@@ -125,7 +125,7 @@ export default function Trends() {
   }, [core?.run_date, ensureBankInsights, showBankInsights]);
 
   const payloadDecisions = useMemo(() => {
-    if (!core) return [];
+    if (!core?.rba) return [];
     const out: { date: string; rate: number; prior: number }[] = [];
     for (let i = 1; i < core.rba.length; i++) {
       if (core.rba[i].rate !== core.rba[i - 1].rate) {
