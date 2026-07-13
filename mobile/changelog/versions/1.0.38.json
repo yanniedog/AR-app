@@ -1,0 +1,31 @@
+{
+  "version": "1.0.38",
+  "date": "2026-07-13",
+  "summaryBullets": [
+    "refactor(mobile): declutter UI with single-owner screen IA (#1)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "refactor(mobile): declutter UI with single-owner screen IA (#1)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.38"
+        },
+        {
+          "text": "Since tag: app-v1.0.37"
+        }
+      ]
+    }
+  ]
+}
