@@ -1,0 +1,23 @@
+{
+  "name": "ar-app",
+  "private": true,
+  "description": "Australian Rates installable Expo app and APK release automation.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "app:ci": "npm --prefix mobile run ci",
+    "wait-for-bots": "node wait_for_bots.mjs",
+    "pr:bot-feedback-check": "node scripts/pr-bot-feedback-check.mjs",
+    "pr:gates:check": "node scripts/pr-gates-check.mjs",
+    "pr:gate-logic:verify": "node scripts/verify-pr-gate-logic.mjs",
+    "pr:bot-spreadsheet:sync": "node scripts/pr-bot-spreadsheet-sync.mjs",
+    "pr:bot-matrix:commit": "node scripts/pr-bot-matrix-commit.mjs",
+    "pr:merge": "node scripts/pr-merge.mjs",
+    "branch-protection:apply": "node scripts/apply-branch-protection.mjs",
+    "repo-merge-settings:apply": "node scripts/apply-repo-merge-settings.mjs",
+    "pr:merge:verify": "node scripts/verify-pr-merge.mjs",
+    "mobile:auto-release:verify": "node scripts/verify-mobile-auto-release-commit.mjs",
+    "crashlytics:sync-issues": "node scripts/crashlytics-to-github-issues.mjs"
+  }
+}

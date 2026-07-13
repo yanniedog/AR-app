@@ -1,0 +1,23 @@
+node_modules/
+
+# Mobile app build artifacts
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/ios/
+mobile/android/
+mobile/build/
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+mobile/.env
+mobile/google-services.json
+mobile/GoogleService-Info.plist
+
+# Local scratch
+.DS_Store
+*.log
+tmp/
+*.tmp
