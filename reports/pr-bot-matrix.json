@@ -1,0 +1,77 @@
+{
+  "repo": "yanniedog/AR-app",
+  "prCount": 1,
+  "generatedAt": "2026-07-13T03:12:35.149Z",
+  "bots": [
+    {
+      "key": "gemini",
+      "label": "Gemini"
+    },
+    {
+      "key": "codex",
+      "label": "Codex"
+    },
+    {
+      "key": "sourcery",
+      "label": "Sourcery"
+    },
+    {
+      "key": "copilot",
+      "label": "Copilot"
+    },
+    {
+      "key": "coderabbit",
+      "label": "CodeRabbit"
+    },
+    {
+      "key": "greptile",
+      "label": "Greptile"
+    }
+  ],
+  "statusLegend": {
+    "green": "feedback addressed before merge",
+    "yellow": "open threads at merge",
+    "grey": "no bot activity",
+    "red": "quota/limit only"
+  },
+  "rows": [
+    {
+      "number": 1,
+      "title": "refactor(mobile): declutter UI with single-owner screen IA",
+      "mergedAt": "2026-07-13T02:56:54Z",
+      "url": "https://github.com/yanniedog/AR-app/pull/1",
+      "cells": {
+        "gemini": {
+          "status": "green",
+          "label": "OK",
+          "reason": "feedback addressed or no actionable threads"
+        },
+        "codex": {
+          "status": "grey",
+          "label": "—",
+          "reason": "no bot activity"
+        },
+        "sourcery": {
+          "status": "green",
+          "label": "OK",
+          "reason": "feedback addressed or no actionable threads"
+        },
+        "copilot": {
+          "status": "grey",
+          "label": "—",
+          "reason": "no bot activity"
+        },
+        "coderabbit": {
+          "status": "grey",
+          "label": "—",
+          "reason": "no bot activity"
+        },
+        "greptile": {
+          "status": "grey",
+          "label": "—",
+          "reason": "no bot activity"
+        }
+      }
+    }
+  ]
+}
