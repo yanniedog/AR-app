@@ -263,15 +263,6 @@ export default function Settings() {
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />
-        {effectiveHistoryRibbon(prefs) ? (
-          <Button
-            title="Open history explorer"
-            icon="stats-chart"
-            variant="secondary"
-            style={{ marginTop: 10 }}
-            onPress={() => router.push('/(tabs)/trends' as Href)}
-          />
-        ) : null}
       </Section>
 
       <Section title="Alerts">

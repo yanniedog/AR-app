@@ -300,13 +300,6 @@ export default function ProductDetail() {
         <OfficialLinks links={detail?.links} />
 
         <Button
-          title={subscribed ? 'Rate alert on' : 'Notify on rate change'}
-          icon={subscribed ? 'notifications' : 'notifications-outline'}
-          variant={subscribed ? 'secondary' : 'primary'}
-          style={{ marginBottom: 8 }}
-          onPress={() => void onToggleNotify()}
-        />
-        <Button
           title={`View all ${row.provider} products`}
           icon="business-outline"
           variant="secondary"
