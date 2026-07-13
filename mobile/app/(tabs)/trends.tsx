@@ -226,7 +226,12 @@ export default function Trends() {
               ? calendarDecisions.map((decision, index) => (
                   <View key={decision.date}>
                     {index > 0 ? <Divider style={{ marginVertical: 8 }} /> : null}
-                    <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                    <Row
+                      style={{ justifyContent: 'space-between', paddingVertical: 4 }}
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={`${formatRbaDate(decision.date)}, ${decisionLine(decision)}`}
+                    >
                       <AppText variant="small" color="textMuted">
                         {formatRbaDate(decision.date)}
                       </AppText>
