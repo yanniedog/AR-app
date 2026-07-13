@@ -7,9 +7,8 @@ import { decisionLine, formatRbaDate, rbaCountdown, recentDecisions } from '../d
 import { useStore } from '../data/store';
 import { useTheme } from '../theme/ThemeProvider';
 
-/** Calm Home card counting down to the next RBA cash-rate decision; tap to reveal
- * the most recent decisions (tiered disclosure). Renders nothing until the
- * rba-calendar asset has synced (an offline cold-start has no schedule). */
+/** Countdown to the next RBA cash-rate decision; tap to reveal recent decisions
+ * when expandable. Renders nothing until the rba-calendar asset has synced. */
 export function RbaCountdownCard({ expandable = true }: { expandable?: boolean } = {}) {
   const theme = useTheme();
   const calendar = useStore((s) => s.rbaCalendar);

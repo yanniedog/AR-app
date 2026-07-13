@@ -67,6 +67,12 @@ export default function Browse() {
             accessibilityLabel="Browse lenders"
             accessibilityHint="Opens searchable lender directory"
           />
+          <ToolbarIconButton
+            icon="calculator-outline"
+            onPress={() => router.push('/calculator')}
+            accessibilityLabel="Mortgage calculator"
+            accessibilityHint="Opens repayment calculator"
+          />
           <ToolbarIconButton icon="search" onPress={() => openSearch(section)} accessibilityLabel="Search products" />
         </Row>
       </View>

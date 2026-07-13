@@ -1,15 +1,12 @@
 import { useScrollToTop } from '@react-navigation/native';
-import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
-import { HomeHero, HomeRefreshCountdown, SpringOnNewData } from '../../src/components/HomeHero';
+import { HomeHero, SpringOnNewData } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
-import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
-import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
-import { AppText, Card, Chip, Row } from '../../src/components/ui';
+import { AppText, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate } from '../../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
@@ -21,7 +18,7 @@ import { ShareQrModal } from '../../src/components/ShareQrModal';
 import { rowsUnder } from '../../src/data/taxonomy';
 import { useStore } from '../../src/data/store';
 import { APK_RELEASE_TAG, REPO } from '../../src/config';
-import { openBank, openProduct, openRibbonProducts } from '../../src/lib/nav';
+import { openBank, openProduct } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Home() {
@@ -81,7 +78,6 @@ export default function Home() {
   const shareToday = useCallback(() => setShareOpen(true), []);
 
   if (!core) return null;
-  const rba = core.rba?.at(-1);
   const sectionAccent = meta.accentColor;
   const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const activeBest = best ?? fallbackBest;
@@ -91,9 +87,7 @@ export default function Home() {
   const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric) : null;
   const heroRate = profileCount > 0 ? heroBest : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
   const bestNote = conditionalNote(activeBest, section);
-  const lenderCount = Object.keys(core.brands ?? {}).length;
   const heroDataKey = `${core.run_date}:${section}:${heroRate ?? 'na'}`;
-  const ribbonDataKey = `${core.run_date}:${section}:ribbon`;
 
   return (
     <ScreenScrollView
@@ -108,10 +102,6 @@ export default function Home() {
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}
         source={source}
         offline={offline}
-        productCount={stats.products}
-        lenderCount={lenderCount}
-        providerCount={stats.providers}
-        onLendersPress={() => router.push('/banks')}
         onShare={shareToday}
       />
 
@@ -150,24 +140,6 @@ export default function Home() {
                 </AppText>
               ) : null}
             </View>
-            {section === 'Mortgage' && rba ? (
-              <View
-                style={{
-                  alignItems: 'flex-end',
-                  backgroundColor: theme.colors.chip,
-                  paddingHorizontal: theme.spacing(3),
-                  paddingVertical: theme.spacing(2),
-                  borderRadius: theme.radius.md,
-                }}
-              >
-                <AppText variant="tiny" color="textFaint">
-                  RBA cash
-                </AppText>
-                <AppText variant="rate" style={{ color: theme.colors.rba }}>
-                  {formatRate(rba.rate)}
-                </AppText>
-              </View>
-            ) : null}
           </Row>
         </SpringOnNewData>
         {activeBest ? (
@@ -186,39 +158,6 @@ export default function Home() {
       </Card>
       </SectionCrossfade>
 
-      <RbaCountdownCard />
-
-      <AppText variant="tiny" weight="700" color="textFaint" style={{ marginBottom: theme.spacing(2) }}>
-        SHORTCUTS
-      </AppText>
-      <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap', marginBottom: theme.spacing(5) }}>
-        <Chip
-          label={meta.lowerIsBetter ? 'Lowest rates' : 'Top yields'}
-          icon="trending-up"
-          onPress={() => openRibbonProducts(section, 'rate')}
-        />
-        <Chip label="Calculator" icon="calculator-outline" onPress={() => router.push('/calculator')} />
-        <Chip label="My profile" icon="person-circle-outline" onPress={() => router.push('/profile')} />
-        <Chip label="Why rates move" icon="pulse-outline" onPress={() => router.push('/rba')} />
-        {section === 'Mortgage' ? (
-          <Chip
-            label="Comparison"
-            icon="swap-vertical"
-            onPress={() => openRibbonProducts(section, 'comparison')}
-          />
-        ) : null}
-      </Row>
-
-      <HomeRefreshCountdown />
-
-      <Card>
-        <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: theme.spacing(2) }}>
-          {meta.title} distribution
-        </AppText>
-        <SpringOnNewData dataKey={ribbonDataKey}>
-          <Ribbon stats={stats} section={section} rbaRate={section === 'Mortgage' ? rba?.rate ?? null : null} />
-        </SpringOnNewData>
-      </Card>
       <ShareQrModal visible={shareOpen} onClose={() => setShareOpen(false)} shareMessage={shareMessage} />
     </ScreenScrollView>
   );

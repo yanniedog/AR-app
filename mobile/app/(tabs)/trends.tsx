@@ -14,6 +14,7 @@ import {
 import { HistoryExplorer } from '../../src/components/viz/HistoryExplorer';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
 import { ProPaywall } from '../../src/components/ProPaywall';
+import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
 import { RbaChart } from '../../src/components/charts';
 import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
@@ -24,6 +25,7 @@ import { effectiveRate, formatRate, formatRunDate } from '../../src/data/format'
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
+import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { bestRow } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
@@ -36,6 +38,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 export default function Trends() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const calendar = useStore((s) => s.rbaCalendar);
   const interests = useStore((s) => s.prefs.interests);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -121,7 +124,7 @@ export default function Trends() {
     void ensureBankInsights();
   }, [core?.run_date, ensureBankInsights, showBankInsights]);
 
-  const decisions = useMemo(() => {
+  const payloadDecisions = useMemo(() => {
     if (!core) return [];
     const out: { date: string; rate: number; prior: number }[] = [];
     for (let i = 1; i < core.rba.length; i++) {
@@ -131,6 +134,10 @@ export default function Trends() {
     }
     return out.reverse().slice(0, 8);
   }, [core]);
+
+  const trend = useMemo(() => rbaTrend(calendar), [calendar]);
+  const calendarDecisions = useMemo(() => recentDecisions(calendar, 12), [calendar]);
+  const useCalendarDecisions = calendarDecisions.length > 0;
 
   if (!core) return null;
   const currentRba = core.rba.at(-1);
@@ -200,44 +207,70 @@ export default function Trends() {
             {currentRba ? formatRate(currentRba.rate) : '—'}
           </AppText>
         </Row>
+        {trend.summary ? (
+          <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+            {trend.summary}
+          </AppText>
+        ) : null}
         <RbaChart data={core.rba} height={190} />
-        <Divider style={{ marginVertical: 12 }} />
-        <AppText variant="small" weight="700" style={{ marginBottom: 8 }}>
-          Recent decisions
-        </AppText>
-        {decisions.map((d) => {
-          const up = d.rate > d.prior;
-          const down = d.rate < d.prior;
-          const direction = up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
-          return (
-            <Row
-              key={d.date}
-              style={{ justifyContent: 'space-between', paddingVertical: 6 }}
-              accessible
-              accessibilityRole="text"
-              accessibilityLabel={rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))}
-            >
-              <AppText variant="small" color="textMuted">
-                {formatRunDate(d.date)}
-              </AppText>
-              <Row gap={6}>
-                <AppText variant="tiny" color="textFaint">
-                  {direction}
-                </AppText>
-                {up || down ? (
-                  <Ionicons
-                    name={up ? 'arrow-up' : 'arrow-down'}
-                    size={14}
-                    color={up ? theme.colors.danger : theme.colors.success}
-                  />
-                ) : null}
-                <AppText variant="small" weight="700">
-                  {formatRate(d.prior)} → {formatRate(d.rate)}
-                </AppText>
-              </Row>
-            </Row>
-          );
-        })}
+        <View style={{ marginTop: 12 }}>
+          <RbaCountdownCard expandable={false} />
+        </View>
+        {(useCalendarDecisions || payloadDecisions.length > 0) ? (
+          <>
+            <Divider style={{ marginVertical: 12 }} />
+            <AppText variant="small" weight="700" style={{ marginBottom: 8 }}>
+              Recent decisions
+            </AppText>
+            {useCalendarDecisions
+              ? calendarDecisions.map((decision, index) => (
+                  <View key={decision.date}>
+                    {index > 0 ? <Divider style={{ marginVertical: 8 }} /> : null}
+                    <Row style={{ justifyContent: 'space-between', paddingVertical: 4 }}>
+                      <AppText variant="small" color="textMuted">
+                        {formatRbaDate(decision.date)}
+                      </AppText>
+                      <AppText variant="small" weight="600">
+                        {decisionLine(decision)}
+                      </AppText>
+                    </Row>
+                  </View>
+                ))
+              : payloadDecisions.map((d) => {
+                  const up = d.rate > d.prior;
+                  const down = d.rate < d.prior;
+                  const direction = up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
+                  return (
+                    <Row
+                      key={d.date}
+                      style={{ justifyContent: 'space-between', paddingVertical: 6 }}
+                      accessible
+                      accessibilityRole="text"
+                      accessibilityLabel={rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))}
+                    >
+                      <AppText variant="small" color="textMuted">
+                        {formatRunDate(d.date)}
+                      </AppText>
+                      <Row gap={6}>
+                        <AppText variant="tiny" color="textFaint">
+                          {direction}
+                        </AppText>
+                        {up || down ? (
+                          <Ionicons
+                            name={up ? 'arrow-up' : 'arrow-down'}
+                            size={14}
+                            color={up ? theme.colors.danger : theme.colors.success}
+                          />
+                        ) : null}
+                        <AppText variant="small" weight="700">
+                          {formatRate(d.prior)} → {formatRate(d.rate)}
+                        </AppText>
+                      </Row>
+                    </Row>
+                  );
+                })}
+          </>
+        ) : null}
       </Card>
 
       {showBankInsights && bankInsights ? (

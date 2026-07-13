@@ -3,12 +3,11 @@ import React, { useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
-import { useNextIngestCountdown } from '../hooks/useNextIngestCountdown';
 import { dataSourceLabel } from '../lib/nextIngest';
 import type { PayloadSource } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
-import { AppText, Card, Row } from './ui';
+import { AppText, Row } from './ui';
 
 const SPRING = { damping: 14, stiffness: 180, mass: 0.8 };
 
@@ -39,23 +38,15 @@ export function HomeHero({
   runAgeLabel,
   source,
   offline,
-  productCount,
-  lenderCount,
-  providerCount,
   dataKey,
-  onLendersPress,
   onShare,
 }: {
   runDateLabel: string;
   runAgeLabel: string;
   source: PayloadSource;
   offline: boolean;
-  productCount: number;
-  lenderCount: number;
-  providerCount: number;
   /** Changes when a new payload is installed — drives spring motion. */
   dataKey: string;
-  onLendersPress?: () => void;
   /** Shares today's headline rates (system share sheet). */
   onShare?: () => void;
 }) {
@@ -63,7 +54,6 @@ export function HomeHero({
   const sourceLabel = dataSourceLabel(source);
   const statusIcon = offline ? 'cloud-offline-outline' : source === 'remote' ? 'cloud-done' : 'albums-outline';
   const statusColor = offline ? theme.colors.warning : theme.colors.success;
-  const statsKey = `${dataKey}:${productCount}:${lenderCount}:${providerCount}`;
   const datePulse = useSharedValue(1);
 
   useEffect(() => {
@@ -150,98 +140,6 @@ export function HomeHero({
           ) : null}
         </View>
       </Row>
-
-      <SpringOnNewData dataKey={statsKey}>
-        <Row gap={8} style={{ marginTop: 10 }}>
-          <StatPill label="Products" value={String(productCount)} />
-          <StatPill
-            label="Lenders"
-            value={String(lenderCount)}
-            onPress={onLendersPress}
-            accessibilityLabel={`${lenderCount} lenders`}
-            accessibilityHint={onLendersPress ? 'Opens lender directory' : undefined}
-          />
-          <StatPill label="In section" value={String(providerCount)} />
-        </Row>
-      </SpringOnNewData>
     </View>
-  );
-}
-
-/** Below-fold refresh timing — kept out of the compact hero for progressive disclosure. */
-export function HomeRefreshCountdown() {
-  const theme = useTheme();
-  const countdown = useNextIngestCountdown();
-
-  return (
-    <Card style={{ marginBottom: 12 }}>
-      <Row gap={8} style={{ alignItems: 'flex-start' }}>
-        <Ionicons name="time-outline" size={18} color={theme.colors.primary} style={{ marginTop: 1 }} />
-        <View style={{ flex: 1 }}>
-          <AppText variant="tiny" color="textMuted" weight="600" style={{ letterSpacing: 0.6 }}>
-            NEXT DATA REFRESH
-          </AppText>
-          <AppText variant="h3" weight="800" style={{ color: theme.colors.primary, marginTop: 2 }}>
-            {countdown.countdownLabel}
-          </AppText>
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-            Target {countdown.nextDueLocalLabel} · scheduled daily refresh
-          </AppText>
-        </View>
-      </Row>
-    </Card>
-  );
-}
-
-function StatPill({
-  label,
-  value,
-  onPress,
-  accessibilityLabel,
-  accessibilityHint,
-}: {
-  label: string;
-  value: string;
-  onPress?: () => void;
-  accessibilityLabel?: string;
-  accessibilityHint?: string;
-}) {
-  const theme = useTheme();
-  const style = {
-    flex: 1 as const,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 8,
-    paddingHorizontal: 6,
-    alignItems: 'center' as const,
-  };
-
-  const content = (
-    <>
-      <AppText variant="body" weight="800">
-        {value}
-      </AppText>
-      <AppText variant="tiny" color="textMuted" weight="700" style={{ marginTop: 2, letterSpacing: 0.4 }}>
-        {label}
-      </AppText>
-    </>
-  );
-
-  if (!onPress) {
-    return <View style={style}>{content}</View>;
-  }
-
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityHint={accessibilityHint}
-      style={({ pressed }) => [style, { opacity: pressed ? 0.85 : 1 }]}
-    >
-      {content}
-    </Pressable>
   );
 }
