@@ -5,7 +5,8 @@ rates data. Offline-first: it downloads a compact daily payload from a GitHub Re
 and serves everything from a local cache.
 
 See [`../docs/MOBILE_APP.md`](../docs/MOBILE_APP.md) for the payload contract, the Pi
-publishing setup, and EAS store builds.
+publishing setup, and EAS store builds. PR bot review matrix artifacts live in
+[`../reports/`](../reports/).
 
 ## Quick start
 
