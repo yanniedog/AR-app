@@ -10,15 +10,17 @@ import { ProPaywall } from '../../src/components/ProPaywall';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SubscriptionRow } from '../../src/components/SubscriptionRow';
-import { TouchTarget } from '../../src/components/TouchTarget';
-import { AppText, Button, Chip, Divider, Row } from '../../src/components/ui';
+import { AppText, Button, Chip, Row } from '../../src/components/ui';
 import { AccountSecurityRows } from '../../src/components/settings/AccountSecurityRows';
 import { AppUpdateSection } from '../../src/components/settings/AppUpdateSection';
 import {
+  DisclosureGroup,
   InfoRow,
   InterestOrderRow,
   Label,
+  NavRow,
   Section,
+  SettingsGap,
   ToggleRow,
 } from '../../src/components/settings/settingsUi';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
@@ -42,7 +44,6 @@ import {
   hasProAccess,
   RATE_INTELLIGENCE_PRO,
 } from '../../src/lib/proAccess';
-import { useTheme } from '../../src/theme/ThemeProvider';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 
 const THRESHOLDS = [1, 5, 10, 25];
@@ -60,7 +61,6 @@ export default function Settings() {
   const removeSubscription = useStore((s) => s.removeSubscription);
   const restoreSubscription = useStore((s) => s.restoreSubscription);
   const { snack, showUndo, undo } = useUndoSnackbar();
-  const theme = useTheme();
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
@@ -117,6 +117,10 @@ export default function Settings() {
     }
   };
 
+  const orderedInterests = orderedInterestSections(prefs.interests);
+  const hiddenSections = SECTION_ORDER.filter((key) => !prefs.interests.includes(key));
+  const sectionsSummary = orderedInterests.map((key) => SECTIONS[key].title).join(' · ');
+
   return (
     <Screen>
     <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}>
@@ -124,9 +128,8 @@ export default function Settings() {
         <InfoRow label="Status" value={hasProAccess(prefs) ? 'Active' : 'Free'} />
         {!hasProAccess(prefs) ? (
           <>
-            <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-              1 rate alert included. Pro unlocks unlimited alerts, deep search, bank intelligence
-              (rate-move feed, RBA pass-through, per-bank history), and the history explorer.
+            <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
+              Unlimited alerts, deep search, bank intelligence, and history explorer.
             </AppText>
             <Button
               title="Upgrade to Pro"
@@ -137,27 +140,14 @@ export default function Settings() {
               }}
             />
           </>
-        ) : (
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-            All Pro features unlocked on this device.
-          </AppText>
-        )}
+        ) : null}
       </Section>
 
       <View onLayout={(e) => { updateSectionY.current = e.nativeEvent.layout.y; }}>
         <AppUpdateSection />
       </View>
 
-      <Section title="Personalise">
-        <Button
-          title="Your product profile"
-          icon="person-circle-outline"
-          variant="secondary"
-          onPress={() => router.push('/profile' as Href)}
-        />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginBottom: 12, lineHeight: 16 }}>
-          Default filters (purpose, rate type, LVR…) applied across the app.
-        </AppText>
+      <Section title="Appearance">
         <Label text="Theme" />
         <SegmentedControl<ThemeMode>
           options={[
@@ -168,40 +158,71 @@ export default function Settings() {
           value={prefs.themeMode}
           onChange={(v) => setPref('themeMode', v)}
         />
-        <Divider style={{ marginVertical: 12 }} />
-        <Label text="Sections shown on Home, Browse, and Trends" />
-        {orderedInterestSections(prefs.interests).map((key, idx, ordered) => (
-          <InterestOrderRow
-            key={key}
-            title={SECTIONS[key].title}
-            canMoveUp={idx > 0}
-            canMoveDown={idx < ordered.length - 1}
-            canRemove={ordered.length > 1}
-            onMoveUp={() => setPref('interests', moveInterest(prefs.interests, key, 'up'))}
-            onMoveDown={() => setPref('interests', moveInterest(prefs.interests, key, 'down'))}
-            onRemove={() => setPref('interests', toggleInterest(prefs.interests, key))}
-          />
-        ))}
-        {SECTION_ORDER.filter((key) => !prefs.interests.includes(key)).length ? (
-          <>
-            <Divider style={{ marginVertical: 12 }} />
-            <Label text="Add section" />
-            <Row gap={8} style={{ flexWrap: 'wrap' }}>
-              {SECTION_ORDER.filter((key) => !prefs.interests.includes(key)).map((key) => (
-                <Chip
-                  key={key}
-                  label={SECTIONS[key].title}
-                  icon={SECTIONS[key].icon as keyof typeof Ionicons.glyphMap}
-                  onPress={() => setPref('interests', toggleInterest(prefs.interests, key))}
-                />
-              ))}
-            </Row>
-          </>
-        ) : null}
-        <Divider style={{ marginVertical: 12 }} />
+        <SettingsGap size={14} />
+        <ToggleRow
+          icon="people-outline"
+          label="Broadly applicable products"
+          sub="Hide staff-only and niche products by default"
+          value={!prefs.includeNonStandard}
+          onChange={(v) => setPref('includeNonStandard', !v)}
+        />
+        <SettingsGap size={14} />
+        <Label text="Rank savings & term deposits by" />
+        <SegmentedControl<RankMetric>
+          options={[
+            { value: 'base', label: 'Base rate' },
+            { value: 'max', label: 'Maximum rate' },
+          ]}
+          value={prefs.depositRankMetric}
+          onChange={(v) => setPref('depositRankMetric', v)}
+        />
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
+          Base uses the ongoing rate; Maximum includes bonus and intro rates.
+        </AppText>
+      </Section>
+
+      <Section title="Personalise">
+        <Button
+          title="Your product profile"
+          icon="person-circle-outline"
+          variant="secondary"
+          onPress={() => router.push('/profile' as Href)}
+        />
+        <SettingsGap size={12} />
+        <DisclosureGroup title="Home sections" summary={sectionsSummary || 'None'}>
+          {orderedInterests.map((key, idx, ordered) => (
+            <InterestOrderRow
+              key={key}
+              title={SECTIONS[key].title}
+              canMoveUp={idx > 0}
+              canMoveDown={idx < ordered.length - 1}
+              canRemove={ordered.length > 1}
+              onMoveUp={() => setPref('interests', moveInterest(prefs.interests, key, 'up'))}
+              onMoveDown={() => setPref('interests', moveInterest(prefs.interests, key, 'down'))}
+              onRemove={() => setPref('interests', toggleInterest(prefs.interests, key))}
+            />
+          ))}
+          {hiddenSections.length ? (
+            <>
+              <SettingsGap size={8} />
+              <Label text="Add section" />
+              <Row gap={8} style={{ flexWrap: 'wrap' }}>
+                {hiddenSections.map((key) => (
+                  <Chip
+                    key={key}
+                    label={SECTIONS[key].title}
+                    icon={SECTIONS[key].icon as keyof typeof Ionicons.glyphMap}
+                    onPress={() => setPref('interests', toggleInterest(prefs.interests, key))}
+                  />
+                ))}
+              </Row>
+            </>
+          ) : null}
+        </DisclosureGroup>
+        <SettingsGap size={12} />
         <Label text="Default category" />
         <Row gap={8} style={{ flexWrap: 'wrap' }}>
-          {orderedInterestSections(prefs.interests).map((key) => (
+          {orderedInterests.map((key) => (
             <Chip
               key={key}
               label={SECTIONS[key].title}
@@ -212,54 +233,19 @@ export default function Settings() {
         </Row>
       </Section>
 
-      <Section title="Product filtering">
-        <ToggleRow
-          icon="people-outline"
-          label="Show broadly applicable products by default"
-          sub="Prioritise standard, broadly available rates. Hides staff-only, business, industry, foreign-investor and other narrowly available products. Turn off to include everything."
-          value={!prefs.includeNonStandard}
-          onChange={(v) => setPref('includeNonStandard', !v)}
-        />
-      </Section>
-
-      <Section title="Rate ranking">
-        <Label text="Rank savings & term deposits by" />
-        <SegmentedControl<RankMetric>
-          options={[
-            { value: 'base', label: 'Base ongoing rate' },
-            { value: 'max', label: 'Maximum rate' },
-          ]}
-          value={prefs.depositRankMetric}
-          onChange={(v) => setPref('depositRankMetric', v)}
-        />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          Base ranks by the ongoing rate you keep after any intro or bonus period — the honest
-          default. Maximum ranks by the best advertised rate, including conditional bonus and
-          introductory rates.
-        </AppText>
-      </Section>
-
       <Section title="Features">
         <ToggleRow
           icon="search-outline"
           label="Deep product search"
-          sub={
-            hasProAccess(prefs)
-              ? 'Search fees and features; downloads details + search index'
-              : 'Pro · search fees and features'
-          }
+          sub={hasProAccess(prefs) ? 'Search fees and features' : 'Pro'}
           value={effectiveDeepSearch(prefs)}
           onChange={onToggleDeepSearch}
         />
-        <Divider style={{ marginVertical: 12 }} />
+        <SettingsGap size={10} />
         <ToggleRow
           icon="analytics-outline"
           label="History explorer"
-          sub={
-            hasProAccess(prefs)
-              ? 'Ribbon, calendar, race, edge, pulse & RBA lenses in Trends'
-              : 'Pro'
-          }
+          sub={hasProAccess(prefs) ? 'Trends lenses and history ribbon' : 'Pro'}
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />
@@ -269,13 +255,13 @@ export default function Settings() {
         <ToggleRow
           icon="notifications-outline"
           label="Rate-change alerts"
-          sub="Best-rate, RBA, watchlist, and your subscriptions"
+          sub="Best-rate, RBA, watchlist, and subscriptions"
           value={prefs.notificationsEnabled}
           onChange={onToggleNotifications}
         />
         {prefs.notificationsEnabled ? (
           <>
-            <Divider style={{ marginVertical: 12 }} />
+            <SettingsGap size={12} />
             <Label text="Alert threshold" />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               {THRESHOLDS.map((bps) => (
@@ -287,7 +273,7 @@ export default function Settings() {
                 />
               ))}
             </Row>
-            <Divider style={{ marginVertical: 12 }} />
+            <SettingsGap size={12} />
             <Label text={`Subscriptions (${subscriptions.length})`} />
             {subscriptions.length ? (
               subscriptions.map((sub: Subscription) => (
@@ -308,7 +294,7 @@ export default function Settings() {
         ) : null}
       </Section>
 
-      <Section title="Data & storage">
+      <Section title="Data">
         <ToggleRow
           icon="wifi-outline"
           label="Refresh on Wi-Fi only"
@@ -316,12 +302,8 @@ export default function Settings() {
           value={prefs.wifiOnly}
           onChange={(v) => setPref('wifiOnly', v)}
         />
-        <Divider style={{ marginVertical: 12 }} />
-        <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
-        <InfoRow label="Source" value={dataSourceLabel(source)} />
-        <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
-        <InfoRow label="Lenders" value={core ? String(Object.keys(core.brands ?? {}).length) : '—'} />
-        <Row gap={12} style={{ marginTop: 12 }}>
+        <SettingsGap size={10} />
+        <Row gap={12}>
           <Button
             title="Refresh now"
             icon="refresh"
@@ -342,51 +324,53 @@ export default function Settings() {
             }
           />
         </Row>
+        <SettingsGap size={8} />
+        <DisclosureGroup
+          title="Data details"
+          summary={
+            core
+              ? `${formatRunDate(core.run_date)} · ${dataSourceLabel(source)}`
+              : 'No data loaded'
+          }
+        >
+          <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
+          <InfoRow label="Source" value={dataSourceLabel(source)} />
+          <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
+          <InfoRow label="Lenders" value={core ? String(Object.keys(core.brands ?? {}).length) : '—'} />
+        </DisclosureGroup>
       </Section>
 
-      <Section title="Privacy & security">
+      <Section title="Account & privacy">
         <AccountSecurityRows
           appLockEnabled={prefs.appLockEnabled}
           onAppLockChange={(v) => setPref('appLockEnabled', v)}
         />
-        <Divider style={{ marginVertical: 12 }} />
-        <ToggleRow
-          icon="pulse-outline"
-          label="Diagnostics & crash reporting"
-          sub="Clarity session replay + Firebase Crashlytics logs"
-          value={prefs.diagnosticsEnabled}
-          onChange={(value) => {
-            setPref('diagnosticsEnabled', value);
-            void setDiagnosticsEnabled(value);
-          }}
-        />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-          Clarity records on-screen interactions for replay. Crashlytics receives crash reports
-          and warn/error log lines from app flows. Disabling stops new uploads; a native rebuild
-          may be required for full SDK teardown.
-        </AppText>
-        <Divider style={{ marginVertical: 12 }} />
-        <TouchTarget
-          fill
-          onPress={() => router.push('/debug-log' as Href)}
-          style={({ pressed }) => ({
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            opacity: pressed ? 0.7 : 1,
-          })}
+        <SettingsGap size={8} />
+        <DisclosureGroup
+          title="Diagnostics & debug"
+          summary={prefs.diagnosticsEnabled ? 'Reporting on' : 'Reporting off'}
         >
-          <Ionicons name="document-text-outline" size={20} color={theme.colors.primary} />
-          <View style={{ flex: 1 }}>
-            <AppText variant="body" weight="600">
-              Debug log
-            </AppText>
-            <AppText variant="tiny" color="textFaint">
-              View, share, or upload logs; on-disk path shown on screen
-            </AppText>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-        </TouchTarget>
+          <ToggleRow
+            icon="pulse-outline"
+            label="Diagnostics & crash reporting"
+            sub="Clarity replay and Crashlytics"
+            value={prefs.diagnosticsEnabled}
+            onChange={(value) => {
+              setPref('diagnosticsEnabled', value);
+              void setDiagnosticsEnabled(value);
+            }}
+          />
+          <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
+            Disabling stops new uploads. A native rebuild may be needed for full SDK teardown.
+          </AppText>
+          <SettingsGap size={8} />
+          <NavRow
+            icon="document-text-outline"
+            label="Debug log"
+            sub="View, share, or upload logs"
+            onPress={() => router.push('/debug-log' as Href)}
+          />
+        </DisclosureGroup>
       </Section>
 
       <Section title="About">
@@ -394,23 +378,13 @@ export default function Settings() {
           label="Version"
           value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '0'})`}
         />
-        <TouchTarget
-          fill
+        <SettingsGap size={4} />
+        <NavRow
+          icon="document-text-outline"
+          label="Terms"
+          sub="Data sources and legal notices"
           onPress={() => router.push('/terms' as Href)}
-          style={{
-            marginTop: 12,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
-          }}
-        >
-          <Ionicons name="document-text-outline" size={20} color={theme.colors.primary} />
-          <View style={{ flex: 1 }}>
-            <AppText variant="body" weight="600">Terms</AppText>
-            <AppText variant="tiny" color="textFaint">Data sources and legal notices</AppText>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={theme.colors.textMuted} />
-        </TouchTarget>
+        />
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
           General information only — not financial advice. Confirm rates with the lender before applying.
         </AppText>
