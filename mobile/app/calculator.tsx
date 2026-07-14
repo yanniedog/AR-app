@@ -69,7 +69,7 @@ export default function Calculator() {
     );
   }, [core, section, profileFilters, includeNonStandard, details]);
 
-  const median = useMemo(() => statsFor(rows, true).median, [rows]);
+  const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
 
   // ---- LVR (mortgage): a real calculation from several inputs ----
   const lvrResult = useMemo(() => computeLvr(inputs), [inputs]);

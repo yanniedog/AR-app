@@ -373,7 +373,7 @@ export interface RbaDecisionRef {
   rate?: number;
   /**
    * Announcement predates the bank-history ledger start, so first-move timing may
-   * miss earlier responses and days-to-follow is a lower bound on observed delay.
+   * miss earlier responses and days-to-follow is an upper bound on observed delay.
    */
   partialObservation: boolean;
 }
@@ -382,9 +382,12 @@ export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over';
 
 export interface PassThroughRow {
   provider: string;
-  /** First same-direction move size since the decision, in basis points (signed). */
+  /**
+   * Same-direction pass-through size in the response window, in basis points (signed).
+   * Sum of matching daily event avg_bps so split repricings still count as full pass.
+   */
   passedBps: number;
-  /** Days from the decision to the provider's first matching move, if any. */
+  /** Days from the decision date to the provider's first matching move, if any. */
   daysToFirstMove: number | null;
   /** |passedBps| / |decision bps|; null when decision bps is 0 or no move. */
   ratio: number | null;
@@ -394,8 +397,14 @@ export interface PassThroughRow {
 export interface PassThroughModel {
   decision: RbaDecisionRef;
   rows: PassThroughRow[];
-  /** Response window length used for this score (days). */
+  /** Nominal response window length used for this score (days). */
   windowDays: number;
+  /** Inclusive end of the response window (may be capped by the next decision). */
+  windowEnd: string;
+  /** Latest bank-history day available for observation. */
+  observedThrough: string;
+  /** True when the response window still extends past observedThrough. */
+  windowOpen: boolean;
 }
 
 export interface PassThroughOpts {
@@ -463,6 +472,8 @@ export interface PassThroughSourceDecision {
   bps: number;
   outcome: 'hike' | 'cut';
   rate?: number;
+  /** Cash-rate effective date when known (calendar announcements only). */
+  effective?: string | null;
 }
 
 /** Derive hike/cut steps from the core cash-rate series (effective dates). */
@@ -470,13 +481,17 @@ export function decisionsFromRbaSeries(
   rba: RbaEntry[] | null | undefined,
 ): PassThroughSourceDecision[] {
   if (!rba?.length) return [];
+  // Live payloads are chronological; sort defensively so a shuffled series cannot
+  // invent bogus steps or drop real ones.
+  const series = rba
+    .map((e) => ({ date: String(e.date || '').slice(0, 10), rate: e.rate }))
+    .filter((e) => parseYmd(e.date) && Number.isFinite(e.rate))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
   const out: PassThroughSourceDecision[] = [];
-  for (let i = 1; i < rba.length; i += 1) {
-    const prior = rba[i - 1].rate;
-    const rate = rba[i].rate;
+  for (let i = 1; i < series.length; i += 1) {
+    const { rate: prior } = series[i - 1];
+    const { rate, date } = series[i];
     if (rate === prior) continue;
-    const date = String(rba[i].date || '').slice(0, 10);
-    if (!parseYmd(date)) continue;
     const bps = Math.round((rate - prior) * 100);
     if (bps === 0) continue;
     out.push({
@@ -504,8 +519,30 @@ function calendarPassThroughDecisions(
         bps: d.outcome === 'cut' ? -Math.abs(d.delta_bps) : Math.abs(d.delta_bps),
         outcome: d.outcome,
         rate: d.rate,
+        effective: d.effective,
       })) ?? []
   );
+}
+
+/** True when a core.rba step is the same RBA move as a calendar announcement. */
+function isCalendarEffectiveTwin(
+  seriesDecision: PassThroughSourceDecision,
+  calendarDecisions: PassThroughSourceDecision[],
+): boolean {
+  return calendarDecisions.some((cal) => {
+    if (cal.outcome !== seriesDecision.outcome || Math.abs(cal.bps) !== Math.abs(seriesDecision.bps)) {
+      return false;
+    }
+    // Same calendar key (announcement) — defensive if merge bounds ever change.
+    if (cal.date === seriesDecision.date) return true;
+    if (cal.effective && cal.effective === seriesDecision.date) return true;
+    // Fallback when effective is missing: same-size move the day after announcement.
+    if (!cal.effective) {
+      const dayAfter = addDaysYmd(cal.date, 1);
+      return dayAfter != null && dayAfter === seriesDecision.date;
+    }
+    return false;
+  });
 }
 
 export function resolvePassThroughDecisions(
@@ -565,14 +602,18 @@ export function scorablePassThroughDecisions(
 
   let scored = scoreDecisionsAgainstLedger(primary, ledgerStart, ledgerEnd, windowDays);
   // Stale calendar that still overlaps the ledger can hide a newer core.rba
-  // decision — merge any series-scored decisions dated after the calendar set.
+  // decision — merge series-scored decisions dated after the calendar set.
+  // Skip effective-date twins: live core.rba steps on effective dates while the
+  // calendar keys announcements (typically announcement+1).
   if (fromCal.length && fromSeries.length) {
     const seriesScored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
     if (!scored.length) {
       scored = seriesScored;
     } else if (seriesScored.length) {
       const latestCal = scored.reduce((a, b) => (a.date >= b.date ? a : b)).date;
-      const newer = seriesScored.filter((d) => d.date > latestCal);
+      const newer = seriesScored.filter(
+        (d) => d.date > latestCal && !isCalendarEffectiveTwin(d, fromCal),
+      );
       if (newer.length) {
         const byDate = new Map(scored.map((d) => [d.date, d]));
         for (const d of newer) byDate.set(d.date, d);
@@ -583,16 +624,24 @@ export function scorablePassThroughDecisions(
   return scored;
 }
 
-function firstMatchingMove(
+interface MatchingMoveAggregate {
+  first: BankRateEvent | null;
+  /** Sum of same-direction avg_bps inside the window. */
+  passedBps: number;
+}
+
+/** First matching move (for speed) plus cumulative same-direction size (for pass status). */
+function aggregateMatchingMoves(
   events: BankRateEvent[],
   provider: string,
   section: SectionKey,
   outcome: 'hike' | 'cut',
   decisionDate: string,
   windowEnd: string,
-): BankRateEvent | null {
+): MatchingMoveAggregate {
   const wantSign = outcome === 'hike' ? 1 : -1;
-  let best: BankRateEvent | null = null;
+  let first: BankRateEvent | null = null;
+  let passedBps = 0;
   for (const event of events) {
     if (event.provider !== provider || event.section !== section) continue;
     if (event.date < decisionDate || event.date > windowEnd) continue;
@@ -600,9 +649,49 @@ function firstMatchingMove(
       event.dir === outcome ||
       (event.dir === 'mixed' && Math.sign(event.avg_bps) === wantSign);
     if (!dirOk) continue;
-    if (!best || event.date < best.date) best = event;
+    passedBps += event.avg_bps;
+    if (!first || event.date < first.date) first = event;
   }
-  return best;
+  return { first, passedBps: Math.round(passedBps * 10) / 10 };
+}
+
+const PASS_STATUS_RANK: Record<PassThroughStatus, number> = {
+  over: 0,
+  full: 1,
+  partial: 2,
+  none: 3,
+};
+
+/** Rank full/fast passers above holdouts so leaderboards match user trust. */
+export function comparePassThroughRows(a: PassThroughRow, b: PassThroughRow): number {
+  const byStatus = PASS_STATUS_RANK[a.passStatus] - PASS_STATUS_RANK[b.passStatus];
+  if (byStatus !== 0) return byStatus;
+  const aDays = a.daysToFirstMove;
+  const bDays = b.daysToFirstMove;
+  if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
+  if (aDays != null && bDays == null) return -1;
+  if (aDays == null && bDays != null) return 1;
+  const bySize = Math.abs(b.passedBps) - Math.abs(a.passedBps);
+  if (bySize !== 0) return bySize;
+  return a.provider.localeCompare(b.provider);
+}
+
+/**
+ * Human label for days-to-first-move.
+ * Partial observation uses ≤ because earlier (pre-ledger) responses may be missing.
+ */
+export function passThroughDaysLabel(
+  daysToFirstMove: number | null,
+  opts: { partialObservation: boolean; windowOpen: boolean },
+): string {
+  if (daysToFirstMove == null) {
+    return opts.windowOpen
+      ? 'no matching move yet — window still open'
+      : 'no matching move in the tracking window';
+  }
+  const unit = daysToFirstMove === 1 ? 'day' : 'days';
+  if (opts.partialObservation) return `moved after ≤${daysToFirstMove} ${unit}`;
+  return `moved after ${daysToFirstMove} ${unit}`;
 }
 
 /** True when the lender had a rate to respond from for this decision. */
@@ -639,7 +728,7 @@ function buildPassThroughRows(
   for (const [provider, sections] of Object.entries(payload.banks)) {
     if (!sections[section]) continue;
     if (!lenderObservableAtDecision(payload, provider, section, decision.date)) continue;
-    const match = firstMatchingMove(
+    const { first, passedBps } = aggregateMatchingMoves(
       payload.events,
       provider,
       section,
@@ -647,7 +736,7 @@ function buildPassThroughRows(
       decision.date,
       windowEnd,
     );
-    if (!match) {
+    if (!first) {
       rows.push({
         provider,
         passedBps: 0,
@@ -657,20 +746,17 @@ function buildPassThroughRows(
       });
       continue;
     }
-    const passedBps = Math.round(match.avg_bps * 10) / 10;
     const absDecision = Math.abs(decision.bps);
     const ratio = absDecision > 0 ? Math.round((Math.abs(passedBps) / absDecision) * 1000) / 1000 : null;
     rows.push({
       provider,
       passedBps,
-      daysToFirstMove: daysBetweenYmd(decision.date, match.date),
+      daysToFirstMove: daysBetweenYmd(decision.date, first.date),
       ratio,
       passStatus: passStatusFor(passedBps, decision.bps),
     });
   }
-  rows.sort((a, b) =>
-    decision.bps < 0 ? a.passedBps - b.passedBps : b.passedBps - a.passedBps,
-  );
+  rows.sort(comparePassThroughRows);
   return rows;
 }
 
@@ -696,21 +782,28 @@ export function rbaPassThrough(
       : null) ?? scorable[scorable.length - 1];
   if (!decision) return null;
 
-  const fromCal = calendarPassThroughDecisions(opts.calendar);
-  const fromSeries = decisionsFromRbaSeries(rba);
-  const all = fromCal.some((d) => d.date === decision.date)
-    ? fromCal
-    : fromSeries.some((d) => d.date === decision.date)
-      ? fromSeries
-      : resolvePassThroughDecisions(rba, opts.calendar);
-  const idx = all.findIndex((d) => d.date === decision.date);
+  // Cap response windows using the merged scorable timeline so a later
+  // series-only decision truncates an earlier calendar announcement window.
+  // RbaDecisionRef is structurally compatible with PassThroughSourceDecision.
+  const idx = scorable.findIndex((d) => d.date === decision.date);
   if (idx < 0) return null;
-  const windowEnd = windowEndForDecision(all, idx, windowDays);
+  const windowEnd = windowEndForDecision(scorable, idx, windowDays);
   if (!windowEnd) return null;
 
-  const rows = buildPassThroughRows(payload, decision, windowEnd, section);
+  const observedThrough =
+    payload.run_date || payload.run_dates[payload.run_dates.length - 1] || windowEnd;
+  // Only count events through the last ingested day (nothing later exists yet).
+  const observeEnd = windowEnd < observedThrough ? windowEnd : observedThrough;
+  const rows = buildPassThroughRows(payload, decision, observeEnd, section);
   if (!rows.length) return null;
-  return { decision, rows, windowDays };
+  return {
+    decision,
+    rows,
+    windowDays,
+    windowEnd,
+    observedThrough,
+    windowOpen: windowEnd > observedThrough,
+  };
 }
 
 /** Newest-first list of scorable pass-through decisions for UI pickers. */

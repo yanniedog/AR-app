@@ -1,4 +1,4 @@
-import { assessAccess, providerRestrictsAccess, rowRestrictsAccess } from '../src/data/access';
+import { assessAccess, accessExcludesFromStandard, providerRestrictsAccess, rowRestrictsAccess } from '../src/data/access';
 import type { ProductDetail } from '../src/types';
 
 const elig = (codes: string[], extra: { name?: string; info?: string }[] = []): ProductDetail => ({
@@ -62,6 +62,159 @@ describe('assessAccess', () => {
     const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
     expect(a.categories).toContain('occupation');
     expect(a.restricted).toBe(true);
+  });
+
+  it('flags youth and junior accounts from product names', () => {
+    expect(assessAccess('Youth Saver', null).categories).toContain('youth');
+    expect(assessAccess('Kids Savings Account', null).categories).toContain('youth');
+    expect(assessAccess('Junior Saver', null).badge).toBe('Youth only');
+    expect(assessAccess('Teen Transaction Account', null).restricted).toBe(true);
+  });
+
+  it('flags MAX_AGE eligibility as youth-restricted when the cap is a youth bound', () => {
+    const a = assessAccess(
+      'Everyday Account',
+      {
+        eligibility: [
+          { label: 'MAX_AGE', value: 18, info: 'Maximum age 18' },
+          { label: 'MIN_AGE' },
+        ],
+      },
+    );
+    expect(a.categories).toContain('youth');
+    expect(a.restricted).toBe(true);
+  });
+
+  it('does not treat senior MAX_AGE lending caps as youth-only', () => {
+    const a = assessAccess(
+      'Variable Home Loan',
+      {
+        eligibility: [
+          { label: 'MAX_AGE', value: 75, info: 'Maximum borrower age 75' },
+          { label: 'MIN_AGE' },
+        ],
+      },
+    );
+    expect(a.categories).not.toContain('youth');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('does not treat guardian under-18 copy as youth-only access', () => {
+    const a = assessAccess(
+      'Everyday Transaction Account',
+      elig(['MIN_AGE'], [{ info: 'Customers under 18 must have a parent or guardian' }]),
+    );
+    expect(a.categories).not.toContain('youth');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('flags region-specific products from name and eligibility text', () => {
+    expect(assessAccess('QLD Residents Home Loan', null).categories).toContain('geographic');
+    const regional = assessAccess('Regional Saver', elig(['OTHER'], [{ info: 'Only available in Victoria' }]));
+    expect(regional.categories).toContain('geographic');
+    const wa = assessAccess('Community Saver', elig(['OTHER'], [{ info: 'Available to customers in WA' }]));
+    expect(wa.badge).toBe('Region-restricted');
+    expect(
+      assessAccess('Capital Saver', elig(['OTHER'], [{ info: 'Available to customers in ACT' }])).categories,
+    ).toContain('geographic');
+    expect(
+      assessAccess('Action Account', elig(['OTHER'], [{ info: 'Available to act as trustee' }])).restricted,
+    ).toBe(false);
+
+    // Generic Australian residency requirements are not geographic access gates.
+    const ausResident = assessAccess(
+      'Everyday Account',
+      elig(['OTHER'], [{ info: 'Must be an Australian resident' }]),
+    );
+    expect(ausResident.categories).not.toContain('geographic');
+    expect(ausResident.restricted).toBe(false);
+
+    const ausResidentsOnly = assessAccess(
+      'Online Saver',
+      elig(['OTHER'], [{ info: 'Available to Australian residents only' }]),
+    );
+    expect(ausResidentsOnly.categories).not.toContain('geographic');
+    expect(ausResidentsOnly.restricted).toBe(false);
+
+    const citizens = assessAccess(
+      'Basic Saver',
+      elig(['OTHER'], [{ info: 'Must be citizens or permanent residents of Australia' }]),
+    );
+    expect(citizens.categories).not.toContain('geographic');
+    expect(citizens.restricted).toBe(false);
+  });
+
+  it('flags state-qualified residents-of restrictions', () => {
+    const nsw = assessAccess(
+      'Regional Saver',
+      elig(['OTHER'], [{ info: 'Available only to residents of NSW' }]),
+    );
+    expect(nsw.categories).toContain('geographic');
+    const qld = assessAccess(
+      'State Saver',
+      elig(['OTHER'], [{ info: 'Must be residents of Queensland' }]),
+    );
+    expect(qld.categories).toContain('geographic');
+  });
+
+  it('does not treat Credit Union brand in description as membership', () => {
+    const a = assessAccess(
+      'Fixed Home Loan Package',
+      {
+        description: 'A home loan package from Credit Union SA with competitive rates.',
+        eligibility: [{ label: 'MIN_AGE', name: 'Minimum age', info: '18 years' }],
+      },
+      'Credit Union SA',
+    );
+    expect(a.categories).not.toContain('membership');
+  });
+
+  it('flags existing-customer / package gates from eligibility copy', () => {
+    const a = assessAccess(
+      'Package Offset Loan',
+      elig(['OTHER'], [{ info: 'Existing customers only - must hold an everyday account' }]),
+    );
+    expect(a.categories).toContain('package');
+    expect(a.restricted).toBe(true);
+  });
+
+  it('does not treat ordinary linked-transaction-account rules as package gates', () => {
+    const a = assessAccess(
+      'High Interest Saver',
+      elig(['OTHER'], [{ info: 'Requires a linked transaction account to earn bonus interest' }]),
+    );
+    expect(a.categories).not.toContain('package');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('does not treat linked Pensioner product names as pensioner-only', () => {
+    const a = assessAccess(
+      'Online Saver',
+      elig(['OTHER'], [{ info: 'Eligible linked accounts include ANZ Pensioner Advantage' }]),
+    );
+    expect(a.categories).not.toContain('pension');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('does not treat LVR / deposit / term / OO-investor structure as access restrictions', () => {
+    const a = assessAccess(
+      'Variable OO Home Loan LVR 80%',
+      elig(['MIN_AGE', 'RESIDENCY_STATUS', 'NATURAL_PERSON'], [
+        { info: 'Maximum LVR 80%. Minimum deposit $50,000. Owner-occupier principal and interest.' },
+      ]),
+      'Westpac',
+    );
+    expect(a.restricted).toBe(false);
+    expect(a.badge).toBeNull();
+  });
+
+  it('accessExcludesFromStandard matches badge visibility', () => {
+    const youth = assessAccess('Youth Saver', null);
+    expect(youth.badge).toBeTruthy();
+    expect(accessExcludesFromStandard(youth)).toBe(true);
+    const open = assessAccess('Basic Variable Home Loan', elig(['MIN_AGE']));
+    expect(open.badge).toBeNull();
+    expect(accessExcludesFromStandard(open)).toBe(false);
   });
 
   it('flags medical-professional-only products from eligibility text', () => {

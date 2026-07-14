@@ -162,7 +162,7 @@ export default function Settings() {
         <ToggleRow
           icon="people-outline"
           label="Broadly applicable products"
-          sub="Hide staff-only and niche products by default"
+          sub="Hide youth, region, staff-only, and other restricted products by default"
           value={!prefs.includeNonStandard}
           onChange={(v) => setPref('includeNonStandard', !v)}
         />

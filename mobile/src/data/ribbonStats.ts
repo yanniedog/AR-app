@@ -1,6 +1,6 @@
 import { visibleAccountRows } from './format';
 import { statsFor, type RateStats } from './taxonomy';
-import type { RateRow, Ribbon, SectionData } from '../types';
+import type { ProductDetail, RateRow, Ribbon, SectionData, SectionKey } from '../types';
 
 export function ribbonToRateStats(ribbon: Ribbon): RateStats {
   const { range, counts } = ribbon;
@@ -28,13 +28,19 @@ export function resolveSectionRibbonStats(
   sectionData: SectionData | undefined,
   hierarchyRows: RateRow[],
   includeNonStandard: boolean,
+  section?: SectionKey | null,
+  detailsProducts?: Record<string, ProductDetail> | null,
 ): RateStats {
   const filtered = includeNonStandard
     ? hierarchyRows
-    : visibleAccountRows(hierarchyRows, false);
+    : visibleAccountRows(hierarchyRows, false, detailsProducts);
 
-  const computed = statsFor(filtered, true);
+  const computed = statsFor(filtered, true, section);
   if (computed.min != null) return computed;
+
+  // Deposit flooring can empty client stats while the payload ribbon still
+  // includes token near-zero rows — do not resurrect those for Savings/TD.
+  if (section === 'Savings' || section === 'TD') return computed;
 
   if (sectionData && hasPayloadRibbon(sectionData.ribbon)) {
     return ribbonToRateStats(sectionData.ribbon);

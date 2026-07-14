@@ -21,8 +21,8 @@ describe('ribbonStats', () => {
     const section = 'Mortgage' as SectionKey;
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
-    const stats = resolveSectionRibbonStats(data, hierRows, false);
-    const expected = statsFor(visibleAccountRows(hierRows, false), true);
+    const stats = resolveSectionRibbonStats(data, hierRows, false, section);
+    const expected = statsFor(visibleAccountRows(hierRows, false), true, section);
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });
@@ -31,8 +31,8 @@ describe('ribbonStats', () => {
     const section = 'Mortgage' as SectionKey;
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
-    const stats = resolveSectionRibbonStats(data, hierRows, true);
-    const expected = statsFor(hierRows, true);
+    const stats = resolveSectionRibbonStats(data, hierRows, true, section);
+    const expected = statsFor(hierRows, true, section);
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });
@@ -60,5 +60,85 @@ describe('ribbonStats', () => {
       false,
     );
     expect(stats.min).toBe(sample.sections.Mortgage.ribbon.range.min);
+  });
+
+  it('excludes token near-zero deposit rates from Savings ribbon stats', () => {
+    const section = 'Savings' as SectionKey;
+    const rows = [
+      {
+        provider: 'Bank A',
+        product_key: 'JUNK|S',
+        product_name: 'Access',
+        rate: '0.0001',
+        taxonomy_path: 'SAVINGS',
+      },
+      {
+        provider: 'Bank B',
+        product_key: 'OK|S',
+        product_name: 'High Saver',
+        rate: '0.045',
+        taxonomy_path: 'SAVINGS',
+      },
+      {
+        provider: 'Bank C',
+        product_key: 'MID|S',
+        product_name: 'Mid Saver',
+        rate: '0.025',
+        taxonomy_path: 'SAVINGS',
+      },
+    ];
+    const stats = statsFor(rows, true, section);
+    expect(stats.min).toBeCloseTo(0.025, 4);
+    expect(stats.max).toBeCloseTo(0.045, 4);
+    expect(stats.count).toBe(2);
+  });
+
+
+  it('does not fall back to payload ribbon for all-token Savings rows', () => {
+    const section = 'Savings' as SectionKey;
+    const data = {
+      ...sample.sections.Savings,
+      ribbon: {
+        range: { min: 0.0001, max: 0.0001, mean: 0.0001, median: 0.0001 },
+        counts: { rates: 1, products: 1, providers: 1 },
+        providers: [],
+      },
+    };
+    const rows = [
+      {
+        provider: 'Bank A',
+        product_key: 'JUNK|S',
+        product_name: 'Access',
+        rate: '0.0001',
+        taxonomy_path: 'SAVINGS',
+      },
+    ];
+    const stats = resolveSectionRibbonStats(data, rows, true, section);
+    expect(stats.min).toBeNull();
+    expect(stats.count).toBe(0);
+  });
+
+  it('excludes token near-zero deposit rates from TD ribbon stats', () => {
+    const section = 'TD' as SectionKey;
+    const rows = [
+      {
+        provider: 'Bank A',
+        product_key: 'FX|TD',
+        product_name: 'EURO TD',
+        rate: '0.0001',
+        taxonomy_path: 'TERM_DEPOSIT',
+      },
+      {
+        provider: 'Bank B',
+        product_key: 'AUD|TD',
+        product_name: '12 Month TD',
+        rate: '0.041',
+        taxonomy_path: 'TERM_DEPOSIT',
+      },
+    ];
+    const stats = statsFor(rows, true, section);
+    expect(stats.min).toBeCloseTo(0.041, 4);
+    expect(stats.max).toBeCloseTo(0.041, 4);
+    expect(stats.count).toBe(1);
   });
 });

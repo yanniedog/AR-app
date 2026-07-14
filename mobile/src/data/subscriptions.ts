@@ -174,7 +174,7 @@ export function rowsForSearchSubscription(
 ): RateRow[] {
   const all = core.sections[sub.section]?.rates ?? [];
   const scoped = rowsForSearchScope(all, sub.section, sub.path, sub.hierarchyScoped);
-  return filterRows(scoped, { ...sub.filters, query: sub.query }, detailsProducts);
+  return filterRows(scoped, { ...sub.filters, query: sub.query }, detailsProducts, null, sub.section);
 }
 
 function ratesMap(rows: RateRow[]): Map<string, { row: RateRow; fraction: number | null }> {

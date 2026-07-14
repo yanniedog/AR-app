@@ -5,6 +5,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import { SECTIONS } from '../constants';
 import {
   marketPulse,
+  passThroughDaysLabel,
   rbaPassThrough,
   rbaPassThroughDecisionList,
   recentBankEvents,
@@ -294,11 +295,14 @@ export function RbaPassThroughCard({
     );
   }
 
-  const { decision, rows, windowDays } = model;
+  const { decision, rows, windowDays, windowEnd, windowOpen, observedThrough } = model;
   const dirWord = decision.bps < 0 ? 'cut' : 'raised';
   const moved = rows.filter((r) => r.daysToFirstMove != null);
+  const holdouts = rows.filter((r) => r.daysToFirstMove == null);
   const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
   const partialPasses = rows.filter((r) => r.passStatus === 'partial');
+  const shown = rows.slice(0, maxRows);
+  const dayOpts = { partialObservation: decision.partialObservation, windowOpen };
 
   return (
     <View>
@@ -321,11 +325,21 @@ export function RbaPassThroughCard({
       ) : null}
       <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
         RBA {dirWord} the cash rate by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        First same-direction mortgage moves within the {windowDays}-day tracking window:
+        Mortgage pass-through in the {windowDays}-day window
+        {windowOpen
+          ? ` (open through ${formatRunDate(windowEnd)}; observed to ${formatRunDate(observedThrough)})`
+          : ` (closed ${formatRunDate(windowEnd)})`}
+        :
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          This decision slightly predates the tracked ledger — days-to-move may miss earlier responses.
+          Announcement predates tracked bank history — timing uses ≤ days because earlier responses
+          may be missing.
+        </AppText>
+      ) : null}
+      {windowOpen ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+          Response window still open — lenders with no move yet may still pass the change through.
         </AppText>
       ) : null}
       <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
@@ -334,24 +348,28 @@ export function RbaPassThroughCard({
           tone="success"
         />
         {partialPasses.length ? (
+          <Badge label={`${partialPasses.length} partial`} tone="warning" />
+        ) : null}
+        <Badge label={`${moved.length} moved`} tone="primary" />
+        {holdouts.length ? (
           <Badge
-            label={`${partialPasses.length} partial`}
+            label={windowOpen ? `${holdouts.length} waiting` : `${holdouts.length} no move`}
             tone="warning"
           />
         ) : null}
-        <Badge label={`${moved.length} moved`} tone="primary" />
       </Row>
-      {rows.slice(0, maxRows).map((row) => (
+      {shown.map((row) => (
         <Pressable
           key={row.provider}
           onPress={() => openBank(row.provider)}
           accessibilityRole="button"
           accessibilityLabel={
             row.passStatus === 'none'
-              ? `${row.provider} has not yet moved in the same direction as the RBA decision`
-              : `${row.provider} moved ${bpsLabel(row.passedBps)} since the RBA decision${
-                  row.daysToFirstMove != null ? `, first move after ${row.daysToFirstMove} days` : ''
-                }`
+              ? `${row.provider}: ${passThroughDaysLabel(null, dayOpts)}`
+              : `${row.provider} passed ${bpsLabel(row.passedBps)}, ${passThroughDaysLabel(
+                  row.daysToFirstMove,
+                  dayOpts,
+                )}`
           }
         >
           <Row gap={10} style={{ paddingVertical: 6 }}>
@@ -361,9 +379,7 @@ export function RbaPassThroughCard({
                 {row.provider}
               </AppText>
               <AppText variant="tiny" color="textFaint">
-                {row.daysToFirstMove != null
-                  ? `moved after ${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`
-                  : 'no matching move detected yet'}
+                {passThroughDaysLabel(row.daysToFirstMove, dayOpts)}
               </AppText>
             </View>
             {row.passStatus === 'full' || row.passStatus === 'over' ? (
@@ -389,6 +405,11 @@ export function RbaPassThroughCard({
           </Row>
         </Pressable>
       ))}
+      {rows.length > maxRows ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
+          Showing {maxRows} of {rows.length} lenders (full and fastest first).
+        </AppText>
+      ) : null}
     </View>
   );
 }
