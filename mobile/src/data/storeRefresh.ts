@@ -20,6 +20,8 @@ type NotifyContext = {
   previousSource: AppState['source'];
   previousDetailsProducts: DetailsPayload['products'] | null;
   core: CorePayload;
+  /** Stable identity for the installed core — object refs change across refreshes. */
+  coreSha: string;
 };
 
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
@@ -46,18 +48,22 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       const runPostRefreshWork = async (notifyCtx: NotifyContext | null) => {
         try {
           await yieldToUi();
+          // A product screen may have started ensureDetails during the yield;
+          // wait for that in-flight load so we do not race on detailsLoading.
+          while (get().detailsLoading) await yieldToUi();
           await warmDetails();
           warmOptionalAssets();
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
+            await yieldToUi();
             const state = get();
-            // A newer refresh may have already published a different core while
-            // this deferred work was yielding/warming — skip stale diffs.
-            if (state.core !== notifyCtx.core) {
+            // Compare SHA, not object identity — an up-to-date refresh re-parses
+            // the same payload into a new object and must not suppress notify.
+            const liveSha = state.manifest?.files.core.sha256;
+            if (liveSha && liveSha !== notifyCtx.coreSha) {
               debugLog.debug('store', 'skip notify; core superseded by newer refresh');
               return;
             }
             if (!state.prefs.notificationsEnabled) return;
-            await yieldToUi();
             // Re-read favorites/subscriptions at notify time so a user who
             // unsubscribes during the yield window is not notified for them.
             const messages = computeChanges(
@@ -166,6 +172,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           previousSource,
           previousDetailsProducts,
           core,
+          coreSha: remote.files.core.sha256,
         };
         deferWarm = true;
         debugLog.info('store', `refresh ok run_date=${core.run_date} changed=true`);

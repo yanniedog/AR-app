@@ -128,6 +128,43 @@ describe('cache core-meta sidecar', () => {
     expect(read?.coreSha).toBe(sampleManifest.files.core.sha256);
   });
 
+  it('readMeta recovers core-meta.tmp when the final sidecar move did not finish', async () => {
+    const meta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-14T00:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: 'tmp-sidecar-details',
+    };
+    const tmpMetaPath = `${FileSystem.documentDirectory}payload/core-meta.json.tmp`;
+    files.set(tmpMetaPath, JSON.stringify(meta));
+
+    const read = await cache.readMeta();
+    expect(read?.detailsSha).toBe('tmp-sidecar-details');
+  });
+
+  it('writeBundle still succeeds when the core-meta sidecar write fails', async () => {
+    const meta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-14T00:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: null,
+    };
+    const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
+    const metaTmpPath = `${FileSystem.documentDirectory}payload/core-meta.json.tmp`;
+    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (path: string, contents: string) => {
+      if (path === metaTmpPath) throw new Error('sidecar write failed');
+      files.set(path, contents);
+    });
+
+    await expect(cache.writeBundle(meta, JSON.stringify(sampleCore))).resolves.toBeUndefined();
+    expect(files.has(`${FileSystem.documentDirectory}payload/core-bundle.json`)).toBe(true);
+    expect(files.has(metaPath)).toBe(false);
+    const read = await cache.readMeta();
+    expect(read?.coreSha).toBe(sampleManifest.files.core.sha256);
+  });
+
   it('readBundle prefers a matching sidecar and ignores a mismatched coreSha sidecar', async () => {
     const meta: CacheMeta = {
       manifest: sampleManifest,

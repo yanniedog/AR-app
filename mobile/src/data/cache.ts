@@ -74,6 +74,14 @@ async function writeCoreMeta(meta: CacheMeta): Promise<void> {
   await FileSystem.moveAsync({ from: CORE_META_TMP, to: CORE_META });
 }
 
+async function readCoreMetaSidecar(): Promise<CacheMeta | null> {
+  const primary = await readJson<CacheMeta>(CORE_META);
+  if (isCacheMeta(primary)) return primary;
+  // Crash window after writeCoreMeta wrote the tmp but before moveAsync finished.
+  const tmp = await readJson<CacheMeta>(CORE_META_TMP);
+  return isCacheMeta(tmp) ? tmp : null;
+}
+
 function isCacheMeta(value: unknown): value is CacheMeta {
   if (!value || typeof value !== 'object') return false;
   const m = value as Partial<CacheMeta>;
@@ -111,16 +119,16 @@ export const cache = {
     if (!b || !b.meta || !b.core) return null;
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
-    const sidecar = await readJson<CacheMeta>(CORE_META);
-    if (isCacheMeta(sidecar) && sidecar.coreSha === b.meta.coreSha) {
+    const sidecar = await readCoreMetaSidecar();
+    if (sidecar && sidecar.coreSha === b.meta.coreSha) {
       return { meta: sidecar, core: b.core };
     }
     return b;
   },
 
   async readMeta(): Promise<CacheMeta | null> {
-    const sidecar = await readJson<CacheMeta>(CORE_META);
-    if (isCacheMeta(sidecar)) return sidecar;
+    const sidecar = await readCoreMetaSidecar();
+    if (sidecar) return sidecar;
     // Older installs only embed meta in the multi-MB bundle. Also covers the
     // crash window after writeBundle deleted the sidecar / committed a new
     // bundle but before writeCoreMeta finished — fall back to embedded meta
@@ -151,7 +159,13 @@ export const cache = {
       // Commit the bundle, then the sidecar. If we crash between the two,
       // readMeta falls back to the embedded meta in the new bundle.
       await atomicWriteBundle(`{"meta":${JSON.stringify(meta)},"core":${coreText}}`);
-      await writeCoreMeta(meta);
+      // Sidecar is an optimization; a failed write must not fail refresh after
+      // the multi-MB bundle is already committed (embedded meta remains valid).
+      try {
+        await writeCoreMeta(meta);
+      } catch {
+        // leave CORE_META_TMP if present — readCoreMetaSidecar recovers it
+      }
     });
   },
 
