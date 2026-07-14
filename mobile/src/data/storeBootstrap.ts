@@ -2,7 +2,6 @@ import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './st
 import { cache } from './cache';
 import { effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
-import { agentDebugLog } from '../lib/agentDebugLog';
 import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
@@ -37,18 +36,7 @@ export function createBootstrapActions(
 
       try {
         const prefs = get().prefs;
-        // #region agent log
-        const bootReadStart = Date.now();
-        // #endregion
         const bundle = await cache.readBundle();
-        // #region agent log
-        agentDebugLog(
-          'storeBootstrap.ts:bootstrap',
-          'bootstrap_readBundle',
-          { ms: Date.now() - bootReadStart, hit: !!bundle, runDate: bundle?.core?.run_date ?? null },
-          'C',
-        );
-        // #endregion
         const [cachedSearch, cachedHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),

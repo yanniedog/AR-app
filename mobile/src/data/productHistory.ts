@@ -112,6 +112,17 @@ function buildProductHistoryFromRates(
     if (series.some((v) => v != null)) products[key] = series;
   }
 
+  // Keep series for products temporarily absent from today's catalog so a later
+  // reappearance can reuse cached rates without re-downloading dated cores.
+  for (const [key, byDate] of existingByKey) {
+    if (products[key]) continue;
+    const series = run_dates.map((d) => {
+      const fromExisting = byDate.get(d);
+      return fromExisting != null ? fromExisting : null;
+    });
+    if (series.some((v) => v != null)) products[key] = series;
+  }
+
   return {
     schema_version: 2,
     run_date: target,

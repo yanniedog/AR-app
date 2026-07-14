@@ -64,17 +64,25 @@ export async function checkForAppUpdate(
   ) {
     return updateCheckCache.promise;
   }
-  const promise = (async () => {
-    const result = await checkForAppUpdateAt(url, getInstalledAppInfo());
-    if (result.status === 'available' || result.status === 'current') {
-      debugLog.info(
-        'app-update',
-        `check ${result.status} installed=${result.installed.version}/${result.installed.buildNumber} remote=${result.remote.version}/${result.remote.build_number}`,
-      );
-    } else {
-      debugLog.error('app-update', `check failed: ${result.message}`);
+  let promise!: Promise<UpdateCheckResult>;
+  promise = (async () => {
+    try {
+      const result = await checkForAppUpdateAt(url, getInstalledAppInfo());
+      if (result.status === 'available' || result.status === 'current') {
+        debugLog.info(
+          'app-update',
+          `check ${result.status} installed=${result.installed.version}/${result.installed.buildNumber} remote=${result.remote.version}/${result.remote.build_number}`,
+        );
+      } else {
+        debugLog.error('app-update', `check failed: ${result.message}`);
+        // Soft failures must not block retries for the TTL window.
+        if (updateCheckCache?.promise === promise) updateCheckCache = null;
+      }
+      return result;
+    } catch (err) {
+      if (updateCheckCache?.promise === promise) updateCheckCache = null;
+      throw err;
     }
-    return result;
   })();
   updateCheckCache = { url, startedAt: now, promise };
   return promise;

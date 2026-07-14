@@ -102,6 +102,38 @@ test('reuses prior dates when the catalog grows instead of refetching history', 
   expect(result.products['Q|2']).toEqual([null, 0.065]);
 });
 
+test('preserves rates when a product temporarily leaves then returns to the catalog', async () => {
+  mockedHistoryDates.mockImplementation((_dates: string[], target: string) =>
+    ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= target),
+  );
+  const existing: ProductHistoryPayload = {
+    schema_version: 2,
+    run_date: '2026-06-10',
+    run_dates: ['2026-06-10'],
+    products: { 'P|1': [0.06], 'Q|2': [0.07] },
+  };
+
+  const withoutQ = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    existing,
+  });
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(withoutQ.products['P|1']).toEqual([0.06, 0.055]);
+  // Absent catalog keys keep their historical series so reuse stays valid.
+  expect(withoutQ.products['Q|2']).toEqual([0.07, null]);
+
+  const restored = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-12',
+    currentCore: core('2026-06-12', {
+      Mortgage: [rateRow('P|1', '0.05'), rateRow('Q|2', '0.065')],
+    }),
+    existing: withoutQ,
+  });
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(restored.products['Q|2']).toEqual([0.07, null, 0.065]);
+});
+
 test('stops dated fetches after consecutive network failures', async () => {
   mockedHistoryDates.mockReturnValue([
     '2026-06-01',

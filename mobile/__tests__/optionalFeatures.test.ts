@@ -150,7 +150,9 @@ describe('optional feature prefs', () => {
     jest.clearAllMocks();
     resetStore();
     historyBanksSyncState.inFlight = null;
+    historyBanksSyncState.inFlightCoreSha = null;
     productHistorySyncState.inFlight = null;
+    productHistorySyncState.inFlightCoreSha = null;
     productHistorySyncState.request = 0;
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockWriteBundle.mockResolvedValue(undefined);

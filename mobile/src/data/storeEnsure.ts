@@ -130,7 +130,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       }
       // Trends + refresh + product screens all call this; coalesce so we never
       // download the compact asset (or fan out dated cores) three times at once.
-      if (!force && historyBanksSyncState.inFlight) {
+      const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
+      if (
+        !force &&
+        historyBanksSyncState.inFlight &&
+        historyBanksSyncState.inFlightCoreSha === currentCoreSha
+      ) {
         return historyBanksSyncState.inFlight;
       }
       const run = (async () => {
@@ -239,10 +244,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           set({ historyBanks: cached?.run_dates.length ? cached : null, historyBanksError: msg });
         }
       })();
-      historyBanksSyncState.inFlight = run.finally(() => {
-        if (historyBanksSyncState.inFlight === run) historyBanksSyncState.inFlight = null;
+      historyBanksSyncState.inFlightCoreSha = currentCoreSha;
+      const promise = run.finally(() => {
+        if (historyBanksSyncState.inFlight === promise) {
+          historyBanksSyncState.inFlight = null;
+          historyBanksSyncState.inFlightCoreSha = null;
+        }
       });
-      return historyBanksSyncState.inFlight;
+      historyBanksSyncState.inFlight = promise;
+      return promise;
     },
 
     async ensureBankInsights(opts: { force?: boolean } = {}) {
@@ -352,7 +362,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         logEnsureSkipped('ensureProductHistory', 'proGate');
         return;
       }
-      if (!force && productHistorySyncState.inFlight) {
+      const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
+      if (
+        !force &&
+        productHistorySyncState.inFlight &&
+        productHistorySyncState.inFlightCoreSha === currentCoreSha
+      ) {
         return productHistorySyncState.inFlight;
       }
       const run = (async () => {
@@ -404,10 +419,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           set({ productHistory: cached ?? null, productHistoryError: msg });
         }
       })();
-      productHistorySyncState.inFlight = run.finally(() => {
-        if (productHistorySyncState.inFlight === run) productHistorySyncState.inFlight = null;
+      productHistorySyncState.inFlightCoreSha = currentCoreSha;
+      const promise = run.finally(() => {
+        if (productHistorySyncState.inFlight === promise) {
+          productHistorySyncState.inFlight = null;
+          productHistorySyncState.inFlightCoreSha = null;
+        }
       });
-      return productHistorySyncState.inFlight;
+      productHistorySyncState.inFlight = promise;
+      return promise;
     },
   } satisfies Pick<
     AppState,

@@ -40,8 +40,10 @@ export async function installSampleSeed(): Promise<void> {
 export const productHistorySyncState: {
   request: number;
   inFlight: Promise<void> | null;
-} = { request: 0, inFlight: null };
+  inFlightCoreSha: string | null;
+} = { request: 0, inFlight: null, inFlightCoreSha: null };
 
 export const historyBanksSyncState: {
   inFlight: Promise<void> | null;
-} = { inFlight: null };
+  inFlightCoreSha: string | null;
+} = { inFlight: null, inFlightCoreSha: null };
