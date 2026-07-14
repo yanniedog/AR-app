@@ -21,11 +21,13 @@ export default function Banks() {
   const core = useStore((s) => s.core);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const [query, setQuery] = useState('');
 
   const groups = useMemo(
-    () => (core ? groupByProvider(core.sections, depositRankMetric, includeNonStandard) : []),
-    [core, depositRankMetric, includeNonStandard],
+    () =>
+      core ? groupByProvider(core.sections, depositRankMetric, includeNonStandard, detailsProducts) : [],
+    [core, depositRankMetric, includeNonStandard, detailsProducts],
   );
   const filtered = useMemo(
     () => groups.filter((g) => g.provider.toLowerCase().includes(query.toLowerCase())),

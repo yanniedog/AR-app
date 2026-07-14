@@ -372,7 +372,7 @@ export default function Trends() {
       {interestSections.map((key) => {
         const data = core.sections[key];
         if (!data) return null;
-        const stats = resolveSectionRibbonStats(data, data.rates, false);
+        const stats = resolveSectionRibbonStats(data, data.rates, false, key);
         if (stats.min === null) return null;
         const best = bestRow(data.rates, key, false, depositRankMetric);
         const bestLabel = rateValueLabel(key, 'best');

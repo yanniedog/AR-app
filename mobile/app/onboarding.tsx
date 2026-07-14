@@ -116,7 +116,7 @@ export default function Onboarding() {
     const sectionRows = core.sections[section]?.rates;
     const sectionData = core.sections[section];
     const hierRows = rowsUnder(sectionRows ?? [], section, []);
-    const stats = resolveSectionRibbonStats(sectionData, hierRows, false);
+    const stats = resolveSectionRibbonStats(sectionData, hierRows, false, section);
     const best = bestRow(hierRows, section, false, depositRankMetric);
     const heroRate = meta.lowerIsBetter ? stats.min : stats.max;
     const rba = section === 'Mortgage' ? core.rba?.at(-1)?.rate : undefined;

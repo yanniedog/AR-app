@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SECTIONS } from '../constants';
 import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
-import { sortRows, type RankMetric } from '../data/selectors';
+import { sortRows, excludeTokenDepositRates, type RankMetric } from '../data/selectors';
 import {
   childrenFromScoped,
   rowsUnder,
@@ -43,12 +43,15 @@ function computeHierarchyView(
   detailsProducts?: Record<string, ProductDetail> | null,
 ) {
   const under = rowsUnder(all, section, path);
-  const nodeRows = visibleAccountRows(under, includeNonStandard, detailsProducts);
+  const nodeRows = excludeTokenDepositRates(
+    visibleAccountRows(under, includeNonStandard, detailsProducts),
+    section,
+  );
   const kids = childrenFromScoped(nodeRows, section, path);
   const stats =
     path.length === 0
-      ? resolveSectionRibbonStats(sectionData, under, includeNonStandard)
-      : statsFor(nodeRows, true);
+      ? resolveSectionRibbonStats(sectionData, under, includeNonStandard, section, detailsProducts)
+      : statsFor(nodeRows, true, section);
   let data: Item[];
   if (kids.length) {
     data = kids.map((node) => ({ kind: 'node', node }) as Item);
