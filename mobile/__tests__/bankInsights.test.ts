@@ -432,6 +432,45 @@ describe('rbaPassThrough', () => {
       passStatus: 'none',
     });
   });
+
+  test('signs calendar cut deltas from outcome even when magnitude is positive', () => {
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-10', effective: '2026-05-11', rate: 4.1, delta_bps: 25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const model = rbaPassThrough(payload, rba, { calendar: cal });
+    expect(model!.decision).toMatchObject({
+      date: '2026-05-10',
+      bps: -25,
+      outcome: 'cut',
+    });
+    expect(model!.rows[0]).toMatchObject({
+      provider: 'AlphaBank',
+      passedBps: -25,
+      passStatus: 'full',
+    });
+  });
+
+  test('falls back to core RBA series when calendar decisions miss the ledger', () => {
+    const staleCal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        // Far outside the May–June test ledger / response window.
+        { date: '2025-01-01', effective: '2025-01-02', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+      ],
+      schedule: [],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-05-01', rate: 4.35 },
+      { date: '2026-05-11', rate: 4.1 },
+    ];
+    expect(rbaPassThrough(payload, series, { calendar: staleCal })).toMatchObject({
+      decision: { date: '2026-05-11', bps: -25, outcome: 'cut' },
+    });
+  });
 });
 
 describe('marketPulse', () => {

@@ -490,23 +490,56 @@ export function decisionsFromRbaSeries(
 }
 
 /** Prefer calendar hike/cut entries; fall back to the cash-rate series. */
-export function resolvePassThroughDecisions(
-  rba: RbaEntry[] | null | undefined,
+function calendarPassThroughDecisions(
   calendar?: RbaCalendar | null,
 ): PassThroughSourceDecision[] {
-  const fromCal =
+  return (
     calendar?.decisions
       ?.filter((d): d is RbaDecisionEntry & { outcome: 'hike' | 'cut' } =>
         (FOLLOW_DIRS as readonly string[]).includes(d.outcome),
       )
       .map((d) => ({
         date: d.date,
-        bps: d.delta_bps,
+        // Calendar may store cut magnitude as positive with outcome:'cut'.
+        bps: d.outcome === 'cut' ? -Math.abs(d.delta_bps) : Math.abs(d.delta_bps),
         outcome: d.outcome,
         rate: d.rate,
-      })) ?? [];
+      })) ?? []
+  );
+}
+
+export function resolvePassThroughDecisions(
+  rba: RbaEntry[] | null | undefined,
+  calendar?: RbaCalendar | null,
+): PassThroughSourceDecision[] {
+  const fromCal = calendarPassThroughDecisions(calendar);
   if (fromCal.length) return fromCal;
   return decisionsFromRbaSeries(rba);
+}
+
+function scoreDecisionsAgainstLedger(
+  decisions: PassThroughSourceDecision[],
+  ledgerStart: string,
+  ledgerEnd: string,
+  windowDays: number,
+): RbaDecisionRef[] {
+  const scored: RbaDecisionRef[] = [];
+  for (let i = 0; i < decisions.length; i += 1) {
+    const dec = decisions[i];
+    if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
+    const windowEnd = windowEndForDecision(decisions, i, windowDays);
+    if (!windowEnd) continue;
+    // Response window must overlap the ledger; announcement must not be after ledger end.
+    if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
+    scored.push({
+      date: dec.date,
+      bps: dec.bps,
+      outcome: dec.outcome,
+      rate: dec.rate,
+      partialObservation: dec.date < ledgerStart,
+    });
+  }
+  return scored;
 }
 
 /**
@@ -523,24 +556,17 @@ export function scorablePassThroughDecisions(
   const ledgerStart = payload.run_dates[0];
   const ledgerEnd = payload.run_date || payload.run_dates[payload.run_dates.length - 1];
   const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
-  const decisions = resolvePassThroughDecisions(rba, opts.calendar);
-  if (!decisions.length || !parseYmd(ledgerStart) || !parseYmd(ledgerEnd)) return [];
+  if (!parseYmd(ledgerStart) || !parseYmd(ledgerEnd)) return [];
 
-  const scored: RbaDecisionRef[] = [];
-  for (let i = 0; i < decisions.length; i += 1) {
-    const dec = decisions[i];
-    if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
-    const windowEnd = windowEndForDecision(decisions, i, windowDays);
-    if (!windowEnd) continue;
-    // Response window must overlap the ledger; announcement must not be after ledger end.
-    if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
-    scored.push({
-      date: dec.date,
-      bps: dec.bps,
-      outcome: dec.outcome,
-      rate: dec.rate,
-      partialObservation: dec.date < ledgerStart,
-    });
+  const fromCal = calendarPassThroughDecisions(opts.calendar);
+  const fromSeries = decisionsFromRbaSeries(rba);
+  const primary = fromCal.length ? fromCal : fromSeries;
+  if (!primary.length) return [];
+
+  let scored = scoreDecisionsAgainstLedger(primary, ledgerStart, ledgerEnd, windowDays);
+  // Stale calendar with no ledger overlap: fall back to freshly loaded core.rba series.
+  if (!scored.length && fromCal.length && fromSeries.length) {
+    scored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
   }
   return scored;
 }
@@ -628,7 +654,13 @@ export function rbaPassThrough(
       : null) ?? scorable[scorable.length - 1];
   if (!decision) return null;
 
-  const all = resolvePassThroughDecisions(rba, opts.calendar);
+  const fromCal = calendarPassThroughDecisions(opts.calendar);
+  const fromSeries = decisionsFromRbaSeries(rba);
+  const all = fromCal.some((d) => d.date === decision.date)
+    ? fromCal
+    : fromSeries.some((d) => d.date === decision.date)
+      ? fromSeries
+      : resolvePassThroughDecisions(rba, opts.calendar);
   const idx = all.findIndex((d) => d.date === decision.date);
   if (idx < 0) return null;
   const windowEnd = windowEndForDecision(all, idx, windowDays);
