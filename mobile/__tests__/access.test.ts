@@ -1,4 +1,4 @@
-import { assessAccess } from '../src/data/access';
+import { assessAccess, providerRestrictsAccess, rowRestrictsAccess } from '../src/data/access';
 import type { ProductDetail } from '../src/types';
 
 const elig = (codes: string[], extra: { name?: string; info?: string }[] = []): ProductDetail => ({
@@ -23,6 +23,17 @@ describe('assessAccess', () => {
     expect(a.badge).toBe('Staff only');
   });
 
+  it('matches plural staff wording in product names', () => {
+    expect(assessAccess('Employees Home Loan Package', null).categories).toContain('staff');
+  });
+
+  it('does not mark provider-brand occupation badges as unverified', () => {
+    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    expect(a.categories).toContain('occupation');
+    expect(a.verify).toBe(false);
+    expect(a.badge).toBe('Occupation-restricted');
+  });
+
   it('flags the Coastline/People-First failure mode: name says staff, data does not', () => {
     // Real example: "People First and Her Staff Home Loan" with only universal codes.
     const a = assessAccess('People First and Her Staff Home Loan', elig(['MIN_AGE', 'NATURAL_PERSON', 'RESIDENCY_STATUS']));
@@ -37,6 +48,66 @@ describe('assessAccess', () => {
     expect(a.restricted).toBe(true);
   });
 
+  it('does not treat bare EMPLOYMENT_STATUS (employed/self-employed) as occupation-restricted', () => {
+    const a = assessAccess(
+      'Fixed Rate Home Loan',
+      elig(['MIN_AGE', 'RESIDENCY_STATUS', 'EMPLOYMENT_STATUS']),
+      'Westpac',
+    );
+    expect(a.categories).not.toContain('occupation');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('flags occupation lenders with generic product titles via provider', () => {
+    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    expect(a.categories).toContain('occupation');
+    expect(a.restricted).toBe(true);
+  });
+
+  it('flags medical-professional-only products from eligibility text', () => {
+    const a = assessAccess(
+      'Basic Home Loan',
+      elig(['MIN_AGE'], [{ info: 'Product is offered to medical, dental, veterinary & accounting professionals only' }]),
+      'BOQ Specialist',
+    );
+    expect(a.categories).toContain('occupation');
+    expect(a.restricted).toBe(true);
+  });
+});
+
+describe('providerRestrictsAccess', () => {
+  it('returns true for known occupation-limited providers', () => {
+    expect(providerRestrictsAccess('Australian Military Bank')).toBe(true);
+    expect(providerRestrictsAccess('Police Bank')).toBe(true);
+  });
+
+  it('returns false for non-occupation providers and generic credit unions', () => {
+    expect(providerRestrictsAccess('Some Credit Union')).toBe(false);
+    expect(providerRestrictsAccess('Bank of Sydney')).toBe(false);
+  });
+});
+
+describe('rowRestrictsAccess', () => {
+  it('returns true for occupation lenders with generic product titles', () => {
+    expect(
+      rowRestrictsAccess({
+        provider: 'Police Bank',
+        product_name: 'RateSaver Home Loan',
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for non-occupation providers and neutral products', () => {
+    expect(
+      rowRestrictsAccess({
+        provider: 'Some Credit Union',
+        product_name: 'Fixed Rate Home Loan',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('assessAccess business / false positives', () => {
   it('detects business/SMSF products', () => {
     expect(assessAccess('SMSF Term Deposit', null).categories).toContain('business');
     expect(assessAccess('Business Term Deposit', elig(['BUSINESS'])).categories).toContain('business');

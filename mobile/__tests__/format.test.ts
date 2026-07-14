@@ -9,6 +9,7 @@ import {
   isBroadlyAvailable,
   isNonStandard,
   toFraction,
+  visibleAccountRows,
 } from '../src/data/format';
 import type { RateRow } from '../src/types';
 
@@ -127,6 +128,7 @@ describe('format', () => {
     expect(nameRestrictsAccess('Darling Downs Education Saver')).toBe(false);
     // ...but an explicit educator occupation restriction still flags.
     expect(nameRestrictsAccess('Educators Rewards Saver')).toBe(true);
+    expect(nameRestrictsAccess('Essential Workers Home Loan')).toBe(true);
     expect(nameRestrictsAccess('')).toBe(false);
     expect(nameRestrictsAccess(null)).toBe(false);
   });
@@ -206,12 +208,66 @@ describe('format', () => {
       product_name: 'Staff Home Loan',
       account_class: 'standard',
     } as RateRow;
+    const occupationLenderGenericTitle = {
+      provider: 'Australian Military Bank',
+      product_name: 'RateSaver Home Loan',
+      account_class: 'standard',
+      product_key: 'amb|ratesaver',
+    } as RateRow;
+    const essentialWorkers = {
+      provider: 'Police Bank',
+      product_name: 'Essential Workers Home Loan',
+      account_class: 'standard',
+      product_key: 'pb|essential',
+    } as RateRow;
     expect(isBroadlyAvailable(mainstream)).toBe(true);
     expect(isBroadlyAvailable(backendNonStandard)).toBe(false);
     expect(isBroadlyAvailable(curated)).toBe(false);
     expect(isBroadlyAvailable(staffOnly)).toBe(false);
+    expect(isBroadlyAvailable(occupationLenderGenericTitle)).toBe(false);
+    expect(isBroadlyAvailable(essentialWorkers)).toBe(false);
+    // Detail-only occupation (BOQ Specialist medical copy) still hides once details load.
+    expect(
+      isBroadlyAvailable(
+        {
+          provider: 'BOQ Specialist',
+          product_name: 'Basic Home Loan',
+          account_class: 'standard',
+          product_key: 'boq|basic',
+        } as RateRow,
+        {
+          eligibility: [
+            {
+              label: 'OTHER',
+              info: 'Product is offered to medical, dental, veterinary & accounting professionals only',
+            },
+          ],
+        },
+      ),
+    ).toBe(false);
     // Defensive: never throws on null/undefined rows.
     expect(isBroadlyAvailable(null)).toBe(false);
     expect(isBroadlyAvailable(undefined)).toBe(false);
+  });
+
+  test('visibleAccountRows hides detail-only occupation products when broadly applicable', () => {
+    const boqBasicRow = {
+      provider: 'BOQ Specialist',
+      product_name: 'Basic Home Loan',
+      account_class: 'standard',
+      product_key: 'boq|basic',
+    } as RateRow;
+    const detailsProducts = {
+      'boq|basic': {
+        eligibility: [
+          {
+            label: 'OTHER',
+            info: 'Product is offered to medical, dental, veterinary & accounting professionals only',
+          },
+        ],
+      },
+    };
+    expect(visibleAccountRows([boqBasicRow], false, detailsProducts)).toEqual([]);
+    expect(visibleAccountRows([boqBasicRow], true, detailsProducts)).toEqual([boqBasicRow]);
   });
 });

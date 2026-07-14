@@ -65,7 +65,10 @@ export function ProductCard({
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
-  const access = React.useMemo(() => assessAccess(row.product_name, detail), [row.product_name, detail]);
+  const access = React.useMemo(
+    () => assessAccess(row.product_name, detail, row.provider),
+    [row.product_name, row.provider, detail],
+  );
   const tags = chips(row, section, qualifier);
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const rateLabel = rateValueLabel(section);

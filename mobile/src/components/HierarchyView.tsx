@@ -18,7 +18,7 @@ import {
 import { useStore } from '../data/store';
 import { logCategoryRowPress } from '../lib/degradationLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
-import type { RateRow, SectionKey } from '../types';
+import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { SectionCrossfade } from './controls';
 import { CategoryRow } from './CategoryRow';
@@ -40,9 +40,10 @@ function computeHierarchyView(
   path: string[],
   includeNonStandard: boolean,
   depositRankMetric: RankMetric = 'base',
+  detailsProducts?: Record<string, ProductDetail> | null,
 ) {
   const under = rowsUnder(all, section, path);
-  const nodeRows = visibleAccountRows(under, includeNonStandard);
+  const nodeRows = visibleAccountRows(under, includeNonStandard, detailsProducts);
   const kids = childrenFromScoped(nodeRows, section, path);
   const stats =
     path.length === 0
@@ -93,6 +94,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   const rba = useStore((s) => s.core?.rba?.at(-1)?.rate ?? null);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const pathKey = path.join('.');
 
   useEffect(() => {
@@ -103,6 +105,19 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     // No data yet (initial load / section transition): nothing to cache, and the
     // component renders null below anyway.
     if (!rows || !sectionData) return EMPTY_VIEW;
+    // When details are loaded, suitability depends on eligibility text — skip the
+    // sectionData WeakMap cache so content updates cannot serve a pre-details view.
+    if (detailsProducts) {
+      return computeHierarchyView(
+        rows,
+        sectionData,
+        section,
+        path,
+        includeNonStandard,
+        depositRankMetric,
+        detailsProducts,
+      );
+    }
     let byKey = viewCache.get(sectionData);
     if (!byKey) {
       byKey = new Map();
@@ -118,12 +133,13 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         path,
         includeNonStandard,
         depositRankMetric,
+        null,
       );
       byKey.set(cacheKey, cached);
     }
     return cached;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pathKey encodes path
-  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric]);
+  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, detailsProducts]);
 
   if (!rows) return null;
 

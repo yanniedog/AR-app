@@ -212,7 +212,7 @@ export default function ProductDetail() {
           ) : null}
         </Card>
 
-        <AccessNotice name={row.product_name} detail={detail} loading={detailsLoading} />
+        <AccessNotice name={row.product_name} provider={row.provider} detail={detail} loading={detailsLoading} />
 
         {detail?.description ? (
           <AppText variant="small" color="textMuted" style={{ marginBottom: 16, lineHeight: 20 }}>

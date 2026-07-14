@@ -30,6 +30,7 @@ export default function BankDetail() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
@@ -49,6 +50,7 @@ export default function BankDetail() {
       const rows = visibleAccountRows(
         core.sections[section]?.rates?.filter((r) => r.provider === provider) ?? [],
         includeNonStandard,
+        detailsProducts,
       );
       // De-duplicate to one card per product (best rate row under the ranking metric).
       const byProduct = new Map<string, RateRow>();
@@ -58,7 +60,7 @@ export default function BankDetail() {
       if (byProduct.size) out.push({ section, rows: Array.from(byProduct.values()) });
     }
     return out;
-  }, [core, provider, depositRankMetric, includeNonStandard]);
+  }, [core, provider, depositRankMetric, includeNonStandard, detailsProducts]);
 
   const chartSections = useMemo(
     () =>
