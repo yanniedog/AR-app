@@ -164,7 +164,8 @@ export function filterRows(
   const runtimeDetailIndex = searchIndex ? null : detailSearchIndex(detailsProducts);
   return rows.filter((row) => {
     if (!row) return false;
-    if (!filters.includeNonStandard && !isBroadlyAvailable(row)) return false;
+    if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
+      return false;
     if (
       !rowMatchesSearchQuery(
         row,

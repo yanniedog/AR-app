@@ -37,6 +37,32 @@ describe('assessAccess', () => {
     expect(a.restricted).toBe(true);
   });
 
+  it('does not treat bare EMPLOYMENT_STATUS (employed/self-employed) as occupation-restricted', () => {
+    const a = assessAccess(
+      'Fixed Rate Home Loan',
+      elig(['MIN_AGE', 'RESIDENCY_STATUS', 'EMPLOYMENT_STATUS']),
+      'Westpac',
+    );
+    expect(a.categories).not.toContain('occupation');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('flags occupation lenders with generic product titles via provider', () => {
+    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    expect(a.categories).toContain('occupation');
+    expect(a.restricted).toBe(true);
+  });
+
+  it('flags medical-professional-only products from eligibility text', () => {
+    const a = assessAccess(
+      'Basic Home Loan',
+      elig(['MIN_AGE'], [{ info: 'Product is offered to medical, dental, veterinary & accounting professionals only' }]),
+      'BOQ Specialist',
+    );
+    expect(a.categories).toContain('occupation');
+    expect(a.restricted).toBe(true);
+  });
+
   it('detects business/SMSF products', () => {
     expect(assessAccess('SMSF Term Deposit', null).categories).toContain('business');
     expect(assessAccess('Business Term Deposit', elig(['BUSINESS'])).categories).toContain('business');

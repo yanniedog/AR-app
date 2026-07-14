@@ -1,6 +1,6 @@
-import type { RateRow } from '../types';
+import type { ProductDetail, RateRow } from '../types';
 import { isKnownNonStandardProduct } from './accountClass';
-import { nameRestrictsAccess } from './access';
+import { assessAccess, rowRestrictsAccess } from './access';
 
 /** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
 export function toFraction(rate: string | number | null | undefined): number | null {
@@ -165,20 +165,34 @@ export function isNonStandard(row: RateRow): boolean {
 /**
  * The unified default-suitability gate. A product is shown to ordinary users by
  * default only when it is *broadly available*: not a non-standard account class,
- * not a curated non-standard cohort, and not name-restricted to staff / an
- * occupation / a union or association / business / students / a region. Advanced
- * users opt everything back in via the "Show broadly applicable products by
- * default" setting (the persisted `includeNonStandard` flag). This is the ONE
- * predicate every surface — search, lists, calculator, rankings, ribbon/charts,
- * hierarchy — must use so classification stays consistent everywhere.
+ * not a curated non-standard cohort, and not restricted to staff / an
+ * occupation / a union or association / business / students / a region (via
+ * product name, lender brand, or loaded eligibility details). Advanced users
+ * opt everything back in via the "Show broadly applicable products by default"
+ * setting (the persisted `includeNonStandard` flag). This is the ONE predicate
+ * every surface — search, lists, calculator, rankings, ribbon/charts, hierarchy
+ * — must use so classification stays consistent everywhere.
  */
-export function isBroadlyAvailable(row: RateRow | null | undefined): boolean {
+export function isBroadlyAvailable(
+  row: RateRow | null | undefined,
+  detail?: ProductDetail | null,
+): boolean {
   if (!row) return false;
-  return !isNonStandard(row) && !nameRestrictsAccess(row.product_name);
+  if (isNonStandard(row) || rowRestrictsAccess(row)) return false;
+  if (detail) {
+    const access = assessAccess(row.product_name, detail, row.provider);
+    if (access.restricted) return false;
+  }
+  return true;
 }
 
-export function visibleAccountRows(rows: RateRow[], includeNonStandard = false): RateRow[] {
-  return includeNonStandard ? rows : rows.filter(isBroadlyAvailable);
+export function visibleAccountRows(
+  rows: RateRow[],
+  includeNonStandard = false,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): RateRow[] {
+  if (includeNonStandard) return rows;
+  return rows.filter((row) => isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null));
 }
 
 /** Short, friendly "Updated 3 days ago" / "Updated today". */

@@ -62,9 +62,12 @@ export default function Calculator() {
   const rows = useMemo(() => {
     const all = core?.sections?.[section]?.rates ?? [];
     return profileFilterRows(rowsUnder(all, section, []), profileFilters, section).filter(
-      (r) => !!r && (includeNonStandard || isBroadlyAvailable(r)),
+      (r) =>
+        !!r &&
+        (includeNonStandard ||
+          isBroadlyAvailable(r, details?.products?.[r.product_key] ?? null)),
     );
-  }, [core, section, profileFilters, includeNonStandard]);
+  }, [core, section, profileFilters, includeNonStandard, details]);
 
   const median = useMemo(() => statsFor(rows, true).median, [rows]);
 
@@ -296,7 +299,11 @@ export default function Calculator() {
               : 'NO BETTER COMPARABLE RATES FOUND'}
       </AppText>
       {candidates.map((c) => {
-        const access = assessAccess(c.row.product_name, details?.products?.[c.row.product_key] ?? null);
+        const access = assessAccess(
+          c.row.product_name,
+          details?.products?.[c.row.product_key] ?? null,
+          c.row.provider,
+        );
         return (
           <Pressable
             key={c.row.provider}

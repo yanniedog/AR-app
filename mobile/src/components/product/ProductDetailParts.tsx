@@ -123,14 +123,16 @@ export function AccessNotice({
   name,
   detail,
   loading,
+  provider,
 }: {
   name: string;
   detail: ProductDetailData | null;
   loading: boolean;
+  provider?: string | null;
 }) {
   const theme = useTheme();
   if (loading && !detail) return null;
-  const a = assessAccess(name, detail);
+  const a = assessAccess(name, detail, provider);
   if (!a.restricted && !a.verify) return null;
   const tone = theme.colors.warning;
   return (
