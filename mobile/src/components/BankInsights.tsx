@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { SECTIONS, SECTION_ORDER } from '../constants';
+import { SECTIONS } from '../constants';
 import {
   daysVsPeerMedian,
   filterPassThroughRows,
@@ -10,7 +10,7 @@ import {
   PASS_THROUGH_METHODOLOGY,
   passThroughDaysLabel,
   passThroughPeerBenchmark,
-  passThroughSectionsAvailable,
+  passThroughSectionOptions,
   rbaPassThrough,
   rbaPassThroughDecisionList,
   rbaPassThroughLeague,
@@ -339,14 +339,10 @@ export function RbaPassThroughCard({
   maxRows?: number;
 }) {
   const theme = useTheme();
-  const availableSections = useMemo(() => passThroughSectionsAvailable(payload), [payload]);
-  const sectionOptions = useMemo(
-    () =>
-      SECTION_ORDER.filter((key) => availableSections.includes(key)).map((key) => ({
-        value: key,
-        label: SECTIONS[key].short,
-      })),
-    [availableSections],
+  const sectionOptions = useMemo(() => passThroughSectionOptions(payload), [payload]);
+  const availableSections = useMemo(
+    () => sectionOptions.map((o) => o.value),
+    [sectionOptions],
   );
   const [section, setSection] = useState<SectionKey>('Mortgage');
   const activeSection = availableSections.includes(section)
@@ -360,8 +356,16 @@ export function RbaPassThroughCard({
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [filter, setFilter] = useState<PassThroughFilter>('all');
   const [expanded, setExpanded] = useState(false);
+  const [leagueExpanded, setLeagueExpanded] = useState(false);
   const [showLeague, setShowLeague] = useState(false);
   const [showMethod, setShowMethod] = useState(false);
+
+  const handleSectionChange = (next: SectionKey) => {
+    setSection(next);
+    setFilter('all');
+    setExpanded(false);
+    setLeagueExpanded(false);
+  };
 
   const activeDate =
     selectedDate && decisions.some((d) => d.date === selectedDate)
@@ -401,7 +405,7 @@ export function RbaPassThroughCard({
           <SegmentedControl
             options={sectionOptions}
             value={activeSection}
-            onChange={setSection}
+            onChange={handleSectionChange}
           />
         ) : null}
         <AppText variant="small" color="textMuted">
@@ -420,7 +424,7 @@ export function RbaPassThroughCard({
   const shown = filtered.slice(0, limit);
   const dayOpts = { partialObservation: decision.partialObservation, windowOpen };
   const sectionTitle = SECTIONS[activeSection].title;
-  const leagueShown = showLeague ? league.slice(0, expanded ? 20 : 8) : [];
+  const leagueShown = showLeague ? league.slice(0, leagueExpanded ? 20 : 8) : [];
 
   return (
     <View>
@@ -429,11 +433,7 @@ export function RbaPassThroughCard({
           <SegmentedControl
             options={sectionOptions}
             value={activeSection}
-            onChange={(next) => {
-              setSection(next);
-              setFilter('all');
-              setExpanded(false);
-            }}
+            onChange={handleSectionChange}
           />
         </View>
       ) : null}
@@ -449,6 +449,7 @@ export function RbaPassThroughCard({
                 onPress={() => {
                   setSelectedDate(d.date);
                   setExpanded(false);
+                  setLeagueExpanded(false);
                 }}
               />
             ))}
@@ -517,6 +518,7 @@ export function RbaPassThroughCard({
               onPress={() => {
                 setFilter(opt.key);
                 setExpanded(false);
+                setLeagueExpanded(false);
               }}
             />
           ))}
@@ -611,8 +613,8 @@ export function RbaPassThroughCard({
             <View style={{ marginTop: 4 }}>
               <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
                 Ranked across {decisions.length} scorable RBA moves for{' '}
-                {SECTIONS[activeSection].short.toLowerCase()} — more full passes, fewer holdouts,
-                then faster median first move.
+                {SECTIONS[activeSection].short.toLowerCase()} — higher full-pass share, fewer
+                holdouts, then larger sample and faster median first move.
               </AppText>
               {leagueShown.map((row) => (
                 <Pressable
@@ -641,7 +643,24 @@ export function RbaPassThroughCard({
                   </Row>
                 </Pressable>
               ))}
-              {league.length > leagueShown.length ? (
+              {league.length > 8 ? (
+                <View style={{ gap: 4, marginTop: 4 }}>
+                  {league.length > leagueShown.length ? (
+                    <AppText variant="tiny" color="textFaint">
+                      Showing {leagueShown.length} of {league.length} lenders.
+                    </AppText>
+                  ) : null}
+                  <Button
+                    title={
+                      leagueExpanded
+                        ? 'Show fewer lenders'
+                        : `Show all ${league.length} lenders`
+                    }
+                    variant="ghost"
+                    onPress={() => setLeagueExpanded((v) => !v)}
+                  />
+                </View>
+              ) : league.length > leagueShown.length ? (
                 <AppText variant="tiny" color="textFaint">
                   Showing {leagueShown.length} of {league.length} lenders.
                 </AppText>

@@ -2,11 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
-import { SECTIONS, SECTION_ORDER } from '../../constants';
+import { SECTIONS } from '../../constants';
 import {
   passThroughDaysLabel,
   passThroughPeerBenchmark,
-  passThroughSectionsAvailable,
+  passThroughSectionOptions,
   rbaPassThrough,
   rbaPassThroughDecisionList,
   type BankInsightsPayload,
@@ -45,14 +45,10 @@ export function RbaResponseScatter({
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const availableSections = useMemo(() => passThroughSectionsAvailable(payload), [payload]);
-  const sectionOptions = useMemo(
-    () =>
-      SECTION_ORDER.filter((key) => availableSections.includes(key)).map((key) => ({
-        value: key,
-        label: SECTIONS[key].short,
-      })),
-    [availableSections],
+  const sectionOptions = useMemo(() => passThroughSectionOptions(payload), [payload]);
+  const availableSections = useMemo(
+    () => sectionOptions.map((o) => o.value),
+    [sectionOptions],
   );
   const [sectionState, setSectionState] = useState<SectionKey>('Mortgage');
   const activeSection =

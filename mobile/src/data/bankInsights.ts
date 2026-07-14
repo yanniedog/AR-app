@@ -460,6 +460,11 @@ export interface PassThroughOpts {
   decisionDate?: string;
   section?: SectionKey;
   windowDays?: number;
+  /**
+   * Precomputed scorable decisions (chronological). When set, skips
+   * `scorablePassThroughDecisions` — used by the multi-decision league loop.
+   */
+  scorableDecisions?: RbaDecisionRef[];
 }
 
 function ymdFromUtcMs(ms: number): string | null {
@@ -820,7 +825,8 @@ export function rbaPassThrough(
   if (!payload?.run_dates?.length) return null;
   const section = opts.section ?? 'Mortgage';
   const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
-  const scorable = scorablePassThroughDecisions(payload, rba, opts);
+  const scorable =
+    opts.scorableDecisions ?? scorablePassThroughDecisions(payload, rba, opts);
   if (!scorable.length) return null;
 
   const decision =
@@ -947,7 +953,8 @@ function leagueConsistency(row: {
 
 /**
  * Multi-decision league table for one section: who reliably passes RBA moves through.
- * Ranking: more full/over, then fewer none, then faster median days, then name.
+ * Ranking: higher full/over share, then lower holdout share, then more decisions
+ * scored, then faster median days, then name.
  */
 export function rbaPassThroughLeague(
   payload: BankInsightsPayload | null | undefined,
@@ -956,7 +963,7 @@ export function rbaPassThroughLeague(
 ): PassThroughLeagueRow[] {
   if (!payload) return [];
   const section = opts.section ?? 'Mortgage';
-  const decisions = scorablePassThroughDecisions(payload, rba, opts);
+  const decisions = opts.scorableDecisions ?? scorablePassThroughDecisions(payload, rba, opts);
   if (!decisions.length) return [];
 
   const byProvider = new Map<
@@ -976,6 +983,7 @@ export function rbaPassThroughLeague(
       ...opts,
       section,
       decisionDate: decision.date,
+      scorableDecisions: decisions,
     });
     if (!model) continue;
     for (const row of model.rows) {
@@ -1021,8 +1029,16 @@ export function rbaPassThroughLeague(
   }
 
   out.sort((a, b) => {
-    if (b.fullOrOver !== a.fullOrOver) return b.fullOrOver - a.fullOrOver;
-    if (a.none !== b.none) return a.none - b.none;
+    const aFullRatio = a.decisionsScored > 0 ? a.fullOrOver / a.decisionsScored : 0;
+    const bFullRatio = b.decisionsScored > 0 ? b.fullOrOver / b.decisionsScored : 0;
+    if (bFullRatio !== aFullRatio) return bFullRatio - aFullRatio;
+
+    const aNoneRatio = a.decisionsScored > 0 ? a.none / a.decisionsScored : 0;
+    const bNoneRatio = b.decisionsScored > 0 ? b.none / b.decisionsScored : 0;
+    if (aNoneRatio !== bNoneRatio) return aNoneRatio - bNoneRatio;
+
+    if (b.decisionsScored !== a.decisionsScored) return b.decisionsScored - a.decisionsScored;
+
     const aDays = a.medianDays;
     const bDays = b.medianDays;
     if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
@@ -1043,6 +1059,23 @@ export function passThroughSectionsAvailable(
   );
 }
 
+/** Segmented-control options for sections with ledger coverage (shared by card + scatter). */
+export function passThroughSectionOptions(
+  payload: BankInsightsPayload | null | undefined,
+): { value: SectionKey; label: string }[] {
+  const available = new Set(passThroughSectionsAvailable(payload));
+  // Inline labels keep this module free of constants import cycles.
+  const labels: Record<SectionKey, string> = {
+    Mortgage: 'Home loans',
+    Savings: 'Savings',
+    TD: 'Term deposits',
+  };
+  return SECTION_KEYS.filter((key) => available.has(key)).map((key) => ({
+    value: key,
+    label: labels[key],
+  }));
+}
+
 /** Short methodology copy for UI disclosures (keep in sync with scoring rules). */
 export const PASS_THROUGH_METHODOLOGY = [
   'Timing starts from the RBA announcement date (calendar) when available; cash-rate series uses the effective step date.',
@@ -1050,7 +1083,7 @@ export const PASS_THROUGH_METHODOLOGY = [
   'Full pass means cumulative same-direction size reaches the decision; over-pass exceeds it; partial is anything in between.',
   'Speed uses the first matching move; when the announcement predates tracked bank history, days are shown as ≤ because earlier responses may be missing.',
   'Open windows mean holdouts may still move — “no move” is not final until the window closes.',
-  'League tables aggregate every scorable decision in the ledger for the selected product section.',
+  'League tables aggregate every scorable decision in the ledger for the selected product section, ranking by full-pass share (then fewer holdouts, sample size, and speed).',
 ] as const;
 
 export interface BankSnapshotRow {

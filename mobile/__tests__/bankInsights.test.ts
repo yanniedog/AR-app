@@ -894,6 +894,90 @@ describe('rbaPassThrough', () => {
     });
   });
 
+  test('league ranks by full-pass ratio so thin perfect records beat sparse tallies', () => {
+    const multi: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-07-01',
+      run_dates: ['2026-04-01', '2026-05-01', '2026-05-15', '2026-06-01', '2026-06-20', '2026-07-01'],
+      banks: {
+        // Joins ledger after the Apr decision — only scored on May + Jun (2/2 full).
+        PerfectThin: {
+          Mortgage: {
+            median: [null, null, 0.0575, 0.0575, 0.055, 0.055],
+            best: [null, null, 0.0525, 0.0525, 0.05, 0.05],
+            count: [0, 0, 4, 4, 4, 4],
+          },
+        },
+        // Present for all three decisions but misses Apr pass (2/3 full).
+        SparseTall: {
+          Mortgage: {
+            median: [0.06, 0.0575, 0.055, 0.055, 0.055, 0.055],
+            best: [0.055, 0.0525, 0.05, 0.05, 0.05, 0.05],
+            count: [8, 8, 8, 8, 8, 8],
+          },
+        },
+      },
+      events: [
+        {
+          date: '2026-05-01',
+          provider: 'SparseTall',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 8,
+          avg_bps: -25,
+        },
+        {
+          date: '2026-05-15',
+          provider: 'PerfectThin',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 4,
+          avg_bps: -25,
+        },
+        {
+          date: '2026-05-15',
+          provider: 'SparseTall',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 8,
+          avg_bps: -25,
+        },
+        {
+          date: '2026-06-20',
+          provider: 'PerfectThin',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 4,
+          avg_bps: -25,
+        },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-04-20', effective: '2026-04-21', rate: 4.35, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-05-10', effective: '2026-05-11', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-06-16', effective: '2026-06-17', rate: 3.85, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const league = rbaPassThroughLeague(multi, rba, { calendar: cal });
+    // PerfectThin joins mid-ledger → 1/1 full; SparseTall → 2/3. Absolute count
+    // would prefer SparseTall; ratio ranking correctly prefers PerfectThin.
+    expect(league.map((r) => r.provider)).toEqual(['PerfectThin', 'SparseTall']);
+    expect(league[0]).toMatchObject({
+      provider: 'PerfectThin',
+      decisionsScored: 1,
+      fullOrOver: 1,
+    });
+    expect(league[1].fullOrOver).toBeGreaterThan(league[0].fullOrOver);
+    expect(league[1].fullOrOver / league[1].decisionsScored).toBeLessThan(1);
+  });
+
   test('lists product sections with bank-history coverage', () => {
     expect(passThroughSectionsAvailable(payload)).toEqual(['Mortgage', 'Savings']);
     expect(passThroughSectionsAvailable(null)).toEqual([]);
