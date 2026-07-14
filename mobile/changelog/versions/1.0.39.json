@@ -1,0 +1,43 @@
+{
+  "version": "1.0.39",
+  "date": "2026-07-14",
+  "summaryBullets": [
+    "fix(mobile): score RBA pass-through across historical decisions (#7)",
+    "fix(mobile): keep UI responsive after daily ingest (#5)",
+    "fix(mobile): honor includeNonStandard on lender and Banks A–Z screens (#6)",
+    "refactor(mobile): calm Settings with progressive disclosure (#4)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): score RBA pass-through across historical decisions (#7)"
+        },
+        {
+          "text": "fix(mobile): keep UI responsive after daily ingest (#5)"
+        },
+        {
+          "text": "fix(mobile): honor includeNonStandard on lender and Banks A–Z screens (#6)"
+        },
+        {
+          "text": "refactor(mobile): calm Settings with progressive disclosure (#4)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.39"
+        },
+        {
+          "text": "Since tag: app-v1.0.38"
+        }
+      ]
+    }
+  ]
+}
