@@ -1,38 +1,59 @@
 import React, { useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
-import { rbaPassThrough, type BankInsightsPayload, type PassThroughRow } from '../../data/bankInsights';
+import {
+  rbaPassThrough,
+  rbaPassThroughDecisionList,
+  type BankInsightsPayload,
+  type PassThroughRow,
+} from '../../data/bankInsights';
+import type { RbaCalendar } from '../../data/rbaCalendar';
 import { formatRunDate } from '../../data/format';
 import { openBank } from '../../lib/nav';
 import type { RbaEntry } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
-import { AppText, Badge, Row } from '../ui';
+import { AppText, Badge, Chip, Row } from '../ui';
 
 /**
  * RBA response map: every lender plotted by how fast (x, days) and how fully
- * (y, bps) they moved their best mortgage rate after the latest cash-rate
- * decision. The dashed line is the decision itself — on it = full pass-through.
+ * (y, bps) they moved after a cash-rate hike/cut. The dashed line is the
+ * decision itself — on it = full pass-through. Past scorable decisions in the
+ * ingest window are selectable when more than one overlaps the ledger.
  */
 export function RbaResponseScatter({
   payload,
   rba,
+  calendar = null,
   height = 190,
 }: {
   payload: BankInsightsPayload | null;
   rba: RbaEntry[];
+  calendar?: RbaCalendar | null;
   height?: number;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const model = useMemo(() => rbaPassThrough(payload, rba), [payload, rba]);
+  const decisions = useMemo(
+    () => rbaPassThroughDecisionList(payload, rba, { calendar }),
+    [payload, rba, calendar],
+  );
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const activeDate =
+    selectedDate && decisions.some((d) => d.date === selectedDate)
+      ? selectedDate
+      : decisions[0]?.date;
+  const model = useMemo(
+    () => rbaPassThrough(payload, rba, { calendar, decisionDate: activeDate }),
+    [payload, rba, calendar, activeDate],
+  );
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
-        No RBA decision falls inside the tracked window yet. When the next one lands, every
-        lender's speed and pass-through size will be mapped here.
+        No RBA hike or cut has a response window overlapping the tracked history yet. When the next
+        one lands, every lender's speed and pass-through size will be mapped here.
       </AppText>
     );
   }
@@ -41,9 +62,8 @@ export function RbaResponseScatter({
   const moved = rows.filter((r) => r.daysToFirstMove != null);
   const holdouts = rows.filter((r) => r.daysToFirstMove == null);
   const isCut = decision.bps < 0;
-  const fullPasses = rows.filter((r) =>
-    isCut ? r.passedBps <= decision.bps : r.passedBps >= decision.bps,
-  );
+  const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
+  const partialPasses = rows.filter((r) => r.passStatus === 'partial');
 
   const padL = 40;
   const padR = 12;
@@ -61,8 +81,8 @@ export function RbaResponseScatter({
   const yAt = (bps: number) => padT + innerH - ((bps - yMin) / ySpan) * innerH;
 
   const dotColor = (r: PassThroughRow): string => {
-    const full = isCut ? r.passedBps <= decision.bps : r.passedBps >= decision.bps;
-    if (full) return theme.colors.success;
+    if (r.passStatus === 'full' || r.passStatus === 'over') return theme.colors.success;
+    if (r.passStatus === 'partial') return theme.colors.warning;
     if (r.passedBps === 0) return theme.colors.textFaint;
     return theme.colors.warning;
   };
@@ -73,12 +93,34 @@ export function RbaResponseScatter({
 
   return (
     <View>
+      {decisions.length > 1 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+          <Row gap={6}>
+            {decisions.map((d) => (
+              <Chip
+                key={d.date}
+                label={`${formatRunDate(d.date)} · ${d.bps > 0 ? '+' : '−'}${Math.abs(d.bps)}`}
+                selected={d.date === decision.date}
+                onPress={() => setSelectedDate(d.date)}
+              />
+            ))}
+          </Row>
+        </ScrollView>
+      ) : null}
       <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
         RBA {isCut ? 'cut' : 'raised'} by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
         Each dot is a lender: further left = faster reaction, on the dashed line = full pass-through.
       </AppText>
+      {decision.partialObservation ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+          Decision predates the ledger start — observed days may miss earlier moves.
+        </AppText>
+      ) : null}
       <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
         <Badge label={`${fullPasses.length} full pass${fullPasses.length === 1 ? '' : 'es'}`} tone="success" />
+        {partialPasses.length ? (
+          <Badge label={`${partialPasses.length} partial`} tone="warning" />
+        ) : null}
         <Badge label={`${moved.length} moved`} tone="primary" />
         {holdouts.length ? <Badge label={`${holdouts.length} yet to move`} tone="warning" /> : null}
       </Row>

@@ -1,11 +1,14 @@
 import type { BankHistoryPoint, RbaEntry, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
+import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import { debugLog } from '../lib/debugLog';
 
 export type BankMoveDir = 'cut' | 'hike' | 'mixed';
 
 const MOVE_DIRS: readonly BankMoveDir[] = ['cut', 'hike', 'mixed'];
+const FOLLOW_DIRS: readonly ('cut' | 'hike')[] = ['cut', 'hike'];
+const DEFAULT_PASS_THROUGH_WINDOW_DAYS = 60;
 
 /** One provider rate-move detected by the Pi between consecutive ingest runs. */
 export interface BankRateEvent {
@@ -28,6 +31,29 @@ export interface BankSectionSeries {
   count: (number | null)[];
 }
 
+/** Sample-size confidence for precomputed lender behaviour (AR-local bank_behaviour). */
+export type PassThroughConfidence = 'insufficient' | 'early' | 'emerging' | 'established';
+
+export interface BehaviourDirectionSummary {
+  n: number;
+  days_median: number | null;
+  bps_median: number | null;
+  ratio_median: number | null;
+  confidence: PassThroughConfidence;
+}
+
+/** Per-provider hike/cut medians shipped in bank-history `behaviour`. */
+export interface BehaviourProviderSummary {
+  hike: BehaviourDirectionSummary;
+  cut: BehaviourDirectionSummary;
+}
+
+export interface BehaviourSectionSummary {
+  section: SectionKey;
+  window_days: number;
+  providers: Record<string, BehaviourProviderSummary>;
+}
+
 /** Pre-aggregated per-bank history + events asset (see app_payload_mobile.py). */
 export interface BankInsightsPayload {
   schema_version: number;
@@ -35,6 +61,8 @@ export interface BankInsightsPayload {
   run_dates: string[];
   banks: Record<string, Partial<Record<SectionKey, BankSectionSeries>>>;
   events: BankRateEvent[];
+  /** Optional precomputed pass-through summaries (may be empty early in the ledger). */
+  behaviour?: Partial<Record<SectionKey, BehaviourSectionSummary>>;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -52,6 +80,74 @@ function alignedSeries(raw: unknown, length: number): (number | null)[] | null {
     out.push(i < raw.length ? numberOrNull(raw[i]) : null);
   }
   return out;
+}
+
+function emptyBehaviourDirection(): BehaviourDirectionSummary {
+  return {
+    n: 0,
+    days_median: null,
+    bps_median: null,
+    ratio_median: null,
+    confidence: 'insufficient',
+  };
+}
+
+function normalizeBehaviourDirection(raw: unknown): BehaviourDirectionSummary {
+  if (!raw || typeof raw !== 'object') return emptyBehaviourDirection();
+  const obj = raw as Record<string, unknown>;
+  const n = Math.max(0, Math.round(numberOrNull(obj.n) ?? 0));
+  const confidenceRaw = typeof obj.confidence === 'string' ? obj.confidence : '';
+  const confidence: PassThroughConfidence =
+    confidenceRaw === 'early' ||
+    confidenceRaw === 'emerging' ||
+    confidenceRaw === 'established' ||
+    confidenceRaw === 'insufficient'
+      ? confidenceRaw
+      : n >= 10
+        ? 'established'
+        : n >= 6
+          ? 'emerging'
+          : n >= 3
+            ? 'early'
+            : 'insufficient';
+  return {
+    n,
+    days_median: numberOrNull(obj.days_median),
+    bps_median: numberOrNull(obj.bps_median),
+    ratio_median: numberOrNull(obj.ratio_median),
+    confidence,
+  };
+}
+
+function normalizeBehaviour(
+  raw: unknown,
+): Partial<Record<SectionKey, BehaviourSectionSummary>> | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const out: Partial<Record<SectionKey, BehaviourSectionSummary>> = {};
+  for (const [section, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(SECTION_KEYS as readonly string[]).includes(section) || !value || typeof value !== 'object') {
+      continue;
+    }
+    const obj = value as Record<string, unknown>;
+    const providersRaw = obj.providers;
+    const providers: Record<string, BehaviourProviderSummary> = {};
+    if (providersRaw && typeof providersRaw === 'object') {
+      for (const [provider, dirs] of Object.entries(providersRaw as Record<string, unknown>)) {
+        if (!provider || !dirs || typeof dirs !== 'object') continue;
+        const d = dirs as Record<string, unknown>;
+        providers[provider] = {
+          hike: normalizeBehaviourDirection(d.hike),
+          cut: normalizeBehaviourDirection(d.cut),
+        };
+      }
+    }
+    out[section as SectionKey] = {
+      section: section as SectionKey,
+      window_days: Math.max(1, Math.round(numberOrNull(obj.window_days) ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS)),
+      providers,
+    };
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** Drop corrupt bank-history JSON before it reaches insights/chart code. */
@@ -128,6 +224,7 @@ export function normalizeBankInsightsPayload(raw: unknown): BankInsightsPayload 
     run_dates,
     banks,
     events,
+    behaviour: normalizeBehaviour(obj.behaviour),
   };
 }
 
@@ -269,79 +366,360 @@ export function bankTrendChartModel(
 
 export interface RbaDecisionRef {
   date: string;
-  /** Decision size in basis points (negative = cut). RBA series is in percent. */
+  /** Decision size in basis points (negative = cut). */
   bps: number;
+  outcome: 'hike' | 'cut';
+  /** Cash-rate target after the decision, percent — when known. */
+  rate?: number;
+  /**
+   * Announcement predates the bank-history ledger start, so first-move timing may
+   * miss earlier responses and days-to-follow is a lower bound on observed delay.
+   */
+  partialObservation: boolean;
 }
+
+export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over';
 
 export interface PassThroughRow {
   provider: string;
-  /** Best-mortgage-rate change since the decision, in basis points. */
+  /** First same-direction move size since the decision, in basis points (signed). */
   passedBps: number;
-  /** Days from the decision to the provider's first detected move, if any. */
+  /** Days from the decision to the provider's first matching move, if any. */
   daysToFirstMove: number | null;
+  /** |passedBps| / |decision bps|; null when decision bps is 0 or no move. */
+  ratio: number | null;
+  passStatus: PassThroughStatus;
 }
 
 export interface PassThroughModel {
   decision: RbaDecisionRef;
   rows: PassThroughRow[];
+  /** Response window length used for this score (days). */
+  windowDays: number;
 }
 
-/**
- * Score how each lender's best mortgage rate moved since the latest RBA decision
- * inside the tracked window. Null when no decision falls inside the history yet.
- */
-export function rbaPassThrough(
-  payload: BankInsightsPayload | null | undefined,
+export interface PassThroughOpts {
+  /** Prefer announcement-dated calendar decisions when present. */
+  calendar?: RbaCalendar | null;
+  /** Score this announcement date instead of the latest scorable decision. */
+  decisionDate?: string;
+  section?: SectionKey;
+  windowDays?: number;
+}
+
+function ymdFromUtcMs(ms: number): string | null {
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
+}
+
+function addDaysYmd(ymd: string, days: number): string | null {
+  const ts = parseYmd(ymd);
+  if (ts == null || !Number.isFinite(ts)) return null;
+  return ymdFromUtcMs(ts + days * DAY_MS);
+}
+
+function daysBetweenYmd(from: string, to: string): number | null {
+  const a = parseYmd(from);
+  const b = parseYmd(to);
+  if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((b - a) / DAY_MS);
+}
+
+function passStatusFor(passedBps: number, decisionBps: number): PassThroughStatus {
+  if (passedBps === 0 || decisionBps === 0) return 'none';
+  // Same-direction only (callers already filter, but guard against misuse).
+  if (Math.sign(passedBps) !== Math.sign(decisionBps)) return 'none';
+  const ratio = Math.abs(passedBps) / Math.abs(decisionBps);
+  if (ratio >= 1.0001) return 'over';
+  if (ratio >= 0.999) return 'full';
+  return 'partial';
+}
+
+function windowEndForDecision(
+  decisions: PassThroughSourceDecision[],
+  index: number,
+  windowDays: number,
+): string | null {
+  const dec = decisions[index];
+  if (!dec) return null;
+  let windowEnd = addDaysYmd(dec.date, windowDays);
+  if (!windowEnd) return null;
+  if (index + 1 < decisions.length) {
+    const nextDec = decisions[index + 1];
+    if (nextDec) {
+      const dayBeforeNext = addDaysYmd(nextDec.date, -1);
+      if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
+    }
+  }
+  return windowEnd;
+}
+
+export interface PassThroughSourceDecision {
+  date: string;
+  bps: number;
+  outcome: 'hike' | 'cut';
+  rate?: number;
+}
+
+/** Derive hike/cut steps from the core cash-rate series (effective dates). */
+export function decisionsFromRbaSeries(
   rba: RbaEntry[] | null | undefined,
-): PassThroughModel | null {
-  if (!payload?.run_dates?.length || !rba?.length) return null;
-  const firstDate = payload.run_dates[0];
-  let decision: RbaDecisionRef | null = null;
+): PassThroughSourceDecision[] {
+  if (!rba?.length) return [];
+  const out: PassThroughSourceDecision[] = [];
   for (let i = 1; i < rba.length; i += 1) {
     const prior = rba[i - 1].rate;
     const rate = rba[i].rate;
     if (rate === prior) continue;
     const date = String(rba[i].date || '').slice(0, 10);
-    if (date >= firstDate && date <= payload.run_date) {
-      decision = { date, bps: Math.round((rate - prior) * 100) };
-    }
-  }
-  if (!decision) return null;
-
-  const decisionTs = parseYmd(decision.date);
-  let baselineIdx = -1;
-  for (let i = 0; i < payload.run_dates.length; i += 1) {
-    if (payload.run_dates[i] <= decision.date) baselineIdx = i;
-  }
-  if (baselineIdx < 0 || decisionTs == null) return null;
-
-  const rows: PassThroughRow[] = [];
-  for (const [provider, sections] of Object.entries(payload.banks)) {
-    const series = sections.Mortgage;
-    if (!series) continue;
-    const baseline = lastNonNull(series.best, baselineIdx);
-    const current = lastNonNull(series.best);
-    if (baseline == null || current == null) continue;
-    let daysToFirstMove: number | null = null;
-    for (const event of payload.events) {
-      if (event.provider !== provider || event.section !== 'Mortgage' || event.date <= decision.date) continue;
-      const ts = parseYmd(event.date);
-      if (ts == null) continue;
-      const days = Math.round((ts - decisionTs) / DAY_MS);
-      if (daysToFirstMove == null || days < daysToFirstMove) daysToFirstMove = days;
-    }
-    rows.push({
-      provider,
-      passedBps: Math.round((current - baseline) * 10000 * 10) / 10,
-      daysToFirstMove,
+    if (!parseYmd(date)) continue;
+    const bps = Math.round((rate - prior) * 100);
+    if (bps === 0) continue;
+    out.push({
+      date,
+      bps,
+      outcome: bps > 0 ? 'hike' : 'cut',
+      rate,
     });
   }
-  if (!rows.length) return null;
-  // Lead with the banks most aligned with the decision direction.
-  rows.sort((a, b) =>
-    decision!.bps < 0 ? a.passedBps - b.passedBps : b.passedBps - a.passedBps,
+  return out;
+}
+
+/** Prefer calendar hike/cut entries; fall back to the cash-rate series. */
+function calendarPassThroughDecisions(
+  calendar?: RbaCalendar | null,
+): PassThroughSourceDecision[] {
+  return (
+    calendar?.decisions
+      ?.filter((d): d is RbaDecisionEntry & { outcome: 'hike' | 'cut' } =>
+        (FOLLOW_DIRS as readonly string[]).includes(d.outcome),
+      )
+      .map((d) => ({
+        date: d.date,
+        // Calendar may store cut magnitude as positive with outcome:'cut'.
+        bps: d.outcome === 'cut' ? -Math.abs(d.delta_bps) : Math.abs(d.delta_bps),
+        outcome: d.outcome,
+        rate: d.rate,
+      })) ?? []
   );
-  return { decision, rows };
+}
+
+export function resolvePassThroughDecisions(
+  rba: RbaEntry[] | null | undefined,
+  calendar?: RbaCalendar | null,
+): PassThroughSourceDecision[] {
+  const fromCal = calendarPassThroughDecisions(calendar);
+  if (fromCal.length) return fromCal;
+  return decisionsFromRbaSeries(rba);
+}
+
+function scoreDecisionsAgainstLedger(
+  decisions: PassThroughSourceDecision[],
+  ledgerStart: string,
+  ledgerEnd: string,
+  windowDays: number,
+): RbaDecisionRef[] {
+  const scored: RbaDecisionRef[] = [];
+  for (let i = 0; i < decisions.length; i += 1) {
+    const dec = decisions[i];
+    if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
+    const windowEnd = windowEndForDecision(decisions, i, windowDays);
+    if (!windowEnd) continue;
+    // Response window must overlap the ledger; announcement must not be after ledger end.
+    if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
+    scored.push({
+      date: dec.date,
+      bps: dec.bps,
+      outcome: dec.outcome,
+      rate: dec.rate,
+      partialObservation: dec.date < ledgerStart,
+    });
+  }
+  return scored;
+}
+
+/**
+ * Hike/cut decisions whose response window overlaps the bank-history ledger.
+ * Includes decisions that slightly predate ledger start when follow-on moves are
+ * still observable inside the ingest window (marked partialObservation).
+ */
+export function scorablePassThroughDecisions(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts = {},
+): RbaDecisionRef[] {
+  if (!payload?.run_dates?.length) return [];
+  const ledgerStart = payload.run_dates[0];
+  const ledgerEnd = payload.run_date || payload.run_dates[payload.run_dates.length - 1];
+  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
+  if (!parseYmd(ledgerStart) || !parseYmd(ledgerEnd)) return [];
+
+  const fromCal = calendarPassThroughDecisions(opts.calendar);
+  const fromSeries = decisionsFromRbaSeries(rba);
+  const primary = fromCal.length ? fromCal : fromSeries;
+  if (!primary.length) return [];
+
+  let scored = scoreDecisionsAgainstLedger(primary, ledgerStart, ledgerEnd, windowDays);
+  // Stale calendar that still overlaps the ledger can hide a newer core.rba
+  // decision — merge any series-scored decisions dated after the calendar set.
+  if (fromCal.length && fromSeries.length) {
+    const seriesScored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
+    if (!scored.length) {
+      scored = seriesScored;
+    } else if (seriesScored.length) {
+      const latestCal = scored.reduce((a, b) => (a.date >= b.date ? a : b)).date;
+      const newer = seriesScored.filter((d) => d.date > latestCal);
+      if (newer.length) {
+        const byDate = new Map(scored.map((d) => [d.date, d]));
+        for (const d of newer) byDate.set(d.date, d);
+        scored = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+      }
+    }
+  }
+  return scored;
+}
+
+function firstMatchingMove(
+  events: BankRateEvent[],
+  provider: string,
+  section: SectionKey,
+  outcome: 'hike' | 'cut',
+  decisionDate: string,
+  windowEnd: string,
+): BankRateEvent | null {
+  const wantSign = outcome === 'hike' ? 1 : -1;
+  let best: BankRateEvent | null = null;
+  for (const event of events) {
+    if (event.provider !== provider || event.section !== section) continue;
+    if (event.date < decisionDate || event.date > windowEnd) continue;
+    const dirOk =
+      event.dir === outcome ||
+      (event.dir === 'mixed' && Math.sign(event.avg_bps) === wantSign);
+    if (!dirOk) continue;
+    if (!best || event.date < best.date) best = event;
+  }
+  return best;
+}
+
+/** True when the lender had a rate to respond from for this decision. */
+function lenderObservableAtDecision(
+  payload: BankInsightsPayload,
+  provider: string,
+  section: SectionKey,
+  decisionDate: string,
+): boolean {
+  const series = payload.banks[provider]?.[section];
+  if (!series) return false;
+  let firstIdx = -1;
+  for (let i = 0; i < payload.run_dates.length; i += 1) {
+    if (series.median[i] != null || series.best[i] != null) {
+      firstIdx = i;
+      break;
+    }
+  }
+  if (firstIdx < 0) return false;
+  const firstDate = payload.run_dates[firstIdx];
+  if (firstDate <= decisionDate) return true;
+  // Decision predates the ledger: lenders present from the first ingest day are
+  // still in-universe (partialObservation); late-join series are not.
+  return payload.run_dates[0] > decisionDate && firstIdx === 0;
+}
+
+function buildPassThroughRows(
+  payload: BankInsightsPayload,
+  decision: RbaDecisionRef,
+  windowEnd: string,
+  section: SectionKey,
+): PassThroughRow[] {
+  const rows: PassThroughRow[] = [];
+  for (const [provider, sections] of Object.entries(payload.banks)) {
+    if (!sections[section]) continue;
+    if (!lenderObservableAtDecision(payload, provider, section, decision.date)) continue;
+    const match = firstMatchingMove(
+      payload.events,
+      provider,
+      section,
+      decision.outcome,
+      decision.date,
+      windowEnd,
+    );
+    if (!match) {
+      rows.push({
+        provider,
+        passedBps: 0,
+        daysToFirstMove: null,
+        ratio: null,
+        passStatus: 'none',
+      });
+      continue;
+    }
+    const passedBps = Math.round(match.avg_bps * 10) / 10;
+    const absDecision = Math.abs(decision.bps);
+    const ratio = absDecision > 0 ? Math.round((Math.abs(passedBps) / absDecision) * 1000) / 1000 : null;
+    rows.push({
+      provider,
+      passedBps,
+      daysToFirstMove: daysBetweenYmd(decision.date, match.date),
+      ratio,
+      passStatus: passStatusFor(passedBps, decision.bps),
+    });
+  }
+  rows.sort((a, b) =>
+    decision.bps < 0 ? a.passedBps - b.passedBps : b.passedBps - a.passedBps,
+  );
+  return rows;
+}
+
+/**
+ * Score how each lender's section rates followed an RBA hike/cut whose response
+ * window overlaps the bank-history ledger. Defaults to the latest scorable
+ * decision; pass `decisionDate` / `calendar` to browse past decisions.
+ */
+export function rbaPassThrough(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts = {},
+): PassThroughModel | null {
+  if (!payload?.run_dates?.length) return null;
+  const section = opts.section ?? 'Mortgage';
+  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
+  const scorable = scorablePassThroughDecisions(payload, rba, opts);
+  if (!scorable.length) return null;
+
+  const decision =
+    (opts.decisionDate
+      ? scorable.find((d) => d.date === opts.decisionDate)
+      : null) ?? scorable[scorable.length - 1];
+  if (!decision) return null;
+
+  const fromCal = calendarPassThroughDecisions(opts.calendar);
+  const fromSeries = decisionsFromRbaSeries(rba);
+  const all = fromCal.some((d) => d.date === decision.date)
+    ? fromCal
+    : fromSeries.some((d) => d.date === decision.date)
+      ? fromSeries
+      : resolvePassThroughDecisions(rba, opts.calendar);
+  const idx = all.findIndex((d) => d.date === decision.date);
+  if (idx < 0) return null;
+  const windowEnd = windowEndForDecision(all, idx, windowDays);
+  if (!windowEnd) return null;
+
+  const rows = buildPassThroughRows(payload, decision, windowEnd, section);
+  if (!rows.length) return null;
+  return { decision, rows, windowDays };
+}
+
+/** Newest-first list of scorable pass-through decisions for UI pickers. */
+export function rbaPassThroughDecisionList(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts = {},
+): RbaDecisionRef[] {
+  return scorablePassThroughDecisions(payload, rba, opts).slice().reverse();
 }
 
 export interface BankSnapshotRow {
