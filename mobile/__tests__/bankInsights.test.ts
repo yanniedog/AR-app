@@ -471,6 +471,88 @@ describe('rbaPassThrough', () => {
       decision: { date: '2026-05-11', bps: -25, outcome: 'cut' },
     });
   });
+
+  test('merges a newer core RBA decision when the calendar is stale but still overlaps', () => {
+    const staleButOverlapping: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-10', effective: '2026-05-11', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-05-01', rate: 4.35 },
+      { date: '2026-05-10', rate: 4.1 },
+      { date: '2026-06-01', rate: 3.85 },
+    ];
+    const dates = rbaPassThroughDecisionList(payload, series, { calendar: staleButOverlapping }).map(
+      (d) => d.date,
+    );
+    expect(dates).toEqual(expect.arrayContaining(['2026-05-10', '2026-06-01']));
+    expect(rbaPassThrough(payload, series, { calendar: staleButOverlapping })!.decision.date).toBe(
+      '2026-06-01',
+    );
+  });
+
+  test('skips lenders with no observable rate at or before the decision', () => {
+    const lateJoin: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-06-01',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-06-01'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.057, 0.057],
+            best: [0.055, 0.052, 0.052],
+            count: [10, 10, 10],
+          },
+        },
+        NewBank: {
+          Mortgage: {
+            median: [null, null, 0.06],
+            best: [null, null, 0.055],
+            count: [null, null, 2],
+          },
+        },
+      },
+      events: [
+        {
+          date: '2026-05-15',
+          provider: 'AlphaBank',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 10,
+          avg_bps: -25,
+        },
+      ],
+    };
+    const model = rbaPassThrough(lateJoin, rba, { calendar });
+    expect(model!.rows.map((r) => r.provider)).toEqual(['AlphaBank']);
+  });
+
+  test('counts mixed repricings whose net avg_bps matches the decision direction', () => {
+    const mixedPayload: BankInsightsPayload = {
+      ...payload,
+      events: [
+        {
+          date: '2026-05-15',
+          provider: 'AlphaBank',
+          section: 'Mortgage',
+          dir: 'mixed',
+          moved: 4,
+          total: 10,
+          avg_bps: -25,
+        },
+      ],
+    };
+    const model = rbaPassThrough(mixedPayload, rba, { calendar });
+    expect(model!.rows[0]).toMatchObject({
+      provider: 'AlphaBank',
+      passedBps: -25,
+      passStatus: 'full',
+    });
+  });
 });
 
 describe('marketPulse', () => {

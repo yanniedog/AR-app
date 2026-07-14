@@ -564,9 +564,21 @@ export function scorablePassThroughDecisions(
   if (!primary.length) return [];
 
   let scored = scoreDecisionsAgainstLedger(primary, ledgerStart, ledgerEnd, windowDays);
-  // Stale calendar with no ledger overlap: fall back to freshly loaded core.rba series.
-  if (!scored.length && fromCal.length && fromSeries.length) {
-    scored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
+  // Stale calendar that still overlaps the ledger can hide a newer core.rba
+  // decision — merge any series-scored decisions dated after the calendar set.
+  if (fromCal.length && fromSeries.length) {
+    const seriesScored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
+    if (!scored.length) {
+      scored = seriesScored;
+    } else if (seriesScored.length) {
+      const latestCal = scored.reduce((a, b) => (a.date >= b.date ? a : b)).date;
+      const newer = seriesScored.filter((d) => d.date > latestCal);
+      if (newer.length) {
+        const byDate = new Map(scored.map((d) => [d.date, d]));
+        for (const d of newer) byDate.set(d.date, d);
+        scored = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+      }
+    }
   }
   return scored;
 }
@@ -579,13 +591,42 @@ function firstMatchingMove(
   decisionDate: string,
   windowEnd: string,
 ): BankRateEvent | null {
+  const wantSign = outcome === 'hike' ? 1 : -1;
   let best: BankRateEvent | null = null;
   for (const event of events) {
-    if (event.provider !== provider || event.section !== section || event.dir !== outcome) continue;
+    if (event.provider !== provider || event.section !== section) continue;
     if (event.date < decisionDate || event.date > windowEnd) continue;
+    const dirOk =
+      event.dir === outcome ||
+      (event.dir === 'mixed' && Math.sign(event.avg_bps) === wantSign);
+    if (!dirOk) continue;
     if (!best || event.date < best.date) best = event;
   }
   return best;
+}
+
+/** True when the lender had a rate to respond from for this decision. */
+function lenderObservableAtDecision(
+  payload: BankInsightsPayload,
+  provider: string,
+  section: SectionKey,
+  decisionDate: string,
+): boolean {
+  const series = payload.banks[provider]?.[section];
+  if (!series) return false;
+  let firstIdx = -1;
+  for (let i = 0; i < payload.run_dates.length; i += 1) {
+    if (series.median[i] != null || series.best[i] != null) {
+      firstIdx = i;
+      break;
+    }
+  }
+  if (firstIdx < 0) return false;
+  const firstDate = payload.run_dates[firstIdx];
+  if (firstDate <= decisionDate) return true;
+  // Decision predates the ledger: lenders present from the first ingest day are
+  // still in-universe (partialObservation); late-join series are not.
+  return payload.run_dates[0] > decisionDate && firstIdx === 0;
 }
 
 function buildPassThroughRows(
@@ -597,6 +638,7 @@ function buildPassThroughRows(
   const rows: PassThroughRow[] = [];
   for (const [provider, sections] of Object.entries(payload.banks)) {
     if (!sections[section]) continue;
+    if (!lenderObservableAtDecision(payload, provider, section, decision.date)) continue;
     const match = firstMatchingMove(
       payload.events,
       provider,
