@@ -1,11 +1,16 @@
 import {
   bankTrendChartModel,
   comparePassThroughRows,
+  daysVsPeerMedian,
+  filterPassThroughRows,
   marketPulse,
   normalizeBankInsightsPayload,
   passThroughDaysLabel,
+  passThroughPeerBenchmark,
+  passThroughSectionsAvailable,
   rbaPassThrough,
   rbaPassThroughDecisionList,
+  rbaPassThroughLeague,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
@@ -191,8 +196,10 @@ describe('rbaPassThrough', () => {
       bps: -25,
       outcome: 'cut',
       rate: 4.1,
+      effective: '2026-05-11',
       partialObservation: false,
     });
+    expect(model!.section).toBe('Mortgage');
     expect(model!.windowEnd).toBe('2026-07-09');
     expect(model!.observedThrough).toBe('2026-06-01');
     expect(model!.windowOpen).toBe(true);
@@ -789,6 +796,107 @@ describe('rbaPassThrough', () => {
       'Partial',
       'Hold',
     ]);
+  });
+
+  test('scores Savings pass-through when that section has ledger coverage', () => {
+    const model = rbaPassThrough(payload, rba, { calendar, section: 'Savings' });
+    expect(model!.section).toBe('Savings');
+    expect(model!.rows.map((r) => r.provider)).toEqual(['GammaBank']);
+    // Savings hike after a cash-rate cut is opposite-direction → none.
+    expect(model!.rows[0]).toMatchObject({
+      provider: 'GammaBank',
+      passedBps: 0,
+      passStatus: 'none',
+    });
+  });
+
+  test('peer benchmark and filters summarise a scored decision', () => {
+    const model = rbaPassThrough(payload, rba, { calendar });
+    const peer = passThroughPeerBenchmark(model!.rows);
+    expect(peer).toMatchObject({
+      total: 2,
+      movers: 1,
+      fullOrOver: 1,
+      none: 1,
+      medianDaysToMove: 5,
+    });
+    expect(filterPassThroughRows(model!.rows, 'full').map((r) => r.provider)).toEqual(['AlphaBank']);
+    expect(filterPassThroughRows(model!.rows, 'none').map((r) => r.provider)).toEqual(['BetaBank']);
+    expect(filterPassThroughRows(model!.rows, 'fast').map((r) => r.provider)).toEqual(['AlphaBank']);
+    expect(daysVsPeerMedian(3, 5)).toBe(-2);
+    expect(daysVsPeerMedian(null, 5)).toBeNull();
+  });
+
+  test('multi-decision league ranks reliable full passers first', () => {
+    const multi: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-07-01',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-06-01', '2026-07-01'],
+      banks: {
+        Steady: {
+          Mortgage: {
+            median: [0.06, 0.0575, 0.055, 0.0525],
+            best: [0.055, 0.0525, 0.05, 0.0475],
+            count: [8, 8, 8, 8],
+          },
+        },
+        Holdout: {
+          Mortgage: {
+            median: [0.06, 0.06, 0.06, 0.06],
+            best: [0.055, 0.055, 0.055, 0.055],
+            count: [4, 4, 4, 4],
+          },
+        },
+      },
+      events: [
+        {
+          date: '2026-05-15',
+          provider: 'Steady',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 8,
+          avg_bps: -25,
+        },
+        {
+          date: '2026-06-20',
+          provider: 'Steady',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 4,
+          total: 8,
+          avg_bps: -25,
+        },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-10', effective: '2026-05-11', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-06-16', effective: '2026-06-17', rate: 3.85, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const league = rbaPassThroughLeague(multi, rba, { calendar: cal });
+    expect(league.map((r) => r.provider)).toEqual(['Steady', 'Holdout']);
+    expect(league[0]).toMatchObject({
+      provider: 'Steady',
+      decisionsScored: 2,
+      fullOrOver: 2,
+      none: 0,
+      consistency: 'reliable',
+    });
+    expect(league[1]).toMatchObject({
+      provider: 'Holdout',
+      fullOrOver: 0,
+      none: 2,
+      consistency: 'holdout',
+    });
+  });
+
+  test('lists product sections with bank-history coverage', () => {
+    expect(passThroughSectionsAvailable(payload)).toEqual(['Mortgage', 'Savings']);
+    expect(passThroughSectionsAvailable(null)).toEqual([]);
   });
 });
 

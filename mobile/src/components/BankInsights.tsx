@@ -2,19 +2,30 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { SECTIONS } from '../constants';
+import { SECTIONS, SECTION_ORDER } from '../constants';
 import {
+  daysVsPeerMedian,
+  filterPassThroughRows,
   marketPulse,
+  PASS_THROUGH_METHODOLOGY,
   passThroughDaysLabel,
+  passThroughPeerBenchmark,
+  passThroughSectionsAvailable,
   rbaPassThrough,
   rbaPassThroughDecisionList,
+  rbaPassThroughLeague,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
   type BankRateEvent,
+  type PassThroughFilter,
+  type PassThroughLeagueConsistency,
+  type PassThroughRow,
+  type RbaDecisionRef,
 } from '../data/bankInsights';
 import { formatRate, formatRunDate } from '../data/format';
 import type { RbaCalendar } from '../data/rbaCalendar';
+import { passThroughA11ySummary } from '../lib/a11ySummaries';
 import {
   DEPOSIT_SECTIONS,
   LOAN_SECTIONS,
@@ -27,6 +38,7 @@ import { openBank } from '../lib/nav';
 import type { RbaEntry, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
+import { SegmentedControl } from './controls';
 import { AppText, Badge, Button, Chip, Divider, Row } from './ui';
 
 function bpsLabel(bps: number): string {
@@ -261,11 +273,65 @@ export function MoversLeaderboard({
   );
 }
 
+function decisionChipLabel(d: RbaDecisionRef): string {
+  const mag = `${d.bps > 0 ? '+' : '−'}${Math.abs(d.bps)}`;
+  return `${formatRunDate(d.date)} · ${mag}`;
+}
+
+function consistencyTone(
+  c: PassThroughLeagueConsistency,
+): 'success' | 'warning' | 'danger' | 'muted' | 'primary' {
+  if (c === 'reliable') return 'success';
+  if (c === 'slow') return 'primary';
+  if (c === 'mixed') return 'warning';
+  if (c === 'holdout') return 'danger';
+  return 'muted';
+}
+
+function consistencyLabel(c: PassThroughLeagueConsistency): string {
+  if (c === 'reliable') return 'reliable';
+  if (c === 'slow') return 'full but slow';
+  if (c === 'mixed') return 'mixed';
+  if (c === 'holdout') return 'often holds';
+  return 'thin sample';
+}
+
+function passRowA11y(
+  row: PassThroughRow,
+  dayOpts: { partialObservation: boolean; windowOpen: boolean },
+  peerMedianDays: number | null,
+): string {
+  if (row.passStatus === 'none') {
+    return `${row.provider}: ${passThroughDaysLabel(null, dayOpts)}`;
+  }
+  const vsPeer = daysVsPeerMedian(row.daysToFirstMove, peerMedianDays);
+  const peerBit =
+    vsPeer == null
+      ? ''
+      : vsPeer === 0
+        ? ', at peer median speed'
+        : vsPeer < 0
+          ? `, ${Math.abs(vsPeer)} days faster than peer median`
+          : `, ${vsPeer} days slower than peer median`;
+  return `${row.provider} passed ${bpsLabel(row.passedBps)}, ${passThroughDaysLabel(
+    row.daysToFirstMove,
+    dayOpts,
+  )}${peerBit}`;
+}
+
+const FILTER_OPTIONS: { key: PassThroughFilter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'full', label: 'Full' },
+  { key: 'partial', label: 'Partial' },
+  { key: 'none', label: 'None' },
+  { key: 'fast', label: '≤7d' },
+];
+
 export function RbaPassThroughCard({
   payload,
   rba,
   calendar = null,
-  maxRows = 5,
+  maxRows = 6,
 }: {
   payload: BankInsightsPayload | null;
   rba: RbaEntry[];
@@ -273,20 +339,53 @@ export function RbaPassThroughCard({
   maxRows?: number;
 }) {
   const theme = useTheme();
+  const availableSections = useMemo(() => passThroughSectionsAvailable(payload), [payload]);
+  const sectionOptions = useMemo(
+    () =>
+      SECTION_ORDER.filter((key) => availableSections.includes(key)).map((key) => ({
+        value: key,
+        label: SECTIONS[key].short,
+      })),
+    [availableSections],
+  );
+  const [section, setSection] = useState<SectionKey>('Mortgage');
+  const activeSection = availableSections.includes(section)
+    ? section
+    : availableSections[0] ?? 'Mortgage';
+
   const decisions = useMemo(
-    () => rbaPassThroughDecisionList(payload, rba, { calendar }),
-    [payload, rba, calendar],
+    () => rbaPassThroughDecisionList(payload, rba, { calendar, section: activeSection }),
+    [payload, rba, calendar, activeSection],
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const activeDate = selectedDate && decisions.some((d) => d.date === selectedDate)
-    ? selectedDate
-    : decisions[0]?.date;
+  const [filter, setFilter] = useState<PassThroughFilter>('all');
+  const [expanded, setExpanded] = useState(false);
+  const [showLeague, setShowLeague] = useState(false);
+  const [showMethod, setShowMethod] = useState(false);
+
+  const activeDate =
+    selectedDate && decisions.some((d) => d.date === selectedDate)
+      ? selectedDate
+      : decisions[0]?.date;
   const model = useMemo(
-    () => rbaPassThrough(payload, rba, { calendar, decisionDate: activeDate }),
-    [payload, rba, calendar, activeDate],
+    () =>
+      rbaPassThrough(payload, rba, {
+        calendar,
+        decisionDate: activeDate,
+        section: activeSection,
+      }),
+    [payload, rba, calendar, activeDate, activeSection],
+  );
+  const league = useMemo(
+    () => rbaPassThroughLeague(payload, rba, { calendar, section: activeSection }),
+    [payload, rba, calendar, activeSection],
+  );
+  const peer = useMemo(
+    () => (model ? passThroughPeerBenchmark(model.rows) : null),
+    [model],
   );
 
-  if (!model) {
+  if (!decisions.length) {
     return (
       <AppText variant="small" color="textMuted">
         No RBA hike or cut has a response window overlapping the tracked bank history yet. When
@@ -295,121 +394,280 @@ export function RbaPassThroughCard({
     );
   }
 
+  if (!model || !peer) {
+    return (
+      <View style={{ gap: 8 }}>
+        {sectionOptions.length > 1 ? (
+          <SegmentedControl
+            options={sectionOptions}
+            value={activeSection}
+            onChange={setSection}
+          />
+        ) : null}
+        <AppText variant="small" color="textMuted">
+          No {SECTIONS[activeSection].short.toLowerCase()} lenders are observable for this RBA
+          decision in the tracked history yet. Try another product section, or wait for the next
+          ingest once banks publish rates in this category.
+        </AppText>
+      </View>
+    );
+  }
+
   const { decision, rows, windowDays, windowEnd, windowOpen, observedThrough } = model;
   const dirWord = decision.bps < 0 ? 'cut' : 'raised';
-  const moved = rows.filter((r) => r.daysToFirstMove != null);
-  const holdouts = rows.filter((r) => r.daysToFirstMove == null);
-  const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
-  const partialPasses = rows.filter((r) => r.passStatus === 'partial');
-  const shown = rows.slice(0, maxRows);
+  const filtered = filterPassThroughRows(rows, filter);
+  const limit = expanded ? filtered.length : maxRows;
+  const shown = filtered.slice(0, limit);
   const dayOpts = { partialObservation: decision.partialObservation, windowOpen };
+  const sectionTitle = SECTIONS[activeSection].title;
+  const leagueShown = showLeague ? league.slice(0, expanded ? 20 : 8) : [];
 
   return (
     <View>
+      {sectionOptions.length > 1 ? (
+        <View style={{ marginBottom: 10 }}>
+          <SegmentedControl
+            options={sectionOptions}
+            value={activeSection}
+            onChange={(next) => {
+              setSection(next);
+              setFilter('all');
+              setExpanded(false);
+            }}
+          />
+        </View>
+      ) : null}
+
       {decisions.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
           <Row gap={6}>
-            {decisions.map((d) => {
-              const label = `${formatRunDate(d.date)} · ${d.bps > 0 ? '+' : '−'}${Math.abs(d.bps)}`;
-              return (
-                <Chip
-                  key={d.date}
-                  label={label}
-                  selected={d.date === decision.date}
-                  onPress={() => setSelectedDate(d.date)}
-                />
-              );
-            })}
+            {decisions.map((d) => (
+              <Chip
+                key={d.date}
+                label={decisionChipLabel(d)}
+                selected={d.date === decision.date}
+                onPress={() => {
+                  setSelectedDate(d.date);
+                  setExpanded(false);
+                }}
+              />
+            ))}
           </Row>
         </ScrollView>
       ) : null}
-      <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
-        RBA {dirWord} the cash rate by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        Mortgage pass-through in the {windowDays}-day window
+
+      <AppText
+        variant="small"
+        color="textMuted"
+        style={{ marginBottom: 4 }}
+        accessibilityLabel={passThroughA11ySummary(model)}
+      >
+        RBA {dirWord} the cash rate by {Math.abs(decision.bps)} bps
+        {decision.rate != null ? ` to ${decision.rate.toFixed(2)}%` : ''}.{' '}
+        {sectionTitle} pass-through in the {windowDays}-day response window
         {windowOpen
           ? ` (open through ${formatRunDate(windowEnd)}; observed to ${formatRunDate(observedThrough)})`
           : ` (closed ${formatRunDate(windowEnd)})`}
-        :
+        .
       </AppText>
-      {decision.partialObservation ? (
-        <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          Announcement predates tracked bank history — timing uses ≤ days because earlier responses
-          may be missing.
-        </AppText>
-      ) : null}
+      <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+        Announced {formatRunDate(decision.date)}
+        {decision.effective
+          ? ` · cash rate effective ${formatRunDate(decision.effective)}`
+          : ' · effective date not in calendar payload'}
+        {decision.partialObservation ? ' · partial observation (pre-ledger announcement)' : ''}
+      </AppText>
       {windowOpen ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
           Response window still open — lenders with no move yet may still pass the change through.
         </AppText>
       ) : null}
+
       <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
         <Badge
-          label={`${fullPasses.length} full pass${fullPasses.length === 1 ? '' : 'es'}`}
+          label={`${peer.fullOrOver} full pass${peer.fullOrOver === 1 ? '' : 'es'}`}
           tone="success"
         />
-        {partialPasses.length ? (
-          <Badge label={`${partialPasses.length} partial`} tone="warning" />
-        ) : null}
-        <Badge label={`${moved.length} moved`} tone="primary" />
-        {holdouts.length ? (
+        {peer.partial ? <Badge label={`${peer.partial} partial`} tone="warning" /> : null}
+        <Badge label={`${peer.movers} moved`} tone="primary" />
+        {peer.none ? (
           <Badge
-            label={windowOpen ? `${holdouts.length} waiting` : `${holdouts.length} no move`}
+            label={windowOpen ? `${peer.none} waiting` : `${peer.none} no move`}
             tone="warning"
           />
         ) : null}
+        {peer.medianDaysToMove != null ? (
+          <Badge
+            label={`peer median ${decision.partialObservation ? '≤' : ''}${peer.medianDaysToMove}d`}
+            tone="muted"
+          />
+        ) : null}
+        {peer.medianRatio != null ? (
+          <Badge label={`peer median ${Math.round(peer.medianRatio * 100)}% pass`} tone="muted" />
+        ) : null}
       </Row>
-      {shown.map((row) => (
-        <Pressable
-          key={row.provider}
-          onPress={() => openBank(row.provider)}
-          accessibilityRole="button"
-          accessibilityLabel={
-            row.passStatus === 'none'
-              ? `${row.provider}: ${passThroughDaysLabel(null, dayOpts)}`
-              : `${row.provider} passed ${bpsLabel(row.passedBps)}, ${passThroughDaysLabel(
-                  row.daysToFirstMove,
-                  dayOpts,
-                )}`
-          }
-        >
-          <Row gap={10} style={{ paddingVertical: 6 }}>
-            <BankAvatar provider={row.provider} size={28} />
-            <View style={{ flex: 1 }}>
-              <AppText variant="small" weight="600" numberOfLines={1}>
-                {row.provider}
-              </AppText>
-              <AppText variant="tiny" color="textFaint">
-                {passThroughDaysLabel(row.daysToFirstMove, dayOpts)}
-              </AppText>
-            </View>
-            {row.passStatus === 'full' || row.passStatus === 'over' ? (
-              <Badge label={row.passStatus === 'over' ? 'over-pass' : 'full pass'} tone="success" />
-            ) : null}
-            {row.passStatus === 'partial' ? <Badge label="partial" tone="warning" /> : null}
-            <AppText
-              variant="small"
-              weight="800"
-              style={{
-                color:
-                  row.passedBps === 0
-                    ? theme.colors.textMuted
-                    : row.passedBps > 0
-                      ? theme.colors.danger
-                      : theme.colors.success,
-                minWidth: 64,
-                textAlign: 'right',
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+        <Row gap={6}>
+          {FILTER_OPTIONS.map((opt) => (
+            <Chip
+              key={opt.key}
+              label={opt.label}
+              selected={filter === opt.key}
+              onPress={() => {
+                setFilter(opt.key);
+                setExpanded(false);
               }}
+            />
+          ))}
+        </Row>
+      </ScrollView>
+
+      {!filtered.length ? (
+        <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+          No lenders match this filter for {SECTIONS[activeSection].short.toLowerCase()} on this
+          decision.
+        </AppText>
+      ) : (
+        shown.map((row) => {
+          const vsPeer = daysVsPeerMedian(row.daysToFirstMove, peer.medianDaysToMove);
+          return (
+            <Pressable
+              key={row.provider}
+              onPress={() => openBank(row.provider)}
+              accessibilityRole="button"
+              accessibilityLabel={passRowA11y(row, dayOpts, peer.medianDaysToMove)}
             >
-              {bpsLabel(row.passedBps)}
-            </AppText>
-          </Row>
-        </Pressable>
-      ))}
-      {rows.length > maxRows ? (
+              <Row gap={10} style={{ paddingVertical: 6 }}>
+                <BankAvatar provider={row.provider} size={28} />
+                <View style={{ flex: 1 }}>
+                  <AppText variant="small" weight="600" numberOfLines={1}>
+                    {row.provider}
+                  </AppText>
+                  <AppText variant="tiny" color="textFaint">
+                    {passThroughDaysLabel(row.daysToFirstMove, dayOpts)}
+                    {vsPeer != null && vsPeer !== 0
+                      ? ` · ${vsPeer < 0 ? `${Math.abs(vsPeer)}d faster` : `${vsPeer}d slower`} than peers`
+                      : ''}
+                  </AppText>
+                </View>
+                {row.passStatus === 'full' || row.passStatus === 'over' ? (
+                  <Badge
+                    label={row.passStatus === 'over' ? 'over-pass' : 'full pass'}
+                    tone="success"
+                  />
+                ) : null}
+                {row.passStatus === 'partial' ? <Badge label="partial" tone="warning" /> : null}
+                {row.passStatus === 'none' ? (
+                  <Badge label={windowOpen ? 'waiting' : 'no move'} tone="muted" />
+                ) : null}
+                <AppText
+                  variant="small"
+                  weight="800"
+                  style={{
+                    color:
+                      row.passedBps === 0
+                        ? theme.colors.textMuted
+                        : row.passedBps > 0
+                          ? theme.colors.danger
+                          : theme.colors.success,
+                    minWidth: 64,
+                    textAlign: 'right',
+                  }}
+                >
+                  {bpsLabel(row.passedBps)}
+                </AppText>
+              </Row>
+            </Pressable>
+          );
+        })
+      )}
+
+      {filtered.length > maxRows ? (
+        <Button
+          title={
+            expanded
+              ? 'Show fewer lenders'
+              : `Show all ${filtered.length} lenders`
+          }
+          variant="ghost"
+          onPress={() => setExpanded((v) => !v)}
+        />
+      ) : filtered.length > 0 && filtered.length < rows.length ? (
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-          Showing {maxRows} of {rows.length} lenders (full and fastest first).
+          Showing {filtered.length} of {rows.length} lenders (filter applied; full and fastest first).
         </AppText>
       ) : null}
+
+      {league.length > 1 ? (
+        <View style={{ marginTop: 10 }}>
+          <Button
+            title={showLeague ? 'Hide multi-decision league' : 'Multi-decision league table'}
+            variant="ghost"
+            icon="trophy"
+            onPress={() => setShowLeague((v) => !v)}
+          />
+          {showLeague ? (
+            <View style={{ marginTop: 4 }}>
+              <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+                Ranked across {decisions.length} scorable RBA moves for{' '}
+                {SECTIONS[activeSection].short.toLowerCase()} — more full passes, fewer holdouts,
+                then faster median first move.
+              </AppText>
+              {leagueShown.map((row) => (
+                <Pressable
+                  key={row.provider}
+                  onPress={() => openBank(row.provider)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${row.provider}: ${row.fullOrOver} full of ${row.decisionsScored} decisions, ${consistencyLabel(row.consistency)}`}
+                >
+                  <Row gap={10} style={{ paddingVertical: 6 }}>
+                    <BankAvatar provider={row.provider} size={26} />
+                    <View style={{ flex: 1 }}>
+                      <AppText variant="small" weight="600" numberOfLines={1}>
+                        {row.provider}
+                      </AppText>
+                      <AppText variant="tiny" color="textFaint">
+                        {row.fullOrOver}/{row.decisionsScored} full
+                        {row.partial ? ` · ${row.partial} partial` : ''}
+                        {row.none ? ` · ${row.none} none` : ''}
+                        {row.medianDays != null ? ` · median ${row.medianDays}d` : ''}
+                      </AppText>
+                    </View>
+                    <Badge
+                      label={consistencyLabel(row.consistency)}
+                      tone={consistencyTone(row.consistency)}
+                    />
+                  </Row>
+                </Pressable>
+              ))}
+              {league.length > leagueShown.length ? (
+                <AppText variant="tiny" color="textFaint">
+                  Showing {leagueShown.length} of {league.length} lenders.
+                </AppText>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={{ marginTop: 6 }}>
+        <Button
+          title={showMethod ? 'Hide methodology' : 'How scoring works'}
+          variant="ghost"
+          icon="information-circle-outline"
+          onPress={() => setShowMethod((v) => !v)}
+        />
+        {showMethod ? (
+          <View style={{ marginTop: 4, gap: 4 }}>
+            {PASS_THROUGH_METHODOLOGY.map((line) => (
+              <AppText key={line} variant="tiny" color="textFaint">
+                • {line}
+              </AppText>
+            ))}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }

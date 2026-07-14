@@ -372,6 +372,11 @@ export interface RbaDecisionRef {
   /** Cash-rate target after the decision, percent — when known. */
   rate?: number;
   /**
+   * Cash-rate effective date when known from the RBA calendar (often announcement+1).
+   * Series-only decisions leave this unset.
+   */
+  effective?: string | null;
+  /**
    * Announcement predates the bank-history ledger start, so first-move timing may
    * miss earlier responses and days-to-follow is an upper bound on observed delay.
    */
@@ -379,6 +384,9 @@ export interface RbaDecisionRef {
 }
 
 export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over';
+
+/** UI / query filter for a single-decision leaderboard. */
+export type PassThroughFilter = 'all' | 'full' | 'partial' | 'none' | 'fast';
 
 export interface PassThroughRow {
   provider: string;
@@ -397,6 +405,8 @@ export interface PassThroughRow {
 export interface PassThroughModel {
   decision: RbaDecisionRef;
   rows: PassThroughRow[];
+  /** Product section this score covers. */
+  section: SectionKey;
   /** Nominal response window length used for this score (days). */
   windowDays: number;
   /** Inclusive end of the response window (may be capped by the next decision). */
@@ -405,6 +415,42 @@ export interface PassThroughModel {
   observedThrough: string;
   /** True when the response window still extends past observedThrough. */
   windowOpen: boolean;
+}
+
+/** Peer medians and counts for one scored decision (movers only for timing/ratio). */
+export interface PassThroughPeerBenchmark {
+  total: number;
+  movers: number;
+  fullOrOver: number;
+  partial: number;
+  none: number;
+  /** Median days-to-first-move among lenders that moved. */
+  medianDaysToMove: number | null;
+  /** Median |passed|/|decision| among movers with a ratio. */
+  medianRatio: number | null;
+  /** Median signed pass-through size among movers. */
+  medianPassedBps: number | null;
+}
+
+export type PassThroughLeagueConsistency =
+  | 'reliable'
+  | 'mixed'
+  | 'slow'
+  | 'holdout'
+  | 'thin';
+
+/** Multi-decision league row — stable ranking across scorable RBA moves. */
+export interface PassThroughLeagueRow {
+  provider: string;
+  decisionsScored: number;
+  fullOrOver: number;
+  partial: number;
+  none: number;
+  /** Median first-move days across decisions where the lender moved. */
+  medianDays: number | null;
+  /** Mean absolute pass ratio across decisions with a move. */
+  meanAbsRatio: number | null;
+  consistency: PassThroughLeagueConsistency;
 }
 
 export interface PassThroughOpts {
@@ -573,6 +619,7 @@ function scoreDecisionsAgainstLedger(
       bps: dec.bps,
       outcome: dec.outcome,
       rate: dec.rate,
+      effective: dec.effective ?? null,
       partialObservation: dec.date < ledgerStart,
     });
   }
@@ -799,6 +846,7 @@ export function rbaPassThrough(
   return {
     decision,
     rows,
+    section,
     windowDays,
     windowEnd,
     observedThrough,
@@ -814,6 +862,196 @@ export function rbaPassThroughDecisionList(
 ): RbaDecisionRef[] {
   return scorablePassThroughDecisions(payload, rba, opts).slice().reverse();
 }
+
+function medianSorted(sorted: number[]): number | null {
+  if (!sorted.length) return null;
+  const mid = Math.floor((sorted.length - 1) / 2);
+  if (sorted.length % 2 === 1) return sorted[mid];
+  return Math.round(((sorted[mid] + sorted[mid + 1]) / 2) * 10) / 10;
+}
+
+/** Peer medians and status counts for a scored decision's rows. */
+export function passThroughPeerBenchmark(rows: PassThroughRow[]): PassThroughPeerBenchmark {
+  const movers = rows.filter((r) => r.daysToFirstMove != null);
+  const days = movers
+    .map((r) => r.daysToFirstMove!)
+    .sort((a, b) => a - b);
+  const ratios = movers
+    .filter((r) => r.ratio != null)
+    .map((r) => r.ratio!)
+    .sort((a, b) => a - b);
+  const bps = movers.map((r) => r.passedBps).sort((a, b) => a - b);
+  let fullOrOver = 0;
+  let partial = 0;
+  let none = 0;
+  for (const r of rows) {
+    if (r.passStatus === 'full' || r.passStatus === 'over') fullOrOver += 1;
+    else if (r.passStatus === 'partial') partial += 1;
+    else none += 1;
+  }
+  return {
+    total: rows.length,
+    movers: movers.length,
+    fullOrOver,
+    partial,
+    none,
+    medianDaysToMove: medianSorted(days),
+    medianRatio: ratios.length ? medianSorted(ratios.map((v) => Math.round(v * 1000) / 1000)) : null,
+    medianPassedBps: medianSorted(bps),
+  };
+}
+
+/** Filter a leaderboard without changing underlying ranking order. */
+export function filterPassThroughRows(
+  rows: PassThroughRow[],
+  filter: PassThroughFilter,
+): PassThroughRow[] {
+  switch (filter) {
+    case 'full':
+      return rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
+    case 'partial':
+      return rows.filter((r) => r.passStatus === 'partial');
+    case 'none':
+      return rows.filter((r) => r.passStatus === 'none');
+    case 'fast':
+      return rows.filter((r) => r.daysToFirstMove != null && r.daysToFirstMove <= 7);
+    default:
+      return rows;
+  }
+}
+
+/** Days faster (−) or slower (+) than the peer median; null when not comparable. */
+export function daysVsPeerMedian(
+  daysToFirstMove: number | null,
+  peerMedianDays: number | null,
+): number | null {
+  if (daysToFirstMove == null || peerMedianDays == null) return null;
+  return daysToFirstMove - peerMedianDays;
+}
+
+function leagueConsistency(row: {
+  decisionsScored: number;
+  fullOrOver: number;
+  partial: number;
+  none: number;
+  medianDays: number | null;
+}): PassThroughLeagueConsistency {
+  if (row.decisionsScored < 2) return 'thin';
+  const fullShare = row.fullOrOver / row.decisionsScored;
+  const noneShare = row.none / row.decisionsScored;
+  if (noneShare >= 0.67) return 'holdout';
+  if (fullShare >= 0.67 && (row.medianDays == null || row.medianDays <= 14)) return 'reliable';
+  if (fullShare >= 0.67 && row.medianDays != null && row.medianDays > 14) return 'slow';
+  return 'mixed';
+}
+
+/**
+ * Multi-decision league table for one section: who reliably passes RBA moves through.
+ * Ranking: more full/over, then fewer none, then faster median days, then name.
+ */
+export function rbaPassThroughLeague(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts = {},
+): PassThroughLeagueRow[] {
+  if (!payload) return [];
+  const section = opts.section ?? 'Mortgage';
+  const decisions = scorablePassThroughDecisions(payload, rba, opts);
+  if (!decisions.length) return [];
+
+  const byProvider = new Map<
+    string,
+    {
+      decisionsScored: number;
+      fullOrOver: number;
+      partial: number;
+      none: number;
+      days: number[];
+      ratios: number[];
+    }
+  >();
+
+  for (const decision of decisions) {
+    const model = rbaPassThrough(payload, rba, {
+      ...opts,
+      section,
+      decisionDate: decision.date,
+    });
+    if (!model) continue;
+    for (const row of model.rows) {
+      let agg = byProvider.get(row.provider);
+      if (!agg) {
+        agg = {
+          decisionsScored: 0,
+          fullOrOver: 0,
+          partial: 0,
+          none: 0,
+          days: [],
+          ratios: [],
+        };
+        byProvider.set(row.provider, agg);
+      }
+      agg.decisionsScored += 1;
+      if (row.passStatus === 'full' || row.passStatus === 'over') agg.fullOrOver += 1;
+      else if (row.passStatus === 'partial') agg.partial += 1;
+      else agg.none += 1;
+      if (row.daysToFirstMove != null) agg.days.push(row.daysToFirstMove);
+      if (row.ratio != null) agg.ratios.push(Math.abs(row.ratio));
+    }
+  }
+
+  const out: PassThroughLeagueRow[] = [];
+  for (const [provider, agg] of byProvider) {
+    const daysSorted = agg.days.slice().sort((a, b) => a - b);
+    const meanAbsRatio = agg.ratios.length
+      ? Math.round(
+          (agg.ratios.reduce((s, v) => s + v, 0) / agg.ratios.length) * 1000,
+        ) / 1000
+      : null;
+    const base = {
+      provider,
+      decisionsScored: agg.decisionsScored,
+      fullOrOver: agg.fullOrOver,
+      partial: agg.partial,
+      none: agg.none,
+      medianDays: medianSorted(daysSorted),
+      meanAbsRatio,
+    };
+    out.push({ ...base, consistency: leagueConsistency(base) });
+  }
+
+  out.sort((a, b) => {
+    if (b.fullOrOver !== a.fullOrOver) return b.fullOrOver - a.fullOrOver;
+    if (a.none !== b.none) return a.none - b.none;
+    const aDays = a.medianDays;
+    const bDays = b.medianDays;
+    if (aDays != null && bDays != null && aDays !== bDays) return aDays - bDays;
+    if (aDays != null && bDays == null) return -1;
+    if (aDays == null && bDays != null) return 1;
+    return a.provider.localeCompare(b.provider);
+  });
+  return out;
+}
+
+/** Sections that have at least one lender series in the bank-history payload. */
+export function passThroughSectionsAvailable(
+  payload: BankInsightsPayload | null | undefined,
+): SectionKey[] {
+  if (!payload) return [];
+  return SECTION_KEYS.filter((section) =>
+    Object.values(payload.banks).some((sections) => Boolean(sections[section])),
+  );
+}
+
+/** Short methodology copy for UI disclosures (keep in sync with scoring rules). */
+export const PASS_THROUGH_METHODOLOGY = [
+  'Timing starts from the RBA announcement date (calendar) when available; cash-rate series uses the effective step date.',
+  'Pass size sums same-direction product moves in the response window (default 60 days, capped before the next hike/cut).',
+  'Full pass means cumulative same-direction size reaches the decision; over-pass exceeds it; partial is anything in between.',
+  'Speed uses the first matching move; when the announcement predates tracked bank history, days are shown as ≤ because earlier responses may be missing.',
+  'Open windows mean holdouts may still move — “no move” is not final until the window closes.',
+  'League tables aggregate every scorable decision in the ledger for the selected product section.',
+] as const;
 
 export interface BankSnapshotRow {
   provider: string;

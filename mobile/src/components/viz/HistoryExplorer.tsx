@@ -164,7 +164,12 @@ export function HistoryExplorer({
           ) : null}
           {activeMode === 'rba' ? (
             <ChartErrorBoundary name="RbaResponseScatter">
-              <RbaResponseScatter payload={insights} rba={rba} calendar={rbaCalendar} />
+              <RbaResponseScatter
+                payload={insights}
+                rba={rba}
+                calendar={rbaCalendar}
+                section={section}
+              />
             </ChartErrorBoundary>
           ) : null}
           {(activeMode === 'ribbon' || activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (

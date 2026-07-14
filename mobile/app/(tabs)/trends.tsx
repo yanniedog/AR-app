@@ -285,8 +285,13 @@ export default function Trends() {
 
       {showBankInsights && bankInsights ? (
         <Card style={{ marginBottom: 16 }}>
-          <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-            <AppText variant="h3">RBA pass-through</AppText>
+          <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+            <View style={{ flex: 1, paddingRight: 8 }}>
+              <AppText variant="h3">RBA pass-through</AppText>
+              <AppText variant="tiny" color="textFaint">
+                Who followed each cash-rate move — by product, speed, and fullness
+              </AppText>
+            </View>
             <Chip label="PRO" selected />
           </Row>
           <RbaPassThroughCard payload={bankInsights} rba={core.rba} calendar={calendar} />

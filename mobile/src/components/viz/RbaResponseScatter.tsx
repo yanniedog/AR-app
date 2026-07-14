@@ -2,8 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
+import { SECTIONS, SECTION_ORDER } from '../../constants';
 import {
   passThroughDaysLabel,
+  passThroughPeerBenchmark,
+  passThroughSectionsAvailable,
   rbaPassThrough,
   rbaPassThroughDecisionList,
   type BankInsightsPayload,
@@ -11,11 +14,13 @@ import {
 } from '../../data/bankInsights';
 import type { RbaCalendar } from '../../data/rbaCalendar';
 import { formatRunDate } from '../../data/format';
+import { passThroughA11ySummary } from '../../lib/a11ySummaries';
 import { openBank } from '../../lib/nav';
-import type { RbaEntry } from '../../types';
+import type { RbaEntry, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
+import { SegmentedControl } from '../controls';
 import { AppText, Badge, Chip, Row } from '../ui';
 
 /**
@@ -28,18 +33,35 @@ export function RbaResponseScatter({
   payload,
   rba,
   calendar = null,
+  section: sectionProp,
   height = 190,
 }: {
   payload: BankInsightsPayload | null;
   rba: RbaEntry[];
   calendar?: RbaCalendar | null;
+  /** When omitted, the chart offers a section control (Mortgage / Savings / TD). */
+  section?: SectionKey;
   height?: number;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  const availableSections = useMemo(() => passThroughSectionsAvailable(payload), [payload]);
+  const sectionOptions = useMemo(
+    () =>
+      SECTION_ORDER.filter((key) => availableSections.includes(key)).map((key) => ({
+        value: key,
+        label: SECTIONS[key].short,
+      })),
+    [availableSections],
+  );
+  const [sectionState, setSectionState] = useState<SectionKey>('Mortgage');
+  const activeSection =
+    sectionProp ??
+    (availableSections.includes(sectionState) ? sectionState : availableSections[0] ?? 'Mortgage');
+
   const decisions = useMemo(
-    () => rbaPassThroughDecisionList(payload, rba, { calendar }),
-    [payload, rba, calendar],
+    () => rbaPassThroughDecisionList(payload, rba, { calendar, section: activeSection }),
+    [payload, rba, calendar, activeSection],
   );
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const activeDate =
@@ -47,10 +69,16 @@ export function RbaResponseScatter({
       ? selectedDate
       : decisions[0]?.date;
   const model = useMemo(
-    () => rbaPassThrough(payload, rba, { calendar, decisionDate: activeDate }),
-    [payload, rba, calendar, activeDate],
+    () =>
+      rbaPassThrough(payload, rba, {
+        calendar,
+        decisionDate: activeDate,
+        section: activeSection,
+      }),
+    [payload, rba, calendar, activeDate, activeSection],
   );
-  if (!model) {
+
+  if (!decisions.length) {
     return (
       <AppText variant="small" color="textMuted">
         No RBA hike or cut has a response window overlapping the tracked history yet. When the next
@@ -59,12 +87,29 @@ export function RbaResponseScatter({
     );
   }
 
+  if (!model) {
+    return (
+      <View style={{ gap: 8 }}>
+        {!sectionProp && sectionOptions.length > 1 ? (
+          <SegmentedControl
+            options={sectionOptions}
+            value={activeSection}
+            onChange={setSectionState}
+          />
+        ) : null}
+        <AppText variant="small" color="textMuted">
+          No {SECTIONS[activeSection].short.toLowerCase()} lenders are observable for this decision
+          yet. Switch section or wait for the next ingest.
+        </AppText>
+      </View>
+    );
+  }
+
   const { decision, rows, windowDays, windowEnd, windowOpen, observedThrough } = model;
+  const peer = passThroughPeerBenchmark(rows);
   const moved = rows.filter((r) => r.daysToFirstMove != null);
   const holdouts = rows.filter((r) => r.daysToFirstMove == null);
   const isCut = decision.bps < 0;
-  const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
-  const partialPasses = rows.filter((r) => r.passStatus === 'partial');
   const dayOpts = { partialObservation: decision.partialObservation, windowOpen };
 
   const padL = 40;
@@ -79,6 +124,7 @@ export function RbaResponseScatter({
     7,
     windowDays,
     ...moved.map((r) => r.daysToFirstMove ?? 0),
+    peer.medianDaysToMove ?? 0,
   );
   const bpsValues = rows.map((r) => r.passedBps).concat([decision.bps, 0]);
   const yMin = Math.min(...bpsValues) - 5;
@@ -102,6 +148,15 @@ export function RbaResponseScatter({
 
   return (
     <View>
+      {!sectionProp && sectionOptions.length > 1 ? (
+        <View style={{ marginBottom: 8 }}>
+          <SegmentedControl
+            options={sectionOptions}
+            value={activeSection}
+            onChange={setSectionState}
+          />
+        </View>
+      ) : null}
       {decisions.length > 1 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
           <Row gap={6}>
@@ -116,14 +171,23 @@ export function RbaResponseScatter({
           </Row>
         </ScrollView>
       ) : null}
-      <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
-        RBA {isCut ? 'cut' : 'raised'} by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        Each dot is a lender: further left = faster first move, on the dashed line = full cumulative
-        pass-through
+      <AppText variant="small" color="textMuted" style={{ marginBottom: 4 }}>
+        RBA {isCut ? 'cut' : 'raised'} by {Math.abs(decision.bps)} bps for{' '}
+        {SECTIONS[activeSection].short.toLowerCase()}. Each dot is a lender: further left = faster
+        first move, on the dashed line = full cumulative pass-through
         {windowOpen
           ? ` (window open through ${formatRunDate(windowEnd)}; data through ${formatRunDate(observedThrough)})`
           : ` (window closed ${formatRunDate(windowEnd)})`}
         .
+      </AppText>
+      <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+        Announced {formatRunDate(decision.date)}
+        {decision.effective
+          ? ` · effective ${formatRunDate(decision.effective)}`
+          : ' · effective date not in calendar'}
+        {peer.medianDaysToMove != null
+          ? ` · peer median first move ${decision.partialObservation ? '≤' : ''}${peer.medianDaysToMove}d`
+          : ''}
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
@@ -136,11 +200,12 @@ export function RbaResponseScatter({
         </AppText>
       ) : null}
       <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
-        <Badge label={`${fullPasses.length} full pass${fullPasses.length === 1 ? '' : 'es'}`} tone="success" />
-        {partialPasses.length ? (
-          <Badge label={`${partialPasses.length} partial`} tone="warning" />
-        ) : null}
-        <Badge label={`${moved.length} moved`} tone="primary" />
+        <Badge
+          label={`${peer.fullOrOver} full pass${peer.fullOrOver === 1 ? '' : 'es'}`}
+          tone="success"
+        />
+        {peer.partial ? <Badge label={`${peer.partial} partial`} tone="warning" /> : null}
+        <Badge label={`${peer.movers} moved`} tone="primary" />
         {holdouts.length ? (
           <Badge
             label={windowOpen ? `${holdouts.length} waiting` : `${holdouts.length} no move`}
@@ -152,12 +217,19 @@ export function RbaResponseScatter({
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
         accessible
         accessibilityRole="image"
-        accessibilityLabel={`RBA response map for ${formatRunDate(decision.date)}: ${moved.length} lenders moved, ${fullPasses.length} full pass-through of ${Math.abs(decision.bps)} basis points, ${holdouts.length} ${windowOpen ? 'still waiting' : 'with no move'}; window ${windowOpen ? 'open' : 'closed'} through ${formatRunDate(windowEnd)}`}
+        accessibilityLabel={passThroughA11ySummary(model)}
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
           <Svg width={width} height={height}>
-            <Line x1={padL} y1={yAt(0)} x2={width - padR} y2={yAt(0)} stroke={theme.colors.border} strokeWidth={1} />
+            <Line
+              x1={padL}
+              y1={yAt(0)}
+              x2={width - padR}
+              y2={yAt(0)}
+              stroke={theme.colors.border}
+              strokeWidth={1}
+            />
             <Line
               x1={padL}
               y1={yAt(decision.bps)}
@@ -167,11 +239,45 @@ export function RbaResponseScatter({
               strokeWidth={1.4}
               strokeDasharray="5 4"
             />
-            <SvgText x={padL + 2} y={yAt(decision.bps) - 4} fontSize={9} fill={theme.colors.rba} fontWeight="600">
+            <SvgText
+              x={padL + 2}
+              y={yAt(decision.bps) - 4}
+              fontSize={9}
+              fill={theme.colors.rba}
+              fontWeight="600"
+            >
               full pass ({decision.bps > 0 ? '+' : ''}
               {decision.bps} bps)
             </SvgText>
-            <SvgText x={padL - 6} y={yAt(0) + 3} fontSize={9} fill={theme.colors.textFaint} textAnchor="end">
+            {peer.medianDaysToMove != null ? (
+              <>
+                <Line
+                  x1={xAt(peer.medianDaysToMove)}
+                  y1={padT}
+                  x2={xAt(peer.medianDaysToMove)}
+                  y2={padT + innerH}
+                  stroke={withAlpha(theme.colors.primary, 0.55)}
+                  strokeWidth={1.2}
+                  strokeDasharray="3 3"
+                />
+                <SvgText
+                  x={xAt(peer.medianDaysToMove) + 3}
+                  y={padT + 10}
+                  fontSize={8}
+                  fill={theme.colors.primary}
+                  fontWeight="600"
+                >
+                  peer {peer.medianDaysToMove}d
+                </SvgText>
+              </>
+            ) : null}
+            <SvgText
+              x={padL - 6}
+              y={yAt(0) + 3}
+              fontSize={9}
+              fill={theme.colors.textFaint}
+              textAnchor="end"
+            >
               0
             </SvgText>
             {axisMarks.map((d) => (
@@ -184,7 +290,13 @@ export function RbaResponseScatter({
                   stroke={withAlpha(theme.colors.textFaint, 0.18)}
                   strokeWidth={0.8}
                 />
-                <SvgText x={xAt(d)} y={height - 12} fontSize={9} fill={theme.colors.textFaint} textAnchor="middle">
+                <SvgText
+                  x={xAt(d)}
+                  y={height - 12}
+                  fontSize={9}
+                  fill={theme.colors.textFaint}
+                  textAnchor="middle"
+                >
                   {d}d
                 </SvgText>
               </React.Fragment>
@@ -198,8 +310,14 @@ export function RbaResponseScatter({
                 fill={withAlpha(dotColor(r), 0.85)}
               />
             ))}
-            <SvgText x={padL + innerW / 2} y={height - 1} fontSize={9} fill={theme.colors.textFaint} textAnchor="middle">
-              days from decision to first move
+            <SvgText
+              x={padL + innerW / 2}
+              y={height - 1}
+              fontSize={9}
+              fill={theme.colors.textFaint}
+              textAnchor="middle"
+            >
+              days from announcement to first move
             </SvgText>
           </Svg>
         ) : null}

@@ -1,5 +1,7 @@
 import { SECTIONS } from '../constants';
-import { formatRate } from '../data/format';
+import type { PassThroughModel } from '../data/bankInsights';
+import { passThroughPeerBenchmark } from '../data/bankInsights';
+import { formatRate, formatRunDate } from '../data/format';
 import type { RateStats } from '../data/taxonomy';
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
 
@@ -90,4 +92,37 @@ export function bankHistoryChartA11ySummary(opts: {
 export function rbaDecisionA11yLabel(prior: number, rate: number, date: string): string {
   const direction = rate > prior ? 'Increased' : rate < prior ? 'Decreased' : 'Unchanged';
   return `${direction} on ${date}, from ${prior.toFixed(2)} percent to ${rate.toFixed(2)} percent`;
+}
+
+/** TalkBack summary for an RBA pass-through scorecard / scatter. */
+export function passThroughA11ySummary(model: PassThroughModel): string {
+  const { decision, section, windowOpen, windowEnd, observedThrough } = model;
+  const peer = passThroughPeerBenchmark(model.rows);
+  const dir = decision.outcome === 'cut' ? 'cut' : 'raised';
+  const sectionTitle = SECTIONS[section].title;
+  const parts = [
+    `${sectionTitle} RBA pass-through`,
+    `announced ${formatRunDate(decision.date)}`,
+  ];
+  if (decision.effective) {
+    parts.push(`effective ${formatRunDate(decision.effective)}`);
+  }
+  parts.push(
+    `RBA ${dir} by ${Math.abs(decision.bps)} basis points`,
+    `${peer.fullOrOver} full pass`,
+    `${peer.partial} partial`,
+    `${peer.movers} moved`,
+    windowOpen
+      ? `${peer.none} still waiting, window open through ${formatRunDate(windowEnd)}, data through ${formatRunDate(observedThrough)}`
+      : `${peer.none} with no move, window closed ${formatRunDate(windowEnd)}`,
+  );
+  if (peer.medianDaysToMove != null) {
+    parts.push(
+      `peer median first move ${decision.partialObservation ? '≤' : ''}${peer.medianDaysToMove} days`,
+    );
+  }
+  if (decision.partialObservation) {
+    parts.push('partial observation because announcement predates tracked bank history');
+  }
+  return parts.join(', ');
 }

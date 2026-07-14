@@ -1,10 +1,12 @@
 import {
   bankHistoryChartA11ySummary,
+  passThroughA11ySummary,
   rateValueLabel,
   rbaChartA11ySummary,
   rbaDecisionA11yLabel,
   ribbonA11ySummary,
 } from '../src/lib/a11ySummaries';
+import type { PassThroughModel } from '../src/data/bankInsights';
 
 describe('a11ySummaries', () => {
   const stats = {
@@ -58,5 +60,45 @@ describe('a11ySummaries', () => {
   it('labels RBA decision direction', () => {
     expect(rbaDecisionA11yLabel(4.35, 4.6, 'Jun 2024')).toContain('Increased');
     expect(rbaDecisionA11yLabel(4.6, 4.35, 'Aug 2024')).toContain('Decreased');
+  });
+
+  it('summarises pass-through scorecards for TalkBack', () => {
+    const model: PassThroughModel = {
+      decision: {
+        date: '2026-05-10',
+        bps: -25,
+        outcome: 'cut',
+        rate: 4.1,
+        effective: '2026-05-11',
+        partialObservation: false,
+      },
+      section: 'Mortgage',
+      rows: [
+        {
+          provider: 'AlphaBank',
+          passedBps: -25,
+          daysToFirstMove: 5,
+          ratio: 1,
+          passStatus: 'full',
+        },
+        {
+          provider: 'BetaBank',
+          passedBps: 0,
+          daysToFirstMove: null,
+          ratio: null,
+          passStatus: 'none',
+        },
+      ],
+      windowDays: 60,
+      windowEnd: '2026-07-09',
+      observedThrough: '2026-06-01',
+      windowOpen: true,
+    };
+    const s = passThroughA11ySummary(model);
+    expect(s).toContain('Home loans RBA pass-through');
+    expect(s).toContain('effective');
+    expect(s).toContain('1 full pass');
+    expect(s).toContain('still waiting');
+    expect(s).toContain('peer median first move 5 days');
   });
 });
