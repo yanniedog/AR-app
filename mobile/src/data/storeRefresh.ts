@@ -50,6 +50,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           warmOptionalAssets();
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
             const state = get();
+            // A newer refresh may have already published a different core while
+            // this deferred work was yielding/warming — skip stale diffs.
+            if (state.core !== notifyCtx.core) {
+              debugLog.debug('store', 'skip notify; core superseded by newer refresh');
+              return;
+            }
             if (!state.prefs.notificationsEnabled) return;
             await yieldToUi();
             // Re-read favorites/subscriptions at notify time so a user who

@@ -111,4 +111,85 @@ describe('cache core-meta sidecar', () => {
     expect(read?.detailsSha).toBeNull();
     expect(JSON.parse(files.get(metaPath)!).coreSha).toBe(sampleManifest.files.core.sha256);
   });
+
+  it('readMeta falls back to tmp bundle when the main bundle is missing', async () => {
+    const meta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-14T00:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: 'tmp-details-sha',
+    };
+    const tmpPath = `${FileSystem.documentDirectory}payload/core-bundle.json.tmp`;
+    files.set(tmpPath, JSON.stringify({ meta, core: sampleCore }));
+
+    const read = await cache.readMeta();
+    expect(read?.detailsSha).toBe('tmp-details-sha');
+    expect(read?.coreSha).toBe(sampleManifest.files.core.sha256);
+  });
+
+  it('readBundle prefers a matching sidecar and ignores a mismatched coreSha sidecar', async () => {
+    const meta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-14T00:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: null,
+    };
+    await cache.writeBundle(meta, JSON.stringify(sampleCore));
+
+    const sidecarMeta: CacheMeta = {
+      ...meta,
+      detailsSha: 'sidecar-details-sha-1234',
+      savedAt: '2026-07-14T01:00:00Z',
+    };
+    await cache.updateMeta(sidecarMeta);
+    const withSidecar = await cache.readBundle();
+    expect(withSidecar?.meta.detailsSha).toBe('sidecar-details-sha-1234');
+
+    const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
+    // updateMeta no-ops on coreSha mismatch, so plant a stale sidecar directly.
+    files.set(
+      metaPath,
+      JSON.stringify({
+        ...sidecarMeta,
+        coreSha: 'stale-core-sha-5678',
+      }),
+    );
+    const withStale = await cache.readBundle();
+    expect(withStale?.meta.detailsSha).toBeNull();
+    expect(withStale?.meta.coreSha).toBe(sampleManifest.files.core.sha256);
+  });
+
+  it('updateMeta no-ops on coreSha mismatch and older manifests', async () => {
+    const meta: CacheMeta = {
+      manifest: { ...sampleManifest, generated_at: '2026-07-14T12:00:00Z' },
+      source: 'remote',
+      savedAt: '2026-07-14T12:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: 'keep-me',
+    };
+    await cache.writeBundle(meta, JSON.stringify(sampleCore));
+    const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
+    const before = files.get(metaPath)!;
+
+    await cache.updateMeta({
+      manifest: sampleManifest,
+      coreSha: 'other-core-sha',
+      detailsSha: 'should-not-apply',
+      savedAt: '2026-07-14T13:00:00Z',
+      source: 'remote',
+    });
+    expect(files.get(metaPath)).toBe(before);
+
+    await cache.updateMeta({
+      manifest: { ...sampleManifest, generated_at: '2026-07-13T00:00:00Z' },
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: 'older-should-not-apply',
+      savedAt: '2026-07-14T13:00:00Z',
+      source: 'remote',
+    });
+    expect(files.get(metaPath)).toBe(before);
+    expect((await cache.readMeta())?.detailsSha).toBe('keep-me');
+  });
 });

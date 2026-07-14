@@ -199,7 +199,9 @@ export async function downloadInflate(
     totalBytes: byteLen,
     startedAt: inflateStarted,
   });
-  if (byteLen >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
+  // Always yield before inflate/decrypt/gunzip — compressed byteLen can be well
+  // under the parse threshold while the expanded JSON is multi-MB on the JS thread.
+  await yieldToUi();
   let bytes: Uint8Array = new Uint8Array(buf);
   // Encrypted assets (ARE1 magic) are decrypted to the gzip layer first; the
   // sha256 above was computed over the ciphertext, matching the manifest.

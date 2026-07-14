@@ -125,7 +125,12 @@ export const cache = {
     // crash window after writeBundle deleted the sidecar / committed a new
     // bundle but before writeCoreMeta finished — fall back to embedded meta
     // (avoid a write here so readMeta stays side-effect free under serialize()).
-    const fromBundle = (await readJson<CoreBundle>(BUNDLE))?.meta ?? null;
+    // Mirror readBundle: prefer the main bundle, then the tmp file if a crash
+    // happened between writing BUNDLE_TMP and moving it into place.
+    const fromBundle =
+      (await readJson<CoreBundle>(BUNDLE))?.meta ??
+      (await readJson<CoreBundle>(BUNDLE_TMP))?.meta ??
+      null;
     return isCacheMeta(fromBundle) ? fromBundle : null;
   },
 
