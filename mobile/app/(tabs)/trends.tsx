@@ -52,6 +52,7 @@ export default function Trends() {
   const bankInsightsError = useStore((s) => s.bankInsightsError);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const retryBankInsights = useStore((s) => s.retryBankInsights);
+  const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
   const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
@@ -123,6 +124,10 @@ export default function Trends() {
     insightsRequestKey.current = key;
     void ensureBankInsights();
   }, [core?.run_date, ensureBankInsights, showBankInsights]);
+
+  useEffect(() => {
+    void ensureRbaCalendar();
+  }, [core?.run_date, ensureRbaCalendar]);
 
   const payloadDecisions = useMemo(() => {
     if (!core?.rba) return [];
@@ -284,7 +289,7 @@ export default function Trends() {
             <AppText variant="h3">RBA pass-through</AppText>
             <Chip label="PRO" selected />
           </Row>
-          <RbaPassThroughCard payload={bankInsights} rba={core.rba} />
+          <RbaPassThroughCard payload={bankInsights} rba={core.rba} calendar={calendar} />
         </Card>
       ) : null}
 
@@ -315,6 +320,7 @@ export default function Trends() {
                 insightsAvailable={showBankInsights}
                 rba={core.rba}
                 rbaHolds={core.rba_holds}
+                rbaCalendar={calendar}
                 brands={core.brands}
                 selectedDate={rewindDate}
                 onDateSelect={setRewindDate}
