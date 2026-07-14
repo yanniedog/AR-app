@@ -2,11 +2,15 @@ import { syncProductHistoryFromDailyPayloads, type ProductHistoryPayload } from 
 import type { CorePayload, RateRow, SectionKey } from '../src/types';
 import { downloadDatedCore, fetchDatesIndexJson, historyDatesUpTo } from '../src/data/historyDaily';
 
-jest.mock('../src/data/historyDaily', () => ({
-  downloadDatedCore: jest.fn(),
-  fetchDatesIndexJson: jest.fn(),
-  historyDatesUpTo: jest.fn(),
-}));
+jest.mock('../src/data/historyDaily', () => {
+  const actual = jest.requireActual('../src/data/historyDaily') as object;
+  return {
+    ...actual,
+    downloadDatedCore: jest.fn(),
+    fetchDatesIndexJson: jest.fn(),
+    historyDatesUpTo: jest.fn(),
+  };
+});
 
 const mockedDownload = jest.mocked(downloadDatedCore);
 const mockedFetchIndex = jest.mocked(fetchDatesIndexJson);
@@ -77,7 +81,7 @@ test('does not cache a failed date and retries it on the next sync', async () =>
   expect(mockedDownload).toHaveBeenCalledTimes(2);
 });
 
-test('refetches prior dates when the current catalog changes', async () => {
+test('reuses prior dates when the catalog grows instead of refetching history', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const existing: ProductHistoryPayload = {
     schema_version: 2,
@@ -85,9 +89,6 @@ test('refetches prior dates when the current catalog changes', async () => {
     run_dates: ['2026-06-10'],
     products: { 'P|1': [0.06] },
   };
-  mockedDownload.mockResolvedValueOnce(
-    core('2026-06-10', { Mortgage: [rateRow('P|1', '0.06'), rateRow('Q|2', '0.07')] }),
-  );
 
   const result = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-11',
@@ -95,6 +96,62 @@ test('refetches prior dates when the current catalog changes', async () => {
     existing,
   });
 
-  expect(mockedDownload).toHaveBeenCalledWith('2026-06-10');
-  expect(result.products['Q|2']).toEqual([0.07, 0.065]);
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(result.products['P|1']).toEqual([0.06, 0.055]);
+  // New catalog keys keep null history until those dates are missing from cache.
+  expect(result.products['Q|2']).toEqual([null, 0.065]);
+});
+
+test('preserves rates when a product temporarily leaves then returns to the catalog', async () => {
+  mockedHistoryDates.mockImplementation((_index, targetRunDate: string) =>
+    ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= targetRunDate),
+  );
+  const existing: ProductHistoryPayload = {
+    schema_version: 2,
+    run_date: '2026-06-10',
+    run_dates: ['2026-06-10'],
+    products: { 'P|1': [0.06], 'Q|2': [0.07] },
+  };
+
+  const withoutQ = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    existing,
+  });
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(withoutQ.products['P|1']).toEqual([0.06, 0.055]);
+  // Absent catalog keys keep their historical series so reuse stays valid.
+  expect(withoutQ.products['Q|2']).toEqual([0.07, null]);
+
+  const restored = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-12',
+    currentCore: core('2026-06-12', {
+      Mortgage: [rateRow('P|1', '0.05'), rateRow('Q|2', '0.065')],
+    }),
+    existing: withoutQ,
+  });
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(restored.products['Q|2']).toEqual([0.07, null, 0.065]);
+});
+
+test('stops dated fetches after consecutive network failures', async () => {
+  mockedHistoryDates.mockReturnValue([
+    '2026-06-01',
+    '2026-06-02',
+    '2026-06-03',
+    '2026-06-04',
+    '2026-06-05',
+    '2026-06-06',
+  ]);
+  mockedDownload.mockRejectedValue(new Error('network error'));
+
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-06',
+    currentCore: core('2026-06-06', { Mortgage: [rateRow('P|1', '0.055')] }),
+    maxConcurrent: 1,
+    circuitLimit: 3,
+  });
+
+  expect(result.run_dates).toEqual(['2026-06-06']);
+  expect(mockedDownload.mock.calls.length).toBeLessThanOrEqual(3);
 });

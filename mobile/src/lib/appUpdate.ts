@@ -31,6 +31,18 @@ export {
 
 const APK_CACHE = `${FileSystem.cacheDirectory ?? ''}app-update.apk`;
 
+/** Coalesce banner + settings checks within a short window (log showed duplicate hits). */
+const UPDATE_CHECK_TTL_MS = 60_000;
+let updateCheckCache: {
+  url: string;
+  startedAt: number;
+  promise: Promise<UpdateCheckResult>;
+} | null = null;
+
+export function resetAppUpdateCheckCacheForTests(): void {
+  updateCheckCache = null;
+}
+
 export function getInstalledAppInfo(): InstalledAppInfo {
   return {
     version: Application.nativeApplicationVersion ?? '0.0.0',
@@ -44,16 +56,36 @@ export async function checkForAppUpdate(
   if (Platform.OS !== 'android') {
     return { status: 'error', message: 'In-app APK updates are Android-only' };
   }
-  const result = await checkForAppUpdateAt(url, getInstalledAppInfo());
-  if (result.status === 'available' || result.status === 'current') {
-    debugLog.info(
-      'app-update',
-      `check ${result.status} installed=${result.installed.version}/${result.installed.buildNumber} remote=${result.remote.version}/${result.remote.build_number}`,
-    );
-  } else {
-    debugLog.error('app-update', `check failed: ${result.message}`);
+  const now = Date.now();
+  if (
+    updateCheckCache &&
+    updateCheckCache.url === url &&
+    now - updateCheckCache.startedAt < UPDATE_CHECK_TTL_MS
+  ) {
+    return updateCheckCache.promise;
   }
-  return result;
+  let promise!: Promise<UpdateCheckResult>;
+  promise = (async () => {
+    try {
+      const result = await checkForAppUpdateAt(url, getInstalledAppInfo());
+      if (result.status === 'available' || result.status === 'current') {
+        debugLog.info(
+          'app-update',
+          `check ${result.status} installed=${result.installed.version}/${result.installed.buildNumber} remote=${result.remote.version}/${result.remote.build_number}`,
+        );
+      } else {
+        debugLog.error('app-update', `check failed: ${result.message}`);
+        // Soft failures must not block retries for the TTL window.
+        if (updateCheckCache?.promise === promise) updateCheckCache = null;
+      }
+      return result;
+    } catch (err) {
+      if (updateCheckCache?.promise === promise) updateCheckCache = null;
+      throw err;
+    }
+  })();
+  updateCheckCache = { url, startedAt: now, promise };
+  return promise;
 }
 
 function toHex(buf: ArrayBuffer): string {

@@ -4,6 +4,7 @@ import { effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
 import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import { sampleCore, sampleManifest } from './sample';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
@@ -51,7 +52,11 @@ export function createBootstrapActions(
             ...(cachedSearch ? { searchIndex: cachedSearch } : {}),
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
           });
-          reportSuitabilityExclusions(bundle.core);
+          // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
+          const readyCore = bundle.core;
+          void yieldToUi().then(() => {
+            if (get().core?.run_date === readyCore.run_date) reportSuitabilityExclusions(readyCore);
+          });
         } else {
           debugLog.info('store', 'cache miss — seeding bundled sample');
           await installSampleSeed();
@@ -62,7 +67,11 @@ export function createBootstrapActions(
             status: 'ready',
             error: null,
           });
-          reportSuitabilityExclusions(sampleCore);
+          // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
+          const seeded = sampleCore;
+          void yieldToUi().then(() => {
+            if (get().core?.run_date === seeded.run_date) reportSuitabilityExclusions(seeded);
+          });
         }
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
