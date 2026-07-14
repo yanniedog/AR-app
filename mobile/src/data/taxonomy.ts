@@ -1,5 +1,5 @@
 import { SECTIONS } from '../constants';
-import { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
+import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
 
@@ -119,13 +119,12 @@ export function statsFor(
   const fractions: number[] = [];
   const providers = new Set<string>();
   const products = new Set<string>();
-  const minDeposit =
-    section && section !== 'Mortgage' ? MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION : 0;
   for (const r of rows) {
     if (!r) continue;
     if (!includeNonStandard && !isBroadlyAvailable(r)) continue;
     const f = effectiveFraction(r);
-    if (f === null || f < minDeposit) continue;
+    // When section is omitted, keep legacy behaviour (no deposit floor).
+    if (f === null || (section && !isMeaningfulDepositRate(f, section))) continue;
     fractions.push(f);
     providers.add(r.provider);
     products.add(r.product_key);

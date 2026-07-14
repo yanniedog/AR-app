@@ -1,5 +1,5 @@
 import { SECTIONS } from '../constants';
-import { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
+import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
   detailSearchIndex,
@@ -75,27 +75,21 @@ export function activeFilterCount(f: Filters): number {
  *  no bonus/intro concept (rateQualifier returns 'none'). */
 export type RankMetric = 'base' | 'max';
 
-export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION };
-
-/** True when `fraction` clears the deposit token-rate floor (mortgages always pass). */
-export function isMeaningfulDepositRate(fraction: number, section: SectionKey): boolean {
-  if (section === 'Mortgage') return true;
-  return fraction >= MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION;
-}
+export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
 
 /**
- * Drop Savings/TD rows whose known rank rate is a near-zero token. Unrankable
- * bonus/intro rows (`rankFraction` null) stay — lists still show them sorted last.
- * Mortgages are returned unchanged.
+ * Drop Savings/TD rows whose headline/effective rate is a near-zero token.
+ * Gate on `effectiveFraction` (not the active rank metric) so list membership
+ * matches ribbon/`statsFor` and genuine bonus savers with a low ongoing base
+ * stay visible under both `base` and `max` ranking. Mortgages are unchanged.
  */
 export function excludeTokenDepositRates(
   rows: RateRow[],
   section: SectionKey,
-  metric: RankMetric = 'base',
 ): RateRow[] {
   if (section === 'Mortgage') return rows;
   return rows.filter((row) => {
-    const v = rankFraction(row, section, metric);
+    const v = effectiveFraction(row);
     return v === null || isMeaningfulDepositRate(v, section);
   });
 }
@@ -140,8 +134,11 @@ export function bestRow(
   let best: RateRow | null = null;
   let bestVal: number | null = null;
   for (const row of visibleAccountRows(rows, includeNonStandard, detailsProducts)) {
+    // Token floor uses headline rate (parity with statsFor / excludeTokenDepositRates).
+    const headline = effectiveFraction(row);
+    if (headline !== null && !isMeaningfulDepositRate(headline, section)) continue;
     const v = rankFraction(row, section, metric);
-    if (v === null || !isMeaningfulDepositRate(v, section)) continue;
+    if (v === null) continue;
     if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
       bestVal = v;
       best = row;
@@ -188,16 +185,15 @@ export function filterRows(
   detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null,
   section?: SectionKey | null,
-  metric: RankMetric = 'base',
 ): RateRow[] {
   const runtimeDetailIndex = searchIndex ? null : detailSearchIndex(detailsProducts);
   return rows.filter((row) => {
     if (!row) return false;
     if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
       return false;
-    if (section && section !== 'Mortgage') {
-      const rank = rankFraction(row, section, metric);
-      if (rank !== null && !isMeaningfulDepositRate(rank, section)) return false;
+    if (section) {
+      const headline = effectiveFraction(row);
+      if (headline !== null && !isMeaningfulDepositRate(headline, section)) return false;
     }
     if (
       !rowMatchesSearchQuery(
@@ -242,7 +238,7 @@ export function queryAndSort(
   metric: RankMetric = 'base',
 ): RateRow[] {
   return sortRows(
-    filterRows(rows, filters, detailsProducts, searchIndex, section, metric),
+    filterRows(rows, filters, detailsProducts, searchIndex, section),
     sortKey,
     section,
     metric,
@@ -300,7 +296,6 @@ export function groupByProvider(
     for (const row of excludeTokenDepositRates(
       visibleAccountRows(sections[section]?.rates ?? [], includeNonStandard, detailsProducts),
       section,
-      metric,
     )) {
       let group = map.get(row.provider);
       if (!group) {

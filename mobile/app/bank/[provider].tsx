@@ -54,7 +54,6 @@ export default function BankDetail() {
           detailsProducts,
         ),
         section,
-        depositRankMetric,
       );
       // De-duplicate to one card per product (best rate row under the ranking metric).
       const byProduct = new Map<string, RateRow>();

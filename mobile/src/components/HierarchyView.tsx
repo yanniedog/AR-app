@@ -46,7 +46,6 @@ function computeHierarchyView(
   const nodeRows = excludeTokenDepositRates(
     visibleAccountRows(under, includeNonStandard, detailsProducts),
     section,
-    depositRankMetric,
   );
   const kids = childrenFromScoped(nodeRows, section, path);
   const stats =

@@ -1,6 +1,5 @@
 import {
   EMPTY_FILTERS,
-  MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION,
   activeFilterCount,
   bestRow,
   distinctProviders,
@@ -84,27 +83,39 @@ describe('selectors', () => {
     const rows = [
       mk({ product_key: 'JUNK|S', rate: '0.0001' }),
       mk({ product_key: 'OK|S', rate: '0.045' }),
+      // Genuine bonus: high headline, near-zero ongoing — keep in lists under both metrics.
       mk({ product_key: 'BONUS|S', rate: '0.052', ribbon_deposit_kind: 'bonus', ongoing_rate: '0.0001' }),
     ];
     expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual([
       'OK|S',
+      'BONUS|S',
     ]);
-    // Max metric ranks on the headline bonus rate (5.2%), so that row returns.
+    // Max metric ranks on the headline bonus rate (5.2%).
     expect(
       queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings', null, null, 'max').map((r) => r.product_key),
     ).toEqual(['BONUS|S', 'OK|S']);
   });
 
+  test('excludeTokenDepositRates is a no-op for mortgages', () => {
+    const rows = [
+      mk({ product_key: 'CHEAP|M', rate: '0.0001', comparison_rate: '0.0001' }),
+      mk({ product_key: 'NORM|M', rate: '0.057', comparison_rate: '0.058' }),
+    ];
+    expect(excludeTokenDepositRates(rows, 'Mortgage')).toEqual(rows);
+  });
+
   test('excludeTokenDepositRates keeps unrankable bonus rows but drops 0.01% base', () => {
-    expect(MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION).toBe(0.001);
     const rows = [
       mk({ product_key: 'JUNK|S', rate: '0.0001' }),
       mk({ product_key: 'OK|S', rate: '0.045' }),
       mk({ product_key: 'UR|S', rate: '0.055', ribbon_deposit_kind: 'bonus' }), // no ongoing → unrankable
+      // High headline + published 0% ongoing must stay (floor uses effectiveFraction).
+      mk({ product_key: 'ZERO|S', rate: '0.055', ribbon_deposit_kind: 'bonus', ongoing_rate: '0' }),
     ];
     expect(excludeTokenDepositRates(rows, 'Savings').map((r) => r.product_key)).toEqual([
       'OK|S',
       'UR|S',
+      'ZERO|S',
     ]);
   });
 
