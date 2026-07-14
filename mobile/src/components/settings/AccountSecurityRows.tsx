@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
-import { Button, AppText, Divider } from '../ui';
+import { Button, AppText } from '../ui';
 import { authenticateBiometric, biometricsAvailable } from '../../lib/appLock';
 import {
   isSignInConfigured,
@@ -11,7 +11,7 @@ import {
   type AuthUser,
 } from '../../lib/auth';
 import { adoptConfigKey } from '../../lib/keyVault';
-import { InfoRow, ToggleRow } from './settingsUi';
+import { InfoRow, SettingsGap, ToggleRow } from './settingsUi';
 
 export function AccountSecurityRows({
   appLockEnabled,
@@ -66,25 +66,27 @@ export function AccountSecurityRows({
       {user ? (
         <>
           <InfoRow label="Signed in as" value={user.email ?? user.displayName ?? user.uid} />
+          <SettingsGap size={6} />
           <Button title="Sign out" variant="ghost" onPress={handleSignOut} loading={busy} disabled={busy} />
         </>
       ) : isSignInConfigured() ? (
-        <>
-          <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8, lineHeight: 16 }}>
-            Sign in to keep your rate history access when tiered plans launch.
-          </AppText>
-          <Button title="Sign in with Google" icon="logo-google" onPress={handleSignIn} loading={busy} disabled={busy} />
-        </>
+        <Button
+          title="Sign in with Google"
+          icon="logo-google"
+          onPress={handleSignIn}
+          loading={busy}
+          disabled={busy}
+        />
       ) : (
         <AppText variant="tiny" color="textFaint" style={{ lineHeight: 16 }}>
           Account sign-in is not enabled for this build yet.
         </AppText>
       )}
-      <Divider style={{ marginVertical: 8 }} />
+      <SettingsGap size={10} />
       <ToggleRow
         icon="finger-print"
         label="App lock"
-        sub="Require fingerprint / face unlock on app start"
+        sub="Require unlock when opening the app"
         value={appLockEnabled}
         onChange={(v) => void handleAppLockChange(v)}
       />
