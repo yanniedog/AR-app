@@ -22,7 +22,7 @@ export function AppUpdateSection() {
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
   const [changelogs, setChangelogs] = useState<VersionChangelogSummary[]>([]);
-  const [checking, setChecking] = useState(false);
+  const [checking, setChecking] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [downloadPct, setDownloadPct] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -102,8 +102,8 @@ export function AppUpdateSection() {
   const statusValue = updateAvailable
     ? `Update available · ${latestLabel}`
     : isCurrent
-      ? `Up to date · ${installed.version}`
-      : checking
+      ? `Up to date · ${installed.version} (${installed.buildNumber})`
+      : checking || (!checkResult && !error)
         ? 'Checking…'
         : error
           ? 'Check failed'
@@ -198,7 +198,11 @@ export function UpdateChangelogList({
               • {bullet}
             </AppText>
           ))}
-          <Pressable onPress={() => void Linking.openURL(entry.releaseUrl)}>
+          <Pressable
+            onPress={() => void Linking.openURL(entry.releaseUrl)}
+            accessibilityRole="button"
+            accessibilityLabel={`Full changelog for version ${entry.version}`}
+          >
             <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>
               Full changelog
             </AppText>

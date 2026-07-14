@@ -206,6 +206,7 @@ export function ToggleRow({
         onValueChange={onChange}
         trackColor={{ true: theme.colors.primary, false: theme.colors.border }}
         accessibilityLabel={label}
+        accessibilityHint={sub}
       />
     </Row>
   );
@@ -214,7 +215,7 @@ export function ToggleRow({
 export function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <Row style={{ justifyContent: 'space-between', paddingVertical: 6, minHeight: 36 }}>
-      <AppText variant="small" color="textMuted">
+      <AppText variant="small" color="textMuted" style={{ flexShrink: 0 }}>
         {label}
       </AppText>
       <AppText variant="small" weight="600" style={{ flexShrink: 1, textAlign: 'right', marginLeft: 12 }}>
