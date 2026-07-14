@@ -69,13 +69,17 @@ export default function Search() {
   const subscribeSearch = useStore((s) => s.subscribeSearch);
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
+  // Re-run when core/details identity changes so Search warms after cold start
+  // or a dataset refresh that cleared details (storeRefresh SHA swap).
+  const coreKey = core?.run_date ?? null;
+  const detailsKey = details?.run_date ?? null;
   useEffect(() => {
     // Suitability filtering needs product details even when Pro deep-search
     // warming is off; force bypasses shouldWarmDetails for default prefs.
     void ensureDetails({ force: true });
     if (!deepSearchActive) return;
     void ensureSearchIndex();
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex]);
+  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey]);
 
   const [query, setQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>(() => normalizeSortKey(sortRaw));

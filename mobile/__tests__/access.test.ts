@@ -144,6 +144,31 @@ describe('assessAccess', () => {
     expect(citizens.restricted).toBe(false);
   });
 
+  it('flags state-qualified residents-of restrictions', () => {
+    const nsw = assessAccess(
+      'Regional Saver',
+      elig(['OTHER'], [{ info: 'Available only to residents of NSW' }]),
+    );
+    expect(nsw.categories).toContain('geographic');
+    const qld = assessAccess(
+      'State Saver',
+      elig(['OTHER'], [{ info: 'Must be residents of Queensland' }]),
+    );
+    expect(qld.categories).toContain('geographic');
+  });
+
+  it('does not treat Credit Union brand in description as membership', () => {
+    const a = assessAccess(
+      'Fixed Home Loan Package',
+      {
+        description: 'A home loan package from Credit Union SA with competitive rates.',
+        eligibility: [{ label: 'MIN_AGE', name: 'Minimum age', info: '18 years' }],
+      },
+      'Credit Union SA',
+    );
+    expect(a.categories).not.toContain('membership');
+  });
+
   it('flags existing-customer / package gates from eligibility copy', () => {
     const a = assessAccess(
       'Package Offset Loan',

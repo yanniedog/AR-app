@@ -78,9 +78,9 @@ const PENSION_RE =
   /\b(?:pensioners?|pension\s+recipients?|centrelink\s+pension)\s+only\b|\b(?:available\s+(?:only\s+)?to|for)\s+(?:pensioners?|pension\s+recipients?)\b|\bpensioner\s+(?:saver|account|product)\b/i;
 const PENSION_NAME_RE = /\b(pensioners?|pension\s+recipients?)\b/i;
 // Region / residency gates beyond the near-universal "Australian resident" check.
-// Do NOT match bare "residents of" (hits "residents of Australia").
+// Match state-qualified "residents of NSW/Queensland/..." but not Australia-wide residency.
 const GEO_RE =
-  /\bonly\s+available\s+in\b|\bavailable\s+(?:only\s+)?(?:to|in)\s+(?:customers?\s+in\s+)?(?:NSW|QLD|VIC|WA|SA|TAS|NT|Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia|Northern\s+Territory|Australian\s+Capital\s+Territory)\b|\b(?:NSW|QLD|VIC|WA|SA|TAS|ACT|NT)\s+residents?\b|\b(?:Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia)\s+residents?\b|\bpostcode[s]?\s+(?:only|restricted|limited)\b|\bgeographic(?:ally)?\s+restricted\b|\blocal\s+(?:residents?|customers?)\s+only\b/i;
+  /\bonly\s+available\s+in\b|\bavailable\s+(?:only\s+)?(?:to|in)\s+(?:customers?\s+in\s+)?(?:NSW|QLD|VIC|WA|SA|TAS|NT|Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia|Northern\s+Territory|Australian\s+Capital\s+Territory)\b|\bresidents?\s+of\s+(?!Australia\b)(?:NSW|QLD|VIC|WA|SA|TAS|NT|ACT|Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia|Northern\s+Territory|Australian\s+Capital\s+Territory)\b|\b(?:NSW|QLD|VIC|WA|SA|TAS|ACT|NT)\s+residents?\b|\b(?:Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia)\s+residents?\b|\bpostcode[s]?\s+(?:only|restricted|limited)\b|\bgeographic(?:ally)?\s+restricted\b|\blocal\s+(?:residents?|customers?)\s+only\b/i;
 // ACT is matched case-sensitively so "available to act" (verb) is not a region gate.
 const GEO_ACT_CANDIDATE_RE =
   /\bavailable\s+(?:only\s+)?(?:to|in)\s+(?:customers?\s+in\s+)?(ACT|act)\b/i;
@@ -160,7 +160,21 @@ export function assessAccess(
   // Textual signals from product name + detail copy.
   if (STAFF_RE.test(text)) cats.add('staff');
   if (OCCUPATION_RE.test(text)) cats.add('occupation');
-  if (MEMBERSHIP_RE.test(text)) cats.add('membership');
+  // Membership: name + eligibility/constraints only — descriptions often repeat lender brands.
+  {
+    const membershipParts: string[] = [nameText];
+    for (const it of detail?.eligibility ?? []) {
+      if (it.name) membershipParts.push(String(it.name));
+      if (it.info) membershipParts.push(String(it.info));
+      if (it.value) membershipParts.push(String(it.value));
+    }
+    for (const it of detail?.constraints ?? []) {
+      if (it.name) membershipParts.push(String(it.name));
+      if (it.info) membershipParts.push(String(it.info));
+      if (it.value) membershipParts.push(String(it.value));
+    }
+    if (MEMBERSHIP_RE.test(membershipParts.join(" "))) cats.add("membership");
+  }
   if (STUDENT_RE.test(text)) cats.add('student');
   // Youth: product name/description or a low MAX_AGE cap — not guardian copy in
   // eligibility ("customers under 18 need a parent").

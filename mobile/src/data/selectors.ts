@@ -2,7 +2,6 @@ import { SECTIONS } from '../constants';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
-  detailSearchIndex,
   rowMatchesSearchQuery,
   type SearchIndexPayload,
 } from './detailSearch';
@@ -197,8 +196,10 @@ export function filterRows(
   searchIndex?: SearchIndexPayload | null,
   section?: SectionKey | null,
 ): RateRow[] {
-  const runtimeDetailIndex = searchIndex ? null : detailSearchIndex(detailsProducts);
-  return rows.filter((row) => {
+  // Detail-text search is Pro-only via searchIndex. Do not build a runtime
+  // detailSearchIndex from detailsProducts — that would unlock fee/feature
+  // matching for non-Pro users whenever suitability details are loaded.
+    return rows.filter((row) => {
     if (!row) return false;
     if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
       return false;
@@ -208,7 +209,7 @@ export function filterRows(
         row,
         filters.query,
         searchIndex,
-        runtimeDetailIndex?.get(row.product_key),
+        undefined,
       )
     ) {
       return false;
