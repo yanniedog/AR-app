@@ -1,0 +1,31 @@
+{
+  "version": "1.0.40",
+  "date": "2026-07-14",
+  "summaryBullets": [
+    "fix(mobile): hide occupation-restricted products when broadly applicable (#10)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): hide occupation-restricted products when broadly applicable (#10)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.40"
+        },
+        {
+          "text": "Since tag: app-v1.0.39"
+        }
+      ]
+    }
+  ]
+}
