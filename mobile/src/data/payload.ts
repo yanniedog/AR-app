@@ -9,6 +9,7 @@ import { MANIFEST_URL, SUPPORTED_SCHEMA } from '../config';
 import { debugLog } from '../lib/debugLog';
 import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
+import { yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeHistoryBanksPayload } from './historyPayload';
@@ -19,6 +20,9 @@ import {
   type PayloadProgressPhase,
   type PayloadProgressSnapshot,
 } from './downloadProgress';
+
+/** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
+const YIELD_BEFORE_HEAVY_BYTES = 256 * 1024;
 
 export interface DownloadOpts {
   fileName?: string;
@@ -195,6 +199,9 @@ export async function downloadInflate(
     totalBytes: byteLen,
     startedAt: inflateStarted,
   });
+  // Always yield before inflate/decrypt/gunzip — compressed byteLen can be well
+  // under the parse threshold while the expanded JSON is multi-MB on the JS thread.
+  await yieldToUi();
   let bytes: Uint8Array = new Uint8Array(buf);
   // Encrypted assets (ARE1 magic) are decrypted to the gzip layer first; the
   // sha256 above was computed over the ciphertext, matching the manifest.
@@ -227,6 +234,7 @@ export async function downloadCore(
     totalBytes: text.length,
     startedAt: parseStarted,
   });
+  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
   return { text, core: JSON.parse(text) as CorePayload };
 }
 
@@ -250,6 +258,7 @@ export async function downloadDetails(
     totalBytes: text.length,
     startedAt: parseStarted,
   });
+  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
   return { text, details: JSON.parse(text) as DetailsPayload };
 }
 
@@ -264,6 +273,7 @@ export async function downloadSearchIndex(
   opts: DownloadOpts = {},
 ): Promise<SearchIndexResult> {
   const text = await downloadInflate(url, expectedSha, opts);
+  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
   return { text, searchIndex: JSON.parse(text) as SearchIndexResult['searchIndex'] };
 }
 
@@ -278,6 +288,7 @@ export async function downloadBankInsights(
   opts: DownloadOpts = {},
 ): Promise<BankInsightsResult> {
   const text = await downloadInflate(url, expectedSha, opts);
+  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
   const bankInsights = normalizeBankInsightsPayload(JSON.parse(text) as unknown);
   if (!bankInsights) {
     throw new Error('bank_history payload failed validation');
@@ -296,6 +307,7 @@ export async function downloadHistoryBanks(
   opts: DownloadOpts = {},
 ): Promise<HistoryBanksResult> {
   const text = await downloadInflate(url, expectedSha, opts);
+  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
   const historyBanks = normalizeHistoryBanksPayload(JSON.parse(text) as unknown);
   if (!historyBanks) {
     throw new Error('history_banks payload failed validation');
