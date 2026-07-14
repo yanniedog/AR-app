@@ -130,11 +130,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       }
       // Trends + refresh + product screens all call this; coalesce so we never
       // download the compact asset (or fan out dated cores) three times at once.
+      // Key on core + history asset revision so a same-core manifest that only
+      // bumps history_banks.sha256 starts a fresh ensure instead of joining stale work.
       const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
+      const currentHistorySha = get().manifest?.files.history_banks?.sha256 ?? '';
       if (
         !force &&
         historyBanksSyncState.inFlight &&
-        historyBanksSyncState.inFlightCoreSha === currentCoreSha
+        historyBanksSyncState.inFlightCoreSha === currentCoreSha &&
+        historyBanksSyncState.inFlightHistorySha === currentHistorySha
       ) {
         return historyBanksSyncState.inFlight;
       }
@@ -245,10 +249,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
       })();
       historyBanksSyncState.inFlightCoreSha = currentCoreSha;
+      historyBanksSyncState.inFlightHistorySha = currentHistorySha;
       const promise = run.finally(() => {
         if (historyBanksSyncState.inFlight === promise) {
           historyBanksSyncState.inFlight = null;
           historyBanksSyncState.inFlightCoreSha = null;
+          historyBanksSyncState.inFlightHistorySha = null;
         }
       });
       historyBanksSyncState.inFlight = promise;

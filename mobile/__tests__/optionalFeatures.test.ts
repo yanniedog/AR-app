@@ -151,6 +151,7 @@ describe('optional feature prefs', () => {
     resetStore();
     historyBanksSyncState.inFlight = null;
     historyBanksSyncState.inFlightCoreSha = null;
+    historyBanksSyncState.inFlightHistorySha = null;
     productHistorySyncState.inFlight = null;
     productHistorySyncState.inFlightCoreSha = null;
     productHistorySyncState.request = 0;

@@ -46,4 +46,6 @@ export const productHistorySyncState: {
 export const historyBanksSyncState: {
   inFlight: Promise<void> | null;
   inFlightCoreSha: string | null;
-} = { inFlight: null, inFlightCoreSha: null };
+  /** Manifest history_banks.sha256 (or daily-sync key) for the in-flight ensure. */
+  inFlightHistorySha: string | null;
+} = { inFlight: null, inFlightCoreSha: null, inFlightHistorySha: null };
