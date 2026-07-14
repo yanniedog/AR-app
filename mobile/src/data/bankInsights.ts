@@ -394,6 +394,8 @@ export interface PassThroughRow {
 export interface PassThroughModel {
   decision: RbaDecisionRef;
   rows: PassThroughRow[];
+  /** Response window length used for this score (days). */
+  windowDays: number;
 }
 
 export interface PassThroughOpts {
@@ -405,29 +407,55 @@ export interface PassThroughOpts {
   windowDays?: number;
 }
 
-function ymdFromUtcMs(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+function ymdFromUtcMs(ms: number): string | null {
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toISOString().slice(0, 10);
+  } catch {
+    return null;
+  }
 }
 
 function addDaysYmd(ymd: string, days: number): string | null {
   const ts = parseYmd(ymd);
-  if (ts == null) return null;
+  if (ts == null || !Number.isFinite(ts)) return null;
   return ymdFromUtcMs(ts + days * DAY_MS);
 }
 
 function daysBetweenYmd(from: string, to: string): number | null {
   const a = parseYmd(from);
   const b = parseYmd(to);
-  if (a == null || b == null) return null;
+  if (a == null || b == null || !Number.isFinite(a) || !Number.isFinite(b)) return null;
   return Math.round((b - a) / DAY_MS);
 }
 
 function passStatusFor(passedBps: number, decisionBps: number): PassThroughStatus {
   if (passedBps === 0 || decisionBps === 0) return 'none';
+  // Same-direction only (callers already filter, but guard against misuse).
+  if (Math.sign(passedBps) !== Math.sign(decisionBps)) return 'none';
   const ratio = Math.abs(passedBps) / Math.abs(decisionBps);
   if (ratio >= 1.0001) return 'over';
   if (ratio >= 0.999) return 'full';
   return 'partial';
+}
+
+function windowEndForDecision(
+  decisions: PassThroughSourceDecision[],
+  index: number,
+  windowDays: number,
+): string | null {
+  const dec = decisions[index];
+  if (!dec) return null;
+  let windowEnd = addDaysYmd(dec.date, windowDays);
+  if (!windowEnd) return null;
+  if (index + 1 < decisions.length) {
+    const nextDec = decisions[index + 1];
+    if (nextDec) {
+      const dayBeforeNext = addDaysYmd(nextDec.date, -1);
+      if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
+    }
+  }
+  return windowEnd;
 }
 
 export interface PassThroughSourceDecision {
@@ -502,12 +530,8 @@ export function scorablePassThroughDecisions(
   for (let i = 0; i < decisions.length; i += 1) {
     const dec = decisions[i];
     if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
-    let windowEnd = addDaysYmd(dec.date, windowDays);
+    const windowEnd = windowEndForDecision(decisions, i, windowDays);
     if (!windowEnd) continue;
-    if (i + 1 < decisions.length) {
-      const dayBeforeNext = addDaysYmd(decisions[i + 1].date, -1);
-      if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
-    }
     // Response window must overlap the ledger; announcement must not be after ledger end.
     if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
     scored.push({
@@ -536,21 +560,6 @@ function firstMatchingMove(
     if (!best || event.date < best.date) best = event;
   }
   return best;
-}
-
-function windowEndForDecision(
-  decisions: PassThroughSourceDecision[],
-  index: number,
-  windowDays: number,
-): string | null {
-  const dec = decisions[index];
-  let windowEnd = addDaysYmd(dec.date, windowDays);
-  if (!windowEnd) return null;
-  if (index + 1 < decisions.length) {
-    const dayBeforeNext = addDaysYmd(decisions[index + 1].date, -1);
-    if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
-  }
-  return windowEnd;
 }
 
 function buildPassThroughRows(
@@ -627,7 +636,7 @@ export function rbaPassThrough(
 
   const rows = buildPassThroughRows(payload, decision, windowEnd, section);
   if (!rows.length) return null;
-  return { decision, rows };
+  return { decision, rows, windowDays };
 }
 
 /** Newest-first list of scorable pass-through decisions for UI pickers. */

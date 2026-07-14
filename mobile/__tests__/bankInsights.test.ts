@@ -355,6 +355,83 @@ describe('rbaPassThrough', () => {
       passStatus: 'full',
     });
   });
+
+  test('classifies over, partial, and none pass statuses with ratios', () => {
+    const statusPayload: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-06-01',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-06-01'],
+      banks: {
+        OverBank: {
+          Mortgage: {
+            median: [0.06, 0.0635, 0.0635],
+            best: [0.055, 0.0585, 0.0585],
+            count: [8, 8, 8],
+          },
+        },
+        PartialBank: {
+          Mortgage: {
+            median: [0.06, 0.0612, 0.0612],
+            best: [0.055, 0.0562, 0.0562],
+            count: [8, 8, 8],
+          },
+        },
+        QuietBank: {
+          Mortgage: {
+            median: [0.06, 0.06, 0.06],
+            best: [0.055, 0.055, 0.055],
+            count: [4, 4, 4],
+          },
+        },
+      },
+      events: [
+        {
+          date: '2026-05-15',
+          provider: 'OverBank',
+          section: 'Mortgage',
+          dir: 'hike',
+          moved: 4,
+          total: 4,
+          avg_bps: 35,
+        },
+        {
+          date: '2026-05-16',
+          provider: 'PartialBank',
+          section: 'Mortgage',
+          dir: 'hike',
+          moved: 2,
+          total: 4,
+          avg_bps: 12,
+        },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+      ],
+      schedule: [],
+    };
+    const model = rbaPassThrough(statusPayload, [{ date: '2026-05-06', rate: 4.35 }], {
+      calendar: cal,
+    });
+    expect(model!.windowDays).toBe(60);
+    expect(model!.rows.find((r) => r.provider === 'OverBank')).toMatchObject({
+      passedBps: 35,
+      ratio: 1.4,
+      passStatus: 'over',
+    });
+    expect(model!.rows.find((r) => r.provider === 'PartialBank')).toMatchObject({
+      passedBps: 12,
+      ratio: 0.48,
+      passStatus: 'partial',
+    });
+    expect(model!.rows.find((r) => r.provider === 'QuietBank')).toMatchObject({
+      passedBps: 0,
+      ratio: null,
+      passStatus: 'none',
+    });
+  });
 });
 
 describe('marketPulse', () => {

@@ -294,7 +294,7 @@ export function RbaPassThroughCard({
     );
   }
 
-  const { decision, rows } = model;
+  const { decision, rows, windowDays } = model;
   const dirWord = decision.bps < 0 ? 'cut' : 'raised';
   const moved = rows.filter((r) => r.daysToFirstMove != null);
   const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
@@ -321,7 +321,7 @@ export function RbaPassThroughCard({
       ) : null}
       <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
         RBA {dirWord} the cash rate by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        First same-direction mortgage moves within 60 days:
+        First same-direction mortgage moves within the {windowDays}-day tracking window:
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
@@ -346,9 +346,13 @@ export function RbaPassThroughCard({
           key={row.provider}
           onPress={() => openBank(row.provider)}
           accessibilityRole="button"
-          accessibilityLabel={`${row.provider} moved ${bpsLabel(row.passedBps)} since the RBA decision${
-            row.daysToFirstMove != null ? `, first move after ${row.daysToFirstMove} days` : ''
-          }`}
+          accessibilityLabel={
+            row.passStatus === 'none'
+              ? `${row.provider} has not yet moved in the same direction as the RBA decision`
+              : `${row.provider} moved ${bpsLabel(row.passedBps)} since the RBA decision${
+                  row.daysToFirstMove != null ? `, first move after ${row.daysToFirstMove} days` : ''
+                }`
+          }
         >
           <Row gap={10} style={{ paddingVertical: 6 }}>
             <BankAvatar provider={row.provider} size={28} />
