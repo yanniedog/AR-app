@@ -34,6 +34,7 @@ export default function Home() {
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -50,18 +51,32 @@ export default function Home() {
   const sectionData = core?.sections[section];
   const hierRows = useMemo(() => rowsUnder(sectionRows ?? [], section, []), [sectionRows, section]);
   const stats = useMemo(
-    () => resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard),
-    [sectionData, hierRows, includeNonStandard],
+    () => resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard, section, detailsProducts),
+    [sectionData, hierRows, includeNonStandard, section, detailsProducts],
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR).
   const profileCount = profileSectionCount(profileFilters, section);
   const best = useMemo(
-    () => bestRow(profileFilterRows(hierRows, profileFilters, section), section, includeNonStandard, depositRankMetric),
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric],
+    () =>
+      bestRow(
+        profileFilterRows(hierRows, profileFilters, section),
+        section,
+        includeNonStandard,
+        depositRankMetric,
+        detailsProducts,
+      ),
+    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts],
   );
   const fallbackBest = useMemo(
-    () => bestRow(profileFilterRows(sectionRows ?? [], profileFilters, section), section, includeNonStandard, depositRankMetric),
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric],
+    () =>
+      bestRow(
+        profileFilterRows(sectionRows ?? [], profileFilters, section),
+        section,
+        includeNonStandard,
+        depositRankMetric,
+        detailsProducts,
+      ),
+    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts],
   );
 
   const meta = SECTIONS[section];

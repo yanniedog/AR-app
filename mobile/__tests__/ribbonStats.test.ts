@@ -21,8 +21,8 @@ describe('ribbonStats', () => {
     const section = 'Mortgage' as SectionKey;
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
-    const stats = resolveSectionRibbonStats(data, hierRows, false);
-    const expected = statsFor(visibleAccountRows(hierRows, false), true);
+    const stats = resolveSectionRibbonStats(data, hierRows, false, section);
+    const expected = statsFor(visibleAccountRows(hierRows, false), true, section);
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });
@@ -31,8 +31,8 @@ describe('ribbonStats', () => {
     const section = 'Mortgage' as SectionKey;
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
-    const stats = resolveSectionRibbonStats(data, hierRows, true);
-    const expected = statsFor(hierRows, true);
+    const stats = resolveSectionRibbonStats(data, hierRows, true, section);
+    const expected = statsFor(hierRows, true, section);
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });

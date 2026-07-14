@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
 
@@ -109,15 +110,22 @@ export interface RateStats {
   providers: number; // distinct lender count
 }
 
-export function statsFor(rows: RateRow[], includeNonStandard = false): RateStats {
+export function statsFor(
+  rows: RateRow[],
+  includeNonStandard = false,
+  /** When set for Savings/TD, drop token near-zero rates from ribbon aggregates. */
+  section?: SectionKey | null,
+): RateStats {
   const fractions: number[] = [];
   const providers = new Set<string>();
   const products = new Set<string>();
+  const minDeposit =
+    section && section !== 'Mortgage' ? MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION : 0;
   for (const r of rows) {
     if (!r) continue;
     if (!includeNonStandard && !isBroadlyAvailable(r)) continue;
     const f = effectiveFraction(r);
-    if (f === null) continue;
+    if (f === null || f < minDeposit) continue;
     fractions.push(f);
     providers.add(r.provider);
     products.add(r.product_key);
@@ -224,7 +232,7 @@ export function childrenFromScoped(
       seg,
       label: segLabel(seg),
       rows: segRows,
-      stats: statsFor(segRows, true),
+      stats: statsFor(segRows, true, section),
       hasChildren: childHasDeeper(segRows, root, depth),
     });
   }

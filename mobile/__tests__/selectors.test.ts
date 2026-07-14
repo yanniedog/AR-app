@@ -1,9 +1,11 @@
 import {
   EMPTY_FILTERS,
+  MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION,
   activeFilterCount,
   bestRow,
   distinctProviders,
   distinctValues,
+  excludeTokenDepositRates,
   filterRows,
   findByKey,
   groupByProvider,
@@ -47,6 +49,63 @@ describe('selectors', () => {
   test('bestRow picks highest for deposits', () => {
     const best = bestRow(savings, 'Savings');
     expect(best?.product_key).toBe('B|S'); // 5.2%
+  });
+
+  test('bestRow (savings) ignores token near-zero rates (~0.01%)', () => {
+    const rows = [
+      mk({ product_key: 'JUNK|S', product_name: 'Access Account', rate: '0.0001' }), // 0.01%
+      mk({ product_key: 'LOW|S', product_name: 'GoalSaver', rate: '0.0025' }), // 0.25%
+      mk({ product_key: 'OK|S', product_name: 'High Saver', rate: '0.045' }),
+    ];
+    expect(bestRow(rows, 'Savings')?.product_key).toBe('OK|S');
+    // 0.25% clears the 0.10% floor and remains eligible when it is the best.
+    expect(bestRow(rows.filter((r) => r.product_key !== 'OK|S'), 'Savings')?.product_key).toBe('LOW|S');
+    expect(bestRow(rows.filter((r) => r.product_key === 'JUNK|S'), 'Savings')).toBeNull();
+  });
+
+  test('bestRow (TD) ignores token near-zero rates', () => {
+    const rows = [
+      mk({ product_key: 'FX|TD', product_name: 'EURO Term Deposit', rate: '0.0001' }),
+      mk({ product_key: 'AUD|TD', product_name: '12 Month TD', rate: '0.041' }),
+    ];
+    expect(bestRow(rows, 'TD')?.product_key).toBe('AUD|TD');
+  });
+
+  test('bestRow (mortgage) is not gated by the deposit token-rate floor', () => {
+    // A pathological 0.01% loan must still win — the floor is deposit-only.
+    const rows = [
+      mk({ product_key: 'CHEAP|M', rate: '0.0001', comparison_rate: '0.0001' }),
+      mk({ product_key: 'NORM|M', rate: '0.057', comparison_rate: '0.058' }),
+    ];
+    expect(bestRow(rows, 'Mortgage')?.product_key).toBe('CHEAP|M');
+  });
+
+  test('queryAndSort / filterRows hide token deposit rates from savings discovery', () => {
+    const rows = [
+      mk({ product_key: 'JUNK|S', rate: '0.0001' }),
+      mk({ product_key: 'OK|S', rate: '0.045' }),
+      mk({ product_key: 'BONUS|S', rate: '0.052', ribbon_deposit_kind: 'bonus', ongoing_rate: '0.0001' }),
+    ];
+    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual([
+      'OK|S',
+    ]);
+    // Max metric ranks on the headline bonus rate (5.2%), so that row returns.
+    expect(
+      queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings', null, null, 'max').map((r) => r.product_key),
+    ).toEqual(['BONUS|S', 'OK|S']);
+  });
+
+  test('excludeTokenDepositRates keeps unrankable bonus rows but drops 0.01% base', () => {
+    expect(MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION).toBe(0.001);
+    const rows = [
+      mk({ product_key: 'JUNK|S', rate: '0.0001' }),
+      mk({ product_key: 'OK|S', rate: '0.045' }),
+      mk({ product_key: 'UR|S', rate: '0.055', ribbon_deposit_kind: 'bonus' }), // no ongoing → unrankable
+    ];
+    expect(excludeTokenDepositRates(rows, 'Savings').map((r) => r.product_key)).toEqual([
+      'OK|S',
+      'UR|S',
+    ]);
   });
 
   test('bestRow includes non-standard when requested', () => {

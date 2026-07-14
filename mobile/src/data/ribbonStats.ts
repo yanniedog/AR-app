@@ -1,6 +1,6 @@
 import { visibleAccountRows } from './format';
 import { statsFor, type RateStats } from './taxonomy';
-import type { RateRow, Ribbon, SectionData } from '../types';
+import type { ProductDetail, RateRow, Ribbon, SectionData, SectionKey } from '../types';
 
 export function ribbonToRateStats(ribbon: Ribbon): RateStats {
   const { range, counts } = ribbon;
@@ -28,12 +28,14 @@ export function resolveSectionRibbonStats(
   sectionData: SectionData | undefined,
   hierarchyRows: RateRow[],
   includeNonStandard: boolean,
+  section?: SectionKey | null,
+  detailsProducts?: Record<string, ProductDetail> | null,
 ): RateStats {
   const filtered = includeNonStandard
     ? hierarchyRows
-    : visibleAccountRows(hierarchyRows, false);
+    : visibleAccountRows(hierarchyRows, false, detailsProducts);
 
-  const computed = statsFor(filtered, true);
+  const computed = statsFor(filtered, true, section);
   if (computed.min != null) return computed;
 
   if (sectionData && hasPayloadRibbon(sectionData.ribbon)) {

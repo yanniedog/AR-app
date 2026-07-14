@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
   detailSearchIndex,
@@ -74,6 +75,31 @@ export function activeFilterCount(f: Filters): number {
  *  no bonus/intro concept (rateQualifier returns 'none'). */
 export type RankMetric = 'base' | 'max';
 
+export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION };
+
+/** True when `fraction` clears the deposit token-rate floor (mortgages always pass). */
+export function isMeaningfulDepositRate(fraction: number, section: SectionKey): boolean {
+  if (section === 'Mortgage') return true;
+  return fraction >= MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION;
+}
+
+/**
+ * Drop Savings/TD rows whose known rank rate is a near-zero token. Unrankable
+ * bonus/intro rows (`rankFraction` null) stay — lists still show them sorted last.
+ * Mortgages are returned unchanged.
+ */
+export function excludeTokenDepositRates(
+  rows: RateRow[],
+  section: SectionKey,
+  metric: RankMetric = 'base',
+): RateRow[] {
+  if (section === 'Mortgage') return rows;
+  return rows.filter((row) => {
+    const v = rankFraction(row, section, metric);
+    return v === null || isMeaningfulDepositRate(v, section);
+  });
+}
+
 /** The fraction a row should be ranked/compared by, honouring the deposit rank
  *  metric. For `base` (default), a bonus/intro deposit row ranks on the base
  *  ongoing rate it reverts to (`null` when the bank publishes none, so it can't
@@ -108,13 +134,14 @@ export function bestRow(
   section: SectionKey,
   includeNonStandard = false,
   metric: RankMetric = 'base',
+  detailsProducts?: Record<string, ProductDetail> | null,
 ): RateRow | null {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   let best: RateRow | null = null;
   let bestVal: number | null = null;
-  for (const row of visibleAccountRows(rows, includeNonStandard)) {
+  for (const row of visibleAccountRows(rows, includeNonStandard, detailsProducts)) {
     const v = rankFraction(row, section, metric);
-    if (v === null) continue;
+    if (v === null || !isMeaningfulDepositRate(v, section)) continue;
     if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
       bestVal = v;
       best = row;
@@ -160,12 +187,18 @@ export function filterRows(
   filters: Filters,
   detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null,
+  section?: SectionKey | null,
+  metric: RankMetric = 'base',
 ): RateRow[] {
   const runtimeDetailIndex = searchIndex ? null : detailSearchIndex(detailsProducts);
   return rows.filter((row) => {
     if (!row) return false;
     if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
       return false;
+    if (section && section !== 'Mortgage') {
+      const rank = rankFraction(row, section, metric);
+      if (rank !== null && !isMeaningfulDepositRate(rank, section)) return false;
+    }
     if (
       !rowMatchesSearchQuery(
         row,
@@ -208,7 +241,12 @@ export function queryAndSort(
   searchIndex?: SearchIndexPayload | null,
   metric: RankMetric = 'base',
 ): RateRow[] {
-  return sortRows(filterRows(rows, filters, detailsProducts, searchIndex), sortKey, section, metric);
+  return sortRows(
+    filterRows(rows, filters, detailsProducts, searchIndex, section, metric),
+    sortKey,
+    section,
+    metric,
+  );
 }
 
 /** Distinct non-empty values for a field, sorted by frequency then label. */
@@ -247,6 +285,7 @@ export function groupByProvider(
   sections: Record<SectionKey, { rates: RateRow[] }>,
   metric: RankMetric = 'base',
   includeNonStandard = false,
+  detailsProducts?: Record<string, ProductDetail> | null,
 ): ProviderGroup[] {
   // Bucket rows per provider AND per section in a single pass. The previous
   // implementation re-scanned every section's full row array (Array.includes)
@@ -258,7 +297,11 @@ export function groupByProvider(
   const map = new Map<string, Acc>();
   const keys = Object.keys(sections) as SectionKey[];
   for (const section of keys) {
-    for (const row of visibleAccountRows(sections[section]?.rates ?? [], includeNonStandard)) {
+    for (const row of excludeTokenDepositRates(
+      visibleAccountRows(sections[section]?.rates ?? [], includeNonStandard, detailsProducts),
+      section,
+      metric,
+    )) {
       let group = map.get(row.provider);
       if (!group) {
         group = { provider: row.provider, rows: [], bestBySection: {}, bySection: {} };
@@ -273,7 +316,7 @@ export function groupByProvider(
     for (const section of keys) {
       const inSection = bySection[section];
       if (!inSection?.length) continue;
-      const best = bestRow(inSection, section, includeNonStandard, metric);
+      const best = bestRow(inSection, section, includeNonStandard, metric, detailsProducts);
       if (best) group.bestBySection[section] = best;
     }
     out.push(group);

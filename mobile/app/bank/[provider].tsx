@@ -15,7 +15,7 @@ import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
 import { bankTrendChartModel, recentBankEvents } from '../../src/data/bankInsights';
 import { visibleAccountRows } from '../../src/data/format';
-import { sortRows } from '../../src/data/selectors';
+import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { openProduct } from '../../src/lib/nav';
@@ -47,10 +47,14 @@ export default function BankDetail() {
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
-      const rows = visibleAccountRows(
-        core.sections[section]?.rates?.filter((r) => r.provider === provider) ?? [],
-        includeNonStandard,
-        detailsProducts,
+      const rows = excludeTokenDepositRates(
+        visibleAccountRows(
+          core.sections[section]?.rates?.filter((r) => r.provider === provider) ?? [],
+          includeNonStandard,
+          detailsProducts,
+        ),
+        section,
+        depositRankMetric,
       );
       // De-duplicate to one card per product (best rate row under the ranking metric).
       const byProduct = new Map<string, RateRow>();
