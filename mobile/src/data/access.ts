@@ -54,7 +54,7 @@ const RESTRICTING_TYPES: Record<string, AccessCategory> = {
 
 const OCCUPATION_RE =
   /\b(police|nurs(?:e|es|ing)|midwi(?:fe|ves)|teacher|educator(?:s)?|doctor|dentist|dental|veterinar(?:y|ian|ians)|health\s*(?:care|sector|worker|professional)s?|medical|defence|defense|military|navy|army|veteran|firefighter|fire\s*service|ambulance|paramedic|emergency\s*services|first\s*responder|essential\s*workers?)\b/i;
-const STAFF_RE = /\b(staff|employe[er]|colleague)\b/i;
+const STAFF_RE = /\b(staff|employees?|employers?|colleagues?)\b/i;
 const MEMBERSHIP_RE = /\bmembers?\s+of\b|\bassociation\b|\bunion\b|\balumni\b|\bdiocese\b|\bparish\b/i;
 const BUSINESS_RE = /\b(business|commercial|corporate|company|smsf|self[-\s]?managed\s+super|trust)\b/i;
 const STUDENT_RE = /\bstudent[s]?\b/i;
@@ -122,17 +122,16 @@ export function assessAccess(
   // Do not match provider names here (many "X Business Bank" style brands).
   if (BUSINESS_RE.test(nameText)) cats.add('business');
 
-  // "Verify": the NAME/PROVIDER implies staff/occupation/membership but no
-  // structured eligibility code corroborates it (Coastline/People-First mode).
-  const nameImpliesRestriction =
-    STAFF_RE.test(nameText) ||
-    OCCUPATION_RE.test(nameText) ||
-    MEMBERSHIP_RE.test(nameText) ||
-    OCCUPATION_RE.test(providerText) ||
-    STAFF_RE.test(providerText);
+  // "Verify": product NAME implies staff/occupation/membership but no structured
+  // eligibility code corroborates it (Coastline/People-First failure mode).
+  // Provider-brand signals do not set verify — those are intentional occupation
+  // lenders, not under-reported CDR gaps. Detail text that already classified a
+  // category also does not need the "?" badge.
+  const nameOnlyImpliesRestriction =
+    STAFF_RE.test(nameText) || OCCUPATION_RE.test(nameText) || MEMBERSHIP_RE.test(nameText);
   const structurallyConfirmed =
     codes.has('STAFF') || codes.has('BUSINESS') || codes.has('STUDENT') || codes.has('PENSION_RECIPIENT');
-  const verify = nameImpliesRestriction && !structurallyConfirmed;
+  const verify = nameOnlyImpliesRestriction && !structurallyConfirmed;
 
   const categories = Array.from(cats);
   const restricted = categories.length > 0;
@@ -159,15 +158,9 @@ export function assessAccess(
 }
 
 /**
- * Row-level access restriction derived from product NAME + PROVIDER (no details
- * required). This is the cheap half of {@link assessAccess} the default
- * suitability filter runs over every rate row so staff-only, occupation,
- * membership, business/SMSF, student and region-restricted products are not
- * surfaced as headline/search/ranking results. Provider is included because
- * occupation lenders often publish generic titles ("RateSaver Home Loan") under
- * an occupation-gated brand ("Australian Military Bank", "Police Bank").
- * Structured eligibility codes (from loaded details) add more signal via
- * {@link assessAccess}.
+ * Row-level access restriction derived from the product NAME alone (no details
+ * and no provider). Use {@link rowRestrictsAccess} when the lender brand should
+ * also gate listings (occupation lenders with generic product titles).
  */
 export function nameRestrictsAccess(name: string | null | undefined): boolean {
   const text = name ?? '';
@@ -191,7 +184,12 @@ export function providerRestrictsAccess(provider: string | null | undefined): bo
   return STAFF_RE.test(text) || OCCUPATION_RE.test(text);
 }
 
-/** Cheap row gate used by list/search/ranking before details are loaded. */
+/**
+ * Cheap row gate used by list/search/ranking before details are loaded.
+ * Combines product name and provider checks. Provider is included because
+ * occupation lenders often publish generic titles ("RateSaver Home Loan") under
+ * an occupation-gated brand ("Australian Military Bank", "Police Bank").
+ */
 export function rowRestrictsAccess(
   row: { product_name?: string | null; provider?: string | null } | null | undefined,
 ): boolean {

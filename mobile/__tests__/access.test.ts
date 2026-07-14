@@ -23,6 +23,17 @@ describe('assessAccess', () => {
     expect(a.badge).toBe('Staff only');
   });
 
+  it('matches plural staff wording in product names', () => {
+    expect(assessAccess('Employees Home Loan Package', null).categories).toContain('staff');
+  });
+
+  it('does not mark provider-brand occupation badges as unverified', () => {
+    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    expect(a.categories).toContain('occupation');
+    expect(a.verify).toBe(false);
+    expect(a.badge).toBe('Occupation-restricted');
+  });
+
   it('flags the Coastline/People-First failure mode: name says staff, data does not', () => {
     // Real example: "People First and Her Staff Home Loan" with only universal codes.
     const a = assessAccess('People First and Her Staff Home Loan', elig(['MIN_AGE', 'NATURAL_PERSON', 'RESIDENCY_STATUS']));
