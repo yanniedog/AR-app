@@ -1,4 +1,4 @@
-import { countSuitabilityExclusions, nameRestrictsAccess } from '../src/data/access';
+import { assessAccess, countSuitabilityExclusions, nameRestrictsAccess } from '../src/data/access';
 import {
   bpsBetween,
   formatBalanceRange,
@@ -129,6 +129,8 @@ describe('format', () => {
     // ...but an explicit educator occupation restriction still flags.
     expect(nameRestrictsAccess('Educators Rewards Saver')).toBe(true);
     expect(nameRestrictsAccess('Essential Workers Home Loan')).toBe(true);
+    expect(nameRestrictsAccess('Youth Saver')).toBe(true);
+    expect(nameRestrictsAccess('QLD Residents Home Loan')).toBe(true);
     expect(nameRestrictsAccess('')).toBe(false);
     expect(nameRestrictsAccess(null)).toBe(false);
   });
@@ -250,24 +252,68 @@ describe('format', () => {
     expect(isBroadlyAvailable(undefined)).toBe(false);
   });
 
-  test('visibleAccountRows hides detail-only occupation products when broadly applicable', () => {
-    const boqBasicRow = {
-      provider: 'BOQ Specialist',
-      product_name: 'Basic Home Loan',
+  test('isBroadlyAvailable excludes youth, region, and package-gated products under standard-only', () => {
+    const youth = {
+      provider: 'Bank A',
+      product_name: 'Youth Saver',
       account_class: 'standard',
-      product_key: 'boq|basic',
+      product_key: 'a|youth',
     } as RateRow;
-    const detailsProducts = {
-      'boq|basic': {
+    const region = {
+      provider: 'Bank A',
+      product_name: 'QLD Residents Home Loan',
+      account_class: 'standard',
+      product_key: 'a|qld',
+    } as RateRow;
+    const packageOnly = {
+      provider: 'Bank A',
+      product_name: 'Offset Plus',
+      account_class: 'standard',
+      product_key: 'a|pkg',
+    } as RateRow;
+    const lvrOnly = {
+      provider: 'Bank A',
+      product_name: 'Variable OO Home Loan',
+      account_class: 'standard',
+      product_key: 'a|lvr',
+    } as RateRow;
+    expect(isBroadlyAvailable(youth)).toBe(false);
+    expect(isBroadlyAvailable(region)).toBe(false);
+    expect(
+      isBroadlyAvailable(packageOnly, {
+        eligibility: [{ label: 'OTHER', info: 'Existing customers only' }],
+      }),
+    ).toBe(false);
+    // Core product-structure dimensions alone remain broadly available.
+    expect(
+      isBroadlyAvailable(lvrOnly, {
         eligibility: [
-          {
-            label: 'OTHER',
-            info: 'Product is offered to medical, dental, veterinary & accounting professionals only',
-          },
+          { label: 'MIN_AGE', value: '18' },
+          { label: 'RESIDENCY_STATUS', info: 'Australian resident' },
         ],
-      },
+      }),
+    ).toBe(true);
+    expect(visibleAccountRows([youth, region, lvrOnly], false).map((r) => r.product_key)).toEqual(['a|lvr']);
+    expect(visibleAccountRows([youth, region, lvrOnly], true).map((r) => r.product_key)).toEqual([
+      'a|youth',
+      'a|qld',
+      'a|lvr',
+    ]);
+  });
+
+  test('orange restricted badge and standard-only filter share assessAccess', () => {
+    const row = {
+      provider: 'Regional Bank',
+      product_name: 'Community Saver',
+      account_class: 'standard',
+      product_key: 'rb|cs',
+    } as RateRow;
+    const detail = {
+      eligibility: [{ label: 'OTHER', info: 'Only available in South Australia' }],
     };
-    expect(visibleAccountRows([boqBasicRow], false, detailsProducts)).toEqual([]);
-    expect(visibleAccountRows([boqBasicRow], true, detailsProducts)).toEqual([boqBasicRow]);
+    const access = assessAccess(row.product_name, detail, row.provider);
+    expect(access.badge).toBe('Region-restricted');
+    expect(isBroadlyAvailable(row, detail)).toBe(false);
+    expect(visibleAccountRows([row], false, { 'rb|cs': detail })).toEqual([]);
   });
 });

@@ -70,9 +70,10 @@ export default function Search() {
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   useEffect(() => {
+    // Suitability filtering (and Pro deep-search) both benefit from details.
+    void ensureDetails();
     if (!deepSearchActive) return;
     void ensureSearchIndex();
-    void ensureDetails();
   }, [deepSearchActive, ensureDetails, ensureSearchIndex]);
 
   const [query, setQuery] = useState('');
@@ -105,7 +106,9 @@ export default function Search() {
         { ...effectiveFilters, query },
         sortKey,
         section,
-        deepSearchActive ? details?.products : null,
+        // Always pass loaded details for suitability (standard-only) filtering —
+        // not only when Pro deep-search is on. Search indexing still requires Pro.
+        details?.products ?? null,
         deepSearchActive ? searchIndex : null,
         depositRankMetric,
       ),

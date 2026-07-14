@@ -8,6 +8,10 @@ import type { DetailItem, ProductDetail } from '../types';
  * eligibilityType codes with name/description/free-text signals, and explicitly
  * flag the gap ("verify") when the name implies a restriction the data does not
  * encode — so a restricted product is never silently presented as open to all.
+ *
+ * Product-structure dimensions (LVR, deposit size, TD term, OO vs investor,
+ * fixed vs variable, etc.) are NOT access restrictions — they describe the
+ * product, not who may apply.
  */
 export type AccessCategory =
   | 'staff'
@@ -15,8 +19,10 @@ export type AccessCategory =
   | 'membership'
   | 'business'
   | 'student'
+  | 'youth'
   | 'pension'
-  | 'geographic';
+  | 'geographic'
+  | 'package';
 
 export interface AccessAssessment {
   /** Any access-limiting signal (structured or textual) is present. */
@@ -36,8 +42,10 @@ const CATEGORY_LABEL: Record<AccessCategory, string> = {
   membership: 'Members only',
   business: 'Business / SMSF',
   student: 'Students',
+  youth: 'Youth only',
   pension: 'Pensioners',
   geographic: 'Region-restricted',
+  package: 'Package / existing customers',
 };
 
 // Structured CDR eligibilityType codes that genuinely limit who can apply.
@@ -50,6 +58,8 @@ const RESTRICTING_TYPES: Record<string, AccessCategory> = {
   BUSINESS: 'business',
   STUDENT: 'student',
   PENSION_RECIPIENT: 'pension',
+  // Upper age caps are youth/child products, not the universal 18+ floor.
+  MAX_AGE: 'youth',
 };
 
 const OCCUPATION_RE =
@@ -58,7 +68,15 @@ const STAFF_RE = /\b(staff|employees?|employers?|colleagues?)\b/i;
 const MEMBERSHIP_RE = /\bmembers?\s+of\b|\bassociation\b|\bunion\b|\balumni\b|\bdiocese\b|\bparish\b/i;
 const BUSINESS_RE = /\b(business|commercial|corporate|company|smsf|self[-\s]?managed\s+super|trust)\b/i;
 const STUDENT_RE = /\bstudent[s]?\b/i;
-const GEO_RE = /\bresidents?\s+of\b|\bonly\s+available\s+in\b/i;
+const YOUTH_RE =
+  /\b(youth|junior|juniors|kids?|children|child|teen(?:ager)?s?|minors?|under\s*1[8-9]|under\s*2[0-5]|u(?:nder)?-?1[8-9])\b/i;
+const PENSION_RE = /\b(pensioners?|pension\s+recipients?|centrelink\s+pension)\b/i;
+// Region / residency gates beyond the near-universal "Australian resident" check.
+const GEO_RE =
+  /\bresidents?\s+of\b|\bonly\s+available\s+in\b|\bavailable\s+(?:only\s+)?(?:to|in)\s+(?:customers?\s+in\s+)?(?:NSW|QLD|VIC|WA|SA|TAS|ACT|NT|Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia|Northern\s+Territory|Australian\s+Capital\s+Territory)\b|\b(?:NSW|QLD|VIC|WA|SA|TAS|ACT|NT)\s+residents?\b|\b(?:Queensland|Victoria|Tasmania|New\s+South\s+Wales|Western\s+Australia|South\s+Australia)\s+residents?\b|\bpostcode[s]?\s+(?:only|restricted|limited)\b|\bgeographic(?:ally)?\s+restricted\b|\blocal\s+(?:residents?|customers?)\s+only\b/i;
+// Package / existing-customer gates that limit who can open (not LVR/deposit/term structure).
+const PACKAGE_RE =
+  /\b(?:existing|current)\s+customers?\s+only\b|\bmust\s+(?:already\s+)?(?:be\s+an?\s+existing\s+customer|hold\s+an?\s+(?:everyday|transaction|offset|package)\s+account)\b|\brequires?\s+(?:an?\s+)?(?:existing|linked|package|transaction|everyday)\s+account\b|\bpackage\s+(?:customers?|members?)\s+only\b|\bonly\s+available\s+(?:as\s+part\s+of|with)\s+a?\s*package\b|\bbundled\s+with\b|\bhome\s+loan\s+package\s+customers?\s+only\b/i;
 
 function textOf(name: string, detail: ProductDetail | null | undefined): string {
   const parts: string[] = [name || '', detail?.description || ''];
@@ -110,7 +128,10 @@ export function assessAccess(
   if (OCCUPATION_RE.test(text)) cats.add('occupation');
   if (MEMBERSHIP_RE.test(text)) cats.add('membership');
   if (STUDENT_RE.test(text)) cats.add('student');
+  if (YOUTH_RE.test(text)) cats.add('youth');
+  if (PENSION_RE.test(text)) cats.add('pension');
   if (GEO_RE.test(text)) cats.add('geographic');
+  if (PACKAGE_RE.test(text)) cats.add('package');
   // Provider brand: occupation/staff only. Do not run membership `\bunion\b`
   // against provider names or every "* Credit Union" becomes members-only.
   if (STAFF_RE.test(providerText)) cats.add('staff');
@@ -122,15 +143,26 @@ export function assessAccess(
   // Do not match provider names here (many "X Business Bank" style brands).
   if (BUSINESS_RE.test(nameText)) cats.add('business');
 
-  // "Verify": product NAME implies staff/occupation/membership but no structured
+  // "Verify": product NAME implies a who-can-open gate but no structured
   // eligibility code corroborates it (Coastline/People-First failure mode).
   // Provider-brand signals do not set verify — those are intentional occupation
   // lenders, not under-reported CDR gaps. Detail text that already classified a
   // category also does not need the "?" badge.
   const nameOnlyImpliesRestriction =
-    STAFF_RE.test(nameText) || OCCUPATION_RE.test(nameText) || MEMBERSHIP_RE.test(nameText);
+    STAFF_RE.test(nameText) ||
+    OCCUPATION_RE.test(nameText) ||
+    MEMBERSHIP_RE.test(nameText) ||
+    YOUTH_RE.test(nameText) ||
+    STUDENT_RE.test(nameText) ||
+    GEO_RE.test(nameText) ||
+    PACKAGE_RE.test(nameText) ||
+    PENSION_RE.test(nameText);
   const structurallyConfirmed =
-    codes.has('STAFF') || codes.has('BUSINESS') || codes.has('STUDENT') || codes.has('PENSION_RECIPIENT');
+    codes.has('STAFF') ||
+    codes.has('BUSINESS') ||
+    codes.has('STUDENT') ||
+    codes.has('PENSION_RECIPIENT') ||
+    codes.has('MAX_AGE');
   const verify = nameOnlyImpliesRestriction && !structurallyConfirmed;
 
   const categories = Array.from(cats);
@@ -158,6 +190,15 @@ export function assessAccess(
 }
 
 /**
+ * True when the product should be hidden under standard-only / broadly-applicable
+ * mode. Same predicate the orange access badge uses — never show a restricted
+ * badge for a product that this gate would still allow.
+ */
+export function accessExcludesFromStandard(assessment: AccessAssessment): boolean {
+  return assessment.restricted || !!assessment.badge;
+}
+
+/**
  * Row-level access restriction derived from the product NAME alone (no details
  * and no provider). Use {@link rowRestrictsAccess} when the lender brand should
  * also gate listings (occupation lenders with generic product titles).
@@ -170,7 +211,10 @@ export function nameRestrictsAccess(name: string | null | undefined): boolean {
     OCCUPATION_RE.test(text) ||
     MEMBERSHIP_RE.test(text) ||
     STUDENT_RE.test(text) ||
+    YOUTH_RE.test(text) ||
+    PENSION_RE.test(text) ||
     GEO_RE.test(text) ||
+    PACKAGE_RE.test(text) ||
     BUSINESS_RE.test(text)
   );
 }
@@ -207,7 +251,10 @@ export function nameRestrictionCategories(name: string | null | undefined): Acce
   if (MEMBERSHIP_RE.test(text)) cats.push('membership');
   if (BUSINESS_RE.test(text)) cats.push('business');
   if (STUDENT_RE.test(text)) cats.push('student');
+  if (YOUTH_RE.test(text)) cats.push('youth');
+  if (PENSION_RE.test(text)) cats.push('pension');
   if (GEO_RE.test(text)) cats.push('geographic');
+  if (PACKAGE_RE.test(text)) cats.push('package');
   return cats;
 }
 
