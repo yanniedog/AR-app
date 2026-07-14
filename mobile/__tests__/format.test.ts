@@ -9,6 +9,7 @@ import {
   isBroadlyAvailable,
   isNonStandard,
   toFraction,
+  visibleAccountRows,
 } from '../src/data/format';
 import type { RateRow } from '../src/types';
 
@@ -247,5 +248,26 @@ describe('format', () => {
     // Defensive: never throws on null/undefined rows.
     expect(isBroadlyAvailable(null)).toBe(false);
     expect(isBroadlyAvailable(undefined)).toBe(false);
+  });
+
+  test('visibleAccountRows hides detail-only occupation products when broadly applicable', () => {
+    const boqBasicRow = {
+      provider: 'BOQ Specialist',
+      product_name: 'Basic Home Loan',
+      account_class: 'standard',
+      product_key: 'boq|basic',
+    } as RateRow;
+    const detailsProducts = {
+      'boq|basic': {
+        eligibility: [
+          {
+            label: 'OTHER',
+            info: 'Product is offered to medical, dental, veterinary & accounting professionals only',
+          },
+        ],
+      },
+    };
+    expect(visibleAccountRows([boqBasicRow], false, detailsProducts)).toEqual([]);
+    expect(visibleAccountRows([boqBasicRow], true, detailsProducts)).toEqual([boqBasicRow]);
   });
 });

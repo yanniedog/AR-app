@@ -1,4 +1,4 @@
-import { assessAccess } from '../src/data/access';
+import { assessAccess, providerRestrictsAccess, rowRestrictsAccess } from '../src/data/access';
 import type { ProductDetail } from '../src/types';
 
 const elig = (codes: string[], extra: { name?: string; info?: string }[] = []): ProductDetail => ({
@@ -62,7 +62,41 @@ describe('assessAccess', () => {
     expect(a.categories).toContain('occupation');
     expect(a.restricted).toBe(true);
   });
+});
 
+describe('providerRestrictsAccess', () => {
+  it('returns true for known occupation-limited providers', () => {
+    expect(providerRestrictsAccess('Australian Military Bank')).toBe(true);
+    expect(providerRestrictsAccess('Police Bank')).toBe(true);
+  });
+
+  it('returns false for non-occupation providers and generic credit unions', () => {
+    expect(providerRestrictsAccess('Some Credit Union')).toBe(false);
+    expect(providerRestrictsAccess('Bank of Sydney')).toBe(false);
+  });
+});
+
+describe('rowRestrictsAccess', () => {
+  it('returns true for occupation lenders with generic product titles', () => {
+    expect(
+      rowRestrictsAccess({
+        provider: 'Police Bank',
+        product_name: 'RateSaver Home Loan',
+      }),
+    ).toBe(true);
+  });
+
+  it('returns false for non-occupation providers and neutral products', () => {
+    expect(
+      rowRestrictsAccess({
+        provider: 'Some Credit Union',
+        product_name: 'Fixed Rate Home Loan',
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('assessAccess business / false positives', () => {
   it('detects business/SMSF products', () => {
     expect(assessAccess('SMSF Term Deposit', null).categories).toContain('business');
     expect(assessAccess('Business Term Deposit', elig(['BUSINESS'])).categories).toContain('business');

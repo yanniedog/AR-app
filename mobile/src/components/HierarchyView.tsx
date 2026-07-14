@@ -105,13 +105,25 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     // No data yet (initial load / section transition): nothing to cache, and the
     // component renders null below anyway.
     if (!rows || !sectionData) return EMPTY_VIEW;
+    // When details are loaded, suitability depends on eligibility text — skip the
+    // sectionData WeakMap cache so content updates cannot serve a pre-details view.
+    if (detailsProducts) {
+      return computeHierarchyView(
+        rows,
+        sectionData,
+        section,
+        path,
+        includeNonStandard,
+        depositRankMetric,
+        detailsProducts,
+      );
+    }
     let byKey = viewCache.get(sectionData);
     if (!byKey) {
       byKey = new Map();
       viewCache.set(sectionData, byKey);
     }
-    const detailsEpoch = detailsProducts ? Object.keys(detailsProducts).length : 0;
-    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|d${detailsEpoch}`;
+    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}`;
     let cached = byKey.get(cacheKey);
     if (!cached) {
       cached = computeHierarchyView(
@@ -121,7 +133,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         path,
         includeNonStandard,
         depositRankMetric,
-        detailsProducts,
+        null,
       );
       byKey.set(cacheKey, cached);
     }
