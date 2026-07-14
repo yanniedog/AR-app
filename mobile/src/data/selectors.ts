@@ -77,6 +77,21 @@ export type RankMetric = 'base' | 'max';
 
 export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
 
+/** True when a deposit row should stay after the token-rate floor.
+ *  Published zero/negative headlines are tokens (`toFraction` maps them to null);
+ *  genuinely missing/unparseable headlines are kept (e.g. incomplete bonus rows).
+ */
+function passesDepositTokenFloor(row: RateRow, section: SectionKey): boolean {
+  if (section === 'Mortgage') return true;
+  const v = effectiveFraction(row);
+  if (v !== null) return isMeaningfulDepositRate(v, section);
+  const raw = row.rate;
+  if (raw === null || raw === undefined || raw === '') return true;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  if (isFinite(n) && n <= 0) return false;
+  return true;
+}
+
 /**
  * Drop Savings/TD rows whose headline/effective rate is a near-zero token.
  * Gate on `effectiveFraction` (not the active rank metric) so list membership
@@ -88,10 +103,7 @@ export function excludeTokenDepositRates(
   section: SectionKey,
 ): RateRow[] {
   if (section === 'Mortgage') return rows;
-  return rows.filter((row) => {
-    const v = effectiveFraction(row);
-    return v === null || isMeaningfulDepositRate(v, section);
-  });
+  return rows.filter((row) => passesDepositTokenFloor(row, section));
 }
 
 /** The fraction a row should be ranked/compared by, honouring the deposit rank
@@ -135,8 +147,7 @@ export function bestRow(
   let bestVal: number | null = null;
   for (const row of visibleAccountRows(rows, includeNonStandard, detailsProducts)) {
     // Token floor uses headline rate (parity with statsFor / excludeTokenDepositRates).
-    const headline = effectiveFraction(row);
-    if (headline !== null && !isMeaningfulDepositRate(headline, section)) continue;
+    if (!passesDepositTokenFloor(row, section)) continue;
     const v = rankFraction(row, section, metric);
     if (v === null) continue;
     if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
@@ -191,10 +202,7 @@ export function filterRows(
     if (!row) return false;
     if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
       return false;
-    if (section) {
-      const headline = effectiveFraction(row);
-      if (headline !== null && !isMeaningfulDepositRate(headline, section)) return false;
-    }
+    if (section && !passesDepositTokenFloor(row, section)) return false;
     if (
       !rowMatchesSearchQuery(
         row,

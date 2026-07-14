@@ -104,6 +104,17 @@ describe('selectors', () => {
     expect(excludeTokenDepositRates(rows, 'Mortgage')).toEqual(rows);
   });
 
+
+  test('excludeTokenDepositRates / filterRows reject published zero-rate deposits', () => {
+    const rows = [
+      mk({ product_key: 'ZERO|S', rate: '0' }),
+      mk({ product_key: 'OK|S', rate: '0.045' }),
+    ];
+    expect(excludeTokenDepositRates(rows, 'Savings').map((r) => r.product_key)).toEqual(['OK|S']);
+    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual(['OK|S']);
+    expect(bestRow(rows, 'Savings')?.product_key).toBe('OK|S');
+  });
+
   test('excludeTokenDepositRates keeps unrankable bonus rows but drops 0.01% base', () => {
     const rows = [
       mk({ product_key: 'JUNK|S', rate: '0.0001' }),

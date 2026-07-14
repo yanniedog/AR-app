@@ -93,6 +93,31 @@ describe('ribbonStats', () => {
     expect(stats.count).toBe(2);
   });
 
+
+  it('does not fall back to payload ribbon for all-token Savings rows', () => {
+    const section = 'Savings' as SectionKey;
+    const data = {
+      ...sample.sections.Savings,
+      ribbon: {
+        range: { min: 0.0001, max: 0.0001, mean: 0.0001, median: 0.0001 },
+        counts: { rates: 1, products: 1, providers: 1 },
+        providers: [],
+      },
+    };
+    const rows = [
+      {
+        provider: 'Bank A',
+        product_key: 'JUNK|S',
+        product_name: 'Access',
+        rate: '0.0001',
+        taxonomy_path: 'SAVINGS',
+      },
+    ];
+    const stats = resolveSectionRibbonStats(data, rows, true, section);
+    expect(stats.min).toBeNull();
+    expect(stats.count).toBe(0);
+  });
+
   it('excludes token near-zero deposit rates from TD ribbon stats', () => {
     const section = 'TD' as SectionKey;
     const rows = [

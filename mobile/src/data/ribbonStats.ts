@@ -38,6 +38,10 @@ export function resolveSectionRibbonStats(
   const computed = statsFor(filtered, true, section);
   if (computed.min != null) return computed;
 
+  // Deposit flooring can empty client stats while the payload ribbon still
+  // includes token near-zero rows — do not resurrect those for Savings/TD.
+  if (section === 'Savings' || section === 'TD') return computed;
+
   if (sectionData && hasPayloadRibbon(sectionData.ribbon)) {
     return ribbonToRateStats(sectionData.ribbon);
   }
