@@ -784,15 +784,10 @@ export function rbaPassThrough(
 
   // Cap response windows using the merged scorable timeline so a later
   // series-only decision truncates an earlier calendar announcement window.
-  const timeline: PassThroughSourceDecision[] = scorable.map((d) => ({
-    date: d.date,
-    bps: d.bps,
-    outcome: d.outcome,
-    rate: d.rate,
-  }));
-  const idx = timeline.findIndex((d) => d.date === decision.date);
+  // RbaDecisionRef is structurally compatible with PassThroughSourceDecision.
+  const idx = scorable.findIndex((d) => d.date === decision.date);
   if (idx < 0) return null;
-  const windowEnd = windowEndForDecision(timeline, idx, windowDays);
+  const windowEnd = windowEndForDecision(scorable, idx, windowDays);
   if (!windowEnd) return null;
 
   const observedThrough =
