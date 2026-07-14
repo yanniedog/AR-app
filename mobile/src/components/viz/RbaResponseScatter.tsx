@@ -127,7 +127,7 @@ export function RbaResponseScatter({
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          Announcement predates tracked history — horizontal position uses ≥ days.
+          Announcement predates tracked history — horizontal position uses ≤ days.
         </AppText>
       ) : null}
       {windowOpen ? (

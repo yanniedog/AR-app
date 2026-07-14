@@ -333,7 +333,7 @@ export function RbaPassThroughCard({
       </AppText>
       {decision.partialObservation ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
-          Announcement predates tracked bank history — timing uses ≥ days because earlier responses
+          Announcement predates tracked bank history — timing uses ≤ days because earlier responses
           may be missing.
         </AppText>
       ) : null}

@@ -766,7 +766,7 @@ describe('rbaPassThrough', () => {
       'moved after 5 days',
     );
     expect(passThroughDaysLabel(1, { partialObservation: true, windowOpen: false })).toBe(
-      'moved after ≥1 day',
+      'moved after ≤1 day',
     );
     expect(passThroughDaysLabel(null, { partialObservation: false, windowOpen: true })).toBe(
       'no matching move yet — window still open',

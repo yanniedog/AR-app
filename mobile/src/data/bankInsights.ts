@@ -373,7 +373,7 @@ export interface RbaDecisionRef {
   rate?: number;
   /**
    * Announcement predates the bank-history ledger start, so first-move timing may
-   * miss earlier responses and days-to-follow is a lower bound on observed delay.
+   * miss earlier responses and days-to-follow is an upper bound on observed delay.
    */
   partialObservation: boolean;
 }
@@ -678,7 +678,7 @@ export function comparePassThroughRows(a: PassThroughRow, b: PassThroughRow): nu
 
 /**
  * Human label for days-to-first-move.
- * Partial observation uses ≥ because earlier (pre-ledger) responses may be missing.
+ * Partial observation uses ≤ because earlier (pre-ledger) responses may be missing.
  */
 export function passThroughDaysLabel(
   daysToFirstMove: number | null,
@@ -690,7 +690,7 @@ export function passThroughDaysLabel(
       : 'no matching move in the tracking window';
   }
   const unit = daysToFirstMove === 1 ? 'day' : 'days';
-  if (opts.partialObservation) return `moved after ≥${daysToFirstMove} ${unit}`;
+  if (opts.partialObservation) return `moved after ≤${daysToFirstMove} ${unit}`;
   return `moved after ${daysToFirstMove} ${unit}`;
 }
 
