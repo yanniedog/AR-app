@@ -5,6 +5,8 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
 import {
+  createDatedFetchCircuit,
+  DATED_FETCH_CIRCUIT_LIMIT,
   downloadDatedCore,
   fetchDatesIndexJson,
   historyDatesUpTo,
@@ -192,11 +194,18 @@ export interface SyncProductHistoryOpts {
   coreSha?: string;
   existing?: ProductHistoryPayload | null;
   maxConcurrent?: number;
+  /** Override circuit trip threshold (tests). */
+  circuitLimit?: number;
 }
 
 /**
  * Incrementally download the dated cores missing from `existing` and (re)build the
  * per-product history. The current day is always recomputed from `currentCore`.
+ *
+ * Catalog growth/shrink does **not** invalidate already-fetched dates — new products
+ * keep `null` for historical days until those dates are missing from cache for another
+ * reason. Re-fetching ~60 full cores on every product add/remove was a multi-minute
+ * JS/network stall in production logs.
  */
 export async function syncProductHistoryFromDailyPayloads(
   opts: SyncProductHistoryOpts,
@@ -220,17 +229,9 @@ export async function syncProductHistoryFromDailyPayloads(
   ]);
 
   const keys = productKeysForCore(opts.currentCore);
-  const existingKeys = new Set(Object.keys(opts.existing?.products ?? {}));
-  const catalogMatches =
-    keys.size === existingKeys.size && [...keys].every((key) => existingKeys.has(key));
-  const reusableDates = new Set<string>();
-  if (catalogMatches && opts.existing) {
-    opts.existing.run_dates.forEach((date, i) => {
-      if ([...keys].some((key) => opts.existing?.products[key]?.[i] != null)) {
-        reusableDates.add(date);
-      }
-    });
-  }
+  // Reuse every date already present in the cached payload. Catalog churn must not
+  // force a full historical re-download (see sync start fetch= count in debug logs).
+  const reusableDates = new Set(opts.existing?.run_dates ?? []);
   const toFetch = wantedDates.filter((d) => d !== targetRunDate && !reusableDates.has(d));
   const bestByDate = new Map<string, Map<string, number>>([
     [targetRunDate, bestRatesForCore(opts.currentCore, keys)],
@@ -242,36 +243,46 @@ export async function syncProductHistoryFromDailyPayloads(
   );
 
   if (toFetch.length) {
+    const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
     let next = 0;
     const workers = Array.from(
       { length: Math.min(opts.maxConcurrent ?? 3, toFetch.length) },
       async () => {
         while (next < toFetch.length) {
+          if (circuit.isOpen) return;
           const runDate = toFetch[next];
           next += 1;
           try {
             const core = await downloadDatedCore(runDate);
             bestByDate.set(runDate, bestRatesForCore(core, keys));
+            circuit.success();
           } catch (err) {
+            circuit.failure();
             debugLog.warn(
               'productHistory',
               `dated core failed run_date=${runDate}: ${String((err as Error)?.message ?? err)}`,
             );
+            if (circuit.isOpen) {
+              debugLog.warn(
+                'productHistory',
+                `dated fetch circuit open after ${opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT} consecutive failures; skipping remaining`,
+              );
+              return;
+            }
           }
         }
-      }
+      },
     );
     await Promise.all(workers);
   }
 
   const availableDates = wantedDates.filter((d) => bestByDate.has(d) || reusableDates.has(d));
-  const reusableExisting = catalogMatches ? opts.existing : null;
   const built = buildProductHistoryFromRates(
     bestByDate,
     keys,
     availableDates,
     targetRunDate,
-    reusableExisting,
+    opts.existing,
     opts.coreSha,
   );
   if (!Object.keys(built.products).length) {

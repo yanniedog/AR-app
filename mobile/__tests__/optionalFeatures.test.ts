@@ -85,6 +85,7 @@ jest.mock('../src/data/productHistory', () => {
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore as store } from '../src/data/store';
+import { historyBanksSyncState, productHistorySyncState } from '../src/data/storeHelpers';
 import { debugLog } from '../src/lib/debugLog';
 
 const remoteManifest: Manifest = {
@@ -148,6 +149,9 @@ describe('optional feature prefs', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetStore();
+    historyBanksSyncState.inFlight = null;
+    productHistorySyncState.inFlight = null;
+    productHistorySyncState.request = 0;
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockWriteBundle.mockResolvedValue(undefined);
     mockReadProductHistory.mockResolvedValue(null);
@@ -437,6 +441,37 @@ describe('optional feature prefs', () => {
     expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
   });
 
+  it('ensureProductHistory coalesces concurrent calls into one sync', async () => {
+    let finishSync!: (value: unknown) => void;
+    const sync = new Promise((resolve) => {
+      finishSync = resolve;
+    });
+    const history = {
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      core_sha: remoteManifest.files.core.sha256,
+      run_dates: [remoteCore.run_date],
+      products: { product: [0.05] },
+    };
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      productHistory: null,
+    });
+    mockSyncProductHistoryFromDailyPayloads.mockReturnValueOnce(sync);
+
+    const first = store.getState().ensureProductHistory();
+    const second = store.getState().ensureProductHistory();
+    finishSync(history);
+    await Promise.all([first, second]);
+
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
+    expect(store.getState().productHistory).toEqual(history);
+    expect(mockWriteProductHistory).toHaveBeenCalledTimes(1);
+  });
+
   it('ensureProductHistory does not install a result from a superseded core revision', async () => {
     let finishOldSync!: (value: unknown) => void;
     const oldSync = new Promise((resolve) => {
@@ -476,48 +511,54 @@ describe('optional feature prefs', () => {
     expect(store.getState().productHistory).toBeNull();
   });
 
-  it('ensureProductHistory does not let an older same-revision sync overwrite a newer result', async () => {
-    let finishOldSync!: (value: unknown) => void;
-    let finishNewSync!: (value: unknown) => void;
-    const oldSync = new Promise((resolve) => {
-      finishOldSync = resolve;
+  it('ensureHistoryBanks coalesces concurrent calls into one download', async () => {
+    let finishDownload!: (value: unknown) => void;
+    const download = new Promise((resolve) => {
+      finishDownload = resolve;
     });
-    const newSync = new Promise((resolve) => {
-      finishNewSync = resolve;
-    });
-    const oldHistory = {
-      schema_version: 2,
-      run_date: remoteCore.run_date,
-      core_sha: remoteManifest.files.core.sha256,
-      run_dates: [remoteCore.run_date],
-      products: { old: [0.05] },
-    };
-    const newHistory = {
-      ...oldHistory,
-      run_dates: ['2026-05-13', remoteCore.run_date],
-      products: { new: [0.051, 0.05] },
-    };
     store.setState({
       prefs: historyRibbonPrefs,
       source: 'remote',
       manifest: remoteManifest,
       core: remoteCore,
-      productHistory: null,
     });
-    mockSyncProductHistoryFromDailyPayloads
-      .mockReturnValueOnce(oldSync)
-      .mockReturnValueOnce(newSync);
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+      historyBanksSha: null,
+    });
+    mockDownloadHistoryBanks.mockReturnValueOnce(download);
 
-    const older = store.getState().ensureProductHistory();
-    const newer = store.getState().ensureProductHistory();
-    finishNewSync(newHistory);
-    await newer;
-    finishOldSync(oldHistory);
-    await older;
+    const first = store.getState().ensureHistoryBanks();
+    const second = store.getState().ensureHistoryBanks();
+    finishDownload({
+      historyBanks: {
+        schema_version: 1,
+        run_date: remoteCore.run_date,
+        run_dates: ['2026-05-13', remoteCore.run_date],
+        sections: {
+          Mortgage: {
+            points: [
+              { date: '2026-05-13', min: 0.03, max: 0.08, mean: 0.05, median: 0.05, count: 1 },
+              {
+                date: remoteCore.run_date,
+                min: 0.031,
+                max: 0.081,
+                mean: 0.051,
+                median: 0.051,
+                count: 1,
+              },
+            ],
+          },
+        },
+      },
+    });
+    await Promise.all([first, second]);
 
-    expect(store.getState().productHistory).toEqual(newHistory);
-    expect(mockWriteProductHistory).toHaveBeenCalledTimes(1);
-    expect(mockWriteProductHistory).toHaveBeenCalledWith(JSON.stringify(newHistory));
+    expect(mockDownloadHistoryBanks).toHaveBeenCalledTimes(1);
   });
 
   it('ensureHistoryBanks no-ops when history ribbon pref is off', async () => {

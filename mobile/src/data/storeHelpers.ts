@@ -36,4 +36,12 @@ export async function installSampleSeed(): Promise<void> {
   await cache.writeBundle(seedMeta, JSON.stringify(sampleCore));
 }
 
-export const productHistorySyncState = { request: 0 };
+/** Coalesce concurrent ensure* calls; `request` supersedes stale product-history writes. */
+export const productHistorySyncState: {
+  request: number;
+  inFlight: Promise<void> | null;
+} = { request: 0, inFlight: null };
+
+export const historyBanksSyncState: {
+  inFlight: Promise<void> | null;
+} = { inFlight: null };

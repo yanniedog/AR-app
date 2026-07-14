@@ -18,7 +18,12 @@ import { debugLog } from '../lib/debugLog';
 import { logDegradation, logEnsureSkipped } from '../lib/degradationLog';
 import { sampleDetails } from './sample';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
-import { productHistorySyncState, readValidatedHistoryBanks } from './storeHelpers';
+import { yieldToUi } from '../lib/yieldToUi';
+import {
+  historyBanksSyncState,
+  productHistorySyncState,
+  readValidatedHistoryBanks,
+} from './storeHelpers';
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   return {
@@ -123,109 +128,121 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         logEnsureSkipped('ensureHistoryBanks', 'proGate');
         return;
       }
-      if (force) set({ historyBanksError: null });
-      debugLog.info('store', 'ensureHistoryBanks start');
-      const { core, manifest, source, historyBanks } = get();
-      if (!core) {
-        debugLog.debug('store', 'ensureHistoryBanks skipped (no core)');
-        return;
+      // Trends + refresh + product screens all call this; coalesce so we never
+      // download the compact asset (or fan out dated cores) three times at once.
+      if (!force && historyBanksSyncState.inFlight) {
+        return historyBanksSyncState.inFlight;
       }
-      if (source !== 'remote' || !manifest) {
-        set({ historyBanks: null, historyBanksError: null });
-        return;
-      }
+      const run = (async () => {
+        if (force) set({ historyBanksError: null });
+        debugLog.info('store', 'ensureHistoryBanks start');
+        const { core, manifest, source, historyBanks } = get();
+        if (!core) {
+          debugLog.debug('store', 'ensureHistoryBanks skipped (no core)');
+          return;
+        }
+        if (source !== 'remote' || !manifest) {
+          set({ historyBanks: null, historyBanksError: null });
+          return;
+        }
 
-      const coreSha = manifest.files.core.sha256;
-      const meta = await cache.readOptionalMeta();
-      const shaMatches = (sha?: string) => meta?.coreSha === coreSha && meta?.historyBanksSha === sha;
-      const cached = historyBanks ?? (await readValidatedHistoryBanks());
+        const coreSha = manifest.files.core.sha256;
+        const meta = await cache.readOptionalMeta();
+        const shaMatches = (sha?: string) => meta?.coreSha === coreSha && meta?.historyBanksSha === sha;
+        const cached = historyBanks ?? (await readValidatedHistoryBanks());
 
-      const installHistory = async (validated: HistoryBanksPayload, sha: string) => {
-        const text = JSON.stringify(validated);
-        await cache.writeHistoryBanks(text);
-        await cache.writeOptionalMeta({ coreSha, historyBanksSha: sha });
-        set({ historyBanks: validated, historyBanksError: null });
-        debugLog.info(
-          'store',
-          `ensureHistoryBanks ok run_date=${validated.run_date} slices=${validated.run_dates.length}`,
-        );
-      };
+        const installHistory = async (validated: HistoryBanksPayload, sha: string) => {
+          await yieldToUi();
+          const text = JSON.stringify(validated);
+          await cache.writeHistoryBanks(text);
+          await cache.writeOptionalMeta({ coreSha, historyBanksSha: sha });
+          set({ historyBanks: validated, historyBanksError: null });
+          debugLog.info(
+            'store',
+            `ensureHistoryBanks ok run_date=${validated.run_date} slices=${validated.run_dates.length}`,
+          );
+        };
 
-      const compactAsset = manifest.files.history_banks;
-      if (compactAsset) {
-        if (!force && cached && cached.run_date === core.run_date && shaMatches(compactAsset.sha256)) {
+        const compactAsset = manifest.files.history_banks;
+        if (compactAsset) {
+          if (!force && cached && cached.run_date === core.run_date && shaMatches(compactAsset.sha256)) {
+            set({ historyBanks: cached, historyBanksError: null });
+            return;
+          }
+          try {
+            const { historyBanks: fresh } = await downloadHistoryBanks(
+              compactAsset.url,
+              compactAsset.sha256,
+            );
+            const validated = normalizeHistoryBanksPayload(fresh);
+            if (!validated) throw new Error('history_banks payload failed validation');
+            await installHistory(validated, compactAsset.sha256);
+            return;
+          } catch (err) {
+            debugLog.warn(
+              'store',
+              `ensureHistoryBanks compact asset failed: ${String((err as Error)?.message ?? err)}`,
+            );
+          }
+        }
+
+        if (!force && cached && cached.run_date === core.run_date && cached.run_dates.length > 1) {
           set({ historyBanks: cached, historyBanksError: null });
           return;
         }
+
         try {
-          const { historyBanks: fresh } = await downloadHistoryBanks(
-            compactAsset.url,
-            compactAsset.sha256,
-          );
-          const validated = normalizeHistoryBanksPayload(fresh);
-          if (!validated) throw new Error('history_banks payload failed validation');
-          await installHistory(validated, compactAsset.sha256);
-          return;
+          const synced = await syncHistoryFromDailyPayloads({
+            targetRunDate: core.run_date,
+            currentCore: core,
+            existing: cached,
+            cachedDates: new Set(cached?.run_dates ?? []),
+          });
+          if (synced.run_dates.length > 1) {
+            await installHistory(synced, dailyHistorySha(synced.run_dates));
+            return;
+          }
         } catch (err) {
           debugLog.warn(
             'store',
-            `ensureHistoryBanks compact asset failed: ${String((err as Error)?.message ?? err)}`,
+            `ensureHistoryBanks daily sync failed: ${String((err as Error)?.message ?? err)}`,
           );
         }
-      }
 
-      if (!force && cached && cached.run_date === core.run_date && cached.run_dates.length > 1) {
-        set({ historyBanks: cached, historyBanksError: null });
-        return;
-      }
-
-      try {
-        const synced = await syncHistoryFromDailyPayloads({
-          targetRunDate: core.run_date,
-          currentCore: core,
-          existing: cached,
-          cachedDates: new Set(cached?.run_dates ?? []),
-        });
-        if (synced.run_dates.length > 1) {
-          await installHistory(synced, dailyHistorySha(synced.run_dates));
+        const asset = manifest.files.history_banks;
+        if (!asset) {
+          if (cached && cached.run_dates.length > 1) {
+            set({ historyBanks: cached, historyBanksError: null });
+            return;
+          }
+          set({ historyBanks: null, historyBanksError: 'history dates unavailable' });
           return;
         }
-      } catch (err) {
-        debugLog.warn(
-          'store',
-          `ensureHistoryBanks daily sync failed: ${String((err as Error)?.message ?? err)}`,
-        );
-      }
 
-      const asset = manifest.files.history_banks;
-      if (!asset) {
-        if (cached && cached.run_dates.length > 1) {
+        if (!force && cached && cached.run_date === core.run_date && shaMatches(asset.sha256)) {
           set({ historyBanks: cached, historyBanksError: null });
           return;
         }
-        set({ historyBanks: null, historyBanksError: 'history dates unavailable' });
-        return;
-      }
 
-      if (!force && cached && cached.run_date === core.run_date && shaMatches(asset.sha256)) {
-        set({ historyBanks: cached, historyBanksError: null });
-        return;
-      }
-
-      try {
-        const { historyBanks: fresh } = await downloadHistoryBanks(asset.url, asset.sha256);
-        const validated = normalizeHistoryBanksPayload(fresh);
-        if (!validated) {
-          debugLog.error('store', 'ensureHistoryBanks rejected payload after download (validation failed)');
-          set({ historyBanks: null, historyBanksError: 'history_banks payload failed validation' });
-          return;
+        try {
+          const { historyBanks: fresh } = await downloadHistoryBanks(asset.url, asset.sha256);
+          const validated = normalizeHistoryBanksPayload(fresh);
+          if (!validated) {
+            debugLog.error('store', 'ensureHistoryBanks rejected payload after download (validation failed)');
+            set({ historyBanks: null, historyBanksError: 'history_banks payload failed validation' });
+            return;
+          }
+          await installHistory(validated, asset.sha256);
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err);
+          debugLog.error('store', `ensureHistoryBanks failed: ${msg}`);
+          set({ historyBanks: cached?.run_dates.length ? cached : null, historyBanksError: msg });
         }
-        await installHistory(validated, asset.sha256);
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? err);
-        debugLog.error('store', `ensureHistoryBanks failed: ${msg}`);
-        set({ historyBanks: cached?.run_dates.length ? cached : null, historyBanksError: msg });
-      }
+      })();
+      historyBanksSyncState.inFlight = run.finally(() => {
+        if (historyBanksSyncState.inFlight === run) historyBanksSyncState.inFlight = null;
+      });
+      return historyBanksSyncState.inFlight;
     },
 
     async ensureBankInsights(opts: { force?: boolean } = {}) {
@@ -335,49 +352,62 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         logEnsureSkipped('ensureProductHistory', 'proGate');
         return;
       }
-      if (force) set({ productHistoryError: null });
-      const { core, manifest, source, productHistory } = get();
-      if (!core) return;
-      if (source !== 'remote') {
-        set({ productHistory: null, productHistoryError: null });
-        return;
+      if (!force && productHistorySyncState.inFlight) {
+        return productHistorySyncState.inFlight;
       }
-      const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
-      const coreSha = manifest?.files.core.sha256 ?? '';
-      const requestId = ++productHistorySyncState.request;
-      const revisionIsCurrent = () => {
-        const current = get();
-        return (
-          requestId === productHistorySyncState.request &&
-          current.source === 'remote' &&
-          current.core?.run_date === core.run_date &&
-          (current.manifest?.files.core.sha256 ?? '') === coreSha
-        );
-      };
-      try {
-        const synced = await syncProductHistoryFromDailyPayloads({
-          targetRunDate: core.run_date,
-          currentCore: core,
-          coreSha,
-          existing: cached,
-        });
-        if (!revisionIsCurrent()) {
-          debugLog.info('store', `ensureProductHistory superseded run_date=${synced.run_date}`);
+      const run = (async () => {
+        if (force) set({ productHistoryError: null });
+        const { core, manifest, source, productHistory } = get();
+        if (!core) return;
+        if (source !== 'remote') {
+          set({ productHistory: null, productHistoryError: null });
           return;
         }
-        await cache.writeProductHistory(JSON.stringify(synced));
-        set({ productHistory: synced, productHistoryError: null });
-        debugLog.info(
-          'store',
-          `ensureProductHistory ok run_date=${synced.run_date} slices=${synced.run_dates.length} products=${Object.keys(synced.products).length}`,
-        );
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? err);
-        debugLog.warn('store', `ensureProductHistory failed: ${msg}`);
-        logDegradation('warn', 'store.ensureFailed', { fn: 'ensureProductHistory', error: msg });
-        if (!revisionIsCurrent()) return;
-        set({ productHistory: cached ?? null, productHistoryError: msg });
-      }
+        const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
+        const coreSha = manifest?.files.core.sha256 ?? '';
+        const requestId = ++productHistorySyncState.request;
+        const revisionIsCurrent = () => {
+          const current = get();
+          return (
+            requestId === productHistorySyncState.request &&
+            current.source === 'remote' &&
+            current.core?.run_date === core.run_date &&
+            (current.manifest?.files.core.sha256 ?? '') === coreSha
+          );
+        };
+        try {
+          const synced = await syncProductHistoryFromDailyPayloads({
+            targetRunDate: core.run_date,
+            currentCore: core,
+            coreSha,
+            existing: cached,
+          });
+          if (!revisionIsCurrent()) {
+            debugLog.info('store', `ensureProductHistory superseded run_date=${synced.run_date}`);
+            return;
+          }
+          // ~2.7k products × ~60 dates — stringify can stall the JS thread.
+          await yieldToUi();
+          const text = JSON.stringify(synced);
+          await yieldToUi();
+          await cache.writeProductHistory(text);
+          set({ productHistory: synced, productHistoryError: null });
+          debugLog.info(
+            'store',
+            `ensureProductHistory ok run_date=${synced.run_date} slices=${synced.run_dates.length} products=${Object.keys(synced.products).length}`,
+          );
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err);
+          debugLog.warn('store', `ensureProductHistory failed: ${msg}`);
+          logDegradation('warn', 'store.ensureFailed', { fn: 'ensureProductHistory', error: msg });
+          if (!revisionIsCurrent()) return;
+          set({ productHistory: cached ?? null, productHistoryError: msg });
+        }
+      })();
+      productHistorySyncState.inFlight = run.finally(() => {
+        if (productHistorySyncState.inFlight === run) productHistorySyncState.inFlight = null;
+      });
+      return productHistorySyncState.inFlight;
     },
   } satisfies Pick<
     AppState,

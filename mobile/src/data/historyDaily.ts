@@ -148,6 +148,34 @@ export async function mapWithConcurrency<T, R>(
   return out;
 }
 
+/** Stop dated-core fan-out after a streak of failures (network dead / GH outage). */
+export const DATED_FETCH_CIRCUIT_LIMIT = 4;
+
+export type DatedFetchCircuit = {
+  readonly isOpen: boolean;
+  success: () => void;
+  failure: () => void;
+};
+
+export function createDatedFetchCircuit(
+  maxConsecutiveFailures: number = DATED_FETCH_CIRCUIT_LIMIT,
+): DatedFetchCircuit {
+  let consecutive = 0;
+  let open = false;
+  return {
+    get isOpen() {
+      return open;
+    },
+    success() {
+      consecutive = 0;
+    },
+    failure() {
+      consecutive += 1;
+      if (consecutive >= maxConsecutiveFailures) open = true;
+    },
+  };
+}
+
 export interface SyncHistoryDailyOpts {
   targetRunDate: string;
   currentCore: CorePayload;
@@ -182,20 +210,37 @@ export async function syncHistoryFromDailyPayloads(
   );
 
   if (toFetch.length) {
-    const downloaded = await mapWithConcurrency(toFetch, opts.maxConcurrent ?? 3, async (runDate) => {
-      try {
-        return { runDate, core: await downloadDatedCore(runDate) };
-      } catch (err) {
-        debugLog.warn(
-          'historyDaily',
-          `dated core failed run_date=${runDate}: ${String((err as Error)?.message ?? err)}`,
-        );
-        return { runDate, core: null as CorePayload | null };
-      }
-    });
-    for (const { runDate, core } of downloaded) {
-      if (core) coresByDate.set(runDate, core);
-    }
+    const circuit = createDatedFetchCircuit();
+    let next = 0;
+    const workers = Array.from(
+      { length: Math.min(opts.maxConcurrent ?? 3, toFetch.length) },
+      async () => {
+        while (next < toFetch.length) {
+          if (circuit.isOpen) return;
+          const runDate = toFetch[next];
+          next += 1;
+          try {
+            const core = await downloadDatedCore(runDate);
+            coresByDate.set(runDate, core);
+            circuit.success();
+          } catch (err) {
+            circuit.failure();
+            debugLog.warn(
+              'historyDaily',
+              `dated core failed run_date=${runDate}: ${String((err as Error)?.message ?? err)}`,
+            );
+            if (circuit.isOpen) {
+              debugLog.warn(
+                'historyDaily',
+                `dated fetch circuit open after ${DATED_FETCH_CIRCUIT_LIMIT} consecutive failures; skipping ${toFetch.length - next} remaining`,
+              );
+              return;
+            }
+          }
+        }
+      },
+    );
+    await Promise.all(workers);
   }
 
   const cachedPointDates = new Set<string>();
