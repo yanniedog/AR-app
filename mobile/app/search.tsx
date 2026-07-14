@@ -70,8 +70,9 @@ export default function Search() {
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   useEffect(() => {
-    // Suitability filtering (and Pro deep-search) both benefit from details.
-    void ensureDetails();
+    // Suitability filtering needs product details even when Pro deep-search
+    // warming is off; force bypasses shouldWarmDetails for default prefs.
+    void ensureDetails({ force: true });
     if (!deepSearchActive) return;
     void ensureSearchIndex();
   }, [deepSearchActive, ensureDetails, ensureSearchIndex]);

@@ -71,10 +71,41 @@ describe('assessAccess', () => {
     expect(assessAccess('Teen Transaction Account', null).restricted).toBe(true);
   });
 
-  it('flags MAX_AGE eligibility as youth-restricted', () => {
-    const a = assessAccess('Everyday Account', elig(['MAX_AGE', 'MIN_AGE']));
+  it('flags MAX_AGE eligibility as youth-restricted when the cap is a youth bound', () => {
+    const a = assessAccess(
+      'Everyday Account',
+      {
+        eligibility: [
+          { label: 'MAX_AGE', value: 18, info: 'Maximum age 18' },
+          { label: 'MIN_AGE' },
+        ],
+      },
+    );
     expect(a.categories).toContain('youth');
     expect(a.restricted).toBe(true);
+  });
+
+  it('does not treat senior MAX_AGE lending caps as youth-only', () => {
+    const a = assessAccess(
+      'Variable Home Loan',
+      {
+        eligibility: [
+          { label: 'MAX_AGE', value: 75, info: 'Maximum borrower age 75' },
+          { label: 'MIN_AGE' },
+        ],
+      },
+    );
+    expect(a.categories).not.toContain('youth');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('does not treat guardian under-18 copy as youth-only access', () => {
+    const a = assessAccess(
+      'Everyday Transaction Account',
+      elig(['MIN_AGE'], [{ info: 'Customers under 18 must have a parent or guardian' }]),
+    );
+    expect(a.categories).not.toContain('youth');
+    expect(a.restricted).toBe(false);
   });
 
   it('flags region-specific products from name and eligibility text', () => {
@@ -83,6 +114,34 @@ describe('assessAccess', () => {
     expect(regional.categories).toContain('geographic');
     const wa = assessAccess('Community Saver', elig(['OTHER'], [{ info: 'Available to customers in WA' }]));
     expect(wa.badge).toBe('Region-restricted');
+    expect(
+      assessAccess('Capital Saver', elig(['OTHER'], [{ info: 'Available to customers in ACT' }])).categories,
+    ).toContain('geographic');
+    expect(
+      assessAccess('Action Account', elig(['OTHER'], [{ info: 'Available to act as trustee' }])).restricted,
+    ).toBe(false);
+
+    // Generic Australian residency requirements are not geographic access gates.
+    const ausResident = assessAccess(
+      'Everyday Account',
+      elig(['OTHER'], [{ info: 'Must be an Australian resident' }]),
+    );
+    expect(ausResident.categories).not.toContain('geographic');
+    expect(ausResident.restricted).toBe(false);
+
+    const ausResidentsOnly = assessAccess(
+      'Online Saver',
+      elig(['OTHER'], [{ info: 'Available to Australian residents only' }]),
+    );
+    expect(ausResidentsOnly.categories).not.toContain('geographic');
+    expect(ausResidentsOnly.restricted).toBe(false);
+
+    const citizens = assessAccess(
+      'Basic Saver',
+      elig(['OTHER'], [{ info: 'Must be citizens or permanent residents of Australia' }]),
+    );
+    expect(citizens.categories).not.toContain('geographic');
+    expect(citizens.restricted).toBe(false);
   });
 
   it('flags existing-customer / package gates from eligibility copy', () => {
@@ -92,6 +151,24 @@ describe('assessAccess', () => {
     );
     expect(a.categories).toContain('package');
     expect(a.restricted).toBe(true);
+  });
+
+  it('does not treat ordinary linked-transaction-account rules as package gates', () => {
+    const a = assessAccess(
+      'High Interest Saver',
+      elig(['OTHER'], [{ info: 'Requires a linked transaction account to earn bonus interest' }]),
+    );
+    expect(a.categories).not.toContain('package');
+    expect(a.restricted).toBe(false);
+  });
+
+  it('does not treat linked Pensioner product names as pensioner-only', () => {
+    const a = assessAccess(
+      'Online Saver',
+      elig(['OTHER'], [{ info: 'Eligible linked accounts include ANZ Pensioner Advantage' }]),
+    );
+    expect(a.categories).not.toContain('pension');
+    expect(a.restricted).toBe(false);
   });
 
   it('does not treat LVR / deposit / term / OO-investor structure as access restrictions', () => {

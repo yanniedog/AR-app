@@ -22,11 +22,11 @@ import { productHistorySyncState, readValidatedHistoryBanks } from './storeHelpe
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   return {
-    async ensureDetails(opts: { forProductView?: boolean } = {}) {
-      const { forProductView = false } = opts;
+    async ensureDetails(opts: { forProductView?: boolean; force?: boolean } = {}) {
+      const { forProductView = false, force = false } = opts;
       const { details, core, manifest, source, detailsLoading, prefs, subscriptions } = get();
       if (!core || detailsLoading) return;
-      if (!forProductView && !shouldWarmDetails(prefs, subscriptions)) return;
+      if (!forProductView && !force && !shouldWarmDetails(prefs, subscriptions)) return;
 
       const wantSha = manifest?.files.details.sha256 ?? null;
       const meta = await cache.readMeta();

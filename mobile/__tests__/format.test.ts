@@ -131,6 +131,8 @@ describe('format', () => {
     expect(nameRestrictsAccess('Essential Workers Home Loan')).toBe(true);
     expect(nameRestrictsAccess('Youth Saver')).toBe(true);
     expect(nameRestrictsAccess('QLD Residents Home Loan')).toBe(true);
+    expect(nameRestrictsAccess('Existing Customers Only Home Loan')).toBe(true);
+    expect(nameRestrictsAccess('Pensioner Saver')).toBe(true);
     expect(nameRestrictsAccess('')).toBe(false);
     expect(nameRestrictsAccess(null)).toBe(false);
   });
