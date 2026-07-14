@@ -78,3 +78,23 @@ export const KEY_SERVICE_URL: string = extra.keyServiceUrl ?? '';
 
 /** Local-notification defaults. */
 export const RATE_MOVE_BPS_THRESHOLD = 5; // notify when a category best rate moves >= 5bps
+
+/**
+ * Minimum deposit rate (fraction) treated as a real savings/TD interest offer.
+ *
+ * CDR payloads include many transaction, offset, and FX accounts at ~0.01% (1bp)
+ * — token rates that are not savings products users want when hunting for the
+ * best interest rate. 0.10% (10bp) drops that junk class while keeping low-but-
+ * intentional savers (sample AR-local cores show genuine-ish floors from ~0.25%+).
+ * Mortgages are never gated by this floor.
+ */
+export const MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION = 0.001; // 0.10%
+
+/** True when `fraction` clears the deposit token-rate floor (mortgages always pass). */
+export function isMeaningfulDepositRate(
+  fraction: number,
+  section: 'Mortgage' | 'Savings' | 'TD' | string,
+): boolean {
+  if (section === 'Mortgage') return true;
+  return fraction >= MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION;
+}

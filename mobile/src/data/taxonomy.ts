@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
 import { effectiveFraction, isBroadlyAvailable, visibleAccountRows } from './format';
 
@@ -109,7 +110,12 @@ export interface RateStats {
   providers: number; // distinct lender count
 }
 
-export function statsFor(rows: RateRow[], includeNonStandard = false): RateStats {
+export function statsFor(
+  rows: RateRow[],
+  includeNonStandard = false,
+  /** When set for Savings/TD, drop token near-zero rates from ribbon aggregates. */
+  section?: SectionKey | null,
+): RateStats {
   const fractions: number[] = [];
   const providers = new Set<string>();
   const products = new Set<string>();
@@ -117,7 +123,8 @@ export function statsFor(rows: RateRow[], includeNonStandard = false): RateStats
     if (!r) continue;
     if (!includeNonStandard && !isBroadlyAvailable(r)) continue;
     const f = effectiveFraction(r);
-    if (f === null) continue;
+    // When section is omitted, keep legacy behaviour (no deposit floor).
+    if (f === null || (section && !isMeaningfulDepositRate(f, section))) continue;
     fractions.push(f);
     providers.add(r.provider);
     products.add(r.product_key);
@@ -224,7 +231,7 @@ export function childrenFromScoped(
       seg,
       label: segLabel(seg),
       rows: segRows,
-      stats: statsFor(segRows, true),
+      stats: statsFor(segRows, true, section),
       hasChildren: childHasDeeper(segRows, root, depth),
     });
   }
