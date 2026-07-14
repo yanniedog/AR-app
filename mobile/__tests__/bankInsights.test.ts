@@ -3,10 +3,12 @@ import {
   marketPulse,
   normalizeBankInsightsPayload,
   rbaPassThrough,
+  rbaPassThroughDecisionList,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
 } from '../src/data/bankInsights';
+import type { RbaCalendar } from '../src/data/rbaCalendar';
 import type { RbaEntry } from '../src/types';
 
 const payload: BankInsightsPayload = {
@@ -37,8 +39,8 @@ const payload: BankInsightsPayload = {
     },
   },
   events: [
-    { date: '2026-05-15', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 4, total: 10, avg_bps: -5 },
-    { date: '2026-06-01', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 8, total: 10, avg_bps: -25 },
+    { date: '2026-05-15', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 4, total: 10, avg_bps: -25 },
+    { date: '2026-06-01', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 8, total: 10, avg_bps: -10 },
     { date: '2026-06-01', provider: 'GammaBank', section: 'Savings', dir: 'hike', moved: 1, total: 3, avg_bps: 10 },
   ],
 };
@@ -48,6 +50,20 @@ const rba: RbaEntry[] = [
   { date: '2026-04-01', rate: 4.35 },
   { date: '2026-05-10', rate: 4.1 },
 ];
+
+const calendar: RbaCalendar = {
+  timezone: 'Australia/Sydney',
+  decisions: [
+    {
+      date: '2026-05-10',
+      effective: '2026-05-11',
+      rate: 4.1,
+      delta_bps: -25,
+      outcome: 'cut',
+    },
+  ],
+  schedule: [],
+};
 
 describe('normalizeBankInsightsPayload', () => {
   test('accepts a valid payload and keeps series aligned to run_dates', () => {
@@ -84,6 +100,29 @@ describe('normalizeBankInsightsPayload', () => {
         banks: { AlphaBank: { Mortgage: { median: [null], best: [null], count: [null] } } },
       }),
     ).toBeNull();
+  });
+
+  test('keeps behaviour summaries when present', () => {
+    const normalized = normalizeBankInsightsPayload({
+      ...payload,
+      behaviour: {
+        Mortgage: {
+          section: 'Mortgage',
+          window_days: 60,
+          providers: {
+            AlphaBank: {
+              hike: { n: 0, days_median: null, bps_median: null, ratio_median: null, confidence: 'insufficient' },
+              cut: { n: 2, days_median: 5, bps_median: 25, ratio_median: 1, confidence: 'insufficient' },
+            },
+          },
+        },
+      },
+    });
+    expect(normalized!.behaviour?.Mortgage?.providers.AlphaBank.cut).toMatchObject({
+      n: 2,
+      days_median: 5,
+      ratio_median: 1,
+    });
   });
 });
 
@@ -142,14 +181,139 @@ describe('bankTrendChartModel', () => {
 });
 
 describe('rbaPassThrough', () => {
-  test('scores best-rate movement since the latest in-window decision', () => {
-    const model = rbaPassThrough(payload, rba);
-    expect(model!.decision).toEqual({ date: '2026-05-10', bps: -25 });
-    expect(model!.rows[0]).toEqual({ provider: 'AlphaBank', passedBps: -30, daysToFirstMove: 5 });
-    expect(model!.rows[1]).toEqual({ provider: 'BetaBank', passedBps: 0, daysToFirstMove: null });
+  test('scores first same-direction move after the latest scorable decision', () => {
+    const model = rbaPassThrough(payload, rba, { calendar });
+    expect(model!.decision).toEqual({
+      date: '2026-05-10',
+      bps: -25,
+      outcome: 'cut',
+      rate: 4.1,
+      partialObservation: false,
+    });
+    expect(model!.rows[0]).toEqual({
+      provider: 'AlphaBank',
+      passedBps: -25,
+      daysToFirstMove: 5,
+      ratio: 1,
+      passStatus: 'full',
+    });
+    expect(model!.rows[1]).toEqual({
+      provider: 'BetaBank',
+      passedBps: 0,
+      daysToFirstMove: null,
+      ratio: null,
+      passStatus: 'none',
+    });
   });
 
-  test('returns null when no decision falls inside the tracked window', () => {
+  test('includes decisions that predate the ledger when the response window overlaps', () => {
+    // Live-data shape: ledger starts 2026-05-13, May 5 hike responses land on May 15.
+    const ledgerPayload: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-06-01',
+      run_dates: ['2026-05-13', '2026-05-15', '2026-06-01'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.0625, 0.0625],
+            best: [0.055, 0.0575, 0.0575],
+            count: [10, 10, 10],
+          },
+        },
+        QuietBank: {
+          Mortgage: {
+            median: [0.06, 0.06, 0.06],
+            best: [0.055, 0.055, 0.055],
+            count: [4, 4, 4],
+          },
+        },
+      },
+      events: [
+        {
+          date: '2026-05-15',
+          provider: 'AlphaBank',
+          section: 'Mortgage',
+          dir: 'hike',
+          moved: 3,
+          total: 3,
+          avg_bps: 25,
+        },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+      ],
+      schedule: [],
+    };
+    // Series-only effective date sits before ledger start with no calendar → null.
+    expect(rbaPassThrough(ledgerPayload, [{ date: '2026-05-06', rate: 4.35 }])).toBeNull();
+    const model = rbaPassThrough(ledgerPayload, [{ date: '2026-05-06', rate: 4.35 }], { calendar: cal });
+    expect(model!.decision).toMatchObject({
+      date: '2026-05-05',
+      bps: 25,
+      outcome: 'hike',
+      partialObservation: true,
+    });
+    expect(model!.rows[0]).toMatchObject({
+      provider: 'AlphaBank',
+      passedBps: 25,
+      daysToFirstMove: 10,
+      ratio: 1,
+      passStatus: 'full',
+    });
+    expect(model!.rows[1]).toMatchObject({ provider: 'QuietBank', passStatus: 'none' });
+  });
+
+  test('lists multiple past decisions and scores a selected date', () => {
+    const multi: BankInsightsPayload = {
+      ...payload,
+      run_date: '2026-07-01',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-06-01', '2026-07-01'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.0595, 0.057, 0.0545],
+            best: [0.055, 0.0545, 0.052, 0.0495],
+            count: [10, 10, 10, 10],
+          },
+        },
+      },
+      events: [
+        ...payload.events.filter((e) => e.provider === 'AlphaBank'),
+        {
+          date: '2026-06-20',
+          provider: 'AlphaBank',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 5,
+          total: 10,
+          avg_bps: -25,
+        },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-10', effective: '2026-05-11', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-06-16', effective: '2026-06-17', rate: 3.85, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const list = rbaPassThroughDecisionList(multi, rba, { calendar: cal });
+    expect(list.map((d) => d.date)).toEqual(['2026-06-16', '2026-05-10']);
+    const june = rbaPassThrough(multi, rba, { calendar: cal, decisionDate: '2026-06-16' });
+    expect(june!.rows[0]).toMatchObject({
+      provider: 'AlphaBank',
+      passedBps: -25,
+      daysToFirstMove: 4,
+      passStatus: 'full',
+    });
+  });
+
+  test('returns null when no decision response window overlaps the ledger', () => {
     expect(rbaPassThrough(payload, [{ date: '2026-04-01', rate: 4.35 }])).toBeNull();
     expect(
       rbaPassThrough(payload, [
@@ -157,6 +321,39 @@ describe('rbaPassThrough', () => {
         { date: '2026-02-01', rate: 4.1 },
       ]),
     ).toBeNull();
+  });
+
+  test('attributes a move to only one decision when windows would overlap', () => {
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-05-20', effective: '2026-05-21', rate: 4.6, delta_bps: 25, outcome: 'hike' },
+      ],
+      schedule: [],
+    };
+    const eventsPayload: BankInsightsPayload = {
+      ...payload,
+      events: [
+        {
+          date: '2026-05-22',
+          provider: 'AlphaBank',
+          section: 'Mortgage',
+          dir: 'hike',
+          moved: 2,
+          total: 2,
+          avg_bps: 25,
+        },
+      ],
+    };
+    const first = rbaPassThrough(eventsPayload, rba, { calendar: cal, decisionDate: '2026-05-05' });
+    const second = rbaPassThrough(eventsPayload, rba, { calendar: cal, decisionDate: '2026-05-20' });
+    // Cap at day before next decision: May 5 window ends May 19, so May 22 is not counted there.
+    expect(first!.rows.find((r) => r.provider === 'AlphaBank')?.daysToFirstMove).toBeNull();
+    expect(second!.rows.find((r) => r.provider === 'AlphaBank')).toMatchObject({
+      daysToFirstMove: 2,
+      passStatus: 'full',
+    });
   });
 });
 

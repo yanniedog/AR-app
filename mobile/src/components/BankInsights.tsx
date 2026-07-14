@@ -1,17 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import {
   marketPulse,
   rbaPassThrough,
+  rbaPassThroughDecisionList,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
   type BankRateEvent,
 } from '../data/bankInsights';
 import { formatRate, formatRunDate } from '../data/format';
+import type { RbaCalendar } from '../data/rbaCalendar';
 import {
   DEPOSIT_SECTIONS,
   LOAN_SECTIONS,
@@ -24,7 +26,7 @@ import { openBank } from '../lib/nav';
 import type { RbaEntry, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
-import { AppText, Badge, Button, Divider, Row } from './ui';
+import { AppText, Badge, Button, Chip, Divider, Row } from './ui';
 
 function bpsLabel(bps: number): string {
   const rounded = Math.round(bps * 10) / 10;
@@ -261,74 +263,128 @@ export function MoversLeaderboard({
 export function RbaPassThroughCard({
   payload,
   rba,
+  calendar = null,
   maxRows = 5,
 }: {
   payload: BankInsightsPayload | null;
   rba: RbaEntry[];
+  calendar?: RbaCalendar | null;
   maxRows?: number;
 }) {
   const theme = useTheme();
-  const model = useMemo(() => rbaPassThrough(payload, rba), [payload, rba]);
+  const decisions = useMemo(
+    () => rbaPassThroughDecisionList(payload, rba, { calendar }),
+    [payload, rba, calendar],
+  );
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const activeDate = selectedDate && decisions.some((d) => d.date === selectedDate)
+    ? selectedDate
+    : decisions[0]?.date;
+  const model = useMemo(
+    () => rbaPassThrough(payload, rba, { calendar, decisionDate: activeDate }),
+    [payload, rba, calendar, activeDate],
+  );
+
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
-        No RBA decision has landed inside the tracked window yet. The next cash-rate move will be
-        scored here, lender by lender, as it happens.
+        No RBA hike or cut has a response window overlapping the tracked bank history yet. When
+        the next cash-rate move lands, lenders will be scored here against that decision.
       </AppText>
     );
   }
+
   const { decision, rows } = model;
   const dirWord = decision.bps < 0 ? 'cut' : 'raised';
+  const moved = rows.filter((r) => r.daysToFirstMove != null);
+  const fullPasses = rows.filter((r) => r.passStatus === 'full' || r.passStatus === 'over');
+  const partialPasses = rows.filter((r) => r.passStatus === 'partial');
+
   return (
     <View>
+      {decisions.length > 1 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+          <Row gap={6}>
+            {decisions.map((d) => {
+              const label = `${formatRunDate(d.date)} · ${d.bps > 0 ? '+' : '−'}${Math.abs(d.bps)}`;
+              return (
+                <Chip
+                  key={d.date}
+                  label={label}
+                  selected={d.date === decision.date}
+                  onPress={() => setSelectedDate(d.date)}
+                />
+              );
+            })}
+          </Row>
+        </ScrollView>
+      ) : null}
       <AppText variant="small" color="textMuted" style={{ marginBottom: 6 }}>
         RBA {dirWord} the cash rate by {Math.abs(decision.bps)} bps on {formatRunDate(decision.date)}.
-        Best variable rates since:
+        First same-direction mortgage moves within 60 days:
       </AppText>
-      {rows.slice(0, maxRows).map((row) => {
-        const fullPass = decision.bps !== 0 && (decision.bps < 0 ? row.passedBps <= decision.bps : row.passedBps >= decision.bps);
-        return (
-          <Pressable
-            key={row.provider}
-            onPress={() => openBank(row.provider)}
-            accessibilityRole="button"
-            accessibilityLabel={`${row.provider} moved ${bpsLabel(row.passedBps)} since the RBA decision${
-              row.daysToFirstMove != null ? `, first move after ${row.daysToFirstMove} days` : ''
-            }`}
-          >
-            <Row gap={10} style={{ paddingVertical: 6 }}>
-              <BankAvatar provider={row.provider} size={28} />
-              <View style={{ flex: 1 }}>
-                <AppText variant="small" weight="600" numberOfLines={1}>
-                  {row.provider}
-                </AppText>
-                <AppText variant="tiny" color="textFaint">
-                  {row.daysToFirstMove != null
-                    ? `moved after ${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`
-                    : 'no move detected yet'}
-                </AppText>
-              </View>
-              {fullPass ? <Badge label="full pass" tone="success" /> : null}
-              <AppText
-                variant="small"
-                weight="800"
-                style={{
-                  color:
-                    row.passedBps === 0
-                      ? theme.colors.textMuted
-                      : row.passedBps > 0
-                        ? theme.colors.danger
-                        : theme.colors.success,
-                  minWidth: 64,
-                  textAlign: 'right',
-                }}
-              >
-                {bpsLabel(row.passedBps)}
+      {decision.partialObservation ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginBottom: 6 }}>
+          This decision slightly predates the tracked ledger — days-to-move may miss earlier responses.
+        </AppText>
+      ) : null}
+      <Row gap={6} style={{ flexWrap: 'wrap', marginBottom: 8 }}>
+        <Badge
+          label={`${fullPasses.length} full pass${fullPasses.length === 1 ? '' : 'es'}`}
+          tone="success"
+        />
+        {partialPasses.length ? (
+          <Badge
+            label={`${partialPasses.length} partial`}
+            tone="warning"
+          />
+        ) : null}
+        <Badge label={`${moved.length} moved`} tone="primary" />
+      </Row>
+      {rows.slice(0, maxRows).map((row) => (
+        <Pressable
+          key={row.provider}
+          onPress={() => openBank(row.provider)}
+          accessibilityRole="button"
+          accessibilityLabel={`${row.provider} moved ${bpsLabel(row.passedBps)} since the RBA decision${
+            row.daysToFirstMove != null ? `, first move after ${row.daysToFirstMove} days` : ''
+          }`}
+        >
+          <Row gap={10} style={{ paddingVertical: 6 }}>
+            <BankAvatar provider={row.provider} size={28} />
+            <View style={{ flex: 1 }}>
+              <AppText variant="small" weight="600" numberOfLines={1}>
+                {row.provider}
               </AppText>
-            </Row>
-          </Pressable>
-        );
-      })}
+              <AppText variant="tiny" color="textFaint">
+                {row.daysToFirstMove != null
+                  ? `moved after ${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`
+                  : 'no matching move detected yet'}
+              </AppText>
+            </View>
+            {row.passStatus === 'full' || row.passStatus === 'over' ? (
+              <Badge label={row.passStatus === 'over' ? 'over-pass' : 'full pass'} tone="success" />
+            ) : null}
+            {row.passStatus === 'partial' ? <Badge label="partial" tone="warning" /> : null}
+            <AppText
+              variant="small"
+              weight="800"
+              style={{
+                color:
+                  row.passedBps === 0
+                    ? theme.colors.textMuted
+                    : row.passedBps > 0
+                      ? theme.colors.danger
+                      : theme.colors.success,
+                minWidth: 64,
+                textAlign: 'right',
+              }}
+            >
+              {bpsLabel(row.passedBps)}
+            </AppText>
+          </Row>
+        </Pressable>
+      ))}
     </View>
   );
 }
