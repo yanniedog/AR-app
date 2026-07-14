@@ -14,6 +14,7 @@ import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
 import { bankTrendChartModel, recentBankEvents } from '../../src/data/bankInsights';
+import { visibleAccountRows } from '../../src/data/format';
 import { sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
@@ -27,6 +28,7 @@ export default function BankDetail() {
   const provider = raw ?? '';
   const core = useStore((s) => s.core);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
@@ -44,7 +46,10 @@ export default function BankDetail() {
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
-      const rows = core.sections[section]?.rates.filter((r) => r.provider === provider) ?? [];
+      const rows = visibleAccountRows(
+        core.sections[section]?.rates.filter((r) => r.provider === provider) ?? [],
+        includeNonStandard,
+      );
       // De-duplicate to one card per product (best rate row under the ranking metric).
       const byProduct = new Map<string, RateRow>();
       for (const r of sortRows(rows, 'rate', section, depositRankMetric)) {
@@ -53,7 +58,7 @@ export default function BankDetail() {
       if (byProduct.size) out.push({ section, rows: Array.from(byProduct.values()) });
     }
     return out;
-  }, [core, provider, depositRankMetric]);
+  }, [core, provider, depositRankMetric, includeNonStandard]);
 
   const chartSections = useMemo(
     () =>

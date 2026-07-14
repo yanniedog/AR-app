@@ -245,6 +245,7 @@ export interface ProviderGroup {
 export function groupByProvider(
   sections: Record<SectionKey, { rates: RateRow[] }>,
   metric: RankMetric = 'base',
+  includeNonStandard = false,
 ): ProviderGroup[] {
   // Bucket rows per provider AND per section in a single pass. The previous
   // implementation re-scanned every section's full row array (Array.includes)
@@ -256,7 +257,7 @@ export function groupByProvider(
   const map = new Map<string, Acc>();
   const keys = Object.keys(sections) as SectionKey[];
   for (const section of keys) {
-    for (const row of sections[section].rates) {
+    for (const row of visibleAccountRows(sections[section].rates, includeNonStandard)) {
       let group = map.get(row.provider);
       if (!group) {
         group = { provider: row.provider, rows: [], bestBySection: {}, bySection: {} };
@@ -271,7 +272,7 @@ export function groupByProvider(
     for (const section of keys) {
       const inSection = bySection[section];
       if (!inSection?.length) continue;
-      const best = bestRow(inSection, section, false, metric);
+      const best = bestRow(inSection, section, includeNonStandard, metric);
       if (best) group.bestBySection[section] = best;
     }
     out.push(group);
