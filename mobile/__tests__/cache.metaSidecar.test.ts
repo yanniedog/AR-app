@@ -83,4 +83,32 @@ describe('cache core-meta sidecar', () => {
     expect(read?.detailsSha).toBe('embedded-details-sha');
     expect(read?.coreSha).toBe(sampleManifest.files.core.sha256);
   });
+
+  it('writeBundle invalidates a prior sidecar before committing the new bundle', async () => {
+    const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
+    const bundlePath = `${FileSystem.documentDirectory}payload/core-bundle.json`;
+    const oldMeta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-13T00:00:00Z',
+      coreSha: 'old-core-sha',
+      detailsSha: 'old-details-sha',
+    };
+    files.set(metaPath, JSON.stringify(oldMeta));
+    files.set(bundlePath, JSON.stringify({ meta: oldMeta, core: sampleCore }));
+
+    const newMeta: CacheMeta = {
+      manifest: sampleManifest,
+      source: 'remote',
+      savedAt: '2026-07-14T00:00:00Z',
+      coreSha: sampleManifest.files.core.sha256,
+      detailsSha: null,
+    };
+    await cache.writeBundle(newMeta, JSON.stringify(sampleCore));
+
+    const read = await cache.readMeta();
+    expect(read?.coreSha).toBe(sampleManifest.files.core.sha256);
+    expect(read?.detailsSha).toBeNull();
+    expect(JSON.parse(files.get(metaPath)!).coreSha).toBe(sampleManifest.files.core.sha256);
+  });
 });

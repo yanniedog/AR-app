@@ -20,11 +20,6 @@ type NotifyContext = {
   previousSource: AppState['source'];
   previousDetailsProducts: DetailsPayload['products'] | null;
   core: CorePayload;
-  depositRankMetric: AppState['prefs']['depositRankMetric'];
-  rateMoveThresholdBps: number;
-  favorites: string[];
-  subscriptions: AppState['subscriptions'];
-  notificationsEnabled: boolean;
 };
 
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
@@ -43,39 +38,41 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         if (effectiveHistoryRibbon(p)) void get().ensureHistoryBanks();
         void get().ensureRbaCalendar();
       };
-      /** Heavy post-install work after the UI can accept touches again. */
-      const schedulePostRefreshWork = (notifyCtx: NotifyContext | null) => {
-        void (async () => {
-          try {
+      /**
+       * Heavy post-install work after refreshing=false so the UI can accept
+       * touches. Still awaited by refresh() so background fetch keeps the task
+       * alive until warm/notify finish.
+       */
+      const runPostRefreshWork = async (notifyCtx: NotifyContext | null) => {
+        try {
+          await yieldToUi();
+          await warmDetails();
+          warmOptionalAssets();
+          if (notifyCtx && notifyCtx.previousSource === 'remote') {
+            const state = get();
+            if (!state.prefs.notificationsEnabled) return;
             await yieldToUi();
-            await warmDetails();
-            warmOptionalAssets();
-            if (
-              notifyCtx &&
-              notifyCtx.notificationsEnabled &&
-              notifyCtx.previousSource === 'remote'
-            ) {
-              await yieldToUi();
-              const messages = computeChanges(
-                notifyCtx.previousCore,
-                notifyCtx.core,
-                notifyCtx.favorites,
-                notifyCtx.rateMoveThresholdBps,
-                notifyCtx.subscriptions,
-                notifyCtx.previousDetailsProducts,
-                get().details?.products ?? null,
-                notifyCtx.depositRankMetric,
-              );
-              await notify(messages);
-              debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
-            }
-          } catch (err) {
-            debugLog.warn(
-              'store',
-              `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
+            // Re-read favorites/subscriptions at notify time so a user who
+            // unsubscribes during the yield window is not notified for them.
+            const messages = computeChanges(
+              notifyCtx.previousCore,
+              notifyCtx.core,
+              state.favorites,
+              state.prefs.rateMoveThresholdBps,
+              state.subscriptions,
+              notifyCtx.previousDetailsProducts,
+              state.details?.products ?? null,
+              state.prefs.depositRankMetric,
             );
+            await notify(messages);
+            debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
           }
-        })();
+        } catch (err) {
+          debugLog.warn(
+            'store',
+            `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
+          );
+        }
       };
 
       if (get().refreshing) {
@@ -163,11 +160,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           previousSource,
           previousDetailsProducts,
           core,
-          depositRankMetric: prefs.depositRankMetric,
-          rateMoveThresholdBps: prefs.rateMoveThresholdBps,
-          favorites: get().favorites,
-          subscriptions: get().subscriptions,
-          notificationsEnabled: prefs.notificationsEnabled,
         };
         deferWarm = true;
         debugLog.info('store', `refresh ok run_date=${core.run_date} changed=true`);
@@ -186,9 +178,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         });
         return false;
       } finally {
+        // Clear refreshing before post-warm so the UI is interactive even while
+        // awaiters (background fetch) still wait for warm/notify to finish.
         set({ refreshing: false, payloadProgress: null });
         if (manual) hapticRefreshComplete();
-        if (deferWarm) schedulePostRefreshWork(notifyCtx);
+        if (deferWarm) await runPostRefreshWork(notifyCtx);
       }
     },
   } satisfies Pick<AppState, 'refresh'>;

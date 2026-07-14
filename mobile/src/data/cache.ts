@@ -20,6 +20,7 @@ const PRODUCT_HISTORY = `${DIR}product-history.json`;
 // multi-MB core bundle (the old updateMeta path blocked the JS thread for
 // seconds after every fresh ingest when detailsSha was patched).
 const CORE_META = `${DIR}core-meta.json`;
+const CORE_META_TMP = `${CORE_META}.tmp`;
 // Optional-asset content hashes live in a tiny sidecar so updating them never
 // rewrites the multi-MB core bundle. Keyed by coreSha so a new core run
 // automatically invalidates stale optional hashes.
@@ -68,13 +69,22 @@ async function readJson<T>(path: string): Promise<T | null> {
 
 async function writeCoreMeta(meta: CacheMeta): Promise<void> {
   await ensureDir();
-  await FileSystem.writeAsStringAsync(CORE_META, JSON.stringify(meta));
+  await FileSystem.writeAsStringAsync(CORE_META_TMP, JSON.stringify(meta));
+  await FileSystem.deleteAsync(CORE_META, { idempotent: true });
+  await FileSystem.moveAsync({ from: CORE_META_TMP, to: CORE_META });
 }
 
 function isCacheMeta(value: unknown): value is CacheMeta {
   if (!value || typeof value !== 'object') return false;
   const m = value as Partial<CacheMeta>;
-  return !!m.manifest && typeof m.coreSha === 'string' && typeof m.source === 'string';
+  const manifest = m.manifest as Manifest | undefined;
+  return (
+    !!manifest &&
+    typeof manifest === 'object' &&
+    typeof manifest.generated_at === 'string' &&
+    typeof m.coreSha === 'string' &&
+    typeof m.source === 'string'
+  );
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -111,9 +121,10 @@ export const cache = {
   async readMeta(): Promise<CacheMeta | null> {
     const sidecar = await readJson<CacheMeta>(CORE_META);
     if (isCacheMeta(sidecar)) return sidecar;
-    // Older installs only embed meta in the multi-MB bundle. Return that until
-    // the next writeBundle/updateMeta creates the sidecar (avoid a write here
-    // so readMeta stays side-effect free under the serialize() chain).
+    // Older installs only embed meta in the multi-MB bundle. Also covers the
+    // crash window after writeBundle deleted the sidecar / committed a new
+    // bundle but before writeCoreMeta finished — fall back to embedded meta
+    // (avoid a write here so readMeta stays side-effect free under serialize()).
     const fromBundle = (await readJson<CoreBundle>(BUNDLE))?.meta ?? null;
     return isCacheMeta(fromBundle) ? fromBundle : null;
   },
@@ -128,7 +139,11 @@ export const cache = {
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
     return serialize(async () => {
-      // Commit the bundle first, then the sidecar. If we crash between the two,
+      // Drop any prior sidecar first so a crash after the new bundle lands cannot
+      // leave readMeta trusting stale detailsSha/coreSha from the old run.
+      await FileSystem.deleteAsync(CORE_META, { idempotent: true });
+      await FileSystem.deleteAsync(CORE_META_TMP, { idempotent: true });
+      // Commit the bundle, then the sidecar. If we crash between the two,
       // readMeta falls back to the embedded meta in the new bundle.
       await atomicWriteBundle(`{"meta":${JSON.stringify(meta)},"core":${coreText}}`);
       await writeCoreMeta(meta);
