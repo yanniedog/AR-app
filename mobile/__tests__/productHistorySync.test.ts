@@ -103,8 +103,8 @@ test('reuses prior dates when the catalog grows instead of refetching history', 
 });
 
 test('preserves rates when a product temporarily leaves then returns to the catalog', async () => {
-  mockedHistoryDates.mockImplementation((_dates: string[], target: string) =>
-    ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= target),
+  mockedHistoryDates.mockImplementation((_index, targetRunDate: string) =>
+    ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= targetRunDate),
   );
   const existing: ProductHistoryPayload = {
     schema_version: 2,
