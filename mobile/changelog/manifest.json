@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-14T16:13:44.496Z",
+  "generated_at": "2026-07-14T19:03:36.802Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -386,6 +386,17 @@
         "fix(mobile): hide occupation-restricted products when broadly applicable (#10)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.40"
+    },
+    {
+      "version": "1.0.41",
+      "date": "2026-07-14",
+      "summaryBullets": [
+        "perf(mobile): cut post-ingest history and update-check churn (#17)",
+        "fix(mobile): align standard-only filter with access badges (#16)",
+        "fix(mobile): exclude near-zero token deposit rates (#15)",
+        "fix(mobile): ignore RBA effective-date twins in pass-through (#14)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.41"
     }
   ]
 }
