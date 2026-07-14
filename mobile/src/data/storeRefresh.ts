@@ -10,8 +10,19 @@ import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } fr
 import { debugLog } from '../lib/debugLog';
 import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
+import { yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
+import type { CorePayload, DetailsPayload } from '../types';
+
+type NotifyContext = {
+  previousCore: CorePayload | null;
+  previousSource: AppState['source'];
+  previousDetailsProducts: DetailsPayload['products'] | null;
+  core: CorePayload;
+  /** Stable identity for the installed core — object refs change across refreshes. */
+  coreSha: string;
+};
 
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
   return {
@@ -29,6 +40,53 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         if (effectiveHistoryRibbon(p)) void get().ensureHistoryBanks();
         void get().ensureRbaCalendar();
       };
+      /**
+       * Heavy post-install work after refreshing=false so the UI can accept
+       * touches. Still awaited by refresh() so background fetch keeps the task
+       * alive until warm/notify finish.
+       */
+      const runPostRefreshWork = async (notifyCtx: NotifyContext | null) => {
+        try {
+          await yieldToUi();
+          // A product screen may have started ensureDetails during the yield;
+          // wait for that in-flight load so we do not race on detailsLoading.
+          while (get().detailsLoading) await yieldToUi();
+          await warmDetails();
+          warmOptionalAssets();
+          if (notifyCtx && notifyCtx.previousSource === 'remote') {
+            await yieldToUi();
+            const state = get();
+            // Compare SHA, not object identity — an up-to-date refresh re-parses
+            // the same payload into a new object and must not suppress notify.
+            const liveSha = state.manifest?.files.core.sha256;
+            if (liveSha && liveSha !== notifyCtx.coreSha) {
+              debugLog.debug('store', 'skip notify; core superseded by newer refresh');
+              return;
+            }
+            if (!state.prefs.notificationsEnabled) return;
+            // Re-read favorites/subscriptions at notify time so a user who
+            // unsubscribes during the yield window is not notified for them.
+            const messages = computeChanges(
+              notifyCtx.previousCore,
+              notifyCtx.core,
+              state.favorites,
+              state.prefs.rateMoveThresholdBps,
+              state.subscriptions,
+              notifyCtx.previousDetailsProducts,
+              state.details?.products ?? null,
+              state.prefs.depositRankMetric,
+            );
+            await notify(messages);
+            debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
+          }
+        } catch (err) {
+          debugLog.warn(
+            'store',
+            `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
+          );
+        }
+      };
+
       if (get().refreshing) {
         logStoreRefreshSkipped('already_refreshing');
         return false;
@@ -43,6 +101,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       debugLog.info('store', `refresh start manual=${manual} force=${force}`);
       set({ refreshing: true });
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
+      let deferWarm = false;
+      let notifyCtx: NotifyContext | null = null;
       try {
         const remote = await fetchManifest(undefined, onProgress);
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
@@ -62,8 +122,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             offline: false,
             ...(bundle ? { core: bundle.core } : {}),
           });
-          await warmDetails();
-          warmOptionalAssets();
+          deferWarm = true;
           set({ refreshOutcome: 'success' });
           return false;
         }
@@ -98,6 +157,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
           text,
         );
+        // Publish core and clear the download UI immediately so touches are not
+        // blocked by details warm / optional assets / change-diff work.
         set({
           core,
           manifest: remote,
@@ -106,24 +167,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           error: null,
           details: detailsUnchanged ? get().details : null,
         });
-
-        await warmDetails();
-        warmOptionalAssets();
-
-        if (prefs.notificationsEnabled && previousSource === 'remote') {
-          const messages = computeChanges(
-            previousCore,
-            core,
-            get().favorites,
-            prefs.rateMoveThresholdBps,
-            get().subscriptions,
-            previousDetailsProducts,
-            get().details?.products ?? null,
-            prefs.depositRankMetric,
-          );
-          await notify(messages);
-          debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
-        }
+        notifyCtx = {
+          previousCore,
+          previousSource,
+          previousDetailsProducts,
+          core,
+          coreSha: remote.files.core.sha256,
+        };
+        deferWarm = true;
         debugLog.info('store', `refresh ok run_date=${core.run_date} changed=true`);
         set({ refreshOutcome: 'success' });
         return true;
@@ -140,8 +191,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         });
         return false;
       } finally {
+        // Clear refreshing before post-warm so the UI is interactive even while
+        // awaiters (background fetch) still wait for warm/notify to finish.
         set({ refreshing: false, payloadProgress: null });
         if (manual) hapticRefreshComplete();
+        if (deferWarm) await runPostRefreshWork(notifyCtx);
       }
     },
   } satisfies Pick<AppState, 'refresh'>;
