@@ -47,7 +47,7 @@ export default function BankDetail() {
     if (!core) return out;
     for (const section of SECTION_ORDER) {
       const rows = visibleAccountRows(
-        core.sections[section]?.rates.filter((r) => r.provider === provider) ?? [],
+        core.sections[section]?.rates?.filter((r) => r.provider === provider) ?? [],
         includeNonStandard,
       );
       // De-duplicate to one card per product (best rate row under the ranking metric).

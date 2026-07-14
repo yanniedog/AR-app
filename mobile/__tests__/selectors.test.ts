@@ -332,6 +332,28 @@ describe('selectors', () => {
     expect(shown?.bestBySection.Mortgage?.product_key).toBe('C|1');
   });
 
+  test('groupByProvider omits providers that only have non-standard products when hidden', () => {
+    const sections = {
+      Mortgage: { rates: [] },
+      Savings: {
+        rates: [
+          mk({
+            provider: 'Bank NS',
+            product_key: 'NS|S',
+            product_name: 'Staff Only Saver',
+            rate: '0.060',
+            account_class: 'non_standard',
+          }),
+        ],
+      },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    expect(groupByProvider(sections, 'base', false).find((g) => g.provider === 'Bank NS')).toBeUndefined();
+    const shown = groupByProvider(sections, 'base', true).find((g) => g.provider === 'Bank NS');
+    expect(shown?.rows.map((r) => r.product_key)).toEqual(['NS|S']);
+    expect(shown?.bestBySection.Savings?.product_key).toBe('NS|S');
+  });
+
   test('groupByProvider honours depositRankMetric for savings best', () => {
     const sections = {
       Mortgage: { rates: [] },

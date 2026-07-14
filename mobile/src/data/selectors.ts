@@ -257,7 +257,7 @@ export function groupByProvider(
   const map = new Map<string, Acc>();
   const keys = Object.keys(sections) as SectionKey[];
   for (const section of keys) {
-    for (const row of visibleAccountRows(sections[section].rates, includeNonStandard)) {
+    for (const row of visibleAccountRows(sections[section]?.rates ?? [], includeNonStandard)) {
       let group = map.get(row.provider);
       if (!group) {
         group = { provider: row.provider, rows: [], bestBySection: {}, bySection: {} };
