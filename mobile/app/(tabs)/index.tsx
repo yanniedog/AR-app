@@ -35,6 +35,11 @@ export default function Home() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const ensureDetails = useStore((s) => s.ensureDetails);
+  const coreKey = useStore((s) => s.core?.run_date ?? null);
+  useEffect(() => {
+    void ensureDetails({ force: true });
+  }, [ensureDetails, coreKey]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
 

@@ -117,7 +117,7 @@ export interface AppState {
   /** Load core/manifest from disk cache if not already in memory (used by the headless task). */
   ensureCoreLoaded: () => Promise<void>;
   refresh: (opts?: { force?: boolean; manual?: boolean }) => Promise<boolean>;
-  ensureDetails: (opts?: { forProductView?: boolean }) => Promise<void>;
+  ensureDetails: (opts?: { forProductView?: boolean; force?: boolean }) => Promise<void>;
   ensureSearchIndex: () => Promise<void>;
   ensureHistoryBanks: (opts?: { force?: boolean }) => Promise<void>;
   ensureBankInsights: (opts?: { force?: boolean }) => Promise<void>;

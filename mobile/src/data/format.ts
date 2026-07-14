@@ -1,6 +1,6 @@
 import type { ProductDetail, RateRow } from '../types';
 import { isKnownNonStandardProduct } from './accountClass';
-import { assessAccess, rowRestrictsAccess } from './access';
+import { accessExcludesFromStandard, assessAccess } from './access';
 
 /** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
 export function toFraction(rate: string | number | null | undefined): number | null {
@@ -165,24 +165,23 @@ export function isNonStandard(row: RateRow): boolean {
 /**
  * The unified default-suitability gate. A product is shown to ordinary users by
  * default only when it is *broadly available*: not a non-standard account class,
- * not a curated non-standard cohort, and not restricted to staff / an
- * occupation / a union or association / business / students / a region (via
- * product name, lender brand, or loaded eligibility details). Advanced users
- * opt everything back in via the "Show broadly applicable products by default"
- * setting (the persisted `includeNonStandard` flag). This is the ONE predicate
- * every surface — search, lists, calculator, rankings, ribbon/charts, hierarchy
- * — must use so classification stays consistent everywhere.
+ * not a curated non-standard cohort, and not access-restricted (youth, region,
+ * staff, occupation, membership, business, student, pension, package/existing-
+ * customer gates — via product name, lender brand, or loaded eligibility).
+ * Product-structure dimensions (LVR, deposit size, TD term, OO/investor, fixed/
+ * variable) are allowed. Advanced users opt everything back in via the
+ * "Broadly applicable products" setting (`includeNonStandard`). This is the ONE
+ * predicate every surface must use; it shares {@link assessAccess} with the
+ * orange restricted badge so badge and filter never disagree.
  */
 export function isBroadlyAvailable(
   row: RateRow | null | undefined,
   detail?: ProductDetail | null,
 ): boolean {
   if (!row) return false;
-  if (isNonStandard(row) || rowRestrictsAccess(row)) return false;
-  if (detail) {
-    const access = assessAccess(row.product_name, detail, row.provider);
-    if (access.restricted) return false;
-  }
+  if (isNonStandard(row)) return false;
+  const access = assessAccess(row.product_name, detail ?? null, row.provider);
+  if (accessExcludesFromStandard(access)) return false;
   return true;
 }
 
