@@ -15,7 +15,7 @@ import {
   ensureInstallPermission,
   openInstallPermissionSettings,
 } from '../../lib/installPermission';
-import { InfoRow, Section } from './settingsUi';
+import { DisclosureGroup, InfoRow, Section, SettingsGap } from './settingsUi';
 
 export function AppUpdateSection() {
   const installed = getInstalledAppInfo();
@@ -93,43 +93,63 @@ export function AppUpdateSection() {
   }
 
   const updateAvailable = checkResult?.status === 'available';
+  const isCurrent = checkResult?.status === 'current';
   const latestLabel = remote
     ? `${remote.version} (${remote.build_number})`
-    : checkResult?.status === 'current'
+    : isCurrent
       ? `${installed.version} (${installed.buildNumber})`
       : '—';
+  const statusValue = updateAvailable
+    ? `Update available · ${latestLabel}`
+    : isCurrent
+      ? `Up to date · ${installed.version}`
+      : checking
+        ? 'Checking…'
+        : error
+          ? 'Check failed'
+          : `${installed.version} (${installed.buildNumber})`;
 
   return (
     <Section title="App update">
-      <InfoRow label="Installed" value={`${installed.version} (${installed.buildNumber})`} />
-      <InfoRow label="Latest" value={latestLabel} />
-      <InfoRow
-        label="Install permission"
-        value={installAllowed === null ? '—' : installAllowed ? 'Allowed' : 'Required'}
-      />
+      <InfoRow label="Status" value={statusValue} />
+      {downloadPct !== null ? <InfoRow label="Download" value={`${downloadPct}%`} /> : null}
+      {error ? (
+        <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>
+          {error}
+        </AppText>
+      ) : null}
+
       {installAllowed === false ? (
-        <Row gap={12} style={{ marginTop: 8 }}>
+        <>
+          <SettingsGap size={8} />
           <Button
             title="Allow app updates"
             icon="settings-outline"
             variant="secondary"
-            style={{ flex: 1 }}
             onPress={() => void openInstallPermissionSettings()}
           />
-        </Row>
+          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
+            Android needs permission once to install updates from this app.
+          </AppText>
+        </>
       ) : null}
-      {downloadPct !== null ? (
-        <InfoRow label="Download" value={`${downloadPct}%`} />
+
+      {updateAvailable ? (
+        <DisclosureGroup
+          title="What's new"
+          summary={changelogs[0] ? changelogs[0].version : latestLabel}
+          defaultOpen
+        >
+          {changelogs.length ? (
+            <UpdateChangelogList entries={changelogs} bare />
+          ) : (
+            <InfoRow label="Latest" value={latestLabel} />
+          )}
+        </DisclosureGroup>
       ) : null}
-      {error ? (
-        <AppText variant="tiny" color="danger" style={{ marginTop: 6 }}>
-          {error}
-        </AppText>
-      ) : null}
-      {updateAvailable && changelogs.length ? (
-        <UpdateChangelogList entries={changelogs} />
-      ) : null}
-      <Row gap={12} style={{ marginTop: 12 }}>
+
+      <SettingsGap size={10} />
+      <Row gap={12}>
         <Button
           title="Check for update"
           icon="cloud-download-outline"
@@ -150,39 +170,52 @@ export function AppUpdateSection() {
           />
         ) : null}
       </Row>
-      <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-        Required to install updates from the app. Android keeps this setting across app updates for
-        the same package and signing key.
-      </AppText>
     </Section>
   );
 }
 
-export function UpdateChangelogList({ entries }: { entries: VersionChangelogSummary[] }) {
+export function UpdateChangelogList({
+  entries,
+  bare = false,
+}: {
+  entries: VersionChangelogSummary[];
+  bare?: boolean;
+}) {
+  const list = (
+    <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
+      {entries.map((entry) => (
+        <View key={entry.version} style={{ marginBottom: 8 }}>
+          <AppText variant="small" weight="700">
+            {entry.version}
+          </AppText>
+          {entry.summaryBullets.map((bullet, idx) => (
+            <AppText
+              key={`${entry.version}-${idx}`}
+              variant="tiny"
+              color="textFaint"
+              style={{ marginLeft: 8 }}
+            >
+              • {bullet}
+            </AppText>
+          ))}
+          <Pressable onPress={() => void Linking.openURL(entry.releaseUrl)}>
+            <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>
+              Full changelog
+            </AppText>
+          </Pressable>
+        </View>
+      ))}
+    </ScrollView>
+  );
+
+  if (bare) return list;
+
   return (
     <View style={{ marginTop: 10, maxHeight: 220 }}>
-      <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 6 }}>
+      <AppText variant="tiny" weight="700" color="textFaint" style={{ marginBottom: 6, letterSpacing: 0.6 }}>
         WHAT&apos;S NEW
       </AppText>
-      <ScrollView nestedScrollEnabled>
-        {entries.map((entry) => (
-          <View key={entry.version} style={{ marginBottom: 10 }}>
-            <AppText variant="small" weight="700">
-              {entry.version}
-            </AppText>
-            {entry.summaryBullets.map((bullet, idx) => (
-              <AppText key={`${entry.version}-${idx}`} variant="tiny" color="textFaint" style={{ marginLeft: 8 }}>
-                • {bullet}
-              </AppText>
-            ))}
-            <Pressable onPress={() => void Linking.openURL(entry.releaseUrl)}>
-              <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>
-                Full changelog
-              </AppText>
-            </Pressable>
-          </View>
-        ))}
-      </ScrollView>
+      {list}
     </View>
   );
 }
