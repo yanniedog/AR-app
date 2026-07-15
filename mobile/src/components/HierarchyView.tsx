@@ -17,6 +17,7 @@ import {
 } from '../data/taxonomy';
 import { useStore } from '../data/store';
 import { logCategoryRowPress } from '../lib/degradationLog';
+import { debugLog } from '../lib/debugLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -76,10 +77,10 @@ function computeHierarchyView(
 // rows array. The WeakMap auto-evicts when a new payload replaces `core`, so
 // toggling Mortgage<->Savings<->TD (or returning to a drill) is an instant cache
 // hit instead of re-scanning thousands of rows on the JS thread every time.
-// Keyed by the per-section `sectionData` object (which owns BOTH `rates` and the
-// fields used for root ribbon stats), so a sectionData change can never serve
-// stale stats; it auto-evicts when a new payload replaces `core`.
-const viewCache = new WeakMap<object, Map<string, ReturnType<typeof computeHierarchyView>>>();
+// Nested by detailsProducts identity so the post-details suitability pass is
+// cached too (previously we skipped the WeakMap whenever details were loaded).
+const viewCache = new WeakMap<object, WeakMap<object, Map<string, ReturnType<typeof computeHierarchyView>>>>();
+const NO_DETAILS = {} as object;
 const EMPTY_VIEW = {
   stats: statsFor([]),
   children: [] as TaxoNode[],
@@ -108,10 +109,23 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     // No data yet (initial load / section transition): nothing to cache, and the
     // component renders null below anyway.
     if (!rows || !sectionData) return EMPTY_VIEW;
-    // When details are loaded, suitability depends on eligibility text — skip the
-    // sectionData WeakMap cache so content updates cannot serve a pre-details view.
-    if (detailsProducts) {
-      return computeHierarchyView(
+    let byDetails = viewCache.get(sectionData);
+    if (!byDetails) {
+      byDetails = new WeakMap();
+      viewCache.set(sectionData, byDetails);
+    }
+    const detailsKey = (detailsProducts as object | null) ?? NO_DETAILS;
+    let byKey = byDetails.get(detailsKey);
+    if (!byKey) {
+      byKey = new Map();
+      byDetails.set(detailsKey, byKey);
+    }
+    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}`;
+    let cached = byKey.get(cacheKey);
+    if (!cached) {
+      // #region agent log
+      const _t1 = Date.now();
+      cached = computeHierarchyView(
         rows,
         sectionData,
         section,
@@ -120,24 +134,11 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         depositRankMetric,
         detailsProducts,
       );
-    }
-    let byKey = viewCache.get(sectionData);
-    if (!byKey) {
-      byKey = new Map();
-      viewCache.set(sectionData, byKey);
-    }
-    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}`;
-    let cached = byKey.get(cacheKey);
-    if (!cached) {
-      cached = computeHierarchyView(
-        rows,
-        sectionData,
-        section,
-        path,
-        includeNonStandard,
-        depositRankMetric,
-        null,
+      debugLog.debug(
+        'perf',
+        `hierarchy cache-miss ms=${Date.now() - _t1} section=${section} path=${pathKey || '(root)'} rows=${rows.length} details=${detailsProducts ? 'yes' : 'no'}`,
       );
+      // #endregion
       byKey.set(cacheKey, cached);
     }
     return cached;

@@ -4,6 +4,7 @@ import type { CorePayload } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
+import { yieldToUi } from '../lib/yieldToUi';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -252,12 +253,20 @@ export async function syncProductHistoryFromDailyPayloads(
     'productHistory',
     `sync start target=${targetRunDate} want=${wantedDates.length} fetch=${toFetch.length}`,
   );
+  // #region agent log
+  const _syncT0 = Date.now();
+  debugLog.debug(
+    'perf',
+    `productHistory syncStart want=${wantedDates.length} fetch=${toFetch.length} existing=${opts.existing?.run_dates?.length ?? 0}`,
+  );
+  // #endregion
 
   if (toFetch.length) {
     const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
     let next = 0;
+    let fetchedOk = 0;
     const workers = Array.from(
-      { length: Math.min(opts.maxConcurrent ?? 3, toFetch.length) },
+      { length: Math.min(opts.maxConcurrent ?? 2, toFetch.length) },
       async () => {
         while (next < toFetch.length) {
           if (circuit.isOpen) return;
@@ -267,6 +276,18 @@ export async function syncProductHistoryFromDailyPayloads(
             const core = await downloadDatedCore(runDate);
             bestByDate.set(runDate, bestRatesForCore(core, keys));
             circuit.success();
+            fetchedOk += 1;
+            // Yield after every dated core so tab presses stay responsive during
+            // the one-time ~60-day warm (production logs showed multi-minute JS stalls).
+            await yieldToUi();
+            // #region agent log
+            if (fetchedOk === 1 || fetchedOk % 10 === 0 || fetchedOk === toFetch.length) {
+              debugLog.debug(
+                'perf',
+                `productHistory fetchProgress ok=${fetchedOk}/${toFetch.length} elapsedMs=${Date.now() - _syncT0} last=${runDate}`,
+              );
+            }
+            // #endregion
           } catch (err) {
             circuit.failure();
             debugLog.warn(

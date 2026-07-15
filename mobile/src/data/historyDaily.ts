@@ -1,5 +1,6 @@
 import { DATES_INDEX_URL, datedManifestUrl } from '../config';
 import { debugLog } from '../lib/debugLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
@@ -223,6 +224,7 @@ export async function syncHistoryFromDailyPayloads(
             const core = await downloadDatedCore(runDate);
             coresByDate.set(runDate, core);
             circuit.success();
+            await yieldToUi();
           } catch (err) {
             circuit.failure();
             debugLog.warn(
