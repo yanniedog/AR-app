@@ -67,7 +67,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               live.core,
               live.details,
               live.manifest?.files.details.sha256 ?? '',
-              () => get().core?.run_date === live.core?.run_date,
+              () =>
+                get().core?.run_date === live.core?.run_date &&
+                (get().manifest?.files.core.sha256 ?? '') ===
+                  (live.manifest?.files.core.sha256 ?? ''),
+              live.manifest?.files.core.sha256 ?? '',
             );
           }
           warmOptionalAssets();

@@ -43,7 +43,16 @@ export function createBootstrapActions(
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs)
-            ? cache.readProductHistory().then(normalizeProductHistoryPayload)
+            ? cache.readProductHistory().then((raw) => {
+                const normalized = normalizeProductHistoryPayload(raw);
+                if (!normalized) return null;
+                // Only hydrate when the cache matches today's core — a killed
+                // mid-refresh must not show yesterday's product series.
+                const coreSha = bundle?.meta.coreSha ?? '';
+                const runOk = normalized.run_date === bundle?.core.run_date;
+                const shaOk = !normalized.core_sha || !coreSha || normalized.core_sha === coreSha;
+                return runOk && shaOk ? normalized : null;
+              })
             : Promise.resolve(null),
         ]);
         if (bundle) {
@@ -114,6 +123,7 @@ export function createBootstrapActions(
       set({ status: 'loading', error: null, refreshing: false, payloadProgress: null });
       try {
         await installSampleSeed();
+        clearSuitabilityIndex();
         set({
           core: sampleCore,
           manifest: sampleManifest,

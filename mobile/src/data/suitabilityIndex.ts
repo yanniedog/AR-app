@@ -12,6 +12,8 @@ import { debugLog } from '../lib/debugLog';
  */
 export type SuitabilityIndex = {
   runDate: string;
+  /** Rolling core sha when known — distinguishes same-date republishes. */
+  coreSha: string;
   /** Manifest details sha when known; empty when built without a sha. */
   detailsSha: string;
   allowed: Set<string>;
@@ -50,6 +52,7 @@ export async function buildSuitabilityIndex(
   core: CorePayload,
   details: DetailsPayload | null | undefined,
   detailsSha = '',
+  coreSha = '',
   chunkSize = 400,
 ): Promise<SuitabilityIndex> {
   const rows = allCoreRateRows(core);
@@ -69,6 +72,7 @@ export async function buildSuitabilityIndex(
 
   const index: SuitabilityIndex = {
     runDate: core.run_date,
+    coreSha,
     detailsSha,
     allowed,
   };
@@ -82,22 +86,28 @@ export async function buildSuitabilityIndex(
 /**
  * Rebuild + install when the live store core/details match `core`.
  * No-ops if a newer refresh already replaced the dataset.
- * Coalesces concurrent rebuilds for the same run_date+detailsSha.
+ * Coalesces concurrent rebuilds for the same run_date+coreSha+detailsSha.
  */
 export async function rebuildAndInstallSuitabilityIndex(
   core: CorePayload,
   details: DetailsPayload | null | undefined,
   detailsSha: string,
   isCurrent: () => boolean,
+  coreSha = '',
 ): Promise<SuitabilityIndex | null> {
-  const key = `${core.run_date}|${detailsSha}`;
-  if (installed && installed.runDate === core.run_date && installed.detailsSha === detailsSha) {
+  const key = `${core.run_date}|${coreSha}|${detailsSha}`;
+  if (
+    installed &&
+    installed.runDate === core.run_date &&
+    installed.coreSha === coreSha &&
+    installed.detailsSha === detailsSha
+  ) {
     return installed;
   }
   if (inFlight && inFlightKey === key) return inFlight;
 
   const promise = (async () => {
-    const index = await buildSuitabilityIndex(core, details, detailsSha);
+    const index = await buildSuitabilityIndex(core, details, detailsSha, coreSha);
     if (!isCurrent()) return null;
     installSuitabilityIndex(index);
     return index;

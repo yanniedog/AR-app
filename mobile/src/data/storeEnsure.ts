@@ -35,6 +35,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       if (!forProductView && !force && !shouldWarmDetails(prefs, subscriptions)) return;
 
       const wantSha = manifest?.files.details.sha256 ?? null;
+      const coreSha = manifest?.files.core.sha256 ?? '';
       const meta = await cache.readMeta();
       const shaOk = !wantSha || meta?.detailsSha === wantSha;
       if (details && details.run_date === core.run_date && shaOk) {
@@ -43,7 +44,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             core,
             details,
             wantSha ?? '',
-            () => get().core?.run_date === core.run_date && get().details === details,
+            () =>
+              get().core?.run_date === core.run_date &&
+              get().details === details &&
+              (get().manifest?.files.core.sha256 ?? '') === coreSha,
+            coreSha,
           );
         }
         return;
@@ -68,7 +73,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               core,
               cached,
               wantSha ?? '',
-              () => get().core?.run_date === core.run_date && get().details === cached,
+              () =>
+                get().core?.run_date === core.run_date &&
+                get().details === cached &&
+                (get().manifest?.files.core.sha256 ?? '') === coreSha,
+              coreSha,
             );
           }
           return;
@@ -94,7 +103,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             core,
             fresh,
             manifest.files.details.sha256,
-            () => get().core?.run_date === core.run_date && get().details === fresh,
+            () =>
+              get().core?.run_date === core.run_date &&
+              get().details === fresh &&
+              (get().manifest?.files.core.sha256 ?? '') === coreSha,
+            coreSha,
           );
           return;
         }
@@ -106,8 +119,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             seeded,
             '',
             () => get().core?.run_date === core.run_date && get().details === seeded,
+            coreSha,
           );
-        }      } catch (err) {
+        }
+      } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureDetails failed: ${msg}`);
         logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });

@@ -98,18 +98,6 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="passthrough"
-        listeners={tabPressListener}
-        options={{
-          title: 'Pass-through',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => (
-                <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />
-              ),
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         listeners={tabPressListener}
         options={{
