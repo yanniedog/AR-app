@@ -3,8 +3,9 @@
  * rebuild cost at production-like scale (~3.7k rows with details loaded).
  */
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { childrenFromScoped, rowsUnder, statsFor } from '../src/data/taxonomy';
-import { sortRows, excludeTokenDepositRates, type RankMetric } from '../src/data/selectors';
+import { sortRows, excludeTokenDepositRates } from '../src/data/selectors';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import type { ProductDetail, RateRow, SectionKey } from '../src/types';
 
@@ -22,7 +23,7 @@ function makeRows(n: number, section: SectionKey = 'Mortgage'): RateRow[] {
               ? 'Youth Saver'
               : `Standard Variable ${i}`,
       provider: i % 19 === 0 ? 'Australian Military Bank' : `Lender ${i % 110}`,
-      rate: (0.05 + (i % 100) / 10000).toFixed(4),
+      rate: 0.05 + (i % 100) / 10000,
       rate_index: 0,
       account_class: i % 11 === 0 ? 'non_standard' : 'standard',
       hierarchy: ['Variable', i % 2 === 0 ? 'Owner Occupier' : 'Investor'],
@@ -55,7 +56,7 @@ function computeHierarchyView(
   section: SectionKey,
   path: string[],
   includeNonStandard: boolean,
-  depositRankMetric: RankMetric = 'base',
+  depositRankMetric: 'base' | 'comparison' = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
 ) {
   const under = rowsUnder(all, section, path);
@@ -86,29 +87,15 @@ describe('menu nav perf bench (hypothesis B/D)', () => {
   const details = makeDetails(rows);
   const sectionData = { rates: rows };
 
+  afterEach(() => {
+    setSuitabilityAllowed(null);
+  });
+
   it('visibleAccountRows with details is expensive at production scale', () => {
     const t0 = Date.now();
     const filtered = visibleAccountRows(rows, false, details);
     const ms = Date.now() - t0;
-    // #region agent log
-    const fs = require('fs') as typeof import('fs');
-    const path = require('path') as typeof import('path');
-    const logPath = path.join(__dirname, '..', '..', 'debug-d1dc54.log');
-    fs.appendFileSync(
-      logPath,
-      JSON.stringify({
-        sessionId: 'd1dc54',
-        runId: 'bench',
-        hypothesisId: 'B',
-        location: 'menuNavPerf.bench.test.ts:visibleAccountRows',
-        message: 'visibleAccountRows with details timing',
-        data: { ms, input: N, output: filtered.length },
-        timestamp: Date.now(),
-      }) + '\n',
-    );
-    // #endregion
     expect(filtered.length).toBeGreaterThan(100);
-    // Soft signal for logs — do not fail CI on slow hosts, but record evidence.
     expect(ms).toBeGreaterThanOrEqual(0);
   });
 
@@ -122,22 +109,6 @@ describe('menu nav perf bench (hypothesis B/D)', () => {
       }
       timings.push((Date.now() - t0) / 5);
     }
-    // #region agent log
-    const fs = require('fs') as typeof import('fs');
-    const path = require('path') as typeof import('path');
-    fs.appendFileSync(
-      path.join(__dirname, '..', '..', 'debug-d1dc54.log'),
-      JSON.stringify({
-        sessionId: 'd1dc54',
-        runId: 'bench',
-        hypothesisId: 'B',
-        location: 'menuNavPerf.bench.test.ts:hierarchy',
-        message: 'uncached hierarchy recompute avg ms',
-        data: { timings, paths: paths.map((p) => p.join('.') || '(root)') },
-        timestamp: Date.now(),
-      }) + '\n',
-    );
-    // #endregion
     expect(timings.length).toBe(3);
   });
 
@@ -149,31 +120,11 @@ describe('menu nav perf bench (hypothesis B/D)', () => {
     }
     const buildMs = Date.now() - tBuild0;
 
-    // Install into the production gate used by visibleAccountRows.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { setSuitabilityAllowed } = require('../src/data/suitabilityGate') as typeof import('../src/data/suitabilityGate');
     setSuitabilityAllowed(allowed);
     const tFilter0 = Date.now();
     const filtered = visibleAccountRows(rows, false, details);
     const filterMs = Date.now() - tFilter0;
-    setSuitabilityAllowed(null);
 
-    // #region agent log
-    const fs = require('fs') as typeof import('fs');
-    const path = require('path') as typeof import('path');
-    fs.appendFileSync(
-      path.join(__dirname, '..', '..', 'debug-d1dc54.log'),
-      JSON.stringify({
-        sessionId: 'd1dc54',
-        runId: 'post-fix',
-        hypothesisId: 'D',
-        location: 'menuNavPerf.bench.test.ts:precomputedSet',
-        message: 'one-shot build vs O(1) visibleAccountRows via gate',
-        data: { buildMs, filterMs, allowed: allowed.size, filtered: filtered.length },
-        timestamp: Date.now(),
-      }) + '\n',
-    );
-    // #endregion
     expect(filtered.length).toBe(allowed.size);
     expect(filterMs).toBeLessThan(buildMs + 50);
   });

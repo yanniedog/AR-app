@@ -17,6 +17,7 @@ import {
 } from '../data/taxonomy';
 import { useStore } from '../data/store';
 import { logCategoryRowPress } from '../lib/degradationLog';
+import { debugLog } from '../lib/debugLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -133,7 +134,10 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         depositRankMetric,
         detailsProducts,
       );
-      fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'post-fix',hypothesisId:'B',location:'HierarchyView.tsx:cache-miss',message:'hierarchy compute cache miss',data:{ms:Date.now()-_t1,section,path:pathKey,rows:rows.length,hasDetails:!!detailsProducts},timestamp:Date.now()})}).catch(()=>{});
+      debugLog.debug(
+        'perf',
+        `hierarchy cache-miss ms=${Date.now() - _t1} section=${section} path=${pathKey || '(root)'} rows=${rows.length} details=${detailsProducts ? 'yes' : 'no'}`,
+      );
       // #endregion
       byKey.set(cacheKey, cached);
     }

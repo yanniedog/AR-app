@@ -14,14 +14,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 export default function TabsLayout() {
   const theme = useTheme();
   const isAndroid = Platform.OS === 'android';
-  const tabPressListener = ({ navigation, route }: { navigation: { getState: () => { index: number; routes: { name: string }[] } }; route: { name: string } }) => ({ tabPress: () => {
-    // #region agent log
-    const state = navigation.getState();
-    const from = state.routes[state.index]?.name;
-    fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'E',location:'tabs/_layout.tsx:tabPress',message:'tab press',data:{from,to:route.name,noOp:from===route.name},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (from === route.name) logTabNoOp(route.name);
-  } });
+  const tabPressListener = ({ navigation, route }: { navigation: { getState: () => { index: number; routes: { name: string }[] } }; route: { name: string } }) => ({ tabPress: () => { const state = navigation.getState(); if (state.routes[state.index]?.name === route.name) logTabNoOp(route.name); } });
   const updateBanner = useAppUpdateBanner();
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 

@@ -18,6 +18,8 @@ export type SuitabilityIndex = {
 };
 
 let installed: SuitabilityIndex | null = null;
+let inFlight: Promise<SuitabilityIndex | null> | null = null;
+let inFlightKey = '';
 
 export function getSuitabilityIndex(): SuitabilityIndex | null {
   return installed;
@@ -26,6 +28,8 @@ export function getSuitabilityIndex(): SuitabilityIndex | null {
 export function clearSuitabilityIndex(): void {
   installed = null;
   setSuitabilityAllowed(null);
+  inFlight = null;
+  inFlightKey = '';
 }
 
 export function installSuitabilityIndex(index: SuitabilityIndex | null): void {
@@ -72,15 +76,13 @@ export async function buildSuitabilityIndex(
     'suitability',
     `index built run_date=${index.runDate} rows=${rows.length} allowed=${allowed.size} ms=${Date.now() - t0} details=${products ? 'yes' : 'no'}`,
   );
-  // #region agent log
-  fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'post-fix',hypothesisId:'D',location:'suitabilityIndex.ts:build',message:'suitability index built',data:{ms:Date.now()-t0,rows:rows.length,allowed:allowed.size,hasDetails:!!products,runDate:index.runDate},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return index;
 }
 
 /**
  * Rebuild + install when the live store core/details match `core`.
  * No-ops if a newer refresh already replaced the dataset.
+ * Coalesces concurrent rebuilds for the same run_date+detailsSha.
  */
 export async function rebuildAndInstallSuitabilityIndex(
   core: CorePayload,
@@ -88,8 +90,25 @@ export async function rebuildAndInstallSuitabilityIndex(
   detailsSha: string,
   isCurrent: () => boolean,
 ): Promise<SuitabilityIndex | null> {
-  const index = await buildSuitabilityIndex(core, details, detailsSha);
-  if (!isCurrent()) return null;
-  installSuitabilityIndex(index);
-  return index;
+  const key = `${core.run_date}|${detailsSha}`;
+  if (installed && installed.runDate === core.run_date && installed.detailsSha === detailsSha) {
+    return installed;
+  }
+  if (inFlight && inFlightKey === key) return inFlight;
+
+  const promise = (async () => {
+    const index = await buildSuitabilityIndex(core, details, detailsSha);
+    if (!isCurrent()) return null;
+    installSuitabilityIndex(index);
+    return index;
+  })();
+
+  inFlightKey = key;
+  inFlight = promise.finally(() => {
+    if (inFlight === promise) {
+      inFlight = null;
+      inFlightKey = '';
+    }
+  });
+  return inFlight;
 }

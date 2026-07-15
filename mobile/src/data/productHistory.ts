@@ -255,7 +255,10 @@ export async function syncProductHistoryFromDailyPayloads(
   );
   // #region agent log
   const _syncT0 = Date.now();
-  fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'A',location:'productHistory.ts:syncStart',message:'productHistory sync start',data:{targetRunDate,want:wantedDates.length,fetch:toFetch.length,existingDates:opts.existing?.run_dates?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  debugLog.debug(
+    'perf',
+    `productHistory syncStart want=${wantedDates.length} fetch=${toFetch.length} existing=${opts.existing?.run_dates?.length ?? 0}`,
+  );
   // #endregion
 
   if (toFetch.length) {
@@ -279,7 +282,10 @@ export async function syncProductHistoryFromDailyPayloads(
             await yieldToUi();
             // #region agent log
             if (fetchedOk === 1 || fetchedOk % 10 === 0 || fetchedOk === toFetch.length) {
-              fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'post-fix',hypothesisId:'A',location:'productHistory.ts:fetchProgress',message:'dated core fetch progress',data:{fetchedOk,toFetch:toFetch.length,elapsedMs:Date.now()-_syncT0,lastDate:runDate},timestamp:Date.now()})}).catch(()=>{});
+              debugLog.debug(
+                'perf',
+                `productHistory fetchProgress ok=${fetchedOk}/${toFetch.length} elapsedMs=${Date.now() - _syncT0} last=${runDate}`,
+              );
             }
             // #endregion
           } catch (err) {
