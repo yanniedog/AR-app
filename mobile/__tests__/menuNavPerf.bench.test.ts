@@ -23,12 +23,12 @@ function makeRows(n: number, section: SectionKey = 'Mortgage'): RateRow[] {
               ? 'Youth Saver'
               : `Standard Variable ${i}`,
       provider: i % 19 === 0 ? 'Australian Military Bank' : `Lender ${i % 110}`,
-      rate: 0.05 + (i % 100) / 10000,
+      rate: String(0.05 + (i % 100) / 10000),
       rate_index: 0,
       account_class: i % 11 === 0 ? 'non_standard' : 'standard',
       hierarchy: ['Variable', i % 2 === 0 ? 'Owner Occupier' : 'Investor'],
       section,
-    } as RateRow);
+    } as unknown as RateRow);
   }
   return rows;
 }
@@ -56,7 +56,7 @@ function computeHierarchyView(
   section: SectionKey,
   path: string[],
   includeNonStandard: boolean,
-  depositRankMetric: 'base' | 'comparison' = 'base',
+  depositRankMetric: 'base' | 'max' = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
 ) {
   const under = rowsUnder(all, section, path);
