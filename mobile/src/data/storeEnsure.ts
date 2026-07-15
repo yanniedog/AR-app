@@ -24,6 +24,7 @@ import {
   productHistorySyncState,
   readValidatedHistoryBanks,
 } from './storeHelpers';
+import { rebuildAndInstallSuitabilityIndex, getSuitabilityIndex } from './suitabilityIndex';
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   return {
@@ -36,7 +37,17 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const wantSha = manifest?.files.details.sha256 ?? null;
       const meta = await cache.readMeta();
       const shaOk = !wantSha || meta?.detailsSha === wantSha;
-      if (details && details.run_date === core.run_date && shaOk) return;
+      if (details && details.run_date === core.run_date && shaOk) {
+        if (!getSuitabilityIndex()) {
+          void rebuildAndInstallSuitabilityIndex(
+            core,
+            details,
+            wantSha ?? '',
+            () => get().core?.run_date === core.run_date && get().details === details,
+          );
+        }
+        return;
+      }
 
       const datasetUnchanged = () => {
         const cur = get();
@@ -51,7 +62,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       try {
         const cached = await cache.readDetails();
         if (cached && cached.run_date === core.run_date && shaOk) {
-          if (datasetUnchanged()) set({ details: cached });
+          if (datasetUnchanged()) {
+            set({ details: cached });
+            void rebuildAndInstallSuitabilityIndex(
+              core,
+              cached,
+              wantSha ?? '',
+              () => get().core?.run_date === core.run_date && get().details === cached,
+            );
+          }
           return;
         }
         if (source === 'remote' && manifest) {
@@ -71,10 +90,24 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           });
           if (!datasetUnchanged()) return;
           set({ details: fresh });
+          void rebuildAndInstallSuitabilityIndex(
+            core,
+            fresh,
+            manifest.files.details.sha256,
+            () => get().core?.run_date === core.run_date && get().details === fresh,
+          );
           return;
         }
-        if (get().source === 'sample') set({ details: sampleDetails as DetailsPayload });
-      } catch (err) {
+        if (get().source === 'sample') {
+          set({ details: sampleDetails as DetailsPayload });
+          const seeded = sampleDetails as DetailsPayload;
+          void rebuildAndInstallSuitabilityIndex(
+            core,
+            seeded,
+            '',
+            () => get().core?.run_date === core.run_date,
+          );
+        }      } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureDetails failed: ${msg}`);
         logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
@@ -145,6 +178,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const run = (async () => {
         if (force) set({ historyBanksError: null });
         debugLog.info('store', 'ensureHistoryBanks start');
+        // #region agent log
+        const _hbT0 = Date.now();
+        fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'C',location:'storeEnsure.ts:ensureHistoryBanks:start',message:'ensureHistoryBanks start',data:{force,coreSha:currentCoreSha.slice(0,12),historySha:currentHistorySha.slice(0,12),hasInFlight:!!historyBanksSyncState.inFlight},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
         const { core, manifest, source, historyBanks } = get();
         if (!core) {
           debugLog.debug('store', 'ensureHistoryBanks skipped (no core)');
@@ -170,12 +207,18 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             'store',
             `ensureHistoryBanks ok run_date=${validated.run_date} slices=${validated.run_dates.length}`,
           );
+          // #region agent log
+          fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'C',location:'storeEnsure.ts:ensureHistoryBanks:ok',message:'ensureHistoryBanks installed',data:{ms:Date.now()-_hbT0,slices:validated.run_dates.length,run_date:validated.run_date},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
         };
 
         const compactAsset = manifest.files.history_banks;
         if (compactAsset) {
           if (!force && cached && cached.run_date === core.run_date && shaMatches(compactAsset.sha256)) {
             set({ historyBanks: cached, historyBanksError: null });
+            // #region agent log
+            fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'C',location:'storeEnsure.ts:ensureHistoryBanks:cacheHit',message:'ensureHistoryBanks cache hit',data:{ms:Date.now()-_hbT0,slices:cached.run_dates.length},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
             return;
           }
           try {
@@ -192,6 +235,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               'store',
               `ensureHistoryBanks compact asset failed: ${String((err as Error)?.message ?? err)}`,
             );
+            // #region agent log
+            fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'C',location:'storeEnsure.ts:ensureHistoryBanks:compactFail',message:'compact history_banks failed',data:{ms:Date.now()-_hbT0,error:String((err as Error)?.message??err)},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
           }
         }
 

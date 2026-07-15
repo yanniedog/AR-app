@@ -10,6 +10,8 @@ import { sampleCore, sampleManifest } from './sample';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
+import { normalizeProductHistoryPayload } from './productHistory';
+import { clearSuitabilityIndex } from './suitabilityIndex';
 
 function reportSuitabilityExclusions(core: CorePayload | null | undefined): void {
   if (!core) return;
@@ -37,12 +39,16 @@ export function createBootstrapActions(
       try {
         const prefs = get().prefs;
         const bundle = await cache.readBundle();
-        const [cachedSearch, cachedHistory] = await Promise.all([
+        const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
+          effectiveHistoryRibbon(prefs)
+            ? cache.readProductHistory().then(normalizeProductHistoryPayload)
+            : Promise.resolve(null),
         ]);
         if (bundle) {
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
+          clearSuitabilityIndex();
           set({
             core: bundle.core,
             manifest: bundle.meta.manifest,
@@ -51,6 +57,7 @@ export function createBootstrapActions(
             error: null,
             ...(cachedSearch ? { searchIndex: cachedSearch } : {}),
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
+            ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           const readyCore = bundle.core;
@@ -59,6 +66,7 @@ export function createBootstrapActions(
           });
         } else {
           debugLog.info('store', 'cache miss — seeding bundled sample');
+          clearSuitabilityIndex();
           await installSampleSeed();
           set({
             core: sampleCore,

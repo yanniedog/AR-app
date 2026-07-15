@@ -13,6 +13,7 @@ import { hapticRefreshComplete } from '../lib/haptics';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
+import { clearSuitabilityIndex, getSuitabilityIndex, rebuildAndInstallSuitabilityIndex } from './suitabilityIndex';
 import type { CorePayload, DetailsPayload } from '../types';
 
 type NotifyContext = {
@@ -37,7 +38,13 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const p = get().prefs;
         if (effectiveDeepSearch(p)) void get().ensureSearchIndex();
         if (effectiveBankInsights(p)) void get().ensureBankInsights();
-        if (effectiveHistoryRibbon(p)) void get().ensureHistoryBanks();
+        if (effectiveHistoryRibbon(p)) {
+          // History ribbon first (compact asset); product-history dated-core fan-out
+          // is last so it cannot starve tab navigation during the one-time warm.
+          void get().ensureHistoryBanks().then(() => {
+            void get().ensureProductHistory();
+          });
+        }
         void get().ensureRbaCalendar();
       };
       /**
@@ -52,6 +59,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // wait for that in-flight load so we do not race on detailsLoading.
           while (get().detailsLoading) await yieldToUi();
           await warmDetails();
+          // Suitability index is built inside ensureDetails; if details were
+          // already warm (up-to-date refresh), rebuild from the live pair.
+          const live = get();
+          if (live.core && live.details && !getSuitabilityIndex()) {
+            await rebuildAndInstallSuitabilityIndex(
+              live.core,
+              live.details,
+              live.manifest?.files.details.sha256 ?? '',
+              () => get().core?.run_date === live.core?.run_date,
+            );
+          }
           warmOptionalAssets();
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
             await yieldToUi();
@@ -159,6 +177,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         );
         // Publish core and clear the download UI immediately so touches are not
         // blocked by details warm / optional assets / change-diff work.
+        clearSuitabilityIndex();
         set({
           core,
           manifest: remote,

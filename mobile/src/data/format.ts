@@ -1,6 +1,7 @@
 import type { ProductDetail, RateRow } from '../types';
 import { isKnownNonStandardProduct } from './accountClass';
 import { accessExcludesFromStandard, assessAccess } from './access';
+import { getSuitabilityAllowed } from './suitabilityGate';
 
 /** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
 export function toFraction(rate: string | number | null | undefined): number | null {
@@ -191,6 +192,12 @@ export function visibleAccountRows(
   detailsProducts?: Record<string, ProductDetail> | null,
 ): RateRow[] {
   if (includeNonStandard) return rows;
+  // Prefer the one-shot post-ingest index so Browse/Home/Search stay O(1) after
+  // details warm. Fall back to per-row assessAccess before the index exists.
+  const allowed = getSuitabilityAllowed();
+  if (allowed) {
+    return rows.filter((row) => allowed.has(row.product_key));
+  }
   return rows.filter((row) => isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null));
 }
 

@@ -14,6 +14,7 @@ import {
 import { normalizeInterests, resolveInterestSection } from './interests';
 import { debugLog } from '../lib/debugLog';
 import { hapticSelection } from '../lib/haptics';
+import { clearSuitabilityIndex } from './suitabilityIndex';
 import type { AppState, Prefs, StoreGet, StoreSet } from './storeTypes';
 
 export function createUserActions(set: StoreSet, get: StoreGet) {
@@ -140,6 +141,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       debugLog.info('store', 'clearCache');
       await cache.clear();
       resetDetailSearchIndexCache();
+      clearSuitabilityIndex();
       set({
         core: null,
         details: null,

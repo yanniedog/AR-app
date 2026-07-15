@@ -67,8 +67,11 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!historyEnabled) return;
-    void ensureHistoryBanks();
-    void ensureProductHistory();
+    // Product-history dated-core fan-out is expensive; prefer the disk/bootstrap
+    // cache and only sync after history banks so tab navigation stays responsive.
+    void ensureHistoryBanks().then(() => {
+      void ensureProductHistory();
+    });
   }, [core?.run_date, coreSha, historyEnabled, ensureHistoryBanks, ensureProductHistory, productKey]);
 
   const found = core ? findByKey(core.sections, productKey) : null;

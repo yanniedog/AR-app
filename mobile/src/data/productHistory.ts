@@ -4,6 +4,7 @@ import type { CorePayload } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
+import { yieldToUi } from '../lib/yieldToUi';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -252,12 +253,17 @@ export async function syncProductHistoryFromDailyPayloads(
     'productHistory',
     `sync start target=${targetRunDate} want=${wantedDates.length} fetch=${toFetch.length}`,
   );
+  // #region agent log
+  const _syncT0 = Date.now();
+  fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'pre-fix',hypothesisId:'A',location:'productHistory.ts:syncStart',message:'productHistory sync start',data:{targetRunDate,want:wantedDates.length,fetch:toFetch.length,existingDates:opts.existing?.run_dates?.length??0},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   if (toFetch.length) {
     const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
     let next = 0;
+    let fetchedOk = 0;
     const workers = Array.from(
-      { length: Math.min(opts.maxConcurrent ?? 3, toFetch.length) },
+      { length: Math.min(opts.maxConcurrent ?? 2, toFetch.length) },
       async () => {
         while (next < toFetch.length) {
           if (circuit.isOpen) return;
@@ -267,6 +273,15 @@ export async function syncProductHistoryFromDailyPayloads(
             const core = await downloadDatedCore(runDate);
             bestByDate.set(runDate, bestRatesForCore(core, keys));
             circuit.success();
+            fetchedOk += 1;
+            // Yield after every dated core so tab presses stay responsive during
+            // the one-time ~60-day warm (production logs showed multi-minute JS stalls).
+            await yieldToUi();
+            // #region agent log
+            if (fetchedOk === 1 || fetchedOk % 10 === 0 || fetchedOk === toFetch.length) {
+              fetch('http://127.0.0.1:7677/ingest/5d5142c5-2085-4bc4-8f7d-0dd9a3803d45',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'d1dc54'},body:JSON.stringify({sessionId:'d1dc54',runId:'post-fix',hypothesisId:'A',location:'productHistory.ts:fetchProgress',message:'dated core fetch progress',data:{fetchedOk,toFetch:toFetch.length,elapsedMs:Date.now()-_syncT0,lastDate:runDate},timestamp:Date.now()})}).catch(()=>{});
+            }
+            // #endregion
           } catch (err) {
             circuit.failure();
             debugLog.warn(
