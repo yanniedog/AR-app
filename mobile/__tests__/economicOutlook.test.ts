@@ -122,4 +122,26 @@ describe('economic outlook', () => {
 
     await expect(loadEconomicOutlook(false)).resolves.toEqual(cached);
   });
+
+  it('keeps the four policy indicators when the optional cash forecast fails', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('j1-cash-rate')) throw new Error('forecast unavailable');
+      const csv = url.includes('g1-data')
+        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        : url.includes('g3-data')
+          ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+          : url.includes('h5-data')
+            ? seriesCsv('GLFSURSA', [['30/04/2026', 4.1]])
+            : seriesCsv('GWPIYP', [['31/03/2026', 3.2]]);
+      return { ok: true, text: async () => csv } as Response;
+    });
+
+    const outlook = await loadEconomicOutlook(true);
+
+    expect(outlook.indicators).toHaveLength(4);
+    expect(outlook.cashRateForecast).toBeNull();
+  });
 });

@@ -13,7 +13,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
 import {
-  clearSuitabilityIndex,
+  closeSuitabilityGateUntilRebuild,
   getSuitabilityIndex,
   rebuildAndInstallSuitabilityIndex,
   suitabilityIndexMatches,
@@ -28,6 +28,26 @@ type NotifyContext = {
   /** Stable identity for the installed core — object refs change across refreshes. */
   coreSha: string;
 };
+
+type OptionalRefreshWork = {
+  historyBanks: boolean;
+  bankInsights: boolean;
+  rbaCalendar: boolean;
+};
+
+function optionalRefreshWork(
+  previous: AppState['manifest'],
+  next: AppState['manifest'],
+): OptionalRefreshWork {
+  return {
+    historyBanks:
+      previous?.files.history_banks?.sha256 !== next?.files.history_banks?.sha256,
+    bankInsights:
+      previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
+    rbaCalendar:
+      previous?.files.rba_calendar?.sha256 !== next?.files.rba_calendar?.sha256,
+  };
+}
 
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
   return {
@@ -48,9 +68,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
        * touches. Still awaited by refresh() so background fetch keeps the task
        * alive until warm/notify finish.
        */
-      const runPostRefreshWork = async (notifyCtx: NotifyContext | null) => {
+      const runPostRefreshWork = async (
+        notifyCtx: NotifyContext | null,
+        optionalWork: OptionalRefreshWork,
+      ) => {
         try {
           await yieldToUi();
+          await Promise.all([
+            optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
+            optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
+            optionalWork.rbaCalendar ? get().ensureRbaCalendar() : Promise.resolve(),
+          ]);
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
           while (get().detailsLoading) await yieldToUi();
@@ -140,6 +168,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
       let deferWarm = false;
       let notifyCtx: NotifyContext | null = null;
+      let optionalWork: OptionalRefreshWork = {
+        historyBanks: false,
+        bankInsights: false,
+        rbaCalendar: false,
+      };
       try {
         const remote = await fetchManifest(undefined, onProgress);
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
@@ -157,6 +190,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // can navigate. Only touch disk for a cold/headless refresh or a
           // mismatched in-memory core.
           const live = get();
+          optionalWork = optionalRefreshWork(live.manifest, remote);
           const liveMatches =
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
@@ -211,10 +245,20 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         );
         // Publish core and clear the download UI immediately so touches are not
         // blocked by details warm / optional assets / change-diff work.
-        // Retain a previous remote gate while the replacement is built. It is
-        // conservative for new product keys (hidden until classified) and
-        // avoids briefly exposing detail-only restricted products.
-        if (previousSource !== 'remote') clearSuitabilityIndex();
+        const currentIndex = getSuitabilityIndex();
+        if (
+          !suitabilityIndexMatches(
+            currentIndex,
+            core.run_date,
+            remote.files.core.sha256,
+            remote.files.details.sha256,
+          )
+        ) {
+          // Never apply a previous payload pair's eligibility decisions to a
+          // replacement core. Keep standard-only surfaces closed until the
+          // post-refresh details rebuild installs the exact matching index.
+          closeSuitabilityGateUntilRebuild();
+        }
         set({
           core,
           manifest: remote,
@@ -251,7 +295,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         // awaiters (background fetch) still wait for warm/notify to finish.
         set({ refreshing: false, payloadProgress: null });
         if (manual) hapticRefreshComplete();
-        if (deferWarm) await runPostRefreshWork(notifyCtx);
+        if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
       }
     },
   } satisfies Pick<AppState, 'refresh'>;

@@ -43,6 +43,18 @@ export function clearSuitabilityIndex(): void {
   inFlightKey = '';
 }
 
+/**
+ * Fail closed while a replacement core/details pair is being classified.
+ * Keeping the previous pair's Set can expose a product whose eligibility
+ * changed; falling back to core-only name checks has the same integrity gap.
+ */
+export function closeSuitabilityGateUntilRebuild(): void {
+  installed = null;
+  setSuitabilityAllowed(new Set());
+  inFlight = null;
+  inFlightKey = '';
+}
+
 export function installSuitabilityIndex(index: SuitabilityIndex | null): void {
   installed = index;
   setSuitabilityAllowed(index?.allowed ?? null);

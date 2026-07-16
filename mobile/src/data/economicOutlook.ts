@@ -248,7 +248,7 @@ export function buildEconomicOutlookFromCsv(input: {
   expectations: string;
   labour: string;
   wages: string;
-  cashForecast: string;
+  cashForecast?: string | null;
 }, fetchedAt = new Date().toISOString()): EconomicOutlookPayload {
   const definitions: {
     id: EconomicIndicator['id'];
@@ -305,13 +305,13 @@ export function buildEconomicOutlookFromCsv(input: {
     schema_version: 1,
     fetchedAt,
     indicators,
-    cashRateForecast: parseCashForecastCsv(input.cashForecast),
+    cashRateForecast: input.cashForecast ? parseCashForecastCsv(input.cashForecast) : null,
   };
 }
 
-async function fetchText(url: string): Promise<string> {
+async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, {
       headers: { Accept: 'text/csv' },
@@ -338,7 +338,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         fetchText(URLS.expectations),
         fetchText(URLS.labour),
         fetchText(URLS.wages),
-        fetchText(URLS.cashForecast),
+        fetchText(URLS.cashForecast, 5_000).catch(() => null),
       ]);
       const fresh = buildEconomicOutlookFromCsv({ inflation, expectations, labour, wages, cashForecast });
       await cache.writeEconomicOutlook(fresh);

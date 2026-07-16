@@ -1,5 +1,6 @@
 import {
   buildSuitabilityIndex,
+  closeSuitabilityGateUntilRebuild,
   clearSuitabilityIndex,
   getSuitabilityIndex,
   hydrateSuitabilityIndex,
@@ -87,6 +88,16 @@ describe('suitabilityIndex', () => {
     clearSuitabilityIndex();
     expect(getSuitabilityAllowed()).toBeNull();
     expect(getSuitabilityIndex()).toBeNull();
+  });
+
+  it('fails closed between payload replacement and the matching rebuild', () => {
+    const open = row({ product_key: 'pending|1', product_name: 'Standard Variable' });
+
+    closeSuitabilityGateUntilRebuild();
+
+    expect(getSuitabilityIndex()).toBeNull();
+    expect(getSuitabilityAllowed()).toEqual(new Set());
+    expect(visibleAccountRows([open], false, null)).toEqual([]);
   });
 
   it('hydrates an exact core and details hash without loading details', async () => {

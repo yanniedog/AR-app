@@ -91,6 +91,7 @@ jest.mock('../src/data/productHistory', () => {
 jest.mock('../src/data/suitabilityIndex', () => ({
   getSuitabilityIndex: () => mockGetSuitabilityIndex(),
   clearSuitabilityIndex: jest.fn(),
+  closeSuitabilityGateUntilRebuild: jest.fn(),
   hydrateSuitabilityIndex: jest.fn(async () => null),
   suitabilityIndexMatches: (...args: unknown[]) => mockSuitabilityIndexMatches(...args),
   rebuildAndInstallSuitabilityIndex: jest.fn(async () => null),

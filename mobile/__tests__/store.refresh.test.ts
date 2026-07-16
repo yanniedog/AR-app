@@ -7,6 +7,9 @@ const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
 const mockReadDetails = jest.fn();
+const mockEnsureHistoryBanks = jest.fn(async () => {});
+const mockEnsureBankInsights = jest.fn(async () => {});
+const mockEnsureRbaCalendar = jest.fn(async () => {});
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -40,6 +43,17 @@ jest.mock('../src/data/payload', () => ({
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
+// eslint-disable-next-line import/first -- suitability module shares the mocked cache
+import {
+  clearSuitabilityIndex,
+  installSuitabilityIndex,
+} from '../src/data/suitabilityIndex';
+// eslint-disable-next-line import/first -- suitability module shares the mocked cache
+import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
+
+const originalEnsureHistoryBanks = useStore.getState().ensureHistoryBanks;
+const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
+const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
 
 const remoteManifest: Manifest = sampleManifest;
 const remoteCore: CorePayload = sampleCore;
@@ -61,12 +75,16 @@ function resetStore() {
     hydrated: true,
     prefs: useStore.getState().prefs,
     favorites: [],
+    ensureHistoryBanks: originalEnsureHistoryBanks,
+    ensureBankInsights: originalEnsureBankInsights,
+    ensureRbaCalendar: originalEnsureRbaCalendar,
   });
 }
 
 describe('store refresh lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearSuitabilityIndex();
     resetStore();
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockWriteBundle.mockResolvedValue(undefined);
@@ -103,6 +121,54 @@ describe('store refresh lifecycle', () => {
     expect(state.payloadProgress).toBeNull();
     expect(state.offline).toBe(false);
     expect(state.refreshOutcome).toBe('success');
+  });
+
+  it('refreshes optional assets when a same-core manifest revises their hashes', async () => {
+    const asset = (name: string, sha256: string) => ({
+      name,
+      bytes: 100,
+      sha256,
+      url: `https://example.com/${name}`,
+    });
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        history_banks: asset('history.json.gz', 'history-old'),
+        bank_history: asset('banks.json.gz', 'banks-old'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-old'),
+      },
+    };
+    const revisedManifest: Manifest = {
+      ...previousManifest,
+      files: {
+        ...previousManifest.files,
+        history_banks: asset('history.json.gz', 'history-new'),
+        bank_history: asset('banks.json.gz', 'banks-new'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-new'),
+      },
+    };
+    useStore.setState({
+      source: 'remote',
+      manifest: previousManifest,
+      ensureHistoryBanks: mockEnsureHistoryBanks,
+      ensureBankInsights: mockEnsureBankInsights,
+      ensureRbaCalendar: mockEnsureRbaCalendar,
+    });
+    mockFetchManifest.mockResolvedValue(revisedManifest);
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: revisedManifest.files.core.sha256,
+      detailsSha: revisedManifest.files.details.sha256,
+    });
+
+    await expect(useStore.getState().refresh({})).resolves.toBe(false);
+
+    expect(mockEnsureHistoryBanks).toHaveBeenCalledTimes(1);
+    expect(mockEnsureBankInsights).toHaveBeenCalledTimes(1);
+    expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
   });
 
   it('manual refresh checks the manifest but preserves an identical live core', async () => {
@@ -160,6 +226,35 @@ describe('store refresh lifecycle', () => {
     expect(mockReadBundle).toHaveBeenCalledTimes(1);
     expect(mockDownloadCore).toHaveBeenCalledTimes(1);
     expect(mockWriteBundle).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes a stale suitability gate before publishing a replacement core', async () => {
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'previous-core-sha' },
+      },
+    };
+    useStore.setState({ source: 'remote', manifest: previousManifest });
+    installSuitabilityIndex({
+      runDate: remoteCore.run_date,
+      coreSha: 'previous-core-sha',
+      detailsSha: previousManifest.files.details.sha256,
+      allowed: new Set(['previously-allowed-product']),
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-06-08T00:00:00Z',
+      coreSha: 'previous-core-sha',
+      detailsSha: previousManifest.files.details.sha256,
+    });
+    mockDownloadCore.mockResolvedValue({ text: JSON.stringify(remoteCore), core: remoteCore });
+
+    await useStore.getState().refresh({});
+
+    expect(getSuitabilityAllowed()).toEqual(new Set());
   });
 
   it('sets source remote after download and clears refreshing', async () => {
