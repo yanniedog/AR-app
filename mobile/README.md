@@ -47,4 +47,4 @@ __tests__/          selectors · format · notifications (jest-expo)
 | `npm run sample` | Rebuild `assets/sample/*` from a built payload dir |
 | `npm run icons` | Regenerate app icons |
 
-<!-- apk install QR refresh v1.0.41 b152 -->
+<!-- apk install QR refresh v1.0.42 b155 -->
