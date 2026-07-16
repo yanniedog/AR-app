@@ -1,0 +1,39 @@
+{
+  "version": "1.0.42",
+  "date": "2026-07-16",
+  "summaryBullets": [
+    "Mobile performance, bank response, and RBA Outlook redesign (#22)",
+    "perf(mobile): make post-cache menu navigation instant (#21)",
+    "docs: refresh Android install QR (v1.0.41 build 152) [skip ci] (#20)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Mobile performance, bank response, and RBA Outlook redesign (#22)"
+        },
+        {
+          "text": "perf(mobile): make post-cache menu navigation instant (#21)"
+        },
+        {
+          "text": "docs: refresh Android install QR (v1.0.41 build 152) [skip ci] (#20)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.42"
+        },
+        {
+          "text": "Since tag: app-v1.0.41"
+        }
+      ]
+    }
+  ]
+}
