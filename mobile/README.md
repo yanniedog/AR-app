@@ -22,14 +22,15 @@ then upgrades to the live payload at `expo.extra.manifestUrl` (set in `app.json`
 
 ```
 app/                expo-router routes
-  (tabs)/           Home · Browse · Watchlist · Trends · Settings
+  (tabs)/           Home · Browse · Response · Outlook · Watchlist (Settings hidden)
   product/[key]     product detail        bank/[provider]  lender detail
   banks · compare · onboarding
 src/
   config.ts types.ts constants.ts
   data/             store (zustand) · payload fetch/inflate · cache · selectors
                     · format · notifications (local + background refresh)
-  components/       ui primitives · ProductCard · RibbonBar · charts · BankAvatar · …
+  components/       ui primitives · ProductCard · market summaries · response/RBA charts
+                    · BankAvatar · …
   theme/            light/dark theme + provider
 assets/             icon/splash (scripts/make-icons.py) + sample/ payload
 __tests__/          selectors · format · notifications (jest-expo)

@@ -17,10 +17,11 @@ describe('a11ySummaries', () => {
     products: 400,
   };
 
-  it('builds ribbon summary with RBA', () => {
+  it('builds actionable market-opportunity summary with RBA', () => {
     const s = ribbonA11ySummary(stats, 'Mortgage', 0.0435);
-    expect(s).toContain('Home loans rate distribution');
-    expect(s).toContain('minimum 5.89%');
+    expect(s).toContain('Home loans market opportunity');
+    expect(s).toContain('best advertised 5.89%');
+    expect(s).toContain('advertised spread 23 basis points');
     expect(s).toContain('842 rates from 67 lenders');
     expect(s).toContain('RBA cash rate 4.35%');
   });

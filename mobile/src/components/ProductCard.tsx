@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import {
@@ -60,6 +60,8 @@ export function ProductCard({
   selected?: boolean;
 }) {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const compact = width < 380;
   const favorite = useStore((s) => s.favorites.includes(row.product_key));
   const toggleFavorite = useStore((s) => s.toggleFavorite);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
@@ -83,7 +85,7 @@ export function ProductCard({
     <View
       style={{
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: compact ? 'flex-start' : 'center',
         gap: 8,
         paddingVertical: 12,
         paddingHorizontal: 14,
@@ -101,26 +103,27 @@ export function ProductCard({
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
-          flexDirection: 'row',
-          alignItems: 'center',
+          flexDirection: compact ? 'column' : 'row',
+          alignItems: compact ? 'stretch' : 'center',
           gap: 12,
           borderRadius: theme.radius.md,
           overflow: 'hidden',
           opacity: pressed ? 0.85 : 1,
         })}
       >
-        {selectMode ? (
-          <Ionicons
-            name={selected ? 'checkbox' : 'square-outline'}
-            size={24}
-            color={selected ? theme.colors.primary : theme.colors.textFaint}
-          />
-        ) : (
-          <BankAvatar provider={row.provider} />
-        )}
+        <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+          {selectMode ? (
+            <Ionicons
+              name={selected ? 'checkbox' : 'square-outline'}
+              size={24}
+              color={selected ? theme.colors.primary : theme.colors.textFaint}
+            />
+          ) : (
+            <BankAvatar provider={row.provider} />
+          )}
 
-        <View style={{ flex: 1 }}>
-        <AppText variant="body" weight="700" numberOfLines={1}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+        <AppText variant="body" weight="700" numberOfLines={compact ? 2 : 1}>
           {row.product_name}
         </AppText>
         <AppText variant="small" color="textMuted" numberOfLines={1}>
@@ -189,11 +192,22 @@ export function ProductCard({
             ) : null}
           </Row>
         ) : null}
-      </View>
+          </View>
+        </View>
 
-        <View style={{ alignItems: 'flex-end', minWidth: 76 }}>
-          <AppText variant="tiny" color="textFaint">
-            {rateLabel}
+        <View
+          style={{
+            alignItems: compact ? 'baseline' : 'flex-end',
+            flexDirection: compact ? 'row' : 'column',
+            justifyContent: compact ? 'flex-end' : 'center',
+            gap: compact ? 6 : 0,
+            minWidth: compact ? 0 : 76,
+            marginTop: compact ? 8 : 0,
+            paddingLeft: 0,
+          }}
+        >
+          <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+            {compact ? 'Rate' : rateLabel}
           </AppText>
           <AppText
             variant="rate"
@@ -202,7 +216,7 @@ export function ProductCard({
             {rateText}
           </AppText>
           {row.comparison_rate ? (
-            <AppText variant="tiny" color="textFaint">
+            <AppText variant="tiny" color="textFaint" numberOfLines={1}>
               {formatRate(row.comparison_rate)} cmp
             </AppText>
           ) : null}

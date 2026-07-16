@@ -9,12 +9,12 @@ import {
   InsightsLockedCard,
   MarketPulseStrip,
   MoversLeaderboard,
-  RbaPassThroughCard,
 } from '../../src/components/BankInsights';
 import { HistoryExplorer } from '../../src/components/viz/HistoryExplorer';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
 import { ProPaywall } from '../../src/components/ProPaywall';
 import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
+import { RbaOutlook } from '../../src/components/RbaOutlook';
 import { RbaChart } from '../../src/components/charts';
 import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
@@ -62,7 +62,7 @@ export default function Trends() {
   useScrollToTop(scrollRef);
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
-  // Scrubbed/pinned ribbon date — rewinds the lender list below the chart.
+  // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
 
   useEffect(() => {
@@ -205,6 +205,8 @@ export default function Trends() {
         </Card>
       )}
 
+      <RbaOutlook />
+
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
           <AppText variant="h3">RBA cash rate</AppText>
@@ -283,22 +285,12 @@ export default function Trends() {
         ) : null}
       </Card>
 
-      {showBankInsights && bankInsights ? (
-        <Card style={{ marginBottom: 16 }}>
-          <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-            <AppText variant="h3">RBA pass-through</AppText>
-            <Chip label="PRO" selected />
-          </Row>
-          <RbaPassThroughCard payload={bankInsights} rba={core.rba} calendar={calendar} />
-        </Card>
-      ) : null}
-
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
           <View>
-            <AppText variant="h3">History explorer</AppText>
+            <AppText variant="h3">Market explorer</AppText>
             <AppText variant="tiny" color="textFaint">
-              One history, six lenses
+              Four useful lenses on daily rate movement
             </AppText>
           </View>
           <Chip label="PRO" selected={showHistoryRibbon} />
@@ -320,7 +312,6 @@ export default function Trends() {
                 insightsAvailable={showBankInsights}
                 rba={core.rba}
                 rbaHolds={core.rba_holds}
-                rbaCalendar={calendar}
                 brands={core.brands}
                 selectedDate={rewindDate}
                 onDateSelect={setRewindDate}

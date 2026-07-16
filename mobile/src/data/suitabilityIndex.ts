@@ -4,6 +4,7 @@ import { isBroadlyAvailable } from './format';
 import { setSuitabilityAllowed } from './suitabilityGate';
 import { yieldToUi } from '../lib/yieldToUi';
 import { debugLog } from '../lib/debugLog';
+import { cache } from './cache';
 
 /**
  * One-shot suitability gate for the current core+details pair.
@@ -17,6 +18,14 @@ export type SuitabilityIndex = {
   /** Manifest details sha when known; empty when built without a sha. */
   detailsSha: string;
   allowed: Set<string>;
+};
+
+export type PersistedSuitabilityIndex = {
+  schemaVersion: 1;
+  runDate: string;
+  coreSha: string;
+  detailsSha: string;
+  allowed: string[];
 };
 
 let installed: SuitabilityIndex | null = null;
@@ -34,9 +43,62 @@ export function clearSuitabilityIndex(): void {
   inFlightKey = '';
 }
 
+/**
+ * Fail closed while a replacement core/details pair is being classified.
+ * Keeping the previous pair's Set can expose a product whose eligibility
+ * changed; falling back to core-only name checks has the same integrity gap.
+ */
+export function closeSuitabilityGateUntilRebuild(): void {
+  installed = null;
+  setSuitabilityAllowed(new Set());
+  inFlight = null;
+  inFlightKey = '';
+}
+
 export function installSuitabilityIndex(index: SuitabilityIndex | null): void {
   installed = index;
   setSuitabilityAllowed(index?.allowed ?? null);
+}
+
+export function suitabilityIndexMatches(
+  index: SuitabilityIndex | null,
+  runDate: string,
+  coreSha: string,
+  detailsSha: string,
+): boolean {
+  return !!index &&
+    index.runDate === runDate &&
+    index.coreSha === coreSha &&
+    index.detailsSha === detailsSha;
+}
+
+/** Install the tiny persisted gate when it exactly matches this payload pair. */
+export async function hydrateSuitabilityIndex(
+  runDate: string,
+  coreSha: string,
+  detailsSha: string,
+): Promise<SuitabilityIndex | null> {
+  const saved = await cache.readSuitabilityIndex();
+  if (
+    !saved ||
+    saved.schemaVersion !== 1 ||
+    saved.runDate !== runDate ||
+    saved.coreSha !== coreSha ||
+    saved.detailsSha !== detailsSha ||
+    !Array.isArray(saved.allowed) ||
+    saved.allowed.some((key) => typeof key !== 'string')
+  ) {
+    return null;
+  }
+  const index: SuitabilityIndex = {
+    runDate,
+    coreSha,
+    detailsSha,
+    allowed: new Set(saved.allowed),
+  };
+  installSuitabilityIndex(index);
+  debugLog.info('suitability', `index hydrated run_date=${runDate} allowed=${index.allowed.size}`);
+  return index;
 }
 
 /** Collect every rate row across sections (shared with diagnostics). */
@@ -110,15 +172,30 @@ export async function rebuildAndInstallSuitabilityIndex(
     const index = await buildSuitabilityIndex(core, details, detailsSha, coreSha);
     if (!isCurrent()) return null;
     installSuitabilityIndex(index);
+    try {
+      await cache.writeSuitabilityIndex({
+        schemaVersion: 1,
+        runDate: index.runDate,
+        coreSha: index.coreSha,
+        detailsSha: index.detailsSha,
+        allowed: [...index.allowed],
+      });
+    } catch (err) {
+      debugLog.warn(
+        'suitability',
+        `index cache write failed: ${String((err as Error)?.message ?? err)}`,
+      );
+    }
     return index;
   })();
 
   inFlightKey = key;
-  inFlight = promise.finally(() => {
-    if (inFlight === promise) {
+  const tracked = promise.finally(() => {
+    if (inFlight === tracked) {
       inFlight = null;
       inFlightKey = '';
     }
   });
-  return inFlight;
+  inFlight = tracked;
+  return tracked;
 }

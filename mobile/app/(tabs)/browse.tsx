@@ -1,6 +1,6 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo } from 'react';
-import { View } from 'react-native';
+import { useWindowDimensions, View } from 'react-native';
 
 import { HierarchyView } from '../../src/components/HierarchyView';
 import { Screen, screenEdgeStyle } from '../../src/components/Screen';
@@ -17,6 +17,8 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Browse() {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const compactToolbar = width < 480;
   const core = useStore((s) => s.core);
   const params = useLocalSearchParams<{ section?: string; path?: string | string[] }>();
   const drillPath = useMemo(() => parseBrowsePath(params.path), [params.path]);
@@ -48,35 +50,45 @@ export default function Browse() {
   return (
     <Screen>
       <View style={screenEdgeStyle(theme)}>
-        <Row gap={theme.spacing(3)}>
-          <View style={{ flex: 1 }}>
+        <View
+          style={{
+            flexDirection: compactToolbar ? 'column' : 'row',
+            gap: theme.spacing(3),
+          }}
+        >
+          <View style={{ flex: compactToolbar ? undefined : 1, width: compactToolbar ? '100%' : undefined }}>
             {sectionOptions.length > 1 ? (
               <SegmentedControl options={sectionOptions} value={section} onChange={setActiveSection} />
             ) : null}
           </View>
-          <ToolbarIconButton
-            icon="person-circle-outline"
-            badge={profileCount || undefined}
-            onPress={() => router.push('/profile')}
-            accessibilityLabel="Your product profile"
-            accessibilityHint="Set default filters applied across the app"
-          />
-          <ToolbarIconButton
-            icon="business-outline"
-            onPress={() => router.push('/banks')}
-            accessibilityLabel="Browse lenders"
-            accessibilityHint="Opens searchable lender directory"
-          />
-          {section === 'Mortgage' ? (
+          <Row
+            gap={theme.spacing(3)}
+            style={compactToolbar ? { justifyContent: 'space-between' } : undefined}
+          >
             <ToolbarIconButton
-              icon="calculator-outline"
-              onPress={() => router.push('/calculator')}
-              accessibilityLabel="Mortgage calculator"
-              accessibilityHint="Opens repayment calculator"
+              icon="person-circle-outline"
+              badge={profileCount || undefined}
+              onPress={() => router.push('/profile')}
+              accessibilityLabel="Your product profile"
+              accessibilityHint="Set default filters applied across the app"
             />
-          ) : null}
-          <ToolbarIconButton icon="search" onPress={() => openSearch(section)} accessibilityLabel="Search products" />
-        </Row>
+            <ToolbarIconButton
+              icon="business-outline"
+              onPress={() => router.push('/banks')}
+              accessibilityLabel="Browse lenders"
+              accessibilityHint="Opens searchable lender directory"
+            />
+            {section === 'Mortgage' ? (
+              <ToolbarIconButton
+                icon="calculator-outline"
+                onPress={() => router.push('/calculator')}
+                accessibilityLabel="Mortgage calculator"
+                accessibilityHint="Opens repayment calculator"
+              />
+            ) : null}
+            <ToolbarIconButton icon="search" onPress={() => openSearch(section)} accessibilityLabel="Search products" />
+          </Row>
+        </View>
       </View>
       <View style={{ flex: 1 }}>
         {/* Key on the drill path only — switching SECTION updates HierarchyView in

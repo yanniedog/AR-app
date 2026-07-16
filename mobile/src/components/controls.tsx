@@ -184,11 +184,12 @@ export function SearchBar({
         backgroundColor: theme.colors.surfaceAlt,
         borderRadius: theme.radius.md,
         paddingHorizontal: 12,
-        height: 44,
+        height: 48,
       }}
     >
       <Ionicons name="search" size={18} color={theme.colors.textFaint} />
       <TextInput
+        accessibilityLabel={placeholder}
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
@@ -202,9 +203,17 @@ export function SearchBar({
       {value.length > 0 ? (
         <Pressable
           onPress={() => onChangeText('')}
-          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Clear search"
           android_ripple={androidRipple(theme.colors.primaryMuted, true)}
-          style={{ borderRadius: theme.radius.sm, overflow: 'hidden' }}
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: theme.radius.sm,
+            overflow: 'hidden',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
           <Ionicons name="close-circle" size={18} color={theme.colors.textFaint} />
         </Pressable>

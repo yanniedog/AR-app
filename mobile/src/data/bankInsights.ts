@@ -378,19 +378,24 @@ export interface RbaDecisionRef {
   partialObservation: boolean;
 }
 
-export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over';
+export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over' | 'unscored';
 
 export interface PassThroughRow {
   provider: string;
   /**
-   * Same-direction pass-through size in the response window, in basis points (signed).
-   * Sum of matching daily event avg_bps so split repricings still count as full pass.
+   * Same-direction change in the provider median over the response window, in
+   * basis points (signed). This intentionally does not sum daily event averages:
+   * doing so double-counts product churn and can manufacture implausible totals.
    */
   passedBps: number;
+  /** Net provider-median change, including a move opposite the RBA direction. */
+  netChangeBps?: number;
   /** Days from the decision date to the provider's first matching move, if any. */
   daysToFirstMove: number | null;
   /** |passedBps| / |decision bps|; null when decision bps is 0 or no move. */
   ratio: number | null;
+  /** False when the decision predates the ledger and no pre-decision baseline exists. */
+  baselineComplete?: boolean;
   passStatus: PassThroughStatus;
 }
 
@@ -404,6 +409,20 @@ export interface PassThroughModel {
   /** Latest bank-history day available for observation. */
   observedThrough: string;
   /** True when the response window still extends past observedThrough. */
+  windowOpen: boolean;
+}
+
+export interface MultiSectionPassThroughRow {
+  provider: string;
+  sections: Partial<Record<SectionKey, PassThroughRow>>;
+}
+
+export interface MultiSectionPassThroughModel {
+  decision: RbaDecisionRef;
+  rows: MultiSectionPassThroughRow[];
+  windowDays: number;
+  windowEnd: string;
+  observedThrough: string;
   windowOpen: boolean;
 }
 
@@ -624,43 +643,34 @@ export function scorablePassThroughDecisions(
   return scored;
 }
 
-interface MatchingMoveAggregate {
-  first: BankRateEvent | null;
-  /** Sum of same-direction avg_bps inside the window. */
-  passedBps: number;
-}
-
-/** First matching move (for speed) plus cumulative same-direction size (for pass status). */
-function aggregateMatchingMoves(
-  events: BankRateEvent[],
-  provider: string,
-  section: SectionKey,
-  outcome: 'hike' | 'cut',
-  decisionDate: string,
-  windowEnd: string,
-): MatchingMoveAggregate {
-  const wantSign = outcome === 'hike' ? 1 : -1;
-  let first: BankRateEvent | null = null;
-  let passedBps = 0;
-  for (const event of events) {
-    if (event.provider !== provider || event.section !== section) continue;
-    if (event.date < decisionDate || event.date > windowEnd) continue;
-    const dirOk =
-      event.dir === outcome ||
-      (event.dir === 'mixed' && Math.sign(event.avg_bps) === wantSign);
-    if (!dirOk) continue;
-    passedBps += event.avg_bps;
-    if (!first || event.date < first.date) first = event;
-  }
-  return { first, passedBps: Math.round(passedBps * 10) / 10 };
-}
-
 const PASS_STATUS_RANK: Record<PassThroughStatus, number> = {
   over: 0,
   full: 1,
   partial: 2,
-  none: 3,
+  unscored: 3,
+  none: 4,
 };
+
+/** Events remain the most precise source for first-observed timing. */
+function firstMatchingMoveDate(
+  events: BankRateEvent[],
+  provider: string,
+  section: SectionKey,
+  decision: RbaDecisionRef,
+  windowEnd: string,
+): string | null {
+  const wantSign = Math.sign(decision.bps);
+  let first: string | null = null;
+  for (const event of events) {
+    if (event.provider !== provider || event.section !== section) continue;
+    if (event.date < decision.date || event.date > windowEnd) continue;
+    const matches =
+      event.dir === decision.outcome ||
+      (event.dir === 'mixed' && Math.sign(event.avg_bps) === wantSign);
+    if (matches && (!first || event.date < first)) first = event.date;
+  }
+  return first;
+}
 
 /** Rank full/fast passers above holdouts so leaderboards match user trust. */
 export function comparePassThroughRows(a: PassThroughRow, b: PassThroughRow): number {
@@ -726,38 +736,107 @@ function buildPassThroughRows(
 ): PassThroughRow[] {
   const rows: PassThroughRow[] = [];
   for (const [provider, sections] of Object.entries(payload.banks)) {
-    if (!sections[section]) continue;
+    const sectionSeries = sections[section];
+    if (!sectionSeries) continue;
     if (!lenderObservableAtDecision(payload, provider, section, decision.date)) continue;
-    const { first, passedBps } = aggregateMatchingMoves(
-      payload.events,
-      provider,
-      section,
-      decision.outcome,
-      decision.date,
-      windowEnd,
-    );
-    if (!first) {
-      rows.push({
-        provider,
-        passedBps: 0,
-        daysToFirstMove: null,
-        ratio: null,
-        passStatus: 'none',
-      });
-      continue;
+
+    // Prefer the provider median because it keeps a stable unit across days and
+    // is far less sensitive than event averages to products entering/leaving the
+    // CDR feed. Fall back to best only for a legacy series without any medians.
+    const values = sectionSeries.median.some((v) => v != null)
+      ? sectionSeries.median
+      : sectionSeries.best;
+    let baselineIndex = -1;
+    for (let i = 0; i < payload.run_dates.length; i += 1) {
+      if (payload.run_dates[i] > decision.date) break;
+      if (values[i] != null) baselineIndex = i;
     }
+    const baselineComplete = baselineIndex >= 0;
+    if (baselineIndex < 0 && decision.partialObservation) {
+      baselineIndex = values.findIndex((v, i) => v != null && payload.run_dates[i] <= windowEnd);
+    }
+    const baseline = baselineIndex >= 0 ? values[baselineIndex] : null;
+    if (baseline == null) continue;
+
+    let final = baseline;
+    const wantSign = Math.sign(decision.bps);
+    for (let i = baselineIndex + 1; i < payload.run_dates.length; i += 1) {
+      const date = payload.run_dates[i];
+      if (date > windowEnd) break;
+      const value = values[i];
+      if (value == null) continue;
+      final = value;
+    }
+
+    const netChangeBps = Math.round((final - baseline) * 10000 * 10) / 10;
+    const passedBps = Math.sign(netChangeBps) === wantSign ? netChangeBps : 0;
+    // Timing and final movement must describe the same response. A lender can
+    // briefly move with the RBA and finish the window unchanged or opposite;
+    // presenting that early event as its response speed is contradictory.
+    const firstMatchingDate = passedBps !== 0
+      ? firstMatchingMoveDate(payload.events, provider, section, decision, windowEnd)
+      : null;
     const absDecision = Math.abs(decision.bps);
-    const ratio = absDecision > 0 ? Math.round((Math.abs(passedBps) / absDecision) * 1000) / 1000 : null;
+    const ratio =
+      baselineComplete && passedBps !== 0 && absDecision > 0
+        ? Math.round((Math.abs(passedBps) / absDecision) * 1000) / 1000
+        : null;
     rows.push({
       provider,
       passedBps,
-      daysToFirstMove: daysBetweenYmd(decision.date, first.date),
+      netChangeBps,
+      daysToFirstMove: firstMatchingDate
+        ? daysBetweenYmd(decision.date, firstMatchingDate)
+        : null,
       ratio,
-      passStatus: passStatusFor(passedBps, decision.bps),
+      baselineComplete,
+      passStatus: baselineComplete ? passStatusFor(passedBps, decision.bps) : 'unscored',
     });
   }
   rows.sort(comparePassThroughRows);
   return rows;
+}
+
+interface PassThroughDecisionContext {
+  decision: RbaDecisionRef;
+  windowDays: number;
+  windowEnd: string;
+  observedThrough: string;
+  observeEnd: string;
+  windowOpen: boolean;
+}
+
+function resolvePassThroughDecisionContext(
+  payload: BankInsightsPayload,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts,
+): PassThroughDecisionContext | null {
+  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
+  const scorable = scorablePassThroughDecisions(payload, rba, opts);
+  if (!scorable.length) return null;
+
+  const decision =
+    (opts.decisionDate
+      ? scorable.find((d) => d.date === opts.decisionDate)
+      : null) ?? scorable[scorable.length - 1];
+  if (!decision) return null;
+
+  const idx = scorable.findIndex((d) => d.date === decision.date);
+  if (idx < 0) return null;
+  const windowEnd = windowEndForDecision(scorable, idx, windowDays);
+  if (!windowEnd) return null;
+
+  const observedThrough =
+    payload.run_date || payload.run_dates[payload.run_dates.length - 1] || windowEnd;
+  const observeEnd = windowEnd < observedThrough ? windowEnd : observedThrough;
+  return {
+    decision,
+    windowDays,
+    windowEnd,
+    observedThrough,
+    observeEnd,
+    windowOpen: windowEnd > observedThrough,
+  };
 }
 
 /**
@@ -772,37 +851,64 @@ export function rbaPassThrough(
 ): PassThroughModel | null {
   if (!payload?.run_dates?.length) return null;
   const section = opts.section ?? 'Mortgage';
-  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
-  const scorable = scorablePassThroughDecisions(payload, rba, opts);
-  if (!scorable.length) return null;
-
-  const decision =
-    (opts.decisionDate
-      ? scorable.find((d) => d.date === opts.decisionDate)
-      : null) ?? scorable[scorable.length - 1];
-  if (!decision) return null;
-
-  // Cap response windows using the merged scorable timeline so a later
-  // series-only decision truncates an earlier calendar announcement window.
-  // RbaDecisionRef is structurally compatible with PassThroughSourceDecision.
-  const idx = scorable.findIndex((d) => d.date === decision.date);
-  if (idx < 0) return null;
-  const windowEnd = windowEndForDecision(scorable, idx, windowDays);
-  if (!windowEnd) return null;
-
-  const observedThrough =
-    payload.run_date || payload.run_dates[payload.run_dates.length - 1] || windowEnd;
-  // Only count events through the last ingested day (nothing later exists yet).
-  const observeEnd = windowEnd < observedThrough ? windowEnd : observedThrough;
-  const rows = buildPassThroughRows(payload, decision, observeEnd, section);
+  const ctx = resolvePassThroughDecisionContext(payload, rba, opts);
+  if (!ctx) return null;
+  const rows = buildPassThroughRows(payload, ctx.decision, ctx.observeEnd, section);
   if (!rows.length) return null;
   return {
-    decision,
+    decision: ctx.decision,
     rows,
-    windowDays,
-    windowEnd,
-    observedThrough,
-    windowOpen: windowEnd > observedThrough,
+    windowDays: ctx.windowDays,
+    windowEnd: ctx.windowEnd,
+    observedThrough: ctx.observedThrough,
+    windowOpen: ctx.windowOpen,
+  };
+}
+
+/**
+ * Per-lender pass-through for Mortgage, Savings, and TD in one directory.
+ * Providers are sorted A–Z; missing sections are omitted from `sections`.
+ */
+export function rbaPassThroughMultiSection(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: PassThroughOpts = {},
+): MultiSectionPassThroughModel | null {
+  if (!payload?.run_dates?.length) return null;
+  const ctx = resolvePassThroughDecisionContext(payload, rba, opts);
+  if (!ctx) return null;
+
+  const sectionRows = SECTION_KEYS.map((section) => ({
+    section,
+    rows: buildPassThroughRows(payload, ctx.decision, ctx.observeEnd, section),
+  }));
+  const providers = new Set<string>();
+  for (const { rows } of sectionRows) {
+    for (const row of rows) providers.add(row.provider);
+  }
+  if (!providers.size) return null;
+
+  const rowsBySection = new Map(
+    sectionRows.map(({ section, rows }) => [section, new Map(rows.map((row) => [row.provider, row]))]),
+  );
+  const rows: MultiSectionPassThroughRow[] = [...providers]
+    .sort((a, b) => a.localeCompare(b))
+    .map((provider) => {
+      const sections: Partial<Record<SectionKey, PassThroughRow>> = {};
+      for (const { section } of sectionRows) {
+        const row = rowsBySection.get(section)?.get(provider);
+        if (row) sections[section] = row;
+      }
+      return { provider, sections };
+    });
+
+  return {
+    decision: ctx.decision,
+    rows,
+    windowDays: ctx.windowDays,
+    windowEnd: ctx.windowEnd,
+    observedThrough: ctx.observedThrough,
+    windowOpen: ctx.windowOpen,
   };
 }
 

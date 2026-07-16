@@ -197,6 +197,9 @@ export function Button({
     variant === 'primary' ? theme.colors.onPrimary : theme.colors.primaryMuted;
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
       onPress={() => {
         if (hapticOnPress) hapticLightImpact();
         onPress?.();

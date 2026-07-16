@@ -9,7 +9,7 @@ export function rateValueLabel(section: SectionKey, context: 'product' | 'best' 
   return SECTIONS[section].lowerIsBetter ? 'Interest rate' : 'Rate';
 }
 
-/** Plain-language TalkBack summary for the rate-distribution ribbon. */
+/** Plain-language TalkBack summary for the best-versus-typical market insight. */
 export function ribbonA11ySummary(
   stats: RateStats,
   section: SectionKey,
@@ -19,16 +19,18 @@ export function ribbonA11ySummary(
   if (stats.min === null || stats.max === null) {
     return `${title}: no rate data`;
   }
+  const best = SECTIONS[section].lowerIsBetter ? stats.min : stats.max;
+  const typical = stats.median ?? stats.mean;
+  const gap = best != null && typical != null ? Math.round(Math.abs(best - typical) * 10000) : null;
   const parts = [
-    `${title} rate distribution`,
-    `minimum ${formatRate(stats.min)}`,
-    stats.median != null ? `median ${formatRate(stats.median)}` : null,
-    stats.mean != null ? `mean ${formatRate(stats.mean)}` : null,
-    `maximum ${formatRate(stats.max)}`,
+    `${title} market opportunity`,
+    best != null ? `best advertised ${formatRate(best)}` : null,
+    typical != null ? `typical advertised ${formatRate(typical)}` : null,
+    gap != null ? `advertised spread ${gap} basis points` : null,
     `${stats.count} rates from ${stats.providers} lenders`,
   ].filter(Boolean) as string[];
   if (rbaRate != null) {
-    parts.push(`RBA cash rate ${formatRate(rbaRate)}`);
+    parts.push(`RBA cash rate ${formatRate(rbaRate > 1 ? rbaRate / 100 : rbaRate)}`);
   }
   return parts.join(', ');
 }

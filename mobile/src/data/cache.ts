@@ -1,14 +1,18 @@
 // SDK 54 replaced the classic file API with a File/Directory API; the classic
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
+import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
 import type { ProductHistoryPayload } from './productHistory';
+import type { EconomicOutlookPayload } from './economicOutlook';
+import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 
-const DIR = `${FileSystem.documentDirectory}payload/`;
+const IS_WEB = Platform.OS === 'web';
+const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
 const BUNDLE = `${DIR}core-bundle.json`;
 const BUNDLE_TMP = `${BUNDLE}.tmp`;
 const DETAILS = `${DIR}details.json`;
@@ -16,6 +20,9 @@ const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
+const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
+const SUITABILITY_INDEX = `${DIR}suitability-index.json`;
+const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
 // Tiny sidecars so metadata reads/writes never re-parse or re-stringify the
 // multi-MB core bundle (the old updateMeta path blocked the JS thread for
 // seconds after every fresh ingest when detailsSha was patched).
@@ -50,17 +57,138 @@ export interface CoreBundle {
 }
 
 async function ensureDir(): Promise<void> {
+  if (IS_WEB) return;
   const info = await FileSystem.getInfoAsync(DIR);
   if (!info.exists) {
     await FileSystem.makeDirectoryAsync(DIR, { intermediates: true });
   }
 }
 
+const webMemory = new Map<string, string>();
+let webDbPromise: Promise<IDBDatabase | null> | null = null;
+
+function webDb(): Promise<IDBDatabase | null> {
+  if (webDbPromise) return webDbPromise;
+  webDbPromise = new Promise((resolve) => {
+    if (typeof globalThis.indexedDB === 'undefined') {
+      resolve(null);
+      return;
+    }
+    const request = globalThis.indexedDB.open('australian-rates-cache', 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains('files')) {
+        request.result.createObjectStore('files');
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+  return webDbPromise;
+}
+
+async function webGet(path: string): Promise<string | null> {
+  const memory = webMemory.get(path);
+  if (memory != null) return memory;
+  const db = await webDb();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    const request = db.transaction('files').objectStore('files').get(path);
+    request.onsuccess = () => {
+      const value = typeof request.result === 'string' ? request.result : null;
+      if (value != null) webMemory.set(path, value);
+      resolve(value);
+    };
+    request.onerror = () => resolve(null);
+  });
+}
+
+async function webSet(path: string, value: string): Promise<void> {
+  webMemory.set(path, value);
+  const db = await webDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const request = db.transaction('files', 'readwrite').objectStore('files').put(value, path);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+  });
+}
+
+async function webDelete(path: string): Promise<void> {
+  const db = await webDb();
+  if (path !== DIR) {
+    webMemory.delete(path);
+    if (!db) return;
+    await new Promise<void>((resolve) => {
+      const request = db.transaction('files', 'readwrite').objectStore('files').delete(path);
+      request.onsuccess = () => resolve();
+      request.onerror = () => resolve();
+    });
+    return;
+  }
+
+  for (const key of [...webMemory.keys()]) {
+    if (key.startsWith(DIR)) webMemory.delete(key);
+  }
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    const transaction = db.transaction('files', 'readwrite');
+    const store = transaction.objectStore('files');
+    const request = store.getAllKeys();
+    request.onsuccess = () => {
+      request.result.forEach((key) => {
+        if (typeof key === 'string' && key.startsWith(DIR)) store.delete(key);
+      });
+    };
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => resolve();
+  });
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  if (IS_WEB) return (await webGet(path)) != null;
+  return (await FileSystem.getInfoAsync(path)).exists;
+}
+
+async function readText(path: string): Promise<string> {
+  if (IS_WEB) {
+    const value = await webGet(path);
+    if (value == null) throw new Error(`Cache entry is unavailable: ${path}`);
+    return value;
+  }
+  return FileSystem.readAsStringAsync(path);
+}
+
+async function writeText(path: string, value: string): Promise<void> {
+  if (IS_WEB) {
+    await webSet(path, value);
+    return;
+  }
+  await FileSystem.writeAsStringAsync(path, value);
+}
+
+async function deletePath(path: string): Promise<void> {
+  if (IS_WEB) {
+    await webDelete(path);
+    return;
+  }
+  await FileSystem.deleteAsync(path, { idempotent: true });
+}
+
+async function movePath(from: string, to: string): Promise<void> {
+  if (IS_WEB) {
+    const value = await webGet(from);
+    if (value == null) throw new Error(`Cache entry is unavailable: ${from}`);
+    await webSet(to, value);
+    await webDelete(from);
+    return;
+  }
+  await FileSystem.moveAsync({ from, to });
+}
+
 async function readJson<T>(path: string): Promise<T | null> {
   try {
-    const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return null;
-    const text = await FileSystem.readAsStringAsync(path);
+    if (!(await pathExists(path))) return null;
+    const text = await readText(path);
     return JSON.parse(text) as T;
   } catch {
     return null;
@@ -69,9 +197,9 @@ async function readJson<T>(path: string): Promise<T | null> {
 
 async function writeCoreMeta(meta: CacheMeta): Promise<void> {
   await ensureDir();
-  await FileSystem.writeAsStringAsync(CORE_META_TMP, JSON.stringify(meta));
-  await FileSystem.deleteAsync(CORE_META, { idempotent: true });
-  await FileSystem.moveAsync({ from: CORE_META_TMP, to: CORE_META });
+  await writeText(CORE_META_TMP, JSON.stringify(meta));
+  await deletePath(CORE_META);
+  await movePath(CORE_META_TMP, CORE_META);
 }
 
 async function readCoreMetaSidecar(): Promise<CacheMeta | null> {
@@ -107,9 +235,9 @@ function serialize<T>(fn: () => Promise<T>): Promise<T> {
 
 async function atomicWriteBundle(contents: string): Promise<void> {
   await ensureDir();
-  await FileSystem.writeAsStringAsync(BUNDLE_TMP, contents);
-  await FileSystem.deleteAsync(BUNDLE, { idempotent: true });
-  await FileSystem.moveAsync({ from: BUNDLE_TMP, to: BUNDLE });
+  await writeText(BUNDLE_TMP, contents);
+  await deletePath(BUNDLE);
+  await movePath(BUNDLE_TMP, BUNDLE);
 }
 
 export const cache = {
@@ -154,8 +282,8 @@ export const cache = {
     return serialize(async () => {
       // Drop any prior sidecar first so a crash after the new bundle lands cannot
       // leave readMeta trusting stale detailsSha/coreSha from the old run.
-      await FileSystem.deleteAsync(CORE_META, { idempotent: true });
-      await FileSystem.deleteAsync(CORE_META_TMP, { idempotent: true });
+      await deletePath(CORE_META);
+      await deletePath(CORE_META_TMP);
       // Commit the bundle, then the sidecar. If we crash between the two,
       // readMeta falls back to the embedded meta in the new bundle.
       await atomicWriteBundle(`{"meta":${JSON.stringify(meta)},"core":${coreText}}`);
@@ -186,7 +314,7 @@ export const cache = {
 
   async writeDetails(json: string): Promise<void> {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(DETAILS, json);
+    await writeText(DETAILS, json);
   },
 
   async readSearchIndex(): Promise<SearchIndexPayload | null> {
@@ -195,7 +323,7 @@ export const cache = {
 
   async writeSearchIndex(json: string): Promise<void> {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(SEARCH_INDEX, json);
+    await writeText(SEARCH_INDEX, json);
   },
 
   async readHistoryBanks(): Promise<HistoryBanksPayload | null> {
@@ -203,12 +331,12 @@ export const cache = {
   },
 
   async clearHistoryBanks(): Promise<void> {
-    await FileSystem.deleteAsync(HISTORY_BANKS, { idempotent: true });
+    await deletePath(HISTORY_BANKS);
   },
 
   async writeHistoryBanks(json: string): Promise<void> {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(HISTORY_BANKS, json);
+    await writeText(HISTORY_BANKS, json);
   },
 
   async readBankInsights(): Promise<BankInsightsPayload | null> {
@@ -217,11 +345,11 @@ export const cache = {
 
   async writeBankInsights(json: string): Promise<void> {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(BANK_INSIGHTS, json);
+    await writeText(BANK_INSIGHTS, json);
   },
 
   async clearBankInsights(): Promise<void> {
-    await FileSystem.deleteAsync(BANK_INSIGHTS, { idempotent: true });
+    await deletePath(BANK_INSIGHTS);
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {
@@ -230,11 +358,33 @@ export const cache = {
 
   async writeProductHistory(json: string): Promise<void> {
     await ensureDir();
-    await FileSystem.writeAsStringAsync(PRODUCT_HISTORY, json);
+    await writeText(PRODUCT_HISTORY, json);
   },
 
   async clearProductHistory(): Promise<void> {
-    await FileSystem.deleteAsync(PRODUCT_HISTORY, { idempotent: true });
+    await deletePath(PRODUCT_HISTORY);
+  },
+
+  async readEconomicOutlook(): Promise<EconomicOutlookPayload | null> {
+    return readJson<EconomicOutlookPayload>(ECONOMIC_OUTLOOK);
+  },
+
+  async writeEconomicOutlook(payload: EconomicOutlookPayload): Promise<void> {
+    await ensureDir();
+    await writeText(ECONOMIC_OUTLOOK, JSON.stringify(payload));
+  },
+
+  async readSuitabilityIndex(): Promise<PersistedSuitabilityIndex | null> {
+    return readJson<PersistedSuitabilityIndex>(SUITABILITY_INDEX);
+  },
+
+  async writeSuitabilityIndex(payload: PersistedSuitabilityIndex): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      await writeText(SUITABILITY_INDEX_TMP, JSON.stringify(payload));
+      await deletePath(SUITABILITY_INDEX);
+      await movePath(SUITABILITY_INDEX_TMP, SUITABILITY_INDEX);
+    });
   },
 
   async readOptionalMeta(): Promise<OptionalMeta | null> {
@@ -253,11 +403,11 @@ export const cache = {
       const existing = await readJson<OptionalMeta>(OPTIONAL_META);
       const base = existing && existing.coreSha === patch.coreSha ? existing : { coreSha: patch.coreSha };
       const merged: OptionalMeta = { ...base, ...patch };
-      await FileSystem.writeAsStringAsync(OPTIONAL_META, JSON.stringify(merged));
+      await writeText(OPTIONAL_META, JSON.stringify(merged));
     });
   },
 
   async clear(): Promise<void> {
-    await FileSystem.deleteAsync(DIR, { idempotent: true });
+    await deletePath(DIR);
   },
 };

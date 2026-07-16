@@ -5,15 +5,19 @@ import {
   downloadCore,
   fetchManifest,
 } from './payload';
-import { shouldWarmDetails } from './optionalPrefs';
-import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
+import { needsDetailsForNotifications } from './optionalPrefs';
 import { debugLog } from '../lib/debugLog';
 import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
-import { clearSuitabilityIndex, getSuitabilityIndex, rebuildAndInstallSuitabilityIndex } from './suitabilityIndex';
+import {
+  closeSuitabilityGateUntilRebuild,
+  getSuitabilityIndex,
+  rebuildAndInstallSuitabilityIndex,
+  suitabilityIndexMatches,
+} from './suitabilityIndex';
 import type { CorePayload, DetailsPayload } from '../types';
 
 type NotifyContext = {
@@ -25,40 +29,77 @@ type NotifyContext = {
   coreSha: string;
 };
 
+type OptionalRefreshWork = {
+  historyBanks: boolean;
+  bankInsights: boolean;
+  rbaCalendar: boolean;
+};
+
+function optionalRefreshWork(
+  previous: AppState['manifest'],
+  next: AppState['manifest'],
+): OptionalRefreshWork {
+  return {
+    historyBanks:
+      previous?.files.history_banks?.sha256 !== next?.files.history_banks?.sha256,
+    bankInsights:
+      previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
+    rbaCalendar:
+      previous?.files.rba_calendar?.sha256 !== next?.files.rba_calendar?.sha256,
+  };
+}
+
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
   return {
-    async refresh(opts: { force?: boolean; manual?: boolean } = {}) {
-      const { force = false, manual = false } = opts;
+    async refresh(
+      opts: { manual?: boolean; repairCache?: boolean } = {},
+    ) {
+      const { manual = false, repairCache = false } = opts;
       const warmDetails = async () => {
-        if (shouldWarmDetails(get().prefs, get().subscriptions)) {
+        // Search/product screens request details on demand. Refresh only warms
+        // the large asset when a background notification genuinely needs its
+        // feature/eligibility fields.
+        if (needsDetailsForNotifications(get().prefs, get().subscriptions)) {
           await get().ensureDetails();
         }
-      };
-      const warmOptionalAssets = () => {
-        const p = get().prefs;
-        if (effectiveDeepSearch(p)) void get().ensureSearchIndex();
-        if (effectiveBankInsights(p)) void get().ensureBankInsights();
-        if (effectiveHistoryRibbon(p)) {
-          // History ribbon first (compact asset); product-history dated-core fan-out
-          // is last so it cannot starve tab navigation during the one-time warm.
-          void get().ensureHistoryBanks().then(() => {
-            void get().ensureProductHistory();
-          });
-        }
-        void get().ensureRbaCalendar();
       };
       /**
        * Heavy post-install work after refreshing=false so the UI can accept
        * touches. Still awaited by refresh() so background fetch keeps the task
        * alive until warm/notify finish.
        */
-      const runPostRefreshWork = async (notifyCtx: NotifyContext | null) => {
+      const runPostRefreshWork = async (
+        notifyCtx: NotifyContext | null,
+        optionalWork: OptionalRefreshWork,
+      ) => {
         try {
           await yieldToUi();
+          await Promise.all([
+            optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
+            optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
+            optionalWork.rbaCalendar ? get().ensureRbaCalendar() : Promise.resolve(),
+          ]);
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
           while (get().detailsLoading) await yieldToUi();
           await warmDetails();
+          const afterWarm = get();
+          const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
+          const afterDetailsSha = afterWarm.manifest?.files.details.sha256 ?? '';
+          if (
+            afterWarm.core &&
+            !suitabilityIndexMatches(
+              getSuitabilityIndex(),
+              afterWarm.core.run_date,
+              afterCoreSha,
+              afterDetailsSha,
+            )
+          ) {
+            // The suitability gate is required for standard-only product
+            // integrity. Build it after refreshing=false; subsequent startups
+            // hydrate the small persisted Set instead of parsing details again.
+            await get().ensureDetails({ force: true });
+          }
           // Suitability index is built inside ensureDetails; if details were
           // already warm (up-to-date refresh), rebuild from the live pair.
           const live = get();
@@ -74,7 +115,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               live.manifest?.files.core.sha256 ?? '',
             );
           }
-          warmOptionalAssets();
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
             await yieldToUi();
             const state = get();
@@ -120,39 +160,63 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         set({ lastCheckedAt: new Date().toISOString(), refreshOutcome: 'wifi-skip' });
         return false;
       }
-      debugLog.info('store', `refresh start manual=${manual} force=${force}`);
+      debugLog.info(
+        'store',
+        `refresh start manual=${manual} repairCache=${repairCache}`,
+      );
       set({ refreshing: true });
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
       let deferWarm = false;
       let notifyCtx: NotifyContext | null = null;
+      let optionalWork: OptionalRefreshWork = {
+        historyBanks: false,
+        bankInsights: false,
+        rbaCalendar: false,
+      };
       try {
         const remote = await fetchManifest(undefined, onProgress);
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
 
         const meta = await cache.readMeta();
         const upToDate =
-          !force &&
+          !repairCache &&
           meta?.source === 'remote' &&
           meta.manifest.run_date === remote.run_date &&
           meta.coreSha === remote.files.core.sha256;
         if (upToDate) {
           debugLog.debug('store', `refresh up-to-date run_date=${remote.run_date}`);
-          const bundle = await cache.readBundle();
-          set({
-            manifest: remote,
-            source: 'remote',
-            offline: false,
-            ...(bundle ? { core: bundle.core } : {}),
-          });
-          deferWarm = true;
-          set({ refreshOutcome: 'success' });
-          return false;
+          // Bootstrap has normally installed this exact core already. Re-reading
+          // the bundle would parse ~11 MB of JSON a second time before the user
+          // can navigate. Only touch disk for a cold/headless refresh or a
+          // mismatched in-memory core.
+          const live = get();
+          optionalWork = optionalRefreshWork(live.manifest, remote);
+          const liveMatches =
+            live.core?.run_date === remote.run_date &&
+            live.manifest?.files.core.sha256 === remote.files.core.sha256;
+          const bundle = liveMatches ? null : await cache.readBundle();
+          if (liveMatches || bundle) {
+            set({
+              manifest: remote,
+              source: 'remote',
+              offline: false,
+              ...(bundle ? { core: bundle.core } : {}),
+            });
+            deferWarm = true;
+            set({ refreshOutcome: 'success' });
+            return false;
+          }
+          debugLog.warn('store', 'matching cache metadata had no readable core; repairing');
         }
 
         const previousCore = get().core;
         const previousSource = get().source;
         let previousDetailsProducts = get().details?.products ?? null;
-        if (!previousDetailsProducts && previousCore) {
+        const needPreviousDetails = needsDetailsForNotifications(
+          get().prefs,
+          get().subscriptions,
+        );
+        if (!previousDetailsProducts && previousCore && needPreviousDetails) {
           const cachedDetails = await cache.readDetails();
           if (cachedDetails && cachedDetails.run_date === previousCore.run_date) {
             previousDetailsProducts = cachedDetails.products ?? null;
@@ -181,7 +245,20 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         );
         // Publish core and clear the download UI immediately so touches are not
         // blocked by details warm / optional assets / change-diff work.
-        clearSuitabilityIndex();
+        const currentIndex = getSuitabilityIndex();
+        if (
+          !suitabilityIndexMatches(
+            currentIndex,
+            core.run_date,
+            remote.files.core.sha256,
+            remote.files.details.sha256,
+          )
+        ) {
+          // Never apply a previous payload pair's eligibility decisions to a
+          // replacement core. Keep standard-only surfaces closed until the
+          // post-refresh details rebuild installs the exact matching index.
+          closeSuitabilityGateUntilRebuild();
+        }
         set({
           core,
           manifest: remote,
@@ -218,7 +295,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         // awaiters (background fetch) still wait for warm/notify to finish.
         set({ refreshing: false, payloadProgress: null });
         if (manual) hapticRefreshComplete();
-        if (deferWarm) await runPostRefreshWork(notifyCtx);
+        if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
       }
     },
   } satisfies Pick<AppState, 'refresh'>;

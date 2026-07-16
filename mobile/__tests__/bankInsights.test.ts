@@ -6,6 +6,7 @@ import {
   passThroughDaysLabel,
   rbaPassThrough,
   rbaPassThroughDecisionList,
+  rbaPassThroughMultiSection,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
@@ -196,19 +197,23 @@ describe('rbaPassThrough', () => {
     expect(model!.windowEnd).toBe('2026-07-09');
     expect(model!.observedThrough).toBe('2026-06-01');
     expect(model!.windowOpen).toBe(true);
-    // Fixture also has a later −10 cut on 2026-06-01 inside the open window.
+    // Size comes from the provider median, not a sum of event averages.
     expect(model!.rows[0]).toEqual({
       provider: 'AlphaBank',
-      passedBps: -35,
+      passedBps: -30,
+      netChangeBps: -30,
       daysToFirstMove: 5,
-      ratio: 1.4,
+      ratio: 1.2,
+      baselineComplete: true,
       passStatus: 'over',
     });
     expect(model!.rows[1]).toEqual({
       provider: 'BetaBank',
       passedBps: 0,
+      netChangeBps: 0,
       daysToFirstMove: null,
       ratio: null,
+      baselineComplete: true,
       passStatus: 'none',
     });
   });
@@ -268,10 +273,11 @@ describe('rbaPassThrough', () => {
       provider: 'AlphaBank',
       passedBps: 25,
       daysToFirstMove: 10,
-      ratio: 1,
-      passStatus: 'full',
+      ratio: null,
+      baselineComplete: false,
+      passStatus: 'unscored',
     });
-    expect(model!.rows[1]).toMatchObject({ provider: 'QuietBank', passStatus: 'none' });
+    expect(model!.rows[1]).toMatchObject({ provider: 'QuietBank', passStatus: 'unscored' });
   });
 
   test('lists multiple past decisions and scores a selected date', () => {
@@ -358,8 +364,11 @@ describe('rbaPassThrough', () => {
     // Cap at day before next decision: May 5 window ends May 19, so May 22 is not counted there.
     expect(first!.rows.find((r) => r.provider === 'AlphaBank')?.daysToFirstMove).toBeNull();
     expect(second!.rows.find((r) => r.provider === 'AlphaBank')).toMatchObject({
-      daysToFirstMove: 2,
-      passStatus: 'full',
+      // The event moved with the RBA, but the provider median finished the
+      // window unchanged. Timing is suppressed so those facts cannot conflict.
+      daysToFirstMove: null,
+      passedBps: 0,
+      passStatus: 'none',
     });
   });
 
@@ -456,7 +465,7 @@ describe('rbaPassThrough', () => {
     });
     expect(model!.rows[0]).toMatchObject({
       provider: 'AlphaBank',
-      passedBps: -35,
+      passedBps: -30,
       passStatus: 'over',
     });
   });
@@ -606,7 +615,7 @@ describe('rbaPassThrough', () => {
     // Window ends day before the merged June 1 series cut — May 20 hike still counts.
     expect(may!.rows.find((r) => r.provider === 'AlphaBank')).toMatchObject({
       daysToFirstMove: 15,
-      passStatus: 'full',
+      passStatus: 'unscored',
     });
   });
 
@@ -647,7 +656,7 @@ describe('rbaPassThrough', () => {
     expect(model!.rows.map((r) => r.provider)).toEqual(['AlphaBank']);
   });
 
-  test('counts mixed repricings whose net avg_bps matches the decision direction', () => {
+  test('uses mixed events for timing while median movement determines pass size', () => {
     const mixedPayload: BankInsightsPayload = {
       ...payload,
       events: [
@@ -665,12 +674,12 @@ describe('rbaPassThrough', () => {
     const model = rbaPassThrough(mixedPayload, rba, { calendar });
     expect(model!.rows[0]).toMatchObject({
       provider: 'AlphaBank',
-      passedBps: -25,
-      passStatus: 'full',
+      passedBps: -30,
+      passStatus: 'over',
     });
   });
 
-  test('sums split same-direction moves for pass size while timing uses the first move', () => {
+  test('uses net provider-median movement for size while timing uses the first event', () => {
     const splitPayload: BankInsightsPayload = {
       schema_version: 1,
       run_date: '2026-07-01',
@@ -789,6 +798,56 @@ describe('rbaPassThrough', () => {
       'Partial',
       'Hold',
     ]);
+  });
+
+  test('rbaPassThroughMultiSection unions providers across Mortgage, Savings, and TD', () => {
+    const multiPayload: BankInsightsPayload = {
+      ...payload,
+      events: [
+        ...payload.events.filter((e) => !(e.provider === 'GammaBank' && e.section === 'Savings')),
+        {
+          date: '2026-05-15',
+          provider: 'GammaBank',
+          section: 'Savings',
+          dir: 'cut',
+          moved: 1,
+          total: 3,
+          avg_bps: -10,
+        },
+      ],
+    };
+    const model = rbaPassThroughMultiSection(multiPayload, rba, { calendar });
+    expect(model).not.toBeNull();
+    expect(model!.rows.map((r) => r.provider)).toEqual(['AlphaBank', 'BetaBank', 'GammaBank']);
+    expect(model!.rows[0].sections.Mortgage).toMatchObject({
+      provider: 'AlphaBank',
+      passedBps: -30,
+      passStatus: 'over',
+    });
+    expect(model!.rows[1].sections.Mortgage).toMatchObject({
+      provider: 'BetaBank',
+      passStatus: 'none',
+    });
+    expect(model!.rows[1].sections.Savings).toBeUndefined();
+    expect(model!.rows[2].sections.Savings).toMatchObject({
+      provider: 'GammaBank',
+      passedBps: 0,
+      netChangeBps: 20,
+      passStatus: 'none',
+    });
+    expect(model!.rows[2].sections.Mortgage).toBeUndefined();
+  });
+
+  test('rbaPassThroughMultiSection shares decision picker with single-section scoring', () => {
+    const list = rbaPassThroughDecisionList(payload, rba, { calendar });
+    const model = rbaPassThroughMultiSection(payload, rba, {
+      calendar,
+      decisionDate: list[0]?.date,
+    });
+    expect(model!.decision.date).toBe(list[0]?.date);
+    expect(rbaPassThrough(payload, rba, { calendar, decisionDate: list[0]?.date })!.decision.date).toBe(
+      list[0]?.date,
+    );
   });
 });
 

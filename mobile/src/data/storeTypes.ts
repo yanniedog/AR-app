@@ -34,7 +34,7 @@ export interface Prefs {
   depositRankMetric: 'base' | 'max';
   /** Fulltext search across product info (off by default). */
   enableDeepSearch: boolean;
-  /** Section ribbon time-series chart in Charts & trends (off by default). */
+  /** Section market-history charts in Outlook (off by default). */
   showHistoryRibbon: boolean;
   /** Rate Intelligence Pro — local stub until store IAP is wired. */
   rateIntelligencePro: boolean;
@@ -111,12 +111,12 @@ export interface AppState {
   favorites: string[];
   subscriptions: Subscription[];
 
-  bootstrap: () => Promise<void>;
+  bootstrap: (opts?: { skipRefresh?: boolean }) => Promise<void>;
   retryDataLoad: () => Promise<void>;
   loadSampleFallback: () => Promise<void>;
   /** Load core/manifest from disk cache if not already in memory (used by the headless task). */
   ensureCoreLoaded: () => Promise<void>;
-  refresh: (opts?: { force?: boolean; manual?: boolean }) => Promise<boolean>;
+  refresh: (opts?: { manual?: boolean; repairCache?: boolean }) => Promise<boolean>;
   ensureDetails: (opts?: { forProductView?: boolean; force?: boolean }) => Promise<void>;
   ensureSearchIndex: () => Promise<void>;
   ensureHistoryBanks: (opts?: { force?: boolean }) => Promise<void>;

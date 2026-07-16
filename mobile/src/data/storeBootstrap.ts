@@ -11,7 +11,7 @@ import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
-import { clearSuitabilityIndex } from './suitabilityIndex';
+import { clearSuitabilityIndex, hydrateSuitabilityIndex } from './suitabilityIndex';
 
 function reportSuitabilityExclusions(core: CorePayload | null | undefined): void {
   if (!core) return;
@@ -25,7 +25,7 @@ export function createBootstrapActions(
   getStore: () => { persist?: { rehydrate?: () => void | Promise<void> } },
 ) {
   return {
-    async bootstrap() {
+    async bootstrap(opts: { skipRefresh?: boolean } = {}) {
       if (get().status === 'ready' || get().status === 'loading') return;
       debugLog.info('store', 'bootstrap');
       set({ status: 'loading', error: null });
@@ -58,6 +58,11 @@ export function createBootstrapActions(
         if (bundle) {
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
+          await hydrateSuitabilityIndex(
+            bundle.core.run_date,
+            bundle.meta.coreSha,
+            bundle.meta.manifest.files.details.sha256,
+          );
           set({
             core: bundle.core,
             manifest: bundle.meta.manifest,
@@ -98,19 +103,19 @@ export function createBootstrapActions(
       }
 
       void useRegisterLogosStore.getState().ensure();
-      void get().refresh({});
+      if (!opts.skipRefresh) void get().refresh({});
     },
 
     async retryDataLoad() {
       logRetry('retryDataLoad', 'start');
       debugLog.info('store', 'retryDataLoad');
       set({ status: 'idle', error: null });
-      await get().bootstrap();
+      await get().bootstrap({ skipRefresh: true });
       if (get().status !== 'ready') {
         logRetry('retryDataLoad', 'failure', get().error ?? undefined);
         return;
       }
-      await get().refresh({ force: true, manual: true });
+      await get().refresh({ repairCache: true, manual: true });
       if (get().refreshOutcome === 'failure') {
         logRetry('retryDataLoad', 'failure', get().error ?? 'refresh failed');
       } else {

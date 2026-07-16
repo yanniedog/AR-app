@@ -1,12 +1,23 @@
 import {
   buildSuitabilityIndex,
+  closeSuitabilityGateUntilRebuild,
   clearSuitabilityIndex,
   getSuitabilityIndex,
+  hydrateSuitabilityIndex,
   installSuitabilityIndex,
+  rebuildAndInstallSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
+import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
 import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src/types';
+
+jest.mock('../src/data/cache', () => ({
+  cache: {
+    readSuitabilityIndex: jest.fn(async () => null),
+    writeSuitabilityIndex: jest.fn(async () => undefined),
+  },
+}));
 
 function row(partial: Partial<RateRow> & Pick<RateRow, 'product_key' | 'product_name'>): RateRow {
   return {
@@ -21,6 +32,8 @@ function row(partial: Partial<RateRow> & Pick<RateRow, 'product_key' | 'product_
 }
 
 describe('suitabilityIndex', () => {
+  beforeEach(() => jest.clearAllMocks());
+
   afterEach(() => {
     clearSuitabilityIndex();
   });
@@ -75,5 +88,67 @@ describe('suitabilityIndex', () => {
     clearSuitabilityIndex();
     expect(getSuitabilityAllowed()).toBeNull();
     expect(getSuitabilityIndex()).toBeNull();
+  });
+
+  it('fails closed between payload replacement and the matching rebuild', () => {
+    const open = row({ product_key: 'pending|1', product_name: 'Standard Variable' });
+
+    closeSuitabilityGateUntilRebuild();
+
+    expect(getSuitabilityIndex()).toBeNull();
+    expect(getSuitabilityAllowed()).toEqual(new Set());
+    expect(visibleAccountRows([open], false, null)).toEqual([]);
+  });
+
+  it('hydrates an exact core and details hash without loading details', async () => {
+    jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
+      schemaVersion: 1,
+      runDate: '2026-07-15',
+      coreSha: 'core-sha',
+      detailsSha: 'details-sha',
+      allowed: ['a|1', 'b|2'],
+    });
+
+    const hydrated = await hydrateSuitabilityIndex(
+      '2026-07-15',
+      'core-sha',
+      'details-sha',
+    );
+    expect(hydrated?.allowed).toEqual(new Set(['a|1', 'b|2']));
+    expect(getSuitabilityAllowed()).toBe(hydrated?.allowed);
+  });
+
+  it('rejects a persisted gate from another payload pair', async () => {
+    jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
+      schemaVersion: 1,
+      runDate: '2026-07-14',
+      coreSha: 'old-core',
+      detailsSha: 'old-details',
+      allowed: ['a|1'],
+    });
+
+    await expect(
+      hydrateSuitabilityIndex('2026-07-15', 'core-sha', 'details-sha'),
+    ).resolves.toBeNull();
+    expect(getSuitabilityAllowed()).toBeNull();
+  });
+
+  it('persists rebuilt gates and allows a later payload rebuild', async () => {
+    const open = row({ product_key: 'c|1', product_name: 'Standard Variable' });
+    const core = {
+      run_date: '2026-07-15',
+      sections: { Mortgage: { rates: [open] } },
+    } as unknown as CorePayload;
+
+    await rebuildAndInstallSuitabilityIndex(core, null, 'details-1', () => true, 'core-1');
+    await rebuildAndInstallSuitabilityIndex(core, null, 'details-2', () => true, 'core-2');
+
+    expect(cache.writeSuitabilityIndex).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(cache.writeSuitabilityIndex).mock.calls[1][0]).toMatchObject({
+      schemaVersion: 1,
+      coreSha: 'core-2',
+      detailsSha: 'details-2',
+      allowed: ['c|1'],
+    });
   });
 });

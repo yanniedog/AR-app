@@ -1,6 +1,6 @@
 import { useScrollToTop } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { HomeHero, SpringOnNewData } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
@@ -17,6 +17,7 @@ import { conditionalNote } from '../../src/lib/rateQualifier';
 import { ShareQrModal } from '../../src/components/ShareQrModal';
 import { rowsUnder } from '../../src/data/taxonomy';
 import { useStore } from '../../src/data/store';
+import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -24,8 +25,10 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 export default function Home() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
+  const ensureDetails = useStore((s) => s.ensureDetails);
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
   const interests = useStore((s) => s.prefs.interests);
@@ -34,12 +37,8 @@ export default function Home() {
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
+  const warmDetails = useStore((s) => shouldWarmDetails(s.prefs, s.subscriptions));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
-  const ensureDetails = useStore((s) => s.ensureDetails);
-  const coreKey = useStore((s) => s.core?.run_date ?? null);
-  useEffect(() => {
-    void ensureDetails({ force: true });
-  }, [ensureDetails, coreKey]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -48,7 +47,27 @@ export default function Home() {
     if (resolved !== section) setActiveSection(resolved);
   }, [interests, section, setActiveSection]);
 
-  const onRefresh = useCallback(() => void refresh({ manual: true, force: true }), [refresh]);
+  const coreRevision = core ? `${core.run_date}:${coreSha}` : '';
+  useEffect(() => {
+    if (!coreRevision || refreshing || !warmDetails) return;
+    let cancelled = false;
+    let interaction: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    // Details are optional and expensive. Warm them after first paint only for
+    // preferences or notification filters that genuinely need product detail;
+    // the default home path remains core-only after a new ingest.
+    const timer = setTimeout(() => {
+      interaction = InteractionManager.runAfterInteractions(() => {
+        if (!cancelled) void ensureDetails();
+      });
+    }, 900);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      interaction?.cancel();
+    };
+  }, [coreRevision, refreshing, warmDetails, ensureDetails]);
+
+  const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 

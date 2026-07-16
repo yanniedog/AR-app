@@ -222,6 +222,7 @@ function RootNavigator() {
   }, [appReady]);
 
   useEffect(() => {
+    if (Platform.OS === 'web') return;
     const queueRoute = (href: Href | null) => {
       if (!href) return;
       if (hydrated && (status === 'ready' || status === 'error')) {

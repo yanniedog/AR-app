@@ -3,35 +3,29 @@ import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
-import type { RbaCalendar } from '../../data/rbaCalendar';
 import type { BankHistoryChartModel, Brand, HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
-import { BankHistoryChart } from '../BankHistoryChart';
 import { ChartErrorBoundary } from '../ChartErrorBoundary';
 import { AppText, Chip, Row } from '../ui';
 import { LenderRaceChart } from './LenderRaceChart';
 import { MarketSeismograph } from './MarketSeismograph';
 import { RateHeatCalendar } from './RateHeatCalendar';
-import { RbaResponseScatter } from './RbaResponseScatter';
 import { SwitcherEdgeChart } from './SwitcherEdgeChart';
 
-export type HistoryViewMode = 'ribbon' | 'calendar' | 'race' | 'edge' | 'pulse' | 'rba';
+export type HistoryViewMode = 'edge' | 'calendar' | 'pulse' | 'race';
 
 const MODE_META: Record<HistoryViewMode, { label: string; icon: keyof typeof Ionicons.glyphMap; blurb: string }> = {
-  ribbon: { label: 'Ribbon', icon: 'analytics-outline', blurb: 'Min / median / mean / max range over time' },
+  edge: { label: 'Spread', icon: 'flash-outline', blurb: 'Best advertised rate versus the median advertised rate row' },
   calendar: { label: 'Calendar', icon: 'calendar-outline', blurb: 'Every day, coloured by which way rates moved' },
-  race: { label: 'Race', icon: 'podium-outline', blurb: "Today's leaders, traced back through the rankings" },
-  edge: { label: 'Edge', icon: 'flash-outline', blurb: 'What switching beats the typical rate by' },
   pulse: { label: 'Pulse', icon: 'pulse-outline', blurb: 'Daily rate-move activity across all lenders' },
-  rba: { label: 'RBA map', icon: 'navigate-outline', blurb: 'Who passed the RBA decision on — how fast, how fully' },
+  race: { label: 'Leaders', icon: 'podium-outline', blurb: "Today's leading rates, traced back through the rankings" },
 };
 
 const WINDOW_OPTIONS: HistoryWindow[] = ['30D', '90D', '1Y', 'All'];
 
 /**
- * History explorer: one card, six lenses on the same history series. Ribbon /
- * calendar / edge read the section aggregates; race / pulse / RBA map read the
- * per-bank intelligence asset.
+ * History explorer: four focused lenses over aggregate and per-bank history.
+ * Calendar / spread read section aggregates; leaders / pulse read bank history.
  */
 export function HistoryExplorer({
   section,
@@ -40,7 +34,6 @@ export function HistoryExplorer({
   insightsAvailable,
   rba,
   rbaHolds,
-  rbaCalendar,
   brands,
   selectedDate,
   onDateSelect,
@@ -53,18 +46,16 @@ export function HistoryExplorer({
   rba: RbaEntry[];
   /** RBA meeting dates the rate was held (rendered as hollow diamonds). */
   rbaHolds?: string[];
-  rbaCalendar?: RbaCalendar | null;
   brands?: Record<string, Brand>;
   selectedDate?: string | null;
   onDateSelect?: (date: string) => void;
 }) {
-  const [mode, setMode] = useState<HistoryViewMode>('ribbon');
+  const [mode, setMode] = useState<HistoryViewMode>('edge');
   const [window, setWindow] = useState<HistoryWindow>('90D');
 
-  const modes: HistoryViewMode[] = ['ribbon', 'calendar', 'race', 'edge', 'pulse'];
-  if (section === 'Mortgage') modes.push('rba');
-  const activeMode = modes.includes(mode) ? mode : 'ribbon';
-  const needsInsights = activeMode === 'race' || activeMode === 'pulse' || activeMode === 'rba';
+  const modes: HistoryViewMode[] = ['edge', 'calendar', 'pulse', 'race'];
+  const activeMode = modes.includes(mode) ? mode : 'edge';
+  const needsInsights = activeMode === 'race' || activeMode === 'pulse';
   const showWindowChips = activeMode === 'race' || activeMode === 'pulse';
 
   return (
@@ -104,20 +95,6 @@ export function HistoryExplorer({
         </AppText>
       ) : (
         <>
-          {activeMode === 'ribbon' && historyModel ? (
-            <ChartErrorBoundary name="BankHistoryChart">
-              <BankHistoryChart
-                dates={historyModel.dates}
-                points={historyModel.points}
-                allDates={historyModel.allDates}
-                rba={rba}
-                rbaHolds={rbaHolds}
-                section={section}
-                height={210}
-                onDateSelect={onDateSelect}
-              />
-            </ChartErrorBoundary>
-          ) : null}
           {activeMode === 'calendar' && historyModel ? (
             <ChartErrorBoundary name="RateHeatCalendar">
               <RateHeatCalendar
@@ -162,14 +139,9 @@ export function HistoryExplorer({
               />
             </ChartErrorBoundary>
           ) : null}
-          {activeMode === 'rba' ? (
-            <ChartErrorBoundary name="RbaResponseScatter">
-              <RbaResponseScatter payload={insights} rba={rba} calendar={rbaCalendar} />
-            </ChartErrorBoundary>
-          ) : null}
-          {(activeMode === 'ribbon' || activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
+          {(activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
             <AppText variant="small" color="textMuted">
-              History loads after the first refresh with the ribbon enabled.
+              History loads after the first refresh with History explorer enabled.
             </AppText>
           ) : null}
         </>

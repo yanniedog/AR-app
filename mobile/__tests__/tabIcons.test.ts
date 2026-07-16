@@ -21,6 +21,10 @@ describe('tabIcons', () => {
     expect(getTabIonicon('unknown')).toBeUndefined();
     expect(getTabLabel('unknown', 'Fallback')).toBe('Fallback');
   });
+
+  it('presents the macro and market analysis destination as Outlook', () => {
+    expect(getTabLabel('trends')).toBe('Outlook');
+  });
 });
 
 describe('androidChrome', () => {

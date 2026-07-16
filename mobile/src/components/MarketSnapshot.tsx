@@ -39,7 +39,7 @@ export function MarketSnapshotList({
   if (!payload) {
     return (
       <AppText variant="small" color="textMuted">
-        Bank-level rewind needs bank intelligence data — it loads with Charts &amp; trends.
+        Bank-level rewind needs bank intelligence data — it loads with Outlook.
       </AppText>
     );
   }

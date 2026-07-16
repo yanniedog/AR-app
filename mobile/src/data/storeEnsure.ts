@@ -24,7 +24,11 @@ import {
   productHistorySyncState,
   readValidatedHistoryBanks,
 } from './storeHelpers';
-import { rebuildAndInstallSuitabilityIndex, getSuitabilityIndex } from './suitabilityIndex';
+import {
+  rebuildAndInstallSuitabilityIndex,
+  getSuitabilityIndex,
+  suitabilityIndexMatches,
+} from './suitabilityIndex';
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   return {
@@ -36,37 +40,43 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
       const wantSha = manifest?.files.details.sha256 ?? null;
       const coreSha = manifest?.files.core.sha256 ?? '';
-      const meta = await cache.readMeta();
-      const shaOk = !wantSha || meta?.detailsSha === wantSha;
-      if (details && details.run_date === core.run_date && shaOk) {
-        if (!getSuitabilityIndex()) {
-          void rebuildAndInstallSuitabilityIndex(
-            core,
-            details,
-            wantSha ?? '',
-            () =>
-              get().core?.run_date === core.run_date &&
-              get().details === details &&
-              (get().manifest?.files.core.sha256 ?? '') === coreSha,
-            coreSha,
-          );
-        }
-        return;
-      }
-
-      const datasetUnchanged = () => {
-        const cur = get();
-        return (
-          cur.core?.run_date === core.run_date &&
-          cur.manifest?.files.core.sha256 === manifest?.files.core.sha256 &&
-          cur.manifest?.files.details.sha256 === manifest?.files.details.sha256
-        );
-      };
-
+      // Claim the load before the first await. Home, Browse, and product screens
+      // can request details in the same frame; without this synchronous claim
+      // they can all pass the initial guard and parse/download the large asset.
       set({ detailsLoading: true });
       try {
-        const cached = await cache.readDetails();
-        if (cached && cached.run_date === core.run_date && shaOk) {
+        const meta = await cache.readMeta();
+        const shaOk = !wantSha || meta?.detailsSha === wantSha;
+        if (details && details.run_date === core.run_date && shaOk) {
+          if (!suitabilityIndexMatches(getSuitabilityIndex(), core.run_date, coreSha, wantSha ?? '')) {
+            await rebuildAndInstallSuitabilityIndex(
+              core,
+              details,
+              wantSha ?? '',
+              () =>
+                get().core?.run_date === core.run_date &&
+                get().details === details &&
+                (get().manifest?.files.core.sha256 ?? '') === coreSha,
+              coreSha,
+            );
+          }
+          return;
+        }
+
+        const datasetUnchanged = () => {
+          const cur = get();
+          return (
+            cur.core?.run_date === core.run_date &&
+            cur.manifest?.files.core.sha256 === manifest?.files.core.sha256 &&
+            cur.manifest?.files.details.sha256 === manifest?.files.details.sha256
+          );
+        };
+
+        // A stale details file expands to several megabytes. Its hash mismatch
+        // already proves it cannot satisfy this core, so do not parse it merely
+        // to throw it away before downloading the current asset.
+        const cached = shaOk ? await cache.readDetails() : null;
+        if (cached && cached.run_date === core.run_date) {
           if (datasetUnchanged()) {
             set({ details: cached });
             void rebuildAndInstallSuitabilityIndex(
@@ -251,20 +261,35 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               compactAsset.sha256,
             );
             const validated = normalizeHistoryBanksPayload(fresh);
-            if (!validated) throw new Error('history_banks payload failed validation');
+            if (!validated) {
+              debugLog.error(
+                'store',
+                'ensureHistoryBanks rejected payload after download (validation failed)',
+              );
+              throw new Error('history_banks payload failed validation');
+            }
             await installHistory(validated, compactAsset.sha256);
             return;
           } catch (err) {
+            const msg = String((err as Error)?.message ?? err);
             debugLog.warn(
               'store',
-              `ensureHistoryBanks compact asset failed: ${String((err as Error)?.message ?? err)}`,
+              `ensureHistoryBanks compact asset failed: ${msg}`,
             );
             // #region agent log
             debugLog.debug(
               'perf',
-              `ensureHistoryBanks compactFail ms=${Date.now() - _hbT0} err=${String((err as Error)?.message ?? err)}`,
+              `ensureHistoryBanks compactFail ms=${Date.now() - _hbT0} err=${msg}`,
             );
             // #endregion
+            // A transient failure of the tiny compact asset must not fan out to
+            // dozens of dated 11 MB cores. Keep any usable cache and let the
+            // explicit Retry action try this asset again.
+            set({
+              historyBanks: cached?.run_dates.length ? cached : null,
+              historyBanksError: msg,
+            });
+            return;
           }
         }
 
@@ -343,7 +368,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const { core, manifest, source, bankInsights } = get();
       if (!core) return;
       if (source !== 'remote' || !manifest) {
-        set({ bankInsights: null, bankInsightsError: null });
+        set({
+          bankInsights: null,
+          bankInsightsError: 'Bank response analysis needs the latest online dataset.',
+        });
         return;
       }
       const asset = manifest.files.bank_history;
@@ -417,7 +445,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       set({ historyBanksError: null });
       const { manifest } = get();
       if (!manifest?.files.history_banks) {
-        await get().refresh({ manual: true, force: true });
+        await get().refresh({ manual: true });
       }
       await get().ensureHistoryBanks({ force: true });
     },
@@ -430,7 +458,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       set({ bankInsightsError: null });
       const { manifest } = get();
       if (!manifest?.files.bank_history) {
-        await get().refresh({ manual: true, force: true });
+        await get().refresh({ manual: true });
       }
       await get().ensureBankInsights({ force: true });
     },
