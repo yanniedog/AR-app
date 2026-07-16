@@ -52,4 +52,8 @@ workflow reads the rolling `app-apk-latest` manifest and assigns the next
 monotonic Android versionCode at build time; the value in `app.json` is the
 local/prebuild fallback.
 
+## Codex Cloud
+
+The repository Cloud environment pins Node.js 24 and runs `bash .codex/cloud/setup.sh`; cached environments run `bash .codex/cloud/maintenance.sh`. Both use `package-lock.json`, require no production credentials, and leave agent internet access off. Validate Cloud changes with `npm run ci` from this directory; signing, EAS builds, publishing, and deployment remain in protected CI.
+
 <!-- apk install QR refresh v1.0.42 b155 -->
