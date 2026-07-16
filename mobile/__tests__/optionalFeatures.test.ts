@@ -1,7 +1,7 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { shouldWarmDetails } from '../src/data/optionalPrefs';
-import { sampleCore, sampleManifest } from '../src/data/sample';
-import { DEFAULT_PREFS, useStore } from '../src/data/store';
+import { sampleCore, sampleDetails, sampleManifest } from '../src/data/sample';
+import { DEFAULT_PREFS } from '../src/data/store';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -9,6 +9,7 @@ const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
 const mockDownloadDetails = jest.fn();
+const mockReadDetails = jest.fn();
 const mockDownloadSearchIndex = jest.fn();
 const mockDownloadHistoryBanks = jest.fn();
 const mockDownloadBankInsights = jest.fn();
@@ -39,7 +40,7 @@ jest.mock('../src/data/cache', () => ({
     readOptionalMeta: (...args: unknown[]) => mockReadMeta(...args),
     writeOptionalMeta: jest.fn(async () => {}),
     writeBundle: (...args: unknown[]) => mockWriteBundle(...args),
-    readDetails: jest.fn(async () => null),
+    readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
     readSearchIndex: jest.fn(async () => null),
     writeSearchIndex: jest.fn(async () => {}),
@@ -82,6 +83,12 @@ jest.mock('../src/data/productHistory', () => {
       mockSyncProductHistoryFromDailyPayloads(...args),
   };
 });
+
+jest.mock('../src/data/suitabilityIndex', () => ({
+  getSuitabilityIndex: jest.fn(() => null),
+  clearSuitabilityIndex: jest.fn(),
+  rebuildAndInstallSuitabilityIndex: jest.fn(async () => null),
+}));
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore as store } from '../src/data/store';
@@ -217,9 +224,67 @@ describe('optional feature prefs', () => {
     expect(store.getState().searchIndex).not.toBeNull();
   });
 
+  it('ensureDetails claims the load before metadata IO and coalesces same-frame callers', async () => {
+    let finishDownload!: (value: unknown) => void;
+    const download = new Promise((resolve) => {
+      finishDownload = resolve;
+    });
+    store.setState({
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      details: null,
+      detailsLoading: false,
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadDetails.mockReturnValueOnce(download);
+
+    const first = store.getState().ensureDetails({ force: true });
+    const second = store.getState().ensureDetails({ force: true });
+    finishDownload({ text: JSON.stringify(sampleDetails), details: sampleDetails });
+    await Promise.all([first, second]);
+
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+    expect(store.getState().details).toEqual(sampleDetails);
+    expect(store.getState().detailsLoading).toBe(false);
+  });
+
   it('ensureSearchIndex no-ops when deep search is off', async () => {
     await store.getState().ensureSearchIndex();
     expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
+  });
+
+  it('does not parse a stale cached details payload before downloading the current one', async () => {
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      details: null,
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-08T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: 'stale-details-sha',
+    });
+    mockDownloadDetails.mockResolvedValue({
+      text: JSON.stringify(sampleDetails),
+      details: sampleDetails,
+    });
+
+    await store.getState().ensureDetails({ force: true });
+
+    expect(mockReadDetails).not.toHaveBeenCalled();
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+    expect(store.getState().details).toBe(sampleDetails);
   });
 
   it('ensureProductHistory stays gated off by default (no eager dated-core fan-out)', async () => {

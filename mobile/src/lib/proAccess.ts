@@ -43,7 +43,7 @@ export function proGateCopy(intent: ProGateIntent): { title: string; body: strin
           'Unlimited product rate alerts',
           'Unlimited saved-search alerts',
           'Deep product search (fees & features)',
-          'Multi-day history ribbon chart',
+          'Multi-day market history charts',
         ],
       };
     case 'deep_search':
@@ -54,7 +54,7 @@ export function proGateCopy(intent: ProGateIntent): { title: string; body: strin
           'Full-text deep product search',
           'Filter by account features & eligibility',
           'Unlimited rate alerts',
-          'History ribbon in Charts & trends',
+          'Market history in Outlook',
         ],
       };
     case 'history_ribbon':
@@ -75,7 +75,7 @@ export function proGateCopy(intent: ProGateIntent): { title: string; body: strin
         bullets: [
           'Daily rate-move feed across every tracked lender',
           'Biggest movers leaderboards',
-          'RBA pass-through scorecard',
+          'RBA pass-through scorecard (Mortgage, Savings & TD)',
           'Per-bank rate history charts',
         ],
       };

@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
+import { router, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -7,6 +7,7 @@ import { AppUpdateBanner, useAppUpdateBanner } from '../../src/components/AppUpd
 import { BrandLockup } from '../../src/components/BrandLockup';
 import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { M3NavigationBar } from '../../src/components/M3NavigationBar';
+import { IconButton } from '../../src/components/ui';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { getTabIonicon } from '../../src/lib/tabIcons';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -40,6 +41,14 @@ export default function TabsLayout() {
         },
         headerTitleAlign: isAndroid ? 'center' : 'left',
         headerShadowVisible: false,
+        headerRight: () => (
+          <IconButton
+            icon="settings-outline"
+            accessibilityLabel="Open settings"
+            onPress={() => router.push('/(tabs)/settings')}
+            style={{ marginRight: 4 }}
+          />
+        ),
         sceneStyle: { backgroundColor: theme.colors.bg },
         tabBarActiveTintColor: theme.colors.primary,
         tabBarInactiveTintColor: theme.colors.textMuted,
@@ -78,6 +87,27 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="passthrough"
+        listeners={tabPressListener}
+        options={{
+          title: 'Bank pass-through',
+          tabBarLabel: 'Response',
+          tabBarIcon: isAndroid
+            ? () => null
+            : ({ color, size }) => <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="trends"
+        listeners={tabPressListener}
+        options={{
+          title: 'Outlook',
+          tabBarIcon: isAndroid
+            ? () => null
+            : ({ color, size }) => <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="watchlist"
         listeners={tabPressListener}
         options={{
@@ -88,23 +118,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="trends"
-        listeners={tabPressListener}
-        options={{
-          title: 'Trends',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
         name="settings"
         listeners={tabPressListener}
         options={{
           title: 'Settings',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('settings')!} size={size} color={color} />,
+          href: null,
+          headerRight: () => null,
+          headerLeft: () => (
+            <IconButton
+              icon="arrow-back"
+              accessibilityLabel="Back"
+              onPress={() => router.back()}
+              style={{ marginLeft: 4 }}
+            />
+          ),
         }}
       />
     </Tabs>

@@ -7,6 +7,7 @@ import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
 import type { ProductHistoryPayload } from './productHistory';
+import type { EconomicOutlookPayload } from './economicOutlook';
 
 const DIR = `${FileSystem.documentDirectory}payload/`;
 const BUNDLE = `${DIR}core-bundle.json`;
@@ -16,6 +17,7 @@ const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
+const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
 // Tiny sidecars so metadata reads/writes never re-parse or re-stringify the
 // multi-MB core bundle (the old updateMeta path blocked the JS thread for
 // seconds after every fresh ingest when detailsSha was patched).
@@ -235,6 +237,15 @@ export const cache = {
 
   async clearProductHistory(): Promise<void> {
     await FileSystem.deleteAsync(PRODUCT_HISTORY, { idempotent: true });
+  },
+
+  async readEconomicOutlook(): Promise<EconomicOutlookPayload | null> {
+    return readJson<EconomicOutlookPayload>(ECONOMIC_OUTLOOK);
+  },
+
+  async writeEconomicOutlook(payload: EconomicOutlookPayload): Promise<void> {
+    await ensureDir();
+    await FileSystem.writeAsStringAsync(ECONOMIC_OUTLOOK, JSON.stringify(payload));
   },
 
   async readOptionalMeta(): Promise<OptionalMeta | null> {

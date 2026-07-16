@@ -1,6 +1,6 @@
 import { useScrollToTop } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
 import { HomeHero, SpringOnNewData } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
@@ -24,8 +24,10 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 export default function Home() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
+  const ensureDetails = useStore((s) => s.ensureDetails);
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
   const interests = useStore((s) => s.prefs.interests);
@@ -35,11 +37,6 @@ export default function Home() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
-  const ensureDetails = useStore((s) => s.ensureDetails);
-  const coreKey = useStore((s) => s.core?.run_date ?? null);
-  useEffect(() => {
-    void ensureDetails({ force: true });
-  }, [ensureDetails, coreKey]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -48,7 +45,27 @@ export default function Home() {
     if (resolved !== section) setActiveSection(resolved);
   }, [interests, section, setActiveSection]);
 
-  const onRefresh = useCallback(() => void refresh({ manual: true, force: true }), [refresh]);
+  const coreRevision = core ? `${core.run_date}:${coreSha}` : '';
+  useEffect(() => {
+    if (!coreRevision || refreshing) return;
+    let cancelled = false;
+    let interaction: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+    // Install the eligibility index after first paint. This preserves accurate
+    // profile filtering without putting an ~9 MB details parse on the ingest
+    // completion path that the user is waiting on.
+    const timer = setTimeout(() => {
+      interaction = InteractionManager.runAfterInteractions(() => {
+        if (!cancelled) void ensureDetails({ force: true });
+      });
+    }, 900);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+      interaction?.cancel();
+    };
+  }, [coreRevision, refreshing, ensureDetails]);
+
+  const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 

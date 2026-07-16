@@ -11,8 +11,8 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Badge, Row } from '../ui';
 
 /**
- * Switcher's edge: how far the best advertised rate sits from the market's
- * typical (median) rate — the daily payoff of shopping around.
+ * Advertised spread: how far the best advertised rate sits from the median
+ * advertised rate row. Product cohorts are mixed, so this is not a savings claim.
  */
 export function SwitcherEdgeChart({
   dates,
@@ -122,8 +122,7 @@ export function SwitcherEdgeChart({
         ) : null}
       </View>
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        A widening gap means switching {lowerIsBetter ? 'saves' : 'earns'} more than sticking with a typical{' '}
-        {SECTIONS[section].short.toLowerCase()} rate
+        This spread mixes advertised products and tiers. Compare eligibility, fees, conditions, LVRs and terms before acting.
       </AppText>
     </View>
   );

@@ -277,7 +277,7 @@ export function RefreshOutcomeSnackbar() {
     clearRefreshOutcome();
     if (model.action === 'retry') {
       logRetry('refresh', 'start');
-      void refresh({ manual: true, force: true }).then((changed) => {
+      void refresh({ manual: true }).then((changed) => {
         const refreshOutcome = useStore.getState().refreshOutcome;
         if (refreshOutcome === 'failure') {
           logRetry('refresh', 'failure', useStore.getState().error ?? 'refresh failed');

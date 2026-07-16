@@ -6,6 +6,7 @@ const mockReadMeta = jest.fn();
 const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
+const mockReadDetails = jest.fn();
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -22,7 +23,7 @@ jest.mock('../src/data/cache', () => ({
     readBundle: (...args: unknown[]) => mockReadBundle(...args),
     readMeta: (...args: unknown[]) => mockReadMeta(...args),
     writeBundle: (...args: unknown[]) => mockWriteBundle(...args),
-    readDetails: jest.fn(async () => null),
+    readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
     updateMeta: jest.fn(async () => {}),
     clear: jest.fn(async () => {}),
@@ -67,6 +68,7 @@ describe('store refresh lifecycle', () => {
     resetStore();
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockWriteBundle.mockResolvedValue(undefined);
+    mockReadDetails.mockResolvedValue(null);
   });
 
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
@@ -92,12 +94,50 @@ describe('store refresh lifecycle', () => {
 
     expect(changed).toBe(false);
     expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(mockReadBundle).not.toHaveBeenCalled();
     const state = useStore.getState();
     expect(state.source).toBe('remote');
     expect(state.refreshing).toBe(false);
     expect(state.payloadProgress).toBeNull();
     expect(state.offline).toBe(false);
     expect(state.refreshOutcome).toBe('success');
+  });
+
+  it('manual refresh checks the manifest but preserves an identical live core', async () => {
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    const liveCore = useStore.getState().core;
+
+    const changed = await useStore.getState().refresh({ manual: true });
+
+    expect(changed).toBe(false);
+    expect(mockFetchManifest).toHaveBeenCalledTimes(1);
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(mockWriteBundle).not.toHaveBeenCalled();
+    expect(mockReadBundle).not.toHaveBeenCalled();
+    expect(useStore.getState().core).toBe(liveCore);
+  });
+
+  it('supports an explicit cache repair without overloading manual refresh', async () => {
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadCore.mockResolvedValue({ text: JSON.stringify(remoteCore), core: remoteCore });
+
+    const changed = await useStore.getState().refresh({ manual: true, repairCache: true });
+
+    expect(changed).toBe(true);
+    expect(mockDownloadCore).toHaveBeenCalledTimes(1);
+    expect(mockWriteBundle).toHaveBeenCalledTimes(1);
   });
 
   it('sets source remote after download and clears refreshing', async () => {
@@ -116,6 +156,7 @@ describe('store refresh lifecycle', () => {
     const changed = await useStore.getState().refresh({});
 
     expect(changed).toBe(true);
+    expect(mockReadDetails).not.toHaveBeenCalled();
     expect(useStore.getState().source).toBe('remote');
     expect(useStore.getState().refreshing).toBe(false);
     expect(useStore.getState().payloadProgress).toBeNull();

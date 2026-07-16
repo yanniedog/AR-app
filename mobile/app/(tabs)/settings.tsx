@@ -245,7 +245,7 @@ export default function Settings() {
         <ToggleRow
           icon="analytics-outline"
           label="History explorer"
-          sub={hasProAccess(prefs) ? 'Trends lenses and history ribbon' : 'Pro'}
+          sub={hasProAccess(prefs) ? 'Charts, market history and lender trends' : 'Pro'}
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />
@@ -309,7 +309,7 @@ export default function Settings() {
             icon="refresh"
             variant="secondary"
             style={{ flex: 1 }}
-            onPress={() => void refresh({ manual: true, force: true })}
+            onPress={() => void refresh({ manual: true })}
           />
           <Button
             title="Clear cache"

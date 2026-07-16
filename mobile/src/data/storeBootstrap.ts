@@ -110,7 +110,7 @@ export function createBootstrapActions(
         logRetry('retryDataLoad', 'failure', get().error ?? undefined);
         return;
       }
-      await get().refresh({ force: true, manual: true });
+      await get().refresh({ repairCache: true, manual: true });
       if (get().refreshOutcome === 'failure') {
         logRetry('retryDataLoad', 'failure', get().error ?? 'refresh failed');
       } else {

@@ -1,17 +1,24 @@
 /** expo-router tab route names under `app/(tabs)/`. */
-export const TAB_ROUTES = ['index', 'browse', 'watchlist', 'trends', 'settings'] as const;
+export const TAB_ROUTES = ['index', 'browse', 'watchlist', 'trends', 'passthrough', 'settings'] as const;
 
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 
 /** Ionicons glyph names used on iOS tab bar. */
-export type TabIoniconName = 'home' | 'list' | 'star' | 'stats-chart' | 'settings';
+export type TabIoniconName =
+  | 'home'
+  | 'list'
+  | 'star'
+  | 'stats-chart'
+  | 'swap-vertical'
+  | 'settings';
 
 /** Human-readable labels for the bottom navigation bar. */
 export const TAB_LABELS: Record<TabRouteName, string> = {
   index: 'Home',
   browse: 'Browse',
   watchlist: 'Watchlist',
-  trends: 'Trends',
+  trends: 'Outlook',
+  passthrough: 'Response',
   settings: 'Settings',
 };
 
@@ -21,6 +28,7 @@ export const TAB_MATERIAL_SYMBOLS: Record<TabRouteName, string> = {
   browse: 'explore',
   watchlist: 'star',
   trends: 'monitoring',
+  passthrough: 'swap_vert',
   settings: 'settings',
 };
 
@@ -30,6 +38,7 @@ export const TAB_IONICONS: Record<TabRouteName, TabIoniconName> = {
   browse: 'list',
   watchlist: 'star',
   trends: 'stats-chart',
+  passthrough: 'swap-vertical',
   settings: 'settings',
 };
 

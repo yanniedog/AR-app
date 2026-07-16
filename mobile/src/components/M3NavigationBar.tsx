@@ -24,8 +24,8 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
         paddingTop: 8,
       }}
     >
-      {state.routes.map((route, index) => {
-        const focused = state.index === index;
+      {state.routes.filter((route) => route.name !== 'settings').map((route) => {
+        const focused = state.routes[state.index]?.key === route.key;
         const { options } = descriptors[route.key];
         const label = getTabLabel(route.name, options.title);
         const symbol = getTabMaterialSymbol(route.name);
@@ -63,11 +63,11 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
               style={{
                 alignItems: 'center',
                 justifyContent: 'center',
-                paddingHorizontal: 16,
+                paddingHorizontal: 8,
                 paddingVertical: 4,
                 borderRadius: theme.radius.pill,
                 backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
-                minWidth: 64,
+                minWidth: 0,
               }}
             >
               {symbol ? (
@@ -82,7 +82,7 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
                 numberOfLines={1}
                 style={{
                   marginTop: 4,
-                  fontSize: 12,
+                  fontSize: 11,
                   fontWeight: focused ? '600' : '500',
                   color: focused ? theme.colors.primary : theme.colors.textMuted,
                 }}
