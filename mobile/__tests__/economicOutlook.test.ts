@@ -1,9 +1,11 @@
 import {
   buildEconomicOutlookFromCsv,
   economicSignal,
+  loadEconomicOutlook,
   parseCashForecastCsv,
   parseRbaSeriesCsv,
 } from '../src/data/economicOutlook';
+import { cache } from '../src/data/cache';
 
 function seriesCsv(seriesId: string, values: [string, number][], publication = '30-Apr-2026') {
   return [
@@ -26,6 +28,8 @@ const cashCsv = [
 ].join('\n');
 
 describe('economic outlook', () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it('parses a named sparse RBA CSV series and publication date', () => {
     const parsed = parseRbaSeriesCsv(
       seriesCsv('TEST', [['31/12/2025', 3.2], ['31/03/2026', 2.9]]),
@@ -36,6 +40,12 @@ describe('economic outlook', () => {
       { date: '2025-12-31', value: 3.2 },
       { date: '2026-03-31', value: 2.9 },
     ]);
+  });
+
+  it('normalises single-digit RBA observation and publication dates', () => {
+    const parsed = parseRbaSeriesCsv(seriesCsv('TEST', [['1/6/2026', 3.1]], '5-May-2026'), 'TEST');
+    expect(parsed.publicationDate).toBe('2026-05-05');
+    expect(parsed.points).toEqual([{ date: '2026-06-01', value: 3.1 }]);
   });
 
   it('keeps only the latest economist survey vintage', () => {
@@ -83,5 +93,19 @@ describe('economic outlook', () => {
       'inflation_expectations',
     ]);
     expect(model.cashRateForecast?.points).toHaveLength(2);
+  });
+
+  it('surfaces a forced refresh failure instead of silently returning cached data', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
+      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
+      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
+      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
+      cashForecast: cashCsv,
+    }, '2026-07-16T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));
+
+    await expect(loadEconomicOutlook(true)).rejects.toThrow('offline');
   });
 });

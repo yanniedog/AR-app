@@ -90,16 +90,18 @@ function parseCsv(text: string): string[][] {
 
 function isoDate(value: string): string {
   const trimmed = value.trim();
-  const numeric = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(trimmed);
-  if (numeric) return `${numeric[3]}-${numeric[2]}-${numeric[1]}`;
+  const numeric = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (numeric) {
+    return `${numeric[3]}-${numeric[2].padStart(2, '0')}-${numeric[1].padStart(2, '0')}`;
+  }
 
-  const named = /^(\d{2})-([A-Za-z]{3})-(\d{4})$/.exec(trimmed);
+  const named = /^(\d{1,2})-([A-Za-z]{3})-(\d{4})$/.exec(trimmed);
   if (!named) return '';
   const month = {
     jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
     jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12',
   }[named[2].toLowerCase()];
-  return month ? `${named[3]}-${month}-${named[1]}` : '';
+  return month ? `${named[3]}-${month}-${named[1].padStart(2, '0')}` : '';
 }
 
 function finite(value: string): number | null {
@@ -342,7 +344,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       await cache.writeEconomicOutlook(fresh);
       return fresh;
     } catch (error) {
-      if (cached) return cached;
+      if (!force && cached) return cached;
       throw error;
     }
   })();
