@@ -94,7 +94,7 @@ export function Ribbon({
   }
 
   return (
-    <View accessible accessibilityRole="summary" accessibilityLabel={a11ySummary}>
+    <View accessible accessibilityRole="text" accessibilityLabel={a11ySummary}>
       <Row gap={compact ? 8 : 10} style={{ alignItems: 'stretch', flexWrap: compact ? 'nowrap' : 'wrap' }}>
         <Insight label="Best" value={formatRate(best)} detail="best advertised" compact={compact} accent={accent} />
         <Insight label="Typical" value={formatRate(typical)} detail="median advertised rate" compact={compact} />

@@ -142,6 +142,26 @@ describe('store refresh lifecycle', () => {
     expect(mockWriteBundle).toHaveBeenCalledTimes(1);
   });
 
+  it('repairs an unreadable cached bundle even when metadata is current', async () => {
+    useStore.setState({ core: null });
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockReadBundle.mockResolvedValue(null);
+    mockDownloadCore.mockResolvedValue({ text: JSON.stringify(remoteCore), core: remoteCore });
+
+    const changed = await useStore.getState().refresh({ manual: true });
+
+    expect(changed).toBe(true);
+    expect(mockReadBundle).toHaveBeenCalledTimes(1);
+    expect(mockDownloadCore).toHaveBeenCalledTimes(1);
+    expect(mockWriteBundle).toHaveBeenCalledTimes(1);
+  });
+
   it('sets source remote after download and clears refreshing', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,

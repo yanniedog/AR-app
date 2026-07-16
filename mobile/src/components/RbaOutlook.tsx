@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -235,35 +235,26 @@ export function RbaOutlook() {
   const [data, setData] = useState<EconomicOutlookPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mounted = useRef(true);
 
   const load = useCallback(async (force = false) => {
     setLoading(true);
     setError(null);
     try {
-      setData(await loadEconomicOutlook(force));
+      const value = await loadEconomicOutlook(force);
+      if (mounted.current) setData(value);
     } catch (err) {
-      setError(String((err as Error)?.message ?? err));
+      if (mounted.current) setError(String((err as Error)?.message ?? err));
     } finally {
-      setLoading(false);
+      if (mounted.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    let active = true;
-    void loadEconomicOutlook().then(
-      (value) => {
-        if (!active) return;
-        setData(value);
-        setLoading(false);
-      },
-      (err) => {
-        if (!active) return;
-        setError(String((err as Error)?.message ?? err));
-        setLoading(false);
-      },
-    );
-    return () => { active = false; };
-  }, []);
+    mounted.current = true;
+    void load(false);
+    return () => { mounted.current = false; };
+  }, [load]);
 
   return (
     <Card style={{ marginBottom: 16, borderColor: `${theme.colors.rba}55` }}>

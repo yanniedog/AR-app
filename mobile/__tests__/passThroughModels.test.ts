@@ -92,6 +92,7 @@ describe('pass-through presentation models', () => {
     expect(filterAndSortSectionRows(model, 'Mortgage', 'et', 'bank').map((r) => r.provider)).toEqual([
       'Beta',
     ]);
+    expect(filterAndSortSectionRows(model, 'Mortgage', 'zzz', 'bank')).toEqual([]);
   });
 
   test('explains customer impact with section-aware direction', () => {

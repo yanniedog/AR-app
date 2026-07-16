@@ -108,4 +108,18 @@ describe('economic outlook', () => {
 
     await expect(loadEconomicOutlook(true)).rejects.toThrow('offline');
   });
+
+  it('falls back to a stale cached outlook when a background refresh fails', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
+      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
+      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
+      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
+      cashForecast: cashCsv,
+    }, '2020-01-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));
+
+    await expect(loadEconomicOutlook(false)).resolves.toEqual(cached);
+  });
 });

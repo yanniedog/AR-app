@@ -20,6 +20,8 @@ const mockSyncHistoryFromDailyPayloads = jest.fn();
 const mockReadProductHistory = jest.fn();
 const mockWriteProductHistory = jest.fn();
 const mockSyncProductHistoryFromDailyPayloads = jest.fn();
+const mockGetSuitabilityIndex = jest.fn();
+const mockSuitabilityIndexMatches = jest.fn();
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -87,10 +89,10 @@ jest.mock('../src/data/productHistory', () => {
 });
 
 jest.mock('../src/data/suitabilityIndex', () => ({
-  getSuitabilityIndex: jest.fn(() => null),
+  getSuitabilityIndex: () => mockGetSuitabilityIndex(),
   clearSuitabilityIndex: jest.fn(),
   hydrateSuitabilityIndex: jest.fn(async () => null),
-  suitabilityIndexMatches: jest.fn(() => false),
+  suitabilityIndexMatches: (...args: unknown[]) => mockSuitabilityIndexMatches(...args),
   rebuildAndInstallSuitabilityIndex: jest.fn(async () => null),
 }));
 
@@ -170,6 +172,8 @@ describe('optional feature prefs', () => {
     mockWriteBundle.mockResolvedValue(undefined);
     mockReadProductHistory.mockResolvedValue(null);
     mockWriteProductHistory.mockResolvedValue(undefined);
+    mockGetSuitabilityIndex.mockReturnValue(null);
+    mockSuitabilityIndexMatches.mockReturnValue(false);
     mockDownloadDetails.mockResolvedValue({
       text: JSON.stringify(sampleDetails),
       details: sampleDetails,
@@ -209,6 +213,44 @@ describe('optional feature prefs', () => {
     expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
     expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
     expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+  });
+
+  it('warms details when notification filters need product-level fields', async () => {
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'sample',
+      savedAt: '2026-06-08T00:00:00Z',
+      coreSha: 'old-hash',
+      detailsSha: null,
+    });
+    mockDownloadCore.mockResolvedValue({ text: JSON.stringify(remoteCore), core: remoteCore });
+    mockGetSuitabilityIndex.mockReturnValue({ persisted: true });
+    mockSuitabilityIndexMatches.mockReturnValue(true);
+    store.setState({
+      prefs: { ...DEFAULT_PREFS, notificationsEnabled: true },
+      subscriptions: [
+        {
+          id: 'search:eligibility',
+          kind: 'search',
+          section: 'Mortgage',
+          path: [],
+          hierarchyScoped: false,
+          query: '',
+          filters: {
+            providers: [], rateTypes: [], lvrTiers: [], repaymentTypes: [], loanPurposes: [],
+            depositKinds: [], interestPayments: [], accountFeatures: [],
+            eligibilityCriteria: ['EMPLOYMENT_STATUS'], includeNonStandard: false,
+          },
+          label: 'Eligible mortgage',
+          createdAt: '2026-07-16T00:00:00.000Z',
+        },
+      ],
+    });
+
+    await store.getState().refresh({});
+
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
+    expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
   });
 
   it('ensureSearchIndex downloads when deep search is enabled', async () => {
