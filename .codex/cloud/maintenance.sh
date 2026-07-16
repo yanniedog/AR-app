@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-mobile_dir="$repo_root/mobile"
-marker="$mobile_dir/node_modules/.codex-package-lock.sha256"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
 
-if [[ ! -f "$mobile_dir/package-lock.json" ]]; then
-  echo "codex-cloud: mobile/package-lock.json is required" >&2
-  exit 1
-fi
+codex_cloud_init
+codex_cloud_validate_node
 
-expected="$(sha256sum "$mobile_dir/package-lock.json" | awk '{print $1}')"
+expected="$(codex_cloud_dependency_hash)"
 actual="$(cat "$marker" 2>/dev/null || true)"
 
 if [[ "$actual" == "$expected" ]] && [[ -d "$mobile_dir/node_modules" ]]; then

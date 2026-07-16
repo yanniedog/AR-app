@@ -1,23 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
-mobile_dir="$repo_root/mobile"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+source "$script_dir/lib.sh"
 
-if [[ ! -f "$mobile_dir/package-lock.json" ]]; then
-  echo "codex-cloud: mobile/package-lock.json is required" >&2
-  exit 1
-fi
-
-node_major="$(node -p 'process.versions.node.split(".")[0]')"
-if [[ "$node_major" != "24" ]]; then
-  echo "codex-cloud: Node.js 24 is required; found $(node --version)" >&2
-  exit 1
-fi
+codex_cloud_init
+codex_cloud_validate_node
 
 cd "$mobile_dir"
 npm ci --no-audit --no-fund
 
-lock_hash="$(sha256sum package-lock.json | awk '{print $1}')"
-printf '%s\n' "$lock_hash" > node_modules/.codex-package-lock.sha256
+lock_hash="$(codex_cloud_dependency_hash)"
+printf '%s\n' "$lock_hash" > "$marker"
 echo "codex-cloud: dependencies ready for $lock_hash"
