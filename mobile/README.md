@@ -47,4 +47,9 @@ __tests__/          selectors · format · notifications (jest-expo)
 | `npm run sample` | Rebuild `assets/sample/*` from a built payload dir |
 | `npm run icons` | Regenerate app icons |
 
+Preview APK releases do not use `expo.android.versionCode` verbatim. The GitHub
+workflow reads the rolling `app-apk-latest` manifest and assigns the next
+monotonic Android versionCode at build time; the value in `app.json` is the
+local/prebuild fallback.
+
 <!-- apk install QR refresh v1.0.42 b155 -->
