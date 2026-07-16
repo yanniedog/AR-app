@@ -99,7 +99,7 @@ export function Ribbon({
         <Insight label="Best" value={formatRate(best)} detail="best advertised" compact={compact} accent={accent} />
         <Insight label="Typical" value={formatRate(typical)} detail="median advertised rate" compact={compact} />
         <Insight
-          label="Advertised spread"
+          label={compact ? 'Spread' : 'Advertised spread'}
           value={gap == null ? '—' : `${gap} bp`}
           detail="best versus typical"
           compact={compact}

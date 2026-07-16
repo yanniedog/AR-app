@@ -172,7 +172,7 @@ function LenderResponseRow({
         accessibilityState={{ selected }}
         accessibilityLabel={`${selected ? 'Hide' : 'Show'} ${item.provider} on response chart`}
         style={{
-          minHeight: 40,
+          minHeight: 48,
           paddingHorizontal: 14,
           borderTopWidth: 1,
           borderTopColor: theme.colors.border,

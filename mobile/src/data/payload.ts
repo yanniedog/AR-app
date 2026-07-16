@@ -1,6 +1,6 @@
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
-import { gunzipSync, strFromU8 } from 'fflate';
+import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
 
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
@@ -23,6 +23,37 @@ import {
 
 /** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
 const YIELD_BEFORE_HEAVY_BYTES = 256 * 1024;
+const INFLATE_CHUNK_BYTES = 64 * 1024;
+
+/**
+ * Decompress a large gzip without monopolising the JS thread for the entire
+ * payload. Fflate's async worker API is unavailable in React Native, so feed
+ * its streaming inflater bounded compressed chunks and yield between pushes.
+ */
+export async function gunzipCooperatively(
+  bytes: Uint8Array,
+  chunkBytes: number = INFLATE_CHUNK_BYTES,
+): Promise<Uint8Array> {
+  const safeChunkBytes = Math.max(1, Math.floor(chunkBytes));
+  const outputs: Uint8Array[] = [];
+  let outputBytes = 0;
+  const stream = new Gunzip((chunk) => {
+    outputs.push(chunk);
+    outputBytes += chunk.length;
+  });
+  for (let offset = 0; offset < bytes.length; offset += safeChunkBytes) {
+    const end = Math.min(bytes.length, offset + safeChunkBytes);
+    stream.push(bytes.subarray(offset, end), end === bytes.length);
+    if (end < bytes.length) await yieldToUi();
+  }
+  const result = new Uint8Array(outputBytes);
+  let writeOffset = 0;
+  for (const chunk of outputs) {
+    result.set(chunk, writeOffset);
+    writeOffset += chunk.length;
+  }
+  return result;
+}
 
 export interface DownloadOpts {
   fileName?: string;
@@ -211,7 +242,11 @@ export async function downloadInflate(
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.
   const looksGzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  return looksGzipped ? strFromU8(gunzipSync(bytes)) : strFromU8(bytes);
+  if (!looksGzipped) return strFromU8(bytes);
+  const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES
+    ? await gunzipCooperatively(bytes)
+    : gunzipSync(bytes);
+  return strFromU8(inflated);
 }
 
 export interface CoreResult {

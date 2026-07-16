@@ -68,6 +68,8 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
                 borderRadius: theme.radius.pill,
                 backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
                 minWidth: 0,
+                width: '100%',
+                maxWidth: '100%',
               }}
             >
               {symbol ? (
@@ -85,6 +87,7 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
                   fontSize: 11,
                   fontWeight: focused ? '600' : '500',
                   color: focused ? theme.colors.primary : theme.colors.textMuted,
+                  textAlign: 'center',
                 }}
               >
                 {label}

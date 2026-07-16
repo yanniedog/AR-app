@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 
 import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from './interests';
 import { normalizeProfileFilters } from './profile';
@@ -16,6 +15,12 @@ import { createEnsureActions } from './storeEnsure';
 import { createUserActions } from './storeUser';
 import { DEFAULT_PREFS, type AppState } from './storeTypes';
 import type { SectionKey } from '../types';
+
+// Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
+// classic web script. Use the package's CommonJS condition until upstream's
+// React Native Web build no longer requires this compatibility path.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const { createJSONStorage, persist } = require('zustand/middleware') as typeof import('zustand/middleware');
 
 export { shouldWarmDetails } from './optionalPrefs';
 export type { Prefs, Status } from './storeTypes';

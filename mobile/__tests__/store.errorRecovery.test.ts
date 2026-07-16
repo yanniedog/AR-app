@@ -32,6 +32,8 @@ jest.mock('../src/data/cache', () => ({
     readProductHistory: jest.fn(async () => null),
     readOptionalMeta: jest.fn(async () => null),
     writeOptionalMeta: jest.fn(async () => {}),
+    readSuitabilityIndex: jest.fn(async () => null),
+    writeSuitabilityIndex: jest.fn(async () => {}),
   },
 }));
 

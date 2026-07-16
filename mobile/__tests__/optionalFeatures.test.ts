@@ -54,6 +54,8 @@ jest.mock('../src/data/cache', () => ({
     writeProductHistory: (...args: unknown[]) => mockWriteProductHistory(...args),
     clearProductHistory: jest.fn(async () => {}),
     updateMeta: jest.fn(async () => {}),
+    readSuitabilityIndex: jest.fn(async () => null),
+    writeSuitabilityIndex: jest.fn(async () => {}),
     clear: jest.fn(async () => {}),
   },
 }));
@@ -87,6 +89,8 @@ jest.mock('../src/data/productHistory', () => {
 jest.mock('../src/data/suitabilityIndex', () => ({
   getSuitabilityIndex: jest.fn(() => null),
   clearSuitabilityIndex: jest.fn(),
+  hydrateSuitabilityIndex: jest.fn(async () => null),
+  suitabilityIndexMatches: jest.fn(() => false),
   rebuildAndInstallSuitabilityIndex: jest.fn(async () => null),
 }));
 
@@ -166,6 +170,10 @@ describe('optional feature prefs', () => {
     mockWriteBundle.mockResolvedValue(undefined);
     mockReadProductHistory.mockResolvedValue(null);
     mockWriteProductHistory.mockResolvedValue(undefined);
+    mockDownloadDetails.mockResolvedValue({
+      text: JSON.stringify(sampleDetails),
+      details: sampleDetails,
+    });
   });
 
   it('defaults deep search and history ribbon off', () => {
@@ -177,7 +185,7 @@ describe('optional feature prefs', () => {
     expect(shouldWarmDetails(DEFAULT_PREFS, [])).toBe(false);
   });
 
-  it('refresh does not download details or optional assets by default', async () => {
+  it('builds suitability after core install without warming unrelated optional assets', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'sample',
@@ -190,9 +198,14 @@ describe('optional feature prefs', () => {
       core: remoteCore,
     });
 
+    mockDownloadDetails.mockImplementation(async () => {
+      expect(store.getState().refreshing).toBe(false);
+      return { text: JSON.stringify(sampleDetails), details: sampleDetails };
+    });
+
     await store.getState().refresh({});
 
-    expect(mockDownloadDetails).not.toHaveBeenCalled();
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
     expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
     expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
     expect(mockDownloadBankInsights).not.toHaveBeenCalled();
@@ -637,6 +650,15 @@ describe('optional feature prefs', () => {
   it('ensureBankInsights no-ops without Pro', async () => {
     await store.getState().ensureBankInsights();
     expect(mockDownloadBankInsights).not.toHaveBeenCalled();
+  });
+
+  it('shows a recoverable message instead of spinning forever on sample data', async () => {
+    store.setState({ prefs: proPrefs, source: 'sample', manifest: remoteManifest, core: remoteCore });
+
+    await store.getState().ensureBankInsights();
+
+    expect(store.getState().bankInsights).toBeNull();
+    expect(store.getState().bankInsightsError).toMatch(/latest online dataset/i);
   });
 
   it('ensureBankInsights downloads and installs the asset for Pro users', async () => {

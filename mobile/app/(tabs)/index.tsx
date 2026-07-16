@@ -17,6 +17,7 @@ import { conditionalNote } from '../../src/lib/rateQualifier';
 import { ShareQrModal } from '../../src/components/ShareQrModal';
 import { rowsUnder } from '../../src/data/taxonomy';
 import { useStore } from '../../src/data/store';
+import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -36,6 +37,7 @@ export default function Home() {
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
+  const warmDetails = useStore((s) => shouldWarmDetails(s.prefs, s.subscriptions));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
@@ -47,15 +49,15 @@ export default function Home() {
 
   const coreRevision = core ? `${core.run_date}:${coreSha}` : '';
   useEffect(() => {
-    if (!coreRevision || refreshing) return;
+    if (!coreRevision || refreshing || !warmDetails) return;
     let cancelled = false;
     let interaction: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
-    // Install the eligibility index after first paint. This preserves accurate
-    // profile filtering without putting an ~9 MB details parse on the ingest
-    // completion path that the user is waiting on.
+    // Details are optional and expensive. Warm them after first paint only for
+    // preferences or notification filters that genuinely need product detail;
+    // the default home path remains core-only after a new ingest.
     const timer = setTimeout(() => {
       interaction = InteractionManager.runAfterInteractions(() => {
-        if (!cancelled) void ensureDetails({ force: true });
+        if (!cancelled) void ensureDetails();
       });
     }, 900);
     return () => {
@@ -63,7 +65,7 @@ export default function Home() {
       clearTimeout(timer);
       interaction?.cancel();
     };
-  }, [coreRevision, refreshing, ensureDetails]);
+  }, [coreRevision, refreshing, warmDetails, ensureDetails]);
 
   const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
   const scrollRef = useRef<ScrollView>(null);

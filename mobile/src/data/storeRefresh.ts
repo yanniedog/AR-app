@@ -12,7 +12,12 @@ import { hapticRefreshComplete } from '../lib/haptics';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
-import { clearSuitabilityIndex, getSuitabilityIndex, rebuildAndInstallSuitabilityIndex } from './suitabilityIndex';
+import {
+  clearSuitabilityIndex,
+  getSuitabilityIndex,
+  rebuildAndInstallSuitabilityIndex,
+  suitabilityIndexMatches,
+} from './suitabilityIndex';
 import type { CorePayload, DetailsPayload } from '../types';
 
 type NotifyContext = {
@@ -50,6 +55,23 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // wait for that in-flight load so we do not race on detailsLoading.
           while (get().detailsLoading) await yieldToUi();
           await warmDetails();
+          const afterWarm = get();
+          const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
+          const afterDetailsSha = afterWarm.manifest?.files.details.sha256 ?? '';
+          if (
+            afterWarm.core &&
+            !suitabilityIndexMatches(
+              getSuitabilityIndex(),
+              afterWarm.core.run_date,
+              afterCoreSha,
+              afterDetailsSha,
+            )
+          ) {
+            // The suitability gate is required for standard-only product
+            // integrity. Build it after refreshing=false; subsequent startups
+            // hydrate the small persisted Set instead of parsing details again.
+            await get().ensureDetails({ force: true });
+          }
           // Suitability index is built inside ensureDetails; if details were
           // already warm (up-to-date refresh), rebuild from the live pair.
           const live = get();
@@ -189,7 +211,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         );
         // Publish core and clear the download UI immediately so touches are not
         // blocked by details warm / optional assets / change-diff work.
-        clearSuitabilityIndex();
+        // Retain a previous remote gate while the replacement is built. It is
+        // conservative for new product keys (hidden until classified) and
+        // avoids briefly exposing detail-only restricted products.
+        if (previousSource !== 'remote') clearSuitabilityIndex();
         set({
           core,
           manifest: remote,

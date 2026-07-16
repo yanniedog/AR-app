@@ -111,7 +111,7 @@ export interface AppState {
   favorites: string[];
   subscriptions: Subscription[];
 
-  bootstrap: () => Promise<void>;
+  bootstrap: (opts?: { skipRefresh?: boolean }) => Promise<void>;
   retryDataLoad: () => Promise<void>;
   loadSampleFallback: () => Promise<void>;
   /** Load core/manifest from disk cache if not already in memory (used by the headless task). */

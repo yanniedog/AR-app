@@ -26,6 +26,8 @@ jest.mock('../src/data/cache', () => ({
     readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
     updateMeta: jest.fn(async () => {}),
+    readSuitabilityIndex: jest.fn(async () => null),
+    writeSuitabilityIndex: jest.fn(async () => {}),
     clear: jest.fn(async () => {}),
   },
 }));

@@ -24,7 +24,11 @@ import {
   productHistorySyncState,
   readValidatedHistoryBanks,
 } from './storeHelpers';
-import { rebuildAndInstallSuitabilityIndex, getSuitabilityIndex } from './suitabilityIndex';
+import {
+  rebuildAndInstallSuitabilityIndex,
+  getSuitabilityIndex,
+  suitabilityIndexMatches,
+} from './suitabilityIndex';
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   return {
@@ -44,7 +48,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const meta = await cache.readMeta();
         const shaOk = !wantSha || meta?.detailsSha === wantSha;
         if (details && details.run_date === core.run_date && shaOk) {
-          if (!getSuitabilityIndex()) {
+          if (!suitabilityIndexMatches(getSuitabilityIndex(), core.run_date, coreSha, wantSha ?? '')) {
             await rebuildAndInstallSuitabilityIndex(
               core,
               details,
@@ -364,7 +368,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const { core, manifest, source, bankInsights } = get();
       if (!core) return;
       if (source !== 'remote' || !manifest) {
-        set({ bankInsights: null, bankInsightsError: null });
+        set({
+          bankInsights: null,
+          bankInsightsError: 'Bank response analysis needs the latest online dataset.',
+        });
         return;
       }
       const asset = manifest.files.bank_history;
