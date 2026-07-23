@@ -5,6 +5,9 @@ name: app-ci
 on:
   pull_request:
     paths:
+      # Release automation updates the README through a PR. Keep the required
+      # mobile-ci check available so that docs-only release PRs can merge.
+      - 'README.md'
       - 'mobile/**'
       - 'firebase/**'
       - 'scripts/**'
