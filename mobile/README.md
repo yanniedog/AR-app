@@ -52,4 +52,4 @@ workflow reads the rolling `app-apk-latest` manifest and assigns the next
 monotonic Android versionCode at build time; the value in `app.json` is the
 local/prebuild fallback.
 
-<!-- apk install QR refresh v1.0.42 b155 -->
+<!-- apk install QR refresh v1.0.43 b156 -->
