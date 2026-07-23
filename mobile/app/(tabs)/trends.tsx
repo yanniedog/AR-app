@@ -56,7 +56,7 @@ export default function Trends() {
   const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
   const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
-  useSuitabilityRevision();
+  const suitabilityRevision = useSuitabilityRevision();
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const historyRequestKey = useRef<string | null>(null);
   const insightsRequestKey = useRef<string | null>(null);
@@ -101,17 +101,16 @@ export default function Trends() {
 
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
-  const historyModel = useMemo(
-    () =>
-      core
-        ? selectBankHistoryChartModel(
-            { core, historyBanks, includeNonStandard },
-            activeSection,
-            'All',
-          )
-        : null,
-    [activeSection, core, historyBanks, includeNonStandard],
-  );
+  const historyModel = useMemo(() => {
+    void suitabilityRevision;
+    return core
+      ? selectBankHistoryChartModel(
+          { core, historyBanks, includeNonStandard },
+          activeSection,
+          'All',
+        )
+      : null;
+  }, [activeSection, core, historyBanks, includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
     const key = showHistoryRibbon ? core?.run_date ?? null : null;

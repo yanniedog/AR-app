@@ -26,6 +26,7 @@ import { hasProductSeries, productSeriesRecord } from '../../src/data/productHis
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
+import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBank } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
@@ -34,6 +35,7 @@ import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function ProductDetail() {
+  useSuitabilityRevision();
   const theme = useTheme();
   const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
   const productKey = key ?? '';

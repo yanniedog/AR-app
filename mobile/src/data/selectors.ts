@@ -9,7 +9,6 @@ import { productHasAllEligibilityCriteria } from './eligibility';
 import { productHasAllFeatures } from './features';
 import {
   effectiveFraction,
-  isBroadlyAvailable,
   sortByDisplayLabel,
   toFraction,
   visibleAccountRows,
@@ -199,10 +198,8 @@ export function filterRows(
   // Detail-text search is Pro-only via searchIndex. Do not build a runtime
   // detailSearchIndex from detailsProducts — that would unlock fee/feature
   // matching for non-Pro users whenever suitability details are loaded.
-    return rows.filter((row) => {
+  return visibleAccountRows(rows, filters.includeNonStandard, detailsProducts).filter((row) => {
     if (!row) return false;
-    if (!filters.includeNonStandard && !isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null))
-      return false;
     if (section && !passesDepositTokenFloor(row, section)) return false;
     if (
       !rowMatchesSearchQuery(

@@ -15,7 +15,8 @@ import {
   sanitizeRibbonPoint,
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
-import { isBroadlyAvailable, toFraction } from './format';
+import { toFraction, visibleAccountRows } from './format';
+import { getSuitabilityAllowed } from './suitabilityGate';
 import { rowsUnder } from './taxonomy';
 
 function medianOf(values: number[]): number | null {
@@ -92,11 +93,9 @@ function currentRibbonFallback(
   if (!sectionData) return null;
   const hierRows = rowsUnder(sectionData.rates, section, []);
   const visibleKeys = new Set(
-    hierRows
-      .filter((row) => !!row && (includeNonStandard || isBroadlyAvailable(row)))
-      .map((row) => row.product_key),
+    visibleAccountRows(hierRows, includeNonStandard).map((row) => row.product_key),
   );
-  if (!visibleKeys.size && sectionData.ribbon?.range?.min == null) return null;
+  if (!visibleKeys.size) return null;
 
   const date = String(core.run_date || '').slice(0, 10);
   if (!date) return null;
@@ -137,6 +136,7 @@ export function selectBankHistoryChartModel(
   try {
     const { core, historyBanks, historyCache, includeNonStandard = false } = state;
     if (!core) return null;
+    if (!includeNonStandard && getSuitabilityAllowed()?.size === 0) return null;
 
     const prebuilt = chartModelFromPrebuiltHistory(historyBanks, section, window);
     if (prebuilt?.dates.length) {
@@ -152,9 +152,7 @@ export function selectBankHistoryChartModel(
       const sectionRows = core.sections[section]?.rates ?? [];
       const hierRows = rowsUnder(sectionRows, section, []);
       const visibleKeys = new Set(
-        hierRows
-          .filter((row) => !!row && (includeNonStandard || isBroadlyAvailable(row)))
-          .map((row) => row.product_key),
+        visibleAccountRows(hierRows, includeNonStandard).map((row) => row.product_key),
       );
       const filtered = historyCache.rates.filter((row) => visibleKeys.has(row.product_key));
       const retained = normalizeTimelineDates(historyCache.run_dates || []);

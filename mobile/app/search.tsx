@@ -27,6 +27,7 @@ import { profileToFilters } from '../src/data/profile';
 import { findSearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
 import { useProPaywall } from '../src/hooks/useProPaywall';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct } from '../src/lib/nav';
@@ -68,6 +69,7 @@ export default function Search() {
   const setPref = useStore((s) => s.setPref);
   const subscribeSearch = useStore((s) => s.subscribeSearch);
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
+  const suitabilityRevision = useSuitabilityRevision();
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   // Re-run when core/details identity changes so Search warms after cold start
   // or a dataset refresh that cleared details (storeRefresh SHA swap).
@@ -105,7 +107,8 @@ export default function Search() {
   );
 
   const rows = useMemo(
-    () =>
+    () => (
+      void suitabilityRevision,
       queryAndSort(
         baseRows,
         { ...effectiveFilters, query },
@@ -116,8 +119,9 @@ export default function Search() {
         details?.products ?? null,
         deepSearchActive ? searchIndex : null,
         depositRankMetric,
-      ),
-    [baseRows, effectiveFilters, query, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric],
+      )
+    ),
+    [baseRows, effectiveFilters, query, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, suitabilityRevision],
   );
 
   const showDeepSearchHint =

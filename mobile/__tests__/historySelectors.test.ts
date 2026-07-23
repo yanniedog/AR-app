@@ -3,11 +3,14 @@ import {
   buildAggregateRibbonFromHistory,
   selectBankHistoryChartModel,
 } from '../src/data/historySelectors';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { BankHistoryCache, CorePayload, SectionKey } from '../src/types';
 
 const sample = core as CorePayload;
 
 describe('historySelectors', () => {
+  afterEach(() => setSuitabilityAllowed(null));
+
   it('falls back to current ribbon when history cache is absent', () => {
     const model = selectBankHistoryChartModel({ core: sample }, 'Mortgage');
     expect(model).not.toBeNull();
@@ -33,6 +36,19 @@ describe('historySelectors', () => {
     );
     expect(model?.dates).toEqual(['2026-05-01', '2026-05-15']);
     expect(model?.points.every((p) => p.min != null && p.max != null)).toBe(true);
+  });
+
+  it('keeps standard-only history closed until the refreshed gate is rebuilt', () => {
+    setSuitabilityAllowed(new Set());
+    expect(selectBankHistoryChartModel({ core: sample }, 'Mortgage')).toBeNull();
+
+    const allowedRow = sample.sections.Mortgage.rates.find((row) =>
+      row.taxonomy_path?.startsWith('HOME_LOAN'),
+    );
+    expect(allowedRow).toBeDefined();
+    setSuitabilityAllowed(new Set([allowedRow!.product_key]));
+
+    expect(selectBankHistoryChartModel({ core: sample }, 'Mortgage')).not.toBeNull();
   });
 
   it('aggregates rates per run date', () => {

@@ -13,6 +13,7 @@ import {
   rankFraction,
   sortRows,
 } from '../src/data/selectors';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { RateRow, SectionKey } from '../src/types';
 
 const mk = (over: Partial<RateRow>): RateRow => ({
@@ -35,6 +36,8 @@ const savings: RateRow[] = [
 ];
 
 describe('selectors', () => {
+  afterEach(() => setSuitabilityAllowed(null));
+
   test('bestRow picks lowest for loans, ignoring non-standard', () => {
     const best = bestRow(mortgage, 'Mortgage');
     expect(best?.product_key).toBe('A|1'); // 5.74% — the green 4.89% is non-standard
@@ -249,6 +252,13 @@ describe('selectors', () => {
     expect(filterRows(mortgage, { ...EMPTY_FILTERS, includeNonStandard: true })).toHaveLength(3);
     expect(filterRows(mortgage, { ...EMPTY_FILTERS, rateTypes: ['FIXED'] })).toHaveLength(1);
     expect(filterRows(mortgage, { ...EMPTY_FILTERS, query: 'green', includeNonStandard: true })).toHaveLength(1);
+  });
+
+  test('filterRows honors the rebuilt suitability gate for shared search paths', () => {
+    setSuitabilityAllowed(new Set(['B|1']));
+
+    expect(filterRows(mortgage, EMPTY_FILTERS).map((row) => row.product_key)).toEqual(['B|1']);
+    expect(filterRows(mortgage, { ...EMPTY_FILTERS, includeNonStandard: true })).toHaveLength(3);
   });
 
   test('filterRows excludes access-restricted products by name unless opted in', () => {
