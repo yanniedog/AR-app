@@ -2,6 +2,7 @@ import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleManifest } from '../src/data/sample';
 
 const mockReadBundle = jest.fn();
+const mockReadSuitabilityIndex = jest.fn();
 const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
@@ -32,7 +33,7 @@ jest.mock('../src/data/cache', () => ({
     readProductHistory: jest.fn(async () => null),
     readOptionalMeta: jest.fn(async () => null),
     writeOptionalMeta: jest.fn(async () => {}),
-    readSuitabilityIndex: jest.fn(async () => null),
+    readSuitabilityIndex: (...args: unknown[]) => mockReadSuitabilityIndex(...args),
     writeSuitabilityIndex: jest.fn(async () => {}),
   },
 }));
@@ -45,6 +46,10 @@ jest.mock('../src/data/payload', () => ({
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
+// eslint-disable-next-line import/first -- suitability modules share the mocked cache
+import { clearSuitabilityIndex } from '../src/data/suitabilityIndex';
+// eslint-disable-next-line import/first -- suitability modules share the mocked cache
+import { getSuitabilityAllowed, setSuitabilityAllowed } from '../src/data/suitabilityGate';
 
 const remoteManifest: Manifest = sampleManifest;
 const remoteCore: CorePayload = sampleCore;
@@ -71,7 +76,9 @@ function resetStore() {
 describe('store error recovery', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    clearSuitabilityIndex();
     resetStore();
+    mockReadSuitabilityIndex.mockResolvedValue(null);
     mockWriteBundle.mockResolvedValue(undefined);
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockDownloadCore.mockResolvedValue({
@@ -112,6 +119,64 @@ describe('store error recovery', () => {
     expect(state.error).toBeNull();
     expect(state.core).toEqual(remoteCore);
     expect(mockFetchManifest).toHaveBeenCalled();
+  });
+
+  it('fails closed on cached startup until the exact post-ingest suitability index is rebuilt', async () => {
+    const ensureDetails = jest.fn(async () => {});
+    setSuitabilityAllowed(new Set(['stale-product']));
+    useStore.setState({
+      status: 'idle',
+      core: null,
+      error: null,
+      ensureDetails,
+    });
+    mockReadBundle.mockResolvedValue({
+      meta: {
+        manifest: remoteManifest,
+        source: 'remote',
+        savedAt: '2026-07-24T00:00:00Z',
+        coreSha: remoteManifest.files.core.sha256,
+        detailsSha: null,
+      },
+      core: remoteCore,
+    });
+
+    await useStore.getState().bootstrap({ skipRefresh: true });
+
+    expect(getSuitabilityAllowed()).toEqual(new Set());
+    expect(ensureDetails).toHaveBeenCalledWith({ force: true });
+  });
+
+  it('uses an exact cached suitability index without closing or rebuilding it', async () => {
+    const ensureDetails = jest.fn(async () => {});
+    useStore.setState({
+      status: 'idle',
+      core: null,
+      error: null,
+      ensureDetails,
+    });
+    mockReadBundle.mockResolvedValue({
+      meta: {
+        manifest: remoteManifest,
+        source: 'remote',
+        savedAt: '2026-07-24T00:00:00Z',
+        coreSha: remoteManifest.files.core.sha256,
+        detailsSha: remoteManifest.files.details.sha256,
+      },
+      core: remoteCore,
+    });
+    mockReadSuitabilityIndex.mockResolvedValue({
+      schemaVersion: 1,
+      runDate: remoteCore.run_date,
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: remoteManifest.files.details.sha256,
+      allowed: ['allowed-product'],
+    });
+
+    await useStore.getState().bootstrap({ skipRefresh: true });
+
+    expect(getSuitabilityAllowed()).toEqual(new Set(['allowed-product']));
+    expect(ensureDetails).not.toHaveBeenCalled();
   });
 
   it('bootstrap sets error when sample seed write fails', async () => {
