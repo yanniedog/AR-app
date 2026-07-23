@@ -11,7 +11,11 @@ import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
-import { clearSuitabilityIndex, hydrateSuitabilityIndex } from './suitabilityIndex';
+import {
+  clearSuitabilityIndex,
+  closeSuitabilityGateUntilRebuild,
+  hydrateSuitabilityIndex,
+} from './suitabilityIndex';
 
 function reportSuitabilityExclusions(core: CorePayload | null | undefined): void {
   if (!core) return;
@@ -58,11 +62,18 @@ export function createBootstrapActions(
         if (bundle) {
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
-          await hydrateSuitabilityIndex(
+          const suitabilityIndex = await hydrateSuitabilityIndex(
             bundle.core.run_date,
             bundle.meta.coreSha,
             bundle.meta.manifest.files.details.sha256,
           );
+          if (!suitabilityIndex) {
+            // A fresh core can reach disk before its exact details-derived
+            // suitability index. Never expose the core-only fallback during
+            // that startup window: eligibility-only restrictions would appear
+            // on Home until the background details warm completed.
+            closeSuitabilityGateUntilRebuild();
+          }
           set({
             core: bundle.core,
             manifest: bundle.meta.manifest,
@@ -73,6 +84,12 @@ export function createBootstrapActions(
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
+          if (!suitabilityIndex) {
+            // Start with matching cached details when available, independent of
+            // the manifest refresh/network. ensureDetails claims the load
+            // synchronously, so the normal refresh warm safely coalesces.
+            void get().ensureDetails({ force: true });
+          }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           const readyCore = bundle.core;
           void yieldToUi().then(() => {
