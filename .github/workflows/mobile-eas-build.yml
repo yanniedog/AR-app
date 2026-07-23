@@ -45,7 +45,8 @@ permissions:
   contents: write
 
 concurrency:
-  group: mobile-eas-build-${{ github.run_id }}
+  # Shared with mobile-android-apk so preview APK publication is globally serial.
+  group: mobile-apk-release
   cancel-in-progress: false
 
 jobs:
@@ -84,7 +85,7 @@ jobs:
           node scripts/ensure-firebase-config.mjs
           node scripts/validate-firebase-package.mjs
 
-      - name: Bump Android versionCode from rolling manifest
+      - name: Advance APK version iteration from rolling manifest
         if: >-
           inputs.profile == 'preview' &&
           (inputs.platform == 'android' || inputs.platform == 'all')

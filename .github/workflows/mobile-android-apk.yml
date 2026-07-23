@@ -1,7 +1,7 @@
 # Free unlimited Android preview APK builds on GitHub Actions (no EAS cloud quota).
 # Produces a signed release APK and publishes to:
 #   Rolling:   app-apk-latest  (manifest app-apk-latest.json for in-app self-update)
-#   Versioned: app-v{semver}   e.g. app-v1.0.0 - title "Australian Rates app - {version} (Android)"
+#   Versioned: app-v{semver}   e.g. app-v1.0.0 - each APK advances the patch iteration
 # Both releases ship app-preview.apk, app-preview-qr.png, and install.html.
 #
 # Secrets (Settings - Secrets and variables - Actions):
@@ -29,7 +29,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: mobile-android-apk-${{ github.ref }}
+  # Shared with mobile-eas-build so two APK publishers cannot select the same
+  # next version from the rolling manifest.
+  group: mobile-apk-release
   cancel-in-progress: false
 
 jobs:
@@ -70,7 +72,7 @@ jobs:
           node scripts/ensure-firebase-config.mjs
           node scripts/validate-firebase-package.mjs
 
-      - name: Bump Android versionCode from rolling manifest
+      - name: Advance APK version iteration from rolling manifest
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: >-
