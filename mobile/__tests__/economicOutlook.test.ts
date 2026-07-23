@@ -197,6 +197,10 @@ describe('economic outlook', () => {
 
     expect(outlook.indicators).toHaveLength(4);
     expect(outlook.cashRateForecast).toBeNull();
+    expect(outlook.refreshStatus).toBe('partial');
+    expect(outlook.refreshErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('forecast unavailable')]),
+    );
   });
 
   it('updates healthy official series when one required table fails', async () => {
@@ -230,6 +234,7 @@ describe('economic outlook', () => {
       .toBe('2026-03-31');
     expect(outlook.indicators.find((item) => item.id === 'wages')?.points.at(-1)?.date)
       .toBe('2025-12-31');
+    expect(outlook.indicators.find((item) => item.id === 'wages')?.status).toBe('current');
     expect(outlook.refreshErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('Wage growth: wages unavailable')]),
     );
@@ -264,7 +269,7 @@ describe('economic outlook', () => {
 
     expect(outlook.refreshStatus).toBe('partial');
     expect(inflation?.points.at(-1)?.date).toBe('2026-06-30');
-    expect(inflation?.status).toBe('stale');
+    expect(inflation?.status).toBe('current');
     expect(outlook.refreshErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('older official response ignored')]),
     );

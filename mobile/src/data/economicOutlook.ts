@@ -507,14 +507,14 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
     const indicators = indicatorEntries.flatMap((entry) => {
       const previous = cachedById.get(entry.definition.id);
-      if (!entry.indicator) return previous ? [{ ...previous, status: 'stale' as const }] : [];
-      if (regressedIds.has(entry.definition.id) && previous) {
-        return [{ ...previous, status: 'stale' as const }];
-      }
+      if (!entry.indicator) return previous ? [previous] : [];
+      if (regressedIds.has(entry.definition.id) && previous) return [previous];
       return [newestIndicator(entry.indicator, previous)];
     });
     const acceptedCount = refreshedCount - regressedIds.size;
-    const refreshStatus = acceptedCount === INDICATOR_DEFINITIONS.length ? 'current' : 'partial';
+    const refreshStatus = acceptedCount === INDICATOR_DEFINITIONS.length && !forecastEntry.error
+      ? 'current'
+      : 'partial';
     const fresh: EconomicOutlookPayload = {
       schema_version: 2,
       fetchedAt: checkedAt,

@@ -1,5 +1,6 @@
 import {
   economicMomentumModel,
+  economicPointAtOrBefore,
   economicPointsInWindow,
   indicatorHistoryModel,
   inflationExpectationsModel,
@@ -110,6 +111,18 @@ describe('economic graph models', () => {
       '2024-12-31',
       '2025-12-31',
     ]);
+  });
+
+  it('does not expose a series value before its first observation date', () => {
+    const points = [
+      { date: '2026-06-01', value: 4.1 },
+      { date: '2026-12-01', value: 3.9 },
+    ];
+    expect(economicPointAtOrBefore(points, '2026-05-01')).toBeNull();
+    expect(economicPointAtOrBefore(points, '2026-09-01')).toEqual({
+      date: '2026-06-01',
+      value: 4.1,
+    });
   });
 
   it('builds a selected indicator history with latest change and target band', () => {

@@ -90,6 +90,17 @@ export function normalizeEconomicPoints(points: EconomicPoint[]): EconomicPoint[
     .map(([date, value]) => ({ date, value }));
 }
 
+export function economicPointAtOrBefore(
+  points: EconomicPoint[],
+  date: string,
+): EconomicPoint | null {
+  let selected: EconomicPoint | null = null;
+  for (const point of points) {
+    if (point.date <= date && (!selected || point.date > selected.date)) selected = point;
+  }
+  return selected;
+}
+
 export function economicPointsInWindow(
   points: EconomicPoint[],
   window: EconomicWindow,

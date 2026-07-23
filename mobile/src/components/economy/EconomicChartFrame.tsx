@@ -3,6 +3,7 @@ import { View, type GestureResponderEvent } from 'react-native';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
+import { economicPointAtOrBefore } from '../../data/economicModels';
 import { formatRunDate } from '../../data/format';
 import { buildLinePath } from '../../lib/chartSvgPaths';
 import { withAlpha } from '../../theme/colors';
@@ -43,14 +44,6 @@ function nearestIndex(values: number[], target: number): number {
     }
   }
   return best;
-}
-
-function nearestPointAtOrBefore(points: EconomicPoint[], date: string): EconomicPoint | null {
-  let selected: EconomicPoint | null = null;
-  for (const point of points) {
-    if (point.date <= date && (!selected || point.date > selected.date)) selected = point;
-  }
-  return selected ?? points[0] ?? null;
 }
 
 function buildStepPath(
@@ -119,7 +112,7 @@ export function EconomicChartFrame({
 
   const selectedValues = series.map((item) => ({
     ...item,
-    point: nearestPointAtOrBefore(item.points, activeDate),
+    point: economicPointAtOrBefore(item.points, activeDate),
   }));
   const selectedText = selectedValues
     .filter((item) => item.point)
