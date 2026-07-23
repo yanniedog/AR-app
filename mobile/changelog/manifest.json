@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-16T16:01:40.369Z",
+  "generated_at": "2026-07-23T10:42:10.637Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -407,6 +407,16 @@
         "docs: refresh Android install QR (v1.0.41 build 152) [skip ci] (#20)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.42"
+    },
+    {
+      "version": "1.0.43",
+      "date": "2026-07-23",
+      "summaryBullets": [
+        "fix: make response chart selection deterministic",
+        "fix: make response charts interactive and refresh filters",
+        "docs: refresh Android install QR (v1.0.42 build 155) [skip ci] (#24)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.43"
     }
   ]
 }

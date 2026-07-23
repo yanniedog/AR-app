@@ -4,7 +4,10 @@ import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 import { SECTIONS } from '../../constants';
 import type { MultiSectionPassThroughModel } from '../../data/bankInsights';
-import { sectionRows } from '../../data/passThroughModels';
+import {
+  sectionRows,
+  selectResponseScatterProvider,
+} from '../../data/passThroughModels';
 import { moveTone } from '../../lib/moveSemantics';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -18,10 +21,12 @@ export function ResponseScatter({
   model,
   section,
   selectedProvider,
+  onProviderSelect,
 }: {
   model: MultiSectionPassThroughModel;
   section: SectionKey;
   selectedProvider: string | null;
+  onProviderSelect: (provider: string) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -51,6 +56,18 @@ export function ResponseScatter({
   const x = (days: number) =>
     padL + (Math.min(model.windowDays, Math.max(0, days)) / model.windowDays) * timedW;
   const y = (bps: number) => padT + innerH / 2 - (bps / maxBps) * (innerH / 2);
+  const points = rows.map((item, index) => {
+    const net = item.response.netChangeBps ?? item.response.passedBps;
+    const hasTiming = item.response.passedBps !== 0 && item.response.daysToFirstMove != null;
+    const jitterX = ((index % 5) - 2) * (hasTiming ? 2.2 : 3.5);
+    const jitterY = ((Math.floor(index / 5) % 5) - 2) * 2;
+    return {
+      item,
+      net,
+      cx: (hasTiming ? x(item.response.daysToFirstMove!) : untimedX) + jitterX,
+      cy: y(net) + jitterY,
+    };
+  });
   const referenceY = y(model.decision.bps);
   const zeroY = y(0);
   const upperBound = model.decision.partialObservation ? ' Timing values are upper bounds.' : '';
@@ -65,7 +82,21 @@ export function ResponseScatter({
       style={{ width: '100%', height }}
     >
       {width > 0 ? (
-        <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+        <Svg
+          width={width}
+          height={height}
+          importantForAccessibility="no-hide-descendants"
+          onPress={(event) => {
+            const { locationX, locationY } = event.nativeEvent;
+            const provider = selectResponseScatterProvider(
+              points.map(({ item, cx, cy }) => ({ provider: item.provider, cx, cy })),
+              locationX,
+              locationY,
+              selectedProvider,
+            );
+            if (provider) onProviderSelect(provider);
+          }}
+        >
           <Line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke={theme.colors.border} />
           <Line x1={padL} y1={padT} x2={padL} y2={padT + innerH} stroke={theme.colors.border} />
           <Line
@@ -100,14 +131,8 @@ export function ResponseScatter({
           <SvgText x={4} y={padT + 4} fontSize={10} fill={theme.colors.textFaint}>+{Math.round(maxBps)}</SvgText>
           <SvgText x={18} y={zeroY + 4} fontSize={10} fill={theme.colors.textFaint}>0</SvgText>
           <SvgText x={4} y={padT + innerH + 4} fontSize={10} fill={theme.colors.textFaint}>−{Math.round(maxBps)}</SvgText>
-          {rows.map((item, index) => {
+          {points.map(({ item, net, cx, cy }) => {
             const selected = item.provider === selectedProvider;
-            const net = item.response.netChangeBps ?? item.response.passedBps;
-            const hasTiming = item.response.passedBps !== 0 && item.response.daysToFirstMove != null;
-            const jitterX = ((index % 5) - 2) * (hasTiming ? 2.2 : 3.5);
-            const jitterY = ((Math.floor(index / 5) % 5) - 2) * 2;
-            const cx = (hasTiming ? x(item.response.daysToFirstMove!) : untimedX) + jitterX;
-            const cy = y(net) + jitterY;
             const tone = net === 0 ? 'muted' : moveTone(section, net);
             const fill = tone === 'success'
               ? theme.colors.success
@@ -124,18 +149,8 @@ export function ResponseScatter({
                   opacity={selected ? 1 : 0.68}
                   stroke={selected ? theme.colors.text : theme.colors.surface}
                   strokeWidth={selected ? 2 : 1}
+                  pointerEvents="none"
                 />
-                {selected ? (
-                  <SvgText
-                    x={Math.min(width - 92, Math.max(padL, cx + 8))}
-                    y={Math.max(14, cy - 8)}
-                    fontSize={11}
-                    fontWeight="700"
-                    fill={theme.colors.text}
-                  >
-                    {item.provider.slice(0, 18)}
-                  </SvgText>
-                ) : null}
               </React.Fragment>
             );
           })}

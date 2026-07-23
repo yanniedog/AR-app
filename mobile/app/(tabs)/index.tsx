@@ -20,6 +20,7 @@ import { useStore } from '../../src/data/store';
 import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
+import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Home() {
@@ -39,6 +40,7 @@ export default function Home() {
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const warmDetails = useStore((s) => shouldWarmDetails(s.prefs, s.subscriptions));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const suitabilityRevision = useSuitabilityRevision();
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
 
@@ -75,32 +77,39 @@ export default function Home() {
   const sectionData = core?.sections[section];
   const hierRows = useMemo(() => rowsUnder(sectionRows ?? [], section, []), [sectionRows, section]);
   const stats = useMemo(
-    () => resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard, section, detailsProducts),
-    [sectionData, hierRows, includeNonStandard, section, detailsProducts],
+    () => {
+      void suitabilityRevision;
+      return resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard, section, detailsProducts);
+    },
+    [sectionData, hierRows, includeNonStandard, section, detailsProducts, suitabilityRevision],
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR).
   const profileCount = profileSectionCount(profileFilters, section);
   const best = useMemo(
-    () =>
-      bestRow(
+    () => {
+      void suitabilityRevision;
+      return bestRow(
         profileFilterRows(hierRows, profileFilters, section),
         section,
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
-      ),
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts],
+      );
+    },
+    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
   );
   const fallbackBest = useMemo(
-    () =>
-      bestRow(
+    () => {
+      void suitabilityRevision;
+      return bestRow(
         profileFilterRows(sectionRows ?? [], profileFilters, section),
         section,
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
-      ),
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts],
+      );
+    },
+    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];

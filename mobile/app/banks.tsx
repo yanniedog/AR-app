@@ -14,6 +14,7 @@ import { effectiveRate, formatRate } from '../src/data/format';
 import { groupByProvider, type ProviderGroup } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { openBank } from '../src/lib/nav';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -22,12 +23,15 @@ export default function Banks() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const suitabilityRevision = useSuitabilityRevision();
   const [query, setQuery] = useState('');
 
   const groups = useMemo(
-    () =>
-      core ? groupByProvider(core.sections, depositRankMetric, includeNonStandard, detailsProducts) : [],
-    [core, depositRankMetric, includeNonStandard, detailsProducts],
+    () => {
+      void suitabilityRevision;
+      return core ? groupByProvider(core.sections, depositRankMetric, includeNonStandard, detailsProducts) : [];
+    },
+    [core, depositRankMetric, includeNonStandard, detailsProducts, suitabilityRevision],
   );
   const filtered = useMemo(
     () => groups.filter((g) => g.provider.toLowerCase().includes(query.toLowerCase())),

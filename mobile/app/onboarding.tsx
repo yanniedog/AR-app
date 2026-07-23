@@ -19,6 +19,7 @@ import { rowsUnder } from '../src/data/taxonomy';
 import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifications';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 
 type OnboardingStep = 1 | 2 | 3;
 
@@ -102,6 +103,7 @@ export default function Onboarding() {
   const completeOnboarding = useStore((s) => s.completeOnboarding);
   const setPref = useStore((s) => s.setPref);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const suitabilityRevision = useSuitabilityRevision();
   const [step, setStep] = useState<OnboardingStep>(1);
   const [interests, setInterests] = useState<SectionKey[]>([...DEFAULT_INTERESTS]);
   const [profile, setProfile] = useState<ProfileFilters>({ ...EMPTY_PROFILE });
@@ -112,6 +114,7 @@ export default function Onboarding() {
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
 
   const snapshot = useMemo(() => {
+    void suitabilityRevision;
     if (!core) return null;
     const sectionRows = core.sections[section]?.rates;
     const sectionData = core.sections[section];
@@ -121,7 +124,7 @@ export default function Onboarding() {
     const heroRate = meta.lowerIsBetter ? stats.min : stats.max;
     const rba = section === 'Mortgage' ? core.rba?.at(-1)?.rate : undefined;
     return { best, heroRate, stats, rba, runDate: core.run_date };
-  }, [core, section, meta.lowerIsBetter, depositRankMetric]);
+  }, [core, section, meta.lowerIsBetter, depositRankMetric, suitabilityRevision]);
 
   const toggle = (key: SectionKey) => setInterests((prev) => toggleInterest(prev, key));
 
