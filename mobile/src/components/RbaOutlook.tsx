@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, View } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, Linking, View } from 'react-native';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 
 import {
+  ECONOMIC_RECHECK_MS,
   loadEconomicOutlook,
   RBA_ECONOMIC_TABLE_URL,
   type CashRateForecast,
@@ -12,8 +14,10 @@ import {
   type EconomicPoint,
   type EconomicPressure,
 } from '../data/economicOutlook';
-import { formatRunDate } from '../data/format';
+import { formatRunDate, relativeDate } from '../data/format';
+import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
+import { EconomicExplorer } from './economy';
 import { AppText, Badge, Button, Card, Row } from './ui';
 
 function pressureMeta(direction: EconomicPressure): {
@@ -133,10 +137,17 @@ function IndicatorCard({ indicator }: { indicator: EconomicIndicator }) {
         color={color}
         label={indicator.label}
       />
+      <AppText variant="tiny" color="textFaint">APP SIGNAL</AppText>
       <AppText variant="small" weight="800" style={{ color }}>{indicator.signal.label}</AppText>
       <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>{indicator.signal.explanation}</AppText>
+      {indicator.status === 'stale' ? (
+        <AppText variant="tiny" color="warning" weight="700" style={{ marginTop: 7 }}>
+          RELEASE OVERDUE — showing the latest verified observation
+        </AppText>
+      ) : null}
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 7 }}>
         Observation {formatRunDate(latest.date)} · released {formatRunDate(indicator.publicationDate)}
+        {' · '}checked {relativeDate(indicator.checkedAt)}
       </AppText>
     </View>
   );
@@ -188,7 +199,7 @@ function CashForecastChart({ forecast }: { forecast: CashRateForecast }) {
   );
 }
 
-function OutlookContent({ data }: { data: EconomicOutlookPayload }) {
+function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaEntry[] }) {
   const counts = data.indicators.reduce(
     (acc, indicator) => ({ ...acc, [indicator.signal.direction]: acc[indicator.signal.direction] + 1 }),
     { higher: 0, lower: 0, balanced: 0 },
@@ -201,7 +212,17 @@ function OutlookContent({ data }: { data: EconomicOutlookPayload }) {
         <Badge label={`${counts.balanced} mixed`} tone="muted" />
       </Row>
       <AppText variant="tiny" color="textMuted" style={{ marginTop: 7 }}>
-        This is a transparent pressure map, not a weighted prediction. The RBA balances inflation and full employment; no single release determines a decision.
+        Official source data with app interpretation. This pressure map is not a weighted prediction; no single release determines a decision.
+      </AppText>
+      <View style={{ marginTop: 16 }}>
+        <AppText variant="h3">Economic explorer</AppText>
+        <AppText variant="tiny" color="textMuted" style={{ marginTop: 2, marginBottom: 10 }}>
+          Tap a lens, then tap or scrub any chart to inspect exact observations.
+        </AppText>
+        <EconomicExplorer data={data} rba={rba} />
+      </View>
+      <AppText variant="small" weight="700" style={{ marginTop: 18 }}>
+        All indicators
       </AppText>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 14 }}>
         {data.indicators.map((indicator) => <IndicatorCard key={indicator.id} indicator={indicator} />)}
@@ -221,16 +242,25 @@ function OutlookContent({ data }: { data: EconomicOutlookPayload }) {
         </View>
       ) : null}
       <Row style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-        <AppText variant="tiny" color="textFaint" style={{ flex: 1 }}>
-          Sparse official RBA/ABS series · cached independently from the daily bank ingest
-        </AppText>
+        <View style={{ flex: 1 }}>
+          <AppText variant="tiny" color="textFaint">
+            Checked {relativeDate(data.checkedAt)} · cached independently from the daily bank ingest
+          </AppText>
+          {data.refreshStatus && data.refreshStatus !== 'current' ? (
+            <AppText variant="tiny" color={data.refreshStatus === 'offline' ? 'warning' : 'textMuted'}>
+              {data.refreshStatus === 'offline'
+                ? 'Could not verify the latest release · showing last-known official data'
+                : 'Some official series could not be refreshed · last-known values retained'}
+            </AppText>
+          ) : null}
+        </View>
         <Button title="Sources" variant="ghost" onPress={() => void Linking.openURL(RBA_ECONOMIC_TABLE_URL)} />
       </Row>
     </>
   );
 }
 
-export function RbaOutlook() {
+export function RbaOutlook({ rba }: { rba: RbaEntry[] }) {
   const theme = useTheme();
   const [data, setData] = useState<EconomicOutlookPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -250,11 +280,19 @@ export function RbaOutlook() {
     }
   }, []);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     mounted.current = true;
     void load(false);
-    return () => { mounted.current = false; };
-  }, [load]);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load(false);
+    });
+    const timer = setInterval(() => void load(false), ECONOMIC_RECHECK_MS);
+    return () => {
+      mounted.current = false;
+      subscription.remove();
+      clearInterval(timer);
+    };
+  }, [load]));
 
   return (
     <Card style={{ marginBottom: 16, borderColor: `${theme.colors.rba}55` }}>
@@ -265,7 +303,19 @@ export function RbaOutlook() {
             Economic signals that shape the next rate decision
           </AppText>
         </View>
-        <Badge label="OFFICIAL DATA" tone="primary" />
+        <Badge label="OFFICIAL SOURCES" tone="primary" />
+      </Row>
+      <Row style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+        <AppText variant="tiny" color="textFaint">
+          Rechecks on entry, foreground and every 15 minutes
+        </AppText>
+        <Button
+          title="Refresh"
+          icon="refresh"
+          variant="ghost"
+          onPress={() => void load(true)}
+          loading={loading && !!data}
+        />
       </Row>
       {loading && !data ? (
         <View style={{ minHeight: 120, alignItems: 'center', justifyContent: 'center' }}>
@@ -273,7 +323,14 @@ export function RbaOutlook() {
           <AppText variant="tiny" color="textMuted" style={{ marginTop: 8 }}>Loading small RBA tables…</AppText>
         </View>
       ) : data ? (
-        <OutlookContent data={data} />
+        <>
+          <OutlookContent data={data} rba={rba} />
+          {error ? (
+            <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
+              Could not verify the latest data: {error}
+            </AppText>
+          ) : null}
+        </>
       ) : (
         <View style={{ marginTop: 14 }}>
           <AppText variant="small" color="textMuted">
