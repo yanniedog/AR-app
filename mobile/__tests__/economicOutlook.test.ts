@@ -120,7 +120,14 @@ describe('economic outlook', () => {
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));
 
-    await expect(loadEconomicOutlook(false)).resolves.toEqual(cached);
+    await expect(loadEconomicOutlook(false)).resolves.toMatchObject({
+      fetchedAt: cached.fetchedAt,
+      indicators: cached.indicators,
+      refreshStatus: 'offline',
+      refreshErrors: expect.arrayContaining([
+        expect.stringContaining('Underlying inflation: offline'),
+      ]),
+    });
   });
 
   it('keeps the four policy indicators when the optional cash forecast fails', async () => {
@@ -143,5 +150,76 @@ describe('economic outlook', () => {
 
     expect(outlook.indicators).toHaveLength(4);
     expect(outlook.cashRateForecast).toBeNull();
+  });
+
+  it('updates healthy official series when one required table fails', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['31/12/2025', 3.3]]),
+      labour: seriesCsv('GLFSURSA', [['31/12/2025', 4.0]]),
+      wages: seriesCsv('GWPIYP', [['31/12/2025', 3.4]]),
+      expectations: seriesCsv('GMAREXPY', [['31/12/2025', 2.8]]),
+      cashForecast: cashCsv,
+    }, '2026-01-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('h4-data')) throw new Error('wages unavailable');
+      const csv = url.includes('g1-data')
+        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        : url.includes('g3-data')
+          ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+          : url.includes('h5-data')
+            ? seriesCsv('GLFSURSA', [['31/03/2026', 4.1]])
+            : cashCsv;
+      return { ok: true, text: async () => csv } as Response;
+    });
+
+    const outlook = await loadEconomicOutlook(false);
+
+    expect(outlook.refreshStatus).toBe('partial');
+    expect(outlook.indicators).toHaveLength(4);
+    expect(outlook.indicators.find((item) => item.id === 'underlying_inflation')?.points.at(-1)?.date)
+      .toBe('2026-03-31');
+    expect(outlook.indicators.find((item) => item.id === 'wages')?.points.at(-1)?.date)
+      .toBe('2025-12-31');
+    expect(outlook.refreshErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('Wage growth: wages unavailable')]),
+    );
+  });
+
+  it('does not replace a newer cached observation with an older official response', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['30/06/2026', 3.0]]),
+      labour: seriesCsv('GLFSURSA', [['30/06/2026', 4.1]]),
+      wages: seriesCsv('GWPIYP', [['30/06/2026', 3.2]]),
+      expectations: seriesCsv('GMAREXPY', [['30/06/2026', 2.7]]),
+      cashForecast: cashCsv,
+    }, '2026-07-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      const csv = url.includes('g1-data')
+        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        : url.includes('g3-data')
+          ? seriesCsv('GMAREXPY', [['30/06/2026', 2.7]])
+          : url.includes('h5-data')
+            ? seriesCsv('GLFSURSA', [['30/06/2026', 4.1]])
+            : url.includes('h4-data')
+              ? seriesCsv('GWPIYP', [['30/06/2026', 3.2]])
+              : cashCsv;
+      return { ok: true, text: async () => csv } as Response;
+    });
+
+    const outlook = await loadEconomicOutlook(true);
+    const inflation = outlook.indicators.find((item) => item.id === 'underlying_inflation');
+
+    expect(outlook.refreshStatus).toBe('partial');
+    expect(inflation?.points.at(-1)?.date).toBe('2026-06-30');
+    expect(inflation?.status).toBe('stale');
+    expect(outlook.refreshErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('older official response ignored')]),
+    );
   });
 });

@@ -21,6 +21,10 @@ export interface EconomicIndicator {
   points: EconomicPoint[];
   targetBand?: [number, number];
   signal: EconomicSignal;
+  sourceUrl?: string;
+  checkedAt?: string;
+  frequency?: 'monthly' | 'quarterly';
+  status?: 'current' | 'stale';
 }
 
 export interface CashRateForecast {
@@ -30,15 +34,21 @@ export interface CashRateForecast {
 }
 
 export interface EconomicOutlookPayload {
-  schema_version: 1;
+  schema_version: 1 | 2;
   fetchedAt: string;
+  checkedAt?: string;
+  refreshStatus?: 'current' | 'partial' | 'offline';
+  refreshErrors?: string[];
   indicators: EconomicIndicator[];
   cashRateForecast: CashRateForecast | null;
 }
 
 const RBA_TABLE_BASE = 'https://www.rba.gov.au/statistics/tables/csv';
 export const RBA_ECONOMIC_TABLE_URL = 'https://www.rba.gov.au/statistics/tables/';
-const CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+/** Active sessions re-check often enough to pick up an official release promptly. */
+export const ECONOMIC_RECHECK_MS = 15 * 60 * 1000;
+const MONTHLY_STALE_MS = 45 * 24 * 60 * 60 * 1000;
+const QUARTERLY_STALE_MS = 120 * 24 * 60 * 60 * 1000;
 
 const URLS = {
   inflation: `${RBA_TABLE_BASE}/g1-data.csv`,
@@ -52,6 +62,60 @@ interface ParsedSeries {
   publicationDate: string;
   points: EconomicPoint[];
 }
+
+type RequiredSourceKey = 'inflation' | 'expectations' | 'labour' | 'wages';
+
+interface IndicatorDefinition {
+  source: RequiredSourceKey;
+  id: EconomicIndicator['id'];
+  label: string;
+  shortLabel: string;
+  seriesId: string;
+  limit: number;
+  frequency: EconomicIndicator['frequency'];
+  targetBand?: [number, number];
+}
+
+const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
+  {
+    source: 'inflation',
+    id: 'underlying_inflation',
+    label: 'Underlying inflation',
+    shortLabel: 'Trimmed mean · year-ended',
+    seriesId: 'GCPIOCPMTMYP',
+    limit: 20,
+    frequency: 'quarterly',
+    targetBand: [2, 3],
+  },
+  {
+    source: 'labour',
+    id: 'unemployment',
+    label: 'Unemployment',
+    shortLabel: 'Seasonally adjusted',
+    seriesId: 'GLFSURSA',
+    limit: 30,
+    frequency: 'monthly',
+  },
+  {
+    source: 'wages',
+    id: 'wages',
+    label: 'Wage growth',
+    shortLabel: 'WPI · year-ended',
+    seriesId: 'GWPIYP',
+    limit: 20,
+    frequency: 'quarterly',
+  },
+  {
+    source: 'expectations',
+    id: 'inflation_expectations',
+    label: 'Inflation expectations',
+    shortLabel: 'Economists · 1 year ahead',
+    seriesId: 'GMAREXPY',
+    limit: 20,
+    frequency: 'quarterly',
+    targetBand: [2, 3],
+  },
+];
 
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
@@ -121,11 +185,13 @@ export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries 
   const column = ids.indexOf(seriesId);
   if (column < 1) throw new Error(`RBA series ${seriesId} is unavailable`);
   const publication = rowByLabel(rows, 'Publication date')?.[column] ?? '';
-  const points = rows.flatMap((row) => {
+  const parsedPoints = rows.flatMap((row) => {
     const date = isoDate(row[0] ?? '');
     const value = finite(row[column] ?? '');
     return date && value != null ? [{ date, value }] : [];
   });
+  const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
+    .sort((a, b) => a.date.localeCompare(b.date));
   if (!points.length) throw new Error(`RBA series ${seriesId} has no observations`);
   return { publicationDate: isoDate(publication), points };
 }
@@ -168,6 +234,17 @@ function round(value: number): number {
 function pointDelta(points: EconomicPoint[], periodsBack: number): number | null {
   if (points.length <= periodsBack) return null;
   return round(points[points.length - 1].value - points[points.length - 1 - periodsBack].value);
+}
+
+function indicatorIsStale(
+  publicationDate: string,
+  frequency: EconomicIndicator['frequency'],
+  nowMs = Date.now(),
+): boolean {
+  const publishedMs = Date.parse(`${publicationDate}T00:00:00Z`);
+  if (!Number.isFinite(publishedMs)) return true;
+  const limit = frequency === 'monthly' ? MONTHLY_STALE_MS : QUARTERLY_STALE_MS;
+  return nowMs - publishedMs > limit;
 }
 
 export function economicSignal(
@@ -256,6 +333,8 @@ export function buildEconomicOutlookFromCsv(input: {
     shortLabel: string;
     parsed: ParsedSeries;
     limit: number;
+    frequency: EconomicIndicator['frequency'];
+    sourceUrl: string;
     targetBand?: [number, number];
   }[] = [
     {
@@ -264,6 +343,8 @@ export function buildEconomicOutlookFromCsv(input: {
       shortLabel: 'Trimmed mean · year-ended',
       parsed: parseRbaSeriesCsv(input.inflation, 'GCPIOCPMTMYP'),
       limit: 20,
+      frequency: 'quarterly',
+      sourceUrl: URLS.inflation,
       targetBand: [2, 3],
     },
     {
@@ -272,6 +353,8 @@ export function buildEconomicOutlookFromCsv(input: {
       shortLabel: 'Seasonally adjusted',
       parsed: parseRbaSeriesCsv(input.labour, 'GLFSURSA'),
       limit: 30,
+      frequency: 'monthly',
+      sourceUrl: URLS.labour,
     },
     {
       id: 'wages',
@@ -279,6 +362,8 @@ export function buildEconomicOutlookFromCsv(input: {
       shortLabel: 'WPI · year-ended',
       parsed: parseRbaSeriesCsv(input.wages, 'GWPIYP'),
       limit: 20,
+      frequency: 'quarterly',
+      sourceUrl: URLS.wages,
     },
     {
       id: 'inflation_expectations',
@@ -286,6 +371,8 @@ export function buildEconomicOutlookFromCsv(input: {
       shortLabel: 'Economists · 1 year ahead',
       parsed: parseRbaSeriesCsv(input.expectations, 'GMAREXPY'),
       limit: 20,
+      frequency: 'quarterly',
+      sourceUrl: URLS.expectations,
       targetBand: [2, 3],
     },
   ];
@@ -299,14 +386,78 @@ export function buildEconomicOutlookFromCsv(input: {
       points,
       targetBand: definition.targetBand,
       signal: economicSignal(definition.id, points),
+      sourceUrl: definition.sourceUrl,
+      checkedAt: fetchedAt,
+      frequency: definition.frequency,
+      status: indicatorIsStale(definition.parsed.publicationDate, definition.frequency)
+        ? 'stale' as const
+        : 'current' as const,
     };
   });
   return {
-    schema_version: 1,
+    schema_version: 2,
     fetchedAt,
+    checkedAt: fetchedAt,
+    refreshStatus: 'current',
     indicators,
     cashRateForecast: input.cashForecast ? parseCashForecastCsv(input.cashForecast) : null,
   };
+}
+
+function buildIndicator(
+  definition: IndicatorDefinition,
+  parsed: ParsedSeries,
+  checkedAt: string,
+): EconomicIndicator {
+  const points = parsed.points.slice(-definition.limit);
+  return {
+    id: definition.id,
+    label: definition.label,
+    shortLabel: definition.shortLabel,
+    publicationDate: parsed.publicationDate,
+    points,
+    targetBand: definition.targetBand,
+    signal: economicSignal(definition.id, points),
+    sourceUrl: URLS[definition.source],
+    checkedAt,
+    frequency: definition.frequency,
+    status: indicatorIsStale(parsed.publicationDate, definition.frequency) ? 'stale' : 'current',
+  };
+}
+
+function normalizeCachedOutlook(
+  cached: EconomicOutlookPayload | null,
+): EconomicOutlookPayload | null {
+  if (!cached?.indicators?.length) return null;
+  const checkedAt = cached.checkedAt || cached.fetchedAt;
+  const indicators = cached.indicators.map((indicator) => {
+    const definition = INDICATOR_DEFINITIONS.find((item) => item.id === indicator.id);
+    const frequency = indicator.frequency ?? definition?.frequency ?? 'quarterly';
+    return {
+      ...indicator,
+      sourceUrl: indicator.sourceUrl || (definition ? URLS[definition.source] : RBA_ECONOMIC_TABLE_URL),
+      checkedAt: indicator.checkedAt || checkedAt,
+      frequency,
+      status: indicatorIsStale(indicator.publicationDate, frequency) ? 'stale' as const : 'current' as const,
+    };
+  });
+  return {
+    ...cached,
+    schema_version: 2,
+    checkedAt,
+    refreshStatus: cached.refreshStatus ?? 'current',
+    indicators,
+  };
+}
+
+function newestIndicator(
+  fresh: EconomicIndicator,
+  cached: EconomicIndicator | undefined,
+): EconomicIndicator {
+  if (!cached) return fresh;
+  const freshDate = fresh.points.at(-1)?.date ?? '';
+  const cachedDate = cached.points.at(-1)?.date ?? '';
+  return freshDate >= cachedDate ? fresh : cached;
 }
 
 async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
@@ -327,26 +478,113 @@ async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
 let inFlight: Promise<EconomicOutlookPayload> | null = null;
 
 export async function loadEconomicOutlook(force = false): Promise<EconomicOutlookPayload> {
-  if (inFlight && !force) return inFlight;
+  if (inFlight) return inFlight;
   const run = (async () => {
-    const cached = await cache.readEconomicOutlook();
-    const cacheAge = cached ? Date.now() - Date.parse(cached.fetchedAt) : Number.POSITIVE_INFINITY;
-    if (!force && cached && Number.isFinite(cacheAge) && cacheAge < CACHE_MAX_AGE_MS) return cached;
-    try {
-      const [inflation, expectations, labour, wages, cashForecast] = await Promise.all([
-        fetchText(URLS.inflation),
-        fetchText(URLS.expectations),
-        fetchText(URLS.labour),
-        fetchText(URLS.wages),
-        fetchText(URLS.cashForecast, 5_000).catch(() => null),
-      ]);
-      const fresh = buildEconomicOutlookFromCsv({ inflation, expectations, labour, wages, cashForecast });
-      await cache.writeEconomicOutlook(fresh);
-      return fresh;
-    } catch (error) {
-      if (!force && cached) return cached;
-      throw error;
+    const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
+    const cacheAge = cached
+      ? Date.now() - Date.parse(cached.checkedAt ?? cached.fetchedAt)
+      : Number.POSITIVE_INFINITY;
+    if (
+      !force &&
+      cached?.refreshStatus === 'current' &&
+      Number.isFinite(cacheAge) &&
+      cacheAge < ECONOMIC_RECHECK_MS
+    ) {
+      return cached;
     }
+
+    const checkedAt = new Date().toISOString();
+    const entries = await Promise.all([
+      ...INDICATOR_DEFINITIONS.map(async (definition) => {
+        try {
+          const text = await fetchText(URLS[definition.source]);
+          return {
+            definition,
+            indicator: buildIndicator(
+              definition,
+              parseRbaSeriesCsv(text, definition.seriesId),
+              checkedAt,
+            ),
+            error: null,
+          };
+        } catch (error) {
+          return {
+            definition,
+            indicator: null,
+            error: `${definition.label}: ${String((error as Error)?.message ?? error)}`,
+          };
+        }
+      }),
+      (async () => {
+        try {
+          return {
+            forecast: parseCashForecastCsv(await fetchText(URLS.cashForecast, 5_000)),
+            error: null,
+          };
+        } catch (error) {
+          return {
+            forecast: null,
+            error: `Cash-rate forecast: ${String((error as Error)?.message ?? error)}`,
+          };
+        }
+      })(),
+    ]);
+
+    const indicatorEntries = entries.slice(0, INDICATOR_DEFINITIONS.length) as {
+      definition: IndicatorDefinition;
+      indicator: EconomicIndicator | null;
+      error: string | null;
+    }[];
+    const forecastEntry = entries.at(-1) as { forecast: CashRateForecast | null; error: string | null };
+    const errors = indicatorEntries.flatMap((entry) => (entry.error ? [entry.error] : []));
+    if (forecastEntry.error) errors.push(forecastEntry.error);
+    const refreshedCount = indicatorEntries.filter((entry) => entry.indicator).length;
+
+    if (refreshedCount === 0) {
+      if (force || !cached) {
+        throw new Error(errors.join(' · ') || 'Official economic data could not be refreshed');
+      }
+      return {
+        ...cached,
+        checkedAt,
+        refreshStatus: 'offline' as const,
+        refreshErrors: errors,
+      };
+    }
+
+    const cachedById = new Map(cached?.indicators.map((indicator) => [indicator.id, indicator]));
+    const regressedIds = new Set<EconomicIndicator['id']>();
+    for (const entry of indicatorEntries) {
+      if (!entry.indicator) continue;
+      const previous = cachedById.get(entry.definition.id);
+      const freshDate = entry.indicator.points.at(-1)?.date ?? '';
+      const previousDate = previous?.points.at(-1)?.date ?? '';
+      if (previous && freshDate < previousDate) {
+        regressedIds.add(entry.definition.id);
+        errors.push(`${entry.definition.label}: older official response ignored`);
+      }
+    }
+    const indicators = indicatorEntries.flatMap((entry) => {
+      const previous = cachedById.get(entry.definition.id);
+      if (!entry.indicator) return previous ? [{ ...previous, status: 'stale' as const }] : [];
+      if (regressedIds.has(entry.definition.id) && previous) {
+        return [{ ...previous, status: 'stale' as const }];
+      }
+      return [newestIndicator(entry.indicator, previous)];
+    });
+    const acceptedCount = refreshedCount - regressedIds.size;
+    const refreshStatus = acceptedCount === INDICATOR_DEFINITIONS.length ? 'current' : 'partial';
+    const fresh: EconomicOutlookPayload = {
+      schema_version: 2,
+      fetchedAt: checkedAt,
+      checkedAt,
+      refreshStatus,
+      refreshErrors: errors.length ? errors : undefined,
+      indicators,
+      cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
+    };
+    await cache.writeEconomicOutlook(fresh);
+    return fresh;
   })();
   const tracked = run.finally(() => {
     if (inFlight === tracked) inFlight = null;

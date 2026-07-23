@@ -206,7 +206,7 @@ export default function Trends() {
         </Card>
       )}
 
-      <RbaOutlook />
+      <RbaOutlook rba={core.rba} />
 
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
