@@ -417,9 +417,35 @@ let inFlight: {
   promise: Promise<EconomicOutlookPayload>;
   force: boolean;
 } | null = null;
+let requestSequence = 0;
+let latestSuccessful: {
+  sequence: number;
+  payload: EconomicOutlookPayload;
+} | null = null;
+let commitQueue: Promise<void> = Promise.resolve();
+
+async function commitEconomicResult(
+  sequence: number,
+  payload: EconomicOutlookPayload,
+  persist: boolean,
+): Promise<EconomicOutlookPayload> {
+  let accepted = payload;
+  const commit = commitQueue.then(async () => {
+    if (latestSuccessful && latestSuccessful.sequence > sequence) {
+      accepted = latestSuccessful.payload;
+      return;
+    }
+    if (persist) await cache.writeEconomicOutlook(payload);
+    latestSuccessful = { sequence, payload };
+  });
+  commitQueue = commit.catch(() => undefined);
+  await commit;
+  return accepted;
+}
 
 export async function loadEconomicOutlook(force = false): Promise<EconomicOutlookPayload> {
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
+  const sequence = ++requestSequence;
   const run = (async () => {
     const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
     const cacheAge = cached
@@ -431,7 +457,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       Number.isFinite(cacheAge) &&
       cacheAge < ECONOMIC_RECHECK_MS
     ) {
-      return cached;
+      return commitEconomicResult(sequence, cached, false);
     }
 
     const checkedAt = new Date().toISOString();
@@ -485,12 +511,12 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       if (force || !cached) {
         throw new Error(errors.join(' · ') || 'Official economic data could not be refreshed');
       }
-      return {
+      return commitEconomicResult(sequence, {
         ...cached,
         checkedAt,
         refreshStatus: 'offline' as const,
         refreshErrors: errors,
-      };
+      }, false);
     }
 
     const cachedById = new Map(cached?.indicators.map((indicator) => [indicator.id, indicator]));
@@ -524,8 +550,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       indicators,
       cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
     };
-    await cache.writeEconomicOutlook(fresh);
-    return fresh;
+    return commitEconomicResult(sequence, fresh, true);
   })();
   const tracked = run.finally(() => {
     if (inFlight?.promise === tracked) inFlight = null;

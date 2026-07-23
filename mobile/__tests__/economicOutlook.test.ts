@@ -156,6 +156,59 @@ describe('economic outlook', () => {
     await expect(background).resolves.toMatchObject({ refreshStatus: 'current' });
   });
 
+  it('does not let an older background result overwrite a newer forced refresh', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['31/12/2025', 3.3]]),
+      labour: seriesCsv('GLFSURSA', [['31/12/2025', 4.0]]),
+      wages: seriesCsv('GWPIYP', [['31/12/2025', 3.4]]),
+      expectations: seriesCsv('GMAREXPY', [['31/12/2025', 2.8]]),
+      cashForecast: cashCsv,
+    }, '2020-01-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    const writeSpy = jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const backgroundResolvers: (() => void)[] = [];
+    const responseFor = (url: string, latest: boolean) => {
+      const date = latest ? '30/06/2026' : '31/03/2026';
+      const csv = url.includes('g1-data')
+        ? seriesCsv('GCPIOCPMTMYP', [[date, latest ? 2.9 : 3.1]])
+        : url.includes('g3-data')
+          ? seriesCsv('GMAREXPY', [[date, 2.7]])
+          : url.includes('h5-data')
+            ? seriesCsv('GLFSURSA', [[date, 4.1]])
+            : url.includes('h4-data')
+              ? seriesCsv('GWPIYP', [[date, 3.2]])
+              : cashCsv;
+      return { ok: true, text: async () => csv } as Response;
+    };
+    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (fetchMock.mock.calls.length > 5) return Promise.resolve(responseFor(url, true));
+      return new Promise<Response>((resolve) => {
+        backgroundResolvers.push(() => resolve(responseFor(url, false)));
+      });
+    });
+    const waitForFetchCalls = async (count: number) => {
+      for (let attempt = 0; attempt < 20 && fetchMock.mock.calls.length < count; attempt += 1) {
+        await Promise.resolve();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(count);
+    };
+
+    const background = loadEconomicOutlook(false);
+    await waitForFetchCalls(5);
+    const forced = loadEconomicOutlook(true);
+    await waitForFetchCalls(10);
+    const forcedResult = await forced;
+    backgroundResolvers.forEach((resolve) => resolve());
+    const backgroundResult = await background;
+
+    expect(forcedResult.indicators.find((item) => item.id === 'underlying_inflation')?.points.at(-1))
+      .toEqual({ date: '2026-06-30', value: 2.9 });
+    expect(backgroundResult).toBe(forcedResult);
+    expect(writeSpy).toHaveBeenCalledTimes(1);
+    expect(writeSpy.mock.calls[0][0]).toBe(forcedResult);
+  });
+
   it('falls back to a stale cached outlook when a background refresh fails', async () => {
     const cached = buildEconomicOutlookFromCsv({
       inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
