@@ -3,6 +3,7 @@ import type {
   MultiSectionPassThroughRow,
   PassThroughRow,
 } from './bankInsights';
+import { SECTION_ORDER, SECTIONS } from '../constants';
 import type { SectionKey } from '../types';
 
 export type PassThroughSort = 'response' | 'timing' | 'bank';
@@ -16,6 +17,68 @@ export interface SectionResponseSummary {
   medianDays: number | null;
   completeBaselines: number;
   fullOrOver: number;
+}
+
+export interface ResponseScatterHitPoint {
+  provider: string;
+  cx: number;
+  cy: number;
+}
+
+export function responseBpsLabel(bps: number): string {
+  const rounded = Math.round(bps * 10) / 10;
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bp`;
+}
+
+export function responseTimingLabel(row: PassThroughRow, partial: boolean): string {
+  if (row.daysToFirstMove == null) {
+    return partial ? 'not observed after tracking began' : 'no matching move observed';
+  }
+  return `${partial ? '≤' : ''}${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`;
+}
+
+export function lenderResponseAccessibilityLabel(
+  row: Pick<MultiSectionPassThroughRow, 'provider' | 'sections'>,
+  partial: boolean,
+): string {
+  return [
+    row.provider,
+    ...SECTION_ORDER.map((section) => {
+      const response = row.sections[section];
+      if (!response) return `${SECTIONS[section].title}: no series`;
+      const net = response.netChangeBps ?? response.passedBps;
+      return `${SECTIONS[section].title}: ${responseBpsLabel(net)}, ${responseTimingLabel(response, partial)}`;
+    }),
+  ].join('. ');
+}
+
+/**
+ * Resolve a chart press to the closest plotted lender. Repeated presses in a
+ * dense cluster cycle through every nearby lender so overlapped observations
+ * remain reachable instead of a later SVG sibling intercepting all taps.
+ */
+export function selectResponseScatterProvider(
+  points: ResponseScatterHitPoint[],
+  locationX: number,
+  locationY: number,
+  selectedProvider: string | null,
+  maxDistance = 22,
+): string | null {
+  const candidates = points
+    .map((point) => ({
+      point,
+      distance: Math.hypot(point.cx - locationX, point.cy - locationY),
+    }))
+    .filter(({ distance }) => distance <= maxDistance)
+    .sort((a, b) => a.distance - b.distance);
+  if (!candidates.length) return null;
+  const currentIndex = candidates.findIndex(
+    ({ point }) => point.provider === selectedProvider,
+  );
+  const nextIndex = currentIndex >= 0
+    ? (currentIndex + 1) % candidates.length
+    : 0;
+  return candidates[nextIndex].point.provider;
 }
 
 function median(values: number[]): number | null {

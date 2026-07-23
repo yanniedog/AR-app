@@ -1,8 +1,10 @@
 import type { MultiSectionPassThroughModel } from '../src/data/bankInsights';
 import {
   filterAndSortSectionRows,
+  lenderResponseAccessibilityLabel,
   passThroughCustomerContext,
   passThroughEvidenceLabel,
+  selectResponseScatterProvider,
   summarizeSectionResponse,
 } from '../src/data/passThroughModels';
 
@@ -104,5 +106,40 @@ describe('pass-through presentation models', () => {
 
   test('labels incomplete evidence explicitly', () => {
     expect(passThroughEvidenceLabel(model)).toBe('Early evidence · partial history');
+  });
+
+  test('selects the nearest scatter point and cycles dense overlapping lenders', () => {
+    const points = [
+      { provider: 'Great Southern Bank', cx: 100, cy: 80 },
+      { provider: 'Great Southern Bank Business+', cx: 103, cy: 81 },
+      { provider: 'Far Away Bank', cx: 200, cy: 200 },
+    ];
+
+    expect(selectResponseScatterProvider(points, 100, 80, null)).toBe('Great Southern Bank');
+    expect(selectResponseScatterProvider(points, 100, 80, 'Great Southern Bank')).toBe(
+      'Great Southern Bank Business+',
+    );
+    expect(selectResponseScatterProvider(points, 0, 0, null)).toBeNull();
+  });
+
+  test('announces all aligned lender columns without truncating the provider', () => {
+    const row = {
+      provider: 'Great Southern Bank Business+',
+      sections: {
+        Mortgage: model.rows[0].sections.Mortgage,
+        Savings: {
+          ...model.rows[0].sections.Mortgage!,
+          provider: 'Great Southern Bank Business+',
+          passedBps: 5,
+          netChangeBps: 5,
+        },
+      },
+    };
+
+    const label = lenderResponseAccessibilityLabel(row, false);
+    expect(label).toContain('Great Southern Bank Business+');
+    expect(label).toContain('Home loans: +20 bp');
+    expect(label).toContain('Savings accounts: +5 bp');
+    expect(label).toContain('Term deposits: no series');
   });
 });

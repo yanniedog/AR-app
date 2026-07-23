@@ -14,8 +14,11 @@ import {
 import { formatRunDate } from '../../data/format';
 import {
   filterAndSortSectionRows,
+  lenderResponseAccessibilityLabel,
   passThroughCustomerContext,
   passThroughEvidenceLabel,
+  responseBpsLabel,
+  responseTimingLabel,
   summarizeSectionResponse,
   type PassThroughSort,
 } from '../../data/passThroughModels';
@@ -28,16 +31,6 @@ import { BankAvatar } from '../BankAvatar';
 import { SearchBar, SegmentedControl } from '../controls';
 import { AppText, Badge, Card, Chip, Row } from '../ui';
 import { ResponseScatter } from './ResponseScatter';
-
-function bpsLabel(bps: number): string {
-  const rounded = Math.round(bps * 10) / 10;
-  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bp`;
-}
-
-function timingLabel(row: PassThroughRow, partial: boolean): string {
-  if (row.daysToFirstMove == null) return partial ? 'not observed after tracking began' : 'no matching move observed';
-  return `${partial ? '≤' : ''}${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`;
-}
 
 function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   const theme = useTheme();
@@ -94,10 +87,10 @@ function ResponseCell({
         {SECTIONS[section].short.toUpperCase()}
       </AppText>
       <AppText variant="small" weight="800" color={tone} style={{ marginTop: 3 }}>
-        {bpsLabel(net)}
+        {responseBpsLabel(net)}
       </AppText>
       <AppText variant="tiny" color="textMuted" numberOfLines={2}>
-        {timingLabel(row, partial)}
+        {responseTimingLabel(row, partial)}
       </AppText>
     </View>
   );
@@ -117,6 +110,10 @@ function LenderResponseRow({
   onSelect: () => void;
 }) {
   const theme = useTheme();
+  const accessibilityLabel = lenderResponseAccessibilityLabel(
+    item,
+    model.decision.partialObservation,
+  );
   return (
     <View
       style={{
@@ -130,7 +127,7 @@ function LenderResponseRow({
       <Pressable
         onPress={() => openBank(item.provider)}
         accessibilityRole="button"
-        accessibilityLabel={`${item.provider}, ${SECTIONS[section].title}, ${bpsLabel(item.response.netChangeBps ?? item.response.passedBps)}, ${timingLabel(item.response, model.decision.partialObservation)}`}
+        accessibilityLabel={accessibilityLabel}
         accessibilityHint="Open this lender's profile."
         style={{ padding: 14 }}
       >
@@ -305,6 +302,24 @@ function AnalysisHeader({
           selectedProvider={selectedProvider}
           onProviderSelect={onProviderSelect}
         />
+        {selectedProvider ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={{
+              alignSelf: 'flex-start',
+              maxWidth: '100%',
+              marginBottom: 10,
+              paddingHorizontal: 10,
+              paddingVertical: 7,
+              borderRadius: theme.radius.md,
+              backgroundColor: theme.colors.primaryMuted,
+            }}
+          >
+            <AppText variant="small" weight="700" color="primary">
+              {selectedProvider}
+            </AppText>
+          </View>
+        ) : null}
         <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10 }}>
           <AppText variant="tiny" color="textMuted">
             {passThroughCustomerContext(section, model.decision.bps)}
