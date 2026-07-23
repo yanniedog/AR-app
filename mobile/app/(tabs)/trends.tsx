@@ -31,6 +31,7 @@ import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { rateValueLabel, rbaDecisionA11yLabel } from '../../src/lib/a11ySummaries';
 import { runStoreRetry } from '../../src/lib/degradationLog';
+import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBrowse } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -55,6 +56,7 @@ export default function Trends() {
   const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
   const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
+  useSuitabilityRevision();
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const historyRequestKey = useRef<string | null>(null);
   const insightsRequestKey = useRef<string | null>(null);

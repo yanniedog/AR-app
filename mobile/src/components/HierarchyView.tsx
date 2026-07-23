@@ -19,6 +19,7 @@ import { useStore } from '../data/store';
 import { logCategoryRowPress } from '../lib/degradationLog';
 import { debugLog } from '../lib/debugLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
+import { useSuitabilityRevision } from '../hooks/useSuitabilityRevision';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { SectionCrossfade } from './controls';
@@ -99,6 +100,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const suitabilityRevision = useSuitabilityRevision();
   const pathKey = path.join('.');
 
   useEffect(() => {
@@ -120,7 +122,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       byKey = new Map();
       byDetails.set(detailsKey, byKey);
     }
-    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}`;
+    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|${suitabilityRevision}`;
     let cached = byKey.get(cacheKey);
     if (!cached) {
       // #region agent log
@@ -143,7 +145,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     }
     return cached;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pathKey encodes path
-  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, detailsProducts]);
+  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision]);
 
   if (!rows) return null;
 

@@ -19,6 +19,7 @@ import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { openProduct } from '../../src/lib/nav';
+import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../../src/types';
 
@@ -31,6 +32,7 @@ export default function BankDetail() {
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
@@ -44,6 +46,7 @@ export default function BankDetail() {
   }, [core?.run_date, ensureBankInsights, showBankInsights]);
 
   const bySection = useMemo(() => {
+    void suitabilityRevision;
     const out: { section: SectionKey; rows: RateRow[] }[] = [];
     if (!core) return out;
     for (const section of SECTION_ORDER) {
@@ -63,7 +66,7 @@ export default function BankDetail() {
       if (byProduct.size) out.push({ section, rows: Array.from(byProduct.values()) });
     }
     return out;
-  }, [core, provider, depositRankMetric, includeNonStandard, detailsProducts]);
+  }, [core, provider, depositRankMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
 
   const chartSections = useMemo(
     () =>

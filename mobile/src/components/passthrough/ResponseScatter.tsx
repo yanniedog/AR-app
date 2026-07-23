@@ -18,10 +18,12 @@ export function ResponseScatter({
   model,
   section,
   selectedProvider,
+  onProviderSelect,
 }: {
   model: MultiSectionPassThroughModel;
   section: SectionKey;
   selectedProvider: string | null;
+  onProviderSelect: (provider: string) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -119,11 +121,20 @@ export function ResponseScatter({
                 <Circle
                   cx={cx}
                   cy={cy}
+                  r={16}
+                  fill={theme.colors.surface}
+                  opacity={0.001}
+                  onPress={() => onProviderSelect(item.provider)}
+                />
+                <Circle
+                  cx={cx}
+                  cy={cy}
                   r={selected ? 7 : 4.5}
                   fill={selected ? theme.colors.primary : fill}
                   opacity={selected ? 1 : 0.68}
                   stroke={selected ? theme.colors.text : theme.colors.surface}
                   strokeWidth={selected ? 2 : 1}
+                  onPress={() => onProviderSelect(item.provider)}
                 />
                 {selected ? (
                   <SvgText
@@ -132,6 +143,7 @@ export function ResponseScatter({
                     fontSize={11}
                     fontWeight="700"
                     fill={theme.colors.text}
+                    pointerEvents="none"
                   >
                     {item.provider.slice(0, 18)}
                   </SvgText>

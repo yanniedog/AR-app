@@ -26,7 +26,7 @@ import type { RbaEntry, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { SearchBar, SegmentedControl } from '../controls';
-import { AppText, Badge, Card, Chip, Divider, Row } from '../ui';
+import { AppText, Badge, Card, Chip, Row } from '../ui';
 import { ResponseScatter } from './ResponseScatter';
 
 function bpsLabel(bps: number): string {
@@ -69,18 +69,19 @@ function ResponseCell({
   section,
   row,
   partial,
-  compact = false,
 }: {
   section: SectionKey;
   row: PassThroughRow | undefined;
   partial: boolean;
-  compact?: boolean;
 }) {
   if (!row) {
     return (
-      <View style={{ paddingVertical: compact ? 5 : 8 }}>
-        <AppText variant="tiny" color="textFaint">
-          {SECTIONS[section].short} · no series
+      <View style={{ minHeight: 76, paddingVertical: 8 }}>
+        <AppText variant="tiny" color="textFaint" weight="700" numberOfLines={2}>
+          {SECTIONS[section].short.toUpperCase()}
+        </AppText>
+        <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
+          No series
         </AppText>
       </View>
     );
@@ -88,16 +89,14 @@ function ResponseCell({
   const net = row.netChangeBps ?? row.passedBps;
   const tone = net === 0 ? 'textMuted' : moveTone(section, net) === 'success' ? 'success' : 'danger';
   return (
-    <View style={{ paddingVertical: compact ? 5 : 8 }}>
-      <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <AppText variant="tiny" color="textFaint" weight="700">
-          {SECTIONS[section].short.toUpperCase()}
-        </AppText>
-        <AppText variant={compact ? 'tiny' : 'small'} weight="800" color={tone}>
-          {bpsLabel(net)}
-        </AppText>
-      </Row>
-      <AppText variant="tiny" color="textMuted" numberOfLines={compact ? 1 : 2}>
+    <View style={{ minHeight: 76, paddingVertical: 8 }}>
+      <AppText variant="tiny" color="textFaint" weight="700" numberOfLines={2}>
+        {SECTIONS[section].short.toUpperCase()}
+      </AppText>
+      <AppText variant="small" weight="800" color={tone} style={{ marginTop: 3 }}>
+        {bpsLabel(net)}
+      </AppText>
+      <AppText variant="tiny" color="textMuted" numberOfLines={2}>
         {timingLabel(row, partial)}
       </AppText>
     </View>
@@ -118,7 +117,6 @@ function LenderResponseRow({
   onSelect: () => void;
 }) {
   const theme = useTheme();
-  const otherSections = SECTION_ORDER.filter((key) => key !== section);
   return (
     <View
       style={{
@@ -136,7 +134,7 @@ function LenderResponseRow({
         accessibilityHint="Open this lender's profile."
         style={{ padding: 14 }}
       >
-        <Row gap={10} style={{ alignItems: 'flex-start' }}>
+        <Row gap={10} style={{ alignItems: 'center' }}>
           <BankAvatar provider={item.provider} size={38} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Row style={{ justifyContent: 'space-between' }}>
@@ -145,25 +143,28 @@ function LenderResponseRow({
               </AppText>
               <Ionicons name="chevron-forward" size={16} color={theme.colors.textFaint} />
             </Row>
-            <ResponseCell
-              section={section}
-              row={item.response}
-              partial={model.decision.partialObservation}
-            />
-            <Divider />
-            <Row gap={12} style={{ alignItems: 'flex-start' }}>
-              {otherSections.map((key) => (
-                <View key={key} style={{ flex: 1, minWidth: 0 }}>
-                  <ResponseCell
-                    section={key}
-                    row={item.sections[key]}
-                    partial={model.decision.partialObservation}
-                    compact
-                  />
-                </View>
-              ))}
-            </Row>
           </View>
+        </Row>
+        <Row gap={0} style={{ alignItems: 'stretch', marginTop: 10 }}>
+          {SECTION_ORDER.map((key, index) => (
+            <View
+              key={key}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                paddingHorizontal: 8,
+                borderLeftWidth: index === 0 ? 0 : 1,
+                borderLeftColor: theme.colors.border,
+                backgroundColor: key === section ? theme.colors.primaryMuted : 'transparent',
+              }}
+            >
+              <ResponseCell
+                section={key}
+                row={item.sections[key]}
+                partial={model.decision.partialObservation}
+              />
+            </View>
+          ))}
         </Row>
       </Pressable>
       <Pressable
@@ -198,6 +199,7 @@ function AnalysisHeader({
   onSectionChange,
   onDecisionChange,
   selectedProvider,
+  onProviderSelect,
 }: {
   model: MultiSectionPassThroughModel;
   decisions: ReturnType<typeof rbaPassThroughDecisionList>;
@@ -205,6 +207,7 @@ function AnalysisHeader({
   onSectionChange: (section: SectionKey) => void;
   onDecisionChange: (date: string) => void;
   selectedProvider: string | null;
+  onProviderSelect: (provider: string) => void;
 }) {
   const theme = useTheme();
   const summary = summarizeSectionResponse(model, section);
@@ -291,12 +294,17 @@ function AnalysisHeader({
           <View style={{ flex: 1, paddingRight: 8 }}>
             <AppText variant="h3">Speed × response</AppText>
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-              Every lender is plotted · untimed and non-matching moves use the right rail
+              Tap a point to reveal the lender · untimed and non-matching moves use the right rail
             </AppText>
           </View>
           <Badge label={`${summary.eligible} lenders`} tone="muted" />
         </Row>
-        <ResponseScatter model={model} section={section} selectedProvider={selectedProvider} />
+        <ResponseScatter
+          model={model}
+          section={section}
+          selectedProvider={selectedProvider}
+          onProviderSelect={onProviderSelect}
+        />
         <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10 }}>
           <AppText variant="tiny" color="textMuted">
             {passThroughCustomerContext(section, model.decision.bps)}
@@ -372,11 +380,14 @@ export function PassThroughDashboard({
               setSelectedProvider(null);
             }}
             selectedProvider={selectedProvider}
+            onProviderSelect={(provider) => {
+              setSelectedProvider(provider === selectedProvider ? null : provider);
+            }}
           />
           <Row style={{ justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-end' }}>
             <View>
               <AppText variant="h3">Compare lenders</AppText>
-              <AppText variant="tiny" color="textMuted">Selected category first · other categories beneath</AppText>
+              <AppText variant="tiny" color="textMuted">Home loans · Savings · Term deposits</AppText>
             </View>
             <Badge label={`${rows.length}`} tone="muted" />
           </Row>
