@@ -109,6 +109,53 @@ describe('economic outlook', () => {
     await expect(loadEconomicOutlook(true)).rejects.toThrow('offline');
   });
 
+  it('starts a forced refresh instead of joining a background refresh already in flight', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
+      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
+      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
+      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
+      cashForecast: cashCsv,
+    }, '2020-01-01T00:00:00.000Z');
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const backgroundResolvers: (() => void)[] = [];
+    const csvFor = (url: string) => url.includes('g1-data')
+      ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+      : url.includes('g3-data')
+        ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+        : url.includes('h5-data')
+          ? seriesCsv('GLFSURSA', [['30/04/2026', 4.1]])
+          : url.includes('h4-data')
+            ? seriesCsv('GWPIYP', [['31/03/2026', 3.2]])
+            : cashCsv;
+    const fetchMock = jest.spyOn(global, 'fetch').mockImplementation((input) => {
+      const url = String(input);
+      if (fetchMock.mock.calls.length > 5) return Promise.reject(new Error('forced offline'));
+      return new Promise<Response>((resolve) => {
+        backgroundResolvers.push(() => resolve({
+          ok: true,
+          text: async () => csvFor(url),
+        } as Response));
+      });
+    });
+    const waitForFetchCalls = async (count: number) => {
+      for (let attempt = 0; attempt < 20 && fetchMock.mock.calls.length < count; attempt += 1) {
+        await Promise.resolve();
+      }
+      expect(fetchMock).toHaveBeenCalledTimes(count);
+    };
+
+    const background = loadEconomicOutlook(false);
+    await waitForFetchCalls(5);
+    const forced = loadEconomicOutlook(true);
+    await waitForFetchCalls(10);
+    backgroundResolvers.forEach((resolve) => resolve());
+
+    await expect(forced).rejects.toThrow('forced offline');
+    await expect(background).resolves.toMatchObject({ refreshStatus: 'current' });
+  });
+
   it('falls back to a stale cached outlook when a background refresh fails', async () => {
     const cached = buildEconomicOutlookFromCsv({
       inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),

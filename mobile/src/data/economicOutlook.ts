@@ -327,73 +327,11 @@ export function buildEconomicOutlookFromCsv(input: {
   wages: string;
   cashForecast?: string | null;
 }, fetchedAt = new Date().toISOString()): EconomicOutlookPayload {
-  const definitions: {
-    id: EconomicIndicator['id'];
-    label: string;
-    shortLabel: string;
-    parsed: ParsedSeries;
-    limit: number;
-    frequency: EconomicIndicator['frequency'];
-    sourceUrl: string;
-    targetBand?: [number, number];
-  }[] = [
-    {
-      id: 'underlying_inflation',
-      label: 'Underlying inflation',
-      shortLabel: 'Trimmed mean · year-ended',
-      parsed: parseRbaSeriesCsv(input.inflation, 'GCPIOCPMTMYP'),
-      limit: 20,
-      frequency: 'quarterly',
-      sourceUrl: URLS.inflation,
-      targetBand: [2, 3],
-    },
-    {
-      id: 'unemployment',
-      label: 'Unemployment',
-      shortLabel: 'Seasonally adjusted',
-      parsed: parseRbaSeriesCsv(input.labour, 'GLFSURSA'),
-      limit: 30,
-      frequency: 'monthly',
-      sourceUrl: URLS.labour,
-    },
-    {
-      id: 'wages',
-      label: 'Wage growth',
-      shortLabel: 'WPI · year-ended',
-      parsed: parseRbaSeriesCsv(input.wages, 'GWPIYP'),
-      limit: 20,
-      frequency: 'quarterly',
-      sourceUrl: URLS.wages,
-    },
-    {
-      id: 'inflation_expectations',
-      label: 'Inflation expectations',
-      shortLabel: 'Economists · 1 year ahead',
-      parsed: parseRbaSeriesCsv(input.expectations, 'GMAREXPY'),
-      limit: 20,
-      frequency: 'quarterly',
-      sourceUrl: URLS.expectations,
-      targetBand: [2, 3],
-    },
-  ];
-  const indicators = definitions.map((definition) => {
-    const points = definition.parsed.points.slice(-definition.limit);
-    return {
-      id: definition.id,
-      label: definition.label,
-      shortLabel: definition.shortLabel,
-      publicationDate: definition.parsed.publicationDate,
-      points,
-      targetBand: definition.targetBand,
-      signal: economicSignal(definition.id, points),
-      sourceUrl: definition.sourceUrl,
-      checkedAt: fetchedAt,
-      frequency: definition.frequency,
-      status: indicatorIsStale(definition.parsed.publicationDate, definition.frequency)
-        ? 'stale' as const
-        : 'current' as const,
-    };
-  });
+  const indicators = INDICATOR_DEFINITIONS.map((definition) => buildIndicator(
+    definition,
+    parseRbaSeriesCsv(input[definition.source], definition.seriesId),
+    fetchedAt,
+  ));
   return {
     schema_version: 2,
     fetchedAt,
@@ -475,10 +413,13 @@ async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
   }
 }
 
-let inFlight: Promise<EconomicOutlookPayload> | null = null;
+let inFlight: {
+  promise: Promise<EconomicOutlookPayload>;
+  force: boolean;
+} | null = null;
 
 export async function loadEconomicOutlook(force = false): Promise<EconomicOutlookPayload> {
-  if (inFlight) return inFlight;
+  if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   const run = (async () => {
     const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
     const cacheAge = cached
@@ -587,8 +528,8 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     return fresh;
   })();
   const tracked = run.finally(() => {
-    if (inFlight === tracked) inFlight = null;
+    if (inFlight?.promise === tracked) inFlight = null;
   });
-  inFlight = tracked;
+  inFlight = { promise: tracked, force };
   return tracked;
 }
