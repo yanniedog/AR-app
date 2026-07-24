@@ -33,6 +33,7 @@ export function HistoryExplorer({
   insights,
   insightsAvailable,
   standardOnly,
+  standardFilterWarming,
   rba,
   rbaHolds,
   brands,
@@ -46,6 +47,8 @@ export function HistoryExplorer({
   insightsAvailable: boolean;
   /** The shared suitability gate is excluding non-standard products. */
   standardOnly?: boolean;
+  /** A replacement ingest is still rebuilding the exact product suitability index. */
+  standardFilterWarming?: boolean;
   rba: RbaEntry[];
   /** RBA meeting dates the rate was held (rendered as hollow diamonds). */
   rbaHolds?: string[];
@@ -80,6 +83,7 @@ export function HistoryExplorer({
         {MODE_META[activeMode].blurb}
       </AppText>
       {standardOnly &&
+      !standardFilterWarming &&
       (activeMode === 'calendar' || activeMode === 'edge') &&
       (historyModel?.dates.length ?? 0) <= 1 ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
@@ -96,7 +100,11 @@ export function HistoryExplorer({
         </Row>
       ) : null}
 
-      {needsInsights && !insightsAvailable ? (
+      {standardFilterWarming ? (
+        <AppText variant="small" color="textMuted">
+          Filtering the latest standard products…
+        </AppText>
+      ) : needsInsights && !insightsAvailable ? (
         <AppText variant="small" color="textMuted">
           This lens uses the per-bank intelligence feed — included with Pro.
         </AppText>

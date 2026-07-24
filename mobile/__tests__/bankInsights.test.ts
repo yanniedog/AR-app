@@ -14,6 +14,8 @@ import {
   type PassThroughRow,
 } from '../src/data/bankInsights';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
+import { lenderRaceModel, marketActivityModel } from '../src/data/vizModels';
 import type { CorePayload, RbaEntry } from '../src/types';
 
 const payload: BankInsightsPayload = {
@@ -82,6 +84,8 @@ function emptySection() {
 }
 
 describe('filterBankInsightsForSuitability', () => {
+  afterEach(() => setSuitabilityAllowed(null));
+
   const filterCore: CorePayload = {
     schema_version: 1,
     run_date: payload.run_date,
@@ -147,7 +151,7 @@ describe('filterBankInsightsForSuitability', () => {
     },
   };
 
-  test('removes every aggregate that could contain a non-standard product', () => {
+  test('rebuilds a current snapshot instead of dropping a mixed provider', () => {
     const withAmbiguousBeta: BankInsightsPayload = {
       ...payload,
       events: [
@@ -180,15 +184,30 @@ describe('filterBankInsightsForSuitability', () => {
       false,
     );
 
-    expect(Object.keys(filtered!.banks)).toEqual(['AlphaBank', 'GammaBank']);
+    expect(Object.keys(filtered!.banks)).toEqual(['AlphaBank', 'BetaBank', 'GammaBank']);
+    expect(filtered!.banks.BetaBank.Mortgage).toEqual({
+      median: [null, null, 0.062],
+      best: [null, null, 0.062],
+      count: [null, null, 1],
+    });
     expect(filtered!.events.some((event) => event.provider === 'BetaBank')).toBe(false);
     expect(filtered!.behaviour?.Mortgage?.providers).toEqual({
       AlphaBank: behaviourSummary,
     });
+    expect(lenderRaceModel(filtered, 'Mortgage', true, 'All')).not.toBeNull();
+    expect(marketActivityModel(filtered, 'Mortgage', 'All')).not.toBeNull();
   });
 
   test('returns the complete feed when non-standard products are enabled', () => {
     expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(payload);
+  });
+
+  test('fails closed while the post-ingest suitability gate is warming', () => {
+    setSuitabilityAllowed(new Set());
+
+    const filtered = filterBankInsightsForSuitability(payload, filterCore, false);
+
+    expect(filtered).toBeNull();
   });
 });
 

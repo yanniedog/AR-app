@@ -26,6 +26,7 @@ import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
+import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { bestRow } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
@@ -129,6 +130,10 @@ export default function Trends() {
       detailsProducts,
     );
   }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+  const standardFilterWarming = useMemo(() => {
+    void suitabilityRevision;
+    return !includeNonStandard && getSuitabilityAllowed()?.size === 0;
+  }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
     const key = showHistoryRibbon ? core?.run_date ?? null : null;
@@ -330,6 +335,7 @@ export default function Trends() {
                 insights={explorerInsights}
                 insightsAvailable={showBankInsights}
                 standardOnly={!includeNonStandard}
+                standardFilterWarming={standardFilterWarming}
                 rba={core.rba}
                 rbaHolds={core.rba_holds}
                 brands={core.brands}
