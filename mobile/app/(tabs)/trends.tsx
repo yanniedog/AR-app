@@ -22,6 +22,7 @@ import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Button, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { effectiveRate, formatRate, formatRunDate } from '../../src/data/format';
+import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
@@ -50,6 +51,7 @@ export default function Trends() {
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const retryHistoryBanks = useStore((s) => s.retryHistoryBanks);
   const bankInsights = useStore((s) => s.bankInsights);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const bankInsightsError = useStore((s) => s.bankInsightsError);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const retryBankInsights = useStore((s) => s.retryBankInsights);
@@ -105,12 +107,28 @@ export default function Trends() {
     void suitabilityRevision;
     return core
       ? selectBankHistoryChartModel(
-          { core, historyBanks, includeNonStandard },
+          { core, historyBanks, includeNonStandard, detailsProducts },
           activeSection,
           'All',
         )
       : null;
-  }, [activeSection, core, historyBanks, includeNonStandard, suitabilityRevision]);
+  }, [
+    activeSection,
+    core,
+    detailsProducts,
+    historyBanks,
+    includeNonStandard,
+    suitabilityRevision,
+  ]);
+  const explorerInsights = useMemo(() => {
+    void suitabilityRevision;
+    return filterBankInsightsForSuitability(
+      bankInsights,
+      core,
+      includeNonStandard,
+      detailsProducts,
+    );
+  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
     const key = showHistoryRibbon ? core?.run_date ?? null : null;
@@ -309,8 +327,9 @@ export default function Trends() {
               <HistoryExplorer
                 section={activeSection}
                 historyModel={historyModel}
-                insights={bankInsights}
+                insights={explorerInsights}
                 insightsAvailable={showBankInsights}
+                standardOnly={!includeNonStandard}
                 rba={core.rba}
                 rbaHolds={core.rba_holds}
                 brands={core.brands}
@@ -327,7 +346,7 @@ export default function Trends() {
                   <Button title="Back to today" variant="ghost" onPress={() => setRewindDate(null)} />
                 </Row>
                 <MarketSnapshotList
-                  payload={bankInsights}
+                  payload={explorerInsights}
                   section={activeSection}
                   date={rewindDate}
                 />

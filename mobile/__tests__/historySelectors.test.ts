@@ -12,7 +12,10 @@ describe('historySelectors', () => {
   afterEach(() => setSuitabilityAllowed(null));
 
   it('falls back to current ribbon when history cache is absent', () => {
-    const model = selectBankHistoryChartModel({ core: sample }, 'Mortgage');
+    const model = selectBankHistoryChartModel(
+      { core: sample, includeNonStandard: true },
+      'Mortgage',
+    );
     expect(model).not.toBeNull();
     expect(model?.dates).toEqual([sample.run_date]);
     expect(model?.points[0].min).toBeCloseTo(0.0279, 4);

@@ -4,6 +4,7 @@ import type {
   BankHistoryPoint,
   CorePayload,
   HistoryWindow,
+  ProductDetail,
   RateRow,
   SectionKey,
 } from '../types';
@@ -88,25 +89,23 @@ function currentRibbonFallback(
   core: CorePayload,
   section: SectionKey,
   includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
 ): BankHistoryChartModel | null {
   const sectionData = core.sections[section];
   if (!sectionData) return null;
   const hierRows = rowsUnder(sectionData.rates, section, []);
-  const visibleKeys = new Set(
-    visibleAccountRows(hierRows, includeNonStandard).map((row) => row.product_key),
-  );
-  if (!visibleKeys.size) return null;
+  const visibleRows = visibleAccountRows(hierRows, includeNonStandard, detailsProducts);
+  if (!visibleRows.length) return null;
 
   const date = String(core.run_date || '').slice(0, 10);
   if (!date) return null;
-  const range = sectionData.ribbon?.range;
-  const point = sanitizeRibbonPoint(date, {
-    min: range?.min ?? null,
-    max: range?.max ?? null,
-    mean: range?.mean ?? null,
-    median: range?.median ?? null,
-    count: sectionData.ribbon?.counts?.rates ?? 0,
-  });
+  const aggregate = buildAggregateRibbonFromHistory(
+    visibleRows.map((row) => ({ ...row, run_date: date })),
+    [date],
+    'All',
+  );
+  if (!aggregate.points[0]?.count) return null;
+  const point = sanitizeRibbonPoint(date, aggregate.points[0]);
   if (point.min == null && point.max == null && point.mean == null) return null;
 
   return {
@@ -122,6 +121,7 @@ export interface HistorySelectorState {
   historyBanks?: HistoryBanksPayload | null;
   historyCache?: BankHistoryCache | null;
   includeNonStandard?: boolean;
+  detailsProducts?: Record<string, ProductDetail> | null;
 }
 
 /**
@@ -134,11 +134,21 @@ export function selectBankHistoryChartModel(
   window: HistoryWindow = 'All',
 ): BankHistoryChartModel | null {
   try {
-    const { core, historyBanks, historyCache, includeNonStandard = false } = state;
+    const {
+      core,
+      historyBanks,
+      historyCache,
+      includeNonStandard = false,
+      detailsProducts,
+    } = state;
     if (!core) return null;
     if (!includeNonStandard && getSuitabilityAllowed()?.size === 0) return null;
 
-    const prebuilt = chartModelFromPrebuiltHistory(historyBanks, section, window);
+    // Prebuilt section history contains the full catalogue and no product keys.
+    // It is therefore safe only when the user explicitly includes non-standard products.
+    const prebuilt = includeNonStandard
+      ? chartModelFromPrebuiltHistory(historyBanks, section, window)
+      : null;
     if (prebuilt?.dates.length) {
       return {
         section,
@@ -152,7 +162,9 @@ export function selectBankHistoryChartModel(
       const sectionRows = core.sections[section]?.rates ?? [];
       const hierRows = rowsUnder(sectionRows, section, []);
       const visibleKeys = new Set(
-        visibleAccountRows(hierRows, includeNonStandard).map((row) => row.product_key),
+        visibleAccountRows(hierRows, includeNonStandard, detailsProducts).map(
+          (row) => row.product_key,
+        ),
       );
       const filtered = historyCache.rates.filter((row) => visibleKeys.has(row.product_key));
       const retained = normalizeTimelineDates(historyCache.run_dates || []);
@@ -166,7 +178,12 @@ export function selectBankHistoryChartModel(
       };
     }
 
-    const fallback = currentRibbonFallback(core, section, includeNonStandard);
+    const fallback = currentRibbonFallback(
+      core,
+      section,
+      includeNonStandard,
+      detailsProducts,
+    );
     if (!fallback) return null;
     return {
       section,
