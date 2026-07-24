@@ -9,7 +9,8 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import { debugLog } from '../lib/debugLog';
-import { visibleAccountRows } from './format';
+import { toFraction, visibleAccountRows } from './format';
+import { getSuitabilityAllowed } from './suitabilityGate';
 
 export type BankMoveDir = 'cut' | 'hike' | 'mixed';
 
@@ -76,11 +77,47 @@ export interface BankInsightsPayload {
  * Apply the app's shared standard-product gate to pre-aggregated bank insights.
  *
  * The history feed has no product keys, so an aggregate cannot be split safely
- * after download. In standard-only mode we retain a provider/section only when
- * every current catalogue row in that aggregate is visible. This deliberately
- * withholds ambiguous aggregates rather than leaking a non-standard product into
- * Market Explorer.
+ * after download. Standard-only mode retains complete history only for
+ * provider/sections whose current catalogue is entirely visible. Mixed
+ * catalogues get a product-row-derived snapshot at the current run date, so the
+ * Explorer remains useful without leaking their unfilterable historical rates.
  */
+function explorerVisibleRows(
+  rows: CorePayload['sections'][SectionKey]['rates'],
+  detailsProducts?: Record<string, ProductDetail> | null,
+) {
+  return visibleAccountRows(rows, false, detailsProducts);
+}
+
+function median(values: number[]): number {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const middle = sorted.length >> 1;
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function currentStandardSeries(
+  rows: CorePayload['sections'][SectionKey]['rates'],
+  section: SectionKey,
+  length: number,
+  currentIndex: number,
+): BankSectionSeries | null {
+  if (currentIndex < 0) return null;
+  const values = rows
+    .map((row) => toFraction(row.rate))
+    .filter((value): value is number => value != null && value > 0);
+  if (!values.length) return null;
+
+  const medians: (number | null)[] = Array(length).fill(null);
+  const best: (number | null)[] = Array(length).fill(null);
+  const count: (number | null)[] = Array(length).fill(null);
+  medians[currentIndex] = median(values);
+  best[currentIndex] = section === 'Mortgage' ? Math.min(...values) : Math.max(...values);
+  count[currentIndex] = values.length;
+  return { median: medians, best, count };
+}
+
 export function filterBankInsightsForSuitability(
   payload: BankInsightsPayload | null | undefined,
   core: CorePayload | null | undefined,
@@ -90,38 +127,64 @@ export function filterBankInsightsForSuitability(
   if (!payload) return null;
   if (includeNonStandard) return payload;
   if (!core) return null;
+  if (getSuitabilityAllowed()?.size === 0) return null;
 
-  const allowedPairs = new Set<string>();
+  const historicalPairs = new Set<string>();
   const pairKey = (provider: string, section: SectionKey) => `${section}\u0000${provider}`;
+  const visibleByPair = new Map<
+    string,
+    CorePayload['sections'][SectionKey]['rates']
+  >();
 
   for (const section of SECTION_KEYS) {
     const rows = core.sections[section]?.rates ?? [];
-    const visibleKeys = new Set(
-      visibleAccountRows(rows, false, detailsProducts).map((row) => row.product_key),
-    );
+    const visibleRows = explorerVisibleRows(rows, detailsProducts);
+    const visibleKeys = new Set(visibleRows.map((row) => row.product_key));
     const byProvider = new Map<string, typeof rows>();
+    const visibleByProvider = new Map<string, typeof rows>();
     for (const row of rows) {
       const providerRows = byProvider.get(row.provider);
       if (providerRows) providerRows.push(row);
       else byProvider.set(row.provider, [row]);
     }
+    for (const row of visibleRows) {
+      const providerRows = visibleByProvider.get(row.provider);
+      if (providerRows) providerRows.push(row);
+      else visibleByProvider.set(row.provider, [row]);
+    }
     for (const [provider, providerRows] of byProvider) {
+      const key = pairKey(provider, section);
+      const visibleProviderRows = visibleByProvider.get(provider) ?? [];
+      if (visibleProviderRows.length) visibleByPair.set(key, visibleProviderRows);
       if (
         providerRows.length > 0 &&
         providerRows.every((row) => visibleKeys.has(row.product_key))
       ) {
-        allowedPairs.add(pairKey(provider, section));
+        historicalPairs.add(key);
       }
     }
   }
 
   const banks: BankInsightsPayload['banks'] = {};
+  const currentIndex = payload.run_dates.indexOf(core.run_date);
   for (const [provider, sections] of Object.entries(payload.banks)) {
     const filteredSections: Partial<Record<SectionKey, BankSectionSeries>> = {};
     for (const section of SECTION_KEYS) {
       const series = sections[section];
-      if (series && allowedPairs.has(pairKey(provider, section))) {
+      if (!series) continue;
+      const key = pairKey(provider, section);
+      if (historicalPairs.has(key)) {
         filteredSections[section] = series;
+        continue;
+      }
+      const current = currentStandardSeries(
+        visibleByPair.get(key) ?? [],
+        section,
+        payload.run_dates.length,
+        currentIndex,
+      );
+      if (current) {
+        filteredSections[section] = current;
       }
     }
     if (Object.keys(filteredSections).length) banks[provider] = filteredSections;
@@ -133,7 +196,7 @@ export function filterBankInsightsForSuitability(
     if (!summary) continue;
     const providers = Object.fromEntries(
       Object.entries(summary.providers).filter(([provider]) =>
-        allowedPairs.has(pairKey(provider, section)),
+        historicalPairs.has(pairKey(provider, section)),
       ),
     );
     if (Object.keys(providers).length) {
@@ -145,7 +208,7 @@ export function filterBankInsightsForSuitability(
     ...payload,
     banks,
     events: payload.events.filter((event) =>
-      allowedPairs.has(pairKey(event.provider, event.section)),
+      historicalPairs.has(pairKey(event.provider, event.section)),
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,
   };
