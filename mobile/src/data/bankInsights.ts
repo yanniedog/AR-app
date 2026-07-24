@@ -1,8 +1,15 @@
-import type { BankHistoryPoint, RbaEntry, SectionKey } from '../types';
+import type {
+  BankHistoryPoint,
+  CorePayload,
+  ProductDetail,
+  RbaEntry,
+  SectionKey,
+} from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import { debugLog } from '../lib/debugLog';
+import { visibleAccountRows } from './format';
 
 export type BankMoveDir = 'cut' | 'hike' | 'mixed';
 
@@ -63,6 +70,85 @@ export interface BankInsightsPayload {
   events: BankRateEvent[];
   /** Optional precomputed pass-through summaries (may be empty early in the ledger). */
   behaviour?: Partial<Record<SectionKey, BehaviourSectionSummary>>;
+}
+
+/**
+ * Apply the app's shared standard-product gate to pre-aggregated bank insights.
+ *
+ * The history feed has no product keys, so an aggregate cannot be split safely
+ * after download. In standard-only mode we retain a provider/section only when
+ * every current catalogue row in that aggregate is visible. This deliberately
+ * withholds ambiguous aggregates rather than leaking a non-standard product into
+ * Market Explorer.
+ */
+export function filterBankInsightsForSuitability(
+  payload: BankInsightsPayload | null | undefined,
+  core: CorePayload | null | undefined,
+  includeNonStandard: boolean,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): BankInsightsPayload | null {
+  if (!payload) return null;
+  if (includeNonStandard) return payload;
+  if (!core) return null;
+
+  const allowedPairs = new Set<string>();
+  const pairKey = (provider: string, section: SectionKey) => `${section}\u0000${provider}`;
+
+  for (const section of SECTION_KEYS) {
+    const rows = core.sections[section]?.rates ?? [];
+    const visibleKeys = new Set(
+      visibleAccountRows(rows, false, detailsProducts).map((row) => row.product_key),
+    );
+    const byProvider = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const providerRows = byProvider.get(row.provider);
+      if (providerRows) providerRows.push(row);
+      else byProvider.set(row.provider, [row]);
+    }
+    for (const [provider, providerRows] of byProvider) {
+      if (
+        providerRows.length > 0 &&
+        providerRows.every((row) => visibleKeys.has(row.product_key))
+      ) {
+        allowedPairs.add(pairKey(provider, section));
+      }
+    }
+  }
+
+  const banks: BankInsightsPayload['banks'] = {};
+  for (const [provider, sections] of Object.entries(payload.banks)) {
+    const filteredSections: Partial<Record<SectionKey, BankSectionSeries>> = {};
+    for (const section of SECTION_KEYS) {
+      const series = sections[section];
+      if (series && allowedPairs.has(pairKey(provider, section))) {
+        filteredSections[section] = series;
+      }
+    }
+    if (Object.keys(filteredSections).length) banks[provider] = filteredSections;
+  }
+
+  const behaviour: BankInsightsPayload['behaviour'] = {};
+  for (const section of SECTION_KEYS) {
+    const summary = payload.behaviour?.[section];
+    if (!summary) continue;
+    const providers = Object.fromEntries(
+      Object.entries(summary.providers).filter(([provider]) =>
+        allowedPairs.has(pairKey(provider, section)),
+      ),
+    );
+    if (Object.keys(providers).length) {
+      behaviour[section] = { ...summary, providers };
+    }
+  }
+
+  return {
+    ...payload,
+    banks,
+    events: payload.events.filter((event) =>
+      allowedPairs.has(pairKey(event.provider, event.section)),
+    ),
+    behaviour: Object.keys(behaviour).length ? behaviour : undefined,
+  };
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

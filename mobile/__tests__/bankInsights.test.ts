@@ -1,6 +1,7 @@
 import {
   bankTrendChartModel,
   comparePassThroughRows,
+  filterBankInsightsForSuitability,
   marketPulse,
   normalizeBankInsightsPayload,
   passThroughDaysLabel,
@@ -13,7 +14,7 @@ import {
   type PassThroughRow,
 } from '../src/data/bankInsights';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
-import type { RbaEntry } from '../src/types';
+import type { CorePayload, RbaEntry } from '../src/types';
 
 const payload: BankInsightsPayload = {
   schema_version: 1,
@@ -68,6 +69,128 @@ const calendar: RbaCalendar = {
   ],
   schedule: [],
 };
+
+function emptySection() {
+  return {
+    rates: [],
+    ribbon: {
+      counts: { rates: 0, products: 0, providers: 0 },
+      range: { min: null, max: null, mean: null, median: null },
+      providers: [],
+    },
+  };
+}
+
+describe('filterBankInsightsForSuitability', () => {
+  const filterCore: CorePayload = {
+    schema_version: 1,
+    run_date: payload.run_date,
+    brands: {},
+    rba: [],
+    sections: {
+      Mortgage: {
+        ...emptySection(),
+        rates: [
+          {
+            provider: 'AlphaBank',
+            product_key: 'alpha-standard',
+            product_name: 'Alpha Variable',
+            rate: '0.057',
+            account_class: 'standard',
+          },
+          {
+            provider: 'BetaBank',
+            product_key: 'beta-standard',
+            product_name: 'Beta Variable',
+            rate: '0.062',
+            account_class: 'standard',
+          },
+          {
+            provider: 'BetaBank',
+            product_key: 'beta-non-standard',
+            product_name: 'Beta Specialist',
+            rate: '0.05',
+            account_class: 'non_standard',
+          },
+        ],
+      },
+      Savings: {
+        ...emptySection(),
+        rates: [
+          {
+            provider: 'GammaBank',
+            product_key: 'gamma-standard',
+            product_name: 'Gamma Saver',
+            rate: '0.052',
+            account_class: 'standard',
+          },
+        ],
+      },
+      TD: emptySection(),
+    },
+  };
+
+  const behaviourSummary = {
+    hike: {
+      n: 1,
+      days_median: 2,
+      bps_median: 10,
+      ratio_median: 0.4,
+      confidence: 'insufficient' as const,
+    },
+    cut: {
+      n: 0,
+      days_median: null,
+      bps_median: null,
+      ratio_median: null,
+      confidence: 'insufficient' as const,
+    },
+  };
+
+  test('removes every aggregate that could contain a non-standard product', () => {
+    const withAmbiguousBeta: BankInsightsPayload = {
+      ...payload,
+      events: [
+        ...payload.events,
+        {
+          date: '2026-06-01',
+          provider: 'BetaBank',
+          section: 'Mortgage',
+          dir: 'cut',
+          moved: 1,
+          total: 2,
+          avg_bps: -5,
+        },
+      ],
+      behaviour: {
+        Mortgage: {
+          section: 'Mortgage',
+          window_days: 60,
+          providers: {
+            AlphaBank: behaviourSummary,
+            BetaBank: behaviourSummary,
+          },
+        },
+      },
+    };
+
+    const filtered = filterBankInsightsForSuitability(
+      withAmbiguousBeta,
+      filterCore,
+      false,
+    );
+
+    expect(Object.keys(filtered!.banks)).toEqual(['AlphaBank', 'GammaBank']);
+    expect(filtered!.events.some((event) => event.provider === 'BetaBank')).toBe(false);
+    expect(filtered!.behaviour?.Mortgage?.providers).toEqual({
+      AlphaBank: behaviourSummary,
+    });
+  });
+
+  test('returns the complete feed when non-standard products are enabled', () => {
+    expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(payload);
+  });
+});
 
 describe('normalizeBankInsightsPayload', () => {
   test('accepts a valid payload and keeps series aligned to run_dates', () => {

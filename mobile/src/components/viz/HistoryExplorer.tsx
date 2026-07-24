@@ -32,6 +32,7 @@ export function HistoryExplorer({
   historyModel,
   insights,
   insightsAvailable,
+  standardOnly,
   rba,
   rbaHolds,
   brands,
@@ -43,6 +44,8 @@ export function HistoryExplorer({
   insights: BankInsightsPayload | null;
   /** Pro bank-intelligence modes are renderable (asset enabled for this user). */
   insightsAvailable: boolean;
+  /** The shared suitability gate is excluding non-standard products. */
+  standardOnly?: boolean;
   rba: RbaEntry[];
   /** RBA meeting dates the rate was held (rendered as hollow diamonds). */
   rbaHolds?: string[];
@@ -76,6 +79,14 @@ export function HistoryExplorer({
       <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
         {MODE_META[activeMode].blurb}
       </AppText>
+      {standardOnly &&
+      (activeMode === 'calendar' || activeMode === 'edge') &&
+      (historyModel?.dates.length ?? 0) <= 1 ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
+          Older history aggregates include the full catalogue, so they are hidden while Standard
+          products only is on.
+        </AppText>
+      ) : null}
 
       {showWindowChips ? (
         <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>

@@ -41,8 +41,22 @@ describe('historyPayload', () => {
   });
 
   test('selectBankHistoryChartModel uses prebuilt history when provided', () => {
-    const model = selectBankHistoryChartModel({ core: sample, historyBanks: prebuilt }, 'Mortgage', 'All');
+    const model = selectBankHistoryChartModel(
+      { core: sample, historyBanks: prebuilt, includeNonStandard: true },
+      'Mortgage',
+      'All',
+    );
     expect(model?.dates.length).toBe(3);
+  });
+
+  test('standard-only mode withholds unfilterable prebuilt history', () => {
+    const model = selectBankHistoryChartModel(
+      { core: sample, historyBanks: prebuilt, includeNonStandard: false },
+      'Mortgage',
+      'All',
+    );
+    expect(model?.dates).toEqual([sample.run_date]);
+    expect(model?.points[0].count).not.toBe(920);
   });
 
   test('falls back to single-day ribbon without prebuilt asset', () => {
@@ -78,13 +92,12 @@ describe('historyPayload', () => {
     expect(normalized?.sections.Mortgage?.points).toHaveLength(3);
   });
 
-  test('selectBankHistoryChartModel sanitizes corrupt ribbon fallback (no throw)', () => {
+  test('selectBankHistoryChartModel sanitizes corrupt rate fallback (no throw)', () => {
     const corrupt = JSON.parse(JSON.stringify(sample)) as CorePayload;
-    corrupt.sections.Mortgage.ribbon = {
-      range: { min: Number.NaN, max: 'not-a-rate' as unknown as number, mean: Infinity, median: null },
-      counts: { rates: 1, products: 0, providers: 1 },
-      providers: [],
-    };
+    corrupt.sections.Mortgage.rates = corrupt.sections.Mortgage.rates.map((row) => ({
+      ...row,
+      rate: 'not-a-rate',
+    }));
     const model = selectBankHistoryChartModel({ core: corrupt }, 'Mortgage');
     expect(model).toBeNull();
   });
