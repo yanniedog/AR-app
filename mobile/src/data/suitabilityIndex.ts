@@ -50,7 +50,7 @@ export function clearSuitabilityIndex(): void {
  */
 export function closeSuitabilityGateUntilRebuild(): void {
   installed = null;
-  setSuitabilityAllowed(new Set());
+  setSuitabilityAllowed(new Set(), { rebuildClosed: true });
   inFlight = null;
   inFlightKey = '';
 }

@@ -4,6 +4,8 @@
  */
 let allowed: Set<string> | null = null;
 let allowedSnapshot: Set<string> | null = null;
+/** True while closeSuitabilityGateUntilRebuild has sealed the gate. */
+let rebuildClosed = false;
 let revision = 0;
 const listeners = new Set<() => void>();
 
@@ -24,15 +26,32 @@ export function getSuitabilityRevision(): number {
   return revision;
 }
 
+/**
+ * Whether standard-only surfaces may paint filtered rates.
+ * Fail-closed rebuild uses an explicit closed flag (not allowlist size) so a
+ * successfully installed empty index is still ready to show the empty result.
+ * `null` allowed means the index was never installed (core-only path) and is
+ * ready; a warm index (empty or not) clears the closed flag on install.
+ */
+export function isSuitabilityFilterReady(includeNonStandard = false): boolean {
+  if (includeNonStandard) return true;
+  return !rebuildClosed;
+}
+
 export function subscribeSuitabilityGate(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
 
-export function setSuitabilityAllowed(next: Set<string> | null): void {
-  if (setsEqual(allowedSnapshot, next)) return;
+export function setSuitabilityAllowed(
+  next: Set<string> | null,
+  opts?: { rebuildClosed?: boolean },
+): void {
+  const nextClosed = opts?.rebuildClosed === true;
+  if (setsEqual(allowedSnapshot, next) && rebuildClosed === nextClosed) return;
   allowed = next;
   allowedSnapshot = next === null ? null : new Set(next);
+  rebuildClosed = nextClosed;
   revision += 1;
   for (const listener of listeners) listener();
 }
