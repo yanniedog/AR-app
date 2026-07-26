@@ -89,6 +89,60 @@ export function PayloadProgressBar({
   );
 }
 
+/** Indeterminate track matching {@link PayloadProgressBar} while suitability rebuilds. */
+export function IndeterminateProgressBar({
+  caption,
+  accessibilityLabel = 'Preparing rates',
+}: {
+  caption?: string;
+  accessibilityLabel?: string;
+}) {
+  const theme = useTheme();
+  const sweep = useSharedValue(0);
+
+  useEffect(() => {
+    sweep.value = withRepeat(
+      withTiming(1, { duration: 1200, easing: Easing.inOut(Easing.ease) }),
+      -1,
+      false,
+    );
+  }, [sweep]);
+
+  const fillStyle = useAnimatedStyle(() => ({
+    width: '36%',
+    transform: [{ translateX: interpolate(sweep.value, [0, 1], [-40, 220]) }],
+  }));
+
+  return (
+    <View style={{ flex: 1, gap: 6 }} accessibilityRole="progressbar" accessibilityLabel={accessibilityLabel}>
+      {caption ? (
+        <AppText variant="small" color="textMuted" numberOfLines={2}>
+          {caption}
+        </AppText>
+      ) : null}
+      <View
+        style={{
+          height: 6,
+          borderRadius: theme.radius.pill,
+          backgroundColor: theme.colors.chip,
+          overflow: 'hidden',
+        }}
+      >
+        <Animated.View
+          style={[
+            {
+              height: '100%',
+              borderRadius: theme.radius.pill,
+              backgroundColor: theme.colors.primary,
+            },
+            fillStyle,
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
 /** @deprecated Use PayloadProgressBar. */
 export const PayloadProgressDetails = PayloadProgressBar;
 

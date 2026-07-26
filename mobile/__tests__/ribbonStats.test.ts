@@ -1,6 +1,10 @@
 import core from '../assets/sample/core.json';
 import { resolveSectionRibbonStats, ribbonToRateStats, hasPayloadRibbon } from '../src/data/ribbonStats';
 import { visibleAccountRows } from '../src/data/format';
+import {
+  clearSuitabilityIndex,
+  closeSuitabilityGateUntilRebuild,
+} from '../src/data/suitabilityIndex';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import type { CorePayload, SectionKey } from '../src/types';
 
@@ -53,13 +57,41 @@ describe('ribbonStats', () => {
     expect(stats.min).toBeNull();
     expect(stats.count).toBe(0);
   });
-  it('falls back to payload ribbon when filtered rows yield no stats', () => {
+  it('does not fall back to payload ribbon under the standard-only filter', () => {
     const stats = resolveSectionRibbonStats(
       sample.sections.Mortgage,
       [],
       false,
     );
+    expect(stats.min).toBeNull();
+    expect(stats.count).toBe(0);
+  });
+
+  it('falls back to payload ribbon when non-standard is included and rows are empty', () => {
+    const stats = resolveSectionRibbonStats(
+      sample.sections.Mortgage,
+      [],
+      true,
+    );
     expect(stats.min).toBe(sample.sections.Mortgage.ribbon.range.min);
+  });
+
+  it('keeps Home standard-only stats empty while the post-ingest gate is closed', () => {
+    clearSuitabilityIndex();
+    closeSuitabilityGateUntilRebuild();
+    const section = 'Mortgage' as SectionKey;
+    const data = sample.sections[section];
+    const hierRows = rowsUnder(data.rates, section, []);
+    expect(hierRows.length).toBeGreaterThan(0);
+
+    const stats = resolveSectionRibbonStats(data, hierRows, false, section);
+    expect(stats.min).toBeNull();
+    expect(stats.max).toBeNull();
+    expect(stats.count).toBe(0);
+
+    // Sanity: the payload ribbon still has an unfiltered extreme that must not leak.
+    expect(data.ribbon.range.min).not.toBeNull();
+    clearSuitabilityIndex();
   });
 
   it('excludes token near-zero deposit rates from Savings ribbon stats', () => {

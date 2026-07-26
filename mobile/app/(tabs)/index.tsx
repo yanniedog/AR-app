@@ -4,6 +4,7 @@ import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 
 
 import { HomeHero, SpringOnNewData } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
+import { IndeterminateProgressBar, LoadingRows } from '../../src/components/feedback';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Row } from '../../src/components/ui';
@@ -13,6 +14,7 @@ import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/in
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { profileFilterRows, profileSectionCount } from '../../src/data/profile';
 import { bestRow, rankFraction } from '../../src/data/selectors';
+import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { conditionalNote } from '../../src/lib/rateQualifier';
 import { ShareQrModal } from '../../src/components/ShareQrModal';
 import { rowsUnder } from '../../src/data/taxonomy';
@@ -50,6 +52,11 @@ export default function Home() {
   }, [interests, section, setActiveSection]);
 
   const coreRevision = core ? `${core.run_date}:${coreSha}` : '';
+  const filterReady = useMemo(() => {
+    void suitabilityRevision;
+    return isSuitabilityFilterReady(includeNonStandard);
+  }, [includeNonStandard, suitabilityRevision]);
+
   useEffect(() => {
     if (!coreRevision || refreshing || !warmDetails) return;
     let cancelled = false;
@@ -68,6 +75,14 @@ export default function Home() {
       interaction?.cancel();
     };
   }, [coreRevision, refreshing, warmDetails, ensureDetails]);
+
+  // Standard-only Home needs the details-derived suitability index. Refresh /
+  // bootstrap already force-rebuild, but kick ensureDetails here too so the
+  // wait UI cannot stall if that post-work has not claimed the load yet.
+  useEffect(() => {
+    if (!coreRevision || refreshing || includeNonStandard || filterReady) return;
+    void ensureDetails({ force: true });
+  }, [coreRevision, refreshing, includeNonStandard, filterReady, ensureDetails]);
 
   const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
   const scrollRef = useRef<ScrollView>(null);
@@ -128,14 +143,18 @@ export default function Home() {
   if (!core) return null;
   const sectionAccent = meta.accentColor;
   const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  const activeBest = best ?? fallbackBest;
+  const activeBest = filterReady ? best ?? fallbackBest : null;
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
   // show nothing (not the market extreme) when nothing matches.
   const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric) : null;
-  const heroRate = profileCount > 0 ? heroBest : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const heroRate = !filterReady
+    ? null
+    : profileCount > 0
+      ? heroBest
+      : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
   const bestNote = conditionalNote(activeBest, section);
-  const heroDataKey = `${core.run_date}:${section}:${heroRate ?? 'na'}`;
+  const heroDataKey = `${core.run_date}:${section}:${filterReady ? heroRate ?? 'na' : 'warming'}`;
 
   return (
     <ScreenScrollView
@@ -159,50 +178,70 @@ export default function Home() {
 
       <SectionCrossfade section={section}>
       <Card style={{ borderColor: `${sectionAccent}44` }}>
-        <SpringOnNewData dataKey={heroDataKey}>
-          <Row
-            style={{
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: activeBest ? theme.spacing(3) : 0,
-            }}
-          >
-            <View style={{ flex: 1, paddingRight: theme.spacing(3) }}>
+        {!filterReady ? (
+          <View style={{ gap: theme.spacing(3) }}>
+            <View>
               <AppText variant="tiny" color="textFaint" weight="700">
                 BEST IN {meta.title.toUpperCase()}
               </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
-                {meta.lowerIsBetter ? 'Lowest' : 'Top'} rate today
-                {profileCount > 0 ? ' · matches your profile' : ''}
+                Preparing filtered rates for today…
               </AppText>
-              <AppText variant="rateHero" style={{ color: rateInk, marginTop: theme.spacing(1) }}>
-                {formatRate(heroRate)}
-              </AppText>
-              {bestNote ? (
-                <AppText
-                  variant="tiny"
-                  weight="700"
-                  style={{ color: theme.colors.warning, marginTop: theme.spacing(1) }}
-                >
-                  {bestNote}
-                </AppText>
-              ) : null}
             </View>
-          </Row>
-        </SpringOnNewData>
-        {activeBest ? (
-          <Pressable
-            onLongPress={() => openBank(activeBest.provider)}
-            delayLongPress={450}
-            accessibilityHint="Long press to open lender profile"
-          >
-            <ProductCard
-              row={activeBest}
-              section={section}
-              onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+            <IndeterminateProgressBar
+              caption="Waiting until the new daily ingest is ready for your filter settings."
+              accessibilityLabel="Preparing filtered rates"
             />
-          </Pressable>
-        ) : null}
+            <LoadingRows count={1} />
+          </View>
+        ) : (
+          <>
+            <SpringOnNewData dataKey={heroDataKey}>
+              <Row
+                style={{
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  marginBottom: activeBest ? theme.spacing(3) : 0,
+                }}
+              >
+                <View style={{ flex: 1, paddingRight: theme.spacing(3) }}>
+                  <AppText variant="tiny" color="textFaint" weight="700">
+                    BEST IN {meta.title.toUpperCase()}
+                  </AppText>
+                  <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
+                    {meta.lowerIsBetter ? 'Lowest' : 'Top'} rate today
+                    {profileCount > 0 ? ' · matches your profile' : ''}
+                  </AppText>
+                  <AppText variant="rateHero" style={{ color: rateInk, marginTop: theme.spacing(1) }}>
+                    {formatRate(heroRate)}
+                  </AppText>
+                  {bestNote ? (
+                    <AppText
+                      variant="tiny"
+                      weight="700"
+                      style={{ color: theme.colors.warning, marginTop: theme.spacing(1) }}
+                    >
+                      {bestNote}
+                    </AppText>
+                  ) : null}
+                </View>
+              </Row>
+            </SpringOnNewData>
+            {activeBest ? (
+              <Pressable
+                onLongPress={() => openBank(activeBest.provider)}
+                delayLongPress={450}
+                accessibilityHint="Long press to open lender profile"
+              >
+                <ProductCard
+                  row={activeBest}
+                  section={section}
+                  onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+                />
+              </Pressable>
+            ) : null}
+          </>
+        )}
       </Card>
       </SectionCrossfade>
 

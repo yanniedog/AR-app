@@ -22,7 +22,9 @@ export function hasPayloadRibbon(ribbon: Ribbon | undefined): ribbon is Ribbon {
 /**
  * Section-level ribbon stats for Home / Trends / Browse root.
  * Prefer stats from visible hierarchy rows (matches non-standard toggle).
- * Fall back to payload ribbon when client-side stats are empty but payload has range data.
+ * Fall back to payload ribbon only when the caller opted into non-standard
+ * products — the ingest ribbon is unfiltered and must not override a closed
+ * standard-only gate (including the post-ingest rebuild window).
  */
 export function resolveSectionRibbonStats(
   sectionData: SectionData | undefined,
@@ -41,6 +43,12 @@ export function resolveSectionRibbonStats(
   // Deposit flooring can empty client stats while the payload ribbon still
   // includes token near-zero rows — do not resurrect those for Savings/TD.
   if (section === 'Savings' || section === 'TD') return computed;
+
+  // Standard-only mode must never resurrect the unfiltered payload ribbon.
+  // After a new daily ingest the suitability gate fails closed (empty Set) until
+  // details rebuild; filtered rows are temporarily empty and falling back here
+  // was putting non-standard extremes on Home's first paint.
+  if (!includeNonStandard) return computed;
 
   if (sectionData && hasPayloadRibbon(sectionData.ribbon)) {
     return ribbonToRateStats(sectionData.ribbon);
