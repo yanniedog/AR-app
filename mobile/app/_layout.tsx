@@ -87,6 +87,14 @@ function BrandedSplashOverlay({
     return () => clearTimeout(timer);
   }, [visible, onboarded, morphTarget]);
 
+  // Hard ceiling so a missed Reanimated completion callback cannot leave the
+  // splash mark floating over Home forever.
+  useEffect(() => {
+    if (!visible) return;
+    const timer = setTimeout(() => finish(), MORPH_MS + FADE_MS + 500);
+    return () => clearTimeout(timer);
+  }, [visible, finish]);
+
   useEffect(() => {
     if (!visible) return;
     const canMorph = onboarded && morphTarget != null;

@@ -95,6 +95,13 @@ jest.mock('../src/data/suitabilityIndex', () => ({
   hydrateSuitabilityIndex: jest.fn(async () => null),
   suitabilityIndexMatches: (...args: unknown[]) => mockSuitabilityIndexMatches(...args),
   rebuildAndInstallSuitabilityIndex: jest.fn(async () => null),
+  buildSuitabilityIndex: jest.fn(async () => ({
+    runDate: '2026-05-19',
+    coreSha: '',
+    detailsSha: '',
+    allowed: new Set<string>(),
+  })),
+  installSuitabilityIndex: jest.fn(),
 }));
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
