@@ -79,7 +79,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         if (cached && cached.run_date === core.run_date) {
           if (datasetUnchanged()) {
             set({ details: cached });
-            void rebuildAndInstallSuitabilityIndex(
+            await rebuildAndInstallSuitabilityIndex(
               core,
               cached,
               wantSha ?? '',
@@ -109,7 +109,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           });
           if (!datasetUnchanged()) return;
           set({ details: fresh });
-          void rebuildAndInstallSuitabilityIndex(
+          await rebuildAndInstallSuitabilityIndex(
             core,
             fresh,
             manifest.files.details.sha256,
@@ -124,7 +124,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         if (get().source === 'sample') {
           set({ details: sampleDetails as DetailsPayload });
           const seeded = sampleDetails as DetailsPayload;
-          void rebuildAndInstallSuitabilityIndex(
+          await rebuildAndInstallSuitabilityIndex(
             core,
             seeded,
             '',

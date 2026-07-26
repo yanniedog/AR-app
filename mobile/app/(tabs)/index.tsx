@@ -7,7 +7,7 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { IndeterminateProgressBar, LoadingRows } from '../../src/components/feedback';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
-import { AppText, Card, Row } from '../../src/components/ui';
+import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate } from '../../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
@@ -32,6 +32,7 @@ export default function Home() {
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
   const ensureDetails = useStore((s) => s.ensureDetails);
+  const detailsLoading = useStore((s) => s.detailsLoading);
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
   const interests = useStore((s) => s.prefs.interests);
@@ -45,6 +46,7 @@ export default function Home() {
   const suitabilityRevision = useSuitabilityRevision();
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
+  const [filterPrepFailed, setFilterPrepFailed] = useState(false);
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -83,6 +85,33 @@ export default function Home() {
     if (!coreRevision || refreshing || includeNonStandard || filterReady) return;
     void ensureDetails({ force: true });
   }, [coreRevision, refreshing, includeNonStandard, filterReady, ensureDetails]);
+
+  // If the load/rebuild settles without opening the gate, exit the permanent
+  // "Preparing" progress state and offer retry (Codex: failed ensureDetails).
+  useEffect(() => {
+    if (filterReady || includeNonStandard || refreshing || !coreRevision || detailsLoading) {
+      setFilterPrepFailed(false);
+      return;
+    }
+    const timer = setTimeout(() => {
+      if (!isSuitabilityFilterReady(includeNonStandard)) {
+        setFilterPrepFailed(true);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [
+    filterReady,
+    includeNonStandard,
+    refreshing,
+    coreRevision,
+    detailsLoading,
+    suitabilityRevision,
+  ]);
+
+  const retryFilterPrep = useCallback(() => {
+    setFilterPrepFailed(false);
+    void ensureDetails({ force: true });
+  }, [ensureDetails]);
 
   const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
   const scrollRef = useRef<ScrollView>(null);
@@ -185,14 +214,22 @@ export default function Home() {
                 BEST IN {meta.title.toUpperCase()}
               </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
-                Preparing filtered rates for today…
+                {filterPrepFailed && !detailsLoading
+                  ? 'Could not prepare filtered rates for today.'
+                  : 'Preparing filtered rates for today…'}
               </AppText>
             </View>
-            <IndeterminateProgressBar
-              caption="Waiting until the new daily ingest is ready for your filter settings."
-              accessibilityLabel="Preparing filtered rates"
-            />
-            <LoadingRows count={1} />
+            {filterPrepFailed && !detailsLoading ? (
+              <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
+            ) : (
+              <>
+                <IndeterminateProgressBar
+                  caption="Waiting until the new daily ingest is ready for your filter settings."
+                  accessibilityLabel="Preparing filtered rates"
+                />
+                <LoadingRows count={1} />
+              </>
+            )}
           </View>
         ) : (
           <>

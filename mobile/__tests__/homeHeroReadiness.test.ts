@@ -28,6 +28,12 @@ describe('Home hero suitability readiness', () => {
     expect(isSuitabilityFilterReady(false)).toBe(true);
   });
 
+  it('allows hero paint after an empty index install clears the closed gate', () => {
+    closeSuitabilityGateUntilRebuild();
+    setSuitabilityAllowed(new Set());
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+  });
+
   it('does not wait when the user opted into non-standard products', () => {
     closeSuitabilityGateUntilRebuild();
     expect(isSuitabilityFilterReady(true)).toBe(true);

@@ -68,4 +68,18 @@ describe('isSuitabilityFilterReady', () => {
     });
     expect(isSuitabilityFilterReady(false)).toBe(true);
   });
+
+  it('is ready after a successfully installed empty index (not stuck closed)', () => {
+    closeSuitabilityGateUntilRebuild();
+    expect(isSuitabilityFilterReady(false)).toBe(false);
+    const before = getSuitabilityRevision();
+    installSuitabilityIndex({
+      runDate: '2026-07-26',
+      coreSha: 'core',
+      detailsSha: 'details',
+      allowed: new Set(),
+    });
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(getSuitabilityRevision()).toBe(before + 1);
+  });
 });
