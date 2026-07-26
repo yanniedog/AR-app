@@ -102,6 +102,11 @@ export interface AppState {
   payloadProgress: PayloadProgressSnapshot | null;
   /** Transient snackbar after refresh completes (success / failure / Wi-Fi skip). */
   refreshOutcome: RefreshOutcomeKind | null;
+  /**
+   * Rolling GH run_date that is still uploading. App keeps the last finalized
+   * day fully usable until dates-index lists this date.
+   */
+  pendingIngestRunDate: string | null;
   /** True once persisted prefs/favorites have rehydrated from AsyncStorage. */
   hydrated: boolean;
   /** Last-selected product section; synced across Home and Browse. */

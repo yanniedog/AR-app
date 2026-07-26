@@ -18,7 +18,8 @@ import {
   rebuildAndInstallSuitabilityIndex,
   suitabilityIndexMatches,
 } from './suitabilityIndex';
-import type { CorePayload, DetailsPayload } from '../types';
+import { resolveFinalizedManifest } from './ingestFinalized';
+import type { CorePayload, DetailsPayload, Manifest } from '../types';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -174,8 +175,65 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         rbaCalendar: false,
       };
       try {
-        const remote = await fetchManifest(undefined, onProgress);
+        const rolling = await fetchManifest(undefined, onProgress);
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
+
+        const resolution = await resolveFinalizedManifest(rolling);
+        let remote: Manifest = rolling;
+        let pendingIngestRunDate: string | null = null;
+
+        if (resolution.status === 'finalized') {
+          remote = resolution.manifest;
+          pendingIngestRunDate = null;
+        } else if (resolution.status === 'pending') {
+          pendingIngestRunDate = resolution.pendingIngestRunDate;
+          if (resolution.manifest) {
+            remote = resolution.manifest;
+          } else {
+            // In-flight rolling day is not safe yet and we could not load a
+            // finalized fallback — keep the installed day fully usable.
+            const live = get();
+            const hasUsable =
+              !!live.core && (live.source === 'remote' || live.source === 'cache');
+            if (hasUsable) {
+              debugLog.info(
+                'store',
+                `refresh holding installed run_date=${live.core?.run_date} pending=${pendingIngestRunDate}`,
+              );
+              set({
+                pendingIngestRunDate,
+                offline: false,
+                refreshOutcome: null,
+              });
+              return false;
+            }
+            // Cold start with nothing installed: refuse the in-flight rolling
+            // day rather than half-adopt it.
+            throw new Error(
+              `today's ingest (${pendingIngestRunDate}) is still uploading; try again shortly`,
+            );
+          }
+        } else {
+          // dates-index unreachable — do not jump to a newer rolling day than
+          // what we already trust on disk.
+          const live = get();
+          const liveDate = live.core?.run_date?.slice(0, 10) ?? '';
+          const rollingDate = String(rolling.run_date || '').slice(0, 10);
+          if (liveDate && rollingDate && rollingDate > liveDate) {
+            debugLog.warn(
+              'store',
+              `dates-index down; holding run_date=${liveDate} (rolling=${rollingDate})`,
+            );
+            set({
+              pendingIngestRunDate: rollingDate,
+              offline: false,
+              refreshOutcome: null,
+            });
+            return false;
+          }
+          remote = rolling;
+          pendingIngestRunDate = null;
+        }
 
         const meta = await cache.readMeta();
         const upToDate =
@@ -200,10 +258,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               manifest: remote,
               source: 'remote',
               offline: false,
+              pendingIngestRunDate,
               ...(bundle ? { core: bundle.core } : {}),
             });
             deferWarm = true;
-            set({ refreshOutcome: 'success' });
+            set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
             return false;
           }
           debugLog.warn('store', 'matching cache metadata had no readable core; repairing');
@@ -265,6 +324,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           source: 'remote',
           status: 'ready',
           error: null,
+          pendingIngestRunDate,
           details: detailsUnchanged ? get().details : null,
         });
         notifyCtx = {
@@ -275,8 +335,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           coreSha: remote.files.core.sha256,
         };
         deferWarm = true;
-        debugLog.info('store', `refresh ok run_date=${core.run_date} changed=true`);
-        set({ refreshOutcome: 'success' });
+        debugLog.info(
+          'store',
+          `refresh ok run_date=${core.run_date} changed=true pending=${pendingIngestRunDate ?? 'none'}`,
+        );
+        set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
         return true;
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);

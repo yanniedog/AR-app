@@ -6,6 +6,7 @@ const mockReadSuitabilityIndex = jest.fn();
 const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
+const mockFetchDatesIndexJson = jest.fn();
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -44,6 +45,14 @@ jest.mock('../src/data/payload', () => ({
   downloadDetails: jest.fn(),
 }));
 
+jest.mock('../src/data/historyDaily', () => {
+  const actual = jest.requireActual('../src/data/historyDaily') as object;
+  return {
+    ...actual,
+    fetchDatesIndexJson: (...args: unknown[]) => mockFetchDatesIndexJson(...args),
+  };
+});
+
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability modules share the mocked cache
@@ -81,6 +90,13 @@ describe('store error recovery', () => {
     mockReadSuitabilityIndex.mockResolvedValue(null);
     mockWriteBundle.mockResolvedValue(undefined);
     mockFetchManifest.mockResolvedValue(remoteManifest);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: [remoteManifest.run_date],
+      count: 1,
+      min_date: remoteManifest.run_date,
+      latest_date: remoteManifest.run_date,
+    });
     mockDownloadCore.mockResolvedValue({
       text: JSON.stringify(remoteCore),
       core: remoteCore,

@@ -1,4 +1,5 @@
 import type { PayloadProgressSnapshot } from '../data/downloadProgress';
+import { pendingIngestBannerMessage } from '../data/ingestFinalized';
 
 /** Transient refresh feedback shown after pull-to-refresh, manual refresh, or background sync. */
 export type RefreshOutcomeKind = 'success' | 'failure' | 'wifi-skip';
@@ -10,8 +11,13 @@ export interface RefreshOutcomeViewModel {
   action: 'retry' | 'settings' | 'dismiss';
 }
 
-/** Resolved offline / sample-connect banner visibility and copy. */
-export type OfflineBannerMode = 'hidden' | 'connecting' | 'offline-cached' | 'offline-sample';
+/** Resolved offline / sample-connect / pending-ingest banner visibility and copy. */
+export type OfflineBannerMode =
+  | 'hidden'
+  | 'connecting'
+  | 'offline-cached'
+  | 'offline-sample'
+  | 'pending-ingest';
 
 export interface OfflineBannerViewModel {
   mode: OfflineBannerMode;
@@ -24,8 +30,18 @@ export function resolveOfflineBanner(
   offline: boolean,
   refreshing: boolean,
   payloadProgress: PayloadProgressSnapshot | null,
+  pendingIngestRunDate: string | null = null,
+  showingRunDate: string | null = null,
 ): OfflineBannerViewModel {
   const sample = source === 'sample';
+
+  if (!offline && !sample && pendingIngestRunDate) {
+    return {
+      mode: 'pending-ingest',
+      showLiveProgress: false,
+      message: pendingIngestBannerMessage(pendingIngestRunDate, showingRunDate),
+    };
+  }
 
   if (!offline && !sample) {
     return { mode: 'hidden', showLiveProgress: false, message: '' };

@@ -51,10 +51,11 @@ describe('resolveOfflineBanner', () => {
     expect(view.showLiveProgress).toBe(true);
   });
 
-  it('shows connecting copy during offline-flagged retry before progress events', () => {
-    const view = resolveOfflineBanner('sample', true, true, null);
-    expect(view.mode).toBe('connecting');
-    expect(view.showLiveProgress).toBe(false);
+  it("shows pending-ingest banner while today's upload is still open", () => {
+    const view = resolveOfflineBanner('remote', false, false, null, '2026-07-28', '2026-07-27');
+    expect(view.mode).toBe('pending-ingest');
+    expect(view.message).toMatch(/still uploading/i);
+    expect(view.message).toMatch(/showing/i);
   });
 });
 
