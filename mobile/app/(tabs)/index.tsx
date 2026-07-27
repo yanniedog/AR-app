@@ -35,6 +35,7 @@ export default function Home() {
   const detailsLoading = useStore((s) => s.detailsLoading);
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
+  const pendingIngestRunDate = useStore((s) => s.pendingIngestRunDate);
   const interests = useStore((s) => s.prefs.interests);
   const section = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
@@ -230,6 +231,7 @@ export default function Home() {
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}
         source={source}
         offline={offline}
+        pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
       />
 

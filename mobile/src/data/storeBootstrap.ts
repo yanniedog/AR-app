@@ -164,6 +164,7 @@ export function createBootstrapActions(
           rbaCalendarError: null,
           productHistory: null,
           productHistoryError: null,
+          pendingIngestRunDate: null,
         });
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
@@ -208,6 +209,7 @@ export const bootstrapInitialState = {
   lastCheckedAt: null,
   payloadProgress: null,
   refreshOutcome: null,
+  pendingIngestRunDate: null,
   hydrated: false,
   activeSection: DEFAULT_PREFS.defaultSection,
   prefs: DEFAULT_PREFS,

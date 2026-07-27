@@ -7,6 +7,7 @@ const mockWriteBundle = jest.fn();
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
 const mockReadDetails = jest.fn();
+const mockFetchDatesIndexJson = jest.fn();
 const mockEnsureHistoryBanks = jest.fn(async () => {});
 const mockEnsureBankInsights = jest.fn(async () => {});
 const mockEnsureRbaCalendar = jest.fn(async () => {});
@@ -41,6 +42,14 @@ jest.mock('../src/data/payload', () => ({
   downloadDetails: jest.fn(),
 }));
 
+jest.mock('../src/data/historyDaily', () => {
+  const actual = jest.requireActual('../src/data/historyDaily') as object;
+  return {
+    ...actual,
+    fetchDatesIndexJson: (...args: unknown[]) => mockFetchDatesIndexJson(...args),
+  };
+});
+
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability module shares the mocked cache
@@ -72,6 +81,7 @@ function resetStore() {
     lastCheckedAt: null,
     payloadProgress: null,
     refreshOutcome: null,
+    pendingIngestRunDate: null,
     hydrated: true,
     prefs: useStore.getState().prefs,
     favorites: [],
@@ -89,6 +99,13 @@ describe('store refresh lifecycle', () => {
     mockFetchManifest.mockResolvedValue(remoteManifest);
     mockWriteBundle.mockResolvedValue(undefined);
     mockReadDetails.mockResolvedValue(null);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: [remoteManifest.run_date],
+      count: 1,
+      min_date: remoteManifest.run_date,
+      latest_date: remoteManifest.run_date,
+    });
   });
 
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
@@ -257,6 +274,164 @@ describe('store refresh lifecycle', () => {
     // Refresh closes the stale allowlist before publish, then post-warm rebuilds
     // a fresh gate. The previous payload's product must not remain allowed.
     expect(getSuitabilityAllowed()?.has('previously-allowed-product')).toBe(false);
+  });
+
+  it('holds the prior day while rolling ingest is ahead of dates-index', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+    });
+    mockFetchManifest
+      .mockResolvedValueOnce(rollingManifest)
+      .mockResolvedValue(priorManifest);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core?.run_date).toBe('2026-07-27');
+    expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('holds cached day when dates-index is unavailable and rolling is newer', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+      status: 'ready',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockRejectedValueOnce(new Error('dates-index 503'));
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core?.run_date).toBe('2026-07-27');
+    expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
+    expect(useStore.getState().status).toBe('ready');
+    expect(useStore.getState().error).toBeNull();
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('surfaces an error on cold start when dates-index is unavailable', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    useStore.setState({
+      source: 'sample',
+      core: null,
+      manifest: null,
+      pendingIngestRunDate: null,
+      status: 'idle',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockRejectedValueOnce(new Error('dates-index 503'));
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core).toBeNull();
+    expect(useStore.getState().error).toMatch(/cannot verify ingest finalisation/i);
+    expect(useStore.getState().status).toBe('error');
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('surfaces an error on cold start when rolling ingest is not yet finalised', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    useStore.setState({
+      source: 'sample',
+      core: null,
+      manifest: null,
+      pendingIngestRunDate: null,
+      status: 'idle',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockResolvedValueOnce({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    // Dated fallback also unavailable → pending with null manifest.
+    mockFetchManifest.mockRejectedValueOnce(new Error('dated missing'));
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core).toBeNull();
+    expect(useStore.getState().error).toMatch(/still uploading/i);
+    expect(useStore.getState().status).toBe('error');
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
   });
 
   it('sets source remote after download and clears refreshing', async () => {

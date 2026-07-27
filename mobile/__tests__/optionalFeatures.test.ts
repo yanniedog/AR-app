@@ -22,6 +22,7 @@ const mockWriteProductHistory = jest.fn();
 const mockSyncProductHistoryFromDailyPayloads = jest.fn();
 const mockGetSuitabilityIndex = jest.fn();
 const mockSuitabilityIndexMatches = jest.fn();
+const mockFetchDatesIndexJson = jest.fn();
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -76,6 +77,7 @@ jest.mock('../src/data/historyDaily', () => {
   return {
     ...actual,
     syncHistoryFromDailyPayloads: (...args: unknown[]) => mockSyncHistoryFromDailyPayloads(...args),
+    fetchDatesIndexJson: (...args: unknown[]) => mockFetchDatesIndexJson(...args),
   };
 });
 
@@ -182,6 +184,13 @@ describe('optional feature prefs', () => {
     mockWriteProductHistory.mockResolvedValue(undefined);
     mockGetSuitabilityIndex.mockReturnValue(null);
     mockSuitabilityIndexMatches.mockReturnValue(false);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: [remoteManifest.run_date],
+      count: 1,
+      min_date: remoteManifest.run_date,
+      latest_date: remoteManifest.run_date,
+    });
     mockDownloadDetails.mockResolvedValue({
       text: JSON.stringify(sampleDetails),
       details: sampleDetails,

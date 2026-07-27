@@ -146,7 +146,7 @@ export function IndeterminateProgressBar({
 /** @deprecated Use PayloadProgressBar. */
 export const PayloadProgressDetails = PayloadProgressBar;
 
-type BannerSurface = 'offline' | 'connecting' | 'syncing' | 'success';
+type BannerSurface = 'offline' | 'connecting' | 'syncing' | 'success' | 'pending';
 
 function resolveBannerSurface(
   source: string,
@@ -154,8 +154,10 @@ function resolveBannerSurface(
   refreshing: boolean,
   payloadProgress: PayloadProgressSnapshot | null,
   showSuccess: boolean,
+  pendingIngestRunDate: string | null,
+  showingRunDate: string | null,
 ): { surface: BannerSurface; message: string; showProgress: boolean } | null {
-  if (showSuccess) {
+  if (showSuccess && !pendingIngestRunDate) {
     return { surface: 'success', message: 'Live rates updated', showProgress: false };
   }
 
@@ -174,7 +176,14 @@ function resolveBannerSurface(
     };
   }
 
-  const banner = resolveOfflineBanner(source, offline, refreshing, payloadProgress);
+  const banner = resolveOfflineBanner(
+    source,
+    offline,
+    refreshing,
+    payloadProgress,
+    pendingIngestRunDate,
+    showingRunDate,
+  );
   if (banner.mode === 'hidden') return null;
 
   if (banner.mode === 'connecting') {
@@ -182,6 +191,14 @@ function resolveBannerSurface(
       surface: 'connecting',
       message: banner.message,
       showProgress: banner.showLiveProgress,
+    };
+  }
+
+  if (banner.mode === 'pending-ingest') {
+    return {
+      surface: 'pending',
+      message: banner.message,
+      showProgress: false,
     };
   }
 
@@ -196,6 +213,8 @@ export function OfflineBanner({ source, offline }: { source: string; offline: bo
   const theme = useTheme();
   const payloadProgress = useStore((s) => s.payloadProgress);
   const refreshing = useStore((s) => s.refreshing);
+  const pendingIngestRunDate = useStore((s) => s.pendingIngestRunDate);
+  const showingRunDate = useStore((s) => s.core?.run_date ?? null);
   const prevRefreshing = useRef(refreshing);
   const [showSuccess, setShowSuccess] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -204,12 +223,18 @@ export function OfflineBanner({ source, offline }: { source: string; offline: bo
     const wasRefreshing = prevRefreshing.current;
     prevRefreshing.current = refreshing;
 
-    if (wasRefreshing && !refreshing && source === 'remote' && !offline) {
+    if (
+      wasRefreshing &&
+      !refreshing &&
+      source === 'remote' &&
+      !offline &&
+      !pendingIngestRunDate
+    ) {
       setShowSuccess(true);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       hideTimer.current = setTimeout(() => setShowSuccess(false), SUCCESS_HOLD_MS + BANNER_FADE_MS);
     }
-  }, [refreshing, source, offline]);
+  }, [refreshing, source, offline, pendingIngestRunDate]);
 
   useEffect(
     () => () => {
@@ -218,23 +243,34 @@ export function OfflineBanner({ source, offline }: { source: string; offline: bo
     [],
   );
 
-  const bannerView = resolveBannerSurface(source, offline, refreshing, payloadProgress, showSuccess);
+  const bannerView = resolveBannerSurface(
+    source,
+    offline,
+    refreshing,
+    payloadProgress,
+    showSuccess,
+    pendingIngestRunDate,
+    showingRunDate,
+  );
   if (!bannerView) return null;
 
   const { surface, message, showProgress } = bannerView;
   const sampleTone = surface === 'connecting' || surface === 'success';
+  const pendingTone = surface === 'pending';
   const iconName =
     surface === 'success'
       ? 'checkmark-circle-outline'
       : surface === 'syncing'
         ? 'cloud-download-outline'
-        : sampleTone
-          ? 'flask-outline'
-          : 'cloud-offline-outline';
+        : pendingTone
+          ? 'cloud-outline'
+          : sampleTone
+            ? 'flask-outline'
+            : 'cloud-offline-outline';
   const iconColor =
     surface === 'success'
       ? theme.colors.success
-      : sampleTone
+      : pendingTone || sampleTone
         ? theme.colors.primary
         : theme.colors.warning;
 
@@ -250,7 +286,7 @@ export function OfflineBanner({ source, offline }: { source: string; offline: bo
           backgroundColor:
             surface === 'success'
               ? `${theme.colors.success}22`
-              : sampleTone
+              : sampleTone || pendingTone
                 ? theme.colors.primaryMuted
                 : theme.colors.chip,
           paddingHorizontal: 12,

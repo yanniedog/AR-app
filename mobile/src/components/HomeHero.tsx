@@ -40,6 +40,7 @@ export function HomeHero({
   offline,
   dataKey,
   onShare,
+  pendingIngest = false,
 }: {
   runDateLabel: string;
   runAgeLabel: string;
@@ -49,11 +50,23 @@ export function HomeHero({
   dataKey: string;
   /** Shares today's headline rates (system share sheet). */
   onShare?: () => void;
+  /** Rolling ingest for today is still uploading on GitHub. */
+  pendingIngest?: boolean;
 }) {
   const theme = useTheme();
-  const sourceLabel = dataSourceLabel(source);
-  const statusIcon = offline ? 'cloud-offline-outline' : source === 'remote' ? 'cloud-done' : 'albums-outline';
-  const statusColor = offline ? theme.colors.warning : theme.colors.success;
+  const sourceLabel = pendingIngest ? 'Updating' : dataSourceLabel(source);
+  const statusIcon = offline
+    ? 'cloud-offline-outline'
+    : pendingIngest
+      ? 'cloud-outline'
+      : source === 'remote'
+        ? 'cloud-done'
+        : 'albums-outline';
+  const statusColor = offline
+    ? theme.colors.warning
+    : pendingIngest
+      ? theme.colors.primary
+      : theme.colors.success;
   const datePulse = useSharedValue(1);
 
   useEffect(() => {
