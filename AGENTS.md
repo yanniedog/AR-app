@@ -18,8 +18,8 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 
 - After every push: commit, push, create/update the PR, then watch checks until they settle.
 - Required gates here typically include `mobile-ci`, `bot-presence-gate`, and `bot-feedback-gate`.
-- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. Re-run while exit 2. If GitHub `bot-presence-gate` is still red after bots have posted, re-trigger it (comment / review event / `ready_for_review`) so Actions re-runs with bots present — avoid empty commits that only re-race CI when possible.
-- Enable squash auto-merge when gates are otherwise satisfied (`gh pr merge --squash --auto` when write-capable).
+- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. Re-run while exit 2. If GitHub `bot-presence-gate` is still red after bots have posted, re-trigger a **PR-head** check (not a top-level issue comment — those run on the default-branch SHA and do not replace the failed check on the PR commit): prefer `ready_for_review`, a new `pull_request_review` / review-comment event, workflow re-run on the PR head when write-capable, or a fix/`synchronize` push. Prefer waiting until `mobile-ci` is green before a synchronize re-trigger so presence does not race CI.
+- Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
 
 ## Bot feedback (mandatory — every finding, every session)
