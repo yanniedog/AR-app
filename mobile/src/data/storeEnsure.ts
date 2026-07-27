@@ -25,127 +25,238 @@ import {
   readValidatedHistoryBanks,
 } from './storeHelpers';
 import {
+  buildSuitabilityIndex,
+  installSuitabilityIndex,
   rebuildAndInstallSuitabilityIndex,
   getSuitabilityIndex,
   suitabilityIndexMatches,
 } from './suitabilityIndex';
+import { isSuitabilityFilterReady } from './suitabilityGate';
+
+/** Coalesce concurrent ensureDetails callers onto one in-flight load. */
+let detailsEnsureInFlight: Promise<void> | null = null;
+/** Bumped when a force warm abandons a hung/stale in-flight ensure. */
+let detailsEnsureGeneration = 0;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
+  const datasetStillCurrent = (
+    runDate: string,
+    coreSha: string,
+    detailsSha: string,
+    detailsRunDate: string | null | undefined,
+  ): boolean => {
+    const cur = get();
+    return (
+      cur.core?.run_date === runDate &&
+      (cur.manifest?.files.core.sha256 ?? '') === coreSha &&
+      (cur.manifest?.files.details.sha256 ?? '') === detailsSha &&
+      (cur.details?.run_date ?? null) === (detailsRunDate ?? null)
+    );
+  };
+
   return {
-    async ensureDetails(opts: { forProductView?: boolean; force?: boolean } = {}) {
-      const { forProductView = false, force = false } = opts;
+    async ensureDetails(
+      opts: { forProductView?: boolean; force?: boolean; abandonInFlight?: boolean } = {},
+    ) {
+      const { forProductView = false, force = false, abandonInFlight = false } = opts;
+      if (!get().core) return;
+
+      // Wait for the in-flight load instead of silently no-oping — Home's
+      // force-warm used to miss the post-ingest rebuild when bootstrap/refresh
+      // had already claimed detailsLoading. Same-frame force callers still
+      // coalesce; abandonInFlight escapes a hung owner (Home Retry).
+      if (detailsEnsureInFlight) {
+        if (!abandonInFlight) {
+          await detailsEnsureInFlight;
+          return;
+        }
+        detailsEnsureGeneration += 1;
+        detailsEnsureInFlight = null;
+      }
+
       const { details, core, manifest, source, detailsLoading, prefs, subscriptions } = get();
-      if (!core || detailsLoading) return;
+      if (!core) return;
+      if (!abandonInFlight && detailsLoading) return;
       if (!forProductView && !force && !shouldWarmDetails(prefs, subscriptions)) return;
 
       const wantSha = manifest?.files.details.sha256 ?? null;
+      const detailsSha = wantSha ?? '';
       const coreSha = manifest?.files.core.sha256 ?? '';
-      // Claim the load before the first await. Home, Browse, and product screens
-      // can request details in the same frame; without this synchronous claim
-      // they can all pass the initial guard and parse/download the large asset.
-      set({ detailsLoading: true });
-      try {
-        const meta = await cache.readMeta();
-        const shaOk = !wantSha || meta?.detailsSha === wantSha;
-        if (details && details.run_date === core.run_date && shaOk) {
-          if (!suitabilityIndexMatches(getSuitabilityIndex(), core.run_date, coreSha, wantSha ?? '')) {
+      const runDate = core.run_date;
+      const myGeneration = detailsEnsureGeneration;
+      let reensureAfter = false;
+
+      const run = (async () => {
+        // Claim the load before the first await. Home, Browse, and product screens
+        // can request details in the same frame; without this synchronous claim
+        // they can all pass the initial guard and parse/download the large asset.
+        set({ detailsLoading: true });
+        try {
+          const meta = await cache.readMeta();
+          if (myGeneration !== detailsEnsureGeneration) return;
+          const shaOk = !wantSha || meta?.detailsSha === wantSha;
+          if (details && details.run_date === core.run_date && shaOk) {
+            if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
+              await rebuildAndInstallSuitabilityIndex(
+                core,
+                details,
+                detailsSha,
+                () => datasetStillCurrent(runDate, coreSha, detailsSha, details.run_date),
+                coreSha,
+              );
+            }
+            return;
+          }
+
+          const datasetUnchanged = () => {
+            if (myGeneration !== detailsEnsureGeneration) return false;
+            const cur = get();
+            return (
+              cur.core?.run_date === core.run_date &&
+              cur.manifest?.files.core.sha256 === manifest?.files.core.sha256 &&
+              cur.manifest?.files.details.sha256 === manifest?.files.details.sha256
+            );
+          };
+
+          // A stale details file expands to several megabytes. Its hash mismatch
+          // already proves it cannot satisfy this core, so do not parse it merely
+          // to throw it away before downloading the current asset.
+          const cached = shaOk ? await cache.readDetails() : null;
+          if (cached && cached.run_date === core.run_date) {
+            if (datasetUnchanged()) {
+              set({ details: cached });
+              await rebuildAndInstallSuitabilityIndex(
+                core,
+                cached,
+                detailsSha,
+                () => datasetStillCurrent(runDate, coreSha, detailsSha, cached.run_date),
+                coreSha,
+              );
+            }
+            return;
+          }
+          if (source === 'remote' && manifest) {
+            const { text, details: fresh } = await downloadDetails(
+              manifest.files.details.url,
+              manifest.files.details.sha256,
+            );
+            if (!datasetUnchanged()) return;
+            await cache.writeDetails(text);
+            if (!datasetUnchanged()) return;
+            await cache.updateMeta({
+              manifest,
+              source: 'remote',
+              savedAt: new Date().toISOString(),
+              coreSha: manifest.files.core.sha256,
+              detailsSha: manifest.files.details.sha256,
+            });
+            if (!datasetUnchanged()) return;
+            set({ details: fresh });
             await rebuildAndInstallSuitabilityIndex(
               core,
-              details,
-              wantSha ?? '',
+              fresh,
+              manifest.files.details.sha256,
               () =>
-                get().core?.run_date === core.run_date &&
-                get().details === details &&
-                (get().manifest?.files.core.sha256 ?? '') === coreSha,
+                datasetStillCurrent(
+                  runDate,
+                  coreSha,
+                  manifest.files.details.sha256,
+                  fresh.run_date,
+                ),
+              coreSha,
+            );
+            return;
+          }
+          if (get().source === 'sample') {
+            set({ details: sampleDetails as DetailsPayload });
+            const seeded = sampleDetails as DetailsPayload;
+            await rebuildAndInstallSuitabilityIndex(
+              core,
+              seeded,
+              '',
+              () => datasetStillCurrent(runDate, coreSha, '', seeded.run_date),
               coreSha,
             );
           }
-          return;
-        }
-
-        const datasetUnchanged = () => {
+        } catch (err) {
+          if (myGeneration !== detailsEnsureGeneration) return;
+          const msg = String((err as Error)?.message ?? err);
+          debugLog.warn('store', `ensureDetails failed: ${msg}`);
+          logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
+          if (get().source === 'sample') set({ details: sampleDetails as DetailsPayload });
+        } finally {
+          if (myGeneration !== detailsEnsureGeneration) return;
+          set({ detailsLoading: false });
           const cur = get();
-          return (
-            cur.core?.run_date === core.run_date &&
-            cur.manifest?.files.core.sha256 === manifest?.files.core.sha256 &&
-            cur.manifest?.files.details.sha256 === manifest?.files.details.sha256
-          );
-        };
-
-        // A stale details file expands to several megabytes. Its hash mismatch
-        // already proves it cannot satisfy this core, so do not parse it merely
-        // to throw it away before downloading the current asset.
-        const cached = shaOk ? await cache.readDetails() : null;
-        if (cached && cached.run_date === core.run_date) {
-          if (datasetUnchanged()) {
-            set({ details: cached });
-            await rebuildAndInstallSuitabilityIndex(
-              core,
-              cached,
-              wantSha ?? '',
-              () =>
-                get().core?.run_date === core.run_date &&
-                get().details === cached &&
-                (get().manifest?.files.core.sha256 ?? '') === coreSha,
-              coreSha,
-            );
+          const movedOn =
+            cur.core?.run_date !== core.run_date ||
+            cur.manifest?.files.core.sha256 !== manifest?.files.core.sha256 ||
+            cur.manifest?.files.details.sha256 !== manifest?.files.details.sha256;
+          if (cur.core && movedOn) {
+            // Defer until after detailsEnsureInFlight clears in tracked.finally —
+            // calling ensureDetails here would coalesce onto this same promise.
+            reensureAfter = true;
+            return;
           }
-          return;
+          // Last resort: if details for this manifest are already trusted on disk
+          // but the suitability index is still sealed, rebuild from those details.
+          // Never open a core-only / stale-details gate here — that can mark
+          // restricted products as broadly available after a transient details
+          // failure. Home's retry UI covers a still-closed gate once loading settles.
+          if (cur.core && !isSuitabilityFilterReady(false)) {
+            const liveCoreSha = cur.manifest?.files.core.sha256 ?? '';
+            const wantDetailsSha = cur.manifest?.files.details.sha256 ?? '';
+            const meta = await cache.readMeta();
+            const detailsShaTrusted =
+              !!wantDetailsSha && meta?.detailsSha === wantDetailsSha;
+            const liveDetails =
+              detailsShaTrusted && cur.details?.run_date === cur.core.run_date
+                ? cur.details
+                : null;
+            if (!liveDetails) {
+              debugLog.warn(
+                'store',
+                'ensureDetails leaving suitability gate closed (no trusted matching details)',
+              );
+              return;
+            }
+            const liveRunDate = cur.core.run_date;
+            const stillThisCore = () =>
+              get().core?.run_date === liveRunDate &&
+              (get().manifest?.files.core.sha256 ?? '') === liveCoreSha &&
+              (get().manifest?.files.details.sha256 ?? '') === wantDetailsSha;
+            debugLog.warn(
+              'store',
+              'ensureDetails rebuilding suitability index from trusted details',
+            );
+            const installed = await rebuildAndInstallSuitabilityIndex(
+              cur.core,
+              liveDetails,
+              wantDetailsSha,
+              stillThisCore,
+              liveCoreSha,
+            );
+            if (!installed && stillThisCore() && !isSuitabilityFilterReady(false)) {
+              const built = await buildSuitabilityIndex(
+                cur.core,
+                liveDetails,
+                wantDetailsSha,
+                liveCoreSha,
+              );
+              if (stillThisCore()) installSuitabilityIndex(built);
+            }
+          }
         }
-        if (source === 'remote' && manifest) {
-          const { text, details: fresh } = await downloadDetails(
-            manifest.files.details.url,
-            manifest.files.details.sha256,
-          );
-          if (!datasetUnchanged()) return;
-          await cache.writeDetails(text);
-          if (!datasetUnchanged()) return;
-          await cache.updateMeta({
-            manifest,
-            source: 'remote',
-            savedAt: new Date().toISOString(),
-            coreSha: manifest.files.core.sha256,
-            detailsSha: manifest.files.details.sha256,
-          });
-          if (!datasetUnchanged()) return;
-          set({ details: fresh });
-          await rebuildAndInstallSuitabilityIndex(
-            core,
-            fresh,
-            manifest.files.details.sha256,
-            () =>
-              get().core?.run_date === core.run_date &&
-              get().details === fresh &&
-              (get().manifest?.files.core.sha256 ?? '') === coreSha,
-            coreSha,
-          );
-          return;
+      })();
+
+      const tracked = run.finally(() => {
+        if (detailsEnsureInFlight === tracked) detailsEnsureInFlight = null;
+        if (reensureAfter && myGeneration === detailsEnsureGeneration) {
+          void get().ensureDetails(opts);
         }
-        if (get().source === 'sample') {
-          set({ details: sampleDetails as DetailsPayload });
-          const seeded = sampleDetails as DetailsPayload;
-          await rebuildAndInstallSuitabilityIndex(
-            core,
-            seeded,
-            '',
-            () => get().core?.run_date === core.run_date && get().details === seeded,
-            coreSha,
-          );
-        }
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? err);
-        debugLog.warn('store', `ensureDetails failed: ${msg}`);
-        logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
-        if (get().source === 'sample') set({ details: sampleDetails as DetailsPayload });
-      } finally {
-        set({ detailsLoading: false });
-        const cur = get();
-        const movedOn =
-          cur.core?.run_date !== core.run_date ||
-          cur.manifest?.files.core.sha256 !== manifest?.files.core.sha256 ||
-          cur.manifest?.files.details.sha256 !== manifest?.files.details.sha256;
-        if (cur.core && movedOn) void get().ensureDetails(opts);
-      }
+      });
+      detailsEnsureInFlight = tracked;
+      return tracked;
     },
 
     async ensureSearchIndex() {

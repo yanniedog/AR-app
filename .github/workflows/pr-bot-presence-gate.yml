@@ -83,8 +83,12 @@ jobs:
           # Override with repo variable AR_BOT_WAIT_REQUIRED if the installed review
           # bots differ on AR-app. Default keeps the existing Sourcery gate.
           AR_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED || 'sourcery' }}
-          BOT_WAIT_IGNORE_CHECK_NAMES: bot-presence-gate,bot-feedback-gate,pr-bot-presence-gate,pr-bot-feedback-check
+          BOT_WAIT_IGNORE_CHECK_NAMES: bot-presence-gate,bot-feedback-gate,pr-bot-presence-gate,pr-bot-feedback-check,mobile-ci
           # CI has no .ar-bot-wait state; anchor falls back to PR createdAt (long-open PRs exceed 28m).
+          # Ignore mobile-ci here: it is a separate required check. Waiting on it from this
+          # single-shot gate races synchronize (presence fails while CI is still running) and
+          # leaves a failed bot-presence-gate check-run on the same SHA that can keep merge blocked
+          # even after a later presence success.
           BOT_WAIT_MAX_MIN: "240"
         run: |
           case "${{ github.event_name }}" in

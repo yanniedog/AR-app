@@ -254,7 +254,9 @@ describe('store refresh lifecycle', () => {
 
     await useStore.getState().refresh({});
 
-    expect(getSuitabilityAllowed()).toEqual(new Set());
+    // Refresh closes the stale allowlist before publish, then post-warm rebuilds
+    // a fresh gate. The previous payload's product must not remain allowed.
+    expect(getSuitabilityAllowed()?.has('previously-allowed-product')).toBe(false);
   });
 
   it('sets source remote after download and clears refreshing', async () => {
