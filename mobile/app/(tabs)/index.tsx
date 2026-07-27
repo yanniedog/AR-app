@@ -142,7 +142,7 @@ export default function Home() {
   const retryFilterPrep = useCallback(() => {
     setFilterPrepFailed(false);
     filterPrepAttempts.current = 0;
-    void ensureDetails({ force: true });
+    void ensureDetails({ force: true, abandonInFlight: true });
   }, [ensureDetails]);
 
   const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
@@ -246,12 +246,12 @@ export default function Home() {
                 BEST IN {meta.title.toUpperCase()}
               </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
-                {filterPrepFailed && !detailsLoading
+                {filterPrepFailed
                   ? 'Could not prepare filtered rates for today.'
                   : 'Preparing filtered rates for today…'}
               </AppText>
             </View>
-            {filterPrepFailed && !detailsLoading ? (
+            {filterPrepFailed ? (
               <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
             ) : (
               <>

@@ -35,6 +35,8 @@ import { isSuitabilityFilterReady } from './suitabilityGate';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
+/** Bumped when a force warm abandons a hung/stale in-flight ensure. */
+let detailsEnsureGeneration = 0;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   const datasetStillCurrent = (
@@ -53,26 +55,36 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
   };
 
   return {
-    async ensureDetails(opts: { forProductView?: boolean; force?: boolean } = {}) {
-      const { forProductView = false, force = false } = opts;
+    async ensureDetails(
+      opts: { forProductView?: boolean; force?: boolean; abandonInFlight?: boolean } = {},
+    ) {
+      const { forProductView = false, force = false, abandonInFlight = false } = opts;
       if (!get().core) return;
 
       // Wait for the in-flight load instead of silently no-oping — Home's
       // force-warm used to miss the post-ingest rebuild when bootstrap/refresh
-      // had already claimed detailsLoading. Do not start a second download.
+      // had already claimed detailsLoading. Same-frame force callers still
+      // coalesce; abandonInFlight escapes a hung owner (Home Retry).
       if (detailsEnsureInFlight) {
-        await detailsEnsureInFlight;
-        return;
+        if (!abandonInFlight) {
+          await detailsEnsureInFlight;
+          return;
+        }
+        detailsEnsureGeneration += 1;
+        detailsEnsureInFlight = null;
       }
 
       const { details, core, manifest, source, detailsLoading, prefs, subscriptions } = get();
-      if (!core || detailsLoading) return;
+      if (!core) return;
+      if (!abandonInFlight && detailsLoading) return;
       if (!forProductView && !force && !shouldWarmDetails(prefs, subscriptions)) return;
 
       const wantSha = manifest?.files.details.sha256 ?? null;
       const detailsSha = wantSha ?? '';
       const coreSha = manifest?.files.core.sha256 ?? '';
       const runDate = core.run_date;
+      const myGeneration = detailsEnsureGeneration;
+      let reensureAfter = false;
 
       const run = (async () => {
         // Claim the load before the first await. Home, Browse, and product screens
@@ -81,6 +93,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         set({ detailsLoading: true });
         try {
           const meta = await cache.readMeta();
+          if (myGeneration !== detailsEnsureGeneration) return;
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
           if (details && details.run_date === core.run_date && shaOk) {
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
@@ -96,6 +109,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           }
 
           const datasetUnchanged = () => {
+            if (myGeneration !== detailsEnsureGeneration) return false;
             const cur = get();
             return (
               cur.core?.run_date === core.run_date &&
@@ -165,11 +179,13 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             );
           }
         } catch (err) {
+          if (myGeneration !== detailsEnsureGeneration) return;
           const msg = String((err as Error)?.message ?? err);
           debugLog.warn('store', `ensureDetails failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
           if (get().source === 'sample') set({ details: sampleDetails as DetailsPayload });
         } finally {
+          if (myGeneration !== detailsEnsureGeneration) return;
           set({ detailsLoading: false });
           const cur = get();
           const movedOn =
@@ -177,7 +193,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             cur.manifest?.files.core.sha256 !== manifest?.files.core.sha256 ||
             cur.manifest?.files.details.sha256 !== manifest?.files.details.sha256;
           if (cur.core && movedOn) {
-            void get().ensureDetails(opts);
+            // Defer until after detailsEnsureInFlight clears in tracked.finally —
+            // calling ensureDetails here would coalesce onto this same promise.
+            reensureAfter = true;
             return;
           }
           // Last resort: never leave standard-only Home permanently sealed after
@@ -221,6 +239,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
       const tracked = run.finally(() => {
         if (detailsEnsureInFlight === tracked) detailsEnsureInFlight = null;
+        if (reensureAfter && myGeneration === detailsEnsureGeneration) {
+          void get().ensureDetails(opts);
+        }
       });
       detailsEnsureInFlight = tracked;
       return tracked;

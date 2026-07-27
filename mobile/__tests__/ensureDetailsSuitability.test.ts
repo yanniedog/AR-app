@@ -186,4 +186,91 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details).toBeNull();
     expect(store.getState().detailsLoading).toBe(false);
   });
+
+  it('re-ensures after the in-flight slot clears when the dataset moved on', async () => {
+    closeSuitabilityGateUntilRebuild();
+    let finishFirst!: (value: unknown) => void;
+    let finishSecond!: (value: unknown) => void;
+    const firstDownload = new Promise((resolve) => {
+      finishFirst = resolve;
+    });
+    const secondDownload = new Promise((resolve) => {
+      finishSecond = resolve;
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadDetails.mockReturnValueOnce(firstDownload).mockReturnValueOnce(secondDownload);
+
+    const first = store.getState().ensureDetails({ force: true });
+    const nextManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'core-sha-next' },
+        details: { ...remoteManifest.files.details, sha256: 'details-sha-next' },
+      },
+    };
+    const nextCore = { ...remoteCore, run_date: '2099-01-02' } as CorePayload;
+    const nextDetails = { ...remoteDetails, run_date: '2099-01-02' } as DetailsPayload;
+    store.setState({
+      manifest: nextManifest,
+      core: nextCore,
+    });
+    finishFirst({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    await first;
+    for (let i = 0; i < 40 && mockDownloadDetails.mock.calls.length < 2; i += 1) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(2);
+    finishSecond({ text: JSON.stringify(nextDetails), details: nextDetails });
+    for (let i = 0; i < 40 && store.getState().detailsLoading; i += 1) {
+      await new Promise((r) => setImmediate(r));
+    }
+
+    expect(store.getState().details).toEqual(nextDetails);
+    expect(store.getState().detailsLoading).toBe(false);
+  });
+
+  it('abandonInFlight starts a fresh ensure instead of joining a hung load', async () => {
+    closeSuitabilityGateUntilRebuild();
+    const downloads: Array<{ finish: (value: unknown) => void }> = [];
+    mockReadMeta.mockResolvedValue({
+      manifest: remoteManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadDetails.mockImplementation(() => {
+      let finish!: (value: unknown) => void;
+      const p = new Promise((resolve) => {
+        finish = resolve;
+      });
+      downloads.push({ finish });
+      return p;
+    });
+
+    void store.getState().ensureDetails({ force: true });
+    for (let i = 0; i < 20 && downloads.length < 1; i += 1) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(downloads.length).toBe(1);
+
+    const abandoned = store.getState().ensureDetails({ force: true, abandonInFlight: true });
+    for (let i = 0; i < 20 && downloads.length < 2; i += 1) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(downloads.length).toBe(2);
+    downloads[1].finish({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    await abandoned;
+
+    expect(store.getState().details).toEqual(remoteDetails);
+    expect(store.getState().detailsLoading).toBe(false);
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+  });
 });
