@@ -8,14 +8,40 @@ This repo owns only the installable Expo app and app-release automation.
 - Use `cd mobile && npm run ci` as the primary local verification path.
 - Keep the `mobile/` directory layout until a separate flattening migration is planned.
 
+## Global ship bar (canonical)
+
+PR bot babysitting follows **[yanniedog/cursor-global-workflow](https://github.com/yanniedog/cursor-global-workflow)** — especially `WORKFLOW.md` steps 4–7, `skills/pr-fix-agent/SKILL.md`, and always-on rules `respond-to-each-review-comment.mdc`, `pr-review-bot-replies.mdc`, and `no-early-stop-after-pr.mdc`. Repo notes below specialize that bar for AR-app; when they conflict, prefer the global workflow unless this file states an AR-app exception.
+
 ## PR babysitting (mandatory — every repo, every session)
 
-Do not stop after opening a PR. Always monitor each PR you own (and any still open from this session) until all required gates are green and the PR is ready for squash merge. Do this without being asked.
+Do not stop after opening a PR. Always monitor each owned open PR (and any still open from this session) until squash-merged — without being asked. Prefer **one dedicated ship-bar / babysit loop per open PR number** (do not abandon a PR because another task started).
 
 - After every push: commit, push, create/update the PR, then watch checks until they settle.
 - Required gates here typically include `mobile-ci`, `bot-presence-gate`, and `bot-feedback-gate`.
-- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0; if GitHub `bot-presence-gate` is still red after bots have posted, re-trigger it (e.g. empty commit / `synchronize`, or `ready_for_review`) so Actions re-runs with bots present.
-- Resolve or clear bot feedback until `bot-feedback-gate` is green. Prefer fixing findings; reply in-thread and resolve via ManagePullRequest (`post_comment` / `resolve_comment`) when `gh` is write-blocked.
-- Do not stop while `mergeStateStatus` is blocked on required checks or unresolved review threads. Keep watching until squash-merge ready (required checks green, threads resolved, branch current with base).
-- Mark the PR ready for review when checks are green and the change is merge-ready; leave it draft only while intentionally incomplete.
-- Do not declare the task done while any owned PR is blocked on failing/pending required checks. Keep iterating until it is clear for squash merge (or blocked only by something outside your write access — then state that explicitly and keep retrying what you can).
+- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. Re-run while exit 2. If GitHub `bot-presence-gate` is still red after bots have posted, re-trigger a **PR-head** check (not a top-level issue comment — those run on the default-branch SHA and do not replace the failed check on the PR commit): prefer `ready_for_review`, a new `pull_request_review` / review-comment event, workflow re-run on the PR head when write-capable, or a fix/`synchronize` push. Prefer waiting until `mobile-ci` is green before a synchronize re-trigger so presence does not race CI.
+- Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
+- Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
+
+## Bot feedback (mandatory — every finding, every session)
+
+Always respond to **all** substantive bot (and human) review feedback. Green CI does not replace thread closure. Bots in scope include Sourcery, Cursor Auto Review / Codex, Gemini, Copilot, CodeRabbit, Greptile, and similar.
+
+### After `wait-for-bots` exit 0 — synthesize first (global step 5b)
+
+1. Fetch **all** review threads.
+2. **Read every thread before replying to any.**
+3. Post one `## Feedback plan` on the PR (implement / defer / decline per thread).
+4. One code push for the implement set, then in-thread replies.
+
+### Per finding (global step 6)
+
+1. Prefer fixing valid bug risks, correctness gaps, and test holes in the same PR when in scope.
+2. Reply in-thread with disposition and reason:
+   - `implemented in <sha>`
+   - `deferred — <reason>`
+   - `declined — <reason>`
+3. Resolve the thread after the reply (live gate requires resolution). Use ManagePullRequest `post_comment` (`in_reply_to`) and `resolve_comment` when `gh` cannot write.
+4. Re-run `npm run pr:bot-feedback-check -- --pr <N>` until exit 0; confirm GitHub `bot-feedback-gate` is green.
+5. After later pushes, re-check for **new** bot threads and handle them the same way before merge.
+
+Low-signal noise (quota notices, empty “react with thumbs” prompts) can be left alone if the feedback gate classifies them as non-blocking; everything else gets an explicit response.
