@@ -15,6 +15,7 @@ Do not stop after opening a PR. Always monitor each PR you own (and any still op
 - After every push: commit, push, create/update the PR, then watch checks until they settle.
 - Required gates here typically include `mobile-ci`, `bot-presence-gate`, and `bot-feedback-gate`.
 - Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0; if GitHub `bot-presence-gate` is still red after bots have posted, re-trigger it (e.g. empty commit / `synchronize`, or `ready_for_review`) so Actions re-runs with bots present.
-- Resolve or clear bot feedback until `bot-feedback-gate` is green.
+- Resolve or clear bot feedback until `bot-feedback-gate` is green. Prefer fixing findings; reply in-thread and resolve via ManagePullRequest (`post_comment` / `resolve_comment`) when `gh` is write-blocked.
+- Do not stop while `mergeStateStatus` is blocked on required checks or unresolved review threads. Keep watching until squash-merge ready (required checks green, threads resolved, branch current with base).
 - Mark the PR ready for review when checks are green and the change is merge-ready; leave it draft only while intentionally incomplete.
 - Do not declare the task done while any owned PR is blocked on failing/pending required checks. Keep iterating until it is clear for squash merge (or blocked only by something outside your write access — then state that explicitly and keep retrying what you can).
