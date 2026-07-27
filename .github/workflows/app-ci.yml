@@ -8,6 +8,7 @@ on:
       # Release automation updates the README through a PR. Keep the required
       # mobile-ci check available so that docs-only release PRs can merge.
       - 'README.md'
+      - 'AGENTS.md'
       - 'mobile/**'
       - 'firebase/**'
       - 'scripts/**'
