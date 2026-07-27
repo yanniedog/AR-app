@@ -48,6 +48,7 @@ export default function Home() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
+  const filterPrepAttempts = useRef(0);
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -59,6 +60,11 @@ export default function Home() {
     void suitabilityRevision;
     return isSuitabilityFilterReady(includeNonStandard);
   }, [includeNonStandard, suitabilityRevision]);
+
+  useEffect(() => {
+    filterPrepAttempts.current = 0;
+    setFilterPrepFailed(false);
+  }, [coreRevision]);
 
   useEffect(() => {
     if (!coreRevision || refreshing || !warmDetails) return;
@@ -82,17 +88,42 @@ export default function Home() {
   // Standard-only Home needs the details-derived suitability index. Refresh /
   // bootstrap already force-rebuild, but kick ensureDetails here too so the
   // wait UI cannot stall if that post-work has not claimed the load yet.
+  // Re-run when a prior load settles still-closed (detailsLoading → false).
   useEffect(() => {
-    if (!coreRevision || refreshing || includeNonStandard || filterReady) return;
+    if (filterReady) {
+      filterPrepAttempts.current = 0;
+      return;
+    }
+    if (!coreRevision || refreshing || includeNonStandard || detailsLoading) return;
+    if (filterPrepAttempts.current >= 3) return;
+    filterPrepAttempts.current += 1;
     void ensureDetails({ force: true });
-  }, [coreRevision, refreshing, includeNonStandard, filterReady, ensureDetails]);
+  }, [
+    coreRevision,
+    refreshing,
+    includeNonStandard,
+    filterReady,
+    detailsLoading,
+    ensureDetails,
+    suitabilityRevision,
+  ]);
 
   // If the load/rebuild settles without opening the gate, exit the permanent
-  // "Preparing" progress state and offer retry (Codex: failed ensureDetails).
+  // "Preparing" progress state and offer retry. Also bound the spinner so a
+  // hung details download cannot leave Home waiting forever.
   useEffect(() => {
-    if (filterReady || includeNonStandard || refreshing || !coreRevision || detailsLoading) {
+    if (filterReady || includeNonStandard || refreshing || !coreRevision) {
       setFilterPrepFailed(false);
       return;
+    }
+    if (detailsLoading) {
+      setFilterPrepFailed(false);
+      const hung = setTimeout(() => {
+        if (!isSuitabilityFilterReady(includeNonStandard)) {
+          setFilterPrepFailed(true);
+        }
+      }, 12_000);
+      return () => clearTimeout(hung);
     }
     const timer = setTimeout(() => {
       if (!isSuitabilityFilterReady(includeNonStandard)) {
@@ -111,7 +142,8 @@ export default function Home() {
 
   const retryFilterPrep = useCallback(() => {
     setFilterPrepFailed(false);
-    void ensureDetails({ force: true });
+    filterPrepAttempts.current = 0;
+    void ensureDetails({ force: true, abandonInFlight: true });
   }, [ensureDetails]);
 
   const onRefresh = useCallback(() => void refresh({ manual: true }), [refresh]);
@@ -216,12 +248,12 @@ export default function Home() {
                 BEST IN {meta.title.toUpperCase()}
               </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
-                {filterPrepFailed && !detailsLoading
+                {filterPrepFailed
                   ? 'Could not prepare filtered rates for today.'
                   : 'Preparing filtered rates for today…'}
               </AppText>
             </View>
-            {filterPrepFailed && !detailsLoading ? (
+            {filterPrepFailed ? (
               <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
             ) : (
               <>
