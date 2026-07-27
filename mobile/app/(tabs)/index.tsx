@@ -231,7 +231,7 @@ export default function Home() {
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}
         source={source}
         offline={offline}
-        pendingIngest={!!pendingIngestRunDate}
+        pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
       />
 
