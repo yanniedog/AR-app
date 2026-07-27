@@ -321,6 +321,117 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().refreshing).toBe(false);
   });
 
+  it('holds cached day when dates-index is unavailable and rolling is newer', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+      status: 'ready',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockRejectedValueOnce(new Error('dates-index 503'));
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core?.run_date).toBe('2026-07-27');
+    expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
+    expect(useStore.getState().status).toBe('ready');
+    expect(useStore.getState().error).toBeNull();
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('surfaces an error on cold start when dates-index is unavailable', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    useStore.setState({
+      source: 'sample',
+      core: null,
+      manifest: null,
+      pendingIngestRunDate: null,
+      status: 'idle',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockRejectedValueOnce(new Error('dates-index 503'));
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core).toBeNull();
+    expect(useStore.getState().error).toMatch(/cannot verify ingest finalisation/i);
+    expect(useStore.getState().status).toBe('error');
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('surfaces an error on cold start when rolling ingest is not yet finalised', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    useStore.setState({
+      source: 'sample',
+      core: null,
+      manifest: null,
+      pendingIngestRunDate: null,
+      status: 'idle',
+      error: null,
+    });
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
+    mockFetchDatesIndexJson.mockResolvedValueOnce({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    // Dated fallback also unavailable → pending with null manifest.
+    mockFetchManifest.mockRejectedValueOnce(new Error('dated missing'));
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core).toBeNull();
+    expect(useStore.getState().error).toMatch(/still uploading/i);
+    expect(useStore.getState().status).toBe('error');
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
   it('sets source remote after download and clears refreshing', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,

@@ -219,7 +219,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const live = get();
           const liveDate = live.core?.run_date?.slice(0, 10) ?? '';
           const rollingDate = String(rolling.run_date || '').slice(0, 10);
-          if (liveDate && rollingDate && rollingDate > liveDate) {
+          const hasUsable =
+            !!live.core && (live.source === 'remote' || live.source === 'cache');
+          if (hasUsable && liveDate && rollingDate && rollingDate > liveDate) {
             debugLog.warn(
               'store',
               `dates-index down; holding run_date=${liveDate} (rolling=${rollingDate})`,
@@ -230,6 +232,15 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               refreshOutcome: null,
             });
             return false;
+          }
+          if (!hasUsable) {
+            // Cold start with no trusted day: refuse rolling until dates-index
+            // can confirm finalisation (same posture as pending cold start).
+            throw new Error(
+              rollingDate
+                ? `cannot verify ingest finalisation for ${rollingDate}; try again shortly`
+                : 'cannot verify ingest finalisation; try again shortly',
+            );
           }
           remote = rolling;
           pendingIngestRunDate = null;
