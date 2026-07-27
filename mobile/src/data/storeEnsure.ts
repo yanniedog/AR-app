@@ -198,37 +198,49 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             reensureAfter = true;
             return;
           }
-          // Last resort: never leave standard-only Home permanently sealed after
-          // an ensure attempt for this dataset. Prefer live details; fall back to
-          // a core-only name gate so rates still render if details did not land.
+          // Last resort: if details for this manifest are already trusted on disk
+          // but the suitability index is still sealed, rebuild from those details.
+          // Never open a core-only / stale-details gate here — that can mark
+          // restricted products as broadly available after a transient details
+          // failure. Home's retry UI covers a still-closed gate once loading settles.
           if (cur.core && !isSuitabilityFilterReady(false)) {
-            const liveDetails = cur.details?.run_date === cur.core.run_date ? cur.details : null;
             const liveCoreSha = cur.manifest?.files.core.sha256 ?? '';
-            // Use '' when details are missing so a later details warm misses the
-            // hash match and rebuilds with eligibility fields.
-            const liveDetailsSha = liveDetails ? (cur.manifest?.files.details.sha256 ?? '') : '';
+            const wantDetailsSha = cur.manifest?.files.details.sha256 ?? '';
+            const meta = await cache.readMeta();
+            const detailsShaTrusted =
+              !!wantDetailsSha && meta?.detailsSha === wantDetailsSha;
+            const liveDetails =
+              detailsShaTrusted && cur.details?.run_date === cur.core.run_date
+                ? cur.details
+                : null;
+            if (!liveDetails) {
+              debugLog.warn(
+                'store',
+                'ensureDetails leaving suitability gate closed (no trusted matching details)',
+              );
+              return;
+            }
             const liveRunDate = cur.core.run_date;
             const stillThisCore = () =>
               get().core?.run_date === liveRunDate &&
-              (get().manifest?.files.core.sha256 ?? '') === liveCoreSha;
+              (get().manifest?.files.core.sha256 ?? '') === liveCoreSha &&
+              (get().manifest?.files.details.sha256 ?? '') === wantDetailsSha;
             debugLog.warn(
               'store',
-              `ensureDetails unblocking closed suitability gate details=${liveDetails ? 'yes' : 'no'}`,
+              'ensureDetails rebuilding suitability index from trusted details',
             );
             const installed = await rebuildAndInstallSuitabilityIndex(
               cur.core,
               liveDetails,
-              liveDetailsSha,
+              wantDetailsSha,
               stillThisCore,
               liveCoreSha,
             );
             if (!installed && stillThisCore() && !isSuitabilityFilterReady(false)) {
-              // Ignore a flaky isCurrent race — this ensure owned the load for
-              // this core and must not leave the gate sealed.
               const built = await buildSuitabilityIndex(
                 cur.core,
                 liveDetails,
-                liveDetailsSha,
+                wantDetailsSha,
                 liveCoreSha,
               );
               if (stillThisCore()) installSuitabilityIndex(built);

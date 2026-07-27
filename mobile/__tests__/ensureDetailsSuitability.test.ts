@@ -168,7 +168,7 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().detailsLoading).toBe(false);
   });
 
-  it('unblocks with a core-only gate when details download fails', async () => {
+  it('leaves the suitability gate closed when details download fails', async () => {
     closeSuitabilityGateUntilRebuild();
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
@@ -181,8 +181,7 @@ describe('ensureDetails suitability unblock', () => {
 
     await store.getState().ensureDetails({ force: true });
 
-    expect(isSuitabilityFilterReady(false)).toBe(true);
-    expect(getSuitabilityIndex()?.detailsSha).toBe('');
+    expect(isSuitabilityFilterReady(false)).toBe(false);
     expect(store.getState().details).toBeNull();
     expect(store.getState().detailsLoading).toBe(false);
   });
