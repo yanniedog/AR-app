@@ -156,6 +156,23 @@ export function bestRow(
   return best;
 }
 
+/** Fraction used when ordering a product list for a given sort chip.
+ *  Mortgage "rate" (Browse + Search "Best rate") ranks by the advertised
+ *  headline rate shown large on product cards; "comparison" ranks by the
+ *  comparison-or-headline effective rate. Deposits keep {@link rankFraction}
+ *  for both chips so bonus/intro rows never top a list on the promo headline. */
+export function sortRankFraction(
+  row: RateRow,
+  sortKey: SortKey,
+  section: SectionKey,
+  metric: RankMetric = 'base',
+): number | null {
+  if (sortKey === 'rate' && section === 'Mortgage') {
+    return toFraction(row.rate);
+  }
+  return rankFraction(row, section, metric);
+}
+
 export function sortRows(
   rows: RateRow[],
   sortKey: SortKey,
@@ -166,21 +183,35 @@ export function sortRows(
   const copy = rows.slice();
   copy.sort((a, b) => {
     if (sortKey === 'bank') {
-      return a.provider.localeCompare(b.provider) || a.product_name.localeCompare(b.product_name);
+      return compareProviderThenName(a, b);
     }
-    // "rate" — and the legacy "comparison" deep-link alias — both rank by the
-    // deposit rank metric: base ongoing rate by default, so conditional bonus/intro
-    // rates never top a deposit list on ANY sort. For loans rankFraction is the
-    // comparison-or-headline rate, so comparison ordering is preserved.
-    const va = rankFraction(a, section, metric);
-    const vb = rankFraction(b, section, metric);
-    if (va === null && vb === null) return 0;
+    const va = sortRankFraction(a, sortKey, section, metric);
+    const vb = sortRankFraction(b, sortKey, section, metric);
+    if (va === null && vb === null) return compareProviderThenName(a, b);
     if (va === null) return 1;
     if (vb === null) return -1;
     // "Best first": ascending for loans, descending for deposits.
-    return lowerIsBetter ? va - vb : vb - va;
+    const byRate = lowerIsBetter ? va - vb : vb - va;
+    if (byRate !== 0) return byRate;
+    // Mortgage headline ties: lower comparison rate first so equal advertised
+    // rates still form a stable, fee-aware order. Rows with no usable
+    // comparison_rate sort last among the tie (do not fall back to headline
+    // via effectiveFraction — that would hide "missing cmp" as a fake tie-break).
+    if (section === 'Mortgage' && sortKey === 'rate') {
+      const ca = toFraction(a.comparison_rate);
+      const cb = toFraction(b.comparison_rate);
+      if (ca === null && cb === null) return compareProviderThenName(a, b);
+      if (ca === null) return 1;
+      if (cb === null) return -1;
+      if (ca !== cb) return ca - cb;
+    }
+    return compareProviderThenName(a, b);
   });
   return copy;
+}
+
+function compareProviderThenName(a: RateRow, b: RateRow): number {
+  return a.provider.localeCompare(b.provider) || a.product_name.localeCompare(b.product_name);
 }
 
 function inList(value: string | undefined, list: string[] | undefined): boolean {
