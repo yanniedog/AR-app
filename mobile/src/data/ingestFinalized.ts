@@ -9,7 +9,7 @@ import {
 import { fetchManifest } from './payload';
 
 /** Optional assets that dated tags often omit (core/details only). */
-const OPTIONAL_MANIFEST_KEYS = [
+export const OPTIONAL_MANIFEST_KEYS = [
   'search_index',
   'history_banks',
   'bank_history',

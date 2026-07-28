@@ -4,6 +4,7 @@ import { sampleCore, sampleManifest } from '../src/data/sample';
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
 const mockWriteBundle = jest.fn();
+const mockUpdateMeta = jest.fn(async (_meta?: unknown) => {});
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
 const mockReadDetails = jest.fn();
@@ -29,7 +30,7 @@ jest.mock('../src/data/cache', () => ({
     writeBundle: (...args: unknown[]) => mockWriteBundle(...args),
     readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
-    updateMeta: jest.fn(async () => {}),
+    updateMeta: (meta: unknown) => mockUpdateMeta(meta),
     readSuitabilityIndex: jest.fn(async () => null),
     writeSuitabilityIndex: jest.fn(async () => {}),
     clear: jest.fn(async () => {}),
@@ -526,6 +527,74 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
     expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
     expect(mockDownloadCore).not.toHaveBeenCalled();
+  });
+
+  it('persists enriched optional assets onto cache meta on up-to-date refresh', async () => {
+    const bankHistory = {
+      name: 'bank-history.json.gz',
+      bytes: 100,
+      sha256: 'bank-history-sha',
+      url: 'https://example.com/bank-history.json.gz',
+    };
+    const coreSha = 'same-core-sha';
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: coreSha },
+        bank_history: bankHistory,
+      },
+    };
+    const datedCoreOnly: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      tag: 'app-payload-2026-07-28',
+      files: {
+        core: rollingManifest.files.core,
+        details: rollingManifest.files.details,
+      },
+    };
+    const liveCore = { ...remoteCore, run_date: '2026-07-28' } as CorePayload;
+    useStore.setState({
+      source: 'remote',
+      core: liveCore,
+      manifest: datedCoreOnly,
+      pendingIngestRunDate: null,
+      ensureBankInsights: mockEnsureBankInsights,
+    });
+    mockFetchManifest
+      .mockResolvedValueOnce(rollingManifest)
+      .mockResolvedValueOnce(datedCoreOnly);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: datedCoreOnly,
+      source: 'remote',
+      savedAt: '2026-07-28T00:00:00Z',
+      coreSha,
+      detailsSha: null,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
+    expect(useStore.getState().refreshOutcome).toBe('success');
+    expect(mockUpdateMeta).toHaveBeenCalledWith(
+      expect.objectContaining({
+        coreSha,
+        manifest: expect.objectContaining({
+          files: expect.objectContaining({ bank_history: bankHistory }),
+        }),
+      }),
+    );
+    expect(mockEnsureBankInsights).toHaveBeenCalled();
   });
 
   it('holds cached day when dates-index is unavailable and rolling is newer', async () => {

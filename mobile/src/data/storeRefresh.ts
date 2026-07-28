@@ -18,7 +18,7 @@ import {
   rebuildAndInstallSuitabilityIndex,
   suitabilityIndexMatches,
 } from './suitabilityIndex';
-import { mergeOptionalManifestFiles, resolveFinalizedManifest } from './ingestFinalized';
+import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 
 type NotifyContext = {
@@ -283,6 +283,21 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // mismatched in-memory core.
           const live = get();
           optionalWork = optionalRefreshWork(live.manifest, remote);
+          // Persist enriched optional file entries so the next cold start does
+          // not re-load a core/details-only dated manifest from cache meta.
+          const cachedOptionalMissing = OPTIONAL_MANIFEST_KEYS.some(
+            (key) => !meta.manifest.files[key] && !!remote.files[key],
+          );
+          if (cachedOptionalMissing) {
+            await cache.updateMeta({
+              coreSha: remote.files.core.sha256,
+              manifest: remote,
+            });
+            debugLog.info(
+              'store',
+              `refresh persisted optional assets onto cached manifest run_date=${remote.run_date}`,
+            );
+          }
           const liveMatches =
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
