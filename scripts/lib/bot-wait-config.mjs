@@ -9,7 +9,14 @@ export const BOT_ALIASES = {
     'google-github-actions-bot[bot]',
     'google-github-actions[bot]',
   ],
-  codex: ['chatgpt-codex-connector', 'chatgpt-codex-connector[bot]'],
+  // Cursor Automation "Codex PR Review" posts as cursor[bot]; keep the
+  // legacy chatgpt-codex-connector logins for older connector installs.
+  codex: [
+    'chatgpt-codex-connector',
+    'chatgpt-codex-connector[bot]',
+    'cursor',
+    'cursor[bot]',
+  ],
   sourcery: ['sourcery-ai', 'sourcery-ai[bot]'],
 };
 
