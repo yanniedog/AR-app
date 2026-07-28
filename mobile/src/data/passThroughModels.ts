@@ -72,9 +72,12 @@ export function nextScatterZoom(zoom: number, direction: 1 | -1): number {
 /** Compact axis label for an RBA decision guide on the scatter. */
 export function formatScatterDecisionLabel(date: string, bps: number): string {
   const d = new Date(`${date}T00:00:00Z`);
-  const when = Number.isNaN(d.getTime())
-    ? date.slice(5)
-    : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const hasValidDate = !Number.isNaN(d.getTime());
+  const when = hasValidDate
+    ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    : date.length >= 5
+      ? date.slice(5)
+      : date || '—';
   const magnitude = `${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps)}`;
   return `${when} ${magnitude}`;
 }

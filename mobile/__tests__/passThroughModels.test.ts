@@ -203,6 +203,8 @@ describe('pass-through presentation models', () => {
     expect(formatScatterDecisionLabel('2026-05-05', 25)).toMatch(/5 May/);
     expect(formatScatterDecisionLabel('2026-05-05', 25)).toContain('+25');
     expect(formatScatterDecisionLabel('2025-11-05', -25)).toContain('−25');
+    expect(formatScatterDecisionLabel('bad', 10)).toBe('bad +10');
+    expect(formatScatterDecisionLabel('', -5)).toBe('— −5');
 
     expect(
       filterAndSortSectionRows(model, 'Mortgage', '', 'bank', 'Gamma').map((row) => row.provider),
