@@ -145,6 +145,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               notifyCtx.previousDetailsProducts,
               state.details?.products ?? null,
               state.prefs.depositRankMetric,
+              state.prefs.mortgageRateMetric,
             );
             await notify(messages);
             debugLog.info('store', `notified ${messages.length} rate-change message(s)`);

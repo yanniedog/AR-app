@@ -155,7 +155,10 @@ describe('selectors', () => {
     expect(rankFraction(bonusNoBase, 'Savings')).toBeNull(); // no base published -> unrankable
     expect(rankFraction(bonus, 'Savings', 'max')).toBeCloseTo(0.052); // opt into max
     // Mortgages carry no bonus/intro concept — always the effective rate.
-    expect(rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage')).toBeCloseTo(0.061);
+    expect(rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage')).toBeCloseTo(0.06);
+    expect(
+      rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage', 'base', 'comparison'),
+    ).toBeCloseTo(0.061);
   });
 
   test('bestRow (savings) ignores conditional bonus rates by default', () => {
@@ -180,8 +183,11 @@ describe('selectors', () => {
 
   test('rankFraction leaves non-deposit sections unchanged under either metric', () => {
     const loan = mk({ rate: '0.06', comparison_rate: '0.061' });
-    expect(rankFraction(loan, 'Mortgage', 'max')).toBeCloseTo(0.061);
-    expect(rankFraction(loan, 'Mortgage', 'base')).toBeCloseTo(0.061);
+    // Mortgages ignore the deposit RankMetric; headline vs comparison is separate.
+    expect(rankFraction(loan, 'Mortgage', 'max')).toBeCloseTo(0.06);
+    expect(rankFraction(loan, 'Mortgage', 'base')).toBeCloseTo(0.06);
+    expect(rankFraction(loan, 'Mortgage', 'base', 'comparison')).toBeCloseTo(0.061);
+    expect(rankFraction(loan, 'Mortgage', 'max', 'headline')).toBeCloseTo(0.06);
   });
 
   test('rankFraction treats a published 0% ongoing rate as 0, not unranked', () => {
@@ -236,6 +242,11 @@ describe('selectors', () => {
     ];
     expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual(['L1', 'L2']);
     expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual(['L2', 'L1']);
+    // Opting into comparison ranking for the rate chip mirrors comparison sort.
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'L1',
+      'L2',
+    ]);
   });
 
   test('sortRows mortgage rate key follows advertised headline rates on cards', () => {

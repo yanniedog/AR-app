@@ -41,6 +41,7 @@ export default function Home() {
   const setActiveSection = useStore((s) => s.setActiveSection);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const warmDetails = useStore((s) => shouldWarmDetails(s.prefs, s.subscriptions));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
@@ -187,9 +188,10 @@ export default function Home() {
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
+        mortgageRateMetric,
       );
     },
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
+    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
   const fallbackBest = useMemo(
     () => {
@@ -200,9 +202,10 @@ export default function Home() {
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
+        mortgageRateMetric,
       );
     },
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
+    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];
@@ -225,7 +228,7 @@ export default function Home() {
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
   // show nothing (not the market extreme) when nothing matches.
-  const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric) : null;
+  const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric, mortgageRateMetric) : null;
   const heroRate = !ratesReady
     ? null
     : profileCount > 0

@@ -69,9 +69,13 @@ export function activeFilterCount(f: Filters): number {
 /** How savings & term-deposit lists are ranked. `base` = the unconditional
  *  ongoing rate a typical customer keeps (a bonus/intro row ranks on the base
  *  rate it reverts to), so conditional promo rates never top the list; `max` =
- *  the headline/maximum achievable rate. Mortgages are unaffected — they carry
- *  no bonus/intro concept (rateQualifier returns 'none'). */
+ *  the headline/maximum achievable rate. */
 export type RankMetric = 'base' | 'max';
+
+/** How home-loan lists are ranked when sorting by rate. `headline` = the
+ *  advertised interest rate shown large on product cards; `comparison` = the
+ *  fee-inclusive comparison rate (falling back to headline when unpublished). */
+export type MortgageRateMetric = 'headline' | 'comparison';
 
 export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
 
@@ -105,16 +109,19 @@ export function excludeTokenDepositRates(
 }
 
 /** The fraction a row should be ranked/compared by, honouring the deposit rank
- *  metric. For `base` (default), a bonus/intro deposit row ranks on the base
- *  ongoing rate it reverts to (`null` when the bank publishes none, so it can't
- *  masquerade as a broadly-earned rate); everything else uses the effective
- *  (comparison-or-headline) rate. This is the single ranking metric every
- *  best/sort/compare surface shares. */
+ *  metric and (for loans) the mortgage rate metric. For deposits with `base`
+ *  (default), a bonus/intro row ranks on the ongoing rate it reverts to (`null`
+ *  when the bank publishes none); `max` uses the headline. Mortgages use the
+ *  advertised headline or the comparison-or-headline effective rate. */
 export function rankFraction(
   row: RateRow,
   section: SectionKey,
   metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): number | null {
+  if (section === 'Mortgage') {
+    return mortgageMetric === 'headline' ? toFraction(row.rate) : effectiveFraction(row);
+  }
   if (metric === 'base') {
     const q = rateQualifier(row, section);
     if (q.kind === 'bonus' || q.kind === 'intro') {
@@ -139,6 +146,7 @@ export function bestRow(
   includeNonStandard = false,
   metric: RankMetric = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): RateRow | null {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   let best: RateRow | null = null;
@@ -146,7 +154,7 @@ export function bestRow(
   for (const row of visibleAccountRows(rows, includeNonStandard, detailsProducts)) {
     // Token floor uses headline rate (parity with statsFor / excludeTokenDepositRates).
     if (!passesDepositTokenFloor(row, section)) continue;
-    const v = rankFraction(row, section, metric);
+    const v = rankFraction(row, section, metric, mortgageMetric);
     if (v === null) continue;
     if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
       bestVal = v;
@@ -157,20 +165,24 @@ export function bestRow(
 }
 
 /** Fraction used when ordering a product list for a given sort chip.
- *  Mortgage "rate" (Browse + Search "Best rate") ranks by the advertised
- *  headline rate shown large on product cards; "comparison" ranks by the
- *  comparison-or-headline effective rate. Deposits keep {@link rankFraction}
- *  for both chips so bonus/intro rows never top a list on the promo headline. */
+ *  Mortgage "rate" (Browse + Search "Best rate") follows {@link MortgageRateMetric};
+ *  "comparison" always ranks by comparison-or-headline. Deposits keep
+ *  {@link rankFraction} for both chips so bonus/intro rows never top a list on
+ *  the promo headline unless the deposit metric is `max`. */
 export function sortRankFraction(
   row: RateRow,
   sortKey: SortKey,
   section: SectionKey,
   metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): number | null {
   if (sortKey === 'rate' && section === 'Mortgage') {
-    return toFraction(row.rate);
+    return rankFraction(row, section, metric, mortgageMetric);
   }
-  return rankFraction(row, section, metric);
+  if (sortKey === 'comparison' && section === 'Mortgage') {
+    return effectiveFraction(row);
+  }
+  return rankFraction(row, section, metric, mortgageMetric);
 }
 
 export function sortRows(
@@ -178,6 +190,7 @@ export function sortRows(
   sortKey: SortKey,
   section: SectionKey,
   metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): RateRow[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const copy = rows.slice();
@@ -185,8 +198,8 @@ export function sortRows(
     if (sortKey === 'bank') {
       return compareProviderThenName(a, b);
     }
-    const va = sortRankFraction(a, sortKey, section, metric);
-    const vb = sortRankFraction(b, sortKey, section, metric);
+    const va = sortRankFraction(a, sortKey, section, metric, mortgageMetric);
+    const vb = sortRankFraction(b, sortKey, section, metric, mortgageMetric);
     if (va === null && vb === null) return compareProviderThenName(a, b);
     if (va === null) return 1;
     if (vb === null) return -1;
@@ -197,7 +210,7 @@ export function sortRows(
     // rates still form a stable, fee-aware order. Rows with no usable
     // comparison_rate sort last among the tie (do not fall back to headline
     // via effectiveFraction — that would hide "missing cmp" as a fake tie-break).
-    if (section === 'Mortgage' && sortKey === 'rate') {
+    if (section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline') {
       const ca = toFraction(a.comparison_rate);
       const cb = toFraction(b.comparison_rate);
       if (ca === null && cb === null) return compareProviderThenName(a, b);
@@ -273,12 +286,14 @@ export function queryAndSort(
   detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null,
   metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): RateRow[] {
   return sortRows(
     filterRows(rows, filters, detailsProducts, searchIndex, section),
     sortKey,
     section,
     metric,
+    mortgageMetric,
   );
 }
 
@@ -322,10 +337,15 @@ export function compareProviderGroupsByRate(
   b: ProviderGroup,
   section: SectionKey,
   metric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): number {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const va = a.bestBySection[section] ? rankFraction(a.bestBySection[section]!, section, metric) : null;
-  const vb = b.bestBySection[section] ? rankFraction(b.bestBySection[section]!, section, metric) : null;
+  const va = a.bestBySection[section]
+    ? rankFraction(a.bestBySection[section]!, section, metric, mortgageMetric)
+    : null;
+  const vb = b.bestBySection[section]
+    ? rankFraction(b.bestBySection[section]!, section, metric, mortgageMetric)
+    : null;
   return compareRankedProviders(a.provider, va, b.provider, vb, lowerIsBetter);
 }
 
@@ -351,6 +371,7 @@ export function groupByProvider(
   detailsProducts?: Record<string, ProductDetail> | null,
   /** When set, order lenders best→worst for this section; otherwise A–Z by name. */
   sortSection?: SectionKey | null,
+  mortgageMetric: MortgageRateMetric = 'headline',
 ): ProviderGroup[] {
   // Bucket rows per provider AND per section in a single pass. The previous
   // implementation re-scanned every section's full row array (Array.includes)
@@ -380,7 +401,14 @@ export function groupByProvider(
     for (const section of keys) {
       const inSection = bySection[section];
       if (!inSection?.length) continue;
-      const best = bestRow(inSection, section, includeNonStandard, metric, detailsProducts);
+      const best = bestRow(
+        inSection,
+        section,
+        includeNonStandard,
+        metric,
+        detailsProducts,
+        mortgageMetric,
+      );
       if (best) group.bestBySection[section] = best;
     }
     out.push(group);
@@ -392,7 +420,7 @@ export function groupByProvider(
       const best = group.bestBySection[sortSection];
       return {
         group,
-        value: best ? rankFraction(best, sortSection, metric) : null,
+        value: best ? rankFraction(best, sortSection, metric, mortgageMetric) : null,
       };
     });
     ranked.sort((a, b) =>

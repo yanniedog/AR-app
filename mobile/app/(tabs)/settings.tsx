@@ -32,7 +32,7 @@ import {
   unregisterBackgroundRefresh,
 } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
-import type { RankMetric } from '../../src/data/selectors';
+import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { setDiagnosticsEnabled } from '../../src/lib/observability';
 import type { Subscription } from '../../src/data/subscriptions';
@@ -171,13 +171,26 @@ export default function Settings() {
         <SegmentedControl<RankMetric>
           options={[
             { value: 'base', label: 'Base rate' },
-            { value: 'max', label: 'Maximum rate' },
+            { value: 'max', label: 'Headline rate' },
           ]}
           value={prefs.depositRankMetric}
           onChange={(v) => setPref('depositRankMetric', v)}
         />
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          Base uses the ongoing rate; Maximum includes bonus and intro rates.
+          Base uses the ongoing rate; Headline includes bonus and introductory rates.
+        </AppText>
+        <SettingsGap size={14} />
+        <Label text="Sort home loans by" />
+        <SegmentedControl<MortgageRateMetric>
+          options={[
+            { value: 'headline', label: 'Headline rate' },
+            { value: 'comparison', label: 'Comparison rate' },
+          ]}
+          value={prefs.mortgageRateMetric}
+          onChange={(v) => setPref('mortgageRateMetric', v)}
+        />
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
+          Headline is the advertised interest rate on cards; Comparison includes fees.
         </AppText>
       </Section>
 

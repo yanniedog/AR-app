@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SECTIONS } from '../constants';
 import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
-import { sortRows, excludeTokenDepositRates, type RankMetric } from '../data/selectors';
+import { sortRows, excludeTokenDepositRates, type MortgageRateMetric, type RankMetric } from '../data/selectors';
 import {
   childrenFromScoped,
   rowsUnder,
@@ -43,6 +43,7 @@ function computeHierarchyView(
   includeNonStandard: boolean,
   depositRankMetric: RankMetric = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
+  mortgageRateMetric: MortgageRateMetric = 'headline',
 ) {
   const under = rowsUnder(all, section, path);
   const nodeRows = excludeTokenDepositRates(
@@ -59,7 +60,7 @@ function computeHierarchyView(
     data = kids.map((node) => ({ kind: 'node', node }) as Item);
   } else {
     const seen = new Set<string>();
-    data = sortRows(nodeRows, 'rate', section, depositRankMetric)
+    data = sortRows(nodeRows, 'rate', section, depositRankMetric, mortgageRateMetric)
       .filter((r) => (seen.has(r.product_key) ? false : seen.add(r.product_key)))
       .map((row) => ({ kind: 'product', row }) as Item);
   }
@@ -99,6 +100,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   const rba = useStore((s) => s.core?.rba?.at(-1)?.rate ?? null);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const pathKey = path.join('.');
@@ -122,7 +124,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       byKey = new Map();
       byDetails.set(detailsKey, byKey);
     }
-    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|${suitabilityRevision}`;
+    const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|${mortgageRateMetric}|${suitabilityRevision}`;
     let cached = byKey.get(cacheKey);
     if (!cached) {
       // #region agent log
@@ -135,6 +137,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
+        mortgageRateMetric,
       );
       debugLog.debug(
         'perf',
@@ -145,7 +148,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     }
     return cached;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pathKey encodes path
-  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision]);
+  }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision]);
 
   if (!rows) return null;
 

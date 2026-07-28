@@ -66,6 +66,7 @@ export default function Search() {
   const ensureSearchIndex = useStore((s) => s.ensureSearchIndex);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
   const subscribeSearch = useStore((s) => s.subscribeSearch);
@@ -120,9 +121,10 @@ export default function Search() {
         details?.products ?? null,
         deepSearchActive ? searchIndex : null,
         depositRankMetric,
+        mortgageRateMetric,
       )
     ),
-    [baseRows, effectiveFilters, query, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, suitabilityRevision],
+    [baseRows, effectiveFilters, query, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, mortgageRateMetric, suitabilityRevision],
   );
 
   const showDeepSearchHint =
