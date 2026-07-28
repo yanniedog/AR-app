@@ -21,3 +21,4 @@ mobile/GoogleService-Info.plist
 *.log
 tmp/
 *.tmp
+.ar-bot-wait/
