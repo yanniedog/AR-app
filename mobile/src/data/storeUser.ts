@@ -117,6 +117,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
           set({ searchIndex: null });
         }
       }
+      if (key === 'profileFilters') {
+        const features = (value as Prefs['profileFilters'])?.accountFeatures;
+        if (Array.isArray(features) && features.length > 0) {
+          void get().ensureDetails();
+        }
+      }
       if (key === 'showHistoryRibbon') {
         set({ historyBanksError: null });
         if (value) {

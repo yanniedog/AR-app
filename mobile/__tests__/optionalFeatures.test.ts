@@ -211,6 +211,18 @@ describe('optional feature prefs', () => {
     expect(shouldWarmDetails(DEFAULT_PREFS, [])).toBe(false);
   });
 
+  it('shouldWarmDetails is true when profile has account feature picks', () => {
+    expect(
+      shouldWarmDetails(
+        {
+          ...DEFAULT_PREFS,
+          profileFilters: { ...DEFAULT_PREFS.profileFilters, accountFeatures: ['OFFSET'] },
+        },
+        [],
+      ),
+    ).toBe(true);
+  });
+
   it('builds suitability after core install without warming unrelated optional assets', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,

@@ -5,7 +5,10 @@ import {
   downloadCore,
   fetchManifest,
 } from './payload';
-import { needsDetailsForNotifications } from './optionalPrefs';
+import {
+  needsDetailsForNotifications,
+  profileAccountFeaturesNeedDetails,
+} from './optionalPrefs';
 import { debugLog } from '../lib/debugLog';
 import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
@@ -58,9 +61,13 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       const { manual = false, repairCache = false } = opts;
       const warmDetails = async () => {
         // Search/product screens request details on demand. Refresh only warms
-        // the large asset when a background notification genuinely needs its
-        // feature/eligibility fields.
-        if (needsDetailsForNotifications(get().prefs, get().subscriptions)) {
+        // the large asset when profile feature picks or notification search
+        // filters need feature/eligibility fields.
+        const prefs = get().prefs;
+        if (
+          profileAccountFeaturesNeedDetails(prefs.profileFilters) ||
+          needsDetailsForNotifications(prefs, get().subscriptions)
+        ) {
           await get().ensureDetails();
         }
       };

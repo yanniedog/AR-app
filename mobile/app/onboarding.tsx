@@ -240,9 +240,10 @@ export default function Onboarding() {
         <>
           <AppText variant="h1">Make it yours</AppText>
           <AppText variant="body" color="textMuted" style={{ marginTop: 8, lineHeight: 22 }}>
-            Lock in the product attributes that match you — like owner-occupied, principal &
-            interest, your LVR. They apply everywhere so you never re-select them. Skip any
-            group to see everything; change it anytime from your profile.
+            Lock in the product attributes that match you — owner-occupied, principal & interest,
+            your LVR — and any must-have features like an offset account or early repayment.
+            They seed search filters everywhere so you never re-select them. Skip any group to
+            see everything; change it anytime from your profile.
           </AppText>
           <ScrollView style={{ flex: 1, marginTop: 20 }} contentContainerStyle={{ paddingBottom: 12 }}>
             <ProfileEditor sections={interests} value={profile} onChange={setProfile} />
