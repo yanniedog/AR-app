@@ -490,6 +490,62 @@ describe('selectors', () => {
       'Bank A',
       'Bank B',
     ]);
+    // With non-standard opted in, Bank C's 4.89% leads.
+    expect(groupByProvider(sections, 'base', true, null, 'Mortgage').map((g) => g.provider)).toEqual([
+      'Bank C',
+      'Bank A',
+      'Bank B',
+    ]);
+  });
+
+  test('groupByProvider mortgage sort uses standard best when a lender also has a sharper non-standard rate', () => {
+    const sections = {
+      Mortgage: {
+        rates: [
+          mk({
+            provider: 'Bank Mix',
+            product_key: 'MIX|STD',
+            product_name: 'Standard Loan',
+            rate: '0.060',
+            account_class: 'standard',
+          }),
+          mk({
+            provider: 'Bank Mix',
+            product_key: 'MIX|NS',
+            product_name: 'Staff Loan',
+            rate: '0.040',
+            account_class: 'non_standard',
+          }),
+          mk({
+            provider: 'Bank Pure',
+            product_key: 'PURE|1',
+            product_name: 'Everyday Loan',
+            rate: '0.055',
+            account_class: 'standard',
+          }),
+        ],
+      },
+      Savings: { rates: [] },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    // Filter off: Mix ranks on 6.0% (standard), Pure's 5.5% wins.
+    expect(groupByProvider(sections, 'base', false, null, 'Mortgage').map((g) => g.provider)).toEqual([
+      'Bank Pure',
+      'Bank Mix',
+    ]);
+    expect(
+      groupByProvider(sections, 'base', false, null, 'Mortgage').find((g) => g.provider === 'Bank Mix')
+        ?.bestBySection.Mortgage?.product_key,
+    ).toBe('MIX|STD');
+    // Filter on: Mix ranks on 4.0% non-standard and leads.
+    expect(groupByProvider(sections, 'base', true, null, 'Mortgage').map((g) => g.provider)).toEqual([
+      'Bank Mix',
+      'Bank Pure',
+    ]);
+    expect(
+      groupByProvider(sections, 'base', true, null, 'Mortgage').find((g) => g.provider === 'Bank Mix')
+        ?.bestBySection.Mortgage?.product_key,
+    ).toBe('MIX|NS');
   });
 
   test('groupByProvider without sortSection falls back to A–Z', () => {
@@ -539,6 +595,38 @@ describe('selectors', () => {
     expect(groupByProvider(sections, 'max', false, null, 'Savings').map((g) => g.provider)).toEqual([
       'Bank Bonus',
       'Bank Base',
+    ]);
+  });
+
+  test('groupByProvider savings sort ignores non-standard highs when filter off', () => {
+    const sections = {
+      Mortgage: { rates: [] },
+      Savings: {
+        rates: [
+          mk({
+            provider: 'Bank Retail',
+            product_key: 'R|S',
+            product_name: 'Everyday Saver',
+            rate: '0.045',
+            account_class: 'standard',
+          }),
+          mk({
+            provider: 'Bank Niche',
+            product_key: 'N|S',
+            product_name: 'Staff Saver',
+            rate: '0.080',
+            account_class: 'non_standard',
+          }),
+        ],
+      },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    expect(groupByProvider(sections, 'base', false, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank Retail',
+    ]);
+    expect(groupByProvider(sections, 'base', true, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank Niche',
+      'Bank Retail',
     ]);
   });
 
