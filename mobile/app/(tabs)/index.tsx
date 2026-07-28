@@ -172,9 +172,17 @@ export default function Home() {
   const stats = useMemo(
     () => {
       void suitabilityRevision;
-      return resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard, section, detailsProducts);
+      return resolveSectionRibbonStats(
+        sectionData,
+        hierRows,
+        includeNonStandard,
+        section,
+        detailsProducts,
+        depositRankMetric,
+        mortgageRateMetric,
+      );
     },
-    [sectionData, hierRows, includeNonStandard, section, detailsProducts, suitabilityRevision],
+    [sectionData, hierRows, includeNonStandard, section, detailsProducts, depositRankMetric, mortgageRateMetric, suitabilityRevision],
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR,
   // and must-have account features once details are warm).

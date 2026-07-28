@@ -175,10 +175,18 @@ function productRatesByIndex(
   return out;
 }
 
-function ratesMap(rows: RateRow[]): Map<string, { row: RateRow; fraction: number | null }> {
+function ratesMap(
+  rows: RateRow[],
+  section: SectionKey,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
+): Map<string, { row: RateRow; fraction: number | null }> {
   const out = new Map<string, { row: RateRow; fraction: number | null }>();
   for (const row of rows) {
-    out.set(rowIdentity(row), { row, fraction: toFraction(row.rate) });
+    out.set(rowIdentity(row), {
+      row,
+      fraction: rankFraction(row, section, depositRankMetric, mortgageRateMetric),
+    });
   }
   return out;
 }
@@ -190,6 +198,8 @@ function subscriptionWouldNotify(
   thresholdBps: number,
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
 ): boolean {
   if (sub.kind === 'product') {
     return (
@@ -204,8 +214,18 @@ function subscriptionWouldNotify(
   const newDetails = newDetailsProducts ?? oldDetailsProducts;
   return (
     largestRateChange(
-      ratesMap(rowsForSearchSubscription(oldCore, sub, oldDetails)),
-      ratesMap(rowsForSearchSubscription(newCore, sub, newDetails)),
+      ratesMap(
+        rowsForSearchSubscription(oldCore, sub, oldDetails),
+        sub.section,
+        depositRankMetric,
+        mortgageRateMetric,
+      ),
+      ratesMap(
+        rowsForSearchSubscription(newCore, sub, newDetails),
+        sub.section,
+        depositRankMetric,
+        mortgageRateMetric,
+      ),
       thresholdBps,
     ) != null
   );
@@ -219,6 +239,8 @@ function enrichSubscriptionRouting(
   thresholdBps: number,
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
 ): NotifyMessage[] {
   const enriched: NotifyMessage[] = [];
   let rawIdx = 0;
@@ -232,6 +254,8 @@ function enrichSubscriptionRouting(
         thresholdBps,
         oldDetailsProducts,
         newDetailsProducts,
+        depositRankMetric,
+        mortgageRateMetric,
       )
     ) {
       continue;
@@ -295,6 +319,8 @@ export function computeChanges(
     thresholdBps,
     oldDetailsProducts,
     newDetailsProducts,
+    depositRankMetric,
+    mortgageRateMetric,
   );
   const messages: NotifyMessage[] = [];
 
@@ -374,6 +400,8 @@ export function computeChanges(
     thresholdBps,
     oldDetailsProducts,
     newDetailsProducts,
+    depositRankMetric,
+    mortgageRateMetric,
   );
   return dedupeNotifyMessages(enriched);
 }

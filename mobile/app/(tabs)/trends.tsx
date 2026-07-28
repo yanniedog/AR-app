@@ -408,7 +408,15 @@ export default function Trends() {
       {interestSections.map((key) => {
         const data = core.sections[key];
         if (!data) return null;
-        const stats = resolveSectionRibbonStats(data, data.rates, false, key);
+        const stats = resolveSectionRibbonStats(
+          data,
+          data.rates,
+          false,
+          key,
+          null,
+          depositRankMetric,
+          mortgageRateMetric,
+        );
         if (stats.min === null) return null;
         const best = bestRow(data.rates, key, false, depositRankMetric, null, mortgageRateMetric);
         const bestLabel = rateValueLabel(key, 'best');
@@ -416,13 +424,6 @@ export default function Trends() {
           ? rankFraction(best, key, depositRankMetric, mortgageRateMetric)
           : null;
         const bestRate = formatRankedFraction(rankedBest);
-        // Keep Ribbon "Best" aligned with the metric that selected the winner.
-        const ribbonStats =
-          rankedBest != null
-            ? SECTIONS[key].lowerIsBetter
-              ? { ...stats, min: rankedBest }
-              : { ...stats, max: rankedBest }
-            : stats;
         return (
           <Pressable
             key={key}
@@ -457,7 +458,7 @@ export default function Trends() {
                   </AppText>
                 </View>
               </Row>
-              <Ribbon stats={ribbonStats} section={key} />
+              <Ribbon stats={stats} section={key} />
             </Card>
           </Pressable>
         );

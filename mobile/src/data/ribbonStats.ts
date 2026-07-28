@@ -1,4 +1,5 @@
 import { visibleAccountRows } from './format';
+import { rankFraction, type MortgageRateMetric, type RankMetric } from './selectors';
 import { statsFor, type RateStats } from './taxonomy';
 import type { ProductDetail, RateRow, Ribbon, SectionData, SectionKey } from '../types';
 
@@ -32,12 +33,17 @@ export function resolveSectionRibbonStats(
   includeNonStandard: boolean,
   section?: SectionKey | null,
   detailsProducts?: Record<string, ProductDetail> | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
 ): RateStats {
   const filtered = includeNonStandard
     ? hierarchyRows
     : visibleAccountRows(hierarchyRows, false, detailsProducts);
 
-  const computed = statsFor(filtered, true, section);
+  const fractionOf = section
+    ? (row: RateRow) => rankFraction(row, section, depositRankMetric, mortgageRateMetric)
+    : undefined;
+  const computed = statsFor(filtered, true, section, fractionOf);
   if (computed.min != null) return computed;
 
   // Deposit flooring can empty client stats while the payload ribbon still

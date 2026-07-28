@@ -115,6 +115,8 @@ export function statsFor(
   includeNonStandard = false,
   /** When set for Savings/TD, drop token near-zero rates from ribbon aggregates. */
   section?: SectionKey | null,
+  /** Fraction used for min/max/mean/median. Defaults to comparison-or-headline. */
+  fractionOf: (row: RateRow) => number | null = effectiveFraction,
 ): RateStats {
   const fractions: number[] = [];
   const providers = new Set<string>();
@@ -122,9 +124,12 @@ export function statsFor(
   for (const r of rows) {
     if (!r) continue;
     if (!includeNonStandard && !isBroadlyAvailable(r)) continue;
-    const f = effectiveFraction(r);
-    // When section is omitted, keep legacy behaviour (no deposit floor).
-    if (f === null || (section && !isMeaningfulDepositRate(f, section))) continue;
+    // Token floor always uses headline/effective rate so membership matches
+    // excludeTokenDepositRates regardless of the aggregate metric.
+    const membership = effectiveFraction(r);
+    if (membership === null || (section && !isMeaningfulDepositRate(membership, section))) continue;
+    const f = fractionOf(r);
+    if (f === null) continue;
     fractions.push(f);
     providers.add(r.provider);
     products.add(r.product_key);
@@ -197,11 +202,13 @@ export function childrenOf(
   section: SectionKey,
   path: string[],
   includeNonStandard = false,
+  fractionOf?: (row: RateRow) => number | null,
 ): TaxoNode[] {
   return childrenFromScoped(
     visibleAccountRows(rowsUnder(rows, section, path), includeNonStandard),
     section,
     path,
+    fractionOf,
   );
 }
 
@@ -213,6 +220,7 @@ export function childrenFromScoped(
   scopedRows: RateRow[],
   section: SectionKey,
   path: string[],
+  fractionOf?: (row: RateRow) => number | null,
 ): TaxoNode[] {
   const root = ROOT[section];
   const depth = path.length + 1; // index of the "next" segment in the full path
@@ -231,7 +239,7 @@ export function childrenFromScoped(
       seg,
       label: segLabel(seg),
       rows: segRows,
-      stats: statsFor(segRows, true, section),
+      stats: statsFor(segRows, true, section, fractionOf),
       hasChildren: childHasDeeper(segRows, root, depth),
     });
   }

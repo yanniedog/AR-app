@@ -120,7 +120,15 @@ export default function Onboarding() {
     const sectionRows = core.sections[section]?.rates;
     const sectionData = core.sections[section];
     const hierRows = rowsUnder(sectionRows ?? [], section, []);
-    const stats = resolveSectionRibbonStats(sectionData, hierRows, false, section);
+    const stats = resolveSectionRibbonStats(
+      sectionData,
+      hierRows,
+      false,
+      section,
+      null,
+      depositRankMetric,
+      mortgageRateMetric,
+    );
     const best = bestRow(hierRows, section, false, depositRankMetric, null, mortgageRateMetric);
     const heroRate = best
       ? rankFraction(best, section, depositRankMetric, mortgageRateMetric)

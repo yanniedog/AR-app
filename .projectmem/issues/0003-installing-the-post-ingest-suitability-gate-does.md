@@ -1,0 +1,7 @@
+# #0003 Installing the post-ingest suitability gate does not notify React/Zustand consumers, leaving the initially rendered section on stale all-product derivations until navigation changes state.
+
+- 2026-07-23T05:50:48Z `issue`: Installing the post-ingest suitability gate does not notify React/Zustand consumers, leaving the initially rendered section on stale all-product derivations until navigation changes state. [mobile/src/data/suitabilityGate.ts]
+- 2026-07-23T05:53:42Z `attempt`: Added a reactive suitability-gate revision and subscribed every mounted surface that caches or directly renders gate-backed product derivations, including Browse, Home, Banks, Trends, and onboarding. [mobile/src/data/suitabilityGate.ts] (partial)
+- 2026-07-23T05:54:05Z `attempt`: Focused suitability-gate and refresh lifecycle regression tests passed (12 tests), confirming revision notifications and existing refresh behavior. [mobile/__tests__/suitabilityGate.test.ts] (worked)
+- 2026-07-23T05:54:31Z `attempt`: TypeScript validation passed across all reactive gate subscribers and the new useSyncExternalStore hook. [mobile/src/hooks/useSuitabilityRevision.ts] (worked)
+- 2026-07-23T05:54:38Z `fix`: Post-ingest suitability gate changes now invalidate mounted product derivations and Browse caches immediately, so standard-only filtering no longer waits for a section switch. [mobile/src/data/suitabilityGate.ts]
