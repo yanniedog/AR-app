@@ -25,31 +25,73 @@ export interface ResponseScatterHitPoint {
   cy: number;
 }
 
-export function responseBpsLabel(bps: number): string {
-  const rounded = Math.round(bps * 10) / 10;
-  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bp`;
+export interface ResponseScatterPlotPoint extends ResponseScatterHitPoint {
+  net: number;
+  hasTiming: boolean;
 }
 
-export function responseTimingLabel(row: PassThroughRow, partial: boolean): string {
-  if (row.daysToFirstMove == null) {
-    return partial ? 'not observed after tracking began' : 'no matching move observed';
-  }
-  return `${partial ? '≤' : ''}${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`;
+export interface ResponseScatterLayout {
+  width: number;
+  height: number;
+  padL: number;
+  padR: number;
+  padT: number;
+  padB: number;
+  windowDays: number;
+  decisionBps: number;
 }
 
-export function lenderResponseAccessibilityLabel(
-  row: Pick<MultiSectionPassThroughRow, 'provider' | 'sections'>,
-  partial: boolean,
-): string {
-  return [
-    row.provider,
-    ...SECTION_ORDER.map((section) => {
-      const response = row.sections[section];
-      if (!response) return `${SECTIONS[section].title}: no series`;
-      const net = response.netChangeBps ?? response.passedBps;
-      return `${SECTIONS[section].title}: ${responseBpsLabel(net)}, ${responseTimingLabel(response, partial)}`;
-    }),
-  ].join('. ');
+/**
+ * Plot every eligible lender for the active section. Timed same-direction
+ * responses use the days axis; untimed / opposite / unchanged sit on the rail.
+ */
+export function buildResponseScatterPoints(
+  rows: (MultiSectionPassThroughRow & { response: PassThroughRow })[],
+  layout: ResponseScatterLayout,
+): {
+  points: ResponseScatterPlotPoint[];
+  maxBps: number;
+  timedW: number;
+  untimedX: number;
+  innerH: number;
+  referenceY: number;
+  zeroY: number;
+} {
+  const { width, height, padL, padR, padT, padB, windowDays, decisionBps } = layout;
+  const innerW = Math.max(1, width - padL - padR);
+  const innerH = height - padT - padB;
+  const timedW = innerW * 0.76;
+  const untimedX = padL + innerW * 0.9;
+  const maxBps = Math.max(
+    Math.abs(decisionBps),
+    ...rows.map((item) => Math.abs(item.response.netChangeBps ?? item.response.passedBps)),
+    1,
+  );
+  const x = (days: number) =>
+    padL + (Math.min(windowDays, Math.max(0, days)) / windowDays) * timedW;
+  const y = (bps: number) => padT + innerH / 2 - (bps / maxBps) * (innerH / 2);
+  const points = rows.map((item, index) => {
+    const net = item.response.netChangeBps ?? item.response.passedBps;
+    const hasTiming = item.response.passedBps !== 0 && item.response.daysToFirstMove != null;
+    const jitterX = ((index % 5) - 2) * (hasTiming ? 2.2 : 3.5);
+    const jitterY = ((Math.floor(index / 5) % 5) - 2) * 2;
+    return {
+      provider: item.provider,
+      net,
+      hasTiming,
+      cx: (hasTiming ? x(item.response.daysToFirstMove!) : untimedX) + jitterX,
+      cy: y(net) + jitterY,
+    };
+  });
+  return {
+    points,
+    maxBps,
+    timedW,
+    untimedX,
+    innerH,
+    referenceY: y(decisionBps),
+    zeroY: y(0),
+  };
 }
 
 /**
@@ -79,6 +121,59 @@ export function selectResponseScatterProvider(
     ? (currentIndex + 1) % candidates.length
     : 0;
   return candidates[nextIndex].point.provider;
+}
+
+export type ResponseScatterPressResult =
+  | { hit: false }
+  | { hit: true; provider: string | null };
+
+/**
+ * Resolve a chart press to the next selection. Misses leave selection alone;
+ * a press on the sole nearby point toggles it off.
+ */
+export function resolveResponseScatterPress(
+  points: ResponseScatterHitPoint[],
+  locationX: number,
+  locationY: number,
+  selectedProvider: string | null,
+  maxDistance = 22,
+): ResponseScatterPressResult {
+  const hit = selectResponseScatterProvider(
+    points,
+    locationX,
+    locationY,
+    selectedProvider,
+    maxDistance,
+  );
+  if (!hit) return { hit: false };
+  return { hit: true, provider: hit === selectedProvider ? null : hit };
+}
+
+export function responseBpsLabel(bps: number): string {
+  const rounded = Math.round(bps * 10) / 10;
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bp`;
+}
+
+export function responseTimingLabel(row: PassThroughRow, partial: boolean): string {
+  if (row.daysToFirstMove == null) {
+    return partial ? 'not observed after tracking began' : 'no matching move observed';
+  }
+  return `${partial ? '≤' : ''}${row.daysToFirstMove} day${row.daysToFirstMove === 1 ? '' : 's'}`;
+}
+
+export function lenderResponseAccessibilityLabel(
+  row: Pick<MultiSectionPassThroughRow, 'provider' | 'sections'>,
+  partial: boolean,
+): string {
+  return [
+    row.provider,
+    ...SECTION_ORDER.map((section) => {
+      const response = row.sections[section];
+      if (!response) return `${SECTIONS[section].title}: no series`;
+      const net = response.netChangeBps ?? response.passedBps;
+      return `${SECTIONS[section].title}: ${responseBpsLabel(net)}, ${responseTimingLabel(response, partial)}`;
+    }),
+  ].join('. ');
 }
 
 function median(values: number[]): number | null {

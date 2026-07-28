@@ -1,9 +1,11 @@
 import type { MultiSectionPassThroughModel } from '../src/data/bankInsights';
 import {
+  buildResponseScatterPoints,
   filterAndSortSectionRows,
   lenderResponseAccessibilityLabel,
   passThroughCustomerContext,
   passThroughEvidenceLabel,
+  resolveResponseScatterPress,
   selectResponseScatterProvider,
   summarizeSectionResponse,
 } from '../src/data/passThroughModels';
@@ -120,6 +122,61 @@ describe('pass-through presentation models', () => {
       'Great Southern Bank Business+',
     );
     expect(selectResponseScatterProvider(points, 0, 0, null)).toBeNull();
+  });
+
+  test('resolves chart presses with miss vs toggle-off and builds stable plot geometry', () => {
+    const points = [
+      { provider: 'Great Southern Bank', cx: 100, cy: 80 },
+      { provider: 'Great Southern Bank Business+', cx: 103, cy: 81 },
+    ];
+
+    expect(resolveResponseScatterPress(points, 0, 0, null)).toEqual({ hit: false });
+    expect(resolveResponseScatterPress(points, 100, 80, null)).toEqual({
+      hit: true,
+      provider: 'Great Southern Bank',
+    });
+    expect(resolveResponseScatterPress(points, 100, 80, 'Great Southern Bank')).toEqual({
+      hit: true,
+      provider: 'Great Southern Bank Business+',
+    });
+    expect(
+      resolveResponseScatterPress(
+        [{ provider: 'Solo Bank', cx: 50, cy: 50 }],
+        50,
+        50,
+        'Solo Bank',
+      ),
+    ).toEqual({ hit: true, provider: null });
+
+    const plot = buildResponseScatterPoints(
+      [
+        {
+          provider: 'Alpha',
+          sections: model.rows[0].sections,
+          response: model.rows[0].sections.Mortgage!,
+        },
+        {
+          provider: 'Beta',
+          sections: model.rows[1].sections,
+          response: model.rows[1].sections.Mortgage!,
+        },
+      ],
+      {
+        width: 320,
+        height: 260,
+        padL: 42,
+        padR: 10,
+        padT: 24,
+        padB: 46,
+        windowDays: 45,
+        decisionBps: 25,
+      },
+    );
+    expect(plot.points).toHaveLength(2);
+    expect(plot.points[0].hasTiming).toBe(true);
+    expect(plot.points[1].hasTiming).toBe(false);
+    expect(plot.points[0].cx).toBeLessThan(plot.untimedX);
+    expect(plot.points[1].cx).toBeGreaterThan(plot.timedW);
   });
 
   test('announces all aligned lender columns without truncating the provider', () => {
