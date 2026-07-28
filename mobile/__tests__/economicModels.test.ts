@@ -169,4 +169,53 @@ describe('economic graph models', () => {
     const model = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], 'All');
     expect(model?.forecast.some((point) => point.date === '2024-01-01')).toBe(false);
   });
+
+  it('uses official cash-rate history so long policy windows are populated', () => {
+    const data = payload();
+    data.cashRateHistory = [
+      { date: '2016-08-03', value: 1.5 },
+      { date: '2019-07-03', value: 1.0 },
+      { date: '2020-03-20', value: 0.25 },
+      { date: '2022-05-04', value: 0.35 },
+      { date: '2023-11-08', value: 4.35 },
+      { date: '2025-05-01', value: 4.0 },
+    ];
+    const all = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], 'All');
+    const fiveYear = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], '5Y');
+    const oneYear = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], '1Y');
+    expect(all?.actual.map((point) => point.date)).toEqual([
+      '2016-08-03',
+      '2019-07-03',
+      '2020-03-20',
+      '2022-05-04',
+      '2023-11-08',
+      '2025-05-01',
+    ]);
+    // core.rba wins on the shared date after merge+normalize.
+    expect(all?.actual.at(-1)?.value).toBe(4.1);
+    expect(fiveYear?.actual[0]?.date).toBe('2020-03-20');
+    expect(fiveYear?.actual.at(-1)?.date).toBe('2025-05-01');
+    expect(oneYear?.actual.map((point) => point.date)).toEqual([
+      '2023-11-08',
+      '2025-05-01',
+    ]);
+  });
+
+  it('windows long indicator histories for every chart range', () => {
+    const data = payload();
+    const inflation = data.indicators.find((item) => item.id === 'underlying_inflation')!;
+    inflation.points = Array.from({ length: 40 }, (_, index) => ({
+      date: new Date(Date.UTC(2016, index * 3 + 2, 28)).toISOString().slice(0, 10),
+      value: 2 + index * 0.05,
+    }));
+    const all = indicatorHistoryModel(data, 'underlying_inflation', 'All');
+    const fiveYear = indicatorHistoryModel(data, 'underlying_inflation', '5Y');
+    const threeYear = indicatorHistoryModel(data, 'underlying_inflation', '3Y');
+    const oneYear = indicatorHistoryModel(data, 'underlying_inflation', '1Y');
+    expect(all?.points).toHaveLength(40);
+    expect(fiveYear?.points.length).toBeGreaterThan(oneYear!.points.length);
+    expect(threeYear?.points.length).toBeGreaterThan(oneYear!.points.length);
+    expect(fiveYear?.points.length).toBeGreaterThanOrEqual(threeYear!.points.length);
+    expect(oneYear?.points.at(-1)).toEqual(all?.points.at(-1));
+  });
 });

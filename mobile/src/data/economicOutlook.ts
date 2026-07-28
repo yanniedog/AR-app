@@ -51,6 +51,8 @@ export interface EconomicOutlookPayload {
   refreshErrors?: string[];
   indicators: EconomicIndicator[];
   cashRateForecast: CashRateForecast | null;
+  /** Official cash-rate target steps (F1), used for Policy path 1Y/3Y/5Y/All. */
+  cashRateHistory?: EconomicPoint[];
 }
 
 const RBA_TABLE_BASE = 'https://www.rba.gov.au/statistics/tables/csv';
@@ -66,6 +68,7 @@ const URLS = {
   labour: `${RBA_TABLE_BASE}/h5-data.csv`,
   wages: `${RBA_TABLE_BASE}/h4-data.csv`,
   cashForecast: `${RBA_TABLE_BASE}/j1-cash-rate.csv`,
+  cashRate: `${RBA_TABLE_BASE}/f1-data.csv`,
 } as const;
 
 interface ParsedSeries {
@@ -88,7 +91,6 @@ interface IndicatorDefinition {
   label: string;
   shortLabel: string;
   seriesId: string;
-  limit: number;
   frequency: EconomicIndicator['frequency'];
   targetBand?: [number, number];
 }
@@ -96,6 +98,7 @@ interface IndicatorDefinition {
 /**
  * Official RBA series shown in Outlook. Extra labour / inflation series reuse the
  * same four CSV tables — one network fetch per table, then multiple series parses.
+ * Full published history is retained so 1Y / 3Y / 5Y / All chart windows have data.
  */
 const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
   {
@@ -104,7 +107,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Underlying inflation',
     shortLabel: 'Trimmed mean · year-ended',
     seriesId: 'GCPIOCPMTMYP',
-    limit: 40,
     frequency: 'quarterly',
     targetBand: [2, 3],
   },
@@ -114,7 +116,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Headline CPI',
     shortLabel: 'All groups · year-ended',
     seriesId: 'GCPIAGYP',
-    limit: 40,
     frequency: 'quarterly',
     targetBand: [2, 3],
   },
@@ -124,7 +125,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Unemployment',
     shortLabel: 'Seasonally adjusted',
     seriesId: 'GLFSURSA',
-    limit: 72,
     frequency: 'monthly',
   },
   {
@@ -133,7 +133,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Participation',
     shortLabel: 'Labour force participation',
     seriesId: 'GLFSPRSA',
-    limit: 72,
     frequency: 'monthly',
   },
   {
@@ -142,7 +141,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Employment growth',
     shortLabel: 'Year-ended · seasonally adjusted',
     seriesId: 'GLFSEPTSYP',
-    limit: 72,
     frequency: 'monthly',
   },
   {
@@ -151,7 +149,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Wage growth',
     shortLabel: 'WPI · year-ended',
     seriesId: 'GWPIYP',
-    limit: 40,
     frequency: 'quarterly',
   },
   {
@@ -160,7 +157,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Market expectations',
     shortLabel: 'Economists · 1 year ahead',
     seriesId: 'GMAREXPY',
-    limit: 40,
     frequency: 'quarterly',
     targetBand: [2, 3],
   },
@@ -170,7 +166,6 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Consumer expectations',
     shortLabel: 'Households · 1 year ahead',
     seriesId: 'GCONEXP',
-    limit: 40,
     frequency: 'quarterly',
   },
 ];
@@ -283,6 +278,25 @@ export function parseCashForecastCsv(text: string): CashRateForecast | null {
     publicationDate: isoDate(rowByLabel(rows, 'Publication date')?.[medianColumn] ?? ''),
     points,
   };
+}
+
+/**
+ * Compress daily cash-rate target observations to decision steps (value changes).
+ * Keeps charts readable for 1Y–All while preserving the full F1 history span.
+ * Defensively sorts by date so equal values are consecutive.
+ */
+export function cashRateTargetSteps(points: EconomicPoint[]): EconomicPoint[] {
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
+  const steps: EconomicPoint[] = [];
+  for (const point of sorted) {
+    const last = steps.at(-1);
+    if (!last || last.value !== point.value) steps.push(point);
+  }
+  return steps;
+}
+
+export function parseCashRateTargetCsv(text: string): EconomicPoint[] {
+  return cashRateTargetSteps(parseRbaSeriesCsv(text, 'FIRMMCRTD').points);
 }
 
 function round(value: number): number {
@@ -454,6 +468,7 @@ export function buildEconomicOutlookFromCsv(input: {
   labour: string;
   wages: string;
   cashForecast?: string | null;
+  cashRate?: string | null;
 }, fetchedAt = new Date().toISOString()): EconomicOutlookPayload {
   // Soft-skip series missing from a table so unit fixtures can ship one column.
   const indicators = INDICATOR_DEFINITIONS.flatMap((definition) => {
@@ -467,6 +482,14 @@ export function buildEconomicOutlookFromCsv(input: {
       return [];
     }
   });
+  let cashRateHistory: EconomicPoint[] | undefined;
+  if (input.cashRate) {
+    try {
+      cashRateHistory = parseCashRateTargetCsv(input.cashRate);
+    } catch {
+      cashRateHistory = undefined;
+    }
+  }
   return {
     schema_version: 2,
     fetchedAt,
@@ -474,6 +497,7 @@ export function buildEconomicOutlookFromCsv(input: {
     refreshStatus: 'current',
     indicators,
     cashRateForecast: input.cashForecast ? parseCashForecastCsv(input.cashForecast) : null,
+    cashRateHistory,
   };
 }
 
@@ -482,7 +506,7 @@ function buildIndicator(
   parsed: ParsedSeries,
   checkedAt: string,
 ): EconomicIndicator {
-  const points = parsed.points.slice(-definition.limit);
+  const points = parsed.points;
   return {
     id: definition.id,
     label: definition.label,
@@ -596,7 +620,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const checkedAt = new Date().toISOString();
-    const [sourceEntries, forecastSettled] = await Promise.all([
+    const [sourceEntries, forecastSettled, cashRateSettled] = await Promise.all([
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
           try {
@@ -620,6 +644,19 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
           return {
             forecast: null as CashRateForecast | null,
             error: `Cash-rate forecast: ${String((error as Error)?.message ?? error)}`,
+          };
+        }
+      })(),
+      (async () => {
+        try {
+          return {
+            history: parseCashRateTargetCsv(await fetchText(URLS.cashRate)),
+            error: null as string | null,
+          };
+        } catch (error) {
+          return {
+            history: null as EconomicPoint[] | null,
+            error: `Cash-rate history: ${String((error as Error)?.message ?? error)}`,
           };
         }
       })(),
@@ -664,9 +701,11 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     });
 
     const forecastEntry = forecastSettled;
+    const cashRateEntry = cashRateSettled;
 
     const errors = indicatorEntries.flatMap((entry) => (entry.error ? [entry.error] : []));
     if (forecastEntry.error) errors.push(forecastEntry.error);
+    if (cashRateEntry.error) errors.push(cashRateEntry.error);
     const refreshedCount = indicatorEntries.filter((entry) => entry.indicator).length;
 
     if (refreshedCount === 0) {
@@ -700,7 +739,12 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       return [newestIndicator(entry.indicator, previous)];
     });
     const acceptedCount = refreshedCount - regressedIds.size;
-    const refreshStatus = acceptedCount === INDICATOR_DEFINITIONS.length && !forecastEntry.error
+    const cashRateHistory = cashRateEntry.history?.length
+      ? cashRateEntry.history
+      : cached?.cashRateHistory;
+    const refreshStatus = acceptedCount === INDICATOR_DEFINITIONS.length
+      && !forecastEntry.error
+      && !cashRateEntry.error
       ? 'current'
       : 'partial';
     const fresh: EconomicOutlookPayload = {
@@ -711,6 +755,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
       refreshErrors: errors.length ? errors : undefined,
       indicators,
       cashRateForecast: forecastEntry.forecast ?? cached?.cashRateForecast ?? null,
+      cashRateHistory,
     };
     return commitEconomicResult(sequence, fresh, true);
   })();
