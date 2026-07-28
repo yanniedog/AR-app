@@ -1,8 +1,11 @@
 import type { MultiSectionPassThroughModel } from '../src/data/bankInsights';
 import {
   buildResponseScatterPoints,
+  clampScatterZoom,
   filterAndSortSectionRows,
+  formatScatterDecisionLabel,
   lenderResponseAccessibilityLabel,
+  nextScatterZoom,
   passThroughCustomerContext,
   passThroughEvidenceLabel,
   resolveResponseScatterPress,
@@ -170,6 +173,11 @@ describe('pass-through presentation models', () => {
         padB: 46,
         windowDays: 45,
         decisionBps: 25,
+        decisions: [
+          { date: '2026-05-05', bps: 25, active: true },
+          { date: '2025-11-05', bps: -25, active: false },
+          { date: '2025-02-19', bps: 25, active: false },
+        ],
       },
     );
     expect(plot.points).toHaveLength(2);
@@ -177,6 +185,29 @@ describe('pass-through presentation models', () => {
     expect(plot.points[1].hasTiming).toBe(false);
     expect(plot.points[0].cx).toBeLessThan(plot.untimedX);
     expect(plot.points[1].cx).toBeGreaterThan(plot.timedW);
+    expect(plot.decisionLines).toHaveLength(3);
+    expect(plot.decisionLines.filter((line) => line.active)).toHaveLength(1);
+    expect(plot.decisionLines.some((line) => line.bps === -25)).toBe(true);
+    expect(plot.maxBps).toBeGreaterThanOrEqual(25);
+    // Shared +25bp decisions keep the same guide Y; only labels stagger.
+    const plus25 = plot.decisionLines.filter((line) => line.bps === 25);
+    expect(plus25[0].y).toBe(plus25[1].y);
+    expect(plus25[1].labelDy).toBeGreaterThan(plus25[0].labelDy);
+  });
+
+  test('clamps scatter zoom and filters the lender list to a selected bank', () => {
+    expect(clampScatterZoom(0.2)).toBe(1);
+    expect(clampScatterZoom(9)).toBe(3);
+    expect(nextScatterZoom(1, 1)).toBe(1.5);
+    expect(nextScatterZoom(1.5, -1)).toBe(1);
+    expect(formatScatterDecisionLabel('2026-05-05', 25)).toMatch(/5 May/);
+    expect(formatScatterDecisionLabel('2026-05-05', 25)).toContain('+25');
+    expect(formatScatterDecisionLabel('2025-11-05', -25)).toContain('−25');
+
+    expect(
+      filterAndSortSectionRows(model, 'Mortgage', '', 'bank', 'Gamma').map((row) => row.provider),
+    ).toEqual(['Gamma']);
+    expect(filterAndSortSectionRows(model, 'Mortgage', 'zzz', 'bank', 'Gamma')).toEqual([]);
   });
 
   test('announces all aligned lender columns without truncating the provider', () => {
