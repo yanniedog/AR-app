@@ -1,6 +1,10 @@
 import {
+  APK_SHA256_VERIFY_MAX_BYTES,
+  assertDownloadedApkMatchesManifest,
   checkForAppUpdateAt,
   fetchApkManifest,
+  isSuccessfulDownloadStatus,
+  preferImmutableApkDownloadUrl,
   remoteIsNewer,
   type ApkManifest,
 } from '../src/lib/appUpdateLogic';
@@ -9,8 +13,10 @@ const baseManifest: ApkManifest = {
   schema_version: 1,
   version: '1.0.0',
   build_number: '42',
-  download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-preview.apk',
+  download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.0/app-preview.apk',
   published_at: '2026-06-09T00:00:00Z',
+  bytes: 130_000_000,
+  sha256: '518fdd8767ca26d02775e585e3ea4bfc53b92e0788c9ae5751cc0eb593e5607a',
 };
 
 const installed = { version: '1.0.0', buildNumber: '41' };
@@ -95,7 +101,7 @@ describe('appUpdateLogic', () => {
       schema_version: 1,
       version: '1.0.2',
       build_number: '11',
-      download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-preview.apk',
+      download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.2/app-preview.apk',
     };
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce({ ok: true, json: async () => remote })
@@ -113,7 +119,7 @@ describe('appUpdateLogic', () => {
       schema_version: 1,
       version: '1.0.0',
       build_number: '43',
-      download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-preview.apk',
+      download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.0/app-preview.apk',
     };
     (global.fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: async () => remote });
 
@@ -122,5 +128,59 @@ describe('appUpdateLogic', () => {
     if (result.status === 'available') {
       expect(result.changelogs).toEqual([]);
     }
+  });
+});
+
+describe('APK download integrity', () => {
+  it('treats missing status as success (compat with older mocks)', () => {
+    expect(isSuccessfulDownloadStatus(undefined)).toBe(true);
+    expect(isSuccessfulDownloadStatus(200)).toBe(true);
+    expect(isSuccessfulDownloadStatus(404)).toBe(false);
+  });
+
+  it('rejects empty or truncated downloads before sha256', () => {
+    expect(() => assertDownloadedApkMatchesManifest(0, baseManifest)).toThrow(/empty/i);
+    expect(() => assertDownloadedApkMatchesManifest(4096, baseManifest)).toThrow(/size mismatch/);
+  });
+
+  it('skips in-memory sha256 for large APKs when size matches', () => {
+    const large = APK_SHA256_VERIFY_MAX_BYTES + 1;
+    expect(
+      assertDownloadedApkMatchesManifest(large, {
+        bytes: large,
+        sha256: baseManifest.sha256,
+      }),
+    ).toEqual({ verifySha256: false });
+  });
+
+  it('requests sha256 verify for small APKs', () => {
+    expect(
+      assertDownloadedApkMatchesManifest(1024, {
+        bytes: 1024,
+        sha256: 'abc',
+      }),
+    ).toEqual({ verifySha256: true });
+  });
+
+  it('rewrites rolling APK URLs to the versioned immutable asset', () => {
+    expect(
+      preferImmutableApkDownloadUrl({
+        version: '1.0.64',
+        download_url:
+          'https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-preview.apk',
+      }),
+    ).toBe(
+      'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.64/app-preview.apk',
+    );
+    expect(
+      preferImmutableApkDownloadUrl({
+        version: '1.0.64',
+        version_tag: 'app-v1.0.64',
+        download_url:
+          'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.64/app-preview.apk',
+      }),
+    ).toBe(
+      'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.64/app-preview.apk',
+    );
   });
 });
