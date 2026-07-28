@@ -282,16 +282,38 @@ export interface ProviderGroup {
   bestBySection: Partial<Record<SectionKey, RateRow>>;
 }
 
+/**
+ * Compare provider groups by best rate for `section` (best first), then name.
+ * Mortgage: lowest first. Savings/TD: highest first. Missing rates sort last.
+ */
+export function compareProviderGroupsByRate(
+  a: ProviderGroup,
+  b: ProviderGroup,
+  section: SectionKey,
+  metric: RankMetric = 'base',
+): number {
+  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
+  const va = a.bestBySection[section] ? rankFraction(a.bestBySection[section]!, section, metric) : null;
+  const vb = b.bestBySection[section] ? rankFraction(b.bestBySection[section]!, section, metric) : null;
+  if (va === null && vb === null) return a.provider.localeCompare(b.provider);
+  if (va === null) return 1;
+  if (vb === null) return -1;
+  const byRate = lowerIsBetter ? va - vb : vb - va;
+  return byRate || a.provider.localeCompare(b.provider);
+}
+
 /** Group every row across all sections by provider (for the Banks screen). */
 export function groupByProvider(
   sections: Record<SectionKey, { rates: RateRow[] }>,
   metric: RankMetric = 'base',
   includeNonStandard = false,
   detailsProducts?: Record<string, ProductDetail> | null,
+  /** When set, order lenders best→worst for this section; otherwise A–Z by name. */
+  sortSection?: SectionKey | null,
 ): ProviderGroup[] {
   // Bucket rows per provider AND per section in a single pass. The previous
   // implementation re-scanned every section's full row array (Array.includes)
-  // for every provider, which is O(providers × rows) — the Banks A–Z screen's
+  // for every provider, which is O(providers × rows) — the Banks screen's
   // main lag source. This is O(rows).
   interface Acc extends ProviderGroup {
     bySection: Partial<Record<SectionKey, RateRow[]>>;
@@ -321,6 +343,9 @@ export function groupByProvider(
       if (best) group.bestBySection[section] = best;
     }
     out.push(group);
+  }
+  if (sortSection) {
+    return out.sort((a, b) => compareProviderGroupsByRate(a, b, sortSection, metric));
   }
   return out.sort((a, b) => a.provider.localeCompare(b.provider));
 }
