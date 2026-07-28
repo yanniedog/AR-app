@@ -30,6 +30,19 @@ export interface ResponseScatterPlotPoint extends ResponseScatterHitPoint {
   hasTiming: boolean;
 }
 
+export interface ResponseScatterDecisionMarker {
+  date: string;
+  bps: number;
+  active: boolean;
+}
+
+export interface ResponseScatterDecisionLine extends ResponseScatterDecisionMarker {
+  y: number;
+  label: string;
+  /** Vertical label offset when multiple decisions share the same bps. */
+  labelDy: number;
+}
+
 export interface ResponseScatterLayout {
   width: number;
   height: number;
@@ -39,11 +52,40 @@ export interface ResponseScatterLayout {
   padB: number;
   windowDays: number;
   decisionBps: number;
+  /** Every scorable RBA decision — drawn as labelled full-pass guides. */
+  decisions?: ResponseScatterDecisionMarker[];
+}
+
+export const SCATTER_ZOOM_MIN = 1;
+export const SCATTER_ZOOM_MAX = 3;
+export const SCATTER_ZOOM_STEP = 0.5;
+
+export function clampScatterZoom(zoom: number): number {
+  const stepped = Math.round(zoom / SCATTER_ZOOM_STEP) * SCATTER_ZOOM_STEP;
+  return Math.min(SCATTER_ZOOM_MAX, Math.max(SCATTER_ZOOM_MIN, Number(stepped.toFixed(2))));
+}
+
+export function nextScatterZoom(zoom: number, direction: 1 | -1): number {
+  return clampScatterZoom(zoom + direction * SCATTER_ZOOM_STEP);
+}
+
+/** Compact axis label for an RBA decision guide on the scatter. */
+export function formatScatterDecisionLabel(date: string, bps: number): string {
+  const d = new Date(`${date}T00:00:00Z`);
+  const hasValidDate = !Number.isNaN(d.getTime());
+  const when = hasValidDate
+    ? d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+    : date.length >= 5
+      ? date.slice(5)
+      : date || '—';
+  const magnitude = `${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps)}`;
+  return `${when} ${magnitude}`;
 }
 
 /**
  * Plot every eligible lender for the active section. Timed same-direction
  * responses use the days axis; untimed / opposite / unchanged sit on the rail.
+ * All scorable RBA decisions render as labelled horizontal full-pass guides.
  */
 export function buildResponseScatterPoints(
   rows: (MultiSectionPassThroughRow & { response: PassThroughRow })[],
@@ -56,14 +98,26 @@ export function buildResponseScatterPoints(
   innerH: number;
   referenceY: number;
   zeroY: number;
+  decisionLines: ResponseScatterDecisionLine[];
 } {
-  const { width, height, padL, padR, padT, padB, windowDays, decisionBps } = layout;
+  const {
+    width,
+    height,
+    padL,
+    padR,
+    padT,
+    padB,
+    windowDays,
+    decisionBps,
+    decisions = [],
+  } = layout;
   const innerW = Math.max(1, width - padL - padR);
   const innerH = height - padT - padB;
   const timedW = innerW * 0.76;
   const untimedX = padL + innerW * 0.9;
   const maxBps = Math.max(
     Math.abs(decisionBps),
+    ...decisions.map((decision) => Math.abs(decision.bps)),
     ...rows.map((item) => Math.abs(item.response.netChangeBps ?? item.response.passedBps)),
     1,
   );
@@ -83,6 +137,18 @@ export function buildResponseScatterPoints(
       cy: y(net) + jitterY,
     };
   });
+  // Keep guides on true bps Y; stagger only labels when several decisions share a level.
+  const bpsCounts = new Map<number, number>();
+  const decisionLines = decisions.map((decision) => {
+    const prior = bpsCounts.get(decision.bps) ?? 0;
+    bpsCounts.set(decision.bps, prior + 1);
+    return {
+      ...decision,
+      y: y(decision.bps),
+      label: formatScatterDecisionLabel(decision.date, decision.bps),
+      labelDy: prior * 11,
+    };
+  });
   return {
     points,
     maxBps,
@@ -91,6 +157,7 @@ export function buildResponseScatterPoints(
     innerH,
     referenceY: y(decisionBps),
     zeroY: y(0),
+    decisionLines,
   };
 }
 
@@ -239,11 +306,13 @@ export function filterAndSortSectionRows(
   section: SectionKey,
   query: string,
   sort: PassThroughSort,
+  providerFilter: string | null = null,
 ): (MultiSectionPassThroughRow & { response: PassThroughRow })[] {
   const normalized = query.trim().toLocaleLowerCase();
-  const rows = sectionRows(model, section).filter(
-    (row) => !normalized || row.provider.toLocaleLowerCase().includes(normalized),
-  );
+  const rows = sectionRows(model, section).filter((row) => {
+    if (providerFilter && row.provider !== providerFilter) return false;
+    return !normalized || row.provider.toLocaleLowerCase().includes(normalized);
+  });
   return rows.sort((a, b) => {
     if (sort === 'bank') return a.provider.localeCompare(b.provider);
     if (sort === 'timing') {
