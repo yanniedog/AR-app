@@ -4,6 +4,7 @@ import {
   hasProductSeries,
   normalizeProductHistoryPayload,
   productSeriesRecord,
+  productSeriesRecordWithCurrent,
   type ProductHistoryPayload,
 } from '../src/data/productHistory';
 import type { CorePayload, RateRow, SectionKey } from '../src/types';
@@ -102,6 +103,19 @@ describe('extractProductSeries / productSeriesRecord / hasProductSeries', () => 
       '2026-06-10': 0.055,
     });
     expect(productSeriesRecord(payload, 'X|9')).toEqual({});
+  });
+
+  it('seeds today when daily history has not yet landed a point', () => {
+    expect(productSeriesRecordWithCurrent(null, 'P|1', '2026-06-10', 0.054)).toEqual({
+      '2026-06-10': 0.054,
+    });
+    // Existing finite point wins over the seed.
+    expect(productSeriesRecordWithCurrent(payload, 'P|1', '2026-06-10', 0.099)['2026-06-10']).toBe(0.055);
+    // Null gap on an existing timeline is filled.
+    expect(productSeriesRecordWithCurrent(payload, 'P|1', '2026-05-19', 0.058)['2026-05-19']).toBe(0.058);
+    expect(productSeriesRecordWithCurrent(payload, 'P|1', '2026-06-10', null)).toEqual(
+      productSeriesRecord(payload, 'P|1'),
+    );
   });
 
   it('hasProductSeries reflects whether any finite value exists', () => {

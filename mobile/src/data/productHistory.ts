@@ -160,6 +160,31 @@ export function productSeriesRecord(
   return out;
 }
 
+/**
+ * Chart highlight values with today's rate seeded when daily history has not yet
+ * landed a point for `runDate`. Keeps the product line visible while
+ * `syncProductHistoryFromDailyPayloads` warms dated cores.
+ */
+export function productSeriesRecordWithCurrent(
+  payload: ProductHistoryPayload | null | undefined,
+  productKey: string,
+  runDate: string | undefined,
+  currentRate: number | null | undefined,
+): Record<string, number | null> {
+  const out = productSeriesRecord(payload, productKey);
+  const date = String(runDate || '').slice(0, 10);
+  if (
+    date &&
+    typeof currentRate === 'number' &&
+    Number.isFinite(currentRate) &&
+    currentRate > 0 &&
+    out[date] == null
+  ) {
+    out[date] = currentRate;
+  }
+  return out;
+}
+
 export function hasProductSeries(
   payload: ProductHistoryPayload | null | undefined,
   productKey: string,
