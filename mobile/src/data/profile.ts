@@ -164,8 +164,8 @@ const matches = (value: string | undefined, list: string[]): boolean =>
 
 /**
  * Rows matching the profile within one section (empty dimensions match all).
- * Account-feature matching needs details; when details are absent, attribute
- * filters still apply and feature constraints are deferred.
+ * Account-feature matching needs details; when features are selected but
+ * details are absent, return no rows (fail closed) until details warm.
  */
 export function profileFilterRows(
   rows: RateRow[],
@@ -193,7 +193,10 @@ export function profileFilterRows(
   }
 
   const features = profileFeaturesForSection(p, section);
-  if (features.length && detailsProducts) {
+  if (features.length) {
+    // Fail closed until details are loaded — otherwise must-have features would
+    // silently disappear and Home/Calculator could show non-matching winners.
+    if (!detailsProducts) return [];
     out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts));
   }
   return out;

@@ -38,6 +38,7 @@ export default function Calculator() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
+  const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -46,6 +47,10 @@ export default function Calculator() {
   const activeSection = useStore((s) => s.activeSection);
   const [section, setSection] = useState<SectionKey>(activeSection);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+
+  useEffect(() => {
+    if (profileFilters.accountFeatures.length > 0) void ensureDetails();
+  }, [profileFilters.accountFeatures, ensureDetails]);
 
   const isLoan = SECTIONS[section].lowerIsBetter;
   const isMortgage = section === 'Mortgage';

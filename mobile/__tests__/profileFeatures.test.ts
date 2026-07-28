@@ -78,7 +78,8 @@ describe('profile account features', () => {
 
   test('profileFilterRows applies features when details are present', () => {
     const p = { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] };
-    expect(profileFilterRows(mortgageRows, p, 'Mortgage')).toHaveLength(2);
+    // Fail closed without details so must-have features are never silently dropped.
+    expect(profileFilterRows(mortgageRows, p, 'Mortgage')).toHaveLength(0);
     expect(profileFilterRows(mortgageRows, p, 'Mortgage', details).map((r) => r.product_key)).toEqual([
       'A|1',
     ]);
