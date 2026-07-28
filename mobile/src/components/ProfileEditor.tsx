@@ -3,12 +3,23 @@ import { View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import { humanizeEnum } from '../data/format';
-import { PROFILE_GROUPS, type ProfileFilters } from '../data/profile';
+import {
+  PROFILE_FEATURE_OPTIONS,
+  PROFILE_GROUPS,
+  type ProfileFilters,
+} from '../data/profile';
 import { distinctValues } from '../data/selectors';
 import { useStore } from '../data/store';
 import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Chip, Row } from './ui';
+
+type EditorGroup = {
+  section: SectionKey;
+  title: string;
+  key: keyof ProfileFilters;
+  options: string[];
+};
 
 /** Chip groups for the saved product profile — shared by onboarding and the Profile screen. */
 export function ProfileEditor({
@@ -23,16 +34,33 @@ export function ProfileEditor({
   const theme = useTheme();
   const core = useStore((s) => s.core);
 
-  const groups = useMemo(
-    () =>
-      PROFILE_GROUPS.filter((g) => sections.includes(g.section))
-        .map((g) => ({
-          ...g,
-          options: distinctValues(core?.sections?.[g.section]?.rates ?? [], g.field).slice(0, 12),
-        }))
-        .filter((g) => g.options.length > 0),
-    [core, sections],
-  );
+  const groups = useMemo(() => {
+    const attrGroups: EditorGroup[] = PROFILE_GROUPS.filter((g) => sections.includes(g.section))
+      .map((g) => ({
+        section: g.section,
+        title: g.title,
+        key: g.key,
+        options: distinctValues(core?.sections?.[g.section]?.rates ?? [], g.field).slice(0, 12),
+      }))
+      .filter((g) => g.options.length > 0);
+
+    const featureGroups: EditorGroup[] = sections
+      .filter((section) => (PROFILE_FEATURE_OPTIONS[section] ?? []).length > 0)
+      .map((section) => ({
+        section,
+        title: 'Account features',
+        key: 'accountFeatures' as const,
+        options: PROFILE_FEATURE_OPTIONS[section],
+      }));
+
+    // Keep section blocks contiguous: attributes for a section, then its features.
+    const out: EditorGroup[] = [];
+    for (const section of sections) {
+      out.push(...attrGroups.filter((g) => g.section === section));
+      out.push(...featureGroups.filter((g) => g.section === section));
+    }
+    return out;
+  }, [core, sections]);
 
   const toggle = (key: keyof ProfileFilters, option: string) => {
     const list = value[key];
@@ -63,6 +91,11 @@ export function ProfileEditor({
             <AppText variant="small" weight="700" style={{ marginBottom: theme.spacing(2) }}>
               {g.title}
             </AppText>
+            {g.key === 'accountFeatures' ? (
+              <AppText variant="tiny" color="textFaint" style={{ marginBottom: theme.spacing(2) }}>
+                Narrow the next search to products that include these — leave empty for any.
+              </AppText>
+            ) : null}
             <Row gap={8} style={{ flexWrap: 'wrap' }}>
               {g.options.map((o) => (
                 <Chip

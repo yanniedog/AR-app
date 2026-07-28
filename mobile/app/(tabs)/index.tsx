@@ -166,7 +166,7 @@ export default function Home() {
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(hierRows, profileFilters, section),
+        profileFilterRows(hierRows, profileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -179,7 +179,7 @@ export default function Home() {
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(sectionRows ?? [], profileFilters, section),
+        profileFilterRows(sectionRows ?? [], profileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,

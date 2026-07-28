@@ -42,7 +42,9 @@ describe('format', () => {
   test('humanizeEnum', () => {
     expect(humanizeEnum('PRINCIPAL_AND_INTEREST')).toBe('Principal & interest');
     expect(humanizeEnum('OWNER_OCCUPIED')).toBe('Owner occupied');
-    expect(humanizeEnum('OFFSET')).toBe('Mortgage offset');
+    expect(humanizeEnum('OFFSET')).toBe('Offset account');
+    expect(humanizeEnum('EXTRA_REPAYMENTS')).toBe('Early / extra repayments');
+    expect(humanizeEnum('REDRAW')).toBe('Redraw facility');
     expect(humanizeEnum('')).toBe('');
   });
 

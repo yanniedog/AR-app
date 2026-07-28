@@ -1,10 +1,15 @@
+import type { ProductDetail, RateRow, SectionKey } from '../types';
+import { productHasAllFeatures } from './features';
 import type { Filters } from './selectors';
-import type { RateRow, SectionKey } from '../types';
 
 /**
  * Per-section product attributes the user locks in once — e.g. owner-occupied,
  * P&I, variable, LVR 80–90% — applied as default filters across the app so the
  * same choices never have to be re-selected screen by screen.
+ *
+ * `accountFeatures` holds CDR featureType codes (offset, extra repayments, …)
+ * curated per section; Search and other surfaces seed from the subset that
+ * applies to the active section.
  */
 export interface ProfileFilters {
   loanPurposes: string[];
@@ -13,6 +18,7 @@ export interface ProfileFilters {
   lvrTiers: string[];
   depositKinds: string[];
   interestPayments: string[];
+  accountFeatures: string[];
 }
 
 export const EMPTY_PROFILE: ProfileFilters = {
@@ -22,6 +28,26 @@ export const EMPTY_PROFILE: ProfileFilters = {
   lvrTiers: [],
   depositKinds: [],
   interestPayments: [],
+  accountFeatures: [],
+};
+
+/**
+ * Curated CDR featureTypes offered on intro / profile — not the full details
+ * catalogue (which includes OTHER and banking noise). Search FilterSheet still
+ * exposes the broader distinct set for session overrides.
+ */
+export const PROFILE_FEATURE_OPTIONS: Record<SectionKey, string[]> = {
+  Mortgage: ['OFFSET', 'EXTRA_REPAYMENTS', 'REDRAW', 'GUARANTOR', 'CASHBACK_OFFER'],
+  Savings: [
+    'CARD_ACCESS',
+    'NPP_PAYID',
+    'UNLIMITED_TXNS',
+    'BILL_PAYMENT',
+    'OVERDRAFT',
+    'FREE_TXNS',
+    'DIGITAL_BANKING',
+  ],
+  TD: ['DIGITAL_BANKING', 'NOTIFICATIONS'],
 };
 
 const stringList = (v: unknown): string[] =>
@@ -35,6 +61,7 @@ export function normalizeProfileFilters(value?: Partial<ProfileFilters> | null):
     lvrTiers: stringList(value?.lvrTiers),
     depositKinds: stringList(value?.depositKinds),
     interestPayments: stringList(value?.interestPayments),
+    accountFeatures: stringList(value?.accountFeatures),
   };
 }
 
@@ -45,8 +72,15 @@ export function profileSelectionCount(p: ProfileFilters): number {
     p.repaymentTypes.length +
     p.lvrTiers.length +
     p.depositKinds.length +
-    p.interestPayments.length
+    p.interestPayments.length +
+    p.accountFeatures.length
   );
+}
+
+/** Profile feature selections that apply to `section` (intersect curated allowlist). */
+export function profileFeaturesForSection(p: ProfileFilters, section: SectionKey): string[] {
+  const allowed = new Set(PROFILE_FEATURE_OPTIONS[section] ?? []);
+  return p.accountFeatures.filter((f) => allowed.has(f));
 }
 
 /**
@@ -55,6 +89,7 @@ export function profileSelectionCount(p: ProfileFilters): number {
  * search); the user can still override per screen.
  */
 export function profileToFilters(p: ProfileFilters, section: SectionKey, base: Filters): Filters {
+  const accountFeatures = profileFeaturesForSection(p, section);
   if (section === 'Mortgage') {
     return {
       ...base,
@@ -62,10 +97,13 @@ export function profileToFilters(p: ProfileFilters, section: SectionKey, base: F
       rateTypes: [...p.rateTypes],
       repaymentTypes: [...p.repaymentTypes],
       lvrTiers: [...p.lvrTiers],
+      accountFeatures: [...accountFeatures],
     };
   }
-  if (section === 'TD') return { ...base, interestPayments: [...p.interestPayments] };
-  return { ...base, depositKinds: [...p.depositKinds] };
+  if (section === 'TD') {
+    return { ...base, interestPayments: [...p.interestPayments], accountFeatures: [...accountFeatures] };
+  }
+  return { ...base, depositKinds: [...p.depositKinds], accountFeatures: [...accountFeatures] };
 }
 
 /**
@@ -124,31 +162,55 @@ export const PROFILE_GROUPS: {
 const matches = (value: string | undefined, list: string[]): boolean =>
   list.length === 0 || (value !== undefined && list.includes(value));
 
-/** Rows matching the profile within one section (empty dimensions match all). */
-export function profileFilterRows(rows: RateRow[], p: ProfileFilters, section: SectionKey): RateRow[] {
+/**
+ * Rows matching the profile within one section (empty dimensions match all).
+ * Account-feature matching needs details; when details are absent, attribute
+ * filters still apply and feature constraints are deferred.
+ */
+export function profileFilterRows(
+  rows: RateRow[],
+  p: ProfileFilters,
+  section: SectionKey,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): RateRow[] {
+  let out = rows;
   if (section === 'Mortgage') {
-    if (!p.loanPurposes.length && !p.rateTypes.length && !p.repaymentTypes.length && !p.lvrTiers.length) return rows;
-    return rows.filter(
-      (r) =>
-        matches(r.loan_purpose ?? r.security_purpose, p.loanPurposes) &&
-        matches(r.rate_type, p.rateTypes) &&
-        matches(r.ribbon_repayment_type ?? r.repayment_type, p.repaymentTypes) &&
-        matches(r.lvr_tier, p.lvrTiers),
-    );
+    if (p.loanPurposes.length || p.rateTypes.length || p.repaymentTypes.length || p.lvrTiers.length) {
+      out = out.filter(
+        (r) =>
+          matches(r.loan_purpose ?? r.security_purpose, p.loanPurposes) &&
+          matches(r.rate_type, p.rateTypes) &&
+          matches(r.ribbon_repayment_type ?? r.repayment_type, p.repaymentTypes) &&
+          matches(r.lvr_tier, p.lvrTiers),
+      );
+    }
+  } else if (section === 'TD') {
+    if (p.interestPayments.length) {
+      out = out.filter((r) => matches(r.interest_payment, p.interestPayments));
+    }
+  } else if (p.depositKinds.length) {
+    out = out.filter((r) => matches(r.ribbon_deposit_kind, p.depositKinds));
   }
-  if (section === 'TD') {
-    if (!p.interestPayments.length) return rows;
-    return rows.filter((r) => matches(r.interest_payment, p.interestPayments));
+
+  const features = profileFeaturesForSection(p, section);
+  if (features.length && detailsProducts) {
+    out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts));
   }
-  if (!p.depositKinds.length) return rows;
-  return rows.filter((r) => matches(r.ribbon_deposit_kind, p.depositKinds));
+  return out;
 }
 
 /** Selections that affect a given section (badge counts, "profile applied" hints). */
 export function profileSectionCount(p: ProfileFilters, section: SectionKey): number {
+  const featureCount = profileFeaturesForSection(p, section).length;
   if (section === 'Mortgage') {
-    return p.loanPurposes.length + p.rateTypes.length + p.repaymentTypes.length + p.lvrTiers.length;
+    return (
+      p.loanPurposes.length +
+      p.rateTypes.length +
+      p.repaymentTypes.length +
+      p.lvrTiers.length +
+      featureCount
+    );
   }
-  if (section === 'TD') return p.interestPayments.length;
-  return p.depositKinds.length;
+  if (section === 'TD') return p.interestPayments.length + featureCount;
+  return p.depositKinds.length + featureCount;
 }
