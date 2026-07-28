@@ -1,17 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
+import { IndeterminateProgressBar } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
-import { AppText, Badge, Card, Row } from '../src/components/ui';
+import { AppText, Badge, Button, Card, Row } from '../src/components/ui';
 import { SECTIONS } from '../src/constants';
 import { assessAccess } from '../src/data/access';
 import { computeLvr, depositToReachLvr, num, type CalcInputs } from '../src/data/calc';
 import { formatRate, humanizeEnum, isBroadlyAvailable, toFraction } from '../src/data/format';
 import { sectionSegmentOptions } from '../src/data/interests';
-import { lvrTierForValue, parseLvrTier, profileFilterRows } from '../src/data/profile';
+import {
+  lvrTierForValue,
+  parseLvrTier,
+  profileFeaturesForSection,
+  profileFilterRows,
+} from '../src/data/profile';
 import { distinctValues } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
@@ -38,6 +44,7 @@ export default function Calculator() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
+  const detailsLoading = useStore((s) => s.detailsLoading);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -48,9 +55,12 @@ export default function Calculator() {
   const [section, setSection] = useState<SectionKey>(activeSection);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
 
+  const profileFeaturesPending =
+    profileFeaturesForSection(profileFilters, section).length > 0 && !details?.products;
+
   useEffect(() => {
-    if (profileFilters.accountFeatures.length > 0) void ensureDetails();
-  }, [profileFilters.accountFeatures, ensureDetails]);
+    if (profileFeaturesPending) void ensureDetails();
+  }, [profileFeaturesPending, ensureDetails]);
 
   const isLoan = SECTIONS[section].lowerIsBetter;
   const isMortgage = section === 'Mortgage';
@@ -298,17 +308,44 @@ export default function Calculator() {
       ) : null}
 
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
-        {candidates.length
-          ? isLoan
-            ? 'WHAT SWITCHING COULD SAVE'
-            : 'WHAT SWITCHING COULD EARN'
-          : currentRate === null
-            ? 'ENTER YOUR CURRENT RATE'
-            : balance <= 0
-              ? 'ENTER YOUR LOAN DETAILS ABOVE'
-              : 'NO BETTER COMPARABLE RATES FOUND'}
+        {profileFeaturesPending
+          ? detailsLoading
+            ? 'PREPARING PROFILE FEATURES…'
+            : 'COULD NOT LOAD PRODUCT FEATURES'
+          : candidates.length
+            ? isLoan
+              ? 'WHAT SWITCHING COULD SAVE'
+              : 'WHAT SWITCHING COULD EARN'
+            : currentRate === null
+              ? 'ENTER YOUR CURRENT RATE'
+              : balance <= 0
+                ? 'ENTER YOUR LOAN DETAILS ABOVE'
+                : 'NO BETTER COMPARABLE RATES FOUND'}
       </AppText>
-      {candidates.map((c) => {
+      {profileFeaturesPending ? (
+        <Card style={{ marginBottom: 16 }}>
+          {detailsLoading ? (
+            <IndeterminateProgressBar
+              caption="Loading product features so profile must-haves can be applied."
+              accessibilityLabel="Preparing profile features"
+            />
+          ) : (
+            <View style={{ gap: 12 }}>
+              <AppText variant="small" color="textMuted">
+                Feature filters need the details payload. Retry once you are online, or clear account
+                features in your profile to compare without them.
+              </AppText>
+              <Button
+                title="Retry"
+                variant="secondary"
+                onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
+              />
+            </View>
+          )}
+        </Card>
+      ) : null}
+      {!profileFeaturesPending
+        ? candidates.map((c) => {
         const access = assessAccess(
           c.row.product_name,
           details?.products?.[c.row.product_key] ?? null,
@@ -352,7 +389,8 @@ export default function Calculator() {
             </Card>
           </Pressable>
         );
-      })}
+      })
+        : null}
 
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
         Estimates use advertised CDR rates and exclude fees, bonus-rate conditions and switching
