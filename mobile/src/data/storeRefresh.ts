@@ -18,7 +18,7 @@ import {
   rebuildAndInstallSuitabilityIndex,
   suitabilityIndexMatches,
 } from './suitabilityIndex';
-import { resolveFinalizedManifest } from './ingestFinalized';
+import { mergeOptionalManifestFiles, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 
 type NotifyContext = {
@@ -263,6 +263,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           remote = rolling;
           pendingIngestRunDate = null;
         }
+
+        // Dated tags often omit optional assets. Prefer rolling (same day) then
+        // the already-installed day so bank history / RBA calendar survive.
+        remote = mergeOptionalManifestFiles(remote, rolling);
+        remote = mergeOptionalManifestFiles(remote, get().manifest);
 
         const meta = await cache.readMeta();
         const upToDate =

@@ -1,12 +1,50 @@
 import { datedManifestUrl } from '../config';
 import { debugLog } from '../lib/debugLog';
-import type { Manifest } from '../types';
+import type { Manifest, ManifestFile } from '../types';
 import { formatRunDate } from './format';
 import {
   fetchDatesIndexJson,
   type DatesIndex,
 } from './historyDaily';
 import { fetchManifest } from './payload';
+
+/** Optional assets that dated tags often omit (core/details only). */
+const OPTIONAL_MANIFEST_KEYS = [
+  'search_index',
+  'history_banks',
+  'bank_history',
+  'rba_calendar',
+] as const;
+
+type OptionalManifestKey = (typeof OPTIONAL_MANIFEST_KEYS)[number];
+
+/**
+ * Dated releases (`app-payload-YYYY-MM-DD`) often ship only core/details while
+ * the rolling tag carries bank history, RBA calendar, and related assets for
+ * the same day. When run_date + core sha match, copy missing optional entries
+ * so Response / Outlook / history keep working after a dates-index-lag adopt.
+ */
+export function mergeOptionalManifestFiles(
+  target: Manifest,
+  source: Manifest | null | undefined,
+): Manifest {
+  if (!source) return target;
+  const targetDate = String(target.run_date || '').slice(0, 10);
+  const sourceDate = String(source.run_date || '').slice(0, 10);
+  if (!targetDate || targetDate !== sourceDate) return target;
+  if (target.files.core.sha256 !== source.files.core.sha256) return target;
+
+  let changed = false;
+  const files: Manifest['files'] = { ...target.files };
+  for (const key of OPTIONAL_MANIFEST_KEYS) {
+    const fromSource: ManifestFile | undefined = source.files[key as OptionalManifestKey];
+    if (!files[key as OptionalManifestKey] && fromSource) {
+      files[key as OptionalManifestKey] = fromSource;
+      changed = true;
+    }
+  }
+  return changed ? { ...target, files } : target;
+}
 
 /**
  * The Pi publishes assets to the rolling `app-payload-latest` tag while an ingest
@@ -112,13 +150,20 @@ export async function resolveFinalizedManifest(
     if (datedRolling) {
       const datedRunDate = String(datedRolling.run_date || '').slice(0, 10);
       if (datedRunDate === pendingIngestRunDate) {
+        const manifest = mergeOptionalManifestFiles(datedRolling, rolling);
+        const restoredOptional = OPTIONAL_MANIFEST_KEYS.filter(
+          (key) => !datedRolling.files[key] && !!manifest.files[key],
+        );
         debugLog.info(
           'ingest',
-          `dated release finalises run_date=${pendingIngestRunDate} despite dates-index lag (latest=${latestFinal})`,
+          `dated release finalises run_date=${pendingIngestRunDate} despite dates-index lag (latest=${latestFinal})` +
+            (restoredOptional.length
+              ? `; restored optional=${restoredOptional.join(',')}`
+              : ''),
         );
         return {
           status: 'finalized',
-          manifest: datedRolling,
+          manifest,
           pendingIngestRunDate: null,
           datesIndex,
         };
@@ -162,7 +207,9 @@ export async function resolveFinalizedManifest(
     }
     return {
       status: 'pending',
-      manifest: finalized,
+      // Prior-day dated tags also omit optional assets; rolling will not merge
+      // (different run_date). Callers may still enrich from the installed day.
+      manifest: mergeOptionalManifestFiles(finalized, rolling),
       pendingIngestRunDate,
       datesIndex,
     };

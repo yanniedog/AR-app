@@ -387,6 +387,147 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().refreshing).toBe(false);
   });
 
+  it('keeps bank_history when adopting a core/details-only dated release', async () => {
+    const bankHistory = {
+      name: 'bank-history.json.gz',
+      bytes: 100,
+      sha256: 'bank-history-sha',
+      url: 'https://example.com/bank-history.json.gz',
+    };
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'same-core-sha' },
+        bank_history: bankHistory,
+        rba_calendar: {
+          name: 'rba-calendar.json.gz',
+          bytes: 50,
+          sha256: 'rba-calendar-sha',
+          url: 'https://example.com/rba-calendar.json.gz',
+        },
+      },
+    };
+    const datedCoreOnly: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      tag: 'app-payload-2026-07-28',
+      files: {
+        core: rollingManifest.files.core,
+        details: rollingManifest.files.details,
+      },
+    };
+    const datedCore = { ...remoteCore, run_date: '2026-07-28' } as CorePayload;
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+    });
+    mockFetchManifest
+      .mockResolvedValueOnce(rollingManifest)
+      .mockResolvedValueOnce(datedCoreOnly);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadCore.mockResolvedValue({
+      text: JSON.stringify(datedCore),
+      core: datedCore,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(true);
+    expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
+    expect(useStore.getState().manifest?.files.rba_calendar?.sha256).toBe('rba-calendar-sha');
+    expect(useStore.getState().manifest?.tag).toBe('app-payload-2026-07-28');
+    expect(useStore.getState().pendingIngestRunDate).toBeNull();
+  });
+
+  it('preserves installed optional assets when re-adopting the same prior dated day', async () => {
+    const bankHistory = {
+      name: 'bank-history.json.gz',
+      bytes: 100,
+      sha256: 'installed-bank-history',
+      url: 'https://example.com/bank-history.json.gz',
+    };
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+      files: {
+        ...remoteManifest.files,
+        bank_history: bankHistory,
+      },
+    };
+    const datedPriorCoreOnly: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+      tag: 'app-payload-2026-07-27',
+      files: {
+        core: priorManifest.files.core,
+        details: priorManifest.files.details,
+      },
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+    });
+    mockFetchManifest
+      .mockResolvedValueOnce(rollingManifest)
+      .mockRejectedValueOnce(new Error('dated 28 not ready'))
+      .mockResolvedValueOnce(datedPriorCoreOnly);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(false);
+    expect(useStore.getState().core?.run_date).toBe('2026-07-27');
+    expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
+    expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
+    expect(mockDownloadCore).not.toHaveBeenCalled();
+  });
+
   it('holds cached day when dates-index is unavailable and rolling is newer', async () => {
     const rollingManifest: Manifest = {
       ...remoteManifest,
