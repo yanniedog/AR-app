@@ -8,14 +8,75 @@ import {
 import { cache } from '../src/data/cache';
 
 function seriesCsv(seriesId: string, values: [string, number][], publication = '30-Apr-2026') {
+  return multiSeriesCsv([{ id: seriesId, values }], publication);
+}
+
+/** Multi-column RBA table fixture (one publication date shared across columns). */
+function multiSeriesCsv(
+  columns: { id: string; values: [string, number][] }[],
+  publication = '30-Apr-2026',
+) {
+  const dates = [...new Set(columns.flatMap((column) => column.values.map(([date]) => date)))].sort(
+    (a, b) => {
+      const toIso = (value: string) => {
+        const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(value);
+        return m ? `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}` : value;
+      };
+      return toIso(a).localeCompare(toIso(b));
+    },
+  );
+  const byId = new Map(
+    columns.map((column) => [column.id, new Map(column.values)] as const),
+  );
   return [
     'TABLE',
-    `Title,"A title, with a comma"`,
-    'Units,Per cent',
-    `Publication date,${publication}`,
-    `Series ID,${seriesId}`,
-    ...values.map(([date, value]) => `${date},${value}`),
+    `Publication date,${columns.map(() => publication).join(',')}`,
+    `Series ID,${columns.map((column) => column.id).join(',')}`,
+    ...dates.map((date) =>
+      `${date},${columns.map((column) => {
+        const value = byId.get(column.id)?.get(date);
+        return value == null ? '' : String(value);
+      }).join(',')}`,
+    ),
   ].join('\r\n');
+}
+
+function inflationCsv(values: [string, number][], publication?: string) {
+  return multiSeriesCsv([
+    { id: 'GCPIOCPMTMYP', values },
+    {
+      id: 'GCPIAGYP',
+      values: values.map(([date, value]) => [date, Math.round((value + 0.4) * 10) / 10] as [string, number]),
+    },
+  ], publication);
+}
+
+function labourCsv(values: [string, number][], publication?: string) {
+  return multiSeriesCsv([
+    { id: 'GLFSURSA', values },
+    {
+      id: 'GLFSPRSA',
+      values: values.map(([date, value]) => [date, Math.round((66 + value * 0.1) * 10) / 10] as [string, number]),
+    },
+    {
+      id: 'GLFSEPTSYP',
+      values: values.map(([date, value]) => [date, Math.round((2.2 + (value - 4) * 0.5) * 10) / 10] as [string, number]),
+    },
+  ], publication);
+}
+
+function expectationsCsv(values: [string, number][], publication?: string) {
+  return multiSeriesCsv([
+    { id: 'GMAREXPY', values },
+    {
+      id: 'GCONEXP',
+      values: values.map(([date, value]) => [date, Math.round((value + 1.8) * 10) / 10] as [string, number]),
+    },
+  ], publication);
+}
+
+function wagesCsv(values: [string, number][], publication?: string) {
+  return seriesCsv('GWPIYP', values, publication);
 }
 
 const cashCsv = [
@@ -26,6 +87,19 @@ const cashCsv = [
   '01/05/2026,01/06/2026,4.20',
   '01/05/2026,01/12/2026,3.95',
 ].join('\n');
+
+function fullOutlookCsv(fetchedAt = '2026-07-16T00:00:00.000Z') {
+  return buildEconomicOutlookFromCsv({
+    inflation: inflationCsv([['31/03/2026', 3.1]]),
+    labour: labourCsv([
+      ['31/10/2025', 4.0], ['30/11/2025', 4.0], ['31/12/2025', 4.0],
+      ['31/01/2026', 4.1], ['28/02/2026', 4.1], ['31/03/2026', 4.1], ['30/04/2026', 4.1],
+    ]),
+    wages: wagesCsv([['31/03/2026', 3.2]]),
+    expectations: expectationsCsv([['31/03/2026', 2.7]]),
+    cashForecast: cashCsv,
+  }, fetchedAt);
+}
 
 describe('economic outlook', () => {
   afterEach(() => jest.restoreAllMocks());
@@ -75,34 +149,23 @@ describe('economic outlook', () => {
     ).toBe('lower');
   });
 
-  it('builds the four-indicator model from sparse official tables', () => {
-    const model = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
-      labour: seriesCsv('GLFSURSA', [
-        ['31/10/2025', 4.0], ['30/11/2025', 4.0], ['31/12/2025', 4.0],
-        ['31/01/2026', 4.1], ['28/02/2026', 4.1], ['31/03/2026', 4.1], ['30/04/2026', 4.1],
-      ]),
-      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
-      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
-      cashForecast: cashCsv,
-    }, '2026-07-16T00:00:00.000Z');
+  it('builds the policy-indicator model from sparse official tables', () => {
+    const model = fullOutlookCsv();
     expect(model.indicators.map((indicator) => indicator.id)).toEqual([
       'underlying_inflation',
+      'headline_inflation',
       'unemployment',
+      'participation',
+      'employment_growth',
       'wages',
       'inflation_expectations',
+      'consumer_inflation_expectations',
     ]);
     expect(model.cashRateForecast?.points).toHaveLength(2);
   });
 
   it('surfaces a forced refresh failure instead of silently returning cached data', async () => {
-    const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
-      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
-      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
-      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
-      cashForecast: cashCsv,
-    }, '2026-07-16T00:00:00.000Z');
+    const cached = fullOutlookCsv();
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));
 
@@ -111,23 +174,23 @@ describe('economic outlook', () => {
 
   it('starts a forced refresh instead of joining a background refresh already in flight', async () => {
     const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
-      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
-      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
-      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
+      inflation: inflationCsv([['31/03/2026', 3.1]]),
+      labour: labourCsv([['30/04/2026', 4.1]]),
+      wages: wagesCsv([['31/03/2026', 3.2]]),
+      expectations: expectationsCsv([['31/03/2026', 2.7]]),
       cashForecast: cashCsv,
     }, '2020-01-01T00:00:00.000Z');
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
     const backgroundResolvers: (() => void)[] = [];
     const csvFor = (url: string) => url.includes('g1-data')
-      ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+      ? inflationCsv([['31/03/2026', 3.1]])
       : url.includes('g3-data')
-        ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+        ? expectationsCsv([['31/03/2026', 2.7]])
         : url.includes('h5-data')
-          ? seriesCsv('GLFSURSA', [['30/04/2026', 4.1]])
+          ? labourCsv([['30/04/2026', 4.1]])
           : url.includes('h4-data')
-            ? seriesCsv('GWPIYP', [['31/03/2026', 3.2]])
+            ? wagesCsv([['31/03/2026', 3.2]])
             : cashCsv;
     const fetchMock = jest.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = String(input);
@@ -158,10 +221,10 @@ describe('economic outlook', () => {
 
   it('does not let an older background result overwrite a newer forced refresh', async () => {
     const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/12/2025', 3.3]]),
-      labour: seriesCsv('GLFSURSA', [['31/12/2025', 4.0]]),
-      wages: seriesCsv('GWPIYP', [['31/12/2025', 3.4]]),
-      expectations: seriesCsv('GMAREXPY', [['31/12/2025', 2.8]]),
+      inflation: inflationCsv([['31/12/2025', 3.3]]),
+      labour: labourCsv([['31/12/2025', 4.0]]),
+      wages: wagesCsv([['31/12/2025', 3.4]]),
+      expectations: expectationsCsv([['31/12/2025', 2.8]]),
       cashForecast: cashCsv,
     }, '2020-01-01T00:00:00.000Z');
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
@@ -170,13 +233,13 @@ describe('economic outlook', () => {
     const responseFor = (url: string, latest: boolean) => {
       const date = latest ? '30/06/2026' : '31/03/2026';
       const csv = url.includes('g1-data')
-        ? seriesCsv('GCPIOCPMTMYP', [[date, latest ? 2.9 : 3.1]])
+        ? inflationCsv([[date, latest ? 2.9 : 3.1]])
         : url.includes('g3-data')
-          ? seriesCsv('GMAREXPY', [[date, 2.7]])
+          ? expectationsCsv([[date, 2.7]])
           : url.includes('h5-data')
-            ? seriesCsv('GLFSURSA', [[date, 4.1]])
+            ? labourCsv([[date, 4.1]])
             : url.includes('h4-data')
-              ? seriesCsv('GWPIYP', [[date, 3.2]])
+              ? wagesCsv([[date, 3.2]])
               : cashCsv;
       return { ok: true, text: async () => csv } as Response;
     };
@@ -210,13 +273,7 @@ describe('economic outlook', () => {
   });
 
   it('falls back to a stale cached outlook when a background refresh fails', async () => {
-    const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]]),
-      labour: seriesCsv('GLFSURSA', [['30/04/2026', 4.1]]),
-      wages: seriesCsv('GWPIYP', [['31/03/2026', 3.2]]),
-      expectations: seriesCsv('GMAREXPY', [['31/03/2026', 2.7]]),
-      cashForecast: cashCsv,
-    }, '2020-01-01T00:00:00.000Z');
+    const cached = fullOutlookCsv('2020-01-01T00:00:00.000Z');
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
     jest.spyOn(global, 'fetch').mockRejectedValue(new Error('offline'));
 
@@ -230,25 +287,25 @@ describe('economic outlook', () => {
     });
   });
 
-  it('keeps the four policy indicators when the optional cash forecast fails', async () => {
+  it('keeps the policy indicators when the optional cash forecast fails', async () => {
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('j1-cash-rate')) throw new Error('forecast unavailable');
       const csv = url.includes('g1-data')
-        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        ? inflationCsv([['31/03/2026', 3.1]])
         : url.includes('g3-data')
-          ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+          ? expectationsCsv([['31/03/2026', 2.7]])
           : url.includes('h5-data')
-            ? seriesCsv('GLFSURSA', [['30/04/2026', 4.1]])
-            : seriesCsv('GWPIYP', [['31/03/2026', 3.2]]);
+            ? labourCsv([['30/04/2026', 4.1]])
+            : wagesCsv([['31/03/2026', 3.2]]);
       return { ok: true, text: async () => csv } as Response;
     });
 
     const outlook = await loadEconomicOutlook(true);
 
-    expect(outlook.indicators).toHaveLength(4);
+    expect(outlook.indicators).toHaveLength(8);
     expect(outlook.cashRateForecast).toBeNull();
     expect(outlook.refreshStatus).toBe('partial');
     expect(outlook.refreshErrors).toEqual(
@@ -257,24 +314,24 @@ describe('economic outlook', () => {
   });
 
   it('updates healthy official series when one required table fails', async () => {
-    const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['31/12/2025', 3.3]]),
-      labour: seriesCsv('GLFSURSA', [['31/12/2025', 4.0]]),
-      wages: seriesCsv('GWPIYP', [['31/12/2025', 3.4]]),
-      expectations: seriesCsv('GMAREXPY', [['31/12/2025', 2.8]]),
+    const aged = buildEconomicOutlookFromCsv({
+      inflation: inflationCsv([['31/12/2025', 3.3]]),
+      labour: labourCsv([['31/12/2025', 4.0]]),
+      wages: wagesCsv([['31/12/2025', 3.4]]),
+      expectations: expectationsCsv([['31/12/2025', 2.8]]),
       cashForecast: cashCsv,
     }, '2026-01-01T00:00:00.000Z');
-    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(aged);
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('h4-data')) throw new Error('wages unavailable');
       const csv = url.includes('g1-data')
-        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        ? inflationCsv([['31/03/2026', 3.1]])
         : url.includes('g3-data')
-          ? seriesCsv('GMAREXPY', [['31/03/2026', 2.7]])
+          ? expectationsCsv([['31/03/2026', 2.7]])
           : url.includes('h5-data')
-            ? seriesCsv('GLFSURSA', [['31/03/2026', 4.1]])
+            ? labourCsv([['31/03/2026', 4.1]])
             : cashCsv;
       return { ok: true, text: async () => csv } as Response;
     });
@@ -282,7 +339,7 @@ describe('economic outlook', () => {
     const outlook = await loadEconomicOutlook(false);
 
     expect(outlook.refreshStatus).toBe('partial');
-    expect(outlook.indicators).toHaveLength(4);
+    expect(outlook.indicators).toHaveLength(8);
     expect(outlook.indicators.find((item) => item.id === 'underlying_inflation')?.points.at(-1)?.date)
       .toBe('2026-03-31');
     expect(outlook.indicators.find((item) => item.id === 'wages')?.points.at(-1)?.date)
@@ -295,10 +352,10 @@ describe('economic outlook', () => {
 
   it('does not replace a newer cached observation with an older official response', async () => {
     const cached = buildEconomicOutlookFromCsv({
-      inflation: seriesCsv('GCPIOCPMTMYP', [['30/06/2026', 3.0]]),
-      labour: seriesCsv('GLFSURSA', [['30/06/2026', 4.1]]),
-      wages: seriesCsv('GWPIYP', [['30/06/2026', 3.2]]),
-      expectations: seriesCsv('GMAREXPY', [['30/06/2026', 2.7]]),
+      inflation: inflationCsv([['30/06/2026', 3.0]]),
+      labour: labourCsv([['30/06/2026', 4.1]]),
+      wages: wagesCsv([['30/06/2026', 3.2]]),
+      expectations: expectationsCsv([['30/06/2026', 2.7]]),
       cashForecast: cashCsv,
     }, '2026-07-01T00:00:00.000Z');
     jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
@@ -306,13 +363,13 @@ describe('economic outlook', () => {
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       const csv = url.includes('g1-data')
-        ? seriesCsv('GCPIOCPMTMYP', [['31/03/2026', 3.1]])
+        ? inflationCsv([['31/03/2026', 3.1]])
         : url.includes('g3-data')
-          ? seriesCsv('GMAREXPY', [['30/06/2026', 2.7]])
+          ? expectationsCsv([['30/06/2026', 2.7]])
           : url.includes('h5-data')
-            ? seriesCsv('GLFSURSA', [['30/06/2026', 4.1]])
+            ? labourCsv([['30/06/2026', 4.1]])
             : url.includes('h4-data')
-              ? seriesCsv('GWPIYP', [['30/06/2026', 3.2]])
+              ? wagesCsv([['30/06/2026', 3.2]])
               : cashCsv;
       return { ok: true, text: async () => csv } as Response;
     });

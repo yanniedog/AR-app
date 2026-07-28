@@ -211,31 +211,37 @@ export function MoversLeaderboard({
         { heading: 'BIGGEST INCREASES', rows: ups },
         { heading: 'BIGGEST DECREASES', rows: downs },
       ];
-  const renderRow = (provider: string, netBps: number, current: number) => (
-    <Pressable
-      key={provider}
-      onPress={() => openBank(provider)}
-      accessibilityRole="button"
-      accessibilityLabel={`${provider}, net ${bpsLabel(netBps)} over ${windowDays} days, now ${formatRate(current)}`}
-    >
-      <Row gap={10} style={{ paddingVertical: 6 }}>
-        <BankAvatar provider={provider} size={28} />
-        <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
-          {provider}
-        </AppText>
-        <AppText variant="tiny" color="textFaint">
-          now {formatRate(current)}
-        </AppText>
-        <AppText
-          variant="small"
-          weight="800"
-          style={{ color: toneColor(moveTone(section, netBps), theme), minWidth: 64, textAlign: 'right' }}
-        >
-          {bpsLabel(netBps)}
-        </AppText>
-      </Row>
-    </Pressable>
-  );
+  const renderRow = (provider: string, netBps: number, current: number, movedOn: string | null) => {
+    const movedLabel = movedOn ? formatRunDate(movedOn) : `last ${windowDays}d`;
+    return (
+      <Pressable
+        key={provider}
+        onPress={() => openBank(provider)}
+        accessibilityRole="button"
+        accessibilityLabel={`${provider}, net ${bpsLabel(netBps)} on ${movedLabel}, now ${formatRate(current)}`}
+      >
+        <Row gap={10} style={{ paddingVertical: 6 }}>
+          <BankAvatar provider={provider} size={28} />
+          <View style={{ flex: 1 }}>
+            <AppText variant="small" weight="600" numberOfLines={1}>
+              {provider}
+            </AppText>
+            <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+              {movedOn ? `Moved ${movedLabel}` : `Over ${windowDays} days`}
+              {' · '}now {formatRate(current)}
+            </AppText>
+          </View>
+          <AppText
+            variant="small"
+            weight="800"
+            style={{ color: toneColor(moveTone(section, netBps), theme), minWidth: 64, textAlign: 'right' }}
+          >
+            {bpsLabel(netBps)}
+          </AppText>
+        </Row>
+      </Pressable>
+    );
+  };
   return (
     <View>
       {groups.map((group, gi) =>
@@ -249,7 +255,7 @@ export function MoversLeaderboard({
             >
               {group.heading} · {windowDays}D
             </AppText>
-            {group.rows.map((m) => renderRow(m.provider, m.netBps, m.current))}
+            {group.rows.map((m) => renderRow(m.provider, m.netBps, m.current, m.movedOn))}
           </React.Fragment>
         ) : null,
       )}
