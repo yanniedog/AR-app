@@ -334,7 +334,16 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   writeFileSync(apkPath, apkBuf);
 
   const sha256 = sha256File(apkPath);
-  const downloadUrl = rollingApkDownloadUrl();
+  // Point in-app updates at the immutable versioned asset. The rolling
+  // app-apk-latest/app-preview.apk URL is clobbered on every publish; clients that
+  // raced that replace downloaded a tiny/wrong body and failed sha256 checks.
+  const versionedTagName = versionTag(version);
+  if (!/^app-v\d+\.\d+\.\d+/.test(String(versionedTagName || ''))) {
+    throw new Error(
+      `publish-apk-manifest: refusing to publish with malformed version tag from version=${JSON.stringify(version)} → ${JSON.stringify(versionedTagName)}`,
+    );
+  }
+  const downloadUrl = apkDownloadUrl(repo, versionedTagName);
 
   const manifest = {
     schema_version: 1,
@@ -346,6 +355,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     published_at: new Date().toISOString(),
     repo,
     tag: ROLLING_TAG,
+    version_tag: versionedTagName,
     profile: 'preview',
     build_source: source,
     ...(easBuildId ? { eas_build_id: easBuildId } : {}),
@@ -356,6 +366,17 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
 
   const changelogSummaryPath = writeChangelogSummaryArtifact({ version, outDir });
 
+  // Publish the versioned APK first so the rolling manifest never points at a
+  // download_url that is not yet uploaded.
+  const versioned = await publishVersionedRelease({
+    apkBuf,
+    version,
+    buildNumber,
+    outDir,
+    changelogSummaryPath,
+  });
+
+  // Rolling QR/install page also deep-link the versioned APK (immutable bytes).
   const { qrPath, installPath, qrUrl, installUrl } = await generateInstallAssets(
     outDir,
     downloadUrl,
@@ -379,18 +400,10 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     installPath,
     '--clobber',
   ]);
-  console.log(`Published ${downloadUrl}`);
+  console.log(`Published download_url ${downloadUrl}`);
   console.log(`Manifest: ${rollingManifestReleaseUrl()}`);
   console.log(`QR PNG: ${qrUrl}`);
   console.log(`Install page: ${installUrl}`);
-
-  const versioned = await publishVersionedRelease({
-    apkBuf,
-    version,
-    buildNumber,
-    outDir,
-    changelogSummaryPath,
-  });
 
   writeJobSummary({
     downloadUrl,

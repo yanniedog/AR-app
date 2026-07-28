@@ -14,6 +14,8 @@ export interface ApkManifest {
   published_at?: string;
   repo?: string;
   tag?: string;
+  /** Immutable app-v{semver} tag that hosts download_url when distinct from rolling tag. */
+  version_tag?: string;
   eas_build_id?: string;
   profile?: string;
 }
@@ -40,9 +42,62 @@ export type DownloadProgress = {
   totalBytes: number | null;
 };
 
+/** Above this size, in-memory sha256 (base64→atob) risks OOM; size match is the gate. */
+export const APK_SHA256_VERIFY_MAX_BYTES = 64 * 1024 * 1024;
+
 function manifestFetchUrl(url: string): string {
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}_=${Date.now()}`;
+}
+
+/**
+ * True when an HTTP status from FileSystem download looks successful.
+ * `null`/`undefined` are treated as success because some mocks omit status.
+ * Non-finite numeric values (e.g., NaN, Infinity) are treated as failure.
+ */
+export function isSuccessfulDownloadStatus(status: number | undefined | null): boolean {
+  if (status == null) return true; // some mocks omit status
+  if (!Number.isFinite(status)) return false;
+  return status >= 200 && status < 300;
+}
+
+/**
+ * Validate a downloaded APK against the manifest before install.
+ * Always enforces non-empty + byte-length when manifest.bytes is known — that is what
+ * catches truncated GitHub/CDN responses that previously surfaced as sha256 mismatch.
+ */
+export function assertDownloadedApkMatchesManifest(
+  size: number,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256'>,
+): { verifySha256: boolean } {
+  if (!Number.isFinite(size) || size <= 0) {
+    throw new Error('APK download missing or empty');
+  }
+  if (manifest.bytes != null && Number.isFinite(manifest.bytes) && manifest.bytes > 0) {
+    if (size !== manifest.bytes) {
+      throw new Error(`APK size mismatch (expected ${manifest.bytes}, got ${size})`);
+    }
+  }
+  const verifySha256 = Boolean(manifest.sha256) && size <= APK_SHA256_VERIFY_MAX_BYTES;
+  return { verifySha256 };
+}
+
+/**
+ * Prefer the immutable versioned GitHub asset over the rolling app-apk-latest URL.
+ * Rolling assets are --clobber'd on every publish; a concurrent download can receive a
+ * truncated body that then fails sha256 / size checks.
+ */
+export function preferImmutableApkDownloadUrl(manifest: Pick<ApkManifest, 'download_url' | 'version' | 'version_tag'>): string {
+  const url = manifest.download_url;
+  const versionTag =
+    (typeof manifest.version_tag === 'string' && manifest.version_tag.trim()) ||
+    (typeof manifest.version === 'string' && /^\d+\.\d+\.\d+/.test(manifest.version)
+      ? `app-v${manifest.version}`
+      : '');
+  if (!versionTag) return url;
+  const rollingMarker = '/download/app-apk-latest/';
+  if (!url.includes(rollingMarker)) return url;
+  return url.replace(rollingMarker, `/download/${versionTag}/`);
 }
 
 export function remoteIsNewer(installed: InstalledAppInfo, remote: ApkManifest): boolean {
