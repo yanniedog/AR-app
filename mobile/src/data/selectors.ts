@@ -295,11 +295,21 @@ export function compareProviderGroupsByRate(
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const va = a.bestBySection[section] ? rankFraction(a.bestBySection[section]!, section, metric) : null;
   const vb = b.bestBySection[section] ? rankFraction(b.bestBySection[section]!, section, metric) : null;
-  if (va === null && vb === null) return a.provider.localeCompare(b.provider);
+  return compareRankedProviders(a.provider, va, b.provider, vb, lowerIsBetter);
+}
+
+function compareRankedProviders(
+  aName: string,
+  va: number | null,
+  bName: string,
+  vb: number | null,
+  lowerIsBetter: boolean,
+): number {
+  if (va === null && vb === null) return aName.localeCompare(bName);
   if (va === null) return 1;
   if (vb === null) return -1;
   const byRate = lowerIsBetter ? va - vb : vb - va;
-  return byRate || a.provider.localeCompare(b.provider);
+  return byRate || aName.localeCompare(bName);
 }
 
 /** Group every row across all sections by provider (for the Banks screen). */
@@ -345,7 +355,19 @@ export function groupByProvider(
     out.push(group);
   }
   if (sortSection) {
-    return out.sort((a, b) => compareProviderGroupsByRate(a, b, sortSection, metric));
+    // Precompute rank once per provider (avoid O(n log n) re-ranking in the comparator).
+    const lowerIsBetter = SECTIONS[sortSection].lowerIsBetter;
+    const ranked = out.map((group) => {
+      const best = group.bestBySection[sortSection];
+      return {
+        group,
+        value: best ? rankFraction(best, sortSection, metric) : null,
+      };
+    });
+    ranked.sort((a, b) =>
+      compareRankedProviders(a.group.provider, a.value, b.group.provider, b.value, lowerIsBetter),
+    );
+    return ranked.map((r) => r.group);
   }
   return out.sort((a, b) => a.provider.localeCompare(b.provider));
 }
