@@ -1,7 +1,0 @@
-# #0006 Overlapping 32px SVG hit circles can select the wrong dense response point, and 18-character labels can fail to identify the lender uniquely.
-
-- 2026-07-23T07:31:30Z `issue`: Overlapping 32px SVG hit circles can select the wrong dense response point, and 18-character labels can fail to identify the lender uniquely. [mobile/src/components/passthrough/ResponseScatter.tsx]
-- 2026-07-23T07:33:29Z `attempt`: Replaced per-point overlapping hit circles with chart-level nearest-point selection that cycles dense candidates, and moved the full selected provider name into an untruncated live callout. [mobile/src/components/passthrough/ResponseScatter.tsx] (partial)
-- 2026-07-23T07:37:00Z `attempt`: Extracted nearest-point/cycling selection into a pure helper and added regression coverage for dense overlapping lenders and full-name disambiguation; targeted tests passed. [mobile/__tests__/passThroughModels.test.ts] (worked)
-- 2026-07-23T07:37:55Z `attempt`: Final typecheck passed after replacing overlapping hit circles with tested chart-level nearest-point cycling and a full provider callout. [mobile/src/components/passthrough/ResponseScatter.tsx] (worked)
-- 2026-07-23T07:38:06Z `fix`: Dense response clusters now select the nearest lender and cycle repeated taps, while the selected lender is shown in a full untruncated callout. [mobile/src/components/passthrough/ResponseScatter.tsx]
