@@ -1,21 +1,32 @@
 /** Live payload transfer / processing snapshot (real metrics only). */
-export type PayloadProgressPhase = 'manifest' | 'download' | 'verify' | 'inflate' | 'parse';
+export type PayloadProgressPhase =
+  | 'manifest'
+  | 'finalize'
+  | 'download'
+  | 'verify'
+  | 'inflate'
+  | 'parse'
+  | 'install';
 
 export const PAYLOAD_PROGRESS_PHASES: PayloadProgressPhase[] = [
   'manifest',
+  'finalize',
   'download',
   'verify',
   'inflate',
   'parse',
+  'install',
 ];
 
 /** Inclusive phase band on the overall 0–100 determinate bar. */
 const PHASE_BANDS: Record<PayloadProgressPhase, readonly [number, number]> = {
-  manifest: [0, 8],
-  download: [8, 88],
-  verify: [88, 92],
-  inflate: [92, 96],
-  parse: [96, 100],
+  manifest: [0, 6],
+  finalize: [6, 12],
+  download: [12, 78],
+  verify: [78, 84],
+  inflate: [84, 90],
+  parse: [90, 96],
+  install: [96, 100],
 };
 
 export interface PayloadProgressSnapshot {
@@ -25,6 +36,12 @@ export interface PayloadProgressSnapshot {
   totalBytes: number | null;
   /** Epoch ms when the current transfer step started (for rate / ETA). */
   startedAt: number;
+  /**
+   * When false, CPU-bound work is still running inside this phase — never fill
+   * to the phase ceiling (avoids a false 100% while JSON.parse / inflate runs).
+   * Transfer phases omit this and use byte progress alone.
+   */
+  phaseComplete?: boolean;
 }
 
 export type PayloadProgressHandler = (snapshot: PayloadProgressSnapshot) => void;
@@ -37,6 +54,8 @@ export interface PayloadProgressViewModel {
   etaText: string;
   rateText: string;
   fileName: string;
+  /** True when the bar should use a native soft-motion fill (JS may be blocked). */
+  softMotion: boolean;
 }
 
 export function fileNameFromUrl(url: string): string {
@@ -95,16 +114,24 @@ export function formatEta(seconds: number | null): string {
 export function phaseLabel(phase: PayloadProgressPhase): string {
   switch (phase) {
     case 'manifest':
-      return 'manifest';
+      return 'Fetching catalog';
+    case 'finalize':
+      return 'Checking ingest status';
     case 'download':
-      return 'download';
+      return 'Downloading rates';
     case 'verify':
-      return 'verify sha256';
+      return 'Verifying checksum';
     case 'inflate':
-      return 'decompress gzip';
+      return 'Decompressing';
     case 'parse':
-      return 'parse json';
+      return 'Parsing rates';
+    case 'install':
+      return 'Saving rates';
   }
+}
+
+function isTransferPhase(phase: PayloadProgressPhase): boolean {
+  return phase === 'manifest' || phase === 'download';
 }
 
 function lerpBand(
@@ -118,11 +145,51 @@ function lerpBand(
   return lo + (inner / 100) * (hi - lo);
 }
 
+/**
+ * Soft fill for CPU-bound phases while `phaseComplete` is false. Creeps toward
+ * (but never reaches) the phase ceiling so the bar never sits at a false 100%.
+ */
+function softProcessingPercent(
+  band: readonly [number, number],
+  startedAt: number,
+  now: number,
+): number {
+  const [lo, hi] = band;
+  const ceiling = Math.max(lo, hi - 1);
+  const elapsedMs = Math.max(0, now - startedAt);
+  const t = 1 - Math.exp(-elapsedMs / 3500);
+  return lo + (ceiling - lo) * Math.min(0.92, t);
+}
+
 /** Map live snapshot to a single 0–100 bar position across all payload phases. */
-export function computeOverallPercent(snapshot: PayloadProgressSnapshot): number {
+export function computeOverallPercent(
+  snapshot: PayloadProgressSnapshot,
+  now: number = Date.now(),
+): number {
   const band = PHASE_BANDS[snapshot.phase];
-  const value = lerpBand(band, snapshot.bytesReceived, snapshot.totalBytes);
-  return Math.min(100, Math.max(0, Math.round(value)));
+  const [lo, hi] = band;
+
+  if (isTransferPhase(snapshot.phase)) {
+    const value = lerpBand(band, snapshot.bytesReceived, snapshot.totalBytes);
+    if (snapshot.phaseComplete === false) {
+      return Math.min(hi - 1, Math.max(lo, Math.round(value)));
+    }
+    return Math.min(100, Math.max(0, Math.round(value)));
+  }
+
+  if (snapshot.phaseComplete === true) {
+    return hi;
+  }
+
+  // Default for verify/inflate/parse/finalize/install without an explicit complete
+  // flag: treat as in-progress so a full-bytes emit cannot jump to 100% mid-work.
+  return Math.min(hi - 1, Math.max(lo, Math.round(softProcessingPercent(band, snapshot.startedAt, now))));
+}
+
+export function isSoftMotionPhase(snapshot: PayloadProgressSnapshot): boolean {
+  if (snapshot.phaseComplete === true) return false;
+  if (isTransferPhase(snapshot.phase) && snapshot.phaseComplete !== false) return false;
+  return true;
 }
 
 export function buildPayloadProgressViewModel(
@@ -134,14 +201,15 @@ export function buildPayloadProgressViewModel(
   const phaseText = phaseLabel(snapshot.phase);
   const rateText = formatTransferRate(rate);
   const etaText = formatEta(eta);
-  const showTransfer = snapshot.phase === 'manifest' || snapshot.phase === 'download';
+  const showTransfer = isTransferPhase(snapshot.phase) && snapshot.phaseComplete !== false;
   const detailLine = showTransfer ? `${rateText} · ETA ${etaText}` : snapshot.fileName;
   return {
-    overallPercent: computeOverallPercent(snapshot),
+    overallPercent: computeOverallPercent(snapshot, now),
     phaseText,
     detailLine,
     etaText,
     rateText,
     fileName: snapshot.fileName,
+    softMotion: isSoftMotionPhase(snapshot),
   };
 }

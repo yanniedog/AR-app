@@ -46,9 +46,13 @@ describe('downloadProgress', () => {
     expect(formatEta(null)).toBe('—');
   });
 
-  it('labels processing phases', () => {
-    expect(phaseLabel('verify')).toBe('verify sha256');
-    expect(phaseLabel('inflate')).toBe('decompress gzip');
+  it('labels processing phases informatively', () => {
+    expect(phaseLabel('manifest')).toBe('Fetching catalog');
+    expect(phaseLabel('finalize')).toBe('Checking ingest status');
+    expect(phaseLabel('verify')).toBe('Verifying checksum');
+    expect(phaseLabel('inflate')).toBe('Decompressing');
+    expect(phaseLabel('parse')).toBe('Parsing rates');
+    expect(phaseLabel('install')).toBe('Saving rates');
   });
 
   it('computes overall percent across phases', () => {
@@ -59,17 +63,40 @@ describe('downloadProgress', () => {
       totalBytes: 1024,
       startedAt: 0,
     };
-    expect(computeOverallPercent(downloadHalf)).toBeGreaterThan(8);
-    expect(computeOverallPercent(downloadHalf)).toBeLessThan(88);
+    expect(computeOverallPercent(downloadHalf)).toBeGreaterThan(12);
+    expect(computeOverallPercent(downloadHalf)).toBeLessThan(78);
 
-    const parseDone: PayloadProgressSnapshot = {
-      phase: 'parse',
+    const installDone: PayloadProgressSnapshot = {
+      phase: 'install',
       fileName: 'core.json',
       bytesReceived: 100,
       totalBytes: 100,
       startedAt: 0,
+      phaseComplete: true,
     };
-    expect(computeOverallPercent(parseDone)).toBe(100);
+    expect(computeOverallPercent(installDone)).toBe(100);
+  });
+
+  it('never reports 100% while parse/finalize is still running', () => {
+    const parseBusy: PayloadProgressSnapshot = {
+      phase: 'parse',
+      fileName: 'core.json',
+      bytesReceived: 100,
+      totalBytes: 100,
+      startedAt: Date.now() - 5_000,
+      phaseComplete: false,
+    };
+    expect(computeOverallPercent(parseBusy)).toBeLessThan(100);
+    expect(computeOverallPercent(parseBusy)).toBeGreaterThanOrEqual(90);
+
+    const manifestParseTrap: PayloadProgressSnapshot = {
+      phase: 'parse',
+      fileName: 'manifest.json',
+      bytesReceived: 50,
+      totalBytes: 50,
+      startedAt: Date.now(),
+    };
+    expect(computeOverallPercent(manifestParseTrap)).toBeLessThan(100);
   });
 
   it('maps each phase band for overall percent', () => {
@@ -79,22 +106,58 @@ describe('downloadProgress', () => {
       totalBytes: null as number | null,
       startedAt: 0,
     };
-    expect(computeOverallPercent({ ...base, phase: 'manifest' })).toBe(3);
+    expect(computeOverallPercent({ ...base, phase: 'manifest' })).toBe(2);
     expect(
       computeOverallPercent({ ...base, phase: 'download', bytesReceived: 0, totalBytes: 100 }),
-    ).toBe(8);
+    ).toBe(12);
     expect(
       computeOverallPercent({ ...base, phase: 'download', bytesReceived: 100, totalBytes: 100 }),
-    ).toBe(88);
+    ).toBe(78);
     expect(
-      computeOverallPercent({ ...base, phase: 'verify', bytesReceived: 10, totalBytes: 10 }),
-    ).toBe(92);
+      computeOverallPercent({
+        ...base,
+        phase: 'verify',
+        bytesReceived: 10,
+        totalBytes: 10,
+        phaseComplete: true,
+      }),
+    ).toBe(84);
     expect(
-      computeOverallPercent({ ...base, phase: 'inflate', bytesReceived: 10, totalBytes: 10 }),
+      computeOverallPercent({
+        ...base,
+        phase: 'inflate',
+        bytesReceived: 10,
+        totalBytes: 10,
+        phaseComplete: true,
+      }),
+    ).toBe(90);
+    expect(
+      computeOverallPercent({
+        ...base,
+        phase: 'parse',
+        bytesReceived: 10,
+        totalBytes: 10,
+        phaseComplete: true,
+      }),
     ).toBe(96);
     expect(
-      computeOverallPercent({ ...base, phase: 'parse', bytesReceived: 10, totalBytes: 10 }),
+      computeOverallPercent({
+        ...base,
+        phase: 'install',
+        bytesReceived: 10,
+        totalBytes: 10,
+        phaseComplete: true,
+      }),
     ).toBe(100);
+    expect(
+      computeOverallPercent({
+        ...base,
+        phase: 'finalize',
+        phaseComplete: true,
+        bytesReceived: 1,
+        totalBytes: 1,
+      }),
+    ).toBe(12);
   });
 
   it('builds progress view model with phase and ETA line', () => {
@@ -108,8 +171,21 @@ describe('downloadProgress', () => {
       },
       Date.now(),
     );
-    expect(vm.phaseText).toBe('download');
+    expect(vm.phaseText).toBe('Downloading rates');
     expect(vm.overallPercent).toBeGreaterThan(0);
     expect(vm.detailLine).toContain('ETA');
+    expect(vm.softMotion).toBe(false);
+  });
+
+  it('marks softMotion for incomplete CPU phases', () => {
+    const vm = buildPayloadProgressViewModel({
+      phase: 'parse',
+      fileName: 'core.json',
+      bytesReceived: 0,
+      totalBytes: 100,
+      startedAt: Date.now(),
+      phaseComplete: false,
+    });
+    expect(vm.softMotion).toBe(true);
   });
 });

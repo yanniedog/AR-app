@@ -222,13 +222,13 @@ describe('ensureDetails suitability unblock', () => {
     });
     finishFirst({ text: JSON.stringify(remoteDetails), details: remoteDetails });
     await first;
-    for (let i = 0; i < 40 && mockDownloadDetails.mock.calls.length < 2; i += 1) {
-      await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 80 && mockDownloadDetails.mock.calls.length < 2; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
     }
     expect(mockDownloadDetails).toHaveBeenCalledTimes(2);
     finishSecond({ text: JSON.stringify(nextDetails), details: nextDetails });
-    for (let i = 0; i < 40 && store.getState().detailsLoading; i += 1) {
-      await new Promise((r) => setImmediate(r));
+    for (let i = 0; i < 80 && store.getState().detailsLoading; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
     }
 
     expect(store.getState().details).toEqual(nextDetails);

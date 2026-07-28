@@ -9,7 +9,7 @@ import { MANIFEST_URL, SUPPORTED_SCHEMA } from '../config';
 import { debugLog } from '../lib/debugLog';
 import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
-import { yieldToUi } from '../lib/yieldToUi';
+import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeHistoryBanksPayload } from './historyPayload';
@@ -22,7 +22,7 @@ import {
 } from './downloadProgress';
 
 /** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
-const YIELD_BEFORE_HEAVY_BYTES = 256 * 1024;
+const YIELD_BEFORE_HEAVY_BYTES = HEAVY_JSON_BYTES;
 const INFLATE_CHUNK_BYTES = 64 * 1024;
 
 /**
@@ -161,16 +161,18 @@ export async function fetchManifest(
     onProgress,
     phase: 'manifest',
   });
-  const text = strFromU8(new Uint8Array(buf));
-  const startedAt = Date.now();
+  // Stay on the manifest phase — never jump to "parse json" at 100% for this
+  // tiny catalog while later finalize/download work is still outstanding.
   emit(onProgress, {
-    phase: 'parse',
+    phase: 'manifest',
     fileName: 'manifest.json',
     bytesReceived: buf.byteLength,
     totalBytes: buf.byteLength,
-    startedAt,
+    startedAt: Date.now(),
+    phaseComplete: true,
   });
-  const m = JSON.parse(text) as Manifest;
+  const text = strFromU8(new Uint8Array(buf));
+  const m = await parseJsonHeavy<Manifest>(text);
   if (typeof m.schema_version === 'number' && m.schema_version > SUPPORTED_SCHEMA) {
     throw new Error(`payload schema v${m.schema_version} unsupported (app supports v${SUPPORTED_SCHEMA}); update the app`);
   }
@@ -209,9 +211,11 @@ export async function downloadInflate(
     bytesReceived: byteLen,
     totalBytes: byteLen,
     startedAt: verifyStarted,
+    phaseComplete: false,
   });
   if (expectedSha) {
     // expo-crypto on Android bridges Uint8Array → Kotlin ByteArray; raw ArrayBuffer fails.
+    await yieldToUi();
     const digest = await Crypto.digest(
       Crypto.CryptoDigestAlgorithm.SHA256,
       new Uint8Array(buf),
@@ -221,6 +225,14 @@ export async function downloadInflate(
       throw new Error(`asset sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`);
     }
   }
+  emit(opts.onProgress, {
+    phase: 'verify',
+    fileName,
+    bytesReceived: byteLen,
+    totalBytes: byteLen,
+    startedAt: verifyStarted,
+    phaseComplete: true,
+  });
 
   const inflateStarted = Date.now();
   emit(opts.onProgress, {
@@ -229,6 +241,7 @@ export async function downloadInflate(
     bytesReceived: byteLen,
     totalBytes: byteLen,
     startedAt: inflateStarted,
+    phaseComplete: false,
   });
   // Always yield before inflate/decrypt/gunzip — compressed byteLen can be well
   // under the parse threshold while the expanded JSON is multi-MB on the JS thread.
@@ -242,10 +255,28 @@ export async function downloadInflate(
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.
   const looksGzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
-  if (!looksGzipped) return strFromU8(bytes);
+  if (!looksGzipped) {
+    emit(opts.onProgress, {
+      phase: 'inflate',
+      fileName,
+      bytesReceived: byteLen,
+      totalBytes: byteLen,
+      startedAt: inflateStarted,
+      phaseComplete: true,
+    });
+    return strFromU8(bytes);
+  }
   const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES
     ? await gunzipCooperatively(bytes)
     : gunzipSync(bytes);
+  emit(opts.onProgress, {
+    phase: 'inflate',
+    fileName,
+    bytesReceived: byteLen,
+    totalBytes: byteLen,
+    startedAt: inflateStarted,
+    phaseComplete: true,
+  });
   return strFromU8(inflated);
 }
 
@@ -265,12 +296,23 @@ export async function downloadCore(
   emit(opts.onProgress, {
     phase: 'parse',
     fileName,
-    bytesReceived: text.length,
+    bytesReceived: 0,
     totalBytes: text.length,
     startedAt: parseStarted,
+    phaseComplete: false,
   });
-  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
-  return { text, core: JSON.parse(text) as CorePayload };
+  const core = await parseJsonHeavy<CorePayload>(text);
+  // Leave parse incomplete until the caller finishes cache install — otherwise
+  // the bar hits 100% while writeBundle is still flushing multi-MB JSON.
+  emit(opts.onProgress, {
+    phase: 'install',
+    fileName,
+    bytesReceived: 0,
+    totalBytes: text.length,
+    startedAt: Date.now(),
+    phaseComplete: false,
+  });
+  return { text, core };
 }
 
 export interface DetailsResult {
@@ -289,12 +331,21 @@ export async function downloadDetails(
   emit(opts.onProgress, {
     phase: 'parse',
     fileName,
+    bytesReceived: 0,
+    totalBytes: text.length,
+    startedAt: parseStarted,
+    phaseComplete: false,
+  });
+  const details = await parseJsonHeavy<DetailsPayload>(text);
+  emit(opts.onProgress, {
+    phase: 'parse',
+    fileName,
     bytesReceived: text.length,
     totalBytes: text.length,
     startedAt: parseStarted,
+    phaseComplete: true,
   });
-  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
-  return { text, details: JSON.parse(text) as DetailsPayload };
+  return { text, details };
 }
 
 export interface SearchIndexResult {
@@ -308,8 +359,8 @@ export async function downloadSearchIndex(
   opts: DownloadOpts = {},
 ): Promise<SearchIndexResult> {
   const text = await downloadInflate(url, expectedSha, opts);
-  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
-  return { text, searchIndex: JSON.parse(text) as SearchIndexResult['searchIndex'] };
+  const searchIndex = await parseJsonHeavy<SearchIndexResult['searchIndex']>(text);
+  return { text, searchIndex };
 }
 
 export interface BankInsightsResult {
@@ -323,8 +374,8 @@ export async function downloadBankInsights(
   opts: DownloadOpts = {},
 ): Promise<BankInsightsResult> {
   const text = await downloadInflate(url, expectedSha, opts);
-  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
-  const bankInsights = normalizeBankInsightsPayload(JSON.parse(text) as unknown);
+  const parsed = await parseJsonHeavy<unknown>(text);
+  const bankInsights = normalizeBankInsightsPayload(parsed);
   if (!bankInsights) {
     throw new Error('bank_history payload failed validation');
   }
@@ -342,8 +393,8 @@ export async function downloadHistoryBanks(
   opts: DownloadOpts = {},
 ): Promise<HistoryBanksResult> {
   const text = await downloadInflate(url, expectedSha, opts);
-  if (text.length >= YIELD_BEFORE_HEAVY_BYTES) await yieldToUi();
-  const historyBanks = normalizeHistoryBanksPayload(JSON.parse(text) as unknown);
+  const parsed = await parseJsonHeavy<unknown>(text);
+  const historyBanks = normalizeHistoryBanksPayload(parsed);
   if (!historyBanks) {
     throw new Error('history_banks payload failed validation');
   }
@@ -361,7 +412,8 @@ export async function downloadRbaCalendar(
   opts: DownloadOpts = {},
 ): Promise<RbaCalendarResult> {
   const text = await downloadInflate(url, expectedSha, opts);
-  const rbaCalendar = normalizeRbaCalendar(JSON.parse(text) as unknown);
+  const parsed = await parseJsonHeavy<unknown>(text);
+  const rbaCalendar = normalizeRbaCalendar(parsed);
   if (!rbaCalendar) {
     throw new Error('rba_calendar payload failed validation');
   }
