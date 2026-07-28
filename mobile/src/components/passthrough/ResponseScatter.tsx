@@ -1,23 +1,66 @@
-import React, { useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 import { SECTIONS } from '../../constants';
 import type { MultiSectionPassThroughModel } from '../../data/bankInsights';
 import {
+  buildResponseScatterPoints,
+  resolveResponseScatterPress,
   sectionRows,
-  selectResponseScatterProvider,
 } from '../../data/passThroughModels';
+import { hapticSelection } from '../../lib/haptics';
 import { moveTone } from '../../lib/moveSemantics';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
+import { AppText } from '../ui';
+
+const CHART_HEIGHT = 260;
+const PAD_L = 42;
+const PAD_R = 10;
+const PAD_T = 24;
+const PAD_B = 46;
+
+const ScatterDot = memo(function ScatterDot({
+  cx,
+  cy,
+  selected,
+  fill,
+  surface,
+  text,
+  primary,
+}: {
+  cx: number;
+  cy: number;
+  selected: boolean;
+  fill: string;
+  surface: string;
+  text: string;
+  primary: string;
+}) {
+  return (
+    <Circle
+      cx={cx}
+      cy={cy}
+      r={selected ? 7 : 4.5}
+      fill={selected ? primary : fill}
+      opacity={selected ? 1 : 0.68}
+      stroke={selected ? text : surface}
+      strokeWidth={selected ? 2 : 1}
+      pointerEvents="none"
+    />
+  );
+});
 
 /**
  * Response map with an explicit untimed rail. Every eligible lender is plotted:
  * same-direction responses with a matching event use the time axis, while
  * untimed, opposite, and unchanged observations sit on the labelled rail.
+ *
+ * Selection paints locally first so taps stay responsive even when the parent
+ * list still has to update row highlights.
  */
-export function ResponseScatter({
+export const ResponseScatter = memo(function ResponseScatter({
   model,
   section,
   selectedProvider,
@@ -26,136 +69,158 @@ export function ResponseScatter({
   model: MultiSectionPassThroughModel;
   section: SectionKey;
   selectedProvider: string | null;
-  onProviderSelect: (provider: string) => void;
+  onProviderSelect: (provider: string | null) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  /** Instant paint target — synced from parent when list/chips change selection. */
+  const [paintedProvider, setPaintedProvider] = useState(selectedProvider);
+  useEffect(() => {
+    setPaintedProvider(selectedProvider);
+  }, [selectedProvider]);
+
   const rows = useMemo(() => sectionRows(model, section), [model, section]);
-  const timed = rows.filter(
-    (item) => item.response.passedBps !== 0 && item.response.daysToFirstMove != null,
+  const plot = useMemo(
+    () =>
+      width > 0
+        ? buildResponseScatterPoints(rows, {
+            width,
+            height: CHART_HEIGHT,
+            padL: PAD_L,
+            padR: PAD_R,
+            padT: PAD_T,
+            padB: PAD_B,
+            windowDays: model.windowDays,
+            decisionBps: model.decision.bps,
+          })
+        : null,
+    [rows, width, model.windowDays, model.decision.bps],
   );
-  const withRba = rows.filter((item) => item.response.passedBps !== 0);
-  const opposite = rows.filter(
-    (item) => (item.response.netChangeBps ?? 0) !== 0 && item.response.passedBps === 0,
+
+  const timedCount = useMemo(
+    () => rows.filter((item) => item.response.passedBps !== 0 && item.response.daysToFirstMove != null).length,
+    [rows],
   );
-  const unchanged = rows.length - withRba.length - opposite.length;
-  const height = 260;
-  const padL = 42;
-  const padR = 10;
-  const padT = 24;
-  const padB = 46;
-  const innerW = Math.max(1, width - padL - padR);
-  const innerH = height - padT - padB;
-  const timedW = innerW * 0.76;
-  const untimedX = padL + innerW * 0.9;
-  const maxBps = Math.max(
-    Math.abs(model.decision.bps),
-    ...rows.map((item) => Math.abs(item.response.netChangeBps ?? item.response.passedBps)),
-    1,
+  const withRbaCount = useMemo(
+    () => rows.filter((item) => item.response.passedBps !== 0).length,
+    [rows],
   );
-  const x = (days: number) =>
-    padL + (Math.min(model.windowDays, Math.max(0, days)) / model.windowDays) * timedW;
-  const y = (bps: number) => padT + innerH / 2 - (bps / maxBps) * (innerH / 2);
-  const points = rows.map((item, index) => {
-    const net = item.response.netChangeBps ?? item.response.passedBps;
-    const hasTiming = item.response.passedBps !== 0 && item.response.daysToFirstMove != null;
-    const jitterX = ((index % 5) - 2) * (hasTiming ? 2.2 : 3.5);
-    const jitterY = ((Math.floor(index / 5) % 5) - 2) * 2;
-    return {
-      item,
-      net,
-      cx: (hasTiming ? x(item.response.daysToFirstMove!) : untimedX) + jitterX,
-      cy: y(net) + jitterY,
-    };
-  });
-  const referenceY = y(model.decision.bps);
-  const zeroY = y(0);
+  const oppositeCount = useMemo(
+    () =>
+      rows.filter(
+        (item) => (item.response.netChangeBps ?? 0) !== 0 && item.response.passedBps === 0,
+      ).length,
+    [rows],
+  );
+  const unchanged = rows.length - withRbaCount - oppositeCount;
   const upperBound = model.decision.partialObservation ? ' Timing values are upper bounds.' : '';
-  const summary = `${SECTIONS[section].title} response map. All ${rows.length} eligible lenders are shown: ${timed.length} have a linked response time, ${withRba.length - timed.length} moved with the RBA without a linked event, ${opposite.length} moved in the opposite direction, and ${unchanged} were unchanged.${upperBound}`;
+  const summary = `${SECTIONS[section].title} response map. All ${rows.length} eligible lenders are shown: ${timedCount} have a linked response time, ${withRbaCount - timedCount} moved with the RBA without a linked event, ${oppositeCount} moved in the opposite direction, and ${unchanged} were unchanged.${upperBound}`;
 
   return (
-    <View
-      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      accessible
-      accessibilityRole="image"
-      accessibilityLabel={summary}
-      style={{ width: '100%', height }}
-    >
-      {width > 0 ? (
-        <Svg
-          width={width}
-          height={height}
-          importantForAccessibility="no-hide-descendants"
-          onPress={(event) => {
-            const { locationX, locationY } = event.nativeEvent;
-            const provider = selectResponseScatterProvider(
-              points.map(({ item, cx, cy }) => ({ provider: item.provider, cx, cy })),
-              locationX,
-              locationY,
-              selectedProvider,
-            );
-            if (provider) onProviderSelect(provider);
+    <View>
+      <View
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        accessible
+        accessibilityRole="image"
+        accessibilityLabel={summary}
+        style={{ width: '100%', height: CHART_HEIGHT }}
+      >
+        {plot ? (
+          <Svg
+            width={width}
+            height={CHART_HEIGHT}
+            importantForAccessibility="no-hide-descendants"
+            onPress={(event) => {
+              const { locationX, locationY } = event.nativeEvent;
+              const result = resolveResponseScatterPress(
+                plot.points,
+                locationX,
+                locationY,
+                paintedProvider,
+              );
+              if (!result.hit) return;
+              setPaintedProvider(result.provider);
+              hapticSelection();
+              onProviderSelect(result.provider);
+            }}
+          >
+            <Line x1={PAD_L} y1={plot.zeroY} x2={width - PAD_R} y2={plot.zeroY} stroke={theme.colors.border} />
+            <Line x1={PAD_L} y1={PAD_T} x2={PAD_L} y2={PAD_T + plot.innerH} stroke={theme.colors.border} />
+            <Line
+              x1={PAD_L + plot.timedW + 8}
+              y1={PAD_T}
+              x2={PAD_L + plot.timedW + 8}
+              y2={PAD_T + plot.innerH}
+              stroke={theme.colors.border}
+              strokeDasharray="3 4"
+            />
+            <Line
+              x1={PAD_L}
+              y1={plot.referenceY}
+              x2={PAD_L + plot.timedW}
+              y2={plot.referenceY}
+              stroke={theme.colors.rba}
+              strokeDasharray="5 4"
+              opacity={0.75}
+            />
+            <SvgText x={PAD_L + 4} y={Math.max(12, plot.referenceY - 5)} fontSize={10} fill={theme.colors.rba}>
+              RBA {model.decision.bps > 0 ? '+' : '−'}{Math.abs(model.decision.bps)} bp
+            </SvgText>
+            <SvgText x={PAD_L} y={CHART_HEIGHT - 10} fontSize={10} fill={theme.colors.textFaint}>
+              {model.decision.partialObservation ? '≤ days from decision' : 'days from decision'}
+            </SvgText>
+            <SvgText x={PAD_L + plot.timedW} y={CHART_HEIGHT - 28} fontSize={10} fill={theme.colors.textFaint} textAnchor="end">
+              {model.windowDays}d
+            </SvgText>
+            <SvgText x={plot.untimedX} y={CHART_HEIGHT - 28} fontSize={10} fill={theme.colors.textFaint} textAnchor="middle">
+              untimed
+            </SvgText>
+            <SvgText x={4} y={PAD_T + 4} fontSize={10} fill={theme.colors.textFaint}>+{Math.round(plot.maxBps)}</SvgText>
+            <SvgText x={18} y={plot.zeroY + 4} fontSize={10} fill={theme.colors.textFaint}>0</SvgText>
+            <SvgText x={4} y={PAD_T + plot.innerH + 4} fontSize={10} fill={theme.colors.textFaint}>−{Math.round(plot.maxBps)}</SvgText>
+            {plot.points.map((point) => {
+              const selected = point.provider === paintedProvider;
+              const tone = point.net === 0 ? 'muted' : moveTone(section, point.net);
+              const fill =
+                tone === 'success'
+                  ? theme.colors.success
+                  : tone === 'danger'
+                    ? theme.colors.danger
+                    : theme.colors.textFaint;
+              return (
+                <ScatterDot
+                  key={point.provider}
+                  cx={point.cx}
+                  cy={point.cy}
+                  selected={selected}
+                  fill={fill}
+                  surface={theme.colors.surface}
+                  text={theme.colors.text}
+                  primary={theme.colors.primary}
+                />
+              );
+            })}
+          </Svg>
+        ) : null}
+      </View>
+      {paintedProvider ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            alignSelf: 'flex-start',
+            maxWidth: '100%',
+            marginBottom: 10,
+            paddingHorizontal: 10,
+            paddingVertical: 7,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.primaryMuted,
           }}
         >
-          <Line x1={padL} y1={zeroY} x2={width - padR} y2={zeroY} stroke={theme.colors.border} />
-          <Line x1={padL} y1={padT} x2={padL} y2={padT + innerH} stroke={theme.colors.border} />
-          <Line
-            x1={padL + timedW + 8}
-            y1={padT}
-            x2={padL + timedW + 8}
-            y2={padT + innerH}
-            stroke={theme.colors.border}
-            strokeDasharray="3 4"
-          />
-          <Line
-            x1={padL}
-            y1={referenceY}
-            x2={padL + timedW}
-            y2={referenceY}
-            stroke={theme.colors.rba}
-            strokeDasharray="5 4"
-            opacity={0.75}
-          />
-          <SvgText x={padL + 4} y={Math.max(12, referenceY - 5)} fontSize={10} fill={theme.colors.rba}>
-            RBA {model.decision.bps > 0 ? '+' : '−'}{Math.abs(model.decision.bps)} bp
-          </SvgText>
-          <SvgText x={padL} y={height - 10} fontSize={10} fill={theme.colors.textFaint}>
-            {model.decision.partialObservation ? '≤ days from decision' : 'days from decision'}
-          </SvgText>
-          <SvgText x={padL + timedW} y={height - 28} fontSize={10} fill={theme.colors.textFaint} textAnchor="end">
-            {model.windowDays}d
-          </SvgText>
-          <SvgText x={untimedX} y={height - 28} fontSize={10} fill={theme.colors.textFaint} textAnchor="middle">
-            untimed
-          </SvgText>
-          <SvgText x={4} y={padT + 4} fontSize={10} fill={theme.colors.textFaint}>+{Math.round(maxBps)}</SvgText>
-          <SvgText x={18} y={zeroY + 4} fontSize={10} fill={theme.colors.textFaint}>0</SvgText>
-          <SvgText x={4} y={padT + innerH + 4} fontSize={10} fill={theme.colors.textFaint}>−{Math.round(maxBps)}</SvgText>
-          {points.map(({ item, net, cx, cy }) => {
-            const selected = item.provider === selectedProvider;
-            const tone = net === 0 ? 'muted' : moveTone(section, net);
-            const fill = tone === 'success'
-              ? theme.colors.success
-              : tone === 'danger'
-                ? theme.colors.danger
-                : theme.colors.textFaint;
-            return (
-              <React.Fragment key={item.provider}>
-                <Circle
-                  cx={cx}
-                  cy={cy}
-                  r={selected ? 7 : 4.5}
-                  fill={selected ? theme.colors.primary : fill}
-                  opacity={selected ? 1 : 0.68}
-                  stroke={selected ? theme.colors.text : theme.colors.surface}
-                  strokeWidth={selected ? 2 : 1}
-                  pointerEvents="none"
-                />
-              </React.Fragment>
-            );
-          })}
-        </Svg>
+          <AppText variant="small" weight="700" color="primary">
+            {paintedProvider}
+          </AppText>
+        </View>
       ) : null}
     </View>
   );
-}
+});
