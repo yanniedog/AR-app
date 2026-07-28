@@ -33,8 +33,19 @@ export function PayloadProgressBar({
 }) {
   const theme = useTheme();
   // Tick while CPU-bound phases run so soft elapsed progress keeps moving
-  // even when the store snapshot is unchanged (e.g. mid JSON.parse).
+  // even when the store snapshot is unchanged (e.g. mid JSON.parse). Also
+  // refresh on every progress snapshot so download rate/ETA use wall time.
   const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    setNowTick(Date.now());
+  }, [
+    progress.phase,
+    progress.startedAt,
+    progress.bytesReceived,
+    progress.totalBytes,
+    progress.phaseComplete,
+    progress.fileName,
+  ]);
   useEffect(() => {
     if (progress.phaseComplete === true) return;
     if (progress.phase === 'manifest' || progress.phase === 'download') {

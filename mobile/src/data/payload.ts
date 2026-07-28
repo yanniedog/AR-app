@@ -172,7 +172,6 @@ export async function fetchManifest(
     phaseComplete: true,
   });
   const text = strFromU8(new Uint8Array(buf));
-  await yieldToUi();
   const m = await parseJsonHeavy<Manifest>(text);
   if (typeof m.schema_version === 'number' && m.schema_version > SUPPORTED_SCHEMA) {
     throw new Error(`payload schema v${m.schema_version} unsupported (app supports v${SUPPORTED_SCHEMA}); update the app`);

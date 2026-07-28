@@ -9,7 +9,8 @@ export const HEAVY_JSON_BYTES = 256 * 1024;
 function armTimeout(ms: number, cb: () => void): ReturnType<typeof setTimeout> {
   const handle = setTimeout(cb, ms);
   // Avoid keeping Jest (and the RN runtime) alive when a yield outlives a test.
-  handle.unref?.();
+  const maybeTimer = handle as ReturnType<typeof setTimeout> & { unref?: () => void };
+  maybeTimer.unref?.();
   return handle;
 }
 
