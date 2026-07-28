@@ -436,6 +436,29 @@ export interface MoverRow {
   netBps: number;
   /** Latest median rate (fraction). */
   current: number;
+  /**
+   * run_date of the most recent median change inside the window (or null when the
+   * median did not move). Prefer this over the window label when telling the user
+   * when the move happened.
+   */
+  movedOn: string | null;
+}
+
+/** Most recent date inside the window where the median differed from the prior observation. */
+function lastMedianChangeDate(
+  run_dates: string[],
+  values: (number | null)[],
+  start: number,
+): string | null {
+  let prev = start > 0 ? lastNonNull(values, start - 1) : null;
+  let changedOn: string | null = null;
+  for (let i = start; i < values.length; i += 1) {
+    const value = values[i];
+    if (value == null) continue;
+    if (prev != null && value !== prev) changedOn = run_dates[i];
+    prev = value;
+  }
+  return changedOn;
 }
 
 /**
@@ -460,6 +483,7 @@ export function topMovers(
       provider,
       netBps: Math.round((last - first) * 10000 * 10) / 10,
       current: last,
+      movedOn: lastMedianChangeDate(payload.run_dates, series.median, start),
     });
   }
   rows.sort((a, b) => a.netBps - b.netBps || a.provider.localeCompare(b.provider));

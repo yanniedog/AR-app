@@ -13,8 +13,18 @@ export interface EconomicSignal {
   explanation: string;
 }
 
+export type EconomicIndicatorId =
+  | 'underlying_inflation'
+  | 'headline_inflation'
+  | 'unemployment'
+  | 'participation'
+  | 'employment_growth'
+  | 'wages'
+  | 'inflation_expectations'
+  | 'consumer_inflation_expectations';
+
 export interface EconomicIndicator {
-  id: 'underlying_inflation' | 'unemployment' | 'wages' | 'inflation_expectations';
+  id: EconomicIndicatorId;
   label: string;
   shortLabel: string;
   publicationDate: string;
@@ -65,9 +75,16 @@ interface ParsedSeries {
 
 type RequiredSourceKey = 'inflation' | 'expectations' | 'labour' | 'wages';
 
+const SOURCE_KEYS: readonly RequiredSourceKey[] = [
+  'inflation',
+  'expectations',
+  'labour',
+  'wages',
+];
+
 interface IndicatorDefinition {
   source: RequiredSourceKey;
-  id: EconomicIndicator['id'];
+  id: EconomicIndicatorId;
   label: string;
   shortLabel: string;
   seriesId: string;
@@ -76,6 +93,10 @@ interface IndicatorDefinition {
   targetBand?: [number, number];
 }
 
+/**
+ * Official RBA series shown in Outlook. Extra labour / inflation series reuse the
+ * same four CSV tables — one network fetch per table, then multiple series parses.
+ */
 const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
   {
     source: 'inflation',
@@ -83,7 +104,17 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Underlying inflation',
     shortLabel: 'Trimmed mean · year-ended',
     seriesId: 'GCPIOCPMTMYP',
-    limit: 20,
+    limit: 40,
+    frequency: 'quarterly',
+    targetBand: [2, 3],
+  },
+  {
+    source: 'inflation',
+    id: 'headline_inflation',
+    label: 'Headline CPI',
+    shortLabel: 'All groups · year-ended',
+    seriesId: 'GCPIAGYP',
+    limit: 40,
     frequency: 'quarterly',
     targetBand: [2, 3],
   },
@@ -93,7 +124,25 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Unemployment',
     shortLabel: 'Seasonally adjusted',
     seriesId: 'GLFSURSA',
-    limit: 30,
+    limit: 72,
+    frequency: 'monthly',
+  },
+  {
+    source: 'labour',
+    id: 'participation',
+    label: 'Participation',
+    shortLabel: 'Labour force participation',
+    seriesId: 'GLFSPRSA',
+    limit: 72,
+    frequency: 'monthly',
+  },
+  {
+    source: 'labour',
+    id: 'employment_growth',
+    label: 'Employment growth',
+    shortLabel: 'Year-ended · seasonally adjusted',
+    seriesId: 'GLFSEPTSYP',
+    limit: 72,
     frequency: 'monthly',
   },
   {
@@ -102,18 +151,27 @@ const INDICATOR_DEFINITIONS: IndicatorDefinition[] = [
     label: 'Wage growth',
     shortLabel: 'WPI · year-ended',
     seriesId: 'GWPIYP',
-    limit: 20,
+    limit: 40,
     frequency: 'quarterly',
   },
   {
     source: 'expectations',
     id: 'inflation_expectations',
-    label: 'Inflation expectations',
+    label: 'Market expectations',
     shortLabel: 'Economists · 1 year ahead',
     seriesId: 'GMAREXPY',
-    limit: 20,
+    limit: 40,
     frequency: 'quarterly',
     targetBand: [2, 3],
+  },
+  {
+    source: 'expectations',
+    id: 'consumer_inflation_expectations',
+    label: 'Consumer expectations',
+    shortLabel: 'Households · 1 year ahead',
+    seriesId: 'GCONEXP',
+    limit: 40,
+    frequency: 'quarterly',
   },
 ];
 
@@ -248,14 +306,18 @@ function indicatorIsStale(
 }
 
 export function economicSignal(
-  id: EconomicIndicator['id'],
+  id: EconomicIndicatorId,
   points: EconomicPoint[],
 ): EconomicSignal {
   const latest = points[points.length - 1]?.value;
   if (latest == null) {
     return { direction: 'balanced', label: 'No current read', explanation: 'Awaiting a current observation.' };
   }
-  if (id === 'underlying_inflation' || id === 'inflation_expectations') {
+  if (
+    id === 'underlying_inflation' ||
+    id === 'headline_inflation' ||
+    id === 'inflation_expectations'
+  ) {
     if (latest > 3) {
       return {
         direction: 'higher',
@@ -274,6 +336,28 @@ export function economicSignal(
       direction: 'balanced',
       label: 'Inside 2–3% band',
       explanation: 'Being inside the band reduces this signal, but persistence and the direction of travel still matter.',
+    };
+  }
+  if (id === 'consumer_inflation_expectations') {
+    const delta = pointDelta(points, 4);
+    if (latest >= 5 || (delta != null && delta >= 0.5)) {
+      return {
+        direction: 'higher',
+        label: latest >= 5 ? 'Elevated household read' : `Up ${delta!.toFixed(1)} pp in a year`,
+        explanation: 'High or rising consumer inflation expectations can entrench price-setting behaviour.',
+      };
+    }
+    if (delta != null && delta <= -0.5) {
+      return {
+        direction: 'lower',
+        label: `Down ${Math.abs(delta).toFixed(1)} pp in a year`,
+        explanation: 'Cooling household inflation expectations can ease the persistence of price pressure.',
+      };
+    }
+    return {
+      direction: 'balanced',
+      label: 'Households broadly steady',
+      explanation: 'Consumer expectations are noisy; the RBA weighs them alongside market and business surveys.',
     };
   }
   if (id === 'unemployment') {
@@ -296,6 +380,50 @@ export function economicSignal(
       direction: 'balanced',
       label: 'Broadly steady in 6m',
       explanation: 'The unemployment rate alone is neutral; the RBA assesses a wider suite of labour-market measures.',
+    };
+  }
+  if (id === 'participation') {
+    const delta = pointDelta(points, 6);
+    if (delta != null && delta >= 0.3) {
+      return {
+        direction: 'higher',
+        label: `Up ${delta.toFixed(1)} pp in 6m`,
+        explanation: 'Rising participation can expand labour supply, but strong engagement often accompanies firm demand.',
+      };
+    }
+    if (delta != null && delta <= -0.3) {
+      return {
+        direction: 'lower',
+        label: `Down ${Math.abs(delta).toFixed(1)} pp in 6m`,
+        explanation: 'Falling participation can signal softer labour-market attachment alongside weaker demand.',
+      };
+    }
+    return {
+      direction: 'balanced',
+      label: 'Participation steady',
+      explanation: 'Participation is a context series for the unemployment rate rather than a standalone policy trigger.',
+    };
+  }
+  if (id === 'employment_growth') {
+    const delta = pointDelta(points, 6);
+    if (latest >= 2.5 && (delta == null || delta >= -0.3)) {
+      return {
+        direction: 'higher',
+        label: 'Firm jobs growth',
+        explanation: 'Strong year-ended employment growth supports demand and can keep labour-market pressure elevated.',
+      };
+    }
+    if (latest <= 0.5 || (delta != null && delta <= -1)) {
+      return {
+        direction: 'lower',
+        label: latest <= 0.5 ? 'Soft jobs growth' : 'Jobs growth slowing',
+        explanation: 'Weak or slowing employment growth can ease capacity pressure and wage bargaining strength.',
+      };
+    }
+    return {
+      direction: 'balanced',
+      label: 'Jobs growth moderate',
+      explanation: 'Moderate employment growth is consistent with a labour market that is neither overheating nor collapsing.',
     };
   }
   const annualDelta = pointDelta(points, 4);
@@ -327,11 +455,18 @@ export function buildEconomicOutlookFromCsv(input: {
   wages: string;
   cashForecast?: string | null;
 }, fetchedAt = new Date().toISOString()): EconomicOutlookPayload {
-  const indicators = INDICATOR_DEFINITIONS.map((definition) => buildIndicator(
-    definition,
-    parseRbaSeriesCsv(input[definition.source], definition.seriesId),
-    fetchedAt,
-  ));
+  // Soft-skip series missing from a table so unit fixtures can ship one column.
+  const indicators = INDICATOR_DEFINITIONS.flatMap((definition) => {
+    try {
+      return [buildIndicator(
+        definition,
+        parseRbaSeriesCsv(input[definition.source], definition.seriesId),
+        fetchedAt,
+      )];
+    } catch {
+      return [];
+    }
+  });
   return {
     schema_version: 2,
     fetchedAt,
@@ -461,48 +596,75 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const checkedAt = new Date().toISOString();
-    const entries = await Promise.all([
-      ...INDICATOR_DEFINITIONS.map(async (definition) => {
-        try {
-          const text = await fetchText(URLS[definition.source]);
-          return {
-            definition,
-            indicator: buildIndicator(
-              definition,
-              parseRbaSeriesCsv(text, definition.seriesId),
-              checkedAt,
-            ),
-            error: null,
-          };
-        } catch (error) {
-          return {
-            definition,
-            indicator: null,
-            error: `${definition.label}: ${String((error as Error)?.message ?? error)}`,
-          };
-        }
-      }),
+    const [sourceEntries, forecastSettled] = await Promise.all([
+      Promise.all(
+        SOURCE_KEYS.map(async (source) => {
+          try {
+            return { source, text: await fetchText(URLS[source]), error: null as string | null };
+          } catch (error) {
+            return {
+              source,
+              text: null as string | null,
+              error: String((error as Error)?.message ?? error),
+            };
+          }
+        }),
+      ),
       (async () => {
         try {
           return {
             forecast: parseCashForecastCsv(await fetchText(URLS.cashForecast, 5_000)),
-            error: null,
+            error: null as string | null,
           };
         } catch (error) {
           return {
-            forecast: null,
+            forecast: null as CashRateForecast | null,
             error: `Cash-rate forecast: ${String((error as Error)?.message ?? error)}`,
           };
         }
       })(),
     ]);
+    const textBySource = new Map(
+      sourceEntries
+        .filter((entry): entry is { source: RequiredSourceKey; text: string; error: null } => !!entry.text)
+        .map((entry) => [entry.source, entry.text] as const),
+    );
+    const sourceErrorByKey = new Map(
+      sourceEntries
+        .filter((entry) => entry.error)
+        .map((entry) => [entry.source, entry.error!] as const),
+    );
 
-    const indicatorEntries = entries.slice(0, INDICATOR_DEFINITIONS.length) as {
-      definition: IndicatorDefinition;
-      indicator: EconomicIndicator | null;
-      error: string | null;
-    }[];
-    const forecastEntry = entries.at(-1) as { forecast: CashRateForecast | null; error: string | null };
+    const indicatorEntries = INDICATOR_DEFINITIONS.map((definition) => {
+      const text = textBySource.get(definition.source);
+      if (!text) {
+        return {
+          definition,
+          indicator: null as EconomicIndicator | null,
+          error: `${definition.label}: ${sourceErrorByKey.get(definition.source) ?? 'unavailable'}`,
+        };
+      }
+      try {
+        return {
+          definition,
+          indicator: buildIndicator(
+            definition,
+            parseRbaSeriesCsv(text, definition.seriesId),
+            checkedAt,
+          ),
+          error: null as string | null,
+        };
+      } catch (error) {
+        return {
+          definition,
+          indicator: null,
+          error: `${definition.label}: ${String((error as Error)?.message ?? error)}`,
+        };
+      }
+    });
+
+    const forecastEntry = forecastSettled;
+
     const errors = indicatorEntries.flatMap((entry) => (entry.error ? [entry.error] : []));
     if (forecastEntry.error) errors.push(forecastEntry.error);
     const refreshedCount = indicatorEntries.filter((entry) => entry.indicator).length;
@@ -520,7 +682,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const cachedById = new Map(cached?.indicators.map((indicator) => [indicator.id, indicator]));
-    const regressedIds = new Set<EconomicIndicator['id']>();
+    const regressedIds = new Set<EconomicIndicatorId>();
     for (const entry of indicatorEntries) {
       if (!entry.indicator) continue;
       const previous = cachedById.get(entry.definition.id);

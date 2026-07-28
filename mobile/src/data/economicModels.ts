@@ -1,5 +1,6 @@
 import type {
   EconomicIndicator,
+  EconomicIndicatorId,
   EconomicOutlookPayload,
   EconomicPoint,
 } from './economicOutlook';
@@ -8,7 +9,7 @@ import type { RbaEntry } from '../types';
 export type EconomicWindow = '1Y' | '3Y' | '5Y' | 'All';
 
 export interface IndicatorHistoryModel {
-  id: EconomicIndicator['id'];
+  id: EconomicIndicatorId;
   label: string;
   shortLabel: string;
   points: EconomicPoint[];
@@ -27,7 +28,7 @@ export interface EconomicComparisonModel {
 }
 
 export interface EconomicMomentumRow {
-  id: EconomicIndicator['id'];
+  id: EconomicIndicatorId;
   label: string;
   change: number;
   periods: number;
@@ -55,19 +56,32 @@ const WINDOW_YEARS: Record<Exclude<EconomicWindow, 'All'>, number> = {
   '5Y': 5,
 };
 
-const MOMENTUM_PERIODS: Record<EconomicIndicator['id'], number> = {
+const MOMENTUM_PERIODS: Record<EconomicIndicatorId, number> = {
   underlying_inflation: 4,
+  headline_inflation: 4,
   unemployment: 6,
+  participation: 6,
+  employment_growth: 6,
   wages: 4,
   inflation_expectations: 4,
+  consumer_inflation_expectations: 4,
 };
 
-const MOMENTUM_LABELS: Record<EconomicIndicator['id'], string> = {
-  underlying_inflation: 'Inflation',
+const MOMENTUM_LABELS: Record<EconomicIndicatorId, string> = {
+  underlying_inflation: 'Underlying',
+  headline_inflation: 'Headline CPI',
   unemployment: 'Unemployment',
+  participation: 'Participation',
+  employment_growth: 'Jobs growth',
   wages: 'Wages',
-  inflation_expectations: 'Expectations',
+  inflation_expectations: 'Market exp.',
+  consumer_inflation_expectations: 'Consumer exp.',
 };
+
+/** Rising values that generally ease rate pressure (labour slack). */
+const LOWER_WHEN_RISING: ReadonlySet<EconomicIndicatorId> = new Set([
+  'unemployment',
+]);
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
@@ -120,7 +134,7 @@ export function economicPointsInWindow(
 
 function indicatorById(
   payload: EconomicOutlookPayload,
-  id: EconomicIndicator['id'],
+  id: EconomicIndicatorId,
 ): EconomicIndicator | null {
   return payload.indicators.find((indicator) => indicator.id === id) ?? null;
 }
@@ -136,7 +150,7 @@ function signed(value: number): string {
 
 export function indicatorHistoryModel(
   payload: EconomicOutlookPayload,
-  id: EconomicIndicator['id'],
+  id: EconomicIndicatorId,
   window: EconomicWindow = '5Y',
 ): IndicatorHistoryModel | null {
   const indicator = indicatorById(payload, id);
@@ -184,14 +198,13 @@ export function inflationExpectationsModel(
 }
 
 function momentumPressure(
-  id: EconomicIndicator['id'],
+  id: EconomicIndicatorId,
   change: number,
 ): EconomicMomentumRow['policyPressure'] {
   if (Math.abs(change) < 0.05) return 'balanced';
-  // Rising unemployment generally reduces rate pressure; for the other three
-  // series a rise generally adds pressure. This is directional context, not a
-  // probability or policy forecast.
-  const higherPressure = id === 'unemployment' ? change < 0 : change > 0;
+  // Rising unemployment generally reduces rate pressure; for other series a rise
+  // generally adds pressure. Directional context only — not a probability.
+  const higherPressure = LOWER_WHEN_RISING.has(id) ? change < 0 : change > 0;
   return higherPressure ? 'higher' : 'lower';
 }
 
@@ -203,14 +216,15 @@ export function economicMomentumModel(
     const periods = MOMENTUM_PERIODS[indicator.id];
     const change = changeAcross(points, periods);
     if (change == null) return [];
+    const monthly = indicator.frequency === 'monthly' || periods >= 6;
     return [{
       id: indicator.id,
       label: MOMENTUM_LABELS[indicator.id],
       change,
       periods,
-      periodLabel: indicator.id === 'unemployment'
-        ? 'last 6 monthly observations'
-        : 'last 4 observations',
+      periodLabel: monthly
+        ? `last ${periods} monthly observations`
+        : `last ${periods} observations`,
       policyPressure: momentumPressure(indicator.id, change),
     }];
   });

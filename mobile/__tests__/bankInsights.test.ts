@@ -293,8 +293,18 @@ describe('recentBankEvents', () => {
 describe('topMovers', () => {
   test('computes net median change over the window, cuts first', () => {
     const movers = topMovers(payload, 'Mortgage', 30);
-    expect(movers[0]).toEqual({ provider: 'AlphaBank', netBps: -25, current: 0.057 });
-    expect(movers[1]).toEqual({ provider: 'BetaBank', netBps: 0, current: 0.062 });
+    expect(movers[0]).toEqual({
+      provider: 'AlphaBank',
+      netBps: -25,
+      current: 0.057,
+      movedOn: '2026-06-01',
+    });
+    expect(movers[1]).toEqual({
+      provider: 'BetaBank',
+      netBps: 0,
+      current: 0.062,
+      movedOn: null,
+    });
   });
 
   test('skips sections with no series', () => {
