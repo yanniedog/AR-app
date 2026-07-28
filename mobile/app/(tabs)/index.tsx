@@ -209,21 +209,6 @@ export default function Home() {
   );
 
   const meta = SECTIONS[section];
-  const shareMessage = useMemo(() => {
-    if (!core) return null;
-    const headline = meta.lowerIsBetter ? stats.min : stats.max;
-    if (headline == null) return null; // nothing worth sharing until rates are loaded
-    return [
-      `Best ${meta.title.toLowerCase()} rate today: ${formatRate(headline)} (${formatRunDate(core.run_date)})`,
-      `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
-      `Get the AustralianRates app: https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`,
-    ].join('\n');
-  }, [core, meta, stats]);
-  const shareToday = useCallback(() => setShareOpen(true), []);
-
-  if (!core) return null;
-  const sectionAccent = meta.accentColor;
-  const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const activeBest = ratesReady ? best ?? fallbackBest : null;
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
@@ -234,6 +219,20 @@ export default function Home() {
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const shareMessage = useMemo(() => {
+    if (!core) return null;
+    if (heroRate == null) return null; // nothing worth sharing until rates are loaded
+    return [
+      `Best ${meta.title.toLowerCase()} rate today: ${formatRate(heroRate)} (${formatRunDate(core.run_date)})`,
+      `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
+      `Get the AustralianRates app: https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`,
+    ].join('\n');
+  }, [core, meta, heroRate]);
+  const shareToday = useCallback(() => setShareOpen(true), []);
+
+  if (!core) return null;
+  const sectionAccent = meta.accentColor;
+  const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const bestNote = conditionalNote(activeBest, section);
   const heroDataKey = `${core.run_date}:${section}:${ratesReady ? heroRate ?? 'na' : 'warming'}`;
 

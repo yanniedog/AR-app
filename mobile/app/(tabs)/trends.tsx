@@ -412,9 +412,17 @@ export default function Trends() {
         if (stats.min === null) return null;
         const best = bestRow(data.rates, key, false, depositRankMetric, null, mortgageRateMetric);
         const bestLabel = rateValueLabel(key, 'best');
-        const bestRate = best
-          ? formatRankedFraction(rankFraction(best, key, depositRankMetric, mortgageRateMetric))
-          : '—';
+        const rankedBest = best
+          ? rankFraction(best, key, depositRankMetric, mortgageRateMetric)
+          : null;
+        const bestRate = formatRankedFraction(rankedBest);
+        // Keep Ribbon "Best" aligned with the metric that selected the winner.
+        const ribbonStats =
+          rankedBest != null
+            ? SECTIONS[key].lowerIsBetter
+              ? { ...stats, min: rankedBest }
+              : { ...stats, max: rankedBest }
+            : stats;
         return (
           <Pressable
             key={key}
@@ -449,7 +457,7 @@ export default function Trends() {
                   </AppText>
                 </View>
               </Row>
-              <Ribbon stats={stats} section={key} />
+              <Ribbon stats={ribbonStats} section={key} />
             </Card>
           </Pressable>
         );
