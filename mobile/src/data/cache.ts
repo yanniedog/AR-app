@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
+import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
@@ -189,6 +190,10 @@ async function readJson<T>(path: string): Promise<T | null> {
   try {
     if (!(await pathExists(path))) return null;
     const text = await readText(path);
+    // Multi-MB core/details must not freeze tab navigation mid-parse.
+    if (text.length >= HEAVY_JSON_BYTES) {
+      return await parseJsonHeavy<T>(text);
+    }
     return JSON.parse(text) as T;
   } catch {
     return null;

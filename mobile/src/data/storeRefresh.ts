@@ -178,7 +178,25 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const rolling = await fetchManifest(undefined, onProgress);
         set({ offline: false, lastCheckedAt: new Date().toISOString() });
 
+        const finalizeStarted = Date.now();
+        onProgress({
+          phase: 'finalize',
+          fileName: 'dates-index.json',
+          bytesReceived: 0,
+          totalBytes: null,
+          startedAt: finalizeStarted,
+          phaseComplete: false,
+        });
+        await yieldToUi();
         const resolution = await resolveFinalizedManifest(rolling);
+        onProgress({
+          phase: 'finalize',
+          fileName: 'dates-index.json',
+          bytesReceived: 1,
+          totalBytes: 1,
+          startedAt: finalizeStarted,
+          phaseComplete: true,
+        });
         let remote: Manifest = rolling;
         let pendingIngestRunDate: string | null = null;
 
@@ -263,6 +281,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const liveMatches =
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
+          if (!liveMatches) {
+            onProgress({
+              phase: 'parse',
+              fileName: 'cached-core.json',
+              bytesReceived: 0,
+              totalBytes: null,
+              startedAt: Date.now(),
+              phaseComplete: false,
+            });
+            await yieldToUi();
+          }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
             set({
