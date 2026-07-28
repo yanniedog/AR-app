@@ -498,6 +498,34 @@ describe('selectors', () => {
     ]);
   });
 
+  test('groupByProvider excludes mortgage lenders with only non-standard products when filter is off', () => {
+    const sections = {
+      Mortgage: {
+        rates: [
+          mk({
+            provider: 'Bank Standard',
+            product_key: 'STD|BASE',
+            product_name: 'Standard Mortgage',
+            rate: '0.050',
+            account_class: 'standard',
+          }),
+          mk({
+            provider: 'Bank Non-Standard Only',
+            product_key: 'NS|MORT',
+            product_name: 'Non-Standard Mortgage',
+            rate: '0.0489',
+            account_class: 'non_standard',
+          }),
+        ],
+      },
+      Savings: { rates: [] },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    const providers = groupByProvider(sections, 'base', false, null, 'Mortgage').map((g) => g.provider);
+    expect(providers).toEqual(['Bank Standard']);
+    expect(providers).not.toContain('Bank Non-Standard Only');
+  });
+
   test('groupByProvider mortgage sort uses standard best when a lender also has a sharper non-standard rate', () => {
     const sections = {
       Mortgage: {
