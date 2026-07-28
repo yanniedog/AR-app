@@ -10,9 +10,9 @@ import { EmptyState } from '../src/components/feedback';
 import { Screen } from '../src/components/Screen';
 import { AppText, Row } from '../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
-import { effectiveRate, formatRate } from '../src/data/format';
+import { formatRate } from '../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
-import { groupByProvider, type ProviderGroup } from '../src/data/selectors';
+import { groupByProvider, rankFraction, type ProviderGroup, type RankMetric } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { openBank } from '../src/lib/nav';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -53,9 +53,10 @@ export default function Banks() {
 
   if (!core) return null;
 
-  const sortHint = SECTIONS[section].lowerIsBetter
-    ? `Best ${SECTIONS[section].short.toLowerCase()} rate first (lowest)`
-    : `Best ${SECTIONS[section].short.toLowerCase()} rate first (highest)`;
+  const direction = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
+  const metricNote =
+    section !== 'Mortgage' && depositRankMetric === 'base' ? ', base ongoing' : '';
+  const sortHint = `Best ${SECTIONS[section].short.toLowerCase()} rate first (${direction}${metricNote})`;
 
   return (
     <Screen>
@@ -70,17 +71,27 @@ export default function Banks() {
       </View>
       <FlashList
         data={filtered}
-        extraData={section}
+        extraData={`${section}:${depositRankMetric}`}
         keyExtractor={(g) => g.provider}
         contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-        renderItem={({ item }) => <BankRow group={item} sortSection={section} />}
+        renderItem={({ item }) => (
+          <BankRow group={item} sortSection={section} depositRankMetric={depositRankMetric} />
+        )}
         ListEmptyComponent={<EmptyState title="No lenders found" />}
       />
     </Screen>
   );
 }
 
-function BankRow({ group, sortSection }: { group: ProviderGroup; sortSection: SectionKey }) {
+function BankRow({
+  group,
+  sortSection,
+  depositRankMetric,
+}: {
+  group: ProviderGroup;
+  sortSection: SectionKey;
+  depositRankMetric: RankMetric;
+}) {
   const theme = useTheme();
   const sections = SECTION_ORDER.filter((s) => group.bestBySection[s]);
   const longPressed = useRef(false);
@@ -130,9 +141,13 @@ function BankRow({ group, sortSection }: { group: ProviderGroup; sortSection: Se
             const best = group.bestBySection[s];
             if (!best) return null;
             const isSortKey = s === sortSection;
+            // Match the ranked value used to order lenders (base ongoing for
+            // deposits by default) — not the headline/effective rate alone.
+            const shown = rankFraction(best, s, depositRankMetric);
+            if (shown === null) return null;
             return (
               <AppText key={s} variant="tiny" color={isSortKey ? 'text' : 'textMuted'} weight={isSortKey ? '700' : '400'}>
-                {SECTIONS[s].title}: <AppText variant="tiny" weight="700">{formatRate(effectiveRate(best))}</AppText>
+                {SECTIONS[s].title}: <AppText variant="tiny" weight="700">{formatRate(shown)}</AppText>
               </AppText>
             );
           })}
