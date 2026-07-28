@@ -2,6 +2,7 @@ import type { Manifest } from '../src/types';
 import { sampleManifest } from '../src/data/sample';
 import {
   isManifestFinalized,
+  mergeOptionalManifestFiles,
   pendingIngestBannerMessage,
   resolveFinalizedManifest,
 } from '../src/data/ingestFinalized';
@@ -28,6 +29,15 @@ const indexThrough27: DatesIndex = {
   min_date: '2026-05-13',
   latest_date: '2026-07-27',
 };
+
+function optionalAsset(name: string, sha256: string) {
+  return {
+    name,
+    bytes: 100,
+    sha256,
+    url: `https://example.com/${name}`,
+  };
+}
 
 describe('ingestFinalized', () => {
   it('treats a rolling day listed in dates-index as finalized', () => {
@@ -83,6 +93,75 @@ describe('ingestFinalized', () => {
     });
     expect(fetchDated).toHaveBeenCalledWith('2026-07-28');
     expect(fetchDated).not.toHaveBeenCalledWith('2026-07-27');
+  });
+
+  it('restores optional rolling assets when dated lag adopt shares the same core', async () => {
+    const bankHistory = optionalAsset('bank-history.json.gz', 'bank-history-sha');
+    const rbaCalendar = optionalAsset('rba-calendar.json.gz', 'rba-calendar-sha');
+    const rollingFull: Manifest = {
+      ...rolling,
+      files: {
+        ...rolling.files,
+        core: { ...rolling.files.core, sha256: 'same-core-sha' },
+        bank_history: bankHistory,
+        rba_calendar: rbaCalendar,
+        history_banks: optionalAsset('history-banks.json.gz', 'history-banks-sha'),
+        search_index: optionalAsset('search-index.json.gz', 'search-index-sha'),
+      },
+    };
+    const datedCoreOnly: Manifest = {
+      ...rollingFull,
+      tag: 'app-payload-2026-07-28',
+      files: {
+        core: rollingFull.files.core,
+        details: rollingFull.files.details,
+      },
+    };
+    const resolution = await resolveFinalizedManifest(rollingFull, {
+      fetchIndex: async () => indexThrough27,
+      fetchDated: async () => datedCoreOnly,
+    });
+
+    expect(resolution.status).toBe('finalized');
+    expect(resolution.manifest?.tag).toBe('app-payload-2026-07-28');
+    expect(resolution.manifest?.files.bank_history).toEqual(bankHistory);
+    expect(resolution.manifest?.files.rba_calendar).toEqual(rbaCalendar);
+    expect(resolution.manifest?.files.history_banks?.sha256).toBe('history-banks-sha');
+    expect(resolution.manifest?.files.search_index?.sha256).toBe('search-index-sha');
+  });
+
+  it('mergeOptionalManifestFiles requires matching run_date and core sha', () => {
+    const source: Manifest = {
+      ...rolling,
+      files: {
+        ...rolling.files,
+        bank_history: optionalAsset('bank-history.json.gz', 'bh'),
+      },
+    };
+    const targetSame: Manifest = {
+      ...rolling,
+      tag: 'app-payload-2026-07-28',
+      files: {
+        core: rolling.files.core,
+        details: rolling.files.details,
+      },
+    };
+    expect(mergeOptionalManifestFiles(targetSame, source).files.bank_history?.sha256).toBe('bh');
+
+    const differentCore: Manifest = {
+      ...targetSame,
+      files: {
+        ...targetSame.files,
+        core: { ...targetSame.files.core, sha256: 'other-core' },
+      },
+    };
+    expect(mergeOptionalManifestFiles(differentCore, source).files.bank_history).toBeUndefined();
+
+    const differentDay: Manifest = {
+      ...targetSame,
+      run_date: '2026-07-27',
+    };
+    expect(mergeOptionalManifestFiles(differentDay, source).files.bank_history).toBeUndefined();
   });
 
   it('does not adopt a dated release when dates-index is ahead of rolling', async () => {

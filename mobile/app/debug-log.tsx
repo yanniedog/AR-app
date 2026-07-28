@@ -102,9 +102,21 @@ export default function DebugLogScreen() {
       });
       const { url, truncated } = await uploadLogsToPasteRs(body);
       setUploadUrl(url);
+      await Clipboard.setStringAsync(url);
       Alert.alert(
         truncated ? 'Uploaded (truncated)' : 'Uploaded',
-        truncated ? 'paste.rs accepted a partial upload (size limit).' : url,
+        truncated
+          ? `Link copied to clipboard. paste.rs accepted a partial upload.\n\n${url}`
+          : `Link copied to clipboard — paste it into chat or a browser.\n\n${url}`,
+        [
+          {
+            text: 'Copy again',
+            onPress: () => {
+              void Clipboard.setStringAsync(url);
+            },
+          },
+          { text: 'OK' },
+        ],
       );
     } catch (err) {
       Alert.alert('Upload failed', String((err as Error)?.message ?? err));
@@ -127,7 +139,7 @@ export default function DebugLogScreen() {
   const onCopyUrl = useCallback(async () => {
     if (!uploadUrl) return;
     await Clipboard.setStringAsync(uploadUrl);
-    Alert.alert('Copied', 'Paste URL copied.');
+    Alert.alert('Copied', 'Paste URL copied — ready to paste.');
   }, [uploadUrl]);
 
   return (
@@ -177,12 +189,20 @@ export default function DebugLogScreen() {
           {uploadUrl ? (
             <Card style={{ gap: 8 }}>
               <AppText variant="tiny" color="textMuted">
-                paste.rs
+                Upload link (copied — long-press to select)
               </AppText>
-              <AppText variant="small" selectable style={{ fontFamily: 'monospace' }}>
+              <AppText
+                variant="small"
+                selectable
+                style={{ fontFamily: 'monospace' }}
+              >
                 {uploadUrl}
               </AppText>
-              <Button title="Copy link" icon="link-outline" variant="ghost" onPress={() => void onCopyUrl()} />
+              <Button
+                title="Copy link"
+                icon="link-outline"
+                onPress={() => void onCopyUrl()}
+              />
             </Card>
           ) : null}
         </View>

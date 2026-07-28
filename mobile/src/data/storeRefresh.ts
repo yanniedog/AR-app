@@ -18,7 +18,7 @@ import {
   rebuildAndInstallSuitabilityIndex,
   suitabilityIndexMatches,
 } from './suitabilityIndex';
-import { resolveFinalizedManifest } from './ingestFinalized';
+import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 
 type NotifyContext = {
@@ -264,6 +264,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           pendingIngestRunDate = null;
         }
 
+        // Dated tags often omit optional assets. Prefer rolling (same day) then
+        // the already-installed day so bank history / RBA calendar survive.
+        remote = mergeOptionalManifestFiles(remote, rolling);
+        remote = mergeOptionalManifestFiles(remote, get().manifest);
+
         const meta = await cache.readMeta();
         const upToDate =
           !repairCache &&
@@ -278,6 +283,23 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // mismatched in-memory core.
           const live = get();
           optionalWork = optionalRefreshWork(live.manifest, remote);
+          // Persist enriched optional file entries so the next cold start does
+          // not re-load a core/details-only dated manifest from cache meta.
+          const cachedOptionalMissing =
+            !!meta?.manifest &&
+            OPTIONAL_MANIFEST_KEYS.some(
+              (key) => !meta.manifest.files[key] && !!remote.files[key],
+            );
+          if (cachedOptionalMissing) {
+            await cache.updateMeta({
+              coreSha: remote.files.core.sha256,
+              manifest: remote,
+            });
+            debugLog.info(
+              'store',
+              `refresh persisted optional assets onto cached manifest run_date=${remote.run_date}`,
+            );
+          }
           const liveMatches =
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
