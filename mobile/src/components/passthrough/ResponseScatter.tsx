@@ -97,24 +97,28 @@ export const ResponseScatter = memo(function ResponseScatter({
     [rows, width, model.windowDays, model.decision.bps],
   );
 
-  const timedCount = useMemo(
-    () => rows.filter((item) => item.response.passedBps !== 0 && item.response.daysToFirstMove != null).length,
-    [rows],
-  );
-  const withRbaCount = useMemo(
-    () => rows.filter((item) => item.response.passedBps !== 0).length,
-    [rows],
-  );
-  const oppositeCount = useMemo(
-    () =>
-      rows.filter(
-        (item) => (item.response.netChangeBps ?? 0) !== 0 && item.response.passedBps === 0,
-      ).length,
-    [rows],
-  );
-  const unchanged = rows.length - withRbaCount - oppositeCount;
+  const rowStats = useMemo(() => {
+    let timed = 0;
+    let withRba = 0;
+    let opposite = 0;
+    for (const item of rows) {
+      const passed = item.response.passedBps !== 0;
+      if (passed) {
+        withRba += 1;
+        if (item.response.daysToFirstMove != null) timed += 1;
+      } else if ((item.response.netChangeBps ?? 0) !== 0) {
+        opposite += 1;
+      }
+    }
+    return {
+      timed,
+      withRba,
+      opposite,
+      unchanged: rows.length - withRba - opposite,
+    };
+  }, [rows]);
   const upperBound = model.decision.partialObservation ? ' Timing values are upper bounds.' : '';
-  const summary = `${SECTIONS[section].title} response map. All ${rows.length} eligible lenders are shown: ${timedCount} have a linked response time, ${withRbaCount - timedCount} moved with the RBA without a linked event, ${oppositeCount} moved in the opposite direction, and ${unchanged} were unchanged.${upperBound}`;
+  const summary = `${SECTIONS[section].title} response map. All ${rows.length} eligible lenders are shown: ${rowStats.timed} have a linked response time, ${rowStats.withRba - rowStats.timed} moved with the RBA without a linked event, ${rowStats.opposite} moved in the opposite direction, and ${rowStats.unchanged} were unchanged.${upperBound}`;
 
   return (
     <View>
