@@ -157,8 +157,10 @@ export function BankHistoryChart({
     () => (showRba && rba ? rbaStepForDates(plotDates, rba) : []),
     [showRba, rba, plotDates],
   );
+  // Single-day fallbacks (e.g. product page before multi-day history warms) must
+  // not paint a prior RBA change across the full plot — that reads as a solid block.
   const rbaMarks = useMemo(
-    () => (showRba && rba ? rbaChangesInWindow(plotDates, rba) : []),
+    () => (showRba && rba ? rbaChangesInWindow(plotDates, rba, plotDates.length > 1) : []),
     [showRba, rba, plotDates],
   );
   const rbaHoldMarks = useMemo(
@@ -367,8 +369,10 @@ export function BankHistoryChart({
               const idx = plotDates.indexOf(mark.snap);
               if (idx < 0) return null;
               const x = xAt(idx);
-              const sliceW = plotDates.length > 1 ? innerW / (plotDates.length - 1) : innerW;
-              const half = Math.max(4, sliceW * 0.45);
+              // Cap single-slice width so a lone date never floods the chart with the RBA band.
+              const sliceW =
+                plotDates.length > 1 ? innerW / (plotDates.length - 1) : Math.min(innerW, 36);
+              const half = Math.max(4, Math.min(sliceW * 0.45, 22));
               return (
                 <React.Fragment key={`${mark.date}-${mark.snap}`}>
                   <Rect

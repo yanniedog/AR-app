@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Alert, Share, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
@@ -19,10 +19,14 @@ import {
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, Divider, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { formatRate, isNonStandard } from '../../src/data/format';
+import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
+import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { sortRows, findByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
-import { hasProductSeries, productSeriesRecord } from '../../src/data/productHistory';
+import {
+  hasProductSeries,
+  productSeriesRecordWithCurrent,
+} from '../../src/data/productHistory';
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
@@ -30,12 +34,16 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBank } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
-import { canAddAlertSubscription, effectiveHistoryRibbon } from '../../src/lib/proAccess';
+import {
+  canAddAlertSubscription,
+  effectiveBankInsights,
+  effectiveHistoryRibbon,
+} from '../../src/lib/proAccess';
 import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function ProductDetail() {
-  useSuitabilityRevision();
+  const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
   const productKey = key ?? '';
@@ -44,6 +52,7 @@ export default function ProductDetail() {
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const favorite = useStore((s) => s.favorites.includes(productKey));
   const toggleFavorite = useStore((s) => s.toggleFavorite);
@@ -56,27 +65,100 @@ export default function ProductDetail() {
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
+  const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const historyBanks = useStore((s) => s.historyBanks);
+  const bankInsights = useStore((s) => s.bankInsights);
+  const bankInsightsError = useStore((s) => s.bankInsightsError);
   const productHistory = useStore((s) => s.productHistory);
   const productHistoryError = useStore((s) => s.productHistoryError);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
+  const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
+  const insightsRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
 
   useEffect(() => {
+    if (!showBankInsights) {
+      insightsRequestKey.current = null;
+      return;
+    }
+    const key = core?.run_date ?? null;
+    if (!key || insightsRequestKey.current === key) return;
+    insightsRequestKey.current = key;
+    void ensureBankInsights();
+  }, [core?.run_date, ensureBankInsights, showBankInsights]);
+
+  useEffect(() => {
     if (!historyEnabled) return;
     // Product-history dated-core fan-out is expensive; prefer the disk/bootstrap
     // cache and only sync after history banks so tab navigation stays responsive.
+    // Bank insights supply the multi-day market ribbon under Standard-only mode.
     void ensureHistoryBanks().then(() => {
+      if (showBankInsights) void ensureBankInsights();
       void ensureProductHistory();
     });
-  }, [core?.run_date, coreSha, historyEnabled, ensureHistoryBanks, ensureProductHistory, productKey]);
+  }, [
+    core?.run_date,
+    coreSha,
+    historyEnabled,
+    showBankInsights,
+    ensureHistoryBanks,
+    ensureBankInsights,
+    ensureProductHistory,
+    productKey,
+  ]);
 
   const found = core ? findByKey(core.sections, productKey) : null;
+
+  const explorerInsights = useMemo(() => {
+    void suitabilityRevision;
+    return filterBankInsightsForSuitability(
+      bankInsights,
+      core,
+      includeNonStandard,
+      detailsProducts,
+    );
+  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+
+  const historyModel = useMemo(() => {
+    void suitabilityRevision;
+    if (!historyEnabled || !core || !found) return null;
+    return selectBankHistoryChartModel(
+      {
+        core,
+        historyBanks,
+        bankInsights: explorerInsights,
+        includeNonStandard,
+        detailsProducts,
+      },
+      found.section,
+      'All',
+    );
+  }, [
+    core,
+    detailsProducts,
+    explorerInsights,
+    found,
+    historyBanks,
+    historyEnabled,
+    includeNonStandard,
+    suitabilityRevision,
+  ]);
+
+  // Single-day fallback is a misleading solid RBA block; wait for multi-day context
+  // when Standard-only mode is relying on bank insights that have not arrived yet.
+  // Stop waiting once insights fail so the empty/collecting copy can show.
+  const historyWaitingForInsights =
+    historyEnabled &&
+    !includeNonStandard &&
+    showBankInsights &&
+    !explorerInsights &&
+    !bankInsightsError &&
+    (!historyModel || historyModel.dates.length < 2);
 
   if (!found) {
     return (
@@ -96,11 +178,22 @@ export default function ProductDetail() {
   const qualifier = rateQualifier(row, section);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  const historyModel = historyEnabled
-    ? selectBankHistoryChartModel({ core, historyBanks, includeNonStandard }, section, 'All')
-    : null;
-  const productSeries = { values: productSeriesRecord(productHistory, productKey), label: row.product_name };
+  // Match productHistory's section-best pick so the seeded point aligns with synced series.
+  let currentBest: number | null = null;
+  for (const sibling of siblings) {
+    const rate = toFraction(sibling.rate);
+    if (rate == null || rate <= 0) continue;
+    if (currentBest == null) currentBest = rate;
+    else currentBest = meta.lowerIsBetter ? Math.min(currentBest, rate) : Math.max(currentBest, rate);
+  }
+  const productSeries = {
+    values: productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest),
+    label: row.product_name,
+  };
   const productHasSeries = hasProductSeries(productHistory, productKey);
+  const productHasHighlight = Object.values(productSeries.values).some(
+    (v) => typeof v === 'number' && Number.isFinite(v),
+  );
 
   const onShare = () =>
     Share.share({
@@ -230,7 +323,11 @@ export default function ProductDetail() {
         <SectionTitle text="Rate history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
           {historyEnabled ? (
-            historyModel ? (
+            historyWaitingForInsights ? (
+              <AppText variant="small" color="textMuted">
+                Loading market history…
+              </AppText>
+            ) : historyModel && historyModel.dates.length >= 2 ? (
               <>
                 <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
                   {row.product_name} vs all {meta.title.toLowerCase()} rates
@@ -244,7 +341,7 @@ export default function ProductDetail() {
                     rbaHolds={core?.rba_holds}
                     section={section}
                     height={210}
-                    highlightSeries={productSeries}
+                    highlightSeries={productHasHighlight ? productSeries : null}
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={theme.colors.text} sectionColor={sectionInk} />

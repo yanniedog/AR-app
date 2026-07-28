@@ -93,6 +93,9 @@ describe('bankHistoryTransform', () => {
     expect(marks[0].bp).toBe(25);
     expect(rbaChangesInWindow(['2026-06-01', '2026-06-15'], rba)).toHaveLength(1);
     expect(rbaChangesInWindow(['2026-06-01', '2026-06-15'], rba, false)).toEqual([]);
+    // Single-day windows must not paint a prior RBA change (product-page fallback).
+    expect(rbaChangesInWindow(['2026-06-15'], rba, false)).toEqual([]);
+    expect(rbaChangesInWindow(['2026-06-15'], rba, true)).toHaveLength(1);
   });
 
   it('maps RBA hold decisions to in-window timeline marks at the held rate', () => {
