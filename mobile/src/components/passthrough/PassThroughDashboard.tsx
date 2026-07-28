@@ -106,12 +106,14 @@ const LenderResponseRow = memo(function LenderResponseRow({
   model,
   selected,
   onSelect,
+  onClearFilter,
 }: {
   item: LenderRow;
   section: SectionKey;
   model: MultiSectionPassThroughModel;
   selected: boolean;
   onSelect: (provider: string) => void;
+  onClearFilter: () => void;
 }) {
   const theme = useTheme();
   const accessibilityLabel = lenderResponseAccessibilityLabel(
@@ -170,10 +172,14 @@ const LenderResponseRow = memo(function LenderResponseRow({
         </Row>
       </Pressable>
       <Pressable
-        onPress={() => onSelect(item.provider)}
+        onPress={() => (selected ? onClearFilter() : onSelect(item.provider))}
         accessibilityRole="button"
         accessibilityState={{ selected }}
-        accessibilityLabel={`${selected ? 'Hide' : 'Show'} ${item.provider} on response chart`}
+        accessibilityLabel={
+          selected
+            ? `Clear filter and show all lenders`
+            : `Filter lender list to ${item.provider}`
+        }
         style={{
           minHeight: 48,
           paddingHorizontal: 14,
@@ -185,9 +191,13 @@ const LenderResponseRow = memo(function LenderResponseRow({
           gap: 6,
         }}
       >
-        <Ionicons name="locate-outline" size={15} color={theme.colors.primary} />
+        <Ionicons
+          name={selected ? 'close-circle-outline' : 'filter-outline'}
+          size={15}
+          color={theme.colors.primary}
+        />
         <AppText variant="tiny" weight="700" color="primary">
-          {selected ? 'HIDE FROM CHART' : 'SHOW ON CHART'}
+          {selected ? 'CLEAR FILTER · SHOW ALL' : 'FILTER LIST TO THIS BANK'}
         </AppText>
       </Pressable>
     </View>
@@ -294,12 +304,14 @@ const AnalysisHeader = memo(function AnalysisHeader({
 const SpeedResponseCard = memo(function SpeedResponseCard({
   model,
   section,
+  decisions,
   eligible,
   selectedProvider,
   onProviderSelect,
 }: {
   model: MultiSectionPassThroughModel;
   section: SectionKey;
+  decisions: ReturnType<typeof rbaPassThroughDecisionList>;
   eligible: number;
   selectedProvider: string | null;
   onProviderSelect: (provider: string | null) => void;
@@ -311,7 +323,7 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
         <View style={{ flex: 1, paddingRight: 8 }}>
           <AppText variant="h3">Speed × response</AppText>
           <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-            Tap a point to reveal the lender · untimed and non-matching moves use the right rail
+            Tap a point to filter the lender list · zoom to inspect clusters · every RBA decision is marked
           </AppText>
         </View>
         <Badge label={`${eligible} lenders`} tone="muted" />
@@ -319,10 +331,11 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
       <ResponseScatter
         model={model}
         section={section}
+        decisions={decisions}
         selectedProvider={selectedProvider}
         onProviderSelect={onProviderSelect}
       />
-      <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10 }}>
+      <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10, marginTop: 8 }}>
         <AppText variant="tiny" color="textMuted">
           {passThroughCustomerContext(section, model.decision.bps)}
         </AppText>
@@ -358,8 +371,11 @@ export function PassThroughDashboard({
     [payload, rba, calendar, activeDate],
   );
   const rows = useMemo(
-    () => (model ? filterAndSortSectionRows(model, section, query, sort) : []),
-    [model, section, query, sort],
+    () =>
+      model
+        ? filterAndSortSectionRows(model, section, query, sort, selectedProvider)
+        : [],
+    [model, section, query, sort, selectedProvider],
   );
   const sectionEligible = useMemo(
     () => (model ? summarizeSectionResponse(model, section).eligible : 0),
@@ -376,16 +392,21 @@ export function PassThroughDashboard({
     setSelectedProvider(null);
   }, []);
 
-  /** Chart already painted locally — defer list highlight work off the tap path. */
+  /** Chart already painted locally — defer list filter work off the tap path. */
   const onChartProviderSelect = useCallback((provider: string | null) => {
     startTransition(() => {
       setSelectedProvider(provider);
     });
   }, []);
 
+  const clearProviderFilter = useCallback(() => {
+    hapticSelection();
+    setSelectedProvider(null);
+  }, []);
+
   const onListProviderSelect = useCallback((provider: string) => {
     hapticSelection();
-    setSelectedProvider((current) => (provider === current ? null : provider));
+    setSelectedProvider(provider);
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
   }, []);
 
@@ -397,9 +418,10 @@ export function PassThroughDashboard({
         model={model!}
         selected={item.provider === selectedProvider}
         onSelect={onListProviderSelect}
+        onClearFilter={clearProviderFilter}
       />
     ),
-    [section, model, selectedProvider, onListProviderSelect],
+    [section, model, selectedProvider, onListProviderSelect, clearProviderFilter],
   );
 
   const staticHeader = useMemo(() => {
@@ -421,10 +443,23 @@ export function PassThroughDashboard({
         <Row style={{ justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-end' }}>
           <View>
             <AppText variant="h3">Compare lenders</AppText>
-            <AppText variant="tiny" color="textMuted">Home loans · Savings · Term deposits</AppText>
+            <AppText variant="tiny" color="textMuted">
+              {selectedProvider
+                ? `Showing ${selectedProvider} only`
+                : 'Home loans · Savings · Term deposits'}
+            </AppText>
           </View>
           <Badge label={`${rows.length}`} tone="muted" />
         </Row>
+        {selectedProvider ? (
+          <View style={{ marginBottom: 10 }}>
+            <Chip
+              label="Clear selection · show all banks"
+              selected
+              onPress={clearProviderFilter}
+            />
+          </View>
+        ) : null}
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search lenders" />
         <Row gap={6} style={{ marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
           <AppText variant="tiny" color="textFaint" weight="700">SORT</AppText>
@@ -434,7 +469,7 @@ export function PassThroughDashboard({
         </Row>
       </>
     ),
-    [rows.length, query, sort],
+    [rows.length, query, sort, selectedProvider, clearProviderFilter],
   );
 
   const listHeader = useMemo(() => {
@@ -445,6 +480,7 @@ export function PassThroughDashboard({
         <SpeedResponseCard
           model={model}
           section={section}
+          decisions={decisions}
           eligible={sectionEligible}
           selectedProvider={selectedProvider}
           onProviderSelect={onChartProviderSelect}
@@ -456,6 +492,7 @@ export function PassThroughDashboard({
     model,
     staticHeader,
     section,
+    decisions,
     sectionEligible,
     selectedProvider,
     onChartProviderSelect,
@@ -486,7 +523,11 @@ export function PassThroughDashboard({
       renderItem={renderItem}
       ListEmptyComponent={
         <Card>
-          <AppText variant="small" color="textMuted">No lenders match that search.</AppText>
+          <AppText variant="small" color="textMuted">
+            {selectedProvider
+              ? 'No lenders match that search within the chart filter.'
+              : 'No lenders match that search.'}
+          </AppText>
         </Card>
       }
       ListFooterComponent={
