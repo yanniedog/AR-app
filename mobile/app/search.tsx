@@ -6,13 +6,13 @@ import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../src/components/FilterSheet';
-import { EmptyState, LoadingRows } from '../src/components/feedback';
+import { EmptyState, IndeterminateProgressBar, LoadingRows } from '../src/components/feedback';
 import { ProPaywall } from '../src/components/ProPaywall';
 import { ProductCard } from '../src/components/ProductCard';
 import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../src/components/Screen';
 import { ToolbarIconButton } from '../src/components/ToolbarIconButton';
 import { SearchBar } from '../src/components/controls';
-import { AppText, Chip, Row } from '../src/components/ui';
+import { AppText, Button, Chip, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import {
   activeFilterCount,
@@ -58,6 +58,7 @@ export default function Search() {
   const hierarchyScoped = scopeRaw === 'hierarchy';
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
+  const detailsLoading = useStore((s) => s.detailsLoading);
   const searchIndex = useStore((s) => s.searchIndex);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
@@ -151,6 +152,10 @@ export default function Search() {
 
   const searchSub = useStore((s) => findSearchSubscription(s.subscriptions, searchSnapshot));
   const searchIndexLoading = deepSearchActive && !searchIndex;
+  const detailFiltersPending =
+    (effectiveFilters.accountFeatures.length > 0 ||
+      effectiveFilters.eligibilityCriteria.length > 0) &&
+    !details?.products;
 
   const onToggleSearchAlert = async () => {
     if (searchSub) {
@@ -251,7 +256,31 @@ export default function Search() {
             />
           )}
           ListEmptyComponent={
-            searchIndexLoading ? (
+            detailFiltersPending ? (
+              <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
+                {detailsLoading ? (
+                  <>
+                    <IndeterminateProgressBar
+                      caption="Loading product features so account-feature filters can apply."
+                      accessibilityLabel="Preparing feature filters"
+                    />
+                    <LoadingRows count={3} />
+                  </>
+                ) : (
+                  <View style={{ gap: theme.spacing(3) }}>
+                    <EmptyState
+                      title="Could not load product features"
+                      subtitle="Feature and eligibility filters need the details payload. Retry when online, or clear those filters."
+                    />
+                    <Button
+                      title="Retry"
+                      variant="secondary"
+                      onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
+                    />
+                  </View>
+                )}
+              </View>
+            ) : searchIndexLoading ? (
               <LoadingRows />
             ) : (
               <EmptyState title="No matching products" subtitle="Try clearing filters or a different search." />
