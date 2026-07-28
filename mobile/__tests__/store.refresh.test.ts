@@ -298,6 +298,8 @@ describe('store refresh lifecycle', () => {
     });
     mockFetchManifest
       .mockResolvedValueOnce(rollingManifest)
+      // Dated release for rolling day not ready yet → hold prior day.
+      .mockRejectedValueOnce(new Error('dated 28 not ready'))
       .mockResolvedValue(priorManifest);
     mockFetchDatesIndexJson.mockResolvedValue({
       schema_version: 1,
@@ -320,6 +322,68 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().core?.run_date).toBe('2026-07-27');
     expect(useStore.getState().pendingIngestRunDate).toBe('2026-07-28');
     expect(mockDownloadCore).not.toHaveBeenCalled();
+    expect(useStore.getState().refreshing).toBe(false);
+  });
+
+  it('adopts dated rolling day when dates-index lags a completed publish', async () => {
+    const rollingManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'rolling-core-sha' },
+      },
+    };
+    const datedManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-28',
+      tag: 'app-payload-2026-07-28',
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'dated-28-core-sha' },
+      },
+    };
+    const datedCore = { ...remoteCore, run_date: '2026-07-28' } as CorePayload;
+    const priorCore = { ...remoteCore, run_date: '2026-07-27' } as CorePayload;
+    const priorManifest: Manifest = {
+      ...remoteManifest,
+      run_date: '2026-07-27',
+    };
+    useStore.setState({
+      source: 'remote',
+      core: priorCore,
+      manifest: priorManifest,
+      pendingIngestRunDate: null,
+    });
+    mockFetchManifest
+      .mockResolvedValueOnce(rollingManifest)
+      .mockResolvedValueOnce(datedManifest);
+    mockFetchDatesIndexJson.mockResolvedValue({
+      schema_version: 1,
+      dates: ['2026-07-27'],
+      count: 1,
+      min_date: '2026-07-27',
+      latest_date: '2026-07-27',
+    });
+    mockReadMeta.mockResolvedValue({
+      manifest: priorManifest,
+      source: 'remote',
+      savedAt: '2026-07-27T00:00:00Z',
+      coreSha: priorManifest.files.core.sha256,
+      detailsSha: null,
+    });
+    mockDownloadCore.mockResolvedValue({
+      text: JSON.stringify(datedCore),
+      core: datedCore,
+    });
+
+    const changed = await useStore.getState().refresh({});
+
+    expect(changed).toBe(true);
+    expect(useStore.getState().core?.run_date).toBe('2026-07-28');
+    expect(useStore.getState().pendingIngestRunDate).toBeNull();
+    expect(useStore.getState().manifest?.files.core.sha256).toBe('dated-28-core-sha');
+    expect(mockDownloadCore).toHaveBeenCalled();
     expect(useStore.getState().refreshing).toBe(false);
   });
 
@@ -421,8 +485,10 @@ describe('store refresh lifecycle', () => {
       min_date: '2026-07-27',
       latest_date: '2026-07-27',
     });
-    // Dated fallback also unavailable → pending with null manifest.
-    mockFetchManifest.mockRejectedValueOnce(new Error('dated missing'));
+    // Dated rolling day + prior-day fallback both unavailable → pending null.
+    mockFetchManifest
+      .mockRejectedValueOnce(new Error('dated 28 missing'))
+      .mockRejectedValueOnce(new Error('dated 27 missing'));
 
     const changed = await useStore.getState().refresh({});
 
