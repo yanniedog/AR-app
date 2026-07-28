@@ -2,6 +2,7 @@ import { assessAccess, countSuitabilityExclusions, nameRestrictsAccess } from '.
 import {
   bpsBetween,
   formatBalanceRange,
+  formatRankedFraction,
   formatRate,
   formatRateDigits,
   formatTerm,
@@ -27,6 +28,14 @@ describe('format', () => {
     expect(formatRate('0.045', 2)).toBe('4.50%');
     expect(formatRate(null)).toBe('—');
     expect(formatRate(4.35)).toBe('4.35%');
+    expect(formatRate(0)).toBe('—');
+  });
+
+  test('formatRankedFraction preserves published 0%', () => {
+    expect(formatRankedFraction(0)).toBe('0.00%');
+    expect(formatRankedFraction(0.045)).toBe('4.50%');
+    expect(formatRankedFraction(null)).toBe('—');
+    expect(formatRankedFraction(-0.01)).toBe('—');
   });
 
   test('formatRateDigits omits percent suffix', () => {

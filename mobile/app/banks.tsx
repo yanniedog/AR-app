@@ -10,7 +10,7 @@ import { EmptyState } from '../src/components/feedback';
 import { Screen } from '../src/components/Screen';
 import { AppText, Row } from '../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
-import { formatRate } from '../src/data/format';
+import { formatRankedFraction } from '../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
 import { groupByProvider, rankFraction, type ProviderGroup, type RankMetric } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
@@ -147,7 +147,7 @@ function BankRow({
             if (shown === null) return null;
             return (
               <AppText key={s} variant="tiny" color={isSortKey ? 'text' : 'textMuted'} weight={isSortKey ? '700' : '400'}>
-                {SECTIONS[s].title}: <AppText variant="tiny" weight="700">{formatRate(shown)}</AppText>
+                {SECTIONS[s].title}: <AppText variant="tiny" weight="700">{formatRankedFraction(shown)}</AppText>
               </AppText>
             );
           })}
