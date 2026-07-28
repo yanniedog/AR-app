@@ -12,12 +12,12 @@ import {
   DetailGroup,
   HistoryLegend,
   OfficialLinks,
+  ProductRatesList,
   ProductSpecs,
-  RateRowLine,
   SectionTitle,
 } from '../../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../../src/components/Screen';
-import { AppText, Button, Card, Divider, IconButton, Row } from '../../src/components/ui';
+import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
@@ -384,16 +384,6 @@ export default function ProductDetail() {
           )}
         </Card>
 
-        <SectionTitle text={`Rates (${rateRows.length})`} />
-        <Card style={{ marginBottom: 16 }}>
-          {rateRows.map((r, i) => (
-            <View key={`${r.rate_index}-${i}`}>
-              {i > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-              <RateRowLine row={r} section={section} accent={accent} />
-            </View>
-          ))}
-        </Card>
-
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={detail?.features} loading={detailsLoading} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={detail?.eligibility} loading={detailsLoading} />
@@ -408,6 +398,9 @@ export default function ProductDetail() {
           style={{ marginTop: 4 }}
           onPress={() => openBank(row.provider)}
         />
+
+        <ProductRatesList rows={rateRows} section={section} accent={accent} />
+
         {row.last_updated ? (
           <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 14 }}>
             Lender data updated {relativeDate(row.last_updated)}

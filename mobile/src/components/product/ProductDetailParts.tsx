@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React from 'react';
+import React, { useState } from 'react';
 import { Linking, Pressable, View } from 'react-native';
 
 import { DetailLoadingLines } from '../feedback';
+import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Badge, Card, Divider, Row } from '../ui';
 import {
   formatBalanceRange,
@@ -214,6 +215,63 @@ export function SectionTitle({ text, icon }: { text: string; icon?: keyof typeof
         {text.toUpperCase()}
       </AppText>
     </Row>
+  );
+}
+
+/** Sibling rate variants for the same product — collapsed by default at page bottom. */
+export function ProductRatesList({
+  rows,
+  section,
+  accent,
+  defaultOpen = false,
+}: {
+  rows: RateRow[];
+  section: SectionKey;
+  accent: string;
+  defaultOpen?: boolean;
+}) {
+  const theme = useTheme();
+  const [open, setOpen] = useState(defaultOpen);
+  const title = `Rates (${rows.length})`;
+
+  return (
+    <View style={{ marginTop: 16, marginBottom: 16 }}>
+      <TouchTarget
+        fill
+        onPress={() => setOpen((value) => !value)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={title}
+        accessibilityHint={open ? 'Hide additional product rates' : 'Show additional product rates'}
+        style={({ pressed }) => ({
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 6,
+          minHeight: TOUCH_TARGET_MIN,
+          marginLeft: 4,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <AppText variant="small" weight="700" color="textMuted" style={{ flex: 1 }}>
+          {title.toUpperCase()}
+        </AppText>
+        <Ionicons
+          name={open ? 'chevron-up' : 'chevron-down'}
+          size={16}
+          color={theme.colors.textMuted}
+        />
+      </TouchTarget>
+      {open ? (
+        <Card>
+          {rows.map((r, i) => (
+            <View key={`${r.rate_index}-${i}`}>
+              {i > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
+              <RateRowLine row={r} section={section} accent={accent} />
+            </View>
+          ))}
+        </Card>
+      ) : null}
+    </View>
   );
 }
 
