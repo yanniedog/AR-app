@@ -243,10 +243,11 @@ export function policyPathModel(
 ): PolicyPathModel | null {
   // Prefer long official F1 cash-rate steps so 1Y/3Y/5Y/All all have history;
   // merge core.rba so a newer app ledger step is not dropped if F1 lags a day.
+  // core.rba wins on duplicate dates (appended last; normalize keeps last value).
   const fromOfficial = payload.cashRateHistory ?? [];
   const fromCore = rba.map((entry) => ({ date: entry.date, value: entry.rate }));
   const actual = economicPointsInWindow(
-    [...fromOfficial, ...fromCore],
+    normalizeEconomicPoints([...fromOfficial, ...fromCore]),
     window,
   );
   const latestActual = actual.at(-1);

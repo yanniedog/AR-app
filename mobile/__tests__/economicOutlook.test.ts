@@ -244,9 +244,9 @@ describe('economic outlook', () => {
 
   it('compresses daily cash-rate target observations to decision steps', () => {
     expect(cashRateTargetSteps([
-      { date: '2022-05-04', value: 0.35 },
-      { date: '2022-05-05', value: 0.35 },
       { date: '2022-06-08', value: 0.85 },
+      { date: '2022-05-05', value: 0.35 },
+      { date: '2022-05-04', value: 0.35 },
       { date: '2022-06-09', value: 0.85 },
     ])).toEqual([
       { date: '2022-05-04', value: 0.35 },

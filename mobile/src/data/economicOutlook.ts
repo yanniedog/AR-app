@@ -283,10 +283,12 @@ export function parseCashForecastCsv(text: string): CashRateForecast | null {
 /**
  * Compress daily cash-rate target observations to decision steps (value changes).
  * Keeps charts readable for 1Y–All while preserving the full F1 history span.
+ * Defensively sorts by date so equal values are consecutive.
  */
 export function cashRateTargetSteps(points: EconomicPoint[]): EconomicPoint[] {
+  const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
   const steps: EconomicPoint[] = [];
-  for (const point of points) {
+  for (const point of sorted) {
     const last = steps.at(-1);
     if (!last || last.value !== point.value) steps.push(point);
   }

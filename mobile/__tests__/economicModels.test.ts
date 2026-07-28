@@ -178,7 +178,7 @@ describe('economic graph models', () => {
       { date: '2020-03-20', value: 0.25 },
       { date: '2022-05-04', value: 0.35 },
       { date: '2023-11-08', value: 4.35 },
-      { date: '2025-05-01', value: 4.1 },
+      { date: '2025-05-01', value: 4.0 },
     ];
     const all = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], 'All');
     const fiveYear = policyPathModel(data, [{ date: '2025-05-01', rate: 4.1 }], '5Y');
@@ -191,6 +191,8 @@ describe('economic graph models', () => {
       '2023-11-08',
       '2025-05-01',
     ]);
+    // core.rba wins on the shared date after merge+normalize.
+    expect(all?.actual.at(-1)?.value).toBe(4.1);
     expect(fiveYear?.actual[0]?.date).toBe('2020-03-20');
     expect(fiveYear?.actual.at(-1)?.date).toBe('2025-05-01');
     expect(oneYear?.actual.map((point) => point.date)).toEqual([
