@@ -302,13 +302,15 @@ export async function downloadCore(
     phaseComplete: false,
   });
   const core = await parseJsonHeavy<CorePayload>(text);
+  // Leave parse incomplete until the caller finishes cache install — otherwise
+  // the bar hits 100% while writeBundle is still flushing multi-MB JSON.
   emit(opts.onProgress, {
-    phase: 'parse',
+    phase: 'install',
     fileName,
-    bytesReceived: text.length,
+    bytesReceived: 0,
     totalBytes: text.length,
-    startedAt: parseStarted,
-    phaseComplete: true,
+    startedAt: Date.now(),
+    phaseComplete: false,
   });
   return { text, core };
 }

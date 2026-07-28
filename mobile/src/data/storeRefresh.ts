@@ -282,8 +282,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
           if (!liveMatches) {
+            // Stay in finalize band while probing cache — do not enter the parse
+            // band until a readable bundle is known (failed probes fall through
+            // to downloadCore which must start at the download band).
             onProgress({
-              phase: 'parse',
+              phase: 'finalize',
               fileName: 'cached-core.json',
               bytesReceived: 0,
               totalBytes: null,
@@ -294,6 +297,16 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
+            if (bundle) {
+              onProgress({
+                phase: 'parse',
+                fileName: 'cached-core.json',
+                bytesReceived: 1,
+                totalBytes: 1,
+                startedAt: Date.now(),
+                phaseComplete: true,
+              });
+            }
             set({
               manifest: remote,
               source: 'remote',
@@ -332,6 +345,15 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
         );
         const detailsUnchanged = !!meta && meta.detailsSha === remote.files.details.sha256;
+        onProgress({
+          phase: 'install',
+          fileName: remote.files.core.name,
+          bytesReceived: 0,
+          totalBytes: text.length,
+          startedAt: Date.now(),
+          phaseComplete: false,
+        });
+        await yieldToUi();
         await cache.writeBundle(
           {
             manifest: remote,
@@ -342,6 +364,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
           text,
         );
+        onProgress({
+          phase: 'install',
+          fileName: remote.files.core.name,
+          bytesReceived: text.length,
+          totalBytes: text.length,
+          startedAt: Date.now(),
+          phaseComplete: true,
+        });
         // Publish core and clear the download UI immediately so touches are not
         // blocked by details warm / optional assets / change-diff work.
         const currentIndex = getSuitabilityIndex();

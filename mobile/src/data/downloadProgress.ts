@@ -5,7 +5,8 @@ export type PayloadProgressPhase =
   | 'download'
   | 'verify'
   | 'inflate'
-  | 'parse';
+  | 'parse'
+  | 'install';
 
 export const PAYLOAD_PROGRESS_PHASES: PayloadProgressPhase[] = [
   'manifest',
@@ -14,16 +15,18 @@ export const PAYLOAD_PROGRESS_PHASES: PayloadProgressPhase[] = [
   'verify',
   'inflate',
   'parse',
+  'install',
 ];
 
 /** Inclusive phase band on the overall 0–100 determinate bar. */
 const PHASE_BANDS: Record<PayloadProgressPhase, readonly [number, number]> = {
   manifest: [0, 6],
   finalize: [6, 12],
-  download: [12, 82],
-  verify: [82, 88],
-  inflate: [88, 94],
-  parse: [94, 100],
+  download: [12, 78],
+  verify: [78, 84],
+  inflate: [84, 90],
+  parse: [90, 96],
+  install: [96, 100],
 };
 
 export interface PayloadProgressSnapshot {
@@ -51,6 +54,8 @@ export interface PayloadProgressViewModel {
   etaText: string;
   rateText: string;
   fileName: string;
+  /** True when the bar should use a native soft-motion fill (JS may be blocked). */
+  softMotion: boolean;
 }
 
 export function fileNameFromUrl(url: string): string {
@@ -120,6 +125,8 @@ export function phaseLabel(phase: PayloadProgressPhase): string {
       return 'Decompressing';
     case 'parse':
       return 'Parsing rates';
+    case 'install':
+      return 'Saving rates';
   }
 }
 
@@ -174,9 +181,15 @@ export function computeOverallPercent(
     return hi;
   }
 
-  // Default for verify/inflate/parse/finalize without an explicit complete flag:
-  // treat as in-progress so a full-bytes emit cannot jump to 100% mid-parse.
+  // Default for verify/inflate/parse/finalize/install without an explicit complete
+  // flag: treat as in-progress so a full-bytes emit cannot jump to 100% mid-work.
   return Math.min(hi - 1, Math.max(lo, Math.round(softProcessingPercent(band, snapshot.startedAt, now))));
+}
+
+export function isSoftMotionPhase(snapshot: PayloadProgressSnapshot): boolean {
+  if (snapshot.phaseComplete === true) return false;
+  if (isTransferPhase(snapshot.phase) && snapshot.phaseComplete !== false) return false;
+  return true;
 }
 
 export function buildPayloadProgressViewModel(
@@ -197,5 +210,6 @@ export function buildPayloadProgressViewModel(
     etaText,
     rateText,
     fileName: snapshot.fileName,
+    softMotion: isSoftMotionPhase(snapshot),
   };
 }

@@ -32,9 +32,7 @@ export function PayloadProgressBar({
   caption?: string;
 }) {
   const theme = useTheme();
-  // Tick while CPU-bound phases run so soft elapsed progress keeps moving
-  // even when the store snapshot is unchanged (e.g. mid JSON.parse). Also
-  // refresh on every progress snapshot so download rate/ETA use wall time.
+  // Refresh wall clock on every progress snapshot so download rate/ETA stay honest.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
     setNowTick(Date.now());
@@ -46,25 +44,46 @@ export function PayloadProgressBar({
     progress.phaseComplete,
     progress.fileName,
   ]);
-  useEffect(() => {
-    if (progress.phaseComplete === true) return;
-    if (progress.phase === 'manifest' || progress.phase === 'download') {
-      if (progress.phaseComplete !== false) return;
-    }
-    const id = setInterval(() => setNowTick(Date.now()), 250);
-    return () => clearInterval(id);
-  }, [progress.phase, progress.startedAt, progress.phaseComplete]);
 
   const vm = buildPayloadProgressViewModel(progress, nowTick);
   const fill = useSharedValue(vm.overallPercent / 100);
+  const softSweep = useRef(new RNAnimated.Value(0)).current;
+  const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
     fill.value = withTiming(vm.overallPercent / 100, { duration: 180 });
   }, [fill, vm.overallPercent]);
 
+  // During CPU-bound phases the JS thread may freeze (JSON.parse). Drive a
+  // native-driver sweep so motion continues without setInterval / React state.
+  useEffect(() => {
+    softSweep.stopAnimation();
+    if (!vm.softMotion) {
+      softSweep.setValue(0);
+      return;
+    }
+    softSweep.setValue(0);
+    const loop = RNAnimated.loop(
+      RNAnimated.timing(softSweep, {
+        toValue: 1,
+        duration: 1200,
+        easing: RNEasing.inOut(RNEasing.ease),
+        useNativeDriver: true,
+      }),
+    );
+    loop.start();
+    return () => {
+      loop.stop();
+      softSweep.stopAnimation();
+    };
+  }, [softSweep, vm.softMotion, progress.phase, progress.startedAt]);
+
   const fillStyle = useAnimatedStyle(() => ({
     width: `${Math.max(0, Math.min(1, fill.value)) * 100}%`,
   }));
+
+  const softBarWidth = Math.max(48, trackWidth * 0.36);
+  const softTravel = Math.max(trackWidth + softBarWidth, softBarWidth + 40);
 
   return (
     <View style={{ flex: 1, gap: 6 }}>
@@ -78,10 +97,11 @@ export function PayloadProgressBar({
           {vm.phaseText}
         </AppText>
         <AppText variant="tiny" weight="700" color="primary">
-          {vm.overallPercent}%
+          {vm.softMotion ? `${vm.overallPercent}%…` : `${vm.overallPercent}%`}
         </AppText>
       </Row>
       <View
+        onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}
         style={{
           height: 6,
           borderRadius: theme.radius.pill,
@@ -91,16 +111,35 @@ export function PayloadProgressBar({
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: vm.overallPercent }}
       >
-        <Animated.View
-          style={[
-            {
+        {vm.softMotion ? (
+          <RNAnimated.View
+            style={{
               height: '100%',
+              width: softBarWidth,
               borderRadius: theme.radius.pill,
               backgroundColor: theme.colors.primary,
-            },
-            fillStyle,
-          ]}
-        />
+              transform: [
+                {
+                  translateX: softSweep.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [-softBarWidth, softTravel],
+                  }),
+                },
+              ],
+            }}
+          />
+        ) : (
+          <Animated.View
+            style={[
+              {
+                height: '100%',
+                borderRadius: theme.radius.pill,
+                backgroundColor: theme.colors.primary,
+              },
+              fillStyle,
+            ]}
+          />
+        )}
       </View>
       <AppText variant="tiny" color="textFaint" numberOfLines={1}>
         {vm.detailLine}

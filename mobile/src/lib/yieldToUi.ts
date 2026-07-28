@@ -14,24 +14,30 @@ function armTimeout(ms: number, cb: () => void): ReturnType<typeof setTimeout> {
   return handle;
 }
 
+function nextMacrotask(): Promise<void> {
+  return new Promise((resolve) => {
+    armTimeout(0, resolve);
+  });
+}
+
 /**
  * Yield the JS thread so React can paint / handle touches before the next
  * heavy sync burst (large JSON.parse, hierarchy rebuild, file IO, etc.).
  *
- * Prefers `InteractionManager.runAfterInteractions`, but races a short timeout
- * so an active spinner/progress animation cannot deadlock the caller. A
- * zero-delay macrotask gives queued tab/Settings presses a turn before the
- * next sync burst even when interactions never clear.
+ * 1. Flush one macrotask so already-queued tab/Settings presses can run.
+ * 2. Then wait for `InteractionManager.runAfterInteractions`, racing a short
+ *    timeout so an active spinner cannot deadlock — without letting the
+ *    zero-delay timer preempt an in-flight gesture/transition.
  */
-export function yieldToUi(timeoutMs: number = YIELD_TIMEOUT_MS): Promise<void> {
-  return new Promise((resolve) => {
+export async function yieldToUi(timeoutMs: number = YIELD_TIMEOUT_MS): Promise<void> {
+  await nextMacrotask();
+  await new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {
       if (settled) return;
       settled = true;
       resolve();
     };
-    armTimeout(0, finish);
     armTimeout(Math.max(0, timeoutMs), finish);
     try {
       InteractionManager.runAfterInteractions(finish);
