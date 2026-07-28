@@ -32,6 +32,9 @@ export interface Prefs {
   /** How savings & term-deposit lists rank: 'base' ongoing rate (default, honest)
    *  vs 'max' headline/bonus rate. Mirrors RankMetric in data/selectors. */
   depositRankMetric: 'base' | 'max';
+  /** How home-loan lists rank when sorting by rate: advertised headline vs
+   *  fee-inclusive comparison rate. Mirrors MortgageRateMetric in data/selectors. */
+  mortgageRateMetric: 'headline' | 'comparison';
   /** Fulltext search across product info (off by default). */
   enableDeepSearch: boolean;
   /** Section market-history charts in Outlook (off by default). */
@@ -59,6 +62,7 @@ export const DEFAULT_PREFS: Prefs = {
   wifiOnly: false,
   includeNonStandard: false,
   depositRankMetric: 'base',
+  mortgageRateMetric: 'headline',
   enableDeepSearch: false,
   showHistoryRibbon: false,
   rateIntelligencePro: false,

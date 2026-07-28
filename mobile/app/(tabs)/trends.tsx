@@ -20,14 +20,14 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Button, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { effectiveRate, formatRate, formatRunDate } from '../../src/data/format';
+import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
-import { bestRow } from '../../src/data/selectors';
+import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { rateValueLabel, rbaDecisionA11yLabel } from '../../src/lib/a11ySummaries';
@@ -44,6 +44,7 @@ export default function Trends() {
   const interests = useStore((s) => s.prefs.interests);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const showHistoryRibbon = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const historyBanks = useStore((s) => s.historyBanks);
@@ -407,11 +408,22 @@ export default function Trends() {
       {interestSections.map((key) => {
         const data = core.sections[key];
         if (!data) return null;
-        const stats = resolveSectionRibbonStats(data, data.rates, false, key);
+        const stats = resolveSectionRibbonStats(
+          data,
+          data.rates,
+          false,
+          key,
+          null,
+          depositRankMetric,
+          mortgageRateMetric,
+        );
         if (stats.min === null) return null;
-        const best = bestRow(data.rates, key, false, depositRankMetric);
+        const best = bestRow(data.rates, key, false, depositRankMetric, null, mortgageRateMetric);
         const bestLabel = rateValueLabel(key, 'best');
-        const bestRate = best ? formatRate(effectiveRate(best)) : '—';
+        const rankedBest = best
+          ? rankFraction(best, key, depositRankMetric, mortgageRateMetric)
+          : null;
+        const bestRate = formatRankedFraction(rankedBest);
         return (
           <Pressable
             key={key}

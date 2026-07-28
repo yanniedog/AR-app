@@ -1,7 +1,7 @@
 import { SECTIONS } from '../constants';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
-import { activeFilterCount, filterRows, type Filters } from './selectors';
+import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 
 export type FilterSnapshot = Omit<Filters, 'query'>;
@@ -177,10 +177,18 @@ export function rowsForSearchSubscription(
   return filterRows(scoped, { ...sub.filters, query: sub.query }, detailsProducts, null, sub.section);
 }
 
-function ratesMap(rows: RateRow[]): Map<string, { row: RateRow; fraction: number | null }> {
+function ratesMap(
+  rows: RateRow[],
+  section: SectionKey,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
+): Map<string, { row: RateRow; fraction: number | null }> {
   const out = new Map<string, { row: RateRow; fraction: number | null }>();
   for (const row of rows) {
-    out.set(rowIdentity(row), { row, fraction: toFraction(row.rate) });
+    out.set(rowIdentity(row), {
+      row,
+      fraction: rankFraction(row, section, depositRankMetric, mortgageRateMetric),
+    });
   }
   return out;
 }
@@ -238,6 +246,8 @@ export function computeSubscriptionChanges(
   thresholdBps: number,
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'headline',
 ): NotifyMessage[] {
   if (!oldCore || !subscriptions.length) return [];
   const messages: NotifyMessage[] = [];
@@ -261,8 +271,8 @@ export function computeSubscriptionChanges(
     }
 
     const hit = largestRateChange(
-      ratesMap(rowsForSearchSubscription(oldCore, sub, oldDetails)),
-      ratesMap(rowsForSearchSubscription(newCore, sub, newDetails)),
+      ratesMap(rowsForSearchSubscription(oldCore, sub, oldDetails), sub.section, depositRankMetric, mortgageRateMetric),
+      ratesMap(rowsForSearchSubscription(newCore, sub, newDetails), sub.section, depositRankMetric, mortgageRateMetric),
       thresholdBps,
     );
     if (hit) {

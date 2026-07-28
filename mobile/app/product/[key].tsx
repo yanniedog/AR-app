@@ -64,6 +64,7 @@ export default function ProductDetail() {
   const subscriptions = useStore((s) => s.subscriptions);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const historyBanks = useStore((s) => s.historyBanks);
@@ -174,7 +175,7 @@ export default function ProductDetail() {
     (rateIndex != null ? siblings.find((s) => s.rate_index === rateIndex) : undefined) ?? found.row;
   const meta = SECTIONS[section];
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
-  const rateRows = sortRows(siblings, 'rate', section, depositRankMetric);
+  const rateRows = sortRows(siblings, 'rate', section, depositRankMetric, mortgageRateMetric);
   const qualifier = rateQualifier(row, section);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;

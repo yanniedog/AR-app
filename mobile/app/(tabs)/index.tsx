@@ -41,6 +41,7 @@ export default function Home() {
   const setActiveSection = useStore((s) => s.setActiveSection);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const warmDetails = useStore((s) => shouldWarmDetails(s.prefs, s.subscriptions));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
@@ -171,9 +172,17 @@ export default function Home() {
   const stats = useMemo(
     () => {
       void suitabilityRevision;
-      return resolveSectionRibbonStats(sectionData, hierRows, includeNonStandard, section, detailsProducts);
+      return resolveSectionRibbonStats(
+        sectionData,
+        hierRows,
+        includeNonStandard,
+        section,
+        detailsProducts,
+        depositRankMetric,
+        mortgageRateMetric,
+      );
     },
-    [sectionData, hierRows, includeNonStandard, section, detailsProducts, suitabilityRevision],
+    [sectionData, hierRows, includeNonStandard, section, detailsProducts, depositRankMetric, mortgageRateMetric, suitabilityRevision],
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR,
   // and must-have account features once details are warm).
@@ -187,9 +196,10 @@ export default function Home() {
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
+        mortgageRateMetric,
       );
     },
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
+    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
   const fallbackBest = useMemo(
     () => {
@@ -200,37 +210,37 @@ export default function Home() {
         includeNonStandard,
         depositRankMetric,
         detailsProducts,
+        mortgageRateMetric,
       );
     },
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, detailsProducts, suitabilityRevision],
+    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];
-  const shareMessage = useMemo(() => {
-    if (!core) return null;
-    const headline = meta.lowerIsBetter ? stats.min : stats.max;
-    if (headline == null) return null; // nothing worth sharing until rates are loaded
-    return [
-      `Best ${meta.title.toLowerCase()} rate today: ${formatRate(headline)} (${formatRunDate(core.run_date)})`,
-      `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
-      `Get the AustralianRates app: https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`,
-    ].join('\n');
-  }, [core, meta, stats]);
-  const shareToday = useCallback(() => setShareOpen(true), []);
-
-  if (!core) return null;
-  const sectionAccent = meta.accentColor;
-  const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const activeBest = ratesReady ? best ?? fallbackBest : null;
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
   // show nothing (not the market extreme) when nothing matches.
-  const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric) : null;
+  const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric, mortgageRateMetric) : null;
   const heroRate = !ratesReady
     ? null
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const shareMessage = useMemo(() => {
+    if (!core) return null;
+    if (heroRate == null) return null; // nothing worth sharing until rates are loaded
+    return [
+      `Best ${meta.title.toLowerCase()} rate today: ${formatRate(heroRate)} (${formatRunDate(core.run_date)})`,
+      `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
+      `Get the AustralianRates app: https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`,
+    ].join('\n');
+  }, [core, meta, heroRate]);
+  const shareToday = useCallback(() => setShareOpen(true), []);
+
+  if (!core) return null;
+  const sectionAccent = meta.accentColor;
+  const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const bestNote = conditionalNote(activeBest, section);
   const heroDataKey = `${core.run_date}:${section}:${ratesReady ? heroRate ?? 'na' : 'warming'}`;
 

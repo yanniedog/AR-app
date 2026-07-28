@@ -155,7 +155,14 @@ describe('selectors', () => {
     expect(rankFraction(bonusNoBase, 'Savings')).toBeNull(); // no base published -> unrankable
     expect(rankFraction(bonus, 'Savings', 'max')).toBeCloseTo(0.052); // opt into max
     // Mortgages carry no bonus/intro concept — always the effective rate.
-    expect(rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage')).toBeCloseTo(0.061);
+    expect(rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage')).toBeCloseTo(0.06);
+    expect(
+      rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage', 'base', 'comparison'),
+    ).toBeCloseTo(0.061);
+    // When comparison is unpublished, mortgage comparison metric falls back to headline.
+    expect(
+      rankFraction(mk({ rate: '0.06' }), 'Mortgage', 'base', 'comparison'),
+    ).toBeCloseTo(0.06);
   });
 
   test('bestRow (savings) ignores conditional bonus rates by default', () => {
@@ -180,8 +187,11 @@ describe('selectors', () => {
 
   test('rankFraction leaves non-deposit sections unchanged under either metric', () => {
     const loan = mk({ rate: '0.06', comparison_rate: '0.061' });
-    expect(rankFraction(loan, 'Mortgage', 'max')).toBeCloseTo(0.061);
-    expect(rankFraction(loan, 'Mortgage', 'base')).toBeCloseTo(0.061);
+    // Mortgages ignore the deposit RankMetric; headline vs comparison is separate.
+    expect(rankFraction(loan, 'Mortgage', 'max')).toBeCloseTo(0.06);
+    expect(rankFraction(loan, 'Mortgage', 'base')).toBeCloseTo(0.06);
+    expect(rankFraction(loan, 'Mortgage', 'base', 'comparison')).toBeCloseTo(0.061);
+    expect(rankFraction(loan, 'Mortgage', 'max', 'headline')).toBeCloseTo(0.06);
   });
 
   test('rankFraction treats a published 0% ongoing rate as 0, not unranked', () => {
@@ -236,6 +246,11 @@ describe('selectors', () => {
     ];
     expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual(['L1', 'L2']);
     expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual(['L2', 'L1']);
+    // Opting into comparison ranking for the rate chip mirrors comparison sort.
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'L1',
+      'L2',
+    ]);
   });
 
   test('sortRows mortgage rate key follows advertised headline rates on cards', () => {
@@ -305,6 +320,43 @@ describe('selectors', () => {
       'HAS',
       'MISS',
     ]);
+    // Comparison metric ranks purely by comparison/effective rate (no headline tie-break).
+    // MISS falls back to its headline (6.0%), so it sorts between BETTER (5.9%) and HAS (6.1%).
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'BETTER',
+      'MISS',
+      'HAS',
+    ]);
+    // Explicit comparison sort key uses the same effective-rate ordering.
+    expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual([
+      'BETTER',
+      'MISS',
+      'HAS',
+    ]);
+  });
+
+  test('sortRows mortgage comparison metric ignores headline when rates diverge', () => {
+    const loans = [
+      mk({ product_key: 'LOW_HEAD', rate: '0.055', comparison_rate: '0.062' }),
+      mk({ product_key: 'LOW_CMP', rate: '0.060', comparison_rate: '0.058' }),
+    ];
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline').map((r) => r.product_key)).toEqual([
+      'LOW_HEAD',
+      'LOW_CMP',
+    ]);
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'LOW_CMP',
+      'LOW_HEAD',
+    ]);
+  });
+
+  test('bestRow mortgage headline ties prefer lower comparison rate like sortRows', () => {
+    const loans = [
+      mk({ product_key: 'FIRST', rate: '0.060', comparison_rate: '0.061' }),
+      mk({ product_key: 'BETTER_CMP', rate: '0.060', comparison_rate: '0.059' }),
+    ];
+    expect(bestRow(loans, 'Mortgage', false, 'base', null, 'headline')?.product_key).toBe('BETTER_CMP');
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline')[0]?.product_key).toBe('BETTER_CMP');
   });
 
   test('sortRows by bank A-Z', () => {

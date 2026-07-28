@@ -12,7 +12,7 @@ import { AppText, Button, Row } from '../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { formatRankedFraction } from '../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
-import { groupByProvider, rankFraction, type ProviderGroup, type RankMetric } from '../src/data/selectors';
+import { groupByProvider, rankFraction, type MortgageRateMetric, type ProviderGroup, type RankMetric } from '../src/data/selectors';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useStore } from '../src/data/store';
 import { openBank } from '../src/lib/nav';
@@ -24,6 +24,7 @@ export default function Banks() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
@@ -104,11 +105,13 @@ export default function Banks() {
         includeNonStandard,
         detailsProducts,
         section,
+        mortgageRateMetric,
       );
     },
     [
       core,
       depositRankMetric,
+      mortgageRateMetric,
       includeNonStandard,
       detailsProducts,
       suitabilityRevision,
@@ -125,7 +128,13 @@ export default function Banks() {
 
   const direction = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
   const metricNote =
-    section !== 'Mortgage' && depositRankMetric === 'base' ? ', base ongoing' : '';
+    section === 'Mortgage'
+      ? mortgageRateMetric === 'comparison'
+        ? ', comparison'
+        : ', headline'
+      : depositRankMetric === 'base'
+        ? ', base ongoing'
+        : ', headline';
   const scopeNote = includeNonStandard ? '' : ', broadly applicable only';
   const sortHint = `Best ${SECTIONS[section].short.toLowerCase()} rate first (${direction}${metricNote}${scopeNote})`;
 
@@ -166,11 +175,16 @@ export default function Banks() {
       ) : (
         <FlashList
           data={filtered}
-          extraData={`${section}:${depositRankMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
+          extraData={`${section}:${depositRankMetric}:${mortgageRateMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
           keyExtractor={(g) => g.provider}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           renderItem={({ item }) => (
-            <BankRow group={item} sortSection={section} depositRankMetric={depositRankMetric} />
+            <BankRow
+              group={item}
+              sortSection={section}
+              depositRankMetric={depositRankMetric}
+              mortgageRateMetric={mortgageRateMetric}
+            />
           )}
           ListEmptyComponent={<EmptyState title="No lenders found" />}
         />
@@ -183,10 +197,12 @@ function BankRow({
   group,
   sortSection,
   depositRankMetric,
+  mortgageRateMetric,
 }: {
   group: ProviderGroup;
   sortSection: SectionKey;
   depositRankMetric: RankMetric;
+  mortgageRateMetric: MortgageRateMetric;
 }) {
   const theme = useTheme();
   const sections = SECTION_ORDER.filter((s) => group.bestBySection[s]);
@@ -239,7 +255,7 @@ function BankRow({
             const isSortKey = s === sortSection;
             // Match the ranked value used to order lenders (base ongoing for
             // deposits by default) — not the headline/effective rate alone.
-            const shown = rankFraction(best, s, depositRankMetric);
+            const shown = rankFraction(best, s, depositRankMetric, mortgageRateMetric);
             if (shown === null) return null;
             return (
               <AppText key={s} variant="tiny" color={isSortKey ? 'text' : 'textMuted'} weight={isSortKey ? '700' : '400'}>

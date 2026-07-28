@@ -29,6 +29,7 @@ export default function BankDetail() {
   const provider = raw ?? '';
   const core = useStore((s) => s.core);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
@@ -60,13 +61,13 @@ export default function BankDetail() {
       );
       // De-duplicate to one card per product (best rate row under the ranking metric).
       const byProduct = new Map<string, RateRow>();
-      for (const r of sortRows(rows, 'rate', section, depositRankMetric)) {
+      for (const r of sortRows(rows, 'rate', section, depositRankMetric, mortgageRateMetric)) {
         if (!byProduct.has(r.product_key)) byProduct.set(r.product_key, r);
       }
       if (byProduct.size) out.push({ section, rows: Array.from(byProduct.values()) });
     }
     return out;
-  }, [core, provider, depositRankMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
+  }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
 
   const chartSections = useMemo(
     () =>

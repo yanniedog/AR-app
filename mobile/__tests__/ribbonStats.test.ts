@@ -1,14 +1,19 @@
 import core from '../assets/sample/core.json';
 import { resolveSectionRibbonStats, ribbonToRateStats, hasPayloadRibbon } from '../src/data/ribbonStats';
 import { visibleAccountRows } from '../src/data/format';
+import { rankFraction } from '../src/data/selectors';
 import {
   clearSuitabilityIndex,
   closeSuitabilityGateUntilRebuild,
 } from '../src/data/suitabilityIndex';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
-import type { CorePayload, SectionKey } from '../src/types';
+import type { CorePayload, RateRow, SectionKey } from '../src/types';
 
 const sample = core as CorePayload;
+
+function rankedFractionOf(section: SectionKey) {
+  return (row: RateRow) => rankFraction(row, section, 'base', 'headline');
+}
 
 describe('ribbonStats', () => {
   it('maps payload ribbon range and counts to RateStats', () => {
@@ -26,7 +31,12 @@ describe('ribbonStats', () => {
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
     const stats = resolveSectionRibbonStats(data, hierRows, false, section);
-    const expected = statsFor(visibleAccountRows(hierRows, false), true, section);
+    const expected = statsFor(
+      visibleAccountRows(hierRows, false),
+      true,
+      section,
+      rankedFractionOf(section),
+    );
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });
@@ -36,7 +46,7 @@ describe('ribbonStats', () => {
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
     const stats = resolveSectionRibbonStats(data, hierRows, true, section);
-    const expected = statsFor(hierRows, true, section);
+    const expected = statsFor(hierRows, true, section, rankedFractionOf(section));
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
   });
