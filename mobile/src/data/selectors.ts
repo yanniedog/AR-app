@@ -139,7 +139,9 @@ export function rankFraction(
   return effectiveFraction(row);
 }
 
-/** The "best" rate in a list, honouring lower-is-better for loans. */
+/** The "best" rate in a list, honouring lower-is-better for loans.
+ *  Delegates to {@link sortRows} so mortgage headline ties use the same
+ *  comparison-rate break as Browse/Search (not first-in-list). */
 export function bestRow(
   rows: RateRow[],
   section: SectionKey,
@@ -148,20 +150,12 @@ export function bestRow(
   detailsProducts?: Record<string, ProductDetail> | null,
   mortgageMetric: MortgageRateMetric = 'headline',
 ): RateRow | null {
-  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  let best: RateRow | null = null;
-  let bestVal: number | null = null;
-  for (const row of visibleAccountRows(rows, includeNonStandard, detailsProducts)) {
-    // Token floor uses headline rate (parity with statsFor / excludeTokenDepositRates).
-    if (!passesDepositTokenFloor(row, section)) continue;
-    const v = rankFraction(row, section, metric, mortgageMetric);
-    if (v === null) continue;
-    if (bestVal === null || (lowerIsBetter ? v < bestVal : v > bestVal)) {
-      bestVal = v;
-      best = row;
-    }
-  }
-  return best;
+  const candidates = excludeTokenDepositRates(
+    visibleAccountRows(rows, includeNonStandard, detailsProducts),
+    section,
+  ).filter((row) => rankFraction(row, section, metric, mortgageMetric) !== null);
+  if (!candidates.length) return null;
+  return sortRows(candidates, 'rate', section, metric, mortgageMetric)[0] ?? null;
 }
 
 /** Fraction used when ordering a product list for a given sort chip.

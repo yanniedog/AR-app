@@ -350,6 +350,15 @@ describe('selectors', () => {
     ]);
   });
 
+  test('bestRow mortgage headline ties prefer lower comparison rate like sortRows', () => {
+    const loans = [
+      mk({ product_key: 'FIRST', rate: '0.060', comparison_rate: '0.061' }),
+      mk({ product_key: 'BETTER_CMP', rate: '0.060', comparison_rate: '0.059' }),
+    ];
+    expect(bestRow(loans, 'Mortgage', false, 'base', null, 'headline')?.product_key).toBe('BETTER_CMP');
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline')[0]?.product_key).toBe('BETTER_CMP');
+  });
+
   test('sortRows by bank A-Z', () => {
     const sorted = sortRows(mortgage, 'bank', 'Mortgage');
     expect(sorted.map((r) => r.provider)).toEqual(['Bank A', 'Bank B', 'Bank C']);
