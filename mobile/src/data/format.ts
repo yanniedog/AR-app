@@ -46,6 +46,16 @@ export function formatRate(rate: string | number | null | undefined, digits = 2)
   return `${ratePercentFormatter(digits).format(f * 100)}%`;
 }
 
+/**
+ * Format an already-ranked rate fraction as a percent.
+ * Unlike {@link formatRate}/{@link toFraction}, a published 0% ranks as 0 and
+ * must render as "0.00%" rather than the missing-rate em dash.
+ */
+export function formatRankedFraction(fraction: number | null | undefined, digits = 2): string {
+  if (fraction === null || fraction === undefined || !isFinite(fraction) || fraction < 0) return '—';
+  return `${ratePercentFormatter(digits).format(fraction * 100)}%`;
+}
+
 /** Percent digits only (no suffix) — chart axis labels. */
 export function formatRateDigits(rate: string | number | null | undefined, digits = 2): string {
   const f = toFraction(rate);

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, ScrollView, View } from 'react-native';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import React, { memo, startTransition, useCallback, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import { SECTION_ORDER, SECTIONS } from '../../constants';
 import {
@@ -23,6 +24,7 @@ import {
   type PassThroughSort,
 } from '../../data/passThroughModels';
 import type { RbaCalendar } from '../../data/rbaCalendar';
+import { hapticSelection } from '../../lib/haptics';
 import { moveTone } from '../../lib/moveSemantics';
 import { openBank } from '../../lib/nav';
 import type { RbaEntry, SectionKey } from '../../types';
@@ -31,6 +33,8 @@ import { BankAvatar } from '../BankAvatar';
 import { SearchBar, SegmentedControl } from '../controls';
 import { AppText, Badge, Card, Chip, Row } from '../ui';
 import { ResponseScatter } from './ResponseScatter';
+
+type LenderRow = MultiSectionPassThroughRow & { response: PassThroughRow };
 
 function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   const theme = useTheme();
@@ -96,18 +100,18 @@ function ResponseCell({
   );
 }
 
-function LenderResponseRow({
+const LenderResponseRow = memo(function LenderResponseRow({
   item,
   section,
   model,
   selected,
   onSelect,
 }: {
-  item: MultiSectionPassThroughRow & { response: PassThroughRow };
+  item: LenderRow;
   section: SectionKey;
   model: MultiSectionPassThroughModel;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (provider: string) => void;
 }) {
   const theme = useTheme();
   const accessibilityLabel = lenderResponseAccessibilityLabel(
@@ -122,6 +126,7 @@ function LenderResponseRow({
         borderWidth: 1,
         borderColor: selected ? theme.colors.primary : theme.colors.border,
         overflow: 'hidden',
+        marginBottom: 10,
       }}
     >
       <Pressable
@@ -165,7 +170,7 @@ function LenderResponseRow({
         </Row>
       </Pressable>
       <Pressable
-        onPress={onSelect}
+        onPress={() => onSelect(item.provider)}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         accessibilityLabel={`${selected ? 'Hide' : 'Show'} ${item.provider} on response chart`}
@@ -187,27 +192,23 @@ function LenderResponseRow({
       </Pressable>
     </View>
   );
-}
+});
 
-function AnalysisHeader({
+const AnalysisHeader = memo(function AnalysisHeader({
   model,
   decisions,
   section,
   onSectionChange,
   onDecisionChange,
-  selectedProvider,
-  onProviderSelect,
 }: {
   model: MultiSectionPassThroughModel;
   decisions: ReturnType<typeof rbaPassThroughDecisionList>;
   section: SectionKey;
   onSectionChange: (section: SectionKey) => void;
   onDecisionChange: (date: string) => void;
-  selectedProvider: string | null;
-  onProviderSelect: (provider: string) => void;
 }) {
   const theme = useTheme();
-  const summary = summarizeSectionResponse(model, section);
+  const summary = useMemo(() => summarizeSectionResponse(model, section), [model, section]);
   const direction = model.decision.bps > 0 ? 'raised' : 'cut';
   const partial = model.decision.partialObservation;
   return (
@@ -285,50 +286,50 @@ function AnalysisHeader({
         />
         <MetricTile label="Opposite" value={`${summary.movedOpposite}`} detail="provider medians moved the other way" />
       </Row>
-
-      <Card style={{ marginBottom: 14 }}>
-        <Row style={{ justifyContent: 'space-between', marginBottom: 2 }}>
-          <View style={{ flex: 1, paddingRight: 8 }}>
-            <AppText variant="h3">Speed × response</AppText>
-            <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
-              Tap a point to reveal the lender · untimed and non-matching moves use the right rail
-            </AppText>
-          </View>
-          <Badge label={`${summary.eligible} lenders`} tone="muted" />
-        </Row>
-        <ResponseScatter
-          model={model}
-          section={section}
-          selectedProvider={selectedProvider}
-          onProviderSelect={onProviderSelect}
-        />
-        {selectedProvider ? (
-          <View
-            accessibilityLiveRegion="polite"
-            style={{
-              alignSelf: 'flex-start',
-              maxWidth: '100%',
-              marginBottom: 10,
-              paddingHorizontal: 10,
-              paddingVertical: 7,
-              borderRadius: theme.radius.md,
-              backgroundColor: theme.colors.primaryMuted,
-            }}
-          >
-            <AppText variant="small" weight="700" color="primary">
-              {selectedProvider}
-            </AppText>
-          </View>
-        ) : null}
-        <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10 }}>
-          <AppText variant="tiny" color="textMuted">
-            {passThroughCustomerContext(section, model.decision.bps)}
-          </AppText>
-        </View>
-      </Card>
     </View>
   );
-}
+});
+
+/** Isolated so chart selection updates do not rebuild decision metrics. */
+const SpeedResponseCard = memo(function SpeedResponseCard({
+  model,
+  section,
+  eligible,
+  selectedProvider,
+  onProviderSelect,
+}: {
+  model: MultiSectionPassThroughModel;
+  section: SectionKey;
+  eligible: number;
+  selectedProvider: string | null;
+  onProviderSelect: (provider: string | null) => void;
+}) {
+  const theme = useTheme();
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <Row style={{ justifyContent: 'space-between', marginBottom: 2 }}>
+        <View style={{ flex: 1, paddingRight: 8 }}>
+          <AppText variant="h3">Speed × response</AppText>
+          <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
+            Tap a point to reveal the lender · untimed and non-matching moves use the right rail
+          </AppText>
+        </View>
+        <Badge label={`${eligible} lenders`} tone="muted" />
+      </Row>
+      <ResponseScatter
+        model={model}
+        section={section}
+        selectedProvider={selectedProvider}
+        onProviderSelect={onProviderSelect}
+      />
+      <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10 }}>
+        <AppText variant="tiny" color="textMuted">
+          {passThroughCustomerContext(section, model.decision.bps)}
+        </AppText>
+      </View>
+    </Card>
+  );
+});
 
 export function PassThroughDashboard({
   payload,
@@ -344,7 +345,7 @@ export function PassThroughDashboard({
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PassThroughSort>('response');
-  const listRef = useRef<FlatList<MultiSectionPassThroughRow & { response: PassThroughRow }>>(null);
+  const listRef = useRef<FlashListRef<LenderRow>>(null);
   const decisions = useMemo(
     () => rbaPassThroughDecisionList(payload, rba, { calendar }),
     [payload, rba, calendar],
@@ -360,6 +361,106 @@ export function PassThroughDashboard({
     () => (model ? filterAndSortSectionRows(model, section, query, sort) : []),
     [model, section, query, sort],
   );
+  const sectionEligible = useMemo(
+    () => (model ? summarizeSectionResponse(model, section).eligible : 0),
+    [model, section],
+  );
+
+  const onSectionChange = useCallback((next: SectionKey) => {
+    setSection(next);
+    setSelectedProvider(null);
+  }, []);
+
+  const onDecisionChange = useCallback((date: string) => {
+    setSelectedDate(date);
+    setSelectedProvider(null);
+  }, []);
+
+  /** Chart already painted locally — defer list highlight work off the tap path. */
+  const onChartProviderSelect = useCallback((provider: string | null) => {
+    startTransition(() => {
+      setSelectedProvider(provider);
+    });
+  }, []);
+
+  const onListProviderSelect = useCallback((provider: string) => {
+    hapticSelection();
+    setSelectedProvider((current) => (provider === current ? null : provider));
+    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: LenderRow }) => (
+      <LenderResponseRow
+        item={item}
+        section={section}
+        model={model!}
+        selected={item.provider === selectedProvider}
+        onSelect={onListProviderSelect}
+      />
+    ),
+    [section, model, selectedProvider, onListProviderSelect],
+  );
+
+  const staticHeader = useMemo(() => {
+    if (!model) return null;
+    return (
+      <AnalysisHeader
+        model={model}
+        decisions={decisions}
+        section={section}
+        onSectionChange={onSectionChange}
+        onDecisionChange={onDecisionChange}
+      />
+    );
+  }, [model, decisions, section, onSectionChange, onDecisionChange]);
+
+  const compareControls = useMemo(
+    () => (
+      <>
+        <Row style={{ justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-end' }}>
+          <View>
+            <AppText variant="h3">Compare lenders</AppText>
+            <AppText variant="tiny" color="textMuted">Home loans · Savings · Term deposits</AppText>
+          </View>
+          <Badge label={`${rows.length}`} tone="muted" />
+        </Row>
+        <SearchBar value={query} onChangeText={setQuery} placeholder="Search lenders" />
+        <Row gap={6} style={{ marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+          <AppText variant="tiny" color="textFaint" weight="700">SORT</AppText>
+          <Chip label="Response" selected={sort === 'response'} onPress={() => setSort('response')} />
+          <Chip label="Timing" selected={sort === 'timing'} onPress={() => setSort('timing')} />
+          <Chip label="Bank" selected={sort === 'bank'} onPress={() => setSort('bank')} />
+        </Row>
+      </>
+    ),
+    [rows.length, query, sort],
+  );
+
+  const listHeader = useMemo(() => {
+    if (!model || !staticHeader) return null;
+    return (
+      <>
+        {staticHeader}
+        <SpeedResponseCard
+          model={model}
+          section={section}
+          eligible={sectionEligible}
+          selectedProvider={selectedProvider}
+          onProviderSelect={onChartProviderSelect}
+        />
+        {compareControls}
+      </>
+    );
+  }, [
+    model,
+    staticHeader,
+    section,
+    sectionEligible,
+    selectedProvider,
+    onChartProviderSelect,
+    compareControls,
+  ]);
 
   if (!model) {
     return (
@@ -373,62 +474,16 @@ export function PassThroughDashboard({
   }
 
   return (
-    <FlatList
+    <FlashList
       ref={listRef}
       data={rows}
+      extraData={selectedProvider}
       keyExtractor={(item) => item.provider}
       contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
       style={{ width: '100%', maxWidth: 860, alignSelf: 'center' }}
       keyboardShouldPersistTaps="handled"
-      ListHeaderComponent={
-        <>
-          <AnalysisHeader
-            model={model}
-            decisions={decisions}
-            section={section}
-            onSectionChange={(next) => {
-              setSection(next);
-              setSelectedProvider(null);
-            }}
-            onDecisionChange={(date) => {
-              setSelectedDate(date);
-              setSelectedProvider(null);
-            }}
-            selectedProvider={selectedProvider}
-            onProviderSelect={(provider) => {
-              setSelectedProvider(provider === selectedProvider ? null : provider);
-            }}
-          />
-          <Row style={{ justifyContent: 'space-between', marginBottom: 8, alignItems: 'flex-end' }}>
-            <View>
-              <AppText variant="h3">Compare lenders</AppText>
-              <AppText variant="tiny" color="textMuted">Home loans · Savings · Term deposits</AppText>
-            </View>
-            <Badge label={`${rows.length}`} tone="muted" />
-          </Row>
-          <SearchBar value={query} onChangeText={setQuery} placeholder="Search lenders" />
-          <Row gap={6} style={{ marginTop: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            <AppText variant="tiny" color="textFaint" weight="700">SORT</AppText>
-            <Chip label="Response" selected={sort === 'response'} onPress={() => setSort('response')} />
-            <Chip label="Timing" selected={sort === 'timing'} onPress={() => setSort('timing')} />
-            <Chip label="Bank" selected={sort === 'bank'} onPress={() => setSort('bank')} />
-          </Row>
-        </>
-      }
-      renderItem={({ item }) => (
-        <View style={{ marginBottom: 10 }}>
-          <LenderResponseRow
-            item={item}
-            section={section}
-            model={model}
-            selected={item.provider === selectedProvider}
-            onSelect={() => {
-              setSelectedProvider(item.provider === selectedProvider ? null : item.provider);
-              requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
-            }}
-          />
-        </View>
-      )}
+      ListHeaderComponent={listHeader}
+      renderItem={renderItem}
       ListEmptyComponent={
         <Card>
           <AppText variant="small" color="textMuted">No lenders match that search.</AppText>

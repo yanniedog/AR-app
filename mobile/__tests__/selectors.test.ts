@@ -7,11 +7,13 @@ import {
   excludeTokenDepositRates,
   filterRows,
   findByKey,
+  compareProviderGroupsByRate,
   groupByProvider,
   normalizeSortKey,
   queryAndSort,
   rankFraction,
   sortRows,
+  type ProviderGroup,
 } from '../src/data/selectors';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { RateRow, SectionKey } from '../src/types';
@@ -475,5 +477,130 @@ describe('selectors', () => {
     expect(groupByProvider(sections, 'max').find((g) => g.provider === 'Bank A')?.bestBySection.Savings?.product_key).toBe(
       'B|S',
     );
+  });
+
+  test('groupByProvider sorts mortgage banks lowest rate first', () => {
+    const sections = {
+      Mortgage: { rates: mortgage },
+      Savings: { rates: savings },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    // Bank C's cheaper loan is non-standard and hidden; A (5.74%) beats B (6.12%).
+    expect(groupByProvider(sections, 'base', false, null, 'Mortgage').map((g) => g.provider)).toEqual([
+      'Bank A',
+      'Bank B',
+    ]);
+  });
+
+  test('groupByProvider without sortSection falls back to A–Z', () => {
+    const sections = {
+      Mortgage: { rates: mortgage },
+      Savings: { rates: savings },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    expect(groupByProvider(sections, 'base', true, null, null).map((g) => g.provider)).toEqual([
+      'Bank A',
+      'Bank B',
+      'Bank C',
+    ]);
+    expect(groupByProvider(sections).map((g) => g.provider)).toEqual(['Bank A', 'Bank B']);
+  });
+
+  test('groupByProvider sorts savings by depositRankMetric', () => {
+    const sections = {
+      Mortgage: { rates: [] },
+      Savings: {
+        rates: [
+          mk({
+            provider: 'Bank Base',
+            product_key: 'BASE|S',
+            product_name: 'Base Saver',
+            rate: '0.045',
+            ribbon_deposit_kind: 'base',
+          }),
+          mk({
+            provider: 'Bank Bonus',
+            product_key: 'BONUS|S',
+            product_name: 'Bonus Saver',
+            rate: '0.055',
+            ongoing_rate: '0.01',
+            ribbon_deposit_kind: 'bonus',
+          }),
+        ],
+      },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    // base metric ranks bonus on ongoing (1%) so Bank Base (4.5%) wins.
+    expect(groupByProvider(sections, 'base', false, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank Base',
+      'Bank Bonus',
+    ]);
+    // max metric ranks on headline so Bank Bonus (5.5%) wins.
+    expect(groupByProvider(sections, 'max', false, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank Bonus',
+      'Bank Base',
+    ]);
+  });
+
+  test('groupByProvider sorts savings banks highest rate first', () => {
+    const sections = {
+      Mortgage: { rates: mortgage },
+      Savings: { rates: savings },
+      TD: { rates: [] },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    expect(groupByProvider(sections, 'base', false, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank B',
+      'Bank A',
+    ]);
+    // Mortgage-only Bank C (non-standard loan hidden) is omitted entirely; with
+    // non-standard included it still has no Savings rate and sorts last.
+    expect(groupByProvider(sections, 'base', true, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank B',
+      'Bank A',
+      'Bank C',
+    ]);
+  });
+
+  test('groupByProvider sorts TD banks highest rate first and keeps missing TD rates last', () => {
+    const sections = {
+      Mortgage: {
+        rates: [
+          mk({ provider: 'Bank Low', product_key: 'L|Mortgage', product_name: '5Y', rate: '0.030' }),
+          mk({ provider: 'Bank High', product_key: 'H|Mortgage', product_name: '5Y', rate: '0.032' }),
+          mk({ provider: 'Bank Mid', product_key: 'M|Mortgage', product_name: '5Y', rate: '0.031' }),
+          mk({
+            provider: 'Bank Mortgage Only',
+            product_key: 'O|Mortgage',
+            product_name: '5Y',
+            rate: '0.029',
+          }),
+        ],
+      },
+      Savings: { rates: [] },
+      TD: {
+        rates: [
+          mk({ provider: 'Bank Low', product_key: 'L|TD', product_name: '6M', rate: '0.035' }),
+          mk({ provider: 'Bank High', product_key: 'H|TD', product_name: '12M', rate: '0.045' }),
+          mk({ provider: 'Bank Mid', product_key: 'M|TD', product_name: '9M', rate: '0.040' }),
+        ],
+      },
+    } as Record<SectionKey, { rates: RateRow[] }>;
+    expect(groupByProvider(sections, 'base', false, null, 'TD').map((g) => g.provider)).toEqual([
+      'Bank High',
+      'Bank Mid',
+      'Bank Low',
+      'Bank Mortgage Only',
+    ]);
+  });
+
+  test('compareProviderGroupsByRate puts missing section rates last', () => {
+    const withRate: ProviderGroup = {
+      provider: 'Has Rate',
+      rows: [],
+      bestBySection: { Savings: mk({ provider: 'Has Rate', rate: '0.04' }) },
+    };
+    const missing: ProviderGroup = { provider: 'No Rate', rows: [], bestBySection: {} };
+    expect(compareProviderGroupsByRate(withRate, missing, 'Savings')).toBeLessThan(0);
+    expect(compareProviderGroupsByRate(missing, withRate, 'Savings')).toBeGreaterThan(0);
   });
 });
