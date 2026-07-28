@@ -119,6 +119,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       }
       if (key === 'showHistoryRibbon') {
         set({ historyBanksError: null });
+        if (value) {
+          // Trends + product history screens expect assets immediately after the
+          // toggle; do not wait for the next manual refresh.
+          void get().ensureHistoryBanks();
+          void get().ensureBankInsights();
+        }
       }
     },
 

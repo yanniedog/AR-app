@@ -87,8 +87,8 @@ export function HistoryExplorer({
       (activeMode === 'calendar' || activeMode === 'edge') &&
       (historyModel?.dates.length ?? 0) <= 1 ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-          Older history aggregates include the full catalogue, so they are hidden while Standard
-          products only is on.
+          Multi-day Spread and Calendar need bank intelligence for standard
+          products. Pull to refresh on Home, or check Pulse and Leaders meanwhile.
         </AppText>
       ) : null}
 
@@ -160,7 +160,7 @@ export function HistoryExplorer({
           ) : null}
           {(activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
             <AppText variant="small" color="textMuted">
-              History loads after the first refresh with History explorer enabled.
+              History loads after Market explorer is enabled and bank intelligence is ready.
             </AppText>
           ) : null}
         </>

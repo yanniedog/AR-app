@@ -141,6 +141,9 @@ const proPrefs = { ...DEFAULT_PREFS, rateIntelligencePro: true };
 const historyRibbonPrefs = { ...proPrefs, showHistoryRibbon: true };
 const deepSearchPrefs = { ...proPrefs, enableDeepSearch: true };
 
+const originalEnsureHistoryBanks = store.getState().ensureHistoryBanks;
+const originalEnsureBankInsights = store.getState().ensureBankInsights;
+
 function resetStore() {
   store.setState({
     status: 'ready',
@@ -165,6 +168,8 @@ function resetStore() {
     prefs: { ...DEFAULT_PREFS },
     favorites: [],
     subscriptions: [],
+    ensureHistoryBanks: originalEnsureHistoryBanks,
+    ensureBankInsights: originalEnsureBankInsights,
   });
 }
 
@@ -549,14 +554,20 @@ describe('optional feature prefs', () => {
     expect(store.getState().historyBanksError).toBeNull();
   });
 
-  it('turning history ribbon on does not start a payload download', () => {
-    store.setState({ prefs: proPrefs });
+  it('turning history ribbon on starts history and bank-insights ensures', () => {
+    const ensureHistoryBanks = jest.fn(async () => {});
+    const ensureBankInsights = jest.fn(async () => {});
+    store.setState({
+      prefs: proPrefs,
+      ensureHistoryBanks,
+      ensureBankInsights,
+    });
 
     store.getState().setPref('showHistoryRibbon', true);
 
     expect(store.getState().prefs.showHistoryRibbon).toBe(true);
-    expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
-    expect(mockSyncHistoryFromDailyPayloads).not.toHaveBeenCalled();
+    expect(ensureHistoryBanks).toHaveBeenCalledTimes(1);
+    expect(ensureBankInsights).toHaveBeenCalledTimes(1);
   });
 
   it('ensureProductHistory rechecks for newly indexed dates even when the core revision is unchanged', async () => {
