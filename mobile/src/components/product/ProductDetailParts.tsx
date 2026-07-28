@@ -234,6 +234,8 @@ export function ProductRatesList({
   const [open, setOpen] = useState(defaultOpen);
   const title = `Rates (${rows.length})`;
 
+  if (rows.length === 0) return null;
+
   return (
     <View style={{ marginTop: 16, marginBottom: 16 }}>
       <TouchTarget
