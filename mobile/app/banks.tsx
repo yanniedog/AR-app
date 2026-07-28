@@ -6,13 +6,14 @@ import { Pressable, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
 import { SearchBar, SegmentedControl } from '../src/components/controls';
-import { EmptyState } from '../src/components/feedback';
+import { EmptyState, IndeterminateProgressBar, LoadingRows } from '../src/components/feedback';
 import { Screen } from '../src/components/Screen';
-import { AppText, Row } from '../src/components/ui';
+import { AppText, Button, Row } from '../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { formatRankedFraction } from '../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
 import { groupByProvider, rankFraction, type ProviderGroup, type RankMetric } from '../src/data/selectors';
+import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useStore } from '../src/data/store';
 import { openBank } from '../src/lib/nav';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -25,26 +26,95 @@ export default function Banks() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const detailsLoading = useStore((s) => s.detailsLoading);
+  const ensureDetails = useStore((s) => s.ensureDetails);
   const suitabilityRevision = useSuitabilityRevision();
   const interests = useStore((s) => s.prefs.interests);
   const section = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [query, setQuery] = useState('');
+  const [filterPrepFailed, setFilterPrepFailed] = useState(false);
+  const filterPrepAttempts = useRef(0);
+  const coreRevision = core ? core.run_date : '';
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
     if (resolved !== section) setActiveSection(resolved);
   }, [interests, section, setActiveSection]);
 
+  const filterReady = useMemo(() => {
+    void suitabilityRevision;
+    return isSuitabilityFilterReady(includeNonStandard);
+  }, [includeNonStandard, suitabilityRevision]);
+
+  useEffect(() => {
+    filterPrepAttempts.current = 0;
+    setFilterPrepFailed(false);
+  }, [coreRevision]);
+
+  // Standard-only ranking must wait for the post-ingest suitability index —
+  // otherwise an empty/closed allowlist yields an empty lender list or a
+  // core-only fallback that can disagree with Browse/Home. Bound retries so a
+  // failed ensureDetails cannot loop forever on detailsLoading flips.
+  useEffect(() => {
+    if (filterReady) {
+      filterPrepAttempts.current = 0;
+      setFilterPrepFailed(false);
+      return;
+    }
+    if (includeNonStandard || detailsLoading || !core) return;
+    if (filterPrepAttempts.current >= 3) return;
+    filterPrepAttempts.current += 1;
+    void ensureDetails({ force: true });
+  }, [filterReady, includeNonStandard, detailsLoading, core, ensureDetails, suitabilityRevision]);
+
+  // Escape permanent "Preparing" when details settle still-closed (or hang).
+  useEffect(() => {
+    if (filterReady || includeNonStandard || !coreRevision) {
+      setFilterPrepFailed(false);
+      return;
+    }
+    if (detailsLoading) {
+      setFilterPrepFailed(false);
+      const hung = setTimeout(() => {
+        if (!isSuitabilityFilterReady(includeNonStandard)) setFilterPrepFailed(true);
+      }, 12_000);
+      return () => clearTimeout(hung);
+    }
+    const timer = setTimeout(() => {
+      if (!isSuitabilityFilterReady(includeNonStandard)) setFilterPrepFailed(true);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [filterReady, includeNonStandard, coreRevision, detailsLoading, suitabilityRevision]);
+
+  const retryFilterPrep = useCallback(() => {
+    setFilterPrepFailed(false);
+    filterPrepAttempts.current = 0;
+    void ensureDetails({ force: true, abandonInFlight: true });
+  }, [ensureDetails]);
+
   const groups = useMemo(
     () => {
       void suitabilityRevision;
-      return core
-        ? groupByProvider(core.sections, depositRankMetric, includeNonStandard, detailsProducts, section)
-        : [];
+      if (!core || !filterReady) return [];
+      return groupByProvider(
+        core.sections,
+        depositRankMetric,
+        includeNonStandard,
+        detailsProducts,
+        section,
+      );
     },
-    [core, depositRankMetric, includeNonStandard, detailsProducts, suitabilityRevision, section],
+    [
+      core,
+      depositRankMetric,
+      includeNonStandard,
+      detailsProducts,
+      suitabilityRevision,
+      section,
+      filterReady,
+    ],
   );
   const filtered = useMemo(
     () => groups.filter((g) => g.provider.toLowerCase().includes(query.toLowerCase())),
@@ -56,7 +126,8 @@ export default function Banks() {
   const direction = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
   const metricNote =
     section !== 'Mortgage' && depositRankMetric === 'base' ? ', base ongoing' : '';
-  const sortHint = `Best ${SECTIONS[section].short.toLowerCase()} rate first (${direction}${metricNote})`;
+  const scopeNote = includeNonStandard ? '' : ', broadly applicable only';
+  const sortHint = `Best ${SECTIONS[section].short.toLowerCase()} rate first (${direction}${metricNote}${scopeNote})`;
 
   return (
     <Screen>
@@ -66,19 +137,44 @@ export default function Banks() {
         ) : null}
         <SearchBar value={query} onChangeText={setQuery} placeholder="Search lenders" />
         <AppText variant="tiny" color="textMuted">
-          {sortHint}
+          {filterReady
+            ? sortHint
+            : filterPrepFailed
+              ? 'Could not prepare filtered lender rates.'
+              : 'Preparing filtered lender rates…'}
         </AppText>
       </View>
-      <FlashList
-        data={filtered}
-        extraData={`${section}:${depositRankMetric}`}
-        keyExtractor={(g) => g.provider}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-        renderItem={({ item }) => (
-          <BankRow group={item} sortSection={section} depositRankMetric={depositRankMetric} />
-        )}
-        ListEmptyComponent={<EmptyState title="No lenders found" />}
-      />
+      {!filterReady ? (
+        <View style={{ paddingHorizontal: 16, gap: theme.spacing(3) }}>
+          {filterPrepFailed ? (
+            <>
+              <AppText variant="small" color="textMuted">
+                Broadly applicable ranking needs the suitability index. Check your connection and retry.
+              </AppText>
+              <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
+            </>
+          ) : (
+            <>
+              <IndeterminateProgressBar
+                caption="Waiting until broadly applicable products are ready for ranking."
+                accessibilityLabel="Preparing filtered lender rates"
+              />
+              <LoadingRows count={4} />
+            </>
+          )}
+        </View>
+      ) : (
+        <FlashList
+          data={filtered}
+          extraData={`${section}:${depositRankMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
+          keyExtractor={(g) => g.provider}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+          renderItem={({ item }) => (
+            <BankRow group={item} sortSection={section} depositRankMetric={depositRankMetric} />
+          )}
+          ListEmptyComponent={<EmptyState title="No lenders found" />}
+        />
+      )}
     </Screen>
   );
 }
