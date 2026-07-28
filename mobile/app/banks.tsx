@@ -34,6 +34,8 @@ export default function Banks() {
   const setActiveSection = useStore((s) => s.setActiveSection);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [query, setQuery] = useState('');
+  const filterPrepAttempts = useRef(0);
+  const coreRevision = core ? core.run_date : '';
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -45,11 +47,22 @@ export default function Banks() {
     return isSuitabilityFilterReady(includeNonStandard);
   }, [includeNonStandard, suitabilityRevision]);
 
+  useEffect(() => {
+    filterPrepAttempts.current = 0;
+  }, [coreRevision]);
+
   // Standard-only ranking must wait for the post-ingest suitability index —
   // otherwise an empty/closed allowlist yields an empty lender list or a
-  // core-only fallback that can disagree with Browse/Home.
+  // core-only fallback that can disagree with Browse/Home. Bound retries so a
+  // failed ensureDetails cannot loop forever on detailsLoading flips.
   useEffect(() => {
-    if (filterReady || includeNonStandard || detailsLoading || !core) return;
+    if (filterReady) {
+      filterPrepAttempts.current = 0;
+      return;
+    }
+    if (includeNonStandard || detailsLoading || !core) return;
+    if (filterPrepAttempts.current >= 3) return;
+    filterPrepAttempts.current += 1;
     void ensureDetails({ force: true });
   }, [filterReady, includeNonStandard, detailsLoading, core, ensureDetails, suitabilityRevision]);
 
