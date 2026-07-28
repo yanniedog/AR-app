@@ -6,11 +6,21 @@ export interface OptionalFeaturePrefs {
   showHistoryRibbon: boolean;
   notificationsEnabled: boolean;
   rateIntelligencePro: boolean;
+  /** Saved profile may require details for CDR account-feature matching. */
+  profileFilters?: { accountFeatures?: string[] } | null;
+}
+
+/** True when saved profile feature picks need the details payload to apply. */
+export function profileAccountFeaturesNeedDetails(
+  profileFilters?: { accountFeatures?: string[] } | null,
+): boolean {
+  return (profileFilters?.accountFeatures?.length ?? 0) > 0;
 }
 
 /** True when refresh/background should download the bulk details payload. */
 export function shouldWarmDetails(prefs: OptionalFeaturePrefs, subscriptions: Subscription[]): boolean {
   if (effectiveDeepSearch(prefs)) return true;
+  if (profileAccountFeaturesNeedDetails(prefs.profileFilters)) return true;
 
   return needsDetailsForNotifications(prefs, subscriptions);
 }

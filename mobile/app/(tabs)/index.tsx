@@ -12,7 +12,7 @@ import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate } from '../../src/data/format';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
-import { profileFilterRows, profileSectionCount } from '../../src/data/profile';
+import { profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { conditionalNote } from '../../src/lib/rateQualifier';
@@ -61,13 +61,17 @@ export default function Home() {
     return isSuitabilityFilterReady(includeNonStandard);
   }, [includeNonStandard, suitabilityRevision]);
 
+  const profileFeaturesPending =
+    profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts;
+  const ratesReady = filterReady && !profileFeaturesPending;
+
   useEffect(() => {
     filterPrepAttempts.current = 0;
     setFilterPrepFailed(false);
   }, [coreRevision]);
 
   useEffect(() => {
-    if (!coreRevision || refreshing || !warmDetails) return;
+    if (!coreRevision || refreshing || (!warmDetails && !profileFeaturesPending)) return;
     let cancelled = false;
     let interaction: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     // Details are optional and expensive. Warm them after first paint only for
@@ -77,24 +81,26 @@ export default function Home() {
       interaction = InteractionManager.runAfterInteractions(() => {
         if (!cancelled) void ensureDetails();
       });
-    }, 900);
+    }, profileFeaturesPending ? 0 : 900);
     return () => {
       cancelled = true;
       clearTimeout(timer);
       interaction?.cancel();
     };
-  }, [coreRevision, refreshing, warmDetails, ensureDetails]);
+  }, [coreRevision, refreshing, warmDetails, profileFeaturesPending, ensureDetails]);
 
   // Standard-only Home needs the details-derived suitability index. Refresh /
   // bootstrap already force-rebuild, but kick ensureDetails here too so the
   // wait UI cannot stall if that post-work has not claimed the load yet.
   // Re-run when a prior load settles still-closed (detailsLoading → false).
+  // Profile account-feature picks also force a details load when still pending.
   useEffect(() => {
-    if (filterReady) {
+    if (ratesReady) {
       filterPrepAttempts.current = 0;
       return;
     }
-    if (!coreRevision || refreshing || includeNonStandard || detailsLoading) return;
+    if (!coreRevision || refreshing || detailsLoading) return;
+    if (!profileFeaturesPending && (includeNonStandard || filterReady)) return;
     if (filterPrepAttempts.current >= 3) return;
     filterPrepAttempts.current += 1;
     void ensureDetails({ force: true });
@@ -103,6 +109,8 @@ export default function Home() {
     refreshing,
     includeNonStandard,
     filterReady,
+    ratesReady,
+    profileFeaturesPending,
     detailsLoading,
     ensureDetails,
     suitabilityRevision,
@@ -110,34 +118,41 @@ export default function Home() {
 
   // If the load/rebuild settles without opening the gate, exit the permanent
   // "Preparing" progress state and offer retry. Also bound the spinner so a
-  // hung details download cannot leave Home waiting forever.
+  // hung details download cannot leave Home waiting forever. Profile feature
+  // picks use the same path — they also need details before the hero can run.
   useEffect(() => {
-    if (filterReady || includeNonStandard || refreshing || !coreRevision) {
+    if (ratesReady || refreshing || !coreRevision) {
       setFilterPrepFailed(false);
       return;
     }
     if (detailsLoading) {
       setFilterPrepFailed(false);
       const hung = setTimeout(() => {
-        if (!isSuitabilityFilterReady(includeNonStandard)) {
-          setFilterPrepFailed(true);
-        }
+        const stillWaiting =
+          !isSuitabilityFilterReady(includeNonStandard) ||
+          (profileFeaturesForSection(profileFilters, section).length > 0 &&
+            !useStore.getState().details?.products);
+        if (stillWaiting) setFilterPrepFailed(true);
       }, 12_000);
       return () => clearTimeout(hung);
     }
     const timer = setTimeout(() => {
-      if (!isSuitabilityFilterReady(includeNonStandard)) {
-        setFilterPrepFailed(true);
-      }
+      const stillWaiting =
+        !isSuitabilityFilterReady(includeNonStandard) ||
+        (profileFeaturesForSection(profileFilters, section).length > 0 &&
+          !useStore.getState().details?.products);
+      if (stillWaiting) setFilterPrepFailed(true);
     }, 400);
     return () => clearTimeout(timer);
   }, [
-    filterReady,
+    ratesReady,
     includeNonStandard,
     refreshing,
     coreRevision,
     detailsLoading,
     suitabilityRevision,
+    profileFilters,
+    section,
   ]);
 
   const retryFilterPrep = useCallback(() => {
@@ -160,13 +175,14 @@ export default function Home() {
     },
     [sectionData, hierRows, includeNonStandard, section, detailsProducts, suitabilityRevision],
   );
-  // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR).
+  // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR,
+  // and must-have account features once details are warm).
   const profileCount = profileSectionCount(profileFilters, section);
   const best = useMemo(
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(hierRows, profileFilters, section),
+        profileFilterRows(hierRows, profileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -179,7 +195,7 @@ export default function Home() {
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(sectionRows ?? [], profileFilters, section),
+        profileFilterRows(sectionRows ?? [], profileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -205,18 +221,18 @@ export default function Home() {
   if (!core) return null;
   const sectionAccent = meta.accentColor;
   const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  const activeBest = filterReady ? best ?? fallbackBest : null;
+  const activeBest = ratesReady ? best ?? fallbackBest : null;
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
   // show nothing (not the market extreme) when nothing matches.
   const heroBest = activeBest ? rankFraction(activeBest, section, depositRankMetric) : null;
-  const heroRate = !filterReady
+  const heroRate = !ratesReady
     ? null
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
   const bestNote = conditionalNote(activeBest, section);
-  const heroDataKey = `${core.run_date}:${section}:${filterReady ? heroRate ?? 'na' : 'warming'}`;
+  const heroDataKey = `${core.run_date}:${section}:${ratesReady ? heroRate ?? 'na' : 'warming'}`;
 
   return (
     <ScreenScrollView
@@ -241,7 +257,7 @@ export default function Home() {
 
       <SectionCrossfade section={section}>
       <Card style={{ borderColor: `${sectionAccent}44` }}>
-        {!filterReady ? (
+        {!ratesReady ? (
           <View style={{ gap: theme.spacing(3) }}>
             <View>
               <AppText variant="tiny" color="textFaint" weight="700">
@@ -250,7 +266,9 @@ export default function Home() {
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
                 {filterPrepFailed
                   ? 'Could not prepare filtered rates for today.'
-                  : 'Preparing filtered rates for today…'}
+                  : profileFeaturesPending
+                    ? 'Preparing rates that match your profile features…'
+                    : 'Preparing filtered rates for today…'}
               </AppText>
             </View>
             {filterPrepFailed ? (

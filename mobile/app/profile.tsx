@@ -18,9 +18,10 @@ export default function Profile() {
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
       <AppText variant="body" color="textMuted" style={{ marginBottom: 16, lineHeight: 22 }}>
-        Pick the product attributes that match your situation — owner-occupied, P&I, your LVR,
-        and so on. They apply automatically as filters across the app, so you never have to
-        re-select them. Leave a group empty to see everything.
+        Pick the product attributes that match your situation — owner-occupied, P&I, your LVR —
+        and must-have features like an offset account or early repayment. They apply as default
+        search filters across the app, so you never have to re-select them. Leave a group empty
+        to see everything.
       </AppText>
       <Card>
         <ProfileEditor

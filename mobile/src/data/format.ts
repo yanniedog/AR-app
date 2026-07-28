@@ -77,7 +77,17 @@ export function bpsBetween(a: number | null, b: number | null): number | null {
 const ACRONYMS = new Set(['LVR', 'TD', 'PI', 'IO', 'FX', 'SMSF', 'P&I']);
 
 const ENUM_LABEL_OVERRIDES: Record<string, string> = {
-  OFFSET: 'Mortgage offset',
+  OFFSET: 'Offset account',
+  EXTRA_REPAYMENTS: 'Early / extra repayments',
+  REDRAW: 'Redraw facility',
+  GUARANTOR: 'Guarantor option',
+  CASHBACK_OFFER: 'Cashback offer',
+  NPP_PAYID: 'PayID',
+  UNLIMITED_TXNS: 'Unlimited transactions',
+  FREE_TXNS: 'Free transactions',
+  BILL_PAYMENT: 'Bill payment',
+  CARD_ACCESS: 'Card access',
+  DIGITAL_BANKING: 'Digital banking',
 };
 
 /** Humanize a CDR enum like "PRINCIPAL_AND_INTEREST" -> "Principal & interest". */
