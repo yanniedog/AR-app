@@ -49,8 +49,8 @@ export type FinalizedManifestResolution =
 /**
  * Resolve which manifest the app may adopt.
  * - Rolling day listed in dates-index → adopt rolling.
- * - Dated release for the rolling day exists → adopt that dated snapshot
- *   (dates-index may lag a completed publish).
+ * - Rolling day ahead of dates-index and dated release exists → adopt that
+ *   dated snapshot (dates-index may lag a completed publish).
  * - Rolling day ahead of dates-index with no dated release yet → keep pending
  *   flag; return the latest finalized dated manifest when available.
  * - dates-index unreachable → return rolling and let the caller keep cache.
@@ -96,10 +96,20 @@ export async function resolveFinalizedManifest(
 
   // dates-index can lag a completed dated publish (seen 2026-07-28: dated tag
   // and rolling assets matched, but dates-index still ended at 2026-07-27).
-  // Presence of the immutable dated release is a stronger finalize signal.
-  if (pendingIngestRunDate) {
+  // Only probe when rolling is strictly ahead of the index — never adopt an
+  // older dated snapshot when the index claims a newer day than rolling.
+  if (pendingIngestRunDate && latestFinal && pendingIngestRunDate > latestFinal) {
+    let datedRolling: Manifest | undefined;
     try {
-      const datedRolling = await fetchDated(pendingIngestRunDate);
+      datedRolling = await fetchDated(pendingIngestRunDate);
+    } catch (err) {
+      debugLog.info(
+        'ingest',
+        `dated release not ready for run_date=${pendingIngestRunDate}: ${String((err as Error)?.message ?? err)}`,
+      );
+    }
+
+    if (datedRolling) {
       const datedRunDate = String(datedRolling.run_date || '').slice(0, 10);
       if (datedRunDate === pendingIngestRunDate) {
         debugLog.info(
@@ -116,11 +126,6 @@ export async function resolveFinalizedManifest(
       debugLog.warn(
         'ingest',
         `dated manifest run_date mismatch want=${pendingIngestRunDate} got=${datedRolling.run_date}`,
-      );
-    } catch (err) {
-      debugLog.info(
-        'ingest',
-        `dated release not ready for run_date=${pendingIngestRunDate}: ${String((err as Error)?.message ?? err)}`,
       );
     }
   }

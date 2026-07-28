@@ -85,6 +85,32 @@ describe('ingestFinalized', () => {
     expect(fetchDated).not.toHaveBeenCalledWith('2026-07-27');
   });
 
+  it('does not adopt a dated release when dates-index is ahead of rolling', async () => {
+    const staleRolling: Manifest = {
+      ...sampleManifest,
+      run_date: '2026-07-26',
+    };
+    const indexAhead: DatesIndex = {
+      schema_version: 1,
+      dates: ['2026-07-25', '2026-07-27'],
+      count: 2,
+      min_date: '2026-07-25',
+      latest_date: '2026-07-27',
+    };
+    const fetchDated = jest.fn(async () => {
+      throw new Error('should not probe dated for stale rolling');
+    });
+    const resolution = await resolveFinalizedManifest(staleRolling, {
+      fetchIndex: async () => indexAhead,
+      fetchDated,
+    });
+
+    expect(resolution.status).toBe('pending');
+    expect(resolution.pendingIngestRunDate).toBe('2026-07-26');
+    expect(resolution.manifest).toBeNull();
+    expect(fetchDated).not.toHaveBeenCalled();
+  });
+
   it('returns finalized rolling when dates-index includes it', async () => {
     const index = {
       ...indexThrough27,
