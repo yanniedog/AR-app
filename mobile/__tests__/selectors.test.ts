@@ -229,12 +229,40 @@ describe('selectors', () => {
     ];
     // The legacy "comparison" sort must not reintroduce bonus-first ordering.
     expect(sortRows(rows, 'comparison', 'Savings').map((r) => r.product_key)).toEqual(['A|S', 'B|S']);
-    // Loans keep comparison-rate ordering (rankFraction = comparison-or-headline).
+    // Loans: "comparison" ranks by comparison rate; "rate" ranks by headline.
     const loans = [
       mk({ product_key: 'L1', rate: '0.061', comparison_rate: '0.059' }),
       mk({ product_key: 'L2', rate: '0.058', comparison_rate: '0.060' }),
     ];
     expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual(['L1', 'L2']);
+    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual(['L2', 'L1']);
+  });
+
+  test('sortRows mortgage rate key follows advertised headline rates on cards', () => {
+    // Mirrors Browse leaf ordering: big green rate must ascend even when
+    // comparison rates would scramble that sequence.
+    const loans = [
+      mk({ product_key: 'GO', product_name: 'Go Basic', rate: '0.0595', comparison_rate: '0.0599' }),
+      mk({ product_key: 'ALL', product_name: 'Allium Premium', rate: '0.0599', comparison_rate: '0.0599' }),
+      mk({ product_key: 'CLS', product_name: 'Classic', rate: '0.0629', comparison_rate: '0.0600' }),
+      mk({ product_key: 'BEN', product_name: 'Bendigo Express', rate: '0.0589', comparison_rate: '0.0602' }),
+      mk({ product_key: 'RD', product_name: 'Real Deal', rate: '0.0599', comparison_rate: '0.0603' }),
+    ];
+    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
+      'BEN',
+      'GO',
+      'ALL',
+      'RD',
+      'CLS',
+    ]);
+    // Equal comparison rates (GO/ALL at 5.99%) break ties by product name.
+    expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual([
+      'ALL',
+      'GO',
+      'CLS',
+      'BEN',
+      'RD',
+    ]);
   });
 
   test('sortRows by bank A-Z', () => {
