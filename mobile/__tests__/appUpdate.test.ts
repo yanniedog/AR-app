@@ -134,8 +134,11 @@ describe('appUpdateLogic', () => {
 describe('APK download integrity', () => {
   it('treats missing status as success (compat with older mocks)', () => {
     expect(isSuccessfulDownloadStatus(undefined)).toBe(true);
+    expect(isSuccessfulDownloadStatus(null)).toBe(true);
     expect(isSuccessfulDownloadStatus(200)).toBe(true);
     expect(isSuccessfulDownloadStatus(404)).toBe(false);
+    expect(isSuccessfulDownloadStatus(Number.NaN)).toBe(false);
+    expect(isSuccessfulDownloadStatus(Number.POSITIVE_INFINITY)).toBe(false);
   });
 
   it('rejects empty or truncated downloads before sha256', () => {

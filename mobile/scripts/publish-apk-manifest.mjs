@@ -338,6 +338,11 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   // app-apk-latest/app-preview.apk URL is clobbered on every publish; clients that
   // raced that replace downloaded a tiny/wrong body and failed sha256 checks.
   const versionedTagName = versionTag(version);
+  if (!/^app-v\d+\.\d+\.\d+/.test(String(versionedTagName || ''))) {
+    throw new Error(
+      `publish-apk-manifest: refusing to publish with malformed version tag from version=${JSON.stringify(version)} → ${JSON.stringify(versionedTagName)}`,
+    );
+  }
   const downloadUrl = apkDownloadUrl(repo, versionedTagName);
 
   const manifest = {

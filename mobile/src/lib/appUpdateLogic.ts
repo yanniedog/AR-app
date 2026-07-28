@@ -50,9 +50,14 @@ function manifestFetchUrl(url: string): string {
   return `${url}${sep}_=${Date.now()}`;
 }
 
-/** True when an HTTP status from FileSystem download looks successful. */
+/**
+ * True when an HTTP status from FileSystem download looks successful.
+ * `null`/`undefined` are treated as success because some mocks omit status.
+ * Non-finite numeric values (e.g., NaN, Infinity) are treated as failure.
+ */
 export function isSuccessfulDownloadStatus(status: number | undefined | null): boolean {
-  if (status == null || !Number.isFinite(status)) return true; // some mocks omit status
+  if (status == null) return true; // some mocks omit status
+  if (!Number.isFinite(status)) return false;
   return status >= 200 && status < 300;
 }
 
