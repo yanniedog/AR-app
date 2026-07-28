@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useScrollToTop } from '@react-navigation/native';
-import { router } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
@@ -57,6 +56,7 @@ export default function Trends() {
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const retryBankInsights = useStore((s) => s.retryBankInsights);
   const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
+  const setPref = useStore((s) => s.setPref);
   const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const suitabilityRevision = useSuitabilityRevision();
@@ -104,23 +104,6 @@ export default function Trends() {
 
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
-  const historyModel = useMemo(() => {
-    void suitabilityRevision;
-    return core
-      ? selectBankHistoryChartModel(
-          { core, historyBanks, includeNonStandard, detailsProducts },
-          activeSection,
-          'All',
-        )
-      : null;
-  }, [
-    activeSection,
-    core,
-    detailsProducts,
-    historyBanks,
-    includeNonStandard,
-    suitabilityRevision,
-  ]);
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
     return filterBankInsightsForSuitability(
@@ -130,20 +113,52 @@ export default function Trends() {
       detailsProducts,
     );
   }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+  const historyModel = useMemo(() => {
+    void suitabilityRevision;
+    return core
+      ? selectBankHistoryChartModel(
+          {
+            core,
+            historyBanks,
+            bankInsights: explorerInsights,
+            includeNonStandard,
+            detailsProducts,
+          },
+          activeSection,
+          'All',
+        )
+      : null;
+  }, [
+    activeSection,
+    core,
+    detailsProducts,
+    explorerInsights,
+    historyBanks,
+    includeNonStandard,
+    suitabilityRevision,
+  ]);
   const standardFilterWarming = useMemo(() => {
     void suitabilityRevision;
     return !includeNonStandard && getSuitabilityAllowed()?.size === 0;
   }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
-    const key = showHistoryRibbon ? core?.run_date ?? null : null;
+    if (!showHistoryRibbon) {
+      historyRequestKey.current = null;
+      return;
+    }
+    const key = core?.run_date ?? null;
     if (!key || historyRequestKey.current === key) return;
     historyRequestKey.current = key;
     void ensureHistoryBanks();
   }, [core?.run_date, ensureHistoryBanks, showHistoryRibbon]);
 
   useEffect(() => {
-    const key = showBankInsights ? core?.run_date ?? null : null;
+    if (!showBankInsights) {
+      insightsRequestKey.current = null;
+      return;
+    }
+    const key = core?.run_date ?? null;
     if (!key || insightsRequestKey.current === key) return;
     insightsRequestKey.current = key;
     void ensureBankInsights();
@@ -375,10 +390,13 @@ export default function Trends() {
           </>
         ) : (
           <Button
-            title="Enable in Settings"
+            title="Enable Market explorer"
             icon="sparkles"
             variant="secondary"
-            onPress={() => router.push('/(tabs)/settings')}
+            onPress={() => {
+              if (!requestPro('history_ribbon')) return;
+              setPref('showHistoryRibbon', true);
+            }}
           />
         )}
       </Card>
@@ -436,7 +454,14 @@ export default function Trends() {
       <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 8 }}>
         Snapshot from {formatRunDate(core.run_date)}
       </AppText>
-      <ProPaywall visible={paywallVisible} intent={paywallIntent} onClose={closePaywall} />
+      <ProPaywall
+        visible={paywallVisible}
+        intent={paywallIntent}
+        onClose={closePaywall}
+        onUpgraded={() => {
+          if (paywallIntent === 'history_ribbon') setPref('showHistoryRibbon', true);
+        }}
+      />
     </ScreenScrollView>
   );
 }

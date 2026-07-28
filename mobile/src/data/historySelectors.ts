@@ -8,12 +8,14 @@ import type {
   RateRow,
   SectionKey,
 } from '../types';
+import type { BankInsightsPayload } from './bankInsights';
 import { chartModelFromPrebuiltHistory, type HistoryBanksPayload } from './historyPayload';
 import {
   alignPointsToTimeline,
   historyDatesInWindow,
   normalizeTimelineDates,
   sanitizeRibbonPoint,
+  sliceChartTimeline,
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
 import { toFraction, visibleAccountRows } from './format';
@@ -120,8 +122,82 @@ export interface HistorySelectorState {
   core: CorePayload | null;
   historyBanks?: HistoryBanksPayload | null;
   historyCache?: BankHistoryCache | null;
+  /**
+   * Suitability-filtered bank intelligence. Used for multi-day Spread/Calendar
+   * when prebuilt history_banks is unsafe under Standard products only.
+   */
+  bankInsights?: BankInsightsPayload | null;
   includeNonStandard?: boolean;
   detailsProducts?: Record<string, ProductDetail> | null;
+}
+
+/**
+ * Aggregate filtered per-bank medians/bests into a section ribbon series.
+ * Prefer this under Standard products only — prebuilt history_banks mixes the
+ * full catalogue and cannot be product-gated on device.
+ */
+export function chartModelFromBankInsights(
+  payload: BankInsightsPayload | null | undefined,
+  section: SectionKey,
+  window: HistoryWindow = 'All',
+): Omit<BankHistoryChartModel, 'section'> | null {
+  try {
+    if (!payload?.run_dates?.length) return null;
+
+    const allDates = normalizeTimelineDates(payload.run_dates);
+    if (!allDates.length) return null;
+
+    const dateIndex = new Map(payload.run_dates.map((date, i) => [date, i]));
+    const points: BankHistoryPoint[] = allDates.map((date) => {
+      const idx = dateIndex.get(date);
+      if (idx == null) return sanitizeRibbonPoint(date, { date, min: null, max: null, mean: null, median: null, count: 0 });
+
+      const medians: number[] = [];
+      const bests: number[] = [];
+      for (const sections of Object.values(payload.banks)) {
+        const series = sections?.[section];
+        if (!series) continue;
+        const median = series.median[idx];
+        const best = series.best[idx];
+        if (typeof median === 'number' && Number.isFinite(median)) medians.push(median);
+        if (typeof best === 'number' && Number.isFinite(best)) bests.push(best);
+      }
+
+      if (!medians.length && !bests.length) {
+        return sanitizeRibbonPoint(date, { date, min: null, max: null, mean: null, median: null, count: 0 });
+      }
+
+      const typicalPool = medians.length ? medians : bests;
+      const rangePool = bests.length || medians.length ? [...medians, ...bests] : typicalPool;
+      const sum = typicalPool.reduce((acc, value) => acc + value, 0);
+      return sanitizeRibbonPoint(date, {
+        date,
+        min: Math.min(...rangePool),
+        max: Math.max(...rangePool),
+        mean: sum / typicalPool.length,
+        median: medianOf(typicalPool),
+        count: Math.max(medians.length, bests.length),
+      });
+    });
+
+    const observed = points.filter((p) => p.min != null || p.max != null || p.median != null);
+    if (!observed.length) return null;
+
+    const aligned = alignPointsToTimeline(allDates, points);
+    const sliced = sliceChartTimeline(allDates, aligned, window);
+    if (!sliced.dates.length) return null;
+    return {
+      dates: sliced.dates,
+      points: sliced.points,
+      allDates,
+    };
+  } catch (err) {
+    debugLog.error(
+      'historySelectors',
+      `chartModelFromBankInsights failed section=${section}: ${String((err as Error)?.message ?? err)}`,
+    );
+    return null;
+  }
 }
 
 /**
@@ -138,6 +214,7 @@ export function selectBankHistoryChartModel(
       core,
       historyBanks,
       historyCache,
+      bankInsights,
       includeNonStandard = false,
       detailsProducts,
     } = state;
@@ -175,6 +252,18 @@ export function selectBankHistoryChartModel(
         dates: aggregate.dates,
         points: alignPointsToTimeline(aggregate.dates, aggregate.points),
         allDates: aggregate.allDates,
+      };
+    }
+
+    // Suitability-filtered bank intelligence keeps Spread/Calendar populated when
+    // prebuilt history_banks is withheld under Standard products only.
+    const fromInsights = chartModelFromBankInsights(bankInsights, section, window);
+    if (fromInsights?.dates.length) {
+      return {
+        section,
+        dates: fromInsights.dates,
+        points: fromInsights.points,
+        allDates: fromInsights.allDates,
       };
     }
 
