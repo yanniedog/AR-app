@@ -241,27 +241,69 @@ describe('selectors', () => {
   test('sortRows mortgage rate key follows advertised headline rates on cards', () => {
     // Mirrors Browse leaf ordering: big green rate must ascend even when
     // comparison rates would scramble that sequence.
+    // Also asserts tie-breaking when rate and comparison_rate are equal:
+    // falls back to provider, then product_name (same identity order as bank sort).
     const loans = [
       mk({ product_key: 'GO', product_name: 'Go Basic', rate: '0.0595', comparison_rate: '0.0599' }),
       mk({ product_key: 'ALL', product_name: 'Allium Premium', rate: '0.0599', comparison_rate: '0.0599' }),
       mk({ product_key: 'CLS', product_name: 'Classic', rate: '0.0629', comparison_rate: '0.0600' }),
       mk({ product_key: 'BEN', product_name: 'Bendigo Express', rate: '0.0589', comparison_rate: '0.0602' }),
       mk({ product_key: 'RD', product_name: 'Real Deal', rate: '0.0599', comparison_rate: '0.0603' }),
+      mk({
+        product_key: 'TIE1',
+        product_name: 'Alpha Home Loan',
+        provider: 'Bank A',
+        rate: '0.0610',
+        comparison_rate: '0.0610',
+      }),
+      mk({
+        product_key: 'TIE2',
+        product_name: 'Alpha Home Loan',
+        provider: 'Bank B',
+        rate: '0.0610',
+        comparison_rate: '0.0610',
+      }),
+      mk({
+        product_key: 'TIE3',
+        product_name: 'Beta Home Loan',
+        provider: 'Bank A',
+        rate: '0.0610',
+        comparison_rate: '0.0610',
+      }),
     ];
     expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
       'BEN',
       'GO',
       'ALL',
       'RD',
+      'TIE1', // Bank A, Alpha
+      'TIE3', // Bank A, Beta
+      'TIE2', // Bank B, Alpha
       'CLS',
     ]);
-    // Equal comparison rates (GO/ALL at 5.99%) break ties by product name.
+    // Equal comparison rates (GO/ALL at 5.99%) break ties by provider then name.
     expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual([
       'ALL',
       'GO',
       'CLS',
       'BEN',
       'RD',
+      'TIE1',
+      'TIE3',
+      'TIE2',
+    ]);
+  });
+
+  test('sortRows mortgage rate key puts missing comparison rates last among headline ties', () => {
+    const loans = [
+      mk({ product_key: 'HAS', product_name: 'Has Cmp', rate: '0.060', comparison_rate: '0.061' }),
+      mk({ product_key: 'MISS', product_name: 'Missing Cmp', rate: '0.060' }),
+      mk({ product_key: 'BETTER', product_name: 'Better Cmp', rate: '0.060', comparison_rate: '0.059' }),
+    ];
+    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
+      'BETTER',
+      'HAS',
+      'MISS',
     ]);
   });
 
