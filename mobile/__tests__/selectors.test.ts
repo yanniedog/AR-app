@@ -159,6 +159,10 @@ describe('selectors', () => {
     expect(
       rankFraction(mk({ rate: '0.06', comparison_rate: '0.061' }), 'Mortgage', 'base', 'comparison'),
     ).toBeCloseTo(0.061);
+    // When comparison is unpublished, mortgage comparison metric falls back to headline.
+    expect(
+      rankFraction(mk({ rate: '0.06' }), 'Mortgage', 'base', 'comparison'),
+    ).toBeCloseTo(0.06);
   });
 
   test('bestRow (savings) ignores conditional bonus rates by default', () => {
@@ -315,6 +319,34 @@ describe('selectors', () => {
       'BETTER',
       'HAS',
       'MISS',
+    ]);
+    // Comparison metric ranks purely by comparison/effective rate (no headline tie-break).
+    // MISS falls back to its headline (6.0%), so it sorts between BETTER (5.9%) and HAS (6.1%).
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'BETTER',
+      'MISS',
+      'HAS',
+    ]);
+    // Explicit comparison sort key uses the same effective-rate ordering.
+    expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual([
+      'BETTER',
+      'MISS',
+      'HAS',
+    ]);
+  });
+
+  test('sortRows mortgage comparison metric ignores headline when rates diverge', () => {
+    const loans = [
+      mk({ product_key: 'LOW_HEAD', rate: '0.055', comparison_rate: '0.062' }),
+      mk({ product_key: 'LOW_CMP', rate: '0.060', comparison_rate: '0.058' }),
+    ];
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline').map((r) => r.product_key)).toEqual([
+      'LOW_HEAD',
+      'LOW_CMP',
+    ]);
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
+      'LOW_CMP',
+      'LOW_HEAD',
     ]);
   });
 

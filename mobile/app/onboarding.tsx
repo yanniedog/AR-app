@@ -11,9 +11,9 @@ import { AppText, Button, Card, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import { DEFAULT_INTERESTS, toggleInterest } from '../src/data/interests';
 import { EMPTY_PROFILE, type ProfileFilters } from '../src/data/profile';
-import { formatRate } from '../src/data/format';
+import { formatRankedFraction, formatRate } from '../src/data/format';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
-import { bestRow } from '../src/data/selectors';
+import { bestRow, rankFraction } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { rowsUnder } from '../src/data/taxonomy';
 import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifications';
@@ -122,7 +122,11 @@ export default function Onboarding() {
     const hierRows = rowsUnder(sectionRows ?? [], section, []);
     const stats = resolveSectionRibbonStats(sectionData, hierRows, false, section);
     const best = bestRow(hierRows, section, false, depositRankMetric, null, mortgageRateMetric);
-    const heroRate = meta.lowerIsBetter ? stats.min : stats.max;
+    const heroRate = best
+      ? rankFraction(best, section, depositRankMetric, mortgageRateMetric)
+      : meta.lowerIsBetter
+        ? stats.min
+        : stats.max;
     const rba = section === 'Mortgage' ? core.rba?.at(-1)?.rate : undefined;
     return { best, heroRate, stats, rba, runDate: core.run_date };
   }, [core, section, meta.lowerIsBetter, depositRankMetric, mortgageRateMetric, suitabilityRevision]);
@@ -204,7 +208,7 @@ export default function Onboarding() {
               Best rate today · {snapshot?.runDate ?? '—'}
             </AppText>
             <AppText variant="h1" weight="800" style={{ color: accent, marginTop: 6 }}>
-              {snapshot?.heroRate != null ? `${(snapshot.heroRate * 100).toFixed(2)}%` : '—'}
+              {snapshot?.heroRate != null ? formatRankedFraction(snapshot.heroRate) : '—'}
             </AppText>
             {snapshot?.best ? (
               <Row gap={10} style={{ marginTop: 12, alignItems: 'center' }}>
