@@ -195,8 +195,6 @@ export default function DebugLogScreen() {
                 variant="small"
                 selectable
                 style={{ fontFamily: 'monospace' }}
-                accessibilityRole="text"
-                accessibilityLabel={`Paste link ${uploadUrl}`}
               >
                 {uploadUrl}
               </AppText>

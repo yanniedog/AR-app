@@ -285,9 +285,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           optionalWork = optionalRefreshWork(live.manifest, remote);
           // Persist enriched optional file entries so the next cold start does
           // not re-load a core/details-only dated manifest from cache meta.
-          const cachedOptionalMissing = OPTIONAL_MANIFEST_KEYS.some(
-            (key) => !meta.manifest.files[key] && !!remote.files[key],
-          );
+          const cachedOptionalMissing =
+            !!meta?.manifest &&
+            OPTIONAL_MANIFEST_KEYS.some(
+              (key) => !meta.manifest.files[key] && !!remote.files[key],
+            );
           if (cachedOptionalMissing) {
             await cache.updateMeta({
               coreSha: remote.files.core.sha256,
