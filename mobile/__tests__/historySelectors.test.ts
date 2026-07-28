@@ -71,7 +71,7 @@ describe('historySelectors', () => {
     const insights: BankInsightsPayload = {
       schema_version: 1,
       run_date: '2026-06-01',
-      run_dates: ['2026-05-01', '2026-05-15', '2026-06-01'],
+      run_dates: ['2026-05-01T12:00:00Z', '2026-05-15', '2026-06-01'],
       banks: {
         AlphaBank: {
           Mortgage: {

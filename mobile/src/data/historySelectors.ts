@@ -147,7 +147,13 @@ export function chartModelFromBankInsights(
     const allDates = normalizeTimelineDates(payload.run_dates);
     if (!allDates.length) return null;
 
-    const dateIndex = new Map(payload.run_dates.map((date, i) => [date, i]));
+    // Index by the same YYYY-MM-DD keys normalizeTimelineDates emits so lookups
+    // stay aligned when run_dates carry longer timestamps or duplicates.
+    const dateIndex = new Map<string, number>();
+    payload.run_dates.forEach((raw, i) => {
+      const date = String(raw ?? '').slice(0, 10);
+      if (date && !dateIndex.has(date)) dateIndex.set(date, i);
+    });
     const points: BankHistoryPoint[] = allDates.map((date) => {
       const idx = dateIndex.get(date);
       if (idx == null) return sanitizeRibbonPoint(date, { date, min: null, max: null, mean: null, median: null, count: 0 });
@@ -168,7 +174,7 @@ export function chartModelFromBankInsights(
       }
 
       const typicalPool = medians.length ? medians : bests;
-      const rangePool = bests.length || medians.length ? [...medians, ...bests] : typicalPool;
+      const rangePool = [...medians, ...bests];
       const sum = typicalPool.reduce((acc, value) => acc + value, 0);
       return sanitizeRibbonPoint(date, {
         date,
