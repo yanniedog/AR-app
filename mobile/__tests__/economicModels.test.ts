@@ -1,9 +1,14 @@
 import {
+  coverageLabelForDate,
   economicMomentumModel,
   economicPointAtOrBefore,
   economicPointsInWindow,
+  economicReleaseRow,
+  economicReleasesModel,
   indicatorHistoryModel,
   inflationExpectationsModel,
+  meetingBiasModel,
+  meetingLeanForIndicator,
   normalizeEconomicPoints,
   policyPathModel,
 } from '../src/data/economicModels';
@@ -217,5 +222,46 @@ describe('economic graph models', () => {
     expect(threeYear?.points.length).toBeGreaterThan(oneYear!.points.length);
     expect(fiveYear?.points.length).toBeGreaterThanOrEqual(threeYear!.points.length);
     expect(oneYear?.points.at(-1)).toEqual(all?.points.at(-1));
+  });
+
+  it('builds chronological release rows with vs-prior and tempered meeting lean', () => {
+    expect(coverageLabelForDate('2026-06-30')).toBe('Jun 2026');
+    const data = payload();
+    data.indicators.push({
+      id: 'headline_inflation',
+      label: 'Headline CPI',
+      shortLabel: 'All groups',
+      publicationDate: '2026-07-29',
+      observationDate: '2026-06-30',
+      points: [
+        { date: '2026-05-31', value: 4.0 },
+        { date: '2026-06-30', value: 3.8 },
+      ],
+      targetBand: [2, 3],
+      signal: {
+        direction: 'higher',
+        label: 'Above 2–3% band',
+        explanation: 'Persistent inflation pressure can make cuts harder.',
+      },
+      sourceUrl: 'https://www.abs.gov.au/',
+      checkedAt: '2026-07-29T00:00:00.000Z',
+      frequency: 'monthly',
+      status: 'current',
+      sourceAgency: 'abs',
+    });
+    const headline = data.indicators.find((item) => item.id === 'headline_inflation')!;
+    expect(meetingLeanForIndicator(headline).lean).toBe('hold');
+    const row = economicReleaseRow(headline);
+    expect(row?.coverageLabel).toBe('Jun 2026');
+    expect(row?.updateDate).toBe('2026-07-29');
+    expect(row?.vsPrior).toBe('below');
+    expect(row?.delta).toBe(-0.2);
+    expect(row?.meetingLean).toBe('hold');
+    const rows = economicReleasesModel(data);
+    expect(rows[0]?.id).toBe('headline_inflation');
+    const bias = meetingBiasModel(data);
+    expect(bias?.rows.length).toBeGreaterThan(0);
+    expect(['cut', 'raise', 'hold']).toContain(bias!.lean);
+    expect(bias?.rationale).toContain('interpretation');
   });
 });
