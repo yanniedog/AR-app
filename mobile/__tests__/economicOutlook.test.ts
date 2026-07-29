@@ -1,11 +1,14 @@
 import {
+  absPeriodToIsoDate,
   buildEconomicOutlookFromCsv,
   cashRateTargetSteps,
   economicSignal,
   loadEconomicOutlook,
+  parseAbsCpiCsv,
   parseCashForecastCsv,
   parseCashRateTargetCsv,
   parseRbaSeriesCsv,
+  preferNewerSeries,
 } from '../src/data/economicOutlook';
 import { cache } from '../src/data/cache';
 
@@ -92,6 +95,16 @@ function cashRateCsv(values: [string, number][], publication = '28-Jul-2026') {
   return multiSeriesCsv([{ id: 'FIRMMCRTD', values }], publication);
 }
 
+function absHeadlineCsv(values: [string, number][]) {
+  return [
+    'DATAFLOW,MEASURE,INDEX,TSEST,REGION,FREQ,TIME_PERIOD,OBS_VALUE,UNIT_MEASURE',
+    ...values.map(
+      ([period, value]) =>
+        `ABS:CPI(2.0.0),3,10001,10,50,M,${period},${value},PCT`,
+    ),
+  ].join('\n');
+}
+
 const cashCsv = [
   'J1 MARKET ECONOMISTS FORECASTS',
   'Publication date,08-May-2026,08-May-2026',
@@ -117,7 +130,15 @@ function csvForUrl(url: string, overrides?: {
   expectations?: string;
   cashForecast?: string;
   cashRate?: string;
+  absHeadline?: string;
 }) {
+  if (url.includes('data.api.abs.gov.au') || url.includes('ABS,CPI')) {
+    return overrides?.absHeadline ?? absHeadlineCsv([
+      ['2026-04', 4.2],
+      ['2026-05', 4.0],
+      ['2026-06', 3.8],
+    ]);
+  }
   if (url.includes('g1-data')) return overrides?.inflation ?? inflationCsv([['31/03/2026', 3.1]]);
   if (url.includes('g3-data')) return overrides?.expectations ?? expectationsCsv([['31/03/2026', 2.7]]);
   if (url.includes('h5-data')) {
@@ -130,6 +151,14 @@ function csvForUrl(url: string, overrides?: {
   if (url.includes('j1-cash-rate')) return overrides?.cashForecast ?? cashCsv;
   if (url.includes('f1-data')) return overrides?.cashRate ?? defaultCashRateHistory;
   throw new Error(`unexpected economic URL ${url}`);
+}
+
+function mockCsvResponse(url: string, overrides?: Parameters<typeof csvForUrl>[1]): Response {
+  return {
+    ok: true,
+    headers: { get: () => null },
+    text: async () => csvForUrl(url, overrides),
+  } as unknown as Response;
 }
 
 function fullOutlookCsv(fetchedAt = '2026-07-16T00:00:00.000Z') {
@@ -176,6 +205,67 @@ describe('economic outlook', () => {
         { date: '2026-12-01', value: 3.95 },
       ],
     });
+  });
+
+  it('parses ABS monthly CPI year-ended percentages and period dates', () => {
+    expect(absPeriodToIsoDate('2026-06')).toBe('2026-06-30');
+    expect(absPeriodToIsoDate('2026-Q2')).toBe('2026-06-30');
+    const parsed = parseAbsCpiCsv(
+      absHeadlineCsv([
+        ['2026-04', 4.2],
+        ['2026-05', 4.0],
+        ['2026-06', 3.8],
+      ]),
+      '2026-07-29',
+    );
+    expect(parsed.sourceAgency).toBe('abs');
+    expect(parsed.publicationDate).toBe('2026-07-29');
+    expect(parsed.points.at(-1)).toEqual({ date: '2026-06-30', value: 3.8 });
+  });
+
+  it('prefers ABS headline CPI when it is newer than RBA G1', () => {
+    const model = buildEconomicOutlookFromCsv({
+      inflation: inflationCsv([['31/03/2026', 3.1]]),
+      labour: labourCsv([['30/04/2026', 4.1]]),
+      wages: wagesCsv([['31/03/2026', 3.2]]),
+      expectations: expectationsCsv([['31/03/2026', 2.7]]),
+      cashForecast: cashCsv,
+      cashRate: defaultCashRateHistory,
+      absHeadline: absHeadlineCsv([
+        ['2026-05', 4.0],
+        ['2026-06', 3.8],
+      ]),
+      absHeadlinePublicationDate: '2026-07-29',
+    });
+    const headline = model.indicators.find((item) => item.id === 'headline_inflation');
+    expect(headline?.sourceAgency).toBe('abs');
+    expect(headline?.frequency).toBe('monthly');
+    expect(headline?.points.at(-1)).toEqual({ date: '2026-06-30', value: 3.8 });
+    expect(headline?.publicationDate).toBe('2026-07-29');
+    expect(preferNewerSeries(
+      parseAbsCpiCsv(absHeadlineCsv([['2026-06', 3.8]]), '2026-07-29'),
+      parseRbaSeriesCsv(seriesCsv('GCPIAGYP', [['31/03/2026', 4.1]]), 'GCPIAGYP'),
+    ).points.at(-1)?.date).toBe('2026-06-30');
+  });
+
+  it('falls back to RBA headline when ABS CPI is unavailable', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('data.api.abs.gov.au') || url.includes('ABS,CPI')) {
+        throw new Error('ABS offline');
+      }
+      return mockCsvResponse(url);
+    });
+
+    const outlook = await loadEconomicOutlook(true);
+    const headline = outlook.indicators.find((item) => item.id === 'headline_inflation');
+    expect(headline?.sourceAgency).toBe('rba');
+    expect(headline?.points.at(-1)?.date).toBe('2026-03-31');
+    expect(outlook.refreshErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('ABS headline CPI')]),
+    );
   });
 
   it('expresses directional pressure without manufacturing a probability', () => {
@@ -281,12 +371,9 @@ describe('economic outlook', () => {
     const backgroundResolvers: (() => void)[] = [];
     const fetchMock = jest.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = String(input);
-      if (fetchMock.mock.calls.length > 6) return Promise.reject(new Error('forced offline'));
+      if (fetchMock.mock.calls.length > 7) return Promise.reject(new Error('forced offline'));
       return new Promise<Response>((resolve) => {
-        backgroundResolvers.push(() => resolve({
-          ok: true,
-          text: async () => csvForUrl(url),
-        } as Response));
+        backgroundResolvers.push(() => resolve(mockCsvResponse(url)));
       });
     });
     const waitForFetchCalls = async (count: number) => {
@@ -297,9 +384,9 @@ describe('economic outlook', () => {
     };
 
     const background = loadEconomicOutlook(false);
-    await waitForFetchCalls(6);
+    await waitForFetchCalls(7);
     const forced = loadEconomicOutlook(true);
-    await waitForFetchCalls(12);
+    await waitForFetchCalls(14);
     backgroundResolvers.forEach((resolve) => resolve());
 
     await expect(forced).rejects.toThrow('forced offline');
@@ -320,19 +407,19 @@ describe('economic outlook', () => {
     const backgroundResolvers: (() => void)[] = [];
     const responseFor = (url: string, latest: boolean) => {
       const date = latest ? '30/06/2026' : '31/03/2026';
-      return {
-        ok: true,
-        text: async () => csvForUrl(url, {
-          inflation: inflationCsv([[date, latest ? 2.9 : 3.1]]),
-          expectations: expectationsCsv([[date, 2.7]]),
-          labour: labourCsv([[date, 4.1]]),
-          wages: wagesCsv([[date, 3.2]]),
-        }),
-      } as Response;
+      return mockCsvResponse(url, {
+        inflation: inflationCsv([[date, latest ? 2.9 : 3.1]]),
+        expectations: expectationsCsv([[date, 2.7]]),
+        labour: labourCsv([[date, 4.1]]),
+        wages: wagesCsv([[date, 3.2]]),
+        absHeadline: absHeadlineCsv([
+          [latest ? '2026-06' : '2026-03', latest ? 2.9 : 3.1],
+        ]),
+      });
     };
     const fetchMock = jest.spyOn(global, 'fetch').mockImplementation((input) => {
       const url = String(input);
-      if (fetchMock.mock.calls.length > 6) return Promise.resolve(responseFor(url, true));
+      if (fetchMock.mock.calls.length > 7) return Promise.resolve(responseFor(url, true));
       return new Promise<Response>((resolve) => {
         backgroundResolvers.push(() => resolve(responseFor(url, false)));
       });
@@ -345,9 +432,9 @@ describe('economic outlook', () => {
     };
 
     const background = loadEconomicOutlook(false);
-    await waitForFetchCalls(6);
+    await waitForFetchCalls(7);
     const forced = loadEconomicOutlook(true);
-    await waitForFetchCalls(12);
+    await waitForFetchCalls(14);
     const forcedResult = await forced;
     backgroundResolvers.forEach((resolve) => resolve());
     const backgroundResult = await background;
@@ -380,7 +467,7 @@ describe('economic outlook', () => {
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('j1-cash-rate')) throw new Error('forecast unavailable');
-      return { ok: true, text: async () => csvForUrl(url) } as Response;
+      return mockCsvResponse(url);
     });
 
     const outlook = await loadEconomicOutlook(true);
@@ -408,14 +495,11 @@ describe('economic outlook', () => {
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
       if (url.includes('h4-data')) throw new Error('wages unavailable');
-      return {
-        ok: true,
-        text: async () => csvForUrl(url, {
-          inflation: inflationCsv([['31/03/2026', 3.1]]),
-          expectations: expectationsCsv([['31/03/2026', 2.7]]),
-          labour: labourCsv([['31/03/2026', 4.1]]),
-        }),
-      } as Response;
+      return mockCsvResponse(url, {
+        inflation: inflationCsv([['31/03/2026', 3.1]]),
+        expectations: expectationsCsv([['31/03/2026', 2.7]]),
+        labour: labourCsv([['31/03/2026', 4.1]]),
+      });
     });
 
     const outlook = await loadEconomicOutlook(false);
@@ -445,15 +529,14 @@ describe('economic outlook', () => {
     jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
     jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
       const url = String(input);
-      return {
-        ok: true,
-        text: async () => csvForUrl(url, {
-          inflation: inflationCsv([['31/03/2026', 3.1]]),
-          expectations: expectationsCsv([['30/06/2026', 2.7]]),
-          labour: labourCsv([['30/06/2026', 4.1]]),
-          wages: wagesCsv([['30/06/2026', 3.2]]),
-        }),
-      } as Response;
+      return mockCsvResponse(url, {
+        inflation: inflationCsv([['31/03/2026', 3.1]]),
+        expectations: expectationsCsv([['30/06/2026', 2.7]]),
+        labour: labourCsv([['30/06/2026', 4.1]]),
+        wages: wagesCsv([['30/06/2026', 3.2]]),
+        // Older ABS than the cached June RBA observation must not regress cache.
+        absHeadline: absHeadlineCsv([['2026-03', 3.1]]),
+      });
     });
 
     const outlook = await loadEconomicOutlook(true);

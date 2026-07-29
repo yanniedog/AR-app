@@ -27,7 +27,10 @@ export interface EconomicIndicator {
   id: EconomicIndicatorId;
   label: string;
   shortLabel: string;
+  /** Official release / update date (ISO YYYY-MM-DD). */
   publicationDate: string;
+  /** Latest observation period covered by the reading (ISO YYYY-MM-DD). */
+  observationDate?: string;
   points: EconomicPoint[];
   targetBand?: [number, number];
   signal: EconomicSignal;
@@ -35,6 +38,8 @@ export interface EconomicIndicator {
   checkedAt?: string;
   frequency?: 'monthly' | 'quarterly';
   status?: 'current' | 'stale';
+  /** Which agency supplied the latest observation when dual-sourced. */
+  sourceAgency?: 'rba' | 'abs';
 }
 
 export interface CashRateForecast {
@@ -57,6 +62,13 @@ export interface EconomicOutlookPayload {
 
 const RBA_TABLE_BASE = 'https://www.rba.gov.au/statistics/tables/csv';
 export const RBA_ECONOMIC_TABLE_URL = 'https://www.rba.gov.au/statistics/tables/';
+/** ABS CPI Data API — year-ended % change, all groups, Australia, monthly. */
+const ABS_DATA_API_BASE = 'https://data.api.abs.gov.au/rest/data/ABS,CPI,2.0.0';
+/** Headline CPI year-ended (MEASURE=3, INDEX=10001, original, Australia, monthly). */
+export const ABS_HEADLINE_CPI_URL =
+  `${ABS_DATA_API_BASE}/3.10001.10.50.M?startPeriod=2015-01&format=csv`;
+export const ABS_CPI_RELEASE_URL =
+  'https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/consumer-price-index-australia/latest-release';
 /** Active sessions re-check often enough to pick up an official release promptly. */
 export const ECONOMIC_RECHECK_MS = 15 * 60 * 1000;
 const MONTHLY_STALE_MS = 45 * 24 * 60 * 60 * 1000;
@@ -74,6 +86,7 @@ const URLS = {
 interface ParsedSeries {
   publicationDate: string;
   points: EconomicPoint[];
+  sourceAgency?: 'rba' | 'abs';
 }
 
 type RequiredSourceKey = 'inflation' | 'expectations' | 'labour' | 'wages';
@@ -246,7 +259,75 @@ export function parseRbaSeriesCsv(text: string, seriesId: string): ParsedSeries 
   const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!points.length) throw new Error(`RBA series ${seriesId} has no observations`);
-  return { publicationDate: isoDate(publication), points };
+  return { publicationDate: isoDate(publication), points, sourceAgency: 'rba' };
+}
+
+/** Last calendar day of an ABS TIME_PERIOD (`YYYY-MM` or `YYYY-Qn`). */
+export function absPeriodToIsoDate(period: string): string {
+  const month = /^(\d{4})-(\d{2})$/.exec(period.trim());
+  if (month) {
+    const year = Number(month[1]);
+    const monthIndex = Number(month[2]);
+    if (monthIndex < 1 || monthIndex > 12) return '';
+    const day = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+    return `${month[1]}-${month[2]}-${String(day).padStart(2, '0')}`;
+  }
+  const quarter = /^(\d{4})-Q([1-4])$/.exec(period.trim());
+  if (quarter) {
+    const endMonth = Number(quarter[2]) * 3;
+    const day = new Date(Date.UTC(Number(quarter[1]), endMonth, 0)).getUTCDate();
+    return `${quarter[1]}-${String(endMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+  return '';
+}
+
+function httpDateToIso(value: string | null | undefined): string {
+  if (!value) return '';
+  const ms = Date.parse(value);
+  if (!Number.isFinite(ms)) return '';
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+/**
+ * Parse ABS Data API CPI CSV (MEASURE=3 year-ended %). Columns include
+ * TIME_PERIOD / OBS_VALUE (order-tolerant via header names).
+ */
+export function parseAbsCpiCsv(
+  text: string,
+  publicationDate = '',
+): ParsedSeries {
+  const rows = parseCsv(text);
+  if (rows.length < 2) throw new Error('ABS CPI table is empty');
+  const header = rows[0].map((cell) => cell.replace(/^\uFEFF/, '').trim().toUpperCase());
+  const timeIdx = header.indexOf('TIME_PERIOD');
+  const valueIdx = header.indexOf('OBS_VALUE');
+  if (timeIdx < 0 || valueIdx < 0) {
+    throw new Error('ABS CPI table is missing TIME_PERIOD or OBS_VALUE');
+  }
+  const parsedPoints = rows.slice(1).flatMap((row) => {
+    const date = absPeriodToIsoDate(row[timeIdx] ?? '');
+    const value = finite(row[valueIdx] ?? '');
+    return date && value != null ? [{ date, value }] : [];
+  });
+  const points = [...new Map(parsedPoints.map((point) => [point.date, point])).values()]
+    .sort((a, b) => a.date.localeCompare(b.date));
+  if (!points.length) throw new Error('ABS CPI series has no observations');
+  return {
+    publicationDate: publicationDate || points.at(-1)!.date,
+    points,
+    sourceAgency: 'abs',
+  };
+}
+
+/** Prefer the series whose latest observation is newer; ties keep the primary (ABS) read. */
+export function preferNewerSeries(
+  primary: ParsedSeries | null,
+  fallback: ParsedSeries,
+): ParsedSeries {
+  if (!primary?.points.length) return fallback;
+  const primaryLatest = primary.points.at(-1)?.date ?? '';
+  const fallbackLatest = fallback.points.at(-1)?.date ?? '';
+  return primaryLatest >= fallbackLatest ? primary : fallback;
 }
 
 export function parseCashForecastCsv(text: string): CashRateForecast | null {
@@ -469,15 +550,38 @@ export function buildEconomicOutlookFromCsv(input: {
   wages: string;
   cashForecast?: string | null;
   cashRate?: string | null;
+  /** Optional ABS headline CPI CSV; preferred when newer than RBA G1. */
+  absHeadline?: string | null;
+  absHeadlinePublicationDate?: string;
 }, fetchedAt = new Date().toISOString()): EconomicOutlookPayload {
   // Soft-skip series missing from a table so unit fixtures can ship one column.
   const indicators = INDICATOR_DEFINITIONS.flatMap((definition) => {
     try {
-      return [buildIndicator(
-        definition,
-        parseRbaSeriesCsv(input[definition.source], definition.seriesId),
-        fetchedAt,
-      )];
+      let parsed = parseRbaSeriesCsv(input[definition.source], definition.seriesId);
+      let sourceUrl: string = URLS[definition.source];
+      let frequency = definition.frequency;
+      let shortLabel = definition.shortLabel;
+      if (definition.id === 'headline_inflation' && input.absHeadline) {
+        try {
+          const abs = parseAbsCpiCsv(
+            input.absHeadline,
+            input.absHeadlinePublicationDate ?? '',
+          );
+          parsed = preferNewerSeries(abs, parsed);
+          if (parsed.sourceAgency === 'abs') {
+            sourceUrl = ABS_CPI_RELEASE_URL;
+            frequency = 'monthly';
+            shortLabel = 'All groups · year-ended · monthly';
+          }
+        } catch {
+          // Keep RBA headline when ABS parse fails.
+        }
+      }
+      return [buildIndicator(definition, parsed, fetchedAt, {
+        sourceUrl,
+        frequency,
+        shortLabel,
+      })];
     } catch {
       return [];
     }
@@ -505,20 +609,29 @@ function buildIndicator(
   definition: IndicatorDefinition,
   parsed: ParsedSeries,
   checkedAt: string,
+  overrides?: {
+    sourceUrl?: string;
+    frequency?: EconomicIndicator['frequency'];
+    shortLabel?: string;
+  },
 ): EconomicIndicator {
   const points = parsed.points;
+  const frequency = overrides?.frequency ?? definition.frequency;
+  const observationDate = points.at(-1)?.date;
   return {
     id: definition.id,
     label: definition.label,
-    shortLabel: definition.shortLabel,
+    shortLabel: overrides?.shortLabel ?? definition.shortLabel,
     publicationDate: parsed.publicationDate,
+    observationDate,
     points,
     targetBand: definition.targetBand,
     signal: economicSignal(definition.id, points),
-    sourceUrl: URLS[definition.source],
+    sourceUrl: overrides?.sourceUrl ?? URLS[definition.source],
     checkedAt,
-    frequency: definition.frequency,
-    status: indicatorIsStale(parsed.publicationDate, definition.frequency) ? 'stale' : 'current',
+    frequency,
+    status: indicatorIsStale(parsed.publicationDate, frequency) ? 'stale' : 'current',
+    sourceAgency: parsed.sourceAgency ?? 'rba',
   };
 }
 
@@ -532,10 +645,12 @@ function normalizeCachedOutlook(
     const frequency = indicator.frequency ?? definition?.frequency ?? 'quarterly';
     return {
       ...indicator,
+      observationDate: indicator.observationDate ?? indicator.points.at(-1)?.date,
       sourceUrl: indicator.sourceUrl || (definition ? URLS[definition.source] : RBA_ECONOMIC_TABLE_URL),
       checkedAt: indicator.checkedAt || checkedAt,
       frequency,
       status: indicatorIsStale(indicator.publicationDate, frequency) ? 'stale' as const : 'current' as const,
+      sourceAgency: indicator.sourceAgency ?? 'rba',
     };
   });
   return {
@@ -554,10 +669,24 @@ function newestIndicator(
   if (!cached) return fresh;
   const freshDate = fresh.points.at(-1)?.date ?? '';
   const cachedDate = cached.points.at(-1)?.date ?? '';
-  return freshDate >= cachedDate ? fresh : cached;
+  if (freshDate > cachedDate) return fresh;
+  if (freshDate < cachedDate) return cached;
+  // Same observation: keep the fresher publication / ABS-backed read when available.
+  if (
+    (fresh.sourceAgency === 'abs' && cached.sourceAgency !== 'abs')
+    || fresh.publicationDate >= cached.publicationDate
+  ) {
+    return fresh;
+  }
+  return cached;
 }
 
-async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
+interface FetchedCsv {
+  text: string;
+  lastModified: string | null;
+}
+
+async function fetchCsv(url: string, timeoutMs = 15_000): Promise<FetchedCsv> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -565,11 +694,19 @@ async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
       headers: { Accept: 'text/csv' },
       signal: controller.signal,
     });
-    if (!response.ok) throw new Error(`RBA table request failed (${response.status})`);
-    return await response.text();
+    if (!response.ok) throw new Error(`Official data request failed (${response.status})`);
+    const text = await response.text();
+    const lastModified = response.headers?.get?.('last-modified')
+      ?? response.headers?.get?.('Last-Modified')
+      ?? null;
+    return { text, lastModified };
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function fetchText(url: string, timeoutMs = 15_000): Promise<string> {
+  return (await fetchCsv(url, timeoutMs)).text;
 }
 
 let inFlight: {
@@ -620,7 +757,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     }
 
     const checkedAt = new Date().toISOString();
-    const [sourceEntries, forecastSettled, cashRateSettled] = await Promise.all([
+    const [sourceEntries, forecastSettled, cashRateSettled, absHeadlineSettled] = await Promise.all([
       Promise.all(
         SOURCE_KEYS.map(async (source) => {
           try {
@@ -660,6 +797,22 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
           };
         }
       })(),
+      (async () => {
+        try {
+          const fetched = await fetchCsv(ABS_HEADLINE_CPI_URL);
+          const publicationDate = httpDateToIso(fetched.lastModified)
+            || checkedAt.slice(0, 10);
+          return {
+            series: parseAbsCpiCsv(fetched.text, publicationDate),
+            error: null as string | null,
+          };
+        } catch (error) {
+          return {
+            series: null as ParsedSeries | null,
+            error: `ABS headline CPI: ${String((error as Error)?.message ?? error)}`,
+          };
+        }
+      })(),
     ]);
     const textBySource = new Map(
       sourceEntries
@@ -682,13 +835,25 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
         };
       }
       try {
+        let parsed = parseRbaSeriesCsv(text, definition.seriesId);
+        let sourceUrl: string = URLS[definition.source];
+        let frequency = definition.frequency;
+        let shortLabel = definition.shortLabel;
+        if (definition.id === 'headline_inflation' && absHeadlineSettled.series) {
+          parsed = preferNewerSeries(absHeadlineSettled.series, parsed);
+          if (parsed.sourceAgency === 'abs') {
+            sourceUrl = ABS_CPI_RELEASE_URL;
+            frequency = 'monthly';
+            shortLabel = 'All groups · year-ended · monthly';
+          }
+        }
         return {
           definition,
-          indicator: buildIndicator(
-            definition,
-            parseRbaSeriesCsv(text, definition.seriesId),
-            checkedAt,
-          ),
+          indicator: buildIndicator(definition, parsed, checkedAt, {
+            sourceUrl,
+            frequency,
+            shortLabel,
+          }),
           error: null as string | null,
         };
       } catch (error) {
@@ -706,6 +871,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
     const errors = indicatorEntries.flatMap((entry) => (entry.error ? [entry.error] : []));
     if (forecastEntry.error) errors.push(forecastEntry.error);
     if (cashRateEntry.error) errors.push(cashRateEntry.error);
+    if (absHeadlineSettled.error) errors.push(absHeadlineSettled.error);
     const refreshedCount = indicatorEntries.filter((entry) => entry.indicator).length;
 
     if (refreshedCount === 0) {

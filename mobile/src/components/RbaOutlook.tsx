@@ -3,6 +3,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, View } from 'react-native';
 
 import {
+  ABS_CPI_RELEASE_URL,
   ECONOMIC_RECHECK_MS,
   loadEconomicOutlook,
   RBA_ECONOMIC_TABLE_URL,
@@ -11,7 +12,7 @@ import {
 import { relativeDate } from '../data/format';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
-import { EconomicExplorer } from './economy';
+import { EconomicExplorer, EconomicReleasesList } from './economy';
 import { AppText, Button, Card, Row } from './ui';
 
 function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaEntry[] }) {
@@ -26,6 +27,7 @@ function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaE
   ]
     .filter(Boolean)
     .join(' · ');
+  const usesAbsCpi = data.indicators.some((indicator) => indicator.sourceAgency === 'abs');
 
   return (
     <View style={{ marginTop: 12 }}>
@@ -34,6 +36,7 @@ function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaE
           {pressureLine} rate-pressure signals · official series with app interpretation
         </AppText>
       ) : null}
+      <EconomicReleasesList data={data} />
       <EconomicExplorer data={data} rba={rba} />
       <Row gap={4} style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <AppText variant="tiny" color="textFaint">
@@ -45,6 +48,23 @@ function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaE
             : ''}
           {' · '}
         </AppText>
+        {usesAbsCpi ? (
+          <>
+            <Pressable
+              onPress={() => void Linking.openURL(ABS_CPI_RELEASE_URL)}
+              accessibilityRole="link"
+              accessibilityLabel="Open ABS CPI release"
+              hitSlop={6}
+            >
+              <AppText variant="tiny" color="primary" weight="600">
+                ABS CPI
+              </AppText>
+            </Pressable>
+            <AppText variant="tiny" color="textFaint">
+              {' · '}
+            </AppText>
+          </>
+        ) : null}
         <Pressable
           onPress={() => void Linking.openURL(RBA_ECONOMIC_TABLE_URL)}
           accessibilityRole="link"

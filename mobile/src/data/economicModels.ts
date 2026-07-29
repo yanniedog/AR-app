@@ -3,10 +3,46 @@ import type {
   EconomicIndicatorId,
   EconomicOutlookPayload,
   EconomicPoint,
+  EconomicPressure,
 } from './economicOutlook';
 import type { RbaEntry } from '../types';
 
 export type EconomicWindow = '1Y' | '3Y' | '5Y' | 'All';
+
+export type MeetingLean = 'cut' | 'raise' | 'hold';
+export type VsPrior = 'above' | 'below' | 'same';
+
+export interface EconomicReleaseRow {
+  id: EconomicIndicatorId;
+  label: string;
+  shortLabel: string;
+  /** Human coverage label, e.g. "Jun 2026". */
+  coverageLabel: string;
+  observationDate: string;
+  updateDate: string;
+  latest: number;
+  prior: number | null;
+  delta: number | null;
+  vsPrior: VsPrior | null;
+  meetingLean: MeetingLean;
+  leanLabel: string;
+  shortExplanation: string;
+  deepExplanation: string;
+  signalDirection: EconomicPressure;
+  frequency: 'monthly' | 'quarterly';
+  sourceUrl?: string;
+  sourceAgency?: 'rba' | 'abs';
+  targetBand?: [number, number];
+}
+
+export interface MeetingBiasModel {
+  lean: MeetingLean;
+  leanLabel: string;
+  confidence: 'low' | 'medium' | 'high';
+  rationale: string;
+  summary: string;
+  rows: EconomicReleaseRow[];
+}
 
 export interface IndicatorHistoryModel {
   id: EconomicIndicatorId;
@@ -272,5 +308,211 @@ export function policyPathModel(
     forecastStart: futureForecast[0]?.date ?? null,
     surveyDate: payload.cashRateForecast?.surveyDate ?? null,
     summary: `Policy path: actual ${actualText}; ${forecastText}.`,
+  };
+}
+
+const VS_PRIOR_EPSILON = 0.05;
+
+const MEETING_WEIGHTS: Record<EconomicIndicatorId, number> = {
+  underlying_inflation: 3,
+  headline_inflation: 2,
+  unemployment: 2,
+  wages: 2,
+  employment_growth: 1,
+  participation: 1,
+  inflation_expectations: 1,
+  consumer_inflation_expectations: 0.5,
+};
+
+const MONTH_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+] as const;
+
+/** Coverage label for the period a reading applies to (e.g. "Jun 2026"). */
+export function coverageLabelForDate(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return isoDate;
+  const month = MONTH_SHORT[Number(match[2]) - 1];
+  return month ? `${month} ${match[1]}` : isoDate;
+}
+
+function leanLabel(lean: MeetingLean): string {
+  if (lean === 'cut') return 'Cut lean';
+  if (lean === 'raise') return 'Raise lean';
+  return 'Hold lean';
+}
+
+/**
+ * Map rate-pressure + travel into a next-meeting lean. Falling-but-still-hot
+ * inflation leans hold/cut rather than a hard raise; this is interpretation only.
+ */
+export function meetingLeanForIndicator(
+  indicator: EconomicIndicator,
+): { lean: MeetingLean; explanation: string } {
+  const points = normalizeEconomicPoints(indicator.points);
+  const latest = points.at(-1);
+  const prior = points.length > 1 ? points[points.length - 2] : null;
+  const delta = latest && prior ? round2(latest.value - prior.value) : null;
+  const falling = delta != null && delta <= -VS_PRIOR_EPSILON;
+  const rising = delta != null && delta >= VS_PRIOR_EPSILON;
+  const direction = indicator.signal.direction;
+
+  if (direction === 'higher') {
+    if (falling) {
+      return {
+        lean: 'hold',
+        explanation:
+          `${indicator.signal.explanation} The latest reading is still elevated, but it eased versus the prior observation, which softens the case for a hike at the next meeting.`,
+      };
+    }
+    return {
+      lean: 'raise',
+      explanation:
+        `${indicator.signal.explanation} On its own this reading leans against easier policy and can support a higher cash-rate path if other data agree.`,
+    };
+  }
+  if (direction === 'lower') {
+    if (rising) {
+      return {
+        lean: 'hold',
+        explanation:
+          `${indicator.signal.explanation} The easing signal is tempered because the latest observation moved higher versus the prior reading.`,
+      };
+    }
+    return {
+      lean: 'cut',
+      explanation:
+        `${indicator.signal.explanation} Softer pressure here adds to the case for easier policy at the next meeting if the broader suite agrees.`,
+    };
+  }
+  if (falling) {
+    return {
+      lean: 'cut',
+      explanation:
+        `${indicator.signal.explanation} Direction of travel is softer versus the prior observation, which modestly supports a cut lean.`,
+    };
+  }
+  if (rising) {
+    return {
+      lean: 'raise',
+      explanation:
+        `${indicator.signal.explanation} Direction of travel is firmer versus the prior observation, which modestly supports a raise lean.`,
+    };
+  }
+  return {
+    lean: 'hold',
+    explanation:
+      `${indicator.signal.explanation} Little change versus the prior reading leaves this series closer to a hold lean for the next meeting.`,
+  };
+}
+
+export function economicReleaseRow(indicator: EconomicIndicator): EconomicReleaseRow | null {
+  const points = normalizeEconomicPoints(indicator.points);
+  const latestPoint = points.at(-1);
+  if (!latestPoint) return null;
+  const priorPoint = points.length > 1 ? points[points.length - 2] : null;
+  const delta = priorPoint ? round2(latestPoint.value - priorPoint.value) : null;
+  let vsPrior: VsPrior | null = null;
+  if (delta != null) {
+    if (Math.abs(delta) < VS_PRIOR_EPSILON) vsPrior = 'same';
+    else vsPrior = delta > 0 ? 'above' : 'below';
+  }
+  const { lean, explanation } = meetingLeanForIndicator(indicator);
+  const observationDate = indicator.observationDate ?? latestPoint.date;
+  const vsText = vsPrior == null || delta == null
+    ? 'no prior observation to compare'
+    : vsPrior === 'same'
+      ? `about the same as the prior reading (${priorPoint!.value.toFixed(1)}%)`
+      : `${vsPrior} the prior reading of ${priorPoint!.value.toFixed(1)}% (${signed(delta)} pp)`;
+  return {
+    id: indicator.id,
+    label: indicator.label,
+    shortLabel: indicator.shortLabel,
+    coverageLabel: coverageLabelForDate(observationDate),
+    observationDate,
+    updateDate: indicator.publicationDate,
+    latest: latestPoint.value,
+    prior: priorPoint?.value ?? null,
+    delta,
+    vsPrior,
+    meetingLean: lean,
+    leanLabel: leanLabel(lean),
+    shortExplanation: indicator.signal.label,
+    deepExplanation:
+      `${indicator.label} is ${latestPoint.value.toFixed(1)}% for ${coverageLabelForDate(observationDate)} `
+      + `(updated ${coverageLabelForDate(indicator.publicationDate)}). It is ${vsText}. ${explanation} `
+      + 'This is an app interpretation of official series, not a forecast.',
+    signalDirection: indicator.signal.direction,
+    frequency: indicator.frequency ?? 'quarterly',
+    sourceUrl: indicator.sourceUrl,
+    sourceAgency: indicator.sourceAgency,
+    targetBand: indicator.targetBand,
+  };
+}
+
+export function economicReleasesModel(
+  payload: EconomicOutlookPayload,
+): EconomicReleaseRow[] {
+  return payload.indicators
+    .flatMap((indicator) => {
+      const row = economicReleaseRow(indicator);
+      return row ? [row] : [];
+    })
+    .sort((left, right) => {
+      const update = right.updateDate.localeCompare(left.updateDate);
+      if (update) return update;
+      return right.observationDate.localeCompare(left.observationDate);
+    });
+}
+
+function scoreLean(lean: MeetingLean): number {
+  if (lean === 'raise') return 1;
+  if (lean === 'cut') return -1;
+  return 0;
+}
+
+export function meetingBiasModel(
+  payload: EconomicOutlookPayload,
+): MeetingBiasModel | null {
+  const rows = economicReleasesModel(payload);
+  if (!rows.length) return null;
+
+  let weighted = 0;
+  let weightSum = 0;
+  for (const row of rows) {
+    const weight = MEETING_WEIGHTS[row.id] ?? 1;
+    weighted += scoreLean(row.meetingLean) * weight;
+    weightSum += weight;
+  }
+  const average = weightSum > 0 ? weighted / weightSum : 0;
+  const lean: MeetingLean = average >= 0.25 ? 'raise' : average <= -0.25 ? 'cut' : 'hold';
+  const magnitude = Math.abs(average);
+  const confidence: MeetingBiasModel['confidence'] =
+    magnitude >= 0.55 ? 'high' : magnitude >= 0.3 ? 'medium' : 'low';
+
+  const drivers = rows
+    .filter((row) => row.meetingLean === lean)
+    .slice(0, 3)
+    .map((row) => row.label);
+  const driverText = drivers.length
+    ? `Led by ${drivers.join(', ')}.`
+    : 'Signals are mixed across the suite.';
+  const rationale =
+    lean === 'hold'
+      ? `Weighted official readings are close to balanced for the next meeting. ${driverText}`
+      : lean === 'cut'
+        ? `Weighted official readings lean toward easier policy at the next meeting. ${driverText}`
+        : `Weighted official readings lean toward tighter policy at the next meeting. ${driverText}`;
+
+  return {
+    lean,
+    leanLabel: leanLabel(lean),
+    confidence,
+    rationale:
+      `${rationale} This is an app interpretation of official ABS/RBA series — not a market probability or RBA forecast.`,
+    summary:
+      `Next-meeting lean: ${leanLabel(lean).toLowerCase()} (${confidence} confidence). ${rationale}`,
+    rows,
   };
 }
