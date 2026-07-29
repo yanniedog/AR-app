@@ -9,6 +9,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import { setTimeout as sleepMs } from 'node:timers/promises';
 import {
   allKnownBotLogins,
+  adjustRequiredKeysForPrContext,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   missingRequiredKeysFromEvents,
@@ -118,13 +119,14 @@ function resolveRepo() {
 }
 
 function resolvePr(prArg, branch) {
+  const fields = 'number,createdAt,headRefName,isCrossRepository';
   if (prArg) {
-    const r = gh(['pr', 'view', String(prArg), '--json', 'number,createdAt,headRefName'], { json: true });
+    const r = gh(['pr', 'view', String(prArg), `--json`, fields], { json: true });
     if (!r.ok) return { error: r.error };
     return { pr: r.data };
   }
   if (!branch) return { pr: null };
-  const r = gh(['pr', 'list', '--state', 'open', '--head', branch, '--json', 'number,createdAt,headRefName'], {
+  const r = gh(['pr', 'list', '--state', 'open', '--head', branch, `--json`, fields], {
     json: true,
   });
   if (!r.ok) return { error: r.error };
@@ -524,8 +526,20 @@ async function main() {
 
   const cliOverride = args.requireBots !== null;
   const envOverride = Boolean(process.env.AR_BOT_WAIT_REQUIRED || process.env.BOT_WAIT_REQUIRED);
-  const effectiveRequired =
+  const baseRequired =
     cliOverride || envOverride ? requiredKeys : state.requiredKeys || requiredKeys;
+  const effectiveRequired = adjustRequiredKeysForPrContext(baseRequired, {
+    isFork: Boolean(resolved.pr?.isCrossRepository),
+  });
+  if (
+    Boolean(resolved.pr?.isCrossRepository) &&
+    baseRequired.includes('gemini') &&
+    !effectiveRequired.includes('gemini')
+  ) {
+    console.log(
+      `>>> BOT WAIT: PR #${prNumber} is from a fork — omitting gemini (secret-backed review cannot run).`,
+    );
+  }
   if (
     state.requiredKeys &&
     JSON.stringify(state.requiredKeys) !== JSON.stringify(effectiveRequired)

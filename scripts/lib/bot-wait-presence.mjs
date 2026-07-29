@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import {
+  adjustRequiredKeysForPrContext,
   allKnownBotLogins,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
@@ -22,7 +23,7 @@ export function resolveAnchorIso(anchorIso, fallbackIso) {
 }
 
 const COMMENTS_QUERY =
-  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt comments(last:100){nodes{author{login}createdAt body}}reviews(last:30){nodes{author{login}submittedAt body}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt body}}}}}}';
+  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt isCrossRepository comments(last:100){nodes{author{login}createdAt body}}reviews(last:30){nodes{author{login}submittedAt body}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt body}}}}}}';
 
 function ghGraphql(owner, name, prNumber) {
   const r = spawnSync(
@@ -80,12 +81,13 @@ export function collectBotEvents(prPayload, knownBots, anchorIso, fallbackIso) {
 
 export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anchorIso, repoRoot } = {}) {
   const state = readBotWaitState(prNumber, repoRoot);
-  const keys =
+  const baseKeys =
     requiredKeys?.length ? requiredKeys : state?.requiredKeys?.length ? state.requiredKeys : resolveRequiredKeys();
-  const knownBots = allKnownBotLogins(keys);
   const data = ghGraphql(owner, name, prNumber);
   const pr = data?.data?.repository?.pullRequest;
   if (!pr) throw new Error('GraphQL: pull request not found');
+  const keys = adjustRequiredKeysForPrContext(baseKeys, { isFork: Boolean(pr.isCrossRepository) });
+  const knownBots = allKnownBotLogins(keys);
   const anchor = resolveAnchorIso(anchorIso || state?.anchor, pr.createdAt);
   const events = collectBotEvents(pr, knownBots, anchor, pr.createdAt);
   const seenLogins = [...new Set(events.map((e) => e.login))];

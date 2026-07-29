@@ -9,8 +9,8 @@ export const BOT_ALIASES = {
     'google-github-actions-bot[bot]',
     'google-github-actions[bot]',
     // sshnaidm/gemini-code-review-action posts as github-actions[bot]
-    // (matched via isGeminiCodeReviewBody, not bare login).
-    'github-actions[bot]',
+    // and is matched only via isGeminiCodeReviewBody / eventSatisfiesRequiredKey —
+    // do NOT put github-actions[bot] here (login-only consumers would false-positive).
   ],
   // Cursor Automation "Codex PR Review" posts as cursor[bot]; keep the
   // legacy chatgpt-codex-connector logins for older connector installs.
@@ -74,6 +74,18 @@ export function resolveRequiredKeys(argvKeys, envRaw) {
   if (argvKeys?.length) return [...argvKeys];
   const fromEnv = envRaw ?? process.env.AR_BOT_WAIT_REQUIRED ?? process.env.BOT_WAIT_REQUIRED ?? '';
   return parseRequiredKeys(fromEnv);
+}
+
+/**
+ * Fork PRs cannot run the secret-backed Gemini Actions workflow, so require
+ * gemini only for same-repo heads.
+ * @param {string[]} requiredKeys
+ * @param {{ isFork?: boolean }} opts
+ */
+export function adjustRequiredKeysForPrContext(requiredKeys, opts = {}) {
+  const keys = [...(requiredKeys || [])];
+  if (opts.isFork) return keys.filter((k) => k.toLowerCase() !== 'gemini');
+  return keys;
 }
 
 export function loginsForKey(key) {
