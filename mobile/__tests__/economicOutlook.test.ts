@@ -268,6 +268,50 @@ describe('economic outlook', () => {
     );
   });
 
+  it('keeps cached ABS headline when refresh falls back to RBA on the same observation', async () => {
+    const cached = buildEconomicOutlookFromCsv({
+      inflation: inflationCsv([['30/06/2026', 3.4]]),
+      labour: labourCsv([['30/06/2026', 4.1]]),
+      wages: wagesCsv([['30/06/2026', 3.2]]),
+      expectations: expectationsCsv([['30/06/2026', 2.7]]),
+      cashForecast: cashCsv,
+      cashRate: defaultCashRateHistory,
+      absHeadline: absHeadlineCsv([
+        ['2026-05', 4.0],
+        ['2026-06', 3.8],
+      ]),
+      absHeadlinePublicationDate: '2026-07-20',
+    }, '2026-07-20T00:00:00.000Z');
+    const cachedHeadline = cached.indicators.find((item) => item.id === 'headline_inflation');
+    expect(cachedHeadline?.sourceAgency).toBe('abs');
+    expect(cachedHeadline?.points.at(-1)).toEqual({ date: '2026-06-30', value: 3.8 });
+
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes('data.api.abs.gov.au') || url.includes('ABS,CPI')) {
+        throw new Error('ABS offline');
+      }
+      return mockCsvResponse(url, {
+        // Same June observation as cached ABS, with a newer RBA publication stamp.
+        inflation: inflationCsv([['30/06/2026', 3.4]], '29-Jul-2026'),
+        labour: labourCsv([['30/06/2026', 4.1]], '29-Jul-2026'),
+        wages: wagesCsv([['30/06/2026', 3.2]], '29-Jul-2026'),
+        expectations: expectationsCsv([['30/06/2026', 2.7]], '29-Jul-2026'),
+      });
+    });
+
+    const outlook = await loadEconomicOutlook(true);
+    const headline = outlook.indicators.find((item) => item.id === 'headline_inflation');
+    expect(headline?.sourceAgency).toBe('abs');
+    expect(headline?.points.at(-1)).toEqual({ date: '2026-06-30', value: 3.8 });
+    expect(headline?.publicationDate).toBe('2026-07-20');
+    expect(outlook.refreshErrors).toEqual(
+      expect.arrayContaining([expect.stringContaining('ABS headline CPI')]),
+    );
+  });
+
   it('expresses directional pressure without manufacturing a probability', () => {
     expect(economicSignal('underlying_inflation', [{ date: '2026-03-31', value: 3.4 }]).direction).toBe('higher');
     expect(economicSignal('inflation_expectations', [{ date: '2026-03-31', value: 2.5 }]).direction).toBe('balanced');

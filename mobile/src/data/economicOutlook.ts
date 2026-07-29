@@ -671,7 +671,11 @@ function newestIndicator(
   const cachedDate = cached.points.at(-1)?.date ?? '';
   if (freshDate > cachedDate) return fresh;
   if (freshDate < cachedDate) return cached;
-  // Same observation: keep the fresher publication / ABS-backed read when available.
+  // Same observation: never demote a cached ABS read to an RBA fallback (e.g. ABS
+  // refresh failed). Prefer fresh ABS over cached RBA; otherwise keep the newer publication.
+  if (cached.sourceAgency === 'abs' && fresh.sourceAgency !== 'abs') {
+    return cached;
+  }
   if (
     (fresh.sourceAgency === 'abs' && cached.sourceAgency !== 'abs')
     || fresh.publicationDate >= cached.publicationDate
