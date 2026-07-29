@@ -8,6 +8,9 @@ export const BOT_ALIASES = {
     'gemini-code-assist[bot]',
     'google-github-actions-bot[bot]',
     'google-github-actions[bot]',
+    // sshnaidm/gemini-code-review-action posts as github-actions[bot]
+    // (matched via isGeminiCodeReviewBody, not bare login).
+    'github-actions[bot]',
   ],
   // Cursor Automation "Codex PR Review" posts as cursor[bot]; keep the
   // legacy chatgpt-codex-connector logins for older connector installs.
@@ -23,10 +26,41 @@ export const BOT_ALIASES = {
 export const DEFAULT_REQUIRED_KEYS = ['gemini', 'codex', 'sourcery'];
 
 export const OPTIONAL_BOT_LOGINS = [
+  'github-actions[bot]',
   'copilot-pull-request-reviewer[bot]',
   'coderabbitai[bot]',
   'greptile-apps[bot]',
 ];
+
+export function isGeminiCodeReviewBody(bodyRaw) {
+  const body = String(bodyRaw || '');
+  return (
+    /<!--\s*gemini-code-review\s*-->/i.test(body) ||
+    /#\s*Code Review by Gemini/i.test(body) ||
+    /\bCode Review by Gemini\b/i.test(body)
+  );
+}
+
+/**
+ * Body-aware match so github-actions[bot] Gemini reviews are not confused
+ * with other Actions comments.
+ */
+export function eventSatisfiesRequiredKey(login, body, key) {
+  const lower = String(login || '').toLowerCase();
+  const k = String(key || '').toLowerCase();
+  if (!lower) return false;
+  if (k === 'gemini') {
+    if (lower === 'github-actions[bot]') return isGeminiCodeReviewBody(body);
+    return loginMatchesRequiredKey(login, 'gemini');
+  }
+  return loginMatchesRequiredKey(login, key);
+}
+
+export function missingRequiredKeysFromEvents(requiredKeys, events) {
+  return (requiredKeys || []).filter(
+    (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key)),
+  );
+}
 
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
