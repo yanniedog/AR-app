@@ -9,8 +9,10 @@ import { execSync, spawnSync } from 'node:child_process';
 import { setTimeout as sleepMs } from 'node:timers/promises';
 import {
   allKnownBotLogins,
+  adjustRequiredKeysForPrContext,
   formatRequiredKeys,
-  missingRequiredKeys,
+  isGeminiCodeReviewBody,
+  missingRequiredKeysFromEvents,
   parseRequiredKeys,
   resolveRequiredKeys,
 } from './scripts/lib/bot-wait-config.mjs';
@@ -117,13 +119,14 @@ function resolveRepo() {
 }
 
 function resolvePr(prArg, branch) {
+  const fields = 'number,createdAt,headRefName,isCrossRepository';
   if (prArg) {
-    const r = gh(['pr', 'view', String(prArg), '--json', 'number,createdAt,headRefName'], { json: true });
+    const r = gh(['pr', 'view', String(prArg), `--json`, fields], { json: true });
     if (!r.ok) return { error: r.error };
     return { pr: r.data };
   }
   if (!branch) return { pr: null };
-  const r = gh(['pr', 'list', '--state', 'open', '--head', branch, '--json', 'number,createdAt,headRefName'], {
+  const r = gh(['pr', 'list', '--state', 'open', '--head', branch, `--json`, fields], {
     json: true,
   });
   if (!r.ok) return { error: r.error };
@@ -149,7 +152,8 @@ function fetchBotActivity(owner, name, prNumber) {
   const events = [];
   const pushEvent = (login, at, body) => {
     if (!login || !at) return;
-    events.push({ login, at, noise: isBotNoise(body) });
+    if (login.toLowerCase() === 'github-actions[bot]' && !isGeminiCodeReviewBody(body)) return;
+    events.push({ login, at, body: body || '', noise: isBotNoise(body) });
   };
   for (const c of pr.comments?.nodes || []) {
     pushEvent(c.author?.login, c.createdAt, c.body);
@@ -296,7 +300,7 @@ function evaluate({ prNumber, anchorIso, state, repo: repoIn, requiredKeys, sing
   const substantiveBotEvents = botEventsSinceAnchor.filter((e) => !e.noise);
   const noiseEventCount = botEventsSinceAnchor.length - substantiveBotEvents.length;
   const seenLogins = [...new Set(botEventsSinceAnchor.map((e) => e.login))];
-  const missing = missingRequiredKeys(requiredKeys, seenLogins);
+  const missing = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor);
   const allRequiredPosted =
     requiredKeys.length > 0 && botEventsSinceAnchor.length > 0 && missing.length === 0;
   const lastBotAt =
@@ -522,8 +526,20 @@ async function main() {
 
   const cliOverride = args.requireBots !== null;
   const envOverride = Boolean(process.env.AR_BOT_WAIT_REQUIRED || process.env.BOT_WAIT_REQUIRED);
-  const effectiveRequired =
+  const baseRequired =
     cliOverride || envOverride ? requiredKeys : state.requiredKeys || requiredKeys;
+  const effectiveRequired = adjustRequiredKeysForPrContext(baseRequired, {
+    isFork: Boolean(resolved.pr?.isCrossRepository),
+  });
+  if (
+    Boolean(resolved.pr?.isCrossRepository) &&
+    baseRequired.includes('gemini') &&
+    !effectiveRequired.includes('gemini')
+  ) {
+    console.log(
+      `>>> BOT WAIT: PR #${prNumber} is from a fork — omitting gemini (secret-backed review cannot run).`,
+    );
+  }
   if (
     state.requiredKeys &&
     JSON.stringify(state.requiredKeys) !== JSON.stringify(effectiveRequired)

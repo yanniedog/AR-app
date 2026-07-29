@@ -8,6 +8,9 @@ export const BOT_ALIASES = {
     'gemini-code-assist[bot]',
     'google-github-actions-bot[bot]',
     'google-github-actions[bot]',
+    // sshnaidm/gemini-code-review-action posts as github-actions[bot]
+    // and is matched only via isGeminiCodeReviewBody / eventSatisfiesRequiredKey —
+    // do NOT put github-actions[bot] here (login-only consumers would false-positive).
   ],
   // Cursor Automation "Codex PR Review" posts as cursor[bot]; keep the
   // legacy chatgpt-codex-connector logins for older connector installs.
@@ -23,10 +26,41 @@ export const BOT_ALIASES = {
 export const DEFAULT_REQUIRED_KEYS = ['gemini', 'codex', 'sourcery'];
 
 export const OPTIONAL_BOT_LOGINS = [
+  'github-actions[bot]',
   'copilot-pull-request-reviewer[bot]',
   'coderabbitai[bot]',
   'greptile-apps[bot]',
 ];
+
+export function isGeminiCodeReviewBody(bodyRaw) {
+  const body = String(bodyRaw || '');
+  return (
+    /<!--\s*gemini-code-review\s*-->/i.test(body) ||
+    /#\s*Code Review by Gemini/i.test(body) ||
+    /\bCode Review by Gemini\b/i.test(body)
+  );
+}
+
+/**
+ * Body-aware match so github-actions[bot] Gemini reviews are not confused
+ * with other Actions comments.
+ */
+export function eventSatisfiesRequiredKey(login, body, key) {
+  const lower = String(login || '').toLowerCase();
+  const k = String(key || '').toLowerCase();
+  if (!lower) return false;
+  if (k === 'gemini') {
+    if (lower === 'github-actions[bot]') return isGeminiCodeReviewBody(body);
+    return loginMatchesRequiredKey(login, 'gemini');
+  }
+  return loginMatchesRequiredKey(login, key);
+}
+
+export function missingRequiredKeysFromEvents(requiredKeys, events) {
+  return (requiredKeys || []).filter(
+    (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key)),
+  );
+}
 
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
@@ -40,6 +74,18 @@ export function resolveRequiredKeys(argvKeys, envRaw) {
   if (argvKeys?.length) return [...argvKeys];
   const fromEnv = envRaw ?? process.env.AR_BOT_WAIT_REQUIRED ?? process.env.BOT_WAIT_REQUIRED ?? '';
   return parseRequiredKeys(fromEnv);
+}
+
+/**
+ * Fork PRs cannot run the secret-backed Gemini Actions workflow, so require
+ * gemini only for same-repo heads.
+ * @param {string[]} requiredKeys
+ * @param {{ isFork?: boolean }} opts
+ */
+export function adjustRequiredKeysForPrContext(requiredKeys, opts = {}) {
+  const keys = [...(requiredKeys || [])];
+  if (opts.isFork) return keys.filter((k) => k.toLowerCase() !== 'gemini');
+  return keys;
 }
 
 export function loginsForKey(key) {

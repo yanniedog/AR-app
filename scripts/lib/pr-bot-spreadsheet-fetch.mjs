@@ -92,7 +92,7 @@ export function fetchPrBotEvents(owner, name, prNumber) {
 
   const push = (login, at, body, kind, reviewState) => {
     if (!login || !at) return;
-    const botKey = loginToBotKey(login);
+    const botKey = loginToBotKey(login, body);
     if (!botKey) return;
     events.push({
       login,

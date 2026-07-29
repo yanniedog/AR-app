@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process';
 import {
+  adjustRequiredKeysForPrContext,
   allKnownBotLogins,
   formatRequiredKeys,
-  missingRequiredKeys,
+  isGeminiCodeReviewBody,
+  missingRequiredKeysFromEvents,
   resolveRequiredKeys,
 } from './bot-wait-config.mjs';
 import { gitRepoRoot, readBotWaitStateFile } from './bot-wait-state.mjs';
@@ -21,7 +23,7 @@ export function resolveAnchorIso(anchorIso, fallbackIso) {
 }
 
 const COMMENTS_QUERY =
-  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt comments(last:100){nodes{author{login}createdAt}}reviews(last:30){nodes{author{login}submittedAt}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt}}}}}}}';
+  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt isCrossRepository comments(last:100){nodes{author{login}createdAt body}}reviews(last:30){nodes{author{login}submittedAt body}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt body}}}}}}}';
 
 function ghGraphql(owner, name, prNumber) {
   const r = spawnSync(
@@ -53,15 +55,20 @@ function ghGraphql(owner, name, prNumber) {
 export function collectBotEvents(prPayload, knownBots, anchorIso, fallbackIso) {
   const anchorMs = new Date(resolveAnchorIso(anchorIso, fallbackIso)).getTime();
   const events = [];
+  const pushEvent = (login, at, body) => {
+    if (!login || !at) return;
+    if (login.toLowerCase() === 'github-actions[bot]' && !isGeminiCodeReviewBody(body)) return;
+    events.push({ login, at, body: body || '' });
+  };
   for (const c of prPayload.comments?.nodes || []) {
-    if (c.author?.login && c.createdAt) events.push({ login: c.author.login, at: c.createdAt });
+    pushEvent(c.author?.login, c.createdAt, c.body);
   }
   for (const rev of prPayload.reviews?.nodes || []) {
-    if (rev.author?.login && rev.submittedAt) events.push({ login: rev.author.login, at: rev.submittedAt });
+    pushEvent(rev.author?.login, rev.submittedAt, rev.body);
   }
   for (const t of prPayload.reviewThreads?.nodes || []) {
     for (const c of t.comments?.nodes || []) {
-      if (c.author?.login && c.createdAt) events.push({ login: c.author.login, at: c.createdAt });
+      pushEvent(c.author?.login, c.createdAt, c.body);
     }
   }
   events.sort((a, b) => new Date(a.at) - new Date(b.at));
@@ -74,16 +81,17 @@ export function collectBotEvents(prPayload, knownBots, anchorIso, fallbackIso) {
 
 export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anchorIso, repoRoot } = {}) {
   const state = readBotWaitState(prNumber, repoRoot);
-  const keys =
+  const baseKeys =
     requiredKeys?.length ? requiredKeys : state?.requiredKeys?.length ? state.requiredKeys : resolveRequiredKeys();
-  const knownBots = allKnownBotLogins(keys);
   const data = ghGraphql(owner, name, prNumber);
   const pr = data?.data?.repository?.pullRequest;
   if (!pr) throw new Error('GraphQL: pull request not found');
+  const keys = adjustRequiredKeysForPrContext(baseKeys, { isFork: Boolean(pr.isCrossRepository) });
+  const knownBots = allKnownBotLogins(keys);
   const anchor = resolveAnchorIso(anchorIso || state?.anchor, pr.createdAt);
   const events = collectBotEvents(pr, knownBots, anchor, pr.createdAt);
   const seenLogins = [...new Set(events.map((e) => e.login))];
-  const missing = missingRequiredKeys(keys, seenLogins);
+  const missing = missingRequiredKeysFromEvents(keys, events);
   return {
     requiredKeys: keys,
     anchor,
