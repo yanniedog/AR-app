@@ -256,6 +256,7 @@ describe('economic graph models', () => {
     expect(row?.updateDate).toBe('2026-07-29');
     expect(row?.vsPrior).toBe('below');
     expect(row?.delta).toBe(-0.2);
+    expect(row?.deepExplanation).toContain('below the prior reading of 4.0% (-0.20 pp)');
     expect(row?.meetingLean).toBe('hold');
     const rows = economicReleasesModel(data);
     expect(rows[0]?.id).toBe('headline_inflation');
