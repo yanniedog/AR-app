@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { InteractionManager, Pressable, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { BankHistoryChart } from '../../src/components/BankHistoryChart';
@@ -17,10 +17,15 @@ import {
   bankEventMedianContext,
   bankTrendChartModel,
   recentBankEvents,
+  type BankEventRateContext,
   type BankRateEvent,
 } from '../../src/data/bankInsights';
 import { formatRate, formatRunDate, visibleAccountRows } from '../../src/data/format';
-import { productMovesForBankEvent, type ProductRateMove } from '../../src/data/productHistory';
+import {
+  productMovesForCatalog,
+  type ProductMoveCatalogEntry,
+  type ProductRateMove,
+} from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
@@ -28,6 +33,7 @@ import { openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
+import { yieldToUi } from '../../src/lib/yieldToUi';
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -41,7 +47,7 @@ function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
 }
 
-function ProductMoveRow({
+const ProductMoveRow = React.memo(function ProductMoveRow({
   move,
   section,
 }: {
@@ -73,7 +79,7 @@ function ProductMoveRow({
       </Row>
     </Pressable>
   );
-}
+});
 
 export default function BankDetail() {
   // Already decoded by expo-router — decoding again would throw on a literal '%'.
@@ -101,10 +107,12 @@ export default function BankDetail() {
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
-  const productHistory = useStore((s) => s.productHistory);
   const productHistoryError = useStore((s) => s.productHistoryError);
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
-  const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
+  // Gate the heavy productHistory subscription until after first paint / interactions
+  // so opening a bank from Outlook never stalls on a multi‑MB store update.
+  const [productHistoryReady, setProductHistoryReady] = useState(false);
+  const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
@@ -118,23 +126,30 @@ export default function BankDetail() {
 
   useEffect(() => {
     // Product-level move drill-down needs the on-device product history ledger.
+    // Do NOT pull history_banks here — bank trend charts use bankInsights only.
+    // Defer until after navigation/interactions so the bank page paints instantly.
     if (!showBankInsights || !historyEnabled) {
       historyRequestKey.current = null;
+      setProductHistoryReady(false);
       return;
     }
     const key = core?.run_date ?? null;
-    if (!key || historyRequestKey.current === key) return;
-    historyRequestKey.current = key;
-    void ensureHistoryBanks().then(() => {
-      void ensureProductHistory();
+    if (!key) return;
+    let cancelled = false;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      void yieldToUi().then(() => {
+        if (cancelled) return;
+        setProductHistoryReady(true);
+        if (historyRequestKey.current === key) return;
+        historyRequestKey.current = key;
+        void ensureProductHistory();
+      });
     });
-  }, [
-    core?.run_date,
-    ensureHistoryBanks,
-    ensureProductHistory,
-    historyEnabled,
-    showBankInsights,
-  ]);
+    return () => {
+      cancelled = true;
+      handle.cancel?.();
+    };
+  }, [core?.run_date, ensureProductHistory, historyEnabled, showBankInsights]);
 
   const bySection = useMemo(() => {
     void suitabilityRevision;
@@ -158,6 +173,29 @@ export default function BankDetail() {
     }
     return out;
   }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
+
+  const catalogsBySection = useMemo(() => {
+    // Must match bank-insights event scope (unfiltered provider/section products).
+    // Building from `bySection` would omit non-standard / token-rate products that
+    // still contribute to headline moved/total counts when Standard-only is on.
+    const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
+    if (!core) return out;
+    for (const section of SECTION_ORDER) {
+      const catalog: ProductMoveCatalogEntry[] = [];
+      const seen = new Set<string>();
+      for (const row of core.sections[section]?.rates ?? []) {
+        if (row.provider !== provider || !row.product_key || seen.has(row.product_key)) continue;
+        seen.add(row.product_key);
+        catalog.push({
+          productKey: row.product_key,
+          productName: (row.product_name && row.product_name.trim()) || row.product_key,
+          rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
+        });
+      }
+      if (catalog.length) out[section] = catalog;
+    }
+    return out;
+  }, [core, provider]);
 
   const chartSections = useMemo(
     () =>
@@ -184,6 +222,14 @@ export default function BankDetail() {
     [bankInsights, provider],
   );
 
+  const bankEventContexts = useMemo(() => {
+    const map = new Map<string, BankEventRateContext | null>();
+    for (const event of bankEvents) {
+      map.set(`${event.date}:${event.section}`, bankEventMedianContext(bankInsights, event));
+    }
+    return map;
+  }, [bankEvents, bankInsights]);
+
   const focusEvent: BankRateEvent | null = useMemo(() => {
     if (!focusDate || !focusSection) return null;
     return (
@@ -195,31 +241,55 @@ export default function BankDetail() {
     );
   }, [bankEvents, bankInsights, focusDate, focusSection, provider]);
 
+  const focusRateCtx = useMemo(
+    () => (focusEvent ? bankEventMedianContext(bankInsights, focusEvent) : null),
+    [bankInsights, focusEvent],
+  );
+
   const focusedMoves = useMemo(() => {
-    if (!focusDate || !focusSection) return [] as ProductRateMove[];
-    return productMovesForBankEvent(core, productHistory, {
-      provider,
-      section: focusSection,
+    if (!focusDate || !focusSection || !productHistory) return [] as ProductRateMove[];
+    return productMovesForCatalog(productHistory, catalogsBySection[focusSection] ?? [], {
       date: focusDate,
     });
-  }, [core, focusDate, focusSection, productHistory, provider]);
+  }, [catalogsBySection, focusDate, focusSection, productHistory]);
 
-  const recentMoveBreakdowns = useMemo(() => {
-    const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
-    for (const event of bankEvents.slice(0, 3)) {
-      const moves = productMovesForBankEvent(core, productHistory, {
-        provider: event.provider,
-        section: event.section,
-        date: event.date,
-      });
-      if (moves.length) out.push({ event, moves });
+  // Defer unfocused "Products involved" diffs until after paint — never on the
+  // critical path of opening the bank page or landing productHistory in the store.
+  const [recentMoveBreakdowns, setRecentMoveBreakdowns] = useState<
+    { event: BankRateEvent; moves: ProductRateMove[] }[]
+  >([]);
+  useEffect(() => {
+    if (focusEvent || !productHistory || !bankEvents.length) {
+      setRecentMoveBreakdowns([]);
+      return;
     }
-    return out;
-  }, [bankEvents, core, productHistory]);
+    let cancelled = false;
+    void yieldToUi().then(() => {
+      if (cancelled) return;
+      const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
+      for (const event of bankEvents.slice(0, 3)) {
+        const moves = productMovesForCatalog(productHistory, catalogsBySection[event.section] ?? [], {
+          date: event.date,
+        });
+        if (moves.length) out.push({ event, moves });
+      }
+      if (!cancelled) setRecentMoveBreakdowns(out);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [bankEvents, catalogsBySection, focusEvent, productHistory]);
+
+  const productCount = useMemo(() => bySection.reduce((n, s) => n + s.rows.length, 0), [bySection]);
+
+  const handleMoveSelect = useCallback(
+    (event: BankRateEvent) => {
+      router.setParams({ date: event.date, section: event.section });
+    },
+    [router],
+  );
 
   if (!core) return null;
-
-  const focusRateCtx = focusEvent ? bankEventMedianContext(bankInsights, focusEvent) : null;
 
   return (
     <>
@@ -230,7 +300,7 @@ export default function BankDetail() {
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{provider}</AppText>
             <AppText variant="small" color="textMuted">
-              {bySection.reduce((n, s) => n + s.rows.length, 0)} products
+              {productCount} products
             </AppText>
           </View>
         </Row>
@@ -325,18 +395,13 @@ export default function BankDetail() {
                     <BankMoveRow
                       key={`${event.date}-${event.section}`}
                       event={event}
-                      rateContext={bankEventMedianContext(bankInsights, event)}
+                      rateContext={bankEventContexts.get(`${event.date}:${event.section}`) ?? null}
                       focused={
                         !!focusEvent &&
                         event.date === focusEvent.date &&
                         event.section === focusEvent.section
                       }
-                      onPress={() =>
-                        router.setParams({
-                          date: event.date,
-                          section: event.section,
-                        })
-                      }
+                      onSelect={handleMoveSelect}
                     />
                   ))}
                 </>

@@ -63,12 +63,12 @@ function eventA11yLabel(event: BankRateEvent, rateCtx: BankEventRateContext | nu
   )} across ${event.moved} of ${event.total} products on ${formatRunDate(event.date)}${rateBit}`;
 }
 
-export function BankMoveRow({
+export const BankMoveRow = React.memo(function BankMoveRow({
   event,
   showDate = true,
   rateContext = null,
   focused = false,
-  onPress,
+  onSelect,
 }: {
   event: BankRateEvent;
   showDate?: boolean;
@@ -76,8 +76,8 @@ export function BankMoveRow({
   rateContext?: BankEventRateContext | null;
   /** Highlight when this row is the drill-down focus. */
   focused?: boolean;
-  /** Override navigation (e.g. already on the bank page). */
-  onPress?: () => void;
+  /** Stable select handler (keeps React.memo effective across parent renders). */
+  onSelect?: (event: BankRateEvent) => void;
 }) {
   const theme = useTheme();
   const verb = moveVerb(event.section, event.dir);
@@ -85,8 +85,9 @@ export function BankMoveRow({
   return (
     <Pressable
       onPress={
-        onPress ??
-        (() => openBank(event.provider, { date: event.date, section: event.section }))
+        onSelect
+          ? () => onSelect(event)
+          : () => openBank(event.provider, { date: event.date, section: event.section })
       }
       accessibilityRole="button"
       accessibilityLabel={eventA11yLabel(event, rateContext)}
@@ -132,7 +133,7 @@ export function BankMoveRow({
       </Row>
     </Pressable>
   );
-}
+});
 
 /** Headline pulse strip: "4 banks moved this week · 6 loan cuts · 2 savings/TD increases". */
 export function MarketPulseStrip({ payload }: { payload: BankInsightsPayload | null }) {
@@ -188,6 +189,14 @@ export function BankMovesFeed({
     () => recentBankEvents(payload, { sections, limit }),
     [payload, sections, limit],
   );
+  const rows = useMemo(
+    () =>
+      events.map((event) => ({
+        event,
+        rateContext: payload ? bankEventMedianContext(payload, event) : null,
+      })),
+    [events, payload],
+  );
   if (!payload) {
     if (error) return null;
     return (
@@ -196,7 +205,7 @@ export function BankMovesFeed({
       </AppText>
     );
   }
-  if (!events.length) {
+  if (!rows.length) {
     return (
       <AppText variant="small" color="textMuted">
         No rate moves detected yet — the feed fills as banks reprice day by day.
@@ -205,10 +214,10 @@ export function BankMovesFeed({
   }
   return (
     <View>
-      {events.map((event, i) => (
+      {rows.map(({ event, rateContext }, i) => (
         <React.Fragment key={`${event.date}-${event.provider}-${event.section}`}>
           {i > 0 ? <Divider /> : null}
-          <BankMoveRow event={event} rateContext={bankEventMedianContext(payload, event)} />
+          <BankMoveRow event={event} rateContext={rateContext} />
         </React.Fragment>
       ))}
     </View>
