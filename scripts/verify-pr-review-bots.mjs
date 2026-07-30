@@ -12,6 +12,7 @@ import {
   loginToBotKey,
   SPREADSHEET_BOT_KEYS,
 } from './lib/pr-bot-roster.mjs';
+import { isStructuredReview } from './qwen-pr-review.mjs';
 
 const sha = '0123456789abcdef0123456789abcdef01234567';
 const qwenSuccess = [
@@ -69,6 +70,11 @@ assert.equal(
 assert.equal(loginMatchesBotKey('cursor[bot]', 'codex', 'Cursor review housekeeping'), false);
 assert(SPREADSHEET_BOT_KEYS.includes('qwen'));
 assert(SPREADSHEET_BOT_KEYS.includes('cursor'));
+assert.equal(
+  isStructuredReview('## Summary\nx\n## Findings\nnone\n## Test Gaps\nnone'),
+  true,
+);
+assert.equal(isStructuredReview('This script waits for bots and offers general help.'), false);
 
 const workflow = readFileSync('.github/workflows/cursor-auto-pr-review.yml', 'utf8');
 assert.match(workflow, /\bpull_request_target:/);
