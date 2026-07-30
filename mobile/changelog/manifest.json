@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-23T10:42:10.637Z",
+  "generated_at": "2026-07-30T19:28:24.961Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -417,6 +417,15 @@
         "docs: refresh Android install QR (v1.0.42 build 155) [skip ci] (#24)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.43"
+    },
+    {
+      "version": "1.0.44",
+      "date": "2026-07-30",
+      "summaryBullets": [
+        "Authenticate release automation branch pushes (#83)",
+        "Fix repeated queue-drain release failures (#82)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.44"
     }
   ]
 }

@@ -1,0 +1,35 @@
+{
+  "version": "1.0.44",
+  "date": "2026-07-30",
+  "summaryBullets": [
+    "Authenticate release automation branch pushes (#83)",
+    "Fix repeated queue-drain release failures (#82)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Authenticate release automation branch pushes (#83)"
+        },
+        {
+          "text": "Fix repeated queue-drain release failures (#82)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.44"
+        },
+        {
+          "text": "Since tag: app-v1.0.77"
+        }
+      ]
+    }
+  ]
+}
