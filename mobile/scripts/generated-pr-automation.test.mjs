@@ -5,9 +5,27 @@ import test from 'node:test';
 import {
   actionRequiredRunIds,
   approveActionRequiredRuns,
+  createHeadScopedRunTracker,
   waitForPullRequestMerge,
   workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
+
+test('head-scoped tracking resets approvals and fallback timing after a rebase', () => {
+  const tracker = createHeadScopedRunTracker({ fallbackAttempt: 2 });
+  const first = tracker.observe('head-a');
+  first.seenRunIds.add(41);
+  assert.equal(first.shouldCheckFallback, false);
+
+  const second = tracker.observe('head-a');
+  assert.equal(second.shouldCheckFallback, true);
+  tracker.markFallbackChecked();
+
+  const rebased = tracker.observe('head-b');
+  assert.equal(rebased.headSha, 'head-b');
+  assert.deepEqual([...rebased.seenRunIds], []);
+  assert.equal(rebased.shouldCheckFallback, false);
+  assert.equal(tracker.observe('head-b').shouldCheckFallback, true);
+});
 
 test('workflowRunsForHead excludes stale runs from a reused branch', () => {
   assert.deepEqual(

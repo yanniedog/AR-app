@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
 import {
   approveActionRequiredRuns,
+  createHeadScopedRunTracker,
   waitForPullRequestMerge,
   workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
@@ -81,7 +82,7 @@ export function pushBranchWithGhAuth(branchName, { authenticate = gh, runGit = g
 }
 
 export function readmeApkQrCommitMessage(version, buildNumber) {
-  return `${README_APK_QR_COMMIT_PREFIX} (v${version} build ${buildNumber}) [skip ci]`;
+  return `${README_APK_QR_COMMIT_PREFIX} (v${version} build ${buildNumber})`;
 }
 
 export function readmeApkQrBranchName(version, buildNumber) {
@@ -101,12 +102,14 @@ function enableAutoMerge(prNumber) {
 }
 
 async function settleGeneratedPr(prNumber, branchName) {
-  const seenRunIds = new Set();
-  const headSha = gh([
-    'pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid', '--repo', repo,
-  ]);
-  let fallbackChecked = false;
-  const approveBlockedRuns = async (attempt) => {
+  const runTracker = createHeadScopedRunTracker();
+  const approveBlockedRuns = async () => {
+    const headState = runTracker.observe(
+      gh([
+        'pr', 'view', String(prNumber), '--json', 'headRefOid',
+        '--jq', '.headRefOid', '--repo', repo,
+      ]),
+    );
     let runs = [];
     const approved = await approveActionRequiredRuns({
       listRuns: () => {
@@ -115,18 +118,18 @@ async function settleGeneratedPr(prNumber, branchName) {
           '--limit', '20', '--json',
           'databaseId,status,conclusion,workflowName,headSha', '--repo', repo,
         ]);
-        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headSha);
+        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headState.headSha);
         return runs;
       },
       approveRun: (runId) =>
         gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
-      seenRunIds,
+      seenRunIds: headState.seenRunIds,
     });
     if (approved.length > 0) {
       console.log(`publish-readme-app-install: approved ${approved.length} generated-PR workflow run(s)`);
     }
-    if (!fallbackChecked && attempt >= 4) {
-      fallbackChecked = true;
+    if (headState.shouldCheckFallback) {
+      runTracker.markFallbackChecked();
       dispatchMissingRequiredPrChecks(
         prNumber,
         branchName,

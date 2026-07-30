@@ -1,5 +1,34 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
+export function createHeadScopedRunTracker({ fallbackAttempt = 4 } = {}) {
+  let headSha = '';
+  let attemptsForHead = 0;
+  let fallbackChecked = false;
+  const seenRunIds = new Set();
+
+  return {
+    observe(nextHeadSha) {
+      const normalizedHeadSha = String(nextHeadSha || '').trim();
+      if (!normalizedHeadSha) throw new Error('generated pull request head SHA is required');
+      if (normalizedHeadSha !== headSha) {
+        headSha = normalizedHeadSha;
+        attemptsForHead = 0;
+        fallbackChecked = false;
+        seenRunIds.clear();
+      }
+      attemptsForHead += 1;
+      return {
+        headSha,
+        seenRunIds,
+        shouldCheckFallback: !fallbackChecked && attemptsForHead >= fallbackAttempt,
+      };
+    },
+    markFallbackChecked() {
+      fallbackChecked = true;
+    },
+  };
+}
+
 export function workflowRunsForHead(runs, expectedHeadSha) {
   const headSha = String(expectedHeadSha || '').trim();
   if (!headSha) return [];
