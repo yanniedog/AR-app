@@ -23,6 +23,9 @@ export const BOT_ALIASES = {
     'cursor[bot]',
   ],
   sourcery: ['sourcery-ai', 'sourcery-ai[bot]'],
+  copilot: ['copilot-pull-request-reviewer', 'copilot-pull-request-reviewer[bot]'],
+  coderabbit: ['coderabbitai', 'coderabbitai[bot]'],
+  greptile: ['greptile-apps', 'greptile-apps[bot]'],
   qwen: ['github-actions[bot]'],
 };
 

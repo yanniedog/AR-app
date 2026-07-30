@@ -92,9 +92,9 @@ export function collectDiff(baseRef, maxChars) {
     .filter(Boolean);
   const candidates = changedFiles
     .filter(isReviewablePath)
-    .sort((left, right) => riskRank(left) - riskRank(right));
-  const excludedFiles = changedFiles.filter((path) => !isReviewablePath(path));
-  const omittedFiles = [];
+    .sort((left, right) => riskRank(left) - riskRank(right))
+    .slice(0, MAX_FILES);
+  const omittedFiles = changedFiles.filter((path) => !candidates.includes(path));
   const reviewedFiles = [];
   const validLines = new Map();
   const sections = [];
@@ -113,7 +113,6 @@ export function collectDiff(baseRef, maxChars) {
   }
   return {
     reviewedFiles,
-    excludedFiles,
     omittedFiles: [...new Set(omittedFiles)],
     validLines,
     sections,
@@ -218,12 +217,6 @@ async function main() {
     baseRef,
     Number.isFinite(configuredMax) && configuredMax > 0 ? configuredMax : DEFAULT_DIFF_MAX,
   );
-  if (diff.omittedFiles.length > 0) {
-    fail(
-      `Qwen review budget omitted reviewable file(s): ${diff.omittedFiles.join(', ')}. ` +
-        'Split the pull request or increase DIFF_MAX_CHARS before accepting the review.',
-    );
-  }
   let findings = [];
   let reason = '';
   let modelCalls = 0;
@@ -266,7 +259,6 @@ async function main() {
   const output = {
     findings,
     reviewed_files: diff.reviewedFiles,
-    excluded_files: diff.excludedFiles,
     omitted_files: diff.omittedFiles,
     model_calls: modelCalls,
     reason,

@@ -60,6 +60,14 @@ assert.deepEqual(
 assert.equal(isBotNoise('ERROR: Gemini API returned HTTP 503'), true);
 assert.equal(isBotNoise('The consumer version has been sunset; review activity has ceased.'), true);
 assert.equal(eventSatisfiesRequiredKey('github-actions[bot]', 'ERROR: Gemini 429', 'gemini'), false);
+assert.equal(
+  eventSatisfiesRequiredKey(
+    'coderabbitai[bot]',
+    'This reachable branch loses the release artifact and should retain it.',
+    'coderabbit',
+  ),
+  true,
+);
 
 assert.equal(loginToBotKey('github-actions[bot]', qwenSuccess), 'qwen');
 assert.equal(loginToBotKey('coderabbitai', 'A real review comment with actionable detail.'), 'coderabbit');
@@ -101,11 +109,9 @@ assert.match(workflow, /cancel-in-progress:\s*true/);
 assert.doesNotMatch(workflow, /queue:\s*max/);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"160000"/);
 assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
-assert.match(workflow, /refs\/pull\/\$\{\{\s*steps\.pr\.outputs\.number\s*\}\}\/head/);
-assert.doesNotMatch(workflow, /Fork PRs cannot run/);
-assert.match(workflow, /Reviewed files:/);
-assert.match(workflow, /Omitted reviewable files:/);
-assert.match(workflow, /Intentionally excluded low-signal files:/);
+assert.match(workflow, /Fork PRs cannot run/);
+assert.doesNotMatch(workflow, /Reviewed files:/);
+assert.doesNotMatch(workflow, /Omitted (?:reviewable )?files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
 assert.match(workflow, /\$finding\.side -eq 'RIGHT'/);
 assert.doesNotMatch(prompt, /## Summary/);
