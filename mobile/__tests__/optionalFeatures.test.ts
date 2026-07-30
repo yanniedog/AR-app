@@ -400,6 +400,25 @@ describe('optional feature prefs', () => {
     expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalled();
   });
 
+  it('allows an exact bank-move drill-down for Pro when the history ribbon is off', async () => {
+    store.setState({
+      prefs: proPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
+    mockSyncProductHistoryFromDailyPayloads.mockResolvedValue({
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      run_dates: [remoteCore.run_date],
+      products: {},
+    });
+
+    await store.getState().ensureProductHistory({ purpose: 'bank_move' });
+
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
+  });
+
   it('ensureHistoryBanks downloads the compact asset before daily fallback', async () => {
     const infoSpy = jest.spyOn(debugLog, 'info').mockImplementation(() => {});
     store.setState({

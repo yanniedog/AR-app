@@ -4,6 +4,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState } from '../src/components/feedback';
+import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
 import { AppText, Badge, Divider } from '../src/components/ui';
 import { SECTIONS } from '../src/constants';
@@ -17,6 +18,7 @@ import {
 } from '../src/data/format';
 import { findByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
+import { hasProAccess } from '../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -25,6 +27,7 @@ const COL_W = 136;
 const HEADER_H = 88;
 const ROW_H = 44;
 const RATE_ROW_H = 52;
+const CHANGE_ROW_H = 64;
 
 interface Entry {
   row: RateRow;
@@ -42,6 +45,9 @@ export default function Compare() {
   const theme = useTheme();
   const { keys } = useLocalSearchParams<{ keys: string }>();
   const core = useStore((s) => s.core);
+  const productHistoryAvailable = useStore(
+    (s) => hasProAccess(s.prefs) && s.productHistory != null,
+  );
 
   const entries = useMemo<Entry[]>(() => {
     if (!core || !keys) return [];
@@ -165,8 +171,9 @@ export default function Compare() {
                 },
               ]}
             />
-            {labelCell('Rate', RATE_ROW_H, '700')}
-            {attrRows.map((r) => labelCell(r.label, ROW_H))}
+             {labelCell('Rate', RATE_ROW_H, '700')}
+             {productHistoryAvailable ? labelCell('Best-rate move', CHANGE_ROW_H) : null}
+             {attrRows.map((r) => labelCell(r.label, ROW_H))}
           </View>
 
           {/* Horizontally scrollable product columns */}
@@ -218,9 +225,21 @@ export default function Compare() {
                         </AppText>
                       </View>,
                       entryHighlightBg,
-                    )}
+                     )}
 
-                    {/* Attribute rows */}
+                     {productHistoryAvailable
+                       ? valueCell(
+                           'best-rate-move',
+                           CHANGE_ROW_H,
+                           <ProductRateChangeLine
+                             productKey={e.row.product_key}
+                             section={e.section}
+                             compact
+                           />,
+                         )
+                       : null}
+
+                     {/* Attribute rows */}
                     {attrRows.map((r) =>
                       valueCell(
                         r.label,

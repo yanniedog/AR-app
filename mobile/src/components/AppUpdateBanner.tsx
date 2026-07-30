@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
-import { Alert, Platform, Pressable } from 'react-native';
+import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { Alert, AppState, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
@@ -26,12 +26,32 @@ export interface AppUpdateBannerState {
   dismiss: () => void;
 }
 
+const AppUpdateBannerVisibleContext = createContext(false);
+
+export function AppUpdateBannerLayoutProvider({
+  visible,
+  children,
+}: {
+  visible: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <AppUpdateBannerVisibleContext.Provider value={visible}>
+      {children}
+    </AppUpdateBannerVisibleContext.Provider>
+  );
+}
+
+export function useAppUpdateBannerVisible(): boolean {
+  return useContext(AppUpdateBannerVisibleContext);
+}
+
 /**
- * One update check per app session; starts a background APK download when a
- * newer build is published. Banner visibility persists dismissal per
- * build_number, so it returns when the next release ships.
+ * Root-scoped update check. It starts a system-managed background download when
+ * a newer build is published and checks again whenever the app becomes active.
+ * Banner dismissal is per build_number, so a later release is shown again.
  */
-export function useAppUpdateBanner(): AppUpdateBannerState {
+export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const dismissedBuild = useStore((s) => s.prefs.dismissedUpdateBuild);
   const wifiOnly = useStore((s) => s.prefs.wifiOnly);
   const setPref = useStore((s) => s.setPref);
@@ -43,23 +63,30 @@ export function useAppUpdateBanner(): AppUpdateBannerState {
   useEffect(() => subscribeApkDownload(setDownload), []);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
+    if (!enabled || Platform.OS !== 'android') return;
     let cancelled = false;
-    checkForAppUpdate()
-      .then((r) => {
-        if (cancelled) return;
-        setResult(r);
-        if (r.status === 'available') {
-          void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
-            // ensureApkBackgroundDownload persists phase=error for Retry.
-          });
-        }
-      })
-      .catch(() => {});
+    const checkAndDownload = () =>
+      checkForAppUpdate()
+        .then((r) => {
+          if (cancelled) return;
+          setResult(r);
+          if (r.status === 'available') {
+            void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
+              // ensureApkBackgroundDownload persists phase=error for Retry.
+            });
+          }
+        })
+        .catch(() => {});
+
+    void checkAndDownload();
+    const appStateSubscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void checkAndDownload();
+    });
     return () => {
       cancelled = true;
+      appStateSubscription.remove();
     };
-  }, [wifiOnly]);
+  }, [enabled, wifiOnly]);
 
   const available = result?.status === 'available' ? result : null;
   return {
