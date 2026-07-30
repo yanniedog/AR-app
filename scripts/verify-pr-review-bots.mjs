@@ -202,6 +202,11 @@ assert.match(
   coderabbitRetryWorkflow,
   /gh pr comment "\$PR" --repo "\$GITHUB_REPOSITORY"/,
 );
+assert.doesNotMatch(coderabbitRetryWorkflow, /gh api[\s\S]{0,200}--jq --arg/);
+assert.match(
+  coderabbitRetryWorkflow,
+  /--paginate --slurp \|\s*\n\s*jq --arg after/,
+);
 assert.doesNotMatch(
   branchProtection.match(/const REQUIRED_CHECKS = \[[\s\S]*?\];/)?.[0] || "",
   /qwen-code-review|bot-presence-gate/,
