@@ -96,7 +96,8 @@
           "faceIDPermission": "Unlock Australian Rates with Face ID."
         }
       ],
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      "@kesha-antonov/react-native-background-downloader"
     ],
     "experiments": {
       "typedRoutes": true

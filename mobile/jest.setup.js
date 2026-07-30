@@ -210,4 +210,36 @@ jest.mock('expo-file-system/legacy', () => ({
   getContentUriAsync: jest.fn(async () => 'content://test/app-update.apk'),
   getInfoAsync: jest.fn(async () => ({ exists: false })),
   readAsStringAsync: jest.fn(async () => ''),
+  readDirectoryAsync: jest.fn(async () => []),
 }));
+
+jest.mock('@kesha-antonov/react-native-background-downloader', () => {
+  const tasks = [];
+  return {
+    directories: { documents: 'file:///docs/' },
+    setConfig: jest.fn(),
+    completeHandler: jest.fn(async () => {}),
+    getExistingDownloadTasks: jest.fn(async () => tasks.slice()),
+    createDownloadTask: jest.fn((opts) => {
+      const task = {
+        id: opts.id,
+        state: 'PENDING',
+        metadata: opts.metadata || {},
+        errorCode: 0,
+        bytesDownloaded: 0,
+        bytesTotal: 0,
+        downloadParams: opts,
+        begin() { return this; },
+        progress() { return this; },
+        done() { return this; },
+        error() { return this; },
+        start: jest.fn(),
+        pause: jest.fn(async () => {}),
+        resume: jest.fn(async () => {}),
+        stop: jest.fn(async () => {}),
+      };
+      tasks.push(task);
+      return task;
+    }),
+  };
+});

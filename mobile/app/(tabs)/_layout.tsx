@@ -22,7 +22,11 @@ export default function TabsLayout() {
   return (
     <>
     {showUpdateBanner ? (
-      <AppUpdateBanner remote={updateBanner.remote!} onDismiss={updateBanner.dismiss} />
+      <AppUpdateBanner
+        remote={updateBanner.remote!}
+        download={updateBanner.download}
+        onDismiss={updateBanner.dismiss}
+      />
     ) : null}
     <Tabs
       tabBar={isAndroid ? (props) => <M3NavigationBar {...props} /> : undefined}
