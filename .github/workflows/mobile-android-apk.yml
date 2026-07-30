@@ -15,14 +15,10 @@
 
 name: mobile-android-apk
 
+# Queue-drain automation dispatches this only after the final patch-version PR
+# merges. Building on every preceding main push produced duplicate/stale APKs.
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/mobile-android-apk.yml'
 
 permissions:
   actions: write

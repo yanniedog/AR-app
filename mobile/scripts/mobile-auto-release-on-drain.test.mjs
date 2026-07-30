@@ -5,6 +5,7 @@ import test from 'node:test';
 import {
   checkedGhOutput,
   ensureApkForMainHead,
+  hasApkBuildInFlight,
   pushBranchWithGhAuth,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
@@ -41,7 +42,7 @@ test('pushBranchWithGhAuth configures the GitHub CLI credential helper before pu
   ]);
 });
 
-test('generated PRs explicitly dispatch every required check on their head branch', () => {
+test('generated PRs dispatch required checks only when PR-event runs are missing', () => {
   assert.deepEqual(requiredPrCheckDispatches(72, 'chore/mobile-auto-release-v1.2.3'), [
     { workflow: 'app-ci.yml', ref: 'chore/mobile-auto-release-v1.2.3', inputs: [] },
     {
@@ -50,6 +51,28 @@ test('generated PRs explicitly dispatch every required check on their head branc
       inputs: ['-f', 'pr_number=72'],
     },
   ]);
+  assert.deepEqual(
+    requiredPrCheckDispatches(
+      72,
+      'chore/mobile-auto-release-v1.2.3',
+      ['app-ci'],
+    ),
+    [
+      {
+        workflow: 'pr-bot-feedback-check.yml',
+        ref: 'chore/mobile-auto-release-v1.2.3',
+        inputs: ['-f', 'pr_number=72'],
+      },
+    ],
+  );
+  assert.deepEqual(
+    requiredPrCheckDispatches(
+      72,
+      'chore/mobile-auto-release-v1.2.3',
+      ['app-ci', 'pr-bot-feedback-check'],
+    ),
+    [],
+  );
 });
 
 test('waitForQueueDrain refreshes main after a queued PR closes', async () => {
@@ -83,15 +106,33 @@ test('waitForQueueDrain skips without refreshing when multiple PRs remain', asyn
   assert.equal(syncCount, 0);
 });
 
+test('hasApkBuildInFlight matches only the exact versioned main head', () => {
+  const runs = [
+    { headSha: 'older', status: 'in_progress' },
+    { headSha: 'target', status: 'completed' },
+  ];
+  assert.equal(hasApkBuildInFlight(runs, 'target'), false);
+  assert.equal(
+    hasApkBuildInFlight([...runs, { headSha: 'target', status: 'queued' }], 'target'),
+    true,
+  );
+});
+
 test('ensureApkForMainHead dispatches when the version has no published APK', () => {
   const dispatched = [];
+  const checkedHeads = [];
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.40',
+    readHeadSha: () => 'abc1234',
     releaseExists: () => false,
-    buildInFlight: () => false,
+    buildInFlight: (headSha) => {
+      checkedHeads.push(headSha);
+      return false;
+    },
     dispatch: (v) => dispatched.push(v),
   });
   assert.equal(did, true);
+  assert.deepEqual(checkedHeads, ['abc1234']);
   assert.deepEqual(dispatched, ['1.0.40']);
 });
 
@@ -99,6 +140,7 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
   let dispatchedCount = 0;
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.29',
+    readHeadSha: () => 'abc1234',
     releaseExists: (v) => v === '1.0.29',
     buildInFlight: () => false,
     dispatch: () => {
@@ -111,14 +153,20 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
 
 test('ensureApkForMainHead skips dispatch when a build is already in flight', () => {
   let dispatchedCount = 0;
+  const checkedHeads = [];
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.41',
+    readHeadSha: () => 'def5678',
     releaseExists: () => false,
-    buildInFlight: () => true,
+    buildInFlight: (headSha) => {
+      checkedHeads.push(headSha);
+      return true;
+    },
     dispatch: () => {
       dispatchedCount += 1;
     },
   });
   assert.equal(did, false);
+  assert.deepEqual(checkedHeads, ['def5678']);
   assert.equal(dispatchedCount, 0);
 });

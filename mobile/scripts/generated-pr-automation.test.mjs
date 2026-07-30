@@ -6,7 +6,21 @@ import {
   actionRequiredRunIds,
   approveActionRequiredRuns,
   waitForPullRequestMerge,
+  workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
+
+test('workflowRunsForHead excludes stale runs from a reused branch', () => {
+  assert.deepEqual(
+    workflowRunsForHead(
+      [
+        { databaseId: 9, headSha: 'old-head' },
+        { databaseId: 10, headSha: 'current-head' },
+      ],
+      'current-head',
+    ),
+    [{ databaseId: 10, headSha: 'current-head' }],
+  );
+});
 
 test('actionRequiredRunIds selects only approvable workflow runs', () => {
   assert.deepEqual(
