@@ -11,6 +11,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
   approveActionRequiredRuns,
+  createHeadScopedRunTracker,
   waitForPullRequestMerge,
   workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
@@ -274,12 +275,14 @@ function enableAutoMerge(prNumber) {
 }
 
 async function settleGeneratedPr(prNumber, branchName) {
-  const seenRunIds = new Set();
-  const headSha = gh([
-    'pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid', '--repo', repo,
-  ]);
-  let fallbackChecked = false;
-  const approveBlockedRuns = async (attempt) => {
+  const runTracker = createHeadScopedRunTracker();
+  const approveBlockedRuns = async () => {
+    const headState = runTracker.observe(
+      gh([
+        'pr', 'view', String(prNumber), '--json', 'headRefOid',
+        '--jq', '.headRefOid', '--repo', repo,
+      ]),
+    );
     let runs = [];
     const approved = await approveActionRequiredRuns({
       listRuns: () => {
@@ -288,24 +291,25 @@ async function settleGeneratedPr(prNumber, branchName) {
           '--limit', '20', '--json',
           'databaseId,status,conclusion,workflowName,headSha', '--repo', repo,
         ]);
-        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headSha);
+        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headState.headSha);
         return runs;
       },
       approveRun: (runId) =>
         gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
-      seenRunIds,
+      seenRunIds: headState.seenRunIds,
     });
     if (approved.length > 0) {
       console.log(`mobile-auto-release-on-drain: approved ${approved.length} generated-PR workflow run(s)`);
     }
-    if (!fallbackChecked && attempt >= 4) {
-      fallbackChecked = true;
+    if (headState.shouldCheckFallback) {
+      runTracker.markFallbackChecked();
       dispatchMissingRequiredPrChecks(
         prNumber,
         branchName,
         runs.map((run) => run?.workflowName),
       );
     }
+    return { resetWait: headState.headChanged };
   };
   enableAutoMerge(prNumber);
   await waitForPullRequestMerge({

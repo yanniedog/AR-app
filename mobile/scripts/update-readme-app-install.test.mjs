@@ -31,7 +31,7 @@ test('buildReadmeInstallSection embeds cache-busted QR from manifest', () => {
 test('readme APK QR commit message and branch are deterministic', () => {
   assert.equal(
     readmeApkQrCommitMessage('1.0.13', '27'),
-    'docs: refresh Android install QR (v1.0.13 build 27) [skip ci]',
+    'docs: refresh Android install QR (v1.0.13 build 27)',
   );
   assert.equal(readmeApkQrBranchName('1.0.13', '27'), 'chore/readme-apk-qr-v1.0.13-b27');
 });

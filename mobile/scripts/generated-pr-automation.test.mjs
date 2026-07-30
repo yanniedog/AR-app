@@ -5,9 +5,30 @@ import test from 'node:test';
 import {
   actionRequiredRunIds,
   approveActionRequiredRuns,
+  createHeadScopedRunTracker,
   waitForPullRequestMerge,
   workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
+
+test('head-scoped tracking resets approvals and fallback timing after a rebase', () => {
+  const tracker = createHeadScopedRunTracker({ fallbackAttempt: 2 });
+  const first = tracker.observe('head-a');
+  first.seenRunIds.add(41);
+  assert.equal(first.headChanged, false);
+  assert.equal(first.shouldCheckFallback, false);
+
+  const second = tracker.observe('head-a');
+  assert.equal(second.headChanged, false);
+  assert.equal(second.shouldCheckFallback, true);
+  tracker.markFallbackChecked();
+
+  const rebased = tracker.observe('head-b');
+  assert.equal(rebased.headSha, 'head-b');
+  assert.equal(rebased.headChanged, true);
+  assert.deepEqual([...rebased.seenRunIds], []);
+  assert.equal(rebased.shouldCheckFallback, false);
+  assert.equal(tracker.observe('head-b').shouldCheckFallback, true);
+});
 
 test('workflowRunsForHead excludes stale runs from a reused branch', () => {
   assert.deepEqual(
@@ -66,6 +87,23 @@ test('waitForPullRequestMerge checks for late blocked runs until merge', async (
     }),
   );
   assert.deepEqual(observedAttempts, [1, 2, 3]);
+});
+
+test('waitForPullRequestMerge replenishes polling after a late head change', async () => {
+  const states = ['OPEN', 'OPEN', 'OPEN', 'OPEN', 'MERGED'];
+  const observedPolls = [];
+  await assert.doesNotReject(
+    waitForPullRequestMerge({
+      attempts: 3,
+      beforeRead: async (poll) => {
+        observedPolls.push(poll);
+        return { resetWait: poll === 3 };
+      },
+      readState: async () => states.shift(),
+      sleep: async () => {},
+    }),
+  );
+  assert.deepEqual(observedPolls, [1, 2, 3, 4, 5]);
 });
 
 test('waitForPullRequestMerge rejects a closed unmerged PR', async () => {

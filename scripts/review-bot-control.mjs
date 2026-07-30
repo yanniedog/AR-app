@@ -3,6 +3,17 @@ import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  combineRequiredCheckState,
+  requiredChecksFromProtection,
+  requiredChecksFromRules,
+} from "./lib/required-ci-checks.mjs";
+
+export {
+  combineRequiredCheckState,
+  requiredChecksFromProtection,
+  requiredChecksFromRules,
+} from "./lib/required-ci-checks.mjs";
 
 const QWEN_WORKFLOW = "cursor-auto-pr-review.yml";
 const PRESENCE_WORKFLOW = "pr-bot-presence-gate.yml";
@@ -150,49 +161,6 @@ function cancelActiveRuns(repo, workflow) {
     if (result.ok) cancelled += 1;
   }
   return cancelled;
-}
-
-export function requiredChecksFromProtection(protection) {
-  return [
-    ...(protection?.required_status_checks?.checks || []).map(
-      (row) => row.context,
-    ),
-    ...(protection?.required_status_checks?.contexts || []),
-  ].filter(Boolean);
-}
-
-export function requiredChecksFromRules(rules) {
-  return (rules || [])
-    .filter((rule) => rule?.type === "required_status_checks")
-    .flatMap((rule) => rule?.parameters?.required_status_checks || [])
-    .map((row) => row.context)
-    .filter(Boolean);
-}
-
-export function combineRequiredCheckState({
-  protectionOk,
-  protection,
-  rulesOk,
-  rules,
-}) {
-  if (protectionOk || rulesOk) {
-    const sources = [];
-    if (protectionOk) sources.push("branch protection");
-    if (rulesOk) sources.push("rules");
-    return {
-      values: [
-        ...new Set([
-          ...requiredChecksFromProtection(protection),
-          ...requiredChecksFromRules(rules),
-        ]),
-      ],
-      source: `live ${sources.join(" + ")}`,
-    };
-  }
-  return {
-    values: ["mobile-ci", "bot-feedback-gate"],
-    source: "configured policy fallback; live policy APIs unavailable",
-  };
 }
 
 function requiredChecks(repo) {
