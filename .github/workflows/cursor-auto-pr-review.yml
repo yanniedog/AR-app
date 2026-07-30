@@ -63,9 +63,6 @@ jobs:
             throw "Pull request number must be numeric."
           }
           $json = gh api "repos/$env:GITHUB_REPOSITORY/pulls/$pr" | ConvertFrom-Json
-          if ($json.head.repo.full_name -ne $env:GITHUB_REPOSITORY) {
-            throw "Fork PRs cannot run on the private Qwen runner."
-          }
           "number=$pr" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "head_sha=$($json.head.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "base_ref=$($json.base.ref)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -112,7 +109,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
-          ref: ${{ steps.pr.outputs.head_sha }}
+          # Base-repository pull refs expose fork heads without granting the
+          # untrusted fork repository a token or executing its code.
+          ref: refs/pull/${{ steps.pr.outputs.number }}/head
           path: review-target
           fetch-depth: 0
           persist-credentials: false
@@ -179,6 +178,9 @@ jobs:
             "Review outcome: $outcome"
             "Model: ``$model``"
             "Workflow: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            "Reviewed files: $reviewed"
+            "Omitted reviewable files: $omitted"
+            "Intentionally excluded low-signal files: $excluded"
             if ($findings.Count -eq 0) { 'No actionable defects found in the high-signal diff.' }
             else { "$($findings.Count) actionable inline finding(s) with direct revisions." }
           ) -join "`n"
@@ -215,7 +217,8 @@ jobs:
           @(
             "### Qwen review coverage"
             "- Reviewed: $(@($review.reviewed_files).Count) high-signal file(s)"
-            "- Omitted: $(@($review.omitted_files).Count) low-signal or size-capped file(s)"
+            "- Omitted: $(@($review.omitted_files).Count) reviewable file(s)"
+            "- Intentionally excluded: $(@($review.excluded_files).Count) low-signal file(s)"
             "- Local model calls: $($review.model_calls)"
             "- Findings: $($findings.Count)"
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
