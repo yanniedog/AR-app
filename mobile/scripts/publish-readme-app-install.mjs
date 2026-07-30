@@ -10,6 +10,10 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
+import {
+  approveActionRequiredRuns,
+  waitForPullRequestMerge,
+} from '../../scripts/lib/generated-pr-automation.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -95,6 +99,34 @@ function enableAutoMerge(prNumber) {
   gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--delete-branch', '--repo', repo]);
 }
 
+async function settleGeneratedPr(prNumber, branchName) {
+  const seenRunIds = new Set();
+  const approveBlockedRuns = async () => {
+    const approved = await approveActionRequiredRuns({
+      listRuns: () => {
+        const raw = gh([
+          'run', 'list', '--branch', branchName, '--event', 'pull_request',
+          '--limit', '20', '--json', 'databaseId,status,conclusion', '--repo', repo,
+        ]);
+        return JSON.parse(raw || '[]');
+      },
+      approveRun: (runId) =>
+        gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
+      seenRunIds,
+    });
+    if (approved.length > 0) {
+      console.log(`publish-readme-app-install: approved ${approved.length} generated-PR workflow run(s)`);
+    }
+  };
+  enableAutoMerge(prNumber);
+  await waitForPullRequestMerge({
+    beforeRead: approveBlockedRuns,
+    readState: () =>
+      gh(['pr', 'view', String(prNumber), '--json', 'state', '--jq', '.state', '--repo', repo]),
+  });
+  console.log(`publish-readme-app-install: generated PR #${prNumber} merged`);
+}
+
 function dispatchRequiredPrChecks(prNumber, branchName) {
   for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
     gh([
@@ -113,14 +145,14 @@ function dispatchRequiredPrChecks(prNumber, branchName) {
   );
 }
 
-function publishViaPullRequest(version, buildNumber, message) {
+async function publishViaPullRequest(version, buildNumber, message) {
   const branchName = readmeApkQrBranchName(version, buildNumber);
   const existing = listOpenReadmeQrPrs(version, buildNumber);
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`publish-readme-app-install: open README QR PR #${pr.number} (${pr.url}) — ensure auto-merge`);
     dispatchRequiredPrChecks(pr.number, branchName);
-    enableAutoMerge(pr.number);
+    await settleGeneratedPr(pr.number, branchName);
     return { mode: 'pr-existing', prNumber: pr.number };
   }
 
@@ -153,7 +185,7 @@ function publishViaPullRequest(version, buildNumber, message) {
   }
 
   dispatchRequiredPrChecks(prNumber, branchName);
-  enableAutoMerge(prNumber);
+  await settleGeneratedPr(prNumber, branchName);
   console.log(`publish-readme-app-install: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return { mode: 'pr-created', prNumber };
 }
@@ -161,7 +193,7 @@ function publishViaPullRequest(version, buildNumber, message) {
 /**
  * @param {{ repo?: string, manifestPath?: string, dryRun?: boolean }} [opts]
  */
-export function publishReadmeAppInstall(opts = {}) {
+export async function publishReadmeAppInstall(opts = {}) {
   const ghRepo = opts.repo?.trim() || repo;
   const manifest = opts.manifestPath ? resolve(opts.manifestPath) : manifestPath;
   const readmePath = join(repoRoot, 'README.md');
@@ -192,13 +224,13 @@ export function publishReadmeAppInstall(opts = {}) {
   git(['add', 'README.md']);
   git(['commit', '-m', message]);
 
-  const pr = publishViaPullRequest(result.version, result.buildNumber, message);
+  const pr = await publishViaPullRequest(result.version, result.buildNumber, message);
   return { ok: true, changed: true, ...pr, ...result };
 }
 
-function main() {
+async function main() {
   try {
-    const outcome = publishReadmeAppInstall({ dryRun });
+    const outcome = await publishReadmeAppInstall({ dryRun });
     if (!outcome.ok) process.exit(1);
   } catch (err) {
     console.error(err instanceof Error ? err.message : err);
@@ -208,5 +240,5 @@ function main() {
 
 const invoked = process.argv[1]?.replace(/\\/g, '/').endsWith('publish-readme-app-install.mjs');
 if (invoked) {
-  main();
+  await main();
 }
