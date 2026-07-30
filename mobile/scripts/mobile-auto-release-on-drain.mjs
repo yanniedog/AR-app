@@ -134,6 +134,11 @@ function git(args, { allowFail = false } = {}) {
   return (res.stdout || '').trim();
 }
 
+export function pushBranchWithGhAuth(branchName, { authenticate = gh, runGit = git } = {}) {
+  authenticate(['auth', 'setup-git']);
+  runGit(['push', '-u', 'origin', branchName, '--force-with-lease']);
+}
+
 function syncMain() {
   git(['fetch', 'origin', 'main', '--quiet']);
   git(['checkout', '-B', 'main', 'origin/main']);
@@ -247,7 +252,7 @@ function publishViaPullRequest(next, message) {
     { allowFail: true },
   );
   git(['checkout', '-B', branchName]);
-  git(['push', '-u', 'origin', branchName, '--force-with-lease']);
+  pushBranchWithGhAuth(branchName);
 
   const prHint = mergeSha ? `\n- Trigger merge: \`${mergeSha.slice(0, 7)}\`` : '';
   const body = [
