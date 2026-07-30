@@ -199,6 +199,26 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
     });
     expect(moves[1].bps).toBe(50);
   });
+
+  it('counts exact 5 bps moves despite floating-point fraction noise', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      // 0.0600 - 0.0595 is the classic IEEE case that undershoots 0.0005.
+      products: { 'P|edge': [0.0595, 0.06] },
+    };
+    const catalog = core('2026-06-10', {
+      Mortgage: [{ ...rateRow('P|edge', '0.06', 'AlphaBank'), product_name: 'Edge loan' }],
+    });
+    const moves = productMovesForBankEvent(catalog, history, {
+      provider: 'AlphaBank',
+      section: 'Mortgage',
+      date: '2026-06-10',
+    });
+    expect(moves).toHaveLength(1);
+    expect(moves[0].bps).toBe(5);
+  });
 });
 
 describe('normalizeProductHistoryPayload', () => {
