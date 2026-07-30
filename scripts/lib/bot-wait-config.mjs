@@ -29,9 +29,9 @@ export const BOT_ALIASES = {
   qwen: ['github-actions[bot]'],
 };
 
-// Qwen is the only required reviewer by default because it is self-hosted and
-// controlled by this repository. External bots remain advisory and observable.
-export const DEFAULT_REQUIRED_KEYS = ['qwen'];
+// No automated reviewer is merge-required by default. Review services remain
+// advisory unless an owner explicitly supplies AR_BOT_WAIT_REQUIRED.
+export const DEFAULT_REQUIRED_KEYS = [];
 
 export const OPTIONAL_BOT_LOGINS = [
   'github-actions[bot]',
@@ -96,6 +96,7 @@ export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
 
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
+  if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];
   return String(raw)
     .split(',')
     .map((s) => s.trim().toLowerCase())
@@ -103,7 +104,7 @@ export function parseRequiredKeys(raw) {
 }
 
 export function resolveRequiredKeys(argvKeys, envRaw) {
-  if (argvKeys?.length) return [...argvKeys];
+  if (argvKeys !== null && argvKeys !== undefined) return [...argvKeys];
   const fromEnv = envRaw ?? process.env.AR_BOT_WAIT_REQUIRED ?? process.env.BOT_WAIT_REQUIRED ?? '';
   return parseRequiredKeys(fromEnv);
 }
@@ -150,5 +151,7 @@ export function missingRequiredKeys(requiredKeys, seenLogins) {
 }
 
 export function formatRequiredKeys(keys) {
-  return keys.map((k) => `${k} (${loginsForKey(k).join(' | ')})`).join(', ');
+  return keys.length
+    ? keys.map((k) => `${k} (${loginsForKey(k).join(' | ')})`).join(', ')
+    : 'none (review bots are advisory)';
 }

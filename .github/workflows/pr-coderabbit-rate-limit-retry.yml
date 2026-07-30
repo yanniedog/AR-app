@@ -74,7 +74,7 @@ jobs:
             exit 0
           fi
 
-          STATE="$(gh pr view "$PR" --json state -q .state 2>/dev/null || true)"
+          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR not open ($STATE); skip"
             exit 0
@@ -83,8 +83,8 @@ jobs:
           BODY="${COMMENT_BODY:-}"
           CREATED="${COMMENT_CREATED_AT:-}"
           if [ "$EVENT_NAME" = "workflow_dispatch" ] || [ -z "$BODY" ]; then
-            META="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
-              --jq '[.[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
+            META="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate --slurp |
+              jq '[add[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
                 and (.body|test("Review limit reached|rate limited by coderabbit|reached your PR review limit";"i")))]
                 | sort_by(.created_at) | reverse | .[0] // empty | {body, created_at}')"
             if [ -z "$META" ] || [ "$META" = "null" ]; then
@@ -95,9 +95,9 @@ jobs:
             CREATED="$(printf '%s' "$META" | jq -r .created_at)"
           fi
 
-          REVIEWED_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/reviews" --paginate \
-            --jq --arg after "$CREATED" '
-              [.[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
+          REVIEWED_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/reviews" --paginate --slurp |
+            jq --arg after "$CREATED" '
+              [add[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
                 and .submitted_at > $after
                 and (.state=="COMMENTED" or .state=="APPROVED" or .state=="CHANGES_REQUESTED")
                 and ((.body // "") | test("Review limit reached|rate limited by coderabbit";"i") | not))]
@@ -107,11 +107,12 @@ jobs:
             exit 0
           fi
 
-          ARMED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
-            --jq --arg after "$CREATED" --arg marker "$RETRY_MARKER" '
-              ( [.[] | select(.created_at > $after and (.body|contains($marker)) and (.body|test("@coderabbitai\\s+review";"i")))]
+          ARMED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate --slurp |
+            jq --arg after "$CREATED" --arg marker "$RETRY_MARKER" '
+              add as $comments
+              | ( [$comments[] | select(.created_at > $after and (.body|contains($marker)) and (.body|test("@coderabbitai\\s+review";"i")))]
                 | map(.created_at) | max ) as $retry
-              | ( [.[] | select(.created_at > $after
+              | ( [$comments[] | select(.created_at > $after
                     and (.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
                     and (.body|test("Review limit reached|rate limited by coderabbit";"i")))]
                   | map(.created_at) | max ) as $newer
@@ -179,14 +180,14 @@ jobs:
             done
           fi
 
-          STATE="$(gh pr view "$PR" --json state -q .state 2>/dev/null || true)"
+          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR closed during wait; skip"
             exit 0
           fi
 
-          META_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate \
-            --jq '[.[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
+          META_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR}/comments" --paginate --slurp |
+            jq '[add[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
               and (.body|test("Review limit reached|rate limited by coderabbit|reached your PR review limit";"i")))]
               | sort_by(.created_at) | reverse | .[0] // empty | {body, created_at}')"
           if [ -n "$META_AFTER" ] && [ "$META_AFTER" != "null" ]; then
@@ -197,9 +198,9 @@ jobs:
             fi
           fi
 
-          REVIEWED_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/reviews" --paginate \
-            --jq --arg after "$CREATED" '
-              [.[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
+          REVIEWED_AFTER="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR}/reviews" --paginate --slurp |
+            jq --arg after "$CREATED" '
+              [add[] | select((.user.login=="coderabbitai[bot]" or .user.login=="coderabbitai")
                 and .submitted_at > $after
                 and (.state=="COMMENTED" or .state=="APPROVED" or .state=="CHANGES_REQUESTED")
                 and ((.body // "") | test("Review limit reached|rate limited by coderabbit";"i") | not))]
@@ -210,5 +211,5 @@ jobs:
           fi
 
           BODY_OUT="${RETRY_MARKER}"$'\n'"@coderabbitai review"
-          gh pr comment "$PR" --body "$BODY_OUT"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$BODY_OUT"
           echo "Posted @coderabbitai review on PR #$PR"

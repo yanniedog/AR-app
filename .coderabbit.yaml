@@ -29,6 +29,7 @@ reviews:
     - ".coderabbit.yaml"
     - ".cursor/**"
     - ".github/**"
+    - "docs/**"
     - "scripts/**"
     - "firebase/**"
     - "mobile/app/**"

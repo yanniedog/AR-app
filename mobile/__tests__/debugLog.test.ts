@@ -9,6 +9,7 @@ import {
   RingBuffer,
   debugLog,
   formatEntry,
+  formatErrorTrace,
   formatLogUploadBody,
   installGlobalErrorHandlers,
   parseLogLine,
@@ -45,6 +46,21 @@ describe('redactSecrets', () => {
   });
 });
 
+describe('formatErrorTrace', () => {
+  it('keeps the full stack on one physical log line', () => {
+    const error = new Error('audit failed');
+    const trace = formatErrorTrace(error);
+    expect(trace).toContain('Error: audit failed');
+    expect(trace).toContain(String.raw`\n`);
+    expect(trace).not.toContain('\n');
+  });
+
+  it('formats non-Error rejection values safely', () => {
+    expect(formatErrorTrace(undefined)).toBe('undefined');
+    expect(formatErrorTrace({ reason: 'slow' })).toBe('{"reason":"slow"}');
+  });
+});
+
 describe('RingBuffer', () => {
   it('evicts oldest lines when exceeding MAX_LOG_LINES', () => {
     const buf = new RingBuffer();
@@ -75,6 +91,30 @@ describe('RingBuffer', () => {
     }
     expect(buf.size()).toBeLessThan(lines);
     expect(buf.getText().length).toBeLessThanOrEqual(MAX_LOG_BYTES + 512);
+  });
+
+  it('uses a stable cursor after head entries are evicted', () => {
+    const buf = new RingBuffer();
+    for (let i = 0; i < MAX_LOG_LINES; i++) {
+      buf.append({
+        ts: new Date().toISOString(),
+        level: 'debug',
+        tag: 'old',
+        message: `line-${i}`,
+      });
+    }
+    const cursor = buf.getCursor();
+    buf.append({
+      ts: new Date().toISOString(),
+      level: 'error',
+      tag: 'new',
+      message: 'route failed',
+    });
+
+    expect(buf.size()).toBe(MAX_LOG_LINES);
+    expect(buf.getEntriesAfter(cursor)).toEqual([
+      expect.objectContaining({ tag: 'new', message: 'route failed' }),
+    ]);
   });
 });
 
@@ -248,6 +288,14 @@ describe('debugLog integration', () => {
     expect(crashlyticsApi.log).not.toHaveBeenCalledWith(expect.stringContaining('secret'));
   });
 
+  it('keeps performance audit reports local even when diagnostics are enabled', () => {
+    debugLog.info('perf-audit', '{"kind":"report","device":"test"}');
+
+    expect(debugLog.getText()).toContain('"kind":"report"');
+    expect(crashlyticsApi.log).not.toHaveBeenCalled();
+    expect(crashlyticsApi.recordError).not.toHaveBeenCalled();
+  });
+
   it('installGlobalErrorHandlers forwards fatal errors to debugLog', () => {
     debugLog.clear();
     resetGlobalErrorHandlersForTests();
@@ -268,7 +316,7 @@ describe('debugLog integration', () => {
 
     installGlobalErrorHandlers();
 
-    expect(debugLog.getText()).toContain('[ERROR] global: fatal Error: ribbon blew up');
+    expect(debugLog.getText()).toContain('[ERROR] global: fatal trace=Error: ribbon blew up');
     expect(previous).toHaveBeenCalled();
     expect(flushSpy).not.toHaveBeenCalled();
     flushSpy.mockRestore();

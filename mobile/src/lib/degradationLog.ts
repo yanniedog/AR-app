@@ -1,5 +1,5 @@
 import type { SuitabilityExclusionCounts } from '../data/access';
-import { debugLog, type LogLevel } from './debugLog';
+import { debugLog, formatErrorTrace, type LogLevel } from './debugLog';
 import { isDiagnosticsEnabled } from './observability';
 import type { ProGateIntent } from './proAccess';
 import type { SectionKey } from '../types';
@@ -56,7 +56,11 @@ export function logSwallowedError(context: string, err: unknown): void {
       msg = (err as { error: string }).error;
     }
   }
-  logDegradation('warn', 'swallowed', { ctx: context, error: msg });
+  logDegradation('warn', 'swallowed', {
+    ctx: context,
+    error: msg,
+    trace: formatErrorTrace(err),
+  });
 }
 
 export function logProGateBlocked(intent: ProGateIntent, source?: string): void {

@@ -18,6 +18,7 @@
     "ship:closeout:strict": "node scripts/pr-gates-check.mjs --watch",
     "branch-protection:apply": "node scripts/apply-branch-protection.mjs",
     "repo-merge-settings:apply": "node scripts/apply-repo-merge-settings.mjs",
+    "review-bots:control": "node scripts/review-bot-control.mjs",
     "pr:merge:verify": "node scripts/verify-pr-merge.mjs",
     "mobile:auto-release:verify": "node scripts/verify-mobile-auto-release-commit.mjs",
     "crashlytics:sync-issues": "node scripts/crashlytics-to-github-issues.mjs"

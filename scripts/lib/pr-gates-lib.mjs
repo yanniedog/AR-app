@@ -4,7 +4,6 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readBotWaitStateFile } from './bot-wait-state.mjs';
 import { hasGh, ghJson, repoSlug } from './gh-pr-review-threads.mjs';
 import { isReportsOnlyPr } from './pr-reports-only.mjs';
 import { fetchPrMergeMeta, gateAutoMergeEnabled, gateBranchFreshMeta } from './pr-branch-sync.mjs';
@@ -13,7 +12,7 @@ import { gateExemptReason } from './pr-gate-exempt.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(__dirname, '../..');
 
-export const BOT_GATE_CHECK_NAMES = ['qwen-code-review', 'bot-presence-gate', 'bot-feedback-gate'];
+export const BOT_GATE_CHECK_NAMES = ['bot-feedback-gate'];
 
 const FEEDBACK_PLAN_RE = /##\s*feedback\s+plan\b/i;
 
@@ -216,7 +215,7 @@ export function gateGithubBotChecks(prNumber) {
       id: 'github-bot-gates',
       pass: false,
       detail: error,
-      action: 'Ensure GitHub Actions workflows pr-bot-presence-gate and pr-bot-feedback-check ran',
+      action: 'Ensure the GitHub Actions workflow pr-bot-feedback-check ran',
     };
   }
   if (skipped || !BOT_GATE_CHECK_NAMES.some((name) => found[name])) {
@@ -229,8 +228,6 @@ export function gateGithubBotChecks(prNumber) {
   }
   const parts = [];
   let pass = true;
-  let botPresencePass = false;
-  let botPresenceCompletedAt = null;
   for (const name of BOT_GATE_CHECK_NAMES) {
     const c = found[name];
     if (!c) {
@@ -241,10 +238,6 @@ export function gateGithubBotChecks(prNumber) {
     const ok = checkBucketPass(c);
     if (ok === true) {
       parts.push(`${name}: pass`);
-      if (name === 'bot-presence-gate') {
-        botPresencePass = true;
-        botPresenceCompletedAt = c.completedAt || null;
-      }
     }
     else if (ok === false) {
       parts.push(`${name}: ${c.bucket || c.state}`);
@@ -258,11 +251,9 @@ export function gateGithubBotChecks(prNumber) {
     id: 'github-bot-gates',
     pass,
     detail: parts.join('; '),
-    botPresencePass,
-    botPresenceCompletedAt,
     action: pass
       ? undefined
-      : 'Wait for qwen-code-review, bot-presence-gate, and bot-feedback-gate on GitHub',
+      : 'Wait for bot-feedback-gate on GitHub',
   };
 }
 
@@ -282,7 +273,7 @@ export function runNodeScript(relPath, extraArgs = [], { env: envOverrides, maxB
   };
 }
 
-export function gateWaitForBots(prNumber, githubBotGate) {
+export function gateWaitForBots(prNumber) {
   const exempt = gateExemptReason(prNumber);
   if (exempt) {
     return {
@@ -291,19 +282,6 @@ export function gateWaitForBots(prNumber, githubBotGate) {
       detail: `Skipped (${exempt} — human bot review not required)`,
       skipped: true,
     };
-  }
-  if (githubBotGate?.botPresencePass) {
-    const state = readBotWaitStateFile(prNumber, REPO_ROOT);
-    const anchorMs = new Date(state?.anchor || '').getTime();
-    const gateMs = new Date(githubBotGate.botPresenceCompletedAt || '').getTime();
-    if (!Number.isFinite(anchorMs) || (Number.isFinite(gateMs) && anchorMs <= gateMs)) {
-      return {
-        id: 'wait-for-bots',
-        pass: true,
-        detail: 'Bot wait satisfied by green GitHub bot-presence-gate',
-        exitCode: 0,
-      };
-    }
   }
   const { exitCode, stderr, stdout } = runNodeScript('wait_for_bots.mjs', ['--pr', String(prNumber)]);
   if (exitCode === 0) {

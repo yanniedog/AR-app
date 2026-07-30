@@ -189,6 +189,7 @@ export function createBootstrapActions(
 export const bootstrapInitialState = {
   status: 'idle' as const,
   refreshing: false,
+  postRefreshWarming: false,
   source: 'sample' as const,
   manifest: null,
   core: null,

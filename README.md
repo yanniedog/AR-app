@@ -47,6 +47,8 @@ npm run ci
 - `mobile-android-apk` builds the internal Android preview APK and publishes it to this repo.
 - `mobile-auto-release-on-queue-drain` bumps `mobile/app.json` and dispatches `mobile-android-apk`.
 - `mobile-eas-build` and `mobile-eas-submit` remain manual EAS workflows.
+- The [review bot control guide](docs/REVIEW-BOT-CONTROL.md) links the pinned
+  GitHub dashboard for Qwen and repository-owned review automation.
 
 Required GitHub Actions secrets mirror the old app build setup:
 

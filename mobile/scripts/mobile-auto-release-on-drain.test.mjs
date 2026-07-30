@@ -9,16 +9,6 @@ test('generated PRs explicitly dispatch every required check on their head branc
   assert.deepEqual(requiredPrCheckDispatches(72, 'chore/mobile-auto-release-v1.2.3'), [
     { workflow: 'app-ci.yml', ref: 'chore/mobile-auto-release-v1.2.3', inputs: [] },
     {
-      workflow: 'cursor-auto-pr-review.yml',
-      ref: 'chore/mobile-auto-release-v1.2.3',
-      inputs: ['-f', 'pr_number=72'],
-    },
-    {
-      workflow: 'pr-bot-presence-gate.yml',
-      ref: 'chore/mobile-auto-release-v1.2.3',
-      inputs: ['-f', 'pr_number=72'],
-    },
-    {
       workflow: 'pr-bot-feedback-check.yml',
       ref: 'chore/mobile-auto-release-v1.2.3',
       inputs: ['-f', 'pr_number=72'],

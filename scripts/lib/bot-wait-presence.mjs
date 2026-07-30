@@ -87,7 +87,11 @@ export function collectBotEvents(prPayload, knownBots, anchorIso, fallbackIso) {
 export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anchorIso, repoRoot } = {}) {
   const state = readBotWaitState(prNumber, repoRoot);
   const baseKeys =
-    requiredKeys?.length ? requiredKeys : state?.requiredKeys?.length ? state.requiredKeys : resolveRequiredKeys();
+    requiredKeys !== undefined
+      ? requiredKeys
+      : state?.requiredKeys !== undefined
+        ? state.requiredKeys
+        : resolveRequiredKeys();
   const data = ghGraphql(owner, name, prNumber);
   const pr = data?.data?.repository?.pullRequest;
   if (!pr) throw new Error('GraphQL: pull request not found');

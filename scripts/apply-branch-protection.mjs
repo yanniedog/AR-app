@@ -10,10 +10,9 @@ import { spawnSync } from 'node:child_process';
 /** Required checks must match GitHub Actions job names exactly. */
 const REQUIRED_CHECKS = [
   'mobile-ci',
-  'qwen-code-review',
-  'bot-presence-gate',
   'bot-feedback-gate',
 ];
+const RETIRED_CHECKS = new Set(['qwen-code-review', 'bot-presence-gate']);
 
 const GH_TIMEOUT_MS = 120_000;
 
@@ -42,7 +41,8 @@ function ghJson(args, { allow404 = false } = {}) {
 }
 
 function mergeCheckContexts(existingContexts, requiredChecks) {
-  const merged = [...(existingContexts || []), ...requiredChecks];
+  const retained = (existingContexts || []).filter((context) => !RETIRED_CHECKS.has(context));
+  const merged = [...retained, ...requiredChecks];
   return [...new Set(merged.filter(Boolean))];
 }
 

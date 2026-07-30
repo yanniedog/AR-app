@@ -17,13 +17,13 @@ PR bot babysitting follows **[yanniedog/cursor-global-workflow](https://github.c
 Do not stop after opening a PR. Always monitor each owned open PR (and any still open from this session) until squash-merged — without being asked. Prefer **one dedicated ship-bar / babysit loop per open PR number** (do not abandon a PR because another task started).
 
 - After every push: commit, push, create/update the PR, then watch checks until they settle.
-- Required gates here are `mobile-ci`, `qwen-code-review`, `bot-presence-gate`, and `bot-feedback-gate`.
-- `qwen-code-review` is the repository-controlled required reviewer. Its formal review must identify the exact reviewed commit and a successful/no-findings/findings outcome. Failed, quota-limited, obsolete, or stale-head bot messages do not prove reviewer presence.
+- Required gates here are `mobile-ci` and `bot-feedback-gate`.
+- Qwen is enabled as an advisory reviewer; `qwen-code-review` and `bot-presence-gate` must remain outside branch protection so local-runner or vendor availability cannot block merge.
 - Qwen runs on the dedicated local runner from reviewer code and instructions checked out from protected `main`; PR-head files are untrusted review data and must never be executed by the reviewer workflow.
 - Qwen reviews every reviewable path in bounded context-safe chunks, reports every reviewed, omitted, and intentionally excluded path, and fails instead of publishing a partial success when the whole-PR budget is exceeded.
-- Qwen publishes only validated, line-addressable defects with direct revisions or GitHub suggestion blocks. Never add generic summaries, walkthroughs, or praise.
+- Qwen publishes only validator-confirmed, line-addressable defects with direct revisions or GitHub suggestion blocks. Never add generic summaries, walkthroughs, or praise.
 - CodeRabbit, Sourcery, Codex, and Cursor remain visible in the bot matrix and all substantive findings still require disposition. Their quota or service availability must not make merge liveness depend on an external vendor.
-- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. Re-run while exit 2. If GitHub `bot-presence-gate` is still red after bots have posted, re-trigger a **PR-head** check (not a top-level issue comment — those run on the default-branch SHA and do not replace the failed check on the PR commit): prefer `ready_for_review`, a new `pull_request_review` / review-comment event, workflow re-run on the PR head when write-capable, or a fix/`synchronize` push. Prefer waiting until `mobile-ci` is green before a synchronize re-trigger so presence does not race CI.
+- Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. With no required reviewer configured, this waits only for required CI to settle. Re-run while exit 2.
 - Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
 
@@ -32,7 +32,7 @@ latency stays bounded. Provision it with
 `ollama create qwen2.5-coder-review:1.5b -f scripts/qwen-review.Modelfile`;
 also provision the targeted quality validator with
 `ollama create qwen2.5-coder-review:7b -f scripts/qwen-validator.Modelfile`.
-the checked-in context size and chunk budget keep the model within this runner's
+The checked-in context size and chunk budget keep the model within this runner's
 memory limit without silently dropping reviewable files.
 
 ## Bot feedback (mandatory — every finding, every session)
