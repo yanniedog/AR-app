@@ -13,6 +13,7 @@ import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
 import {
   approveActionRequiredRuns,
   waitForPullRequestMerge,
+  workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
@@ -101,6 +102,9 @@ function enableAutoMerge(prNumber) {
 
 async function settleGeneratedPr(prNumber, branchName) {
   const seenRunIds = new Set();
+  const headSha = gh([
+    'pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid', '--repo', repo,
+  ]);
   let fallbackChecked = false;
   const approveBlockedRuns = async (attempt) => {
     let runs = [];
@@ -108,9 +112,10 @@ async function settleGeneratedPr(prNumber, branchName) {
       listRuns: () => {
         const raw = gh([
           'run', 'list', '--branch', branchName, '--event', 'pull_request',
-          '--limit', '20', '--json', 'databaseId,status,conclusion,workflowName', '--repo', repo,
+          '--limit', '20', '--json',
+          'databaseId,status,conclusion,workflowName,headSha', '--repo', repo,
         ]);
-        runs = JSON.parse(raw || '[]');
+        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headSha);
         return runs;
       },
       approveRun: (runId) =>
