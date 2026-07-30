@@ -6,6 +6,7 @@ import {
   hasProductSeries,
   normalizeProductHistoryPayload,
   productMovesForBankEvent,
+  productMovesForCatalog,
   productSeriesRecord,
   productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
@@ -198,6 +199,22 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
       bps: -50,
     });
     expect(moves[1].bps).toBe(50);
+  });
+
+  it('productMovesForCatalog skips the full-section scan when a catalog is provided', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      products: { 'P|cut': [0.06, 0.055] },
+    };
+    const moves = productMovesForCatalog(
+      history,
+      [{ productKey: 'P|cut', productName: 'Cut loan', rateIndex: null }],
+      { date: '2026-06-10' },
+    );
+    expect(moves).toHaveLength(1);
+    expect(moves[0].bps).toBe(-50);
   });
 
   it('counts exact 5 bps moves despite floating-point fraction noise', () => {

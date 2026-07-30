@@ -266,6 +266,10 @@ function lastFiniteBefore(series: (number | null)[], beforeIndex: number): numbe
 /**
  * Reconstruct which products drove a provider rate-move event by diffing the
  * on-device product-history ledger (same ≥5 bps rule the Pi uses for events).
+ *
+ * Prefer {@link productMovesForCatalog} when the caller already has the lender's
+ * product list — scanning the full section rates array on every bank open is
+ * needless work on large cores.
  */
 export function productMovesForBankEvent(
   core: CorePayload | null | undefined,
@@ -278,25 +282,45 @@ export function productMovesForBankEvent(
   },
 ): ProductRateMove[] {
   if (!core || !history?.run_dates?.length) return [];
+  const catalog: ProductMoveCatalogEntry[] = [];
+  const seen = new Set<string>();
+  for (const row of core.sections?.[opts.section]?.rates ?? []) {
+    if (row.provider !== opts.provider || !row.product_key || seen.has(row.product_key)) continue;
+    seen.add(row.product_key);
+    catalog.push({
+      productKey: row.product_key,
+      productName: (row.product_name && row.product_name.trim()) || row.product_key,
+      rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
+    });
+  }
+  return productMovesForCatalog(history, catalog, {
+    date: opts.date,
+    thresholdBps: opts.thresholdBps,
+  });
+}
+
+export interface ProductMoveCatalogEntry {
+  productKey: string;
+  productName: string;
+  rateIndex: number | null;
+}
+
+/** Diff a known product catalog against product history for one event date. */
+export function productMovesForCatalog(
+  history: ProductHistoryPayload | null | undefined,
+  catalog: readonly ProductMoveCatalogEntry[],
+  opts: { date: string; thresholdBps?: number },
+): ProductRateMove[] {
+  if (!history?.run_dates?.length || !catalog.length) return [];
   const date = String(opts.date || '').slice(0, 10);
   if (!date) return [];
   const thresholdBps = opts.thresholdBps ?? 5;
   const dateIndex = history.run_dates.indexOf(date);
   if (dateIndex < 0) return [];
 
-  const catalog = new Map<string, { productName: string; rateIndex: number | null }>();
-  for (const row of core.sections?.[opts.section]?.rates ?? []) {
-    if (row.provider !== opts.provider || !row.product_key) continue;
-    if (catalog.has(row.product_key)) continue;
-    catalog.set(row.product_key, {
-      productName: (row.product_name && row.product_name.trim()) || row.product_key,
-      rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
-    });
-  }
-
   const moves: ProductRateMove[] = [];
-  for (const [productKey, meta] of catalog) {
-    const series = history.products[productKey];
+  for (const meta of catalog) {
+    const series = history.products[meta.productKey];
     if (!series) continue;
     const toRate = series[dateIndex];
     if (toRate == null || !Number.isFinite(toRate) || toRate <= 0) continue;
@@ -307,7 +331,7 @@ export function productMovesForBankEvent(
     const bps = Math.round((toRate - fromRate) * 10000 * 10) / 10;
     if (Math.abs(bps) < thresholdBps) continue;
     moves.push({
-      productKey,
+      productKey: meta.productKey,
       productName: meta.productName,
       rateIndex: meta.rateIndex,
       date,
