@@ -56,6 +56,8 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           QWEN_MODE: ${{ inputs.qwen || 'unchanged' }}
           CODERABBIT_RETRY_MODE: ${{ inputs.coderabbit_retry || 'unchanged' }}
+          CONTROL_QWEN_ENABLED: ${{ vars.QWEN_ENABLED }}
+          CONTROL_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED }}
         run: >-
           node scripts/review-bot-control.mjs
           --qwen "$QWEN_MODE"

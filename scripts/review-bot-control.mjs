@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import { appendFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const QWEN_WORKFLOW = "cursor-auto-pr-review.yml";
 const PRESENCE_WORKFLOW = "pr-bot-presence-gate.yml";
@@ -138,6 +140,19 @@ function setVariable(repo, name, value) {
   runGh(["variable", "set", name, "--repo", repo, "--body", value]);
 }
 
+export function mergeVariablePages(pages, fallback = {}) {
+  const merged = Object.fromEntries(
+    Object.entries(fallback).filter(
+      ([, value]) => value !== undefined && value !== "",
+    ),
+  );
+  const rows = Array.isArray(pages)
+    ? pages.flatMap((page) => page?.variables || [])
+    : [];
+  for (const row of rows) merged[row.name] = row.value;
+  return merged;
+}
+
 function variables(repo) {
   const pages = ghJson(
     [
@@ -148,18 +163,42 @@ function variables(repo) {
     ],
     { allowFailure: true },
   );
-  const rows = Array.isArray(pages)
-    ? pages.flatMap((page) => page?.variables || [])
-    : [];
-  return Object.fromEntries(rows.map((row) => [row.name, row.value]));
+  return mergeVariablePages(pages, {
+    QWEN_ENABLED: process.env.CONTROL_QWEN_ENABLED,
+    AR_BOT_WAIT_REQUIRED: process.env.CONTROL_BOT_WAIT_REQUIRED,
+  });
+}
+
+export function requiredChecksFromRules(rules) {
+  return (rules || [])
+    .filter((rule) => rule?.type === "required_status_checks")
+    .flatMap((rule) => rule?.parameters?.required_status_checks || [])
+    .map((row) => row.context)
+    .filter(Boolean);
 }
 
 function requiredChecks(repo) {
-  const payload = ghJson(["api", `repos/${repo}/branches/main/protection`], {
+  const protection = ghJson(["api", `repos/${repo}/branches/main/protection`], {
     allowFailure: true,
   });
-  const rows = payload?.required_status_checks?.checks || [];
-  return rows.map((row) => row.context).filter(Boolean);
+  const protectionChecks = (protection?.required_status_checks?.checks || [])
+    .map((row) => row.context)
+    .filter(Boolean);
+  if (protectionChecks.length) {
+    return { values: protectionChecks, source: "live branch protection" };
+  }
+
+  const rules = ghJson(["api", `repos/${repo}/rules/branches/main`], {
+    allowFailure: true,
+  });
+  const ruleChecks = requiredChecksFromRules(rules);
+  if (ruleChecks.length) {
+    return { values: ruleChecks, source: "live branch rules" };
+  }
+  return {
+    values: ["mobile-ci", "bot-feedback-gate"],
+    source: "configured policy fallback; live rules API unavailable",
+  };
 }
 
 function stateLabel(state) {
@@ -176,6 +215,7 @@ export function renderDashboard({
   coderabbitRetryState,
   repoVariables,
   checks,
+  checkSource,
   updatedAt,
 }) {
   const repoUrl = `https://github.com/${repo}`;
@@ -191,9 +231,7 @@ export function renderDashboard({
       : "";
     return `| ${name} | Vendor-managed | Advisory | [Manage installed apps](${appSettingsUrl})${configLink} |`;
   }).join("\n");
-  const checkText = checks.length
-    ? checks.map((name) => `\`${name}\``).join(", ")
-    : "Unavailable";
+  const checkText = checks.map((name) => `\`${name}\``).join(", ");
 
   return `<!-- review-bot-control-dashboard -->
 # Review bot control dashboard
@@ -211,7 +249,7 @@ Last refreshed: ${updatedAt}
 | Feedback-thread gate | ${stateLabel(feedbackState)} | Required; vendor-neutral | [View workflow](${repoUrl}/actions/workflows/${FEEDBACK_WORKFLOW}) |
 | CodeRabbit retry helper | ${stateLabel(coderabbitRetryState)} | Advisory helper only | [Enable / disable](${workflowUrl}) |
 
-Required checks on \`main\`: ${checkText}
+Required checks on \`main\` (${checkSource}): ${checkText}
 
 Repository variables: \`QWEN_ENABLED=${repoVariables.QWEN_ENABLED || "unset"}\`, \`AR_BOT_WAIT_REQUIRED=${repoVariables.AR_BOT_WAIT_REQUIRED || "unset"}\`.
 
@@ -345,6 +383,7 @@ async function main() {
     changes.push(`CodeRabbit retry helper ${args.coderabbitRetry}`);
   }
 
+  const checkState = requiredChecks(repo);
   const body = renderDashboard({
     repo,
     qwenState: workflowState(repo, QWEN_WORKFLOW),
@@ -352,7 +391,8 @@ async function main() {
     feedbackState: workflowState(repo, FEEDBACK_WORKFLOW),
     coderabbitRetryState: workflowState(repo, CODERABBIT_RETRY_WORKFLOW),
     repoVariables: variables(repo),
-    checks: requiredChecks(repo),
+    checks: checkState.values,
+    checkSource: checkState.source,
     updatedAt: new Date().toISOString(),
   });
   const issueNumber = publishDashboard(repo, body);
@@ -372,7 +412,13 @@ async function main() {
   console.log(summary);
 }
 
-main().catch((error) => {
-  console.error(`review-bot-control: ${error.message}`);
-  process.exit(1);
-});
+const isDirectRun =
+  process.argv[1] &&
+  pathToFileURL(resolve(process.argv[1])).href === import.meta.url;
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(`review-bot-control: ${error.message}`);
+    process.exit(1);
+  });
+}
