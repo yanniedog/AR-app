@@ -22,3 +22,6 @@ mobile/GoogleService-Info.plist
 tmp/
 *.tmp
 .ar-bot-wait/
+
+# Local agent memory (machine-specific issue/event log; not product code)
+.projectmem/

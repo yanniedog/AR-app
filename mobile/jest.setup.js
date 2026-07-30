@@ -1,3 +1,5 @@
+/* eslint-env jest */
+
 // Mock native-only Expo modules so unit tests (pure logic) can import data modules
 // without a native runtime. The app uses the real modules on device.
 jest.mock('expo-haptics', () => ({
@@ -210,4 +212,55 @@ jest.mock('expo-file-system/legacy', () => ({
   getContentUriAsync: jest.fn(async () => 'content://test/app-update.apk'),
   getInfoAsync: jest.fn(async () => ({ exists: false })),
   readAsStringAsync: jest.fn(async () => ''),
+  readDirectoryAsync: jest.fn(async () => []),
 }));
+
+jest.mock('@kesha-antonov/react-native-background-downloader', () => {
+  const tasks = [];
+  return {
+    directories: { documents: 'file:///docs/' },
+    setConfig: jest.fn(),
+    completeHandler: jest.fn(async () => {}),
+    getExistingDownloadTasks: jest.fn(async () => tasks.slice()),
+    __resetTasks: () => {
+      tasks.length = 0;
+    },
+    createDownloadTask: jest.fn((opts) => {
+      const task = {
+        id: opts.id,
+        state: 'PENDING',
+        metadata: opts.metadata || {},
+        errorCode: 0,
+        bytesDownloaded: 0,
+        bytesTotal: 0,
+        downloadParams: opts,
+        handlers: {},
+        begin(fn) {
+          this.handlers.begin = fn;
+          return this;
+        },
+        progress(fn) {
+          this.handlers.progress = fn;
+          return this;
+        },
+        done(fn) {
+          this.handlers.done = fn;
+          return this;
+        },
+        error(fn) {
+          this.handlers.error = fn;
+          return this;
+        },
+        start: jest.fn(),
+        pause: jest.fn(async () => {}),
+        resume: jest.fn(async () => {}),
+        stop: jest.fn(async () => {
+          const index = tasks.indexOf(task);
+          if (index >= 0) tasks.splice(index, 1);
+        }),
+      };
+      tasks.push(task);
+      return task;
+    }),
+  };
+});
