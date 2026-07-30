@@ -281,6 +281,52 @@ function evaluate({
     return { status: 'error', message: `Invalid anchor time: ${anchorIso}` };
   }
 
+  if (requiredKeys.length === 0) {
+    const elapsedMs = Date.now() - anchor.getTime();
+    const maxMs = MAX_WAIT_MIN * 60 * 1000;
+    const checks = fetchChecks(prNumber);
+    if (checks.error && !checks.failed) {
+      if (isGithubRateLimitError(checks.error)) {
+        return {
+          status: 'waiting',
+          message: `GitHub API rate limit on required checks — retry later (${checks.error})`,
+          elapsedMs,
+          remainingCapMs: maxMs - elapsedMs,
+        };
+      }
+      return { status: 'error', message: checks.error };
+    }
+    if (checks.failed) {
+      const names = checks.failedNames?.length ? checks.failedNames.join(', ') : 'required check(s)';
+      return {
+        status: 'error',
+        message: `PR #${prNumber} has failed required check(s): ${names}. Fix CI before merge.`,
+      };
+    }
+    if (checks.pending) {
+      if (elapsedMs > maxMs) {
+        return {
+          status: 'timeout',
+          message:
+            `Bot wait safety cap (${MAX_WAIT_MIN} min) exceeded since anchor ` +
+            `${anchor.toISOString()} while required CI checks remain pending.`,
+        };
+      }
+      return {
+        status: 'waiting',
+        message: `PR #${prNumber}: required CI checks are still pending; bot presence is disabled by policy.`,
+        elapsedMs,
+        remainingCapMs: maxMs - elapsedMs,
+      };
+    }
+    return {
+      status: 'ready',
+      message: 'Bot presence is disabled by repository policy; required CI checks are settled.',
+      botsSeen: [],
+      missing: [],
+    };
+  }
+
   const repo = repoIn || resolveRepo();
   if (!repo) return { status: 'error', message: 'Could not resolve repository (gh repo view).' };
 
@@ -456,7 +502,7 @@ Options:
   --watch, -w           Poll every ${POLL_INTERVAL_SEC}s until ready or cap
   --bot-tag             Reset wait anchor to now (after @mentioning bots)
   --since <iso>         Anchor wait window to timestamp (ISO 8601)
-  --require-bots <list> Comma-separated required keys (default: qwen)
+  --require-bots <list> Comma-separated required keys, or off/none/disabled (default: none)
   --help, -h            Show this help
 
 Exit codes: 0 ready | 2 still waiting | 1 error or required bots missing at cap (DO NOT MERGE)
@@ -548,10 +594,9 @@ async function main() {
     writeState(prNumber, state);
   }
 
-  const cliOverride = args.requireBots !== null;
-  const envOverride = Boolean(process.env.AR_BOT_WAIT_REQUIRED || process.env.BOT_WAIT_REQUIRED);
-  const baseRequired =
-    cliOverride || envOverride ? requiredKeys : state.requiredKeys || requiredKeys;
+  // The current repository policy is authoritative. State persists only the
+  // anchor/head bookkeeping and must never resurrect a previously required bot.
+  const baseRequired = requiredKeys;
   const effectiveRequired = adjustRequiredKeysForPrContext(baseRequired, {
     isFork: Boolean(resolved.pr?.isCrossRepository),
   });

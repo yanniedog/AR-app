@@ -1,0 +1,62 @@
+name: review-bot-control
+
+on:
+  workflow_dispatch:
+    inputs:
+      qwen:
+        description: Qwen reviewer mode
+        required: true
+        default: unchanged
+        type: choice
+        options:
+          - unchanged
+          - disabled
+          - advisory
+      coderabbit_retry:
+        description: CodeRabbit rate-limit retry helper
+        required: true
+        default: unchanged
+        type: choice
+        options:
+          - unchanged
+          - disabled
+          - enabled
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/review-bot-control.yml"
+      - "scripts/review-bot-control.mjs"
+      - "docs/REVIEW-BOT-CONTROL.md"
+
+permissions:
+  actions: write
+  contents: read
+  issues: write
+
+concurrency:
+  group: review-bot-control
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  control:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
+      - name: Apply controls and refresh dashboard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          QWEN_MODE: ${{ inputs.qwen || 'unchanged' }}
+          CODERABBIT_RETRY_MODE: ${{ inputs.coderabbit_retry || 'unchanged' }}
+        run: >-
+          node scripts/review-bot-control.mjs
+          --qwen "$QWEN_MODE"
+          --coderabbit-retry "$CODERABBIT_RETRY_MODE"

@@ -84,7 +84,7 @@ function main() {
   const args = parseArgs(process.argv);
   if (args.help) {
     console.log(
-      'Usage: node scripts/pr-bot-feedback-check.mjs [--pr N] [--audit-merged] [--limit N] [--json] [--skip-bot-presence] [--require-bots qwen]',
+      'Usage: node scripts/pr-bot-feedback-check.mjs [--pr N] [--audit-merged] [--limit N] [--json] [--skip-bot-presence] [--require-bots qwen|off]',
     );
     process.exit(0);
   }
@@ -158,11 +158,21 @@ function main() {
         : state?.requiredKeys?.length
           ? state.requiredKeys
           : resolveRequiredKeys();
-    try {
-      botPresence = checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys });
-    } catch (e) {
-      console.error(`pr-bot-feedback-check: bot presence check failed: ${e.message}`);
-      process.exit(1);
+    if (requiredKeys.length === 0) {
+      botPresence = {
+        ok: true,
+        requiredKeys: [],
+        missing: [],
+        botsSeen: [],
+        detail: 'none (review bots are advisory)',
+      };
+    } else {
+      try {
+        botPresence = checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys });
+      } catch (e) {
+        console.error(`pr-bot-feedback-check: bot presence check failed: ${e.message}`);
+        process.exit(1);
+      }
     }
     if (!botPresence.ok) {
       console.error(
