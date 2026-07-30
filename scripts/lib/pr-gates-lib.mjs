@@ -140,7 +140,7 @@ export function fetchRequiredCi(prNumber) {
 export function fetchNamedChecks(prNumber, names) {
   const r = spawnSync(
     'gh',
-    ['pr', 'checks', String(prNumber), '--json', 'name,bucket,state,completedAt'],
+    ['pr', 'checks', String(prNumber), '--json', 'name,bucket,state,startedAt,completedAt'],
     { encoding: 'utf8' },
   );
   if (r.status !== 0) {
@@ -156,14 +156,26 @@ export function fetchNamedChecks(prNumber, names) {
     const tail = lower.includes('/') ? lower.slice(lower.lastIndexOf('/') + 1) : lower;
     for (const key of want) {
       if (lower === key || tail === key) {
-        const prior = found[key];
-        const priorAt = new Date(prior?.completedAt || 0).getTime();
-        const nextAt = new Date(c.completedAt || 0).getTime();
-        if (!prior || nextAt >= priorAt) found[key] = c;
+        found[key] = selectNewestCheck(found[key], c);
       }
     }
   }
   return { found };
+}
+
+export function selectNewestCheck(prior, candidate) {
+  if (!prior) return candidate;
+  const priorAt = new Date(prior.startedAt || prior.completedAt || 0).getTime();
+  const nextAt = new Date(candidate.startedAt || candidate.completedAt || 0).getTime();
+  if (nextAt > priorAt) return candidate;
+  if (nextAt < priorAt) return prior;
+  const candidatePending =
+    candidate.bucket === 'pending' ||
+    candidate.state === 'PENDING' ||
+    candidate.state === 'IN_PROGRESS';
+  const priorPending =
+    prior.bucket === 'pending' || prior.state === 'PENDING' || prior.state === 'IN_PROGRESS';
+  return candidatePending && !priorPending ? candidate : prior;
 }
 
 function checkBucketPass(c) {

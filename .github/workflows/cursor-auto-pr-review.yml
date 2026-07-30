@@ -153,16 +153,6 @@ jobs:
           $findings = @($review.findings)
           $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
           $model = if ($env:MODEL) { $env:MODEL } else { 'qwen3-coder:30b' }
-          $reviewed = if (@($review.reviewed_files).Count -eq 0) {
-            '(none)'
-          } else {
-            @($review.reviewed_files) -join ', '
-          }
-          $omitted = if (@($review.omitted_files).Count -eq 0) {
-            '(none)'
-          } else {
-            @($review.omitted_files) -join ', '
-          }
           $body = @(
             '<!-- qwen-code-review -->'
             '## Qwen Code Review'
@@ -171,8 +161,6 @@ jobs:
             "Review outcome: $outcome"
             "Model: ``$model``"
             "Workflow: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
-            "Reviewed files: $reviewed"
-            "Omitted files: $omitted"
             if ($findings.Count -eq 0) { 'No actionable defects found in the high-signal diff.' }
             else { "$($findings.Count) actionable inline finding(s) with direct revisions." }
           ) -join "`n"

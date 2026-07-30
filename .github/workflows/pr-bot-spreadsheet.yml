@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -38,11 +40,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          LIMIT_INPUT: ${{ inputs.limit || '50' }}
+          PR_NUMBER_INPUT: ${{ inputs.pr_number }}
         run: |
           set -euo pipefail
-          ARGS=(--limit "${{ inputs.limit || '50' }}")
-          if [ -n "${{ inputs.pr_number }}" ]; then
-            ARGS+=(--pr "${{ inputs.pr_number }}")
+          ARGS=(--limit "$LIMIT_INPUT")
+          if [ -n "$PR_NUMBER_INPUT" ]; then
+            ARGS+=(--pr "$PR_NUMBER_INPUT")
           fi
           npm run pr:bot-spreadsheet:sync -- "${ARGS[@]}"
       - name: Publish matrix in workflow summary

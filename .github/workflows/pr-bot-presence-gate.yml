@@ -30,6 +30,8 @@ jobs:
     timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
@@ -40,10 +42,13 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
-          case "${{ github.event_name }}" in
-            workflow_dispatch) PR="${{ inputs.pr_number }}" ;;
-            *)                 PR="${{ github.event.pull_request.number }}" ;;
+          case "$EVENT_NAME" in
+            workflow_dispatch) PR="$INPUT_PR" ;;
+            *)                 PR="$EVENT_PR" ;;
           esac
           export PR
           EXEMPT=$(node scripts/pr-gate-exempt-reason.mjs || true)
@@ -72,9 +77,12 @@ jobs:
           BOT_WAIT_QUIET_SEC: "30"
           BOT_WAIT_MIN_SEC: "30"
           BOT_WAIT_MAX_MIN: "45"
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
-          case "${{ github.event_name }}" in
-            workflow_dispatch) PR="${{ inputs.pr_number }}" ;;
-            *)                 PR="${{ github.event.pull_request.number }}" ;;
+          case "$EVENT_NAME" in
+            workflow_dispatch) PR="$INPUT_PR" ;;
+            *)                 PR="$EVENT_PR" ;;
           esac
           npm run wait-for-bots -- --watch --pr "$PR"

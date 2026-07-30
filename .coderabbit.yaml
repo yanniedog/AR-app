@@ -1,10 +1,16 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 reviews:
   profile: assertive
-  high_level_summary: true
+  high_level_summary: false
   review_status: true
   poem: false
   enable_prompt_for_ai_agents: false
+  finishing_touches:
+    docstrings:
+      enabled: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
   auto_review:
     enabled: true
     drafts: false

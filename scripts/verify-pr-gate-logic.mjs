@@ -9,7 +9,8 @@
  *    implemented / deferred / declined / by design / "fixed in <sha>" …).
  *  - Low-signal bot threads never block. Unresolved human threads block.
  */
-import { classifyThreads, isClosureReply } from './lib/gh-pr-review-threads.mjs';
+import { classifyThreads, isBotLogin, isClosureReply } from './lib/gh-pr-review-threads.mjs';
+import { selectNewestCheck } from './lib/pr-gates-lib.mjs';
 import {
   isMatrixCommitTitle,
   isReportsOnlyFileList,
@@ -78,6 +79,35 @@ const failures = [];
 for (const [name, t, expected] of cases) {
   const got = classifyThreads([t]).length;
   if (got !== expected) failures.push(`${name}: got ${got} violations, expected ${expected}`);
+}
+
+for (const [login, want] of [
+  ['qwen', true],
+  ['qwen-code-review[bot]', true],
+  ['coderabbitai[bot]', true],
+  ['github-actions[bot]', true],
+  ['notqwen-human', false],
+  ['cursor-admin', false],
+]) {
+  if (isBotLogin(login) !== want) failures.push(`isBotLogin(${login}) !== ${want}`);
+}
+
+const oldPass = {
+  name: 'bot-presence-gate',
+  bucket: 'pass',
+  state: 'SUCCESS',
+  startedAt: '2026-07-30T01:00:00Z',
+  completedAt: '2026-07-30T01:01:00Z',
+};
+const newerPending = {
+  name: 'bot-presence-gate',
+  bucket: 'pending',
+  state: 'IN_PROGRESS',
+  startedAt: '2026-07-30T02:00:00Z',
+  completedAt: null,
+};
+if (selectNewestCheck(oldPass, newerPending) !== newerPending) {
+  failures.push('selectNewestCheck must keep a newer pending run over an older pass');
 }
 for (const [name, t, expected] of auditCases) {
   const got = classifyThreads([t], { mergedAudit: true }).length;

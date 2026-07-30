@@ -518,7 +518,7 @@ async function main() {
 
   if (args.botTag) {
     const anchorIso = new Date().toISOString();
-    state = { anchor: anchorIso, readyAt: null, requiredKeys };
+    state = { anchor: anchorIso, readyAt: null, headSha, requiredKeys };
     writeState(prNumber, state);
     console.log(`>>> BOT WAIT: anchor reset (bot-tag) at ${anchorIso} for PR #${prNumber}`);
     console.log(`>>> Required: ${formatRequiredKeys(requiredKeys)}`);
@@ -526,6 +526,7 @@ async function main() {
   } else if (args.since) {
     state.anchor = args.since;
     state.readyAt = null;
+    state.headSha = headSha;
     state.requiredKeys = requiredKeys;
     writeState(prNumber, state);
   } else if (state.headSha !== headSha) {

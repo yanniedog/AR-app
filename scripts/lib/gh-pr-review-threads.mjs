@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { isBotNoise } from './bot-noise.mjs';
 
 const BOT_LOGIN_RE =
-  /(?:qwen|cursor|gemini|codex|sourcery|coderabbit|copilot|greptile|chatgpt|github-actions\[bot\])/i;
+  /^(?:qwen(?:-code-review)?(?:\[bot\])?|cursor(?:-auto-review)?(?:\[bot\])?|gemini-code-assist(?:\[bot\])?|chatgpt-codex-connector(?:\[bot\])?|codex(?:\[bot\])?|sourcery-ai(?:\[bot\])?|coderabbitai(?:\[bot\])?|github-copilot(?:\[bot\])?|copilot-pull-request-reviewer(?:\[bot\])?|greptile-apps(?:\[bot\])?|chatgpt(?:\[bot\])?|github-actions\[bot\])$/i;
 
 // Disposition reply detection. Used by the merged-PR audit (a historical PR may
 // have replied-but-not-resolved threads); the LIVE gate requires resolution, so
