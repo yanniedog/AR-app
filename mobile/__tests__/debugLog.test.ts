@@ -9,6 +9,7 @@ import {
   RingBuffer,
   debugLog,
   formatEntry,
+  formatErrorTrace,
   formatLogUploadBody,
   installGlobalErrorHandlers,
   parseLogLine,
@@ -42,6 +43,21 @@ describe('redactSecrets', () => {
     expect(out).not.toContain('abc123');
     expect(out).not.toContain('sk-live-xyz');
     expect(out).toContain('[REDACTED]');
+  });
+});
+
+describe('formatErrorTrace', () => {
+  it('keeps the full stack on one physical log line', () => {
+    const error = new Error('audit failed');
+    const trace = formatErrorTrace(error);
+    expect(trace).toContain('Error: audit failed');
+    expect(trace).toContain(String.raw`\n`);
+    expect(trace).not.toContain('\n');
+  });
+
+  it('formats non-Error rejection values safely', () => {
+    expect(formatErrorTrace(undefined)).toBe('undefined');
+    expect(formatErrorTrace({ reason: 'slow' })).toBe('{"reason":"slow"}');
   });
 });
 
@@ -248,6 +264,14 @@ describe('debugLog integration', () => {
     expect(crashlyticsApi.log).not.toHaveBeenCalledWith(expect.stringContaining('secret'));
   });
 
+  it('keeps performance audit reports local even when diagnostics are enabled', () => {
+    debugLog.info('perf-audit', '{"kind":"report","device":"test"}');
+
+    expect(debugLog.getText()).toContain('"kind":"report"');
+    expect(crashlyticsApi.log).not.toHaveBeenCalled();
+    expect(crashlyticsApi.recordError).not.toHaveBeenCalled();
+  });
+
   it('installGlobalErrorHandlers forwards fatal errors to debugLog', () => {
     debugLog.clear();
     resetGlobalErrorHandlersForTests();
@@ -268,7 +292,7 @@ describe('debugLog integration', () => {
 
     installGlobalErrorHandlers();
 
-    expect(debugLog.getText()).toContain('[ERROR] global: fatal Error: ribbon blew up');
+    expect(debugLog.getText()).toContain('[ERROR] global: fatal trace=Error: ribbon blew up');
     expect(previous).toHaveBeenCalled();
     expect(flushSpy).not.toHaveBeenCalled();
     flushSpy.mockRestore();

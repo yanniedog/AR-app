@@ -26,13 +26,14 @@ import { ArMarkLogo } from '../src/components/ArMarkLogo';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { ErrorScreen } from '../src/components/ErrorScreen';
+import { PerformanceAuditRunner } from '../src/components/PerformanceAuditRunner';
 import { AppText } from '../src/components/ui';
 import { routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
-import { debugLog, installGlobalErrorHandlers } from '../src/lib/debugLog';
+import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import { setDiagnosticsEnabled } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
@@ -44,7 +45,7 @@ const MORPH_MS = 680;
 const FADE_MS = 320;
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
-  debugLog.error('app', `render error: ${error.message}`);
+  debugLog.error('app', `render error trace=${formatErrorTrace(error)}`);
   return <ErrorScreen error={error} retry={retry} />;
 }
 
@@ -310,6 +311,10 @@ function RootNavigator() {
           <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
           <Stack.Screen name="rba" options={{ title: 'Why rates move' }} />
           <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+          <Stack.Screen
+            name="performance-audit"
+            options={{ title: 'Performance audit', headerBackTitle: 'Settings' }}
+          />
           <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
           <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
         </Stack>
@@ -321,6 +326,7 @@ function RootNavigator() {
             onMorphComplete={handleMorphComplete}
           />
         ) : null}
+        <PerformanceAuditRunner />
       </View>
     </SplashMorphProvider>
   );

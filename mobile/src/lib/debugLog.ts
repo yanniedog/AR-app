@@ -53,6 +53,27 @@ export function formatEntry(entry: LogEntry): string {
   return `${entry.ts} [${level}] ${entry.tag}: ${entry.message}`;
 }
 
+/**
+ * Preserve the complete JS traceback in one physical log line so it survives
+ * file-tail parsing and can be exported without orphaned stack frames.
+ */
+export function formatErrorTrace(error: unknown): string {
+  let trace: string;
+  if (error instanceof Error) {
+    trace = error.stack ?? `${error.name}: ${error.message}`;
+  } else {
+    try {
+      trace =
+        typeof error === 'string'
+          ? error
+          : JSON.stringify(error) ?? String(error);
+    } catch {
+      trace = String(error);
+    }
+  }
+  return trace.replace(/\r/g, '').replace(/\n/g, String.raw`\n`);
+}
+
 /** Parse a single persisted log line back into a LogEntry. */
 export function parseLogLine(line: string): LogEntry | null {
   const match = line.match(LOG_LINE_RE);
@@ -236,7 +257,12 @@ function append(level: LogLevel, tag: string, message: string): void {
   };
   buffer.append(entry);
   pendingFileLines.push(formatEntry(entry) + '\n');
-  bridgeLogToCrashlytics(level, tag, messageRedacted);
+  // Performance reports can be large and include device/app timing context.
+  // Keep them local even when general Crashlytics diagnostics are enabled;
+  // sharing remains an explicit action from the Debug log screen.
+  if (tag !== 'perf-audit') {
+    bridgeLogToCrashlytics(level, tag, messageRedacted);
+  }
   notify();
   schedulePersist();
   scheduleFileFlush();
@@ -381,8 +407,10 @@ export function installGlobalErrorHandlers(): void {
   if (utils?.setGlobalHandler) {
     const previous = utils.getGlobalHandler?.();
     utils.setGlobalHandler((error, isFatal) => {
-      const msg = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      debugLog.error('global', `${isFatal ? 'fatal' : 'js'} ${msg}`);
+      debugLog.error(
+        'global',
+        `${isFatal ? 'fatal' : 'js'} trace=${formatErrorTrace(error)}`,
+      );
       previous?.(error, isFatal);
     });
   }
@@ -391,8 +419,7 @@ export function installGlobalErrorHandlers(): void {
     process?: { on?: (event: string, listener: (reason: unknown) => void) => void };
   };
   processLike.process?.on?.('unhandledRejection', (reason) => {
-    const msg = reason instanceof Error ? `${reason.name}: ${reason.message}` : String(reason);
-    debugLog.error('global', `unhandledRejection ${msg}`);
+    debugLog.error('global', `unhandledRejection trace=${formatErrorTrace(reason)}`);
   });
 }
 

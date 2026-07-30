@@ -378,6 +378,13 @@ export default function Settings() {
           </AppText>
           <SettingsGap size={8} />
           <NavRow
+            icon="speedometer-outline"
+            label="Performance audit"
+            sub="Test every screen, navigation, responsiveness, storage, and network"
+            onPress={() => router.push('/performance-audit' as Href)}
+          />
+          <SettingsGap size={8} />
+          <NavRow
             icon="document-text-outline"
             label="Debug log"
             sub="View, share, or upload logs"
