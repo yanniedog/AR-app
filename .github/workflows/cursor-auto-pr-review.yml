@@ -152,7 +152,8 @@ jobs:
           PROMPT_PATH: ${{ github.workspace }}\_trusted-reviewer\.cursor\PR_REVIEW_PROMPT.md
           DIFF_MAX_CHARS: "160000"
           DIFF_CHUNK_CHARS: "24000"
-          QWEN_CONTEXT_TOKENS: "8192"
+          QWEN_CONTEXT_TOKENS: "32768"
+          QWEN_VALIDATOR_CONTEXT_TOKENS: "8192"
         run: |
           $ErrorActionPreference = 'Continue'
           if (-not $env:QWEN_API_BASE_URL) { $env:QWEN_API_BASE_URL = 'http://127.0.0.1:11434/v1' }

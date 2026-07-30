@@ -63,6 +63,7 @@ function normalizeBaseUrl(raw) {
 
 export function isReviewablePath(filePath) {
   const path = String(filePath || '').replace(/\\/g, '/');
+  if (path === '.cursor/PR_REVIEW_PROMPT.md') return true;
   if (
     /(^|\/)(node_modules|dist|build|coverage|reports|assets)\//i.test(path) ||
     /(?:package-lock\.json|pnpm-lock\.ya?ml|yarn\.lock|bun\.lockb?|Cargo\.lock|composer\.lock|Podfile\.lock|Gemfile\.lock|poetry\.lock|uv\.lock|changelog\/|\.snap$)/i.test(path)
@@ -272,15 +273,25 @@ function normalizeFindings(rawFindings, diff) {
   return findings;
 }
 
-async function requestFindings({ baseUrl, apiKey, model, userContent }) {
+async function requestFindings({ baseUrl, apiKey, model, userContent, contextTokens: contextOverride }) {
   const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
   const configuredTimeout = Number(process.env.QWEN_TIMEOUT_MS || 600_000);
   const timeoutMs =
     Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 600_000;
-  const configuredContext = Number(process.env.QWEN_CONTEXT_TOKENS || 8_192);
+  const configuredContext = Number(contextOverride || process.env.QWEN_CONTEXT_TOKENS || 32_768);
   const contextTokens =
     Number.isFinite(configuredContext) && configuredContext >= 4_096 ? configuredContext : 8_192;
+  const systemContent =
+    'Find only concrete PR-introduced defects. Return strict JSON with at most one highest-severity finding for this chunk. Never summarize.';
+  const inputBytes = Buffer.byteLength(`${systemContent}\n${userContent}`, 'utf8');
+  const conservativeInputByteBudget = contextTokens - 384 - 1_024;
+  if (inputBytes > conservativeInputByteBudget) {
+    fail(
+      `Qwen request is ${inputBytes} UTF-8 bytes, above the conservative ${conservativeInputByteBudget}-byte input budget for ${contextTokens} context tokens. ` +
+        'Split the pull request or lower DIFF_CHUNK_CHARS before accepting the review.',
+    );
+  }
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers,
@@ -299,8 +310,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
       messages: [
         {
           role: 'system',
-          content:
-            'Find only concrete PR-introduced defects. Return strict JSON with at most one highest-severity finding for this chunk. Never summarize.',
+          content: systemContent,
         },
         { role: 'user', content: userContent },
       ],
@@ -315,6 +325,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
   const decoder = new TextDecoder();
   let buffer = '';
   let content = '';
+  let streamCompleted = false;
   const consumeLine = (line) => {
     if (!line.trim()) return;
     let envelope;
@@ -325,6 +336,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     }
     if (envelope?.error) fail(`Qwen API stream failed: ${String(envelope.error).slice(0, 1000)}`);
     content += envelope?.message?.content || '';
+    if (envelope?.done === true) streamCompleted = true;
   };
   while (true) {
     const { done, value } = await reader.read();
@@ -336,6 +348,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
   }
   buffer += decoder.decode();
   consumeLine(buffer);
+  if (!streamCompleted) fail('Qwen API stream ended before the terminal done=true envelope');
   return parseModelJson(content).findings;
 }
 
@@ -434,6 +447,7 @@ async function main() {
           baseUrl: normalizeBaseUrl(process.env.QWEN_API_BASE_URL),
           apiKey,
           model: validatorModel,
+          contextTokens: Number(process.env.QWEN_VALIDATOR_CONTEXT_TOKENS || 8_192),
           userContent: [
             'Validate the candidate finding below against only the supplied diff excerpt.',
             'Return one finding on the exact same path, side, and line only if the diff proves a concrete PR-introduced defect.',
@@ -465,7 +479,7 @@ async function main() {
       return true;
     });
     if (findings.length === 0 && rejectedFindings > 0) {
-      reason = `${rejectedFindings} model candidate(s) were suppressed because they did not reference a valid changed-line anchor.`;
+      reason = `${rejectedFindings} model candidate(s) were suppressed by changed-line validation or focused validator review.`;
     }
   }
   const output = {
