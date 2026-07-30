@@ -16,6 +16,13 @@ import {
   SPREADSHEET_BOT_KEYS,
 } from "./lib/pr-bot-roster.mjs";
 import { changedLinesFromDiff, isReviewablePath } from "./qwen-pr-review.mjs";
+import {
+  combineRequiredCheckState,
+  mergeVariablePages,
+  renderDashboard,
+  requiredChecksFromProtection,
+  requiredChecksFromRules,
+} from "./review-bot-control.mjs";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
 const qwenSuccess = [
@@ -35,6 +42,122 @@ assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
 assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
+assert.deepEqual(
+  mergeVariablePages(
+    [
+      { variables: [{ name: "QWEN_ENABLED", value: "false" }] },
+      { variables: [{ name: "AR_BOT_WAIT_REQUIRED", value: "off" }] },
+    ],
+    { QWEN_ENABLED: "stale-fallback" },
+  ),
+  { QWEN_ENABLED: "false", AR_BOT_WAIT_REQUIRED: "off" },
+);
+assert.deepEqual(
+  mergeVariablePages(
+    [{ variables: [{ name: "QWEN_ENABLED", value: "false" }] }],
+    { QWEN_ENABLED: "stale-fallback" },
+    { QWEN_ENABLED: "true", AR_BOT_WAIT_REQUIRED: "off" },
+  ),
+  { QWEN_ENABLED: "true", AR_BOT_WAIT_REQUIRED: "off" },
+);
+assert.deepEqual(
+  requiredChecksFromProtection({
+    required_status_checks: {
+      checks: [{ context: "mobile-ci" }],
+      contexts: ["bot-feedback-gate"],
+    },
+  }),
+  ["mobile-ci", "bot-feedback-gate"],
+);
+assert.deepEqual(
+  requiredChecksFromRules([
+    {
+      type: "required_status_checks",
+      parameters: {
+        required_status_checks: [
+          { context: "mobile-ci" },
+          { context: "bot-feedback-gate" },
+        ],
+      },
+    },
+  ]),
+  ["mobile-ci", "bot-feedback-gate"],
+);
+assert.deepEqual(
+  combineRequiredCheckState({
+    protectionOk: true,
+    protection: {
+      required_status_checks: { checks: [{ context: "mobile-ci" }] },
+    },
+    rulesOk: true,
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          required_status_checks: [{ context: "bot-feedback-gate" }],
+        },
+      },
+    ],
+  }),
+  {
+    values: ["mobile-ci", "bot-feedback-gate"],
+    source: "live branch protection + rules",
+  },
+);
+assert.deepEqual(
+  combineRequiredCheckState({
+    protectionOk: false,
+    protection: null,
+    rulesOk: true,
+    rules: [],
+  }),
+  { values: [], source: "live rules" },
+);
+assert.deepEqual(
+  combineRequiredCheckState({
+    protectionOk: false,
+    protection: null,
+    rulesOk: false,
+    rules: null,
+  }),
+  {
+    values: ["mobile-ci", "bot-feedback-gate"],
+    source: "configured policy fallback; live policy APIs unavailable",
+  },
+);
+const dashboardFixture = renderDashboard({
+  repo: "owner/repo",
+  qwenState: "disabled_manually",
+  presenceState: "disabled_manually",
+  feedbackState: "active",
+  coderabbitRetryState: "active",
+  repoVariables: {
+    QWEN_ENABLED: "false",
+    AR_BOT_WAIT_REQUIRED: "off",
+  },
+  checks: ["mobile-ci", "bot-feedback-gate"],
+  checkSource: "live branch rules",
+  updatedAt: "2026-01-01T00:00:00.000Z",
+});
+assert.match(
+  dashboardFixture,
+  /Required checks on `main` \(live branch rules\)/,
+);
+assert.match(dashboardFixture, /QWEN_ENABLED=false/);
+assert.match(
+  renderDashboard({
+    repo: "owner/repo",
+    qwenState: "disabled_manually",
+    presenceState: "disabled_manually",
+    feedbackState: "active",
+    coderabbitRetryState: "active",
+    repoVariables: {},
+    checks: [],
+    checkSource: "live rules",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  }),
+  /Required checks on `main` \(live rules\): \*\*None\*\*/,
+);
 assert.equal(reviewedCommitFromBody(qwenSuccess), sha);
 assert.equal(
   eventSatisfiesRequiredKey("github-actions[bot]", qwenSuccess, "qwen", {
