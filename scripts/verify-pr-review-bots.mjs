@@ -100,6 +100,8 @@ const workflow = readFileSync('.github/workflows/cursor-auto-pr-review.yml', 'ut
 const prompt = readFileSync('.cursor/PR_REVIEW_PROMPT.md', 'utf8');
 const reviewer = readFileSync('scripts/qwen-pr-review.mjs', 'utf8');
 assert.match(workflow, /\bpull_request_target:/);
+assert.match(workflow, /shell:\s*powershell/);
+assert.doesNotMatch(workflow, /shell:\s*pwsh/);
 assert.match(workflow, /ref:\s*main/);
 assert.match(workflow, /persist-credentials:\s*false/g);
 assert.match(workflow, /_trusted-reviewer\\scripts\\qwen-pr-review\.mjs/);

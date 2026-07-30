@@ -50,7 +50,7 @@ jobs:
     timeout-minutes: 45
     defaults:
       run:
-        shell: pwsh
+        shell: powershell
     steps:
       - name: Resolve and trust-check pull request
         id: pr
