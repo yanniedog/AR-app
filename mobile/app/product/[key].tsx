@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef } from 'react';
-import { Alert, Share, View } from 'react-native';
+import { Alert, InteractionManager, Share, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { BankHistoryChart } from '../../src/components/BankHistoryChart';
@@ -24,7 +24,8 @@ import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { sortRows, findByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import {
-  hasProductSeries,
+  countFiniteSeriesPoints,
+  forwardFillSeriesRecord,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
@@ -39,6 +40,7 @@ import {
   effectiveBankInsights,
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
+import { yieldToUi } from '../../src/lib/yieldToUi';
 import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -95,13 +97,24 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!historyEnabled) return;
-    // Product-history dated-core fan-out is expensive; prefer the disk/bootstrap
-    // cache and only sync after history banks so tab navigation stays responsive.
-    // Bank insights supply the multi-day market ribbon under Standard-only mode.
-    void ensureHistoryBanks().then(() => {
-      if (showBankInsights) void ensureBankInsights();
-      void ensureProductHistory();
+    // Product-history dated-core fan-out is expensive; wait until the product
+    // screen transition finishes so navigation stays instant, then prefer the
+    // disk/bootstrap cache and only sync after history banks.
+    let cancelled = false;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      void yieldToUi().then(() => {
+        if (cancelled) return;
+        void ensureHistoryBanks().then(() => {
+          if (cancelled) return;
+          if (showBankInsights) void ensureBankInsights();
+          void ensureProductHistory();
+        });
+      });
     });
+    return () => {
+      cancelled = true;
+      handle.cancel?.();
+    };
   }, [
     core?.run_date,
     coreSha,
@@ -179,6 +192,8 @@ export default function ProductDetail() {
   const qualifier = rateQualifier(row, section);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
+  // Distinct from the market ribbon ink so the product line/marker stays readable.
+  const productInk = theme.colors.warning;
   // Match productHistory's section-best pick so the seeded point aligns with synced series.
   let currentBest: number | null = null;
   for (const sibling of siblings) {
@@ -187,14 +202,23 @@ export default function ProductDetail() {
     if (currentBest == null) currentBest = rate;
     else currentBest = meta.lowerIsBetter ? Math.min(currentBest, rate) : Math.max(currentBest, rate);
   }
-  const productSeries = {
-    values: productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest),
-    label: row.product_name,
-  };
-  const productHasSeries = hasProductSeries(productHistory, productKey);
-  const productHasHighlight = Object.values(productSeries.values).some(
-    (v) => typeof v === 'number' && Number.isFinite(v),
+  const chartDates = historyModel?.allDates ?? historyModel?.dates ?? [];
+  // Build seeded series once — avoid a second full scan just for point counts.
+  const seededProductValues = productSeriesRecordWithCurrent(
+    productHistory,
+    productKey,
+    core?.run_date,
+    currentBest,
   );
+  const productSeries = {
+    values: chartDates.length
+      ? forwardFillSeriesRecord(seededProductValues, chartDates)
+      : seededProductValues,
+    label: row.product_name,
+    color: productInk,
+  };
+  const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
+  const productHasHighlight = observedProductPoints > 0;
 
   const onShare = () =>
     Share.share({
@@ -345,8 +369,8 @@ export default function ProductDetail() {
                     highlightSeries={productHasHighlight ? productSeries : null}
                   />
                 </ChartErrorBoundary>
-                <HistoryLegend productColor={theme.colors.text} sectionColor={sectionInk} />
-                {productHistoryError && !productHasSeries ? (
+                <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
+                {productHistoryError && observedProductPoints < 2 ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
                       Couldn&apos;t load this product&apos;s history.
@@ -357,9 +381,10 @@ export default function ProductDetail() {
                       onPress={() => void ensureProductHistory({ force: true })}
                     />
                   </Row>
-                ) : !productHasSeries ? (
+                ) : observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    Gathering this product&apos;s daily history…
+                    {formatRate(currentBest)} today · gathering prior daily rates so the full line
+                    can draw
                   </AppText>
                 ) : null}
               </>

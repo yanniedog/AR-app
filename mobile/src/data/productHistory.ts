@@ -1,6 +1,6 @@
 import { SECTIONS } from '../constants';
 import { debugLog } from '../lib/debugLog';
-import type { CorePayload } from '../types';
+import type { CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
@@ -191,6 +191,157 @@ export function hasProductSeries(
 ): boolean {
   const series = payload?.products?.[productKey];
   return !!series && series.some((v) => v != null);
+}
+
+/** Count finite observations in a date→value record (for chart empty-state copy). */
+export function countFiniteSeriesPoints(values: Record<string, number | null> | null | undefined): number {
+  if (!values) return 0;
+  let n = 0;
+  for (const v of Object.values(values)) {
+    if (typeof v === 'number' && Number.isFinite(v)) n += 1;
+  }
+  return n;
+}
+
+/**
+ * Carry the last known rate forward across null gaps so a product highlight
+ * renders as a continuous step line while daily history is still warming.
+ * Does not invent history before the first observation.
+ */
+export function forwardFillSeriesRecord(
+  values: Record<string, number | null>,
+  orderedDates: string[],
+): Record<string, number | null> {
+  const out: Record<string, number | null> = {};
+  let last: number | null = null;
+  for (const date of orderedDates) {
+    const raw = values[date];
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+      last = raw;
+      out[date] = raw;
+    } else if (last != null) {
+      out[date] = last;
+    } else {
+      out[date] = raw ?? null;
+    }
+  }
+  return out;
+}
+
+/**
+ * Chart-ready product highlight: seed today's rate if needed, then forward-fill
+ * across the chart's date axis so sparse daily history still reads as a line.
+ */
+export function productSeriesRecordForChart(
+  payload: ProductHistoryPayload | null | undefined,
+  productKey: string,
+  chartDates: string[],
+  runDate: string | undefined,
+  currentRate: number | null | undefined,
+): Record<string, number | null> {
+  const seeded = productSeriesRecordWithCurrent(payload, productKey, runDate, currentRate);
+  if (!chartDates.length) return seeded;
+  return forwardFillSeriesRecord(seeded, chartDates);
+}
+
+export interface ProductRateMove {
+  productKey: string;
+  productName: string;
+  rateIndex: number | null;
+  date: string;
+  fromRate: number;
+  toRate: number;
+  /** Signed basis-point change (to − from). */
+  bps: number;
+}
+
+function lastFiniteBefore(series: (number | null)[], beforeIndex: number): number | null {
+  for (let i = beforeIndex - 1; i >= 0; i -= 1) {
+    const v = series[i];
+    if (v != null && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+/**
+ * Reconstruct which products drove a provider rate-move event by diffing the
+ * on-device product-history ledger (same ≥5 bps rule the Pi uses for events).
+ *
+ * Prefer {@link productMovesForCatalog} when the caller already has the lender's
+ * product list — scanning the full section rates array on every bank open is
+ * needless work on large cores.
+ */
+export function productMovesForBankEvent(
+  core: CorePayload | null | undefined,
+  history: ProductHistoryPayload | null | undefined,
+  opts: {
+    provider: string;
+    section: SectionKey;
+    date: string;
+    thresholdBps?: number;
+  },
+): ProductRateMove[] {
+  if (!core || !history?.run_dates?.length) return [];
+  const catalog: ProductMoveCatalogEntry[] = [];
+  const seen = new Set<string>();
+  for (const row of core.sections?.[opts.section]?.rates ?? []) {
+    if (row.provider !== opts.provider || !row.product_key || seen.has(row.product_key)) continue;
+    seen.add(row.product_key);
+    catalog.push({
+      productKey: row.product_key,
+      productName: (row.product_name && row.product_name.trim()) || row.product_key,
+      rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
+    });
+  }
+  return productMovesForCatalog(history, catalog, {
+    date: opts.date,
+    thresholdBps: opts.thresholdBps,
+  });
+}
+
+export interface ProductMoveCatalogEntry {
+  productKey: string;
+  productName: string;
+  rateIndex: number | null;
+}
+
+/** Diff a known product catalog against product history for one event date. */
+export function productMovesForCatalog(
+  history: ProductHistoryPayload | null | undefined,
+  catalog: readonly ProductMoveCatalogEntry[],
+  opts: { date: string; thresholdBps?: number },
+): ProductRateMove[] {
+  if (!history?.run_dates?.length || !catalog.length) return [];
+  const date = String(opts.date || '').slice(0, 10);
+  if (!date) return [];
+  const thresholdBps = opts.thresholdBps ?? 5;
+  const dateIndex = history.run_dates.indexOf(date);
+  if (dateIndex < 0) return [];
+
+  const moves: ProductRateMove[] = [];
+  for (const meta of catalog) {
+    const series = history.products[meta.productKey];
+    if (!series) continue;
+    const toRate = series[dateIndex];
+    if (toRate == null || !Number.isFinite(toRate) || toRate <= 0) continue;
+    const fromRate = lastFiniteBefore(series, dateIndex);
+    if (fromRate == null || fromRate <= 0) continue;
+    // Compare in rounded bps space — fraction subtraction can land just under
+    // 0.0005 for a true 5 bps move (e.g. 0.0600 − 0.0595 → 0.0004999…).
+    const bps = Math.round((toRate - fromRate) * 10000 * 10) / 10;
+    if (Math.abs(bps) < thresholdBps) continue;
+    moves.push({
+      productKey: meta.productKey,
+      productName: meta.productName,
+      rateIndex: meta.rateIndex,
+      date,
+      fromRate,
+      toRate,
+      bps,
+    });
+  }
+  moves.sort((a, b) => Math.abs(b.bps) - Math.abs(a.bps) || a.productName.localeCompare(b.productName));
+  return moves;
 }
 
 /** Validate a cached/parsed payload before it reaches chart code. */

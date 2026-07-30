@@ -16,8 +16,19 @@ export const openProduct = (productKey: string, rateIndex?: number) =>
     params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
   });
 
-export const openBank = (provider: string) =>
-  router.push({ pathname: '/bank/[provider]', params: { provider } });
+/** Open a lender page; optional date/section focus a specific bank-move drill-down. */
+export const openBank = (
+  provider: string,
+  opts?: { date?: string; section?: SectionKey },
+) =>
+  router.push({
+    pathname: '/bank/[provider]',
+    params: {
+      provider,
+      ...(opts?.date ? { date: opts.date } : {}),
+      ...(opts?.section ? { section: opts.section } : {}),
+    },
+  });
 
 /** Dot-delimited Browse drill path from expo-router search params. */
 export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {

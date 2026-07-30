@@ -6,7 +6,7 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
 import {
@@ -219,7 +219,9 @@ export function BankHistoryChart({
   const rbaInk = theme.colors.rba;
   const rbaBand = withAlpha(rbaInk, 0.42);
   const crosshairColor = withAlpha(theme.colors.primary, theme.dark ? 0.6 : 0.55);
-  const highlightColor = highlightSeries?.color ?? theme.colors.text;
+  // Prefer an explicit product color; fall back to warning so the series does not
+  // disappear into near-white text / the mean crosshair on dark surfaces.
+  const highlightColor = highlightSeries?.color ?? theme.colors.warning;
 
   const labelEvery = axisLabelInterval(plotDates.length);
   const pinnedDate =
@@ -530,7 +532,28 @@ export function BankHistoryChart({
               <CrossMarker cx={xAt(activeIndex)} cy={yAt(activePoint.mean)} color={ribbonColor} />
             ) : null}
             {activeHighlight != null ? (
-              <CrossMarker cx={xAt(activeIndex)} cy={yAt(activeHighlight)} color={highlightColor} />
+              <ProductMarker
+                cx={xAt(activeIndex)}
+                cy={yAt(activeHighlight)}
+                color={highlightColor}
+                fill={theme.colors.surface}
+              />
+            ) : null}
+            {/* Single-day product seed: draw a reference level so "today's rate" is
+                visible against the market ribbon while daily history is still warming. */}
+            {highlightValues &&
+            activeHighlight != null &&
+            highlightValues.filter((v) => isFiniteNumber(v)).length === 1 ? (
+              <Line
+                x1={padL}
+                y1={yAt(activeHighlight)}
+                x2={width - padR}
+                y2={yAt(activeHighlight)}
+                stroke={highlightColor}
+                strokeWidth={1.5}
+                strokeDasharray="5 4"
+                opacity={0.85}
+              />
             ) : null}
           </Svg>
         ) : null}
@@ -594,6 +617,27 @@ function CrossMarker({ cx, cy, color }: { cx: number; cy: number; color: string 
     <G>
       <Line x1={cx} y1={cy - 4} x2={cx} y2={cy + 4} stroke={color} strokeWidth={2} />
       <Line x1={cx - 4} y1={cy} x2={cx + 4} y2={cy} stroke={color} strokeWidth={2} />
+    </G>
+  );
+}
+
+/** Filled ring marker for the product highlight — reads as a rate point, not a tiny +. */
+function ProductMarker({
+  cx,
+  cy,
+  color,
+  fill,
+}: {
+  cx: number;
+  cy: number;
+  color: string;
+  fill: string;
+}) {
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+  return (
+    <G>
+      <Circle cx={cx} cy={cy} r={5.5} fill={fill} stroke={color} strokeWidth={2.4} />
+      <Circle cx={cx} cy={cy} r={2.2} fill={color} stroke="none" />
     </G>
   );
 }

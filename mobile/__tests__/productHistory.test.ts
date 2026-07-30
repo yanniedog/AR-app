@@ -1,9 +1,14 @@
 import {
   buildProductHistoryFromCores,
+  countFiniteSeriesPoints,
   extractProductSeries,
+  forwardFillSeriesRecord,
   hasProductSeries,
   normalizeProductHistoryPayload,
+  productMovesForBankEvent,
+  productMovesForCatalog,
   productSeriesRecord,
+  productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
   type ProductHistoryPayload,
 } from '../src/data/productHistory';
@@ -15,8 +20,8 @@ const EMPTY_RIBBON = {
   providers: [],
 };
 
-function rateRow(productKey: string, rate: string): RateRow {
-  return { provider: 'Bank', product_key: productKey, product_name: productKey, rate };
+function rateRow(productKey: string, rate: string, provider = 'Bank'): RateRow {
+  return { provider, product_key: productKey, product_name: productKey, rate };
 }
 
 function core(runDate: string, rowsBySection: Partial<Record<SectionKey, RateRow[]>>): CorePayload {
@@ -122,6 +127,114 @@ describe('extractProductSeries / productSeriesRecord / hasProductSeries', () => 
     expect(hasProductSeries(payload, 'P|1')).toBe(true);
     expect(hasProductSeries(payload, 'X|9')).toBe(false);
     expect(hasProductSeries(null, 'P|1')).toBe(false);
+  });
+});
+
+describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesForBankEvent', () => {
+  it('forward-fills after the first observation without inventing earlier history', () => {
+    expect(
+      forwardFillSeriesRecord(
+        { '2026-05-13': null, '2026-05-19': 0.06, '2026-06-10': null },
+        ['2026-05-13', '2026-05-19', '2026-06-10'],
+      ),
+    ).toEqual({
+      '2026-05-13': null,
+      '2026-05-19': 0.06,
+      '2026-06-10': 0.06,
+    });
+  });
+
+  it('builds a chart series that seeds today and fills gaps across the axis', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-05-19', '2026-06-10'],
+      products: { 'P|1': [0.061, null, null] },
+    };
+    expect(
+      productSeriesRecordForChart(
+        history,
+        'P|1',
+        ['2026-05-13', '2026-05-19', '2026-06-10'],
+        '2026-06-10',
+        0.055,
+      ),
+    ).toEqual({
+      '2026-05-13': 0.061,
+      '2026-05-19': 0.061,
+      '2026-06-10': 0.055,
+    });
+    expect(countFiniteSeriesPoints({ a: 1, b: null, c: 2 })).toBe(2);
+  });
+
+  it('lists products whose best rate moved >= 5 bps on the event date', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      products: {
+        'P|cut': [0.06, 0.055], // -50 bps
+        'P|flat': [0.06, 0.0598], // -2 bps — below threshold
+        'P|hike': [0.05, 0.055], // +50 bps
+      },
+    };
+    const catalog = core('2026-06-10', {
+      Mortgage: [
+        { ...rateRow('P|cut', '0.055', 'AlphaBank'), product_name: 'Cut loan' },
+        { ...rateRow('P|flat', '0.0598', 'AlphaBank'), product_name: 'Flat loan' },
+        { ...rateRow('P|hike', '0.055', 'AlphaBank'), product_name: 'Hike loan' },
+        { ...rateRow('P|other', '0.07', 'OtherBank'), product_name: 'Other' },
+      ],
+    });
+    const moves = productMovesForBankEvent(catalog, history, {
+      provider: 'AlphaBank',
+      section: 'Mortgage',
+      date: '2026-06-10',
+    });
+    expect(moves.map((m) => m.productKey)).toEqual(['P|cut', 'P|hike']);
+    expect(moves[0]).toMatchObject({
+      productName: 'Cut loan',
+      fromRate: 0.06,
+      toRate: 0.055,
+      bps: -50,
+    });
+    expect(moves[1].bps).toBe(50);
+  });
+
+  it('productMovesForCatalog skips the full-section scan when a catalog is provided', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      products: { 'P|cut': [0.06, 0.055] },
+    };
+    const moves = productMovesForCatalog(
+      history,
+      [{ productKey: 'P|cut', productName: 'Cut loan', rateIndex: null }],
+      { date: '2026-06-10' },
+    );
+    expect(moves).toHaveLength(1);
+    expect(moves[0].bps).toBe(-50);
+  });
+
+  it('counts exact 5 bps moves despite floating-point fraction noise', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      // 0.0600 - 0.0595 is the classic IEEE case that undershoots 0.0005.
+      products: { 'P|edge': [0.0595, 0.06] },
+    };
+    const catalog = core('2026-06-10', {
+      Mortgage: [{ ...rateRow('P|edge', '0.06', 'AlphaBank'), product_name: 'Edge loan' }],
+    });
+    const moves = productMovesForBankEvent(catalog, history, {
+      provider: 'AlphaBank',
+      section: 'Mortgage',
+      date: '2026-06-10',
+    });
+    expect(moves).toHaveLength(1);
+    expect(moves[0].bps).toBe(5);
   });
 });
 

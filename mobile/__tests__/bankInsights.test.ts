@@ -1,4 +1,5 @@
 import {
+  bankEventMedianContext,
   bankTrendChartModel,
   comparePassThroughRows,
   filterBankInsightsForSuitability,
@@ -287,6 +288,32 @@ describe('recentBankEvents', () => {
     expect(recentBankEvents(payload, { provider: 'AlphaBank' })).toHaveLength(2);
     expect(recentBankEvents(payload, { limit: 1 })[0].provider).toBe('AlphaBank');
     expect(recentBankEvents(null)).toEqual([]);
+  });
+});
+
+describe('bankEventMedianContext', () => {
+  test('returns before→after median rates for a move date', () => {
+    expect(
+      bankEventMedianContext(payload, {
+        provider: 'AlphaBank',
+        section: 'Mortgage',
+        date: '2026-06-01',
+      }),
+    ).toEqual({
+      before: 0.0595,
+      after: 0.057,
+      medianBps: -25,
+    });
+  });
+
+  test('returns null when prior median is missing', () => {
+    expect(
+      bankEventMedianContext(payload, {
+        provider: 'BetaBank',
+        section: 'Mortgage',
+        date: '2026-05-01',
+      }),
+    ).toBeNull();
   });
 });
 
