@@ -282,12 +282,16 @@ function evaluate({
   }
 
   if (requiredKeys.length === 0) {
+    const elapsedMs = Date.now() - anchor.getTime();
+    const maxMs = MAX_WAIT_MIN * 60 * 1000;
     const checks = fetchChecks(prNumber);
     if (checks.error && !checks.failed) {
       if (isGithubRateLimitError(checks.error)) {
         return {
           status: 'waiting',
           message: `GitHub API rate limit on required checks — retry later (${checks.error})`,
+          elapsedMs,
+          remainingCapMs: maxMs - elapsedMs,
         };
       }
       return { status: 'error', message: checks.error };
@@ -300,9 +304,19 @@ function evaluate({
       };
     }
     if (checks.pending) {
+      if (elapsedMs > maxMs) {
+        return {
+          status: 'timeout',
+          message:
+            `Bot wait safety cap (${MAX_WAIT_MIN} min) exceeded since anchor ` +
+            `${anchor.toISOString()} while required CI checks remain pending.`,
+        };
+      }
       return {
         status: 'waiting',
         message: `PR #${prNumber}: required CI checks are still pending; bot presence is disabled by policy.`,
+        elapsedMs,
+        remainingCapMs: maxMs - elapsedMs,
       };
     }
     return {

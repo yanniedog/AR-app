@@ -139,13 +139,19 @@ function setVariable(repo, name, value) {
 }
 
 function variables(repo) {
-  const payload = ghJson(
-    ["api", `repos/${repo}/actions/variables?per_page=100`],
+  const pages = ghJson(
+    [
+      "api",
+      `repos/${repo}/actions/variables?per_page=100`,
+      "--paginate",
+      "--slurp",
+    ],
     { allowFailure: true },
   );
-  return Object.fromEntries(
-    (payload?.variables || []).map((row) => [row.name, row.value]),
-  );
+  const rows = Array.isArray(pages)
+    ? pages.flatMap((page) => page?.variables || [])
+    : [];
+  return Object.fromEntries(rows.map((row) => [row.name, row.value]));
 }
 
 function requiredChecks(repo) {

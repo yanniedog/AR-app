@@ -197,6 +197,14 @@ assert.match(
   /Qwen enabled as advisory; presence gate remains disabled/,
 );
 assert.match(
+  controlScript,
+  /actions\/variables\?per_page=100[\s\S]{0,200}"--paginate"/,
+);
+assert.match(
+  controlScript,
+  /pages\.flatMap\(\(page\) => page\?\.variables \|\| \[\]\)/,
+);
+assert.match(
   coderabbitRetryWorkflow,
   /gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"/,
 );
@@ -220,6 +228,10 @@ assert.match(waitScript, /state\.anchor = anchorFromPr/);
 assert.match(
   waitScript,
   /state = \{ anchor: anchorIso, readyAt: null, headSha, requiredKeys \}/,
+);
+assert.match(
+  waitScript,
+  /requiredKeys\.length === 0[\s\S]*MAX_WAIT_MIN[\s\S]*status: 'timeout'/,
 );
 
 const workflowSources = readdirSync(".github/workflows")
