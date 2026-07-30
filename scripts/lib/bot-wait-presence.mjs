@@ -4,6 +4,7 @@ import {
   allKnownBotLogins,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
+  isQwenCodeReviewBody,
   missingRequiredKeysFromEvents,
   resolveRequiredKeys,
 } from './bot-wait-config.mjs';
@@ -23,7 +24,7 @@ export function resolveAnchorIso(anchorIso, fallbackIso) {
 }
 
 const COMMENTS_QUERY =
-  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt isCrossRepository comments(last:100){nodes{author{login}createdAt body}}reviews(last:30){nodes{author{login}submittedAt body}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt body}}}}}}}';
+  'query($owner:String!,$name:String!,$num:Int!){repository(owner:$owner,name:$name){pullRequest(number:$num){createdAt headRefOid isCrossRepository comments(last:100){nodes{author{login}createdAt body}}reviews(last:30){nodes{author{login}submittedAt body}}reviewThreads(last:100){nodes{comments(last:10){nodes{author{login}createdAt body}}}}}}}';
 
 function ghGraphql(owner, name, prNumber) {
   const r = spawnSync(
@@ -57,7 +58,11 @@ export function collectBotEvents(prPayload, knownBots, anchorIso, fallbackIso) {
   const events = [];
   const pushEvent = (login, at, body) => {
     if (!login || !at) return;
-    if (login.toLowerCase() === 'github-actions[bot]' && !isGeminiCodeReviewBody(body)) return;
+    if (
+      login.toLowerCase() === 'github-actions[bot]' &&
+      !isGeminiCodeReviewBody(body) &&
+      !isQwenCodeReviewBody(body)
+    ) return;
     events.push({ login, at, body: body || '' });
   };
   for (const c of prPayload.comments?.nodes || []) {
@@ -91,7 +96,9 @@ export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anc
   const anchor = resolveAnchorIso(anchorIso || state?.anchor, pr.createdAt);
   const events = collectBotEvents(pr, knownBots, anchor, pr.createdAt);
   const seenLogins = [...new Set(events.map((e) => e.login))];
-  const missing = missingRequiredKeysFromEvents(keys, events);
+  const missing = missingRequiredKeysFromEvents(keys, events, {
+    expectedHeadSha: pr.headRefOid,
+  });
   return {
     requiredKeys: keys,
     anchor,

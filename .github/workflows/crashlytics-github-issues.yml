@@ -25,21 +25,43 @@ on:
         type: string
         default: ''
 
-permissions:
-  contents: read
-  issues: write
-
 concurrency:
   group: crashlytics-github-issues
   cancel-in-progress: false
 
 jobs:
-  sync:
+  validate:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Validate Crashlytics sync with fixture
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          node --test scripts/lib/*.test.mjs
+          node scripts/crashlytics-to-github-issues.mjs \
+            --dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json
 
-      - uses: actions/setup-node@v4
+  sync:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '24'
 
@@ -52,17 +74,17 @@ jobs:
           GITHUB_REPOSITORY: ${{ github.repository }}
           CRASHLYTICS_LOOKBACK_DAYS: '7'
           CRASHLYTICS_MIN_EVENTS: '1'
+          DRY_RUN_INPUT: ${{ inputs.dry_run }}
+          MOCK_REPORT_INPUT: ${{ inputs.mock_report }}
         run: |
           set -euo pipefail
           args=()
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            args+=(--dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json)
-          elif [ "${{ inputs.dry_run }}" = "true" ]; then
+          if [ "$DRY_RUN_INPUT" = "true" ]; then
             args+=(--dry-run)
           fi
-          if [ "${{ github.event_name }}" != "pull_request" ] && [ -n "${{ inputs.mock_report }}" ]; then
-            args+=(--mock-report "${{ inputs.mock_report }}")
-          elif [ "${{ github.event_name }}" != "pull_request" ] && [ -z "${FIREBASE_USER_OAUTH_JSON:-}" ]; then
+          if [ -n "$MOCK_REPORT_INPUT" ]; then
+            args+=(--mock-report "$MOCK_REPORT_INPUT")
+          elif [ -z "${FIREBASE_USER_OAUTH_JSON:-}" ]; then
             echo "::warning::FIREBASE_USER_OAUTH_JSON not set - live Crashlytics report sync is disabled; running mock dry-run"
             args+=(--dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json)
           fi

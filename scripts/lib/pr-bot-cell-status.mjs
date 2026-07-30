@@ -38,7 +38,9 @@ export const CELL_COLORS = {
  * @param {string} botKey
  */
 function eventsForBot(events, botKey) {
-  return (events || []).filter((e) => e.botKey === botKey || loginMatchesBotKey(e.login, botKey));
+  return (events || []).filter(
+    (e) => e.botKey === botKey || loginMatchesBotKey(e.login, botKey, e.body),
+  );
 }
 
 /**
@@ -78,7 +80,7 @@ function onlyQuotaLimitActivity(botEvents) {
  */
 function violationsForBot(threads, botKey) {
   const violations = classifyThreads(threads, { mergedAudit: true });
-  return violations.filter((v) => loginMatchesBotKey(v.starter, botKey));
+  return violations.filter((v) => loginMatchesBotKey(v.starter, botKey, v.body));
 }
 
 /**

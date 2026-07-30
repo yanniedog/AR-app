@@ -32,8 +32,8 @@ export function classifyBranchState(meta) {
     return {
       status: 'blocked',
       behind: false,
-      canUpdate: true,
-      detail: 'merge blocked (checks or branch protection) — may need branch update',
+      canUpdate: false,
+      detail: 'merge blocked by checks or branch protection; branch is not known to be behind',
     };
   }
   if (ms === 'CLEAN' || ms === 'UNSTABLE' || mergeable === 'MERGEABLE') {
@@ -173,7 +173,7 @@ export function progressPullRequest(prNumber, { dryRun = false, syncBranch = tru
     out.ok = false;
     return out;
   }
-  if (syncBranch && (state.behind || state.status === 'blocked' || state.status === 'unknown')) {
+  if (syncBranch && state.behind) {
     out.sync = updatePrBranch(prNumber, { dryRun, force: state.behind });
     if (!out.sync.ok) {
       out.blocked = true;

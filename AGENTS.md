@@ -17,7 +17,12 @@ PR bot babysitting follows **[yanniedog/cursor-global-workflow](https://github.c
 Do not stop after opening a PR. Always monitor each owned open PR (and any still open from this session) until squash-merged — without being asked. Prefer **one dedicated ship-bar / babysit loop per open PR number** (do not abandon a PR because another task started).
 
 - After every push: commit, push, create/update the PR, then watch checks until they settle.
-- Required gates here typically include `mobile-ci`, `bot-presence-gate`, and `bot-feedback-gate`.
+- Required gates here are `mobile-ci`, `qwen-code-review`, `bot-presence-gate`, and `bot-feedback-gate`.
+- `qwen-code-review` is the repository-controlled required reviewer. Its formal review must identify the exact reviewed commit and a successful/no-findings/findings outcome. Failed, quota-limited, obsolete, or stale-head bot messages do not prove reviewer presence.
+- Qwen runs on the dedicated local runner from reviewer code and instructions checked out from protected `main`; PR-head files are untrusted review data and must never be executed by the reviewer workflow.
+- Qwen is intentionally resource-bounded: one model call per PR head, at most 10 risk-ranked files and 60,000 diff characters, with superseded runs cancelled. Coverage counts belong only in the private Actions summary.
+- Qwen publishes only validated, line-addressable defects with direct revisions or GitHub suggestion blocks. Never add PR/file/script summaries, walkthroughs, praise, whole-PR coverage, or a larger model context to satisfy generic coverage feedback.
+- CodeRabbit, Sourcery, Codex, and Cursor remain visible in the bot matrix and all substantive findings still require disposition. Their quota or service availability must not make merge liveness depend on an external vendor.
 - Run `npm run wait-for-bots -- --pr <N>` (repo root) until exit 0. Re-run while exit 2. If GitHub `bot-presence-gate` is still red after bots have posted, re-trigger a **PR-head** check (not a top-level issue comment — those run on the default-branch SHA and do not replace the failed check on the PR commit): prefer `ready_for_review`, a new `pull_request_review` / review-comment event, workflow re-run on the PR head when write-capable, or a fix/`synchronize` push. Prefer waiting until `mobile-ci` is green before a synchronize re-trigger so presence does not race CI.
 - Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Self-test for PR bot gate exemption policy (author + chore + automated chores).
+ * Self-test for PR bot gate exemption policy.
  * Run: node scripts/verify-pr-gate-exempt-policy.mjs
  */
 import {
@@ -28,9 +28,9 @@ check(
   null,
 );
 check(
-  'human chore skips',
+  'human chore requires bots',
   gateExemptReasonFromPrMeta({ title: 'chore: docs', authorLogin: 'yanniedog', authorType: 'User' }),
-  'chore',
+  null,
 );
 check(
   'bot-authored skips any title',

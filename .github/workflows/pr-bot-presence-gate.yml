@@ -1,15 +1,11 @@
 name: pr-bot-presence-gate
 
-# Single-shot bot presence check. Re-fires on PR lifecycle + bot review/comment events,
-# so a miss while bots are still in flight self-heals when they post (no GraphQL polling from
-# Actions - installation quota). Local --watch (npm run wait-for-bots) remains the pre-merge gate.
+# Required bot-presence check. It stays pending while the required reviewer is
+# working instead of deliberately failing on PR open and relying on later events
+# to replace the red check.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  pull_request_review:
-    types: [submitted]
-  issue_comment:
-    types: [created]
   workflow_dispatch:
     inputs:
       pr_number:
@@ -20,48 +16,41 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  issues: read
 
 concurrency:
-  # cancel-in-progress MUST stay false for a required check. Cancelling an
-  # in-flight run leaves a "cancelled" check-run that branch protection reads as
-  # the latest required status, blocking the PR even when a later run succeeds
-  # (the "BLOCKED but all-green" trap that forced empty re-trigger commits on
-  # every PR). With false, the newest event still runs to completion, so the
-  # latest required check-run is always success/failure - never a stale cancel.
-  group: bot-presence-gate-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  # Include the PR head so a new commit never cancels or queues behind the old
+  # SHA. queue:max prevents same-head lifecycle events replacing a pending run.
+  group: bot-presence-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.event.pull_request.head.sha || github.sha }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   bot-presence-gate:
-    # Re-evaluate on bot reviews/comments so a single-shot miss self-heals.
-    # issue_comment fires for both issues and PRs - gate on PR-only.
-    if: >-
-      github.event.pull_request != null
-      || github.event.review != null
-      || (github.event_name == 'issue_comment' && github.event.issue.pull_request != null)
-      || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
-      - name: Skip bot wait for non-human / chore PRs
+      - name: Skip bot wait for bot-authored or exact generated PRs
         id: gate_exempt
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_AUTHOR_TYPE: ${{ github.event.pull_request.user.type }}
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
-          case "${{ github.event_name }}" in
-            workflow_dispatch) PR="${{ inputs.pr_number }}" ;;
-            issue_comment)     PR="${{ github.event.issue.number }}" ;;
-            pull_request_review) PR="${{ github.event.pull_request.number }}" ;;
-            *)                 PR="${{ github.event.pull_request.number }}" ;;
+          case "$EVENT_NAME" in
+            workflow_dispatch) PR="$INPUT_PR" ;;
+            *)                 PR="$EVENT_PR" ;;
           esac
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::Pull request number must be numeric"; exit 1; }
           export PR
           EXEMPT=$(node scripts/pr-gate-exempt-reason.mjs || true)
           if [ -n "$EXEMPT" ]; then
@@ -75,34 +64,27 @@ jobs:
         if: steps.gate_exempt.outputs.gate_exempt == 'true'
         run: |
           echo "bot-presence-gate: skipped (${{ steps.gate_exempt.outputs.gate_exempt_reason }} - human bot review not required)"
-      - name: Required bot wait gate (single shot)
+      - name: Required bot wait gate
         if: steps.gate_exempt.outputs.gate_exempt != 'true'
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Override with repo variable AR_BOT_WAIT_REQUIRED if the installed review
-          # bots differ on AR-app. Default keeps the existing Sourcery gate.
-          AR_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED || 'sourcery' }}
+          # Qwen is self-hosted and under this repo's control. Third-party bots
+          # remain visible in the matrix but cannot make merge liveness depend on
+          # their quota or product availability.
+          AR_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED || 'qwen' }}
           BOT_WAIT_IGNORE_CHECK_NAMES: bot-presence-gate,bot-feedback-gate,pr-bot-presence-gate,pr-bot-feedback-check,mobile-ci
-          # CI has no .ar-bot-wait state; anchor falls back to PR createdAt (long-open PRs exceed 28m).
-          # Ignore mobile-ci here: it is a separate required check. Waiting on it from this
-          # single-shot gate races synchronize (presence fails while CI is still running) and
-          # leaves a failed bot-presence-gate check-run on the same SHA that can keep merge blocked
-          # even after a later presence success.
-          BOT_WAIT_MAX_MIN: "240"
+          BOT_WAIT_POLL_SEC: "90"
+          BOT_WAIT_QUIET_SEC: "30"
+          BOT_WAIT_MIN_SEC: "30"
+          BOT_WAIT_MAX_MIN: "45"
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_PR: ${{ inputs.pr_number }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
         run: |
-          case "${{ github.event_name }}" in
-            workflow_dispatch) PR="${{ inputs.pr_number }}" ;;
-            issue_comment)     PR="${{ github.event.issue.number }}" ;;
-            pull_request_review) PR="${{ github.event.pull_request.number }}" ;;
-            *)                 PR="${{ github.event.pull_request.number }}" ;;
+          case "$EVENT_NAME" in
+            workflow_dispatch) PR="$INPUT_PR" ;;
+            *)                 PR="$EVENT_PR" ;;
           esac
-          set +e
-          npm run wait-for-bots -- --pr "$PR"
-          code=$?
-          set -e
-          if [ "$code" -eq 2 ]; then
-            echo "::warning::Bot wait not ready yet (exit 2) - run npm run wait-for-bots locally until exit 0, then re-run this workflow"
-            exit 1
-          fi
-          exit "$code"
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::Pull request number must be numeric"; exit 1; }
+          npm run wait-for-bots -- --watch --pr "$PR"

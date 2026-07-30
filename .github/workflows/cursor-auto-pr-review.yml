@@ -1,0 +1,254 @@
+name: qwen-code-review
+
+# pull_request_target loads this workflow from protected main. The target PR is
+# checked out separately and treated only as diff data on the laptop runner.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number to review
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
+concurrency:
+  # A new push makes old analysis worthless. Cancel it before another 30B
+  # inference starts and debounce the replacement below.
+  group: qwen-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: qwen-review-runner
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || github.event.pull_request != null
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.user.type != 'Bot'
+          && contains(github.event.comment.body, '@qwen-review'))
+    runs-on: [self-hosted, Windows, X64, qwen-local-llm]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - name: Resolve and trust-check pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          INPUT_PR: ${{ inputs.pr_number }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pr = if ($env:EVENT_NAME -eq 'workflow_dispatch') {
+            $env:INPUT_PR
+          } elseif ($env:EVENT_NAME -eq 'issue_comment') {
+            $env:ISSUE_NUMBER
+          } else {
+            $env:EVENT_PR
+          }
+          if ($pr -notmatch '^\d+$') {
+            throw "Pull request number must be numeric."
+          }
+          $json = gh api "repos/$env:GITHUB_REPOSITORY/pulls/$pr" | ConvertFrom-Json
+          if ($json.head.repo.full_name -ne $env:GITHUB_REPOSITORY) {
+            throw "Fork PRs cannot run on the private Qwen runner."
+          }
+          "number=$pr" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "head_sha=$($json.head.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "base_ref=$($json.base.ref)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "author=$($json.user.login)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "author_type=$($json.user.type)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Determine exemption
+        id: exempt
+        env:
+          AUTHOR: ${{ steps.pr.outputs.author }}
+          AUTHOR_TYPE: ${{ steps.pr.outputs.author_type }}
+        run: |
+          $isBot = $env:AUTHOR_TYPE -eq 'Bot' -or $env:AUTHOR.EndsWith('[bot]')
+          "value=$($isBot.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Check existing current-head result
+        id: existing
+        if: steps.exempt.outputs.value != 'true' && github.event_name != 'workflow_dispatch' && github.event_name != 'issue_comment'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          $id = gh api "repos/$env:GITHUB_REPOSITORY/commits/$env:HEAD_SHA/check-runs" `
+            --jq '.check_runs[] | select(.name=="qwen-code-review" and .conclusion=="success") | .id' |
+            Select-Object -First 1
+          $exists = [bool]$id
+          "value=$($exists.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Debounce rapid push sequences
+        if: >-
+          steps.exempt.outputs.value != 'true'
+          && steps.existing.outputs.value != 'true'
+          && github.event_name == 'pull_request_target'
+        run: Start-Sleep -Seconds 90
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
+        with:
+          ref: main
+          path: _trusted-reviewer
+          persist-credentials: false
+          clean: true
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
+        with:
+          ref: ${{ steps.pr.outputs.head_sha }}
+          path: review-target
+          fetch-depth: 0
+          persist-credentials: false
+          clean: true
+
+      - name: Run trusted Qwen reviewer
+        id: qwen
+        if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
+        working-directory: review-target
+        env:
+          QWEN_API_BASE_URL: ${{ secrets.QWEN_API_BASE_URL }}
+          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          QWEN_MODEL: ${{ secrets.QWEN_MODEL }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          BASE_REF: ${{ steps.pr.outputs.base_ref }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PROMPT_PATH: ${{ github.workspace }}\_trusted-reviewer\.cursor\PR_REVIEW_PROMPT.md
+          DIFF_MAX_CHARS: "60000"
+        run: |
+          $ErrorActionPreference = 'Continue'
+          if (-not $env:QWEN_API_BASE_URL) { $env:QWEN_API_BASE_URL = 'http://127.0.0.1:11434/v1' }
+          if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen3-coder:30b' }
+          $out = Join-Path $env:RUNNER_TEMP 'qwen-review.md'
+          $err = Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt'
+          $env:OUT_FILE = $out
+          Get-Process ollama -ErrorAction SilentlyContinue |
+            ForEach-Object { $_.PriorityClass = 'BelowNormal' }
+          & node "$env:GITHUB_WORKSPACE\_trusted-reviewer\scripts\qwen-pr-review.mjs" 2> $err
+          "status=$LASTEXITCODE" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          exit 0
+
+      - name: Publish direct inline findings and revisions
+        if: steps.qwen.outputs.status == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          MODEL: ${{ secrets.QWEN_MODEL }}
+        run: |
+          $review = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review.md') | ConvertFrom-Json
+          $findings = @($review.findings)
+          $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
+          $model = if ($env:MODEL) { $env:MODEL } else { 'qwen3-coder:30b' }
+          $body = @(
+            '<!-- qwen-code-review -->'
+            '## Qwen Code Review'
+            ''
+            "Reviewed commit: ``$env:HEAD_SHA``"
+            "Review outcome: $outcome"
+            "Model: ``$model``"
+            "Workflow: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            if ($findings.Count -eq 0) { 'No actionable defects found in the high-signal diff.' }
+            else { "$($findings.Count) actionable inline finding(s) with direct revisions." }
+          ) -join "`n"
+          $comments = @()
+          foreach ($finding in $findings) {
+            $commentBody = @(
+              "**$($finding.severity)**"
+              ''
+              $finding.issue
+              ''
+              "**Suggested revision:** $($finding.suggested_fix)"
+            )
+            if ($finding.replacement -and $finding.side -eq 'RIGHT') {
+              $replacement = [string]$finding.replacement -replace '```', '``\`'
+              $commentBody += @('', '```suggestion', $replacement, '```')
+            }
+            $comments += @{
+              path = [string]$finding.path
+              line = [int]$finding.line
+              side = [string]$finding.side
+              body = ($commentBody -join "`n")
+            }
+          }
+          $payload = @{
+            commit_id = $env:HEAD_SHA
+            event = 'COMMENT'
+            body = $body
+            comments = $comments
+          } | ConvertTo-Json -Depth 8
+          $file = Join-Path $env:RUNNER_TEMP 'qwen-review-request.json'
+          Set-Content $file $payload -Encoding utf8
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/pulls/$env:PR_NUMBER/reviews" `
+            --input $file | Out-Null
+          @(
+            "### Qwen review coverage"
+            "- Reviewed: $(@($review.reviewed_files).Count) high-signal file(s)"
+            "- Omitted: $(@($review.omitted_files).Count) low-signal or size-capped file(s)"
+            "- Local model calls: $($review.model_calls)"
+            "- Findings: $($findings.Count)"
+          ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - name: Publish failed review notice
+        if: steps.qwen.outcome != 'skipped' && steps.qwen.outputs.status != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          $errorText = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt')
+          $body = @(
+            '<!-- qwen-code-review -->'
+            '## Qwen Code Review'
+            ''
+            "Reviewed commit: ``$env:HEAD_SHA``"
+            'Review outcome: failed'
+            ''
+            'Qwen Code Review did not complete successfully. This does not satisfy reviewer presence.'
+            ''
+            '```text'
+            $errorText.Trim()
+            '```'
+          ) -join "`n"
+          gh pr comment $env:PR_NUMBER --body $body
+
+      - name: Publish current-head qwen-code-review check
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          EXEMPT: ${{ steps.exempt.outputs.value }}
+          EXISTING: ${{ steps.existing.outputs.value }}
+          STATUS: ${{ steps.qwen.outputs.status }}
+        run: |
+          $conclusion = 'success'
+          $summary = 'Qwen review completed for this head commit.'
+          if ($env:EXEMPT -eq 'true') {
+            $summary = 'Skipped for bot-authored pull request.'
+          } elseif ($env:EXISTING -eq 'true') {
+            $summary = 'A successful Qwen review already exists for this head commit.'
+          } elseif ($env:STATUS -ne '0') {
+            $conclusion = 'failure'
+            $summary = 'Qwen review failed. See the workflow log and PR notice.'
+          }
+          gh api --method POST "repos/$env:GITHUB_REPOSITORY/check-runs" `
+            -f name='qwen-code-review' -f head_sha="$env:HEAD_SHA" `
+            -f status='completed' -f conclusion="$conclusion" `
+            -f 'output[title]=Qwen Code Review' -f "output[summary]=$summary" | Out-Null
+          if ($conclusion -ne 'success') { exit 1 }
