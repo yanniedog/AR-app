@@ -24,7 +24,9 @@ import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { sortRows, findByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import {
+  countFiniteSeriesPoints,
   hasProductSeries,
+  productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
@@ -179,6 +181,8 @@ export default function ProductDetail() {
   const qualifier = rateQualifier(row, section);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
+  // Distinct from the market ribbon ink so the product line/marker stays readable.
+  const productInk = theme.colors.warning;
   // Match productHistory's section-best pick so the seeded point aligns with synced series.
   let currentBest: number | null = null;
   for (const sibling of siblings) {
@@ -187,11 +191,22 @@ export default function ProductDetail() {
     if (currentBest == null) currentBest = rate;
     else currentBest = meta.lowerIsBetter ? Math.min(currentBest, rate) : Math.max(currentBest, rate);
   }
+  const chartDates = historyModel?.dates ?? [];
   const productSeries = {
-    values: productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest),
+    values: productSeriesRecordForChart(
+      productHistory,
+      productKey,
+      chartDates,
+      core?.run_date,
+      currentBest,
+    ),
     label: row.product_name,
+    color: productInk,
   };
   const productHasSeries = hasProductSeries(productHistory, productKey);
+  const observedProductPoints = countFiniteSeriesPoints(
+    productSeriesRecordWithCurrent(productHistory, productKey, core?.run_date, currentBest),
+  );
   const productHasHighlight = Object.values(productSeries.values).some(
     (v) => typeof v === 'number' && Number.isFinite(v),
   );
@@ -345,7 +360,7 @@ export default function ProductDetail() {
                     highlightSeries={productHasHighlight ? productSeries : null}
                   />
                 </ChartErrorBoundary>
-                <HistoryLegend productColor={theme.colors.text} sectionColor={sectionInk} />
+                <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
                 {productHistoryError && !productHasSeries ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
@@ -357,9 +372,12 @@ export default function ProductDetail() {
                       onPress={() => void ensureProductHistory({ force: true })}
                     />
                   </Row>
-                ) : !productHasSeries ? (
+                ) : !productHasSeries || observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    Gathering this product&apos;s daily history…
+                    {formatRate(currentBest)} today
+                    {observedProductPoints < 2
+                      ? ' · gathering prior daily rates so the full line can draw'
+                      : ''}
                   </AppText>
                 ) : null}
               </>

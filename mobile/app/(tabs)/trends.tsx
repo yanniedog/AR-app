@@ -202,7 +202,8 @@ export default function Trends() {
               <Chip label="PRO" selected />
             </Row>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-              Detected daily from every lender's advertised {SECTIONS[activeSection].title.toLowerCase()} rates
+              Detected daily from every lender&apos;s advertised {SECTIONS[activeSection].title.toLowerCase()}{' '}
+              rates. Tap a row for the products involved and each rate change.
             </AppText>
             {sectionOptions.length > 1 ? (
               <View style={{ marginBottom: 8 }}>

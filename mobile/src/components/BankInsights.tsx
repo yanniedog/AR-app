@@ -4,9 +4,11 @@ import { Pressable, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import {
+  bankEventMedianContext,
   marketPulse,
   recentBankEvents,
   topMovers,
+  type BankEventRateContext,
   type BankInsightsPayload,
   type BankRateEvent,
 } from '../data/bankInsights';
@@ -51,43 +53,82 @@ function toneColor(tone: MoveTone, theme: ReturnType<typeof useTheme>): string {
       : theme.colors.textMuted;
 }
 
-function eventA11yLabel(event: BankRateEvent): string {
+function eventA11yLabel(event: BankRateEvent, rateCtx: BankEventRateContext | null): string {
   const verb = moveVerb(event.section, event.dir);
-  return `${event.provider} ${verb} ${SECTIONS[event.section].title} rates by ${bpsLabel(
+  const rateBit = rateCtx
+    ? `, median ${formatRate(rateCtx.before)} to ${formatRate(rateCtx.after)}`
+    : '';
+  return `${event.provider} ${verb} ${SECTIONS[event.section].title} rates by average ${bpsLabel(
     event.avg_bps,
-  )} across ${event.moved} of ${event.total} products on ${formatRunDate(event.date)}`;
+  )} across ${event.moved} of ${event.total} products on ${formatRunDate(event.date)}${rateBit}`;
 }
 
-export function BankMoveRow({ event, showDate = true }: { event: BankRateEvent; showDate?: boolean }) {
+export function BankMoveRow({
+  event,
+  showDate = true,
+  rateContext = null,
+  focused = false,
+  onPress,
+}: {
+  event: BankRateEvent;
+  showDate?: boolean;
+  /** Optional median before→after context for the move date. */
+  rateContext?: BankEventRateContext | null;
+  /** Highlight when this row is the drill-down focus. */
+  focused?: boolean;
+  /** Override navigation (e.g. already on the bank page). */
+  onPress?: () => void;
+}) {
   const theme = useTheme();
   const verb = moveVerb(event.section, event.dir);
+  const tone = moveTone(event.section, event.avg_bps);
   return (
     <Pressable
-      onPress={() => openBank(event.provider)}
+      onPress={
+        onPress ??
+        (() => openBank(event.provider, { date: event.date, section: event.section }))
+      }
       accessibilityRole="button"
-      accessibilityLabel={eventA11yLabel(event)}
+      accessibilityLabel={eventA11yLabel(event, rateContext)}
+      accessibilityHint="Shows which products moved and by how much"
     >
-      <Row gap={10} style={{ paddingVertical: 8 }}>
+      <Row
+        gap={10}
+        style={{
+          paddingVertical: 10,
+          paddingHorizontal: focused ? 8 : 0,
+          marginHorizontal: focused ? -8 : 0,
+          borderRadius: focused ? theme.radius.md : 0,
+          backgroundColor: focused ? theme.colors.primaryMuted : undefined,
+        }}
+      >
         <BankAvatar provider={event.provider} size={34} />
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, gap: 2 }}>
           <AppText variant="small" weight="700" numberOfLines={1}>
             {event.provider}
           </AppText>
-          <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {verb} {SECTIONS[event.section].short.toLowerCase()} · {event.moved} of {event.total} products
+          <AppText variant="tiny" color="textFaint" numberOfLines={2}>
+            {verb} {SECTIONS[event.section].short.toLowerCase()} · {event.moved} of {event.total}{' '}
+            products
             {showDate ? ` · ${formatRunDate(event.date)}` : ''}
           </AppText>
+          {rateContext ? (
+            <AppText variant="tiny" weight="600" numberOfLines={1}>
+              Median {formatRate(rateContext.before)} → {formatRate(rateContext.after)}
+            </AppText>
+          ) : null}
         </View>
-        <Row gap={4}>
-          <MoveArrow section={event.section} bps={event.avg_bps} />
-          <AppText
-            variant="small"
-            weight="800"
-            style={{ color: toneColor(moveTone(event.section, event.avg_bps), theme) }}
-          >
-            {bpsLabel(event.avg_bps)}
+        <View style={{ alignItems: 'flex-end', gap: 2 }}>
+          <Row gap={4}>
+            <MoveArrow section={event.section} bps={event.avg_bps} />
+            <AppText variant="small" weight="800" style={{ color: toneColor(tone, theme) }}>
+              {bpsLabel(event.avg_bps)}
+            </AppText>
+          </Row>
+          <AppText variant="tiny" color="textFaint">
+            avg across movers
           </AppText>
-        </Row>
+        </View>
       </Row>
     </Pressable>
   );
@@ -167,7 +208,7 @@ export function BankMovesFeed({
       {events.map((event, i) => (
         <React.Fragment key={`${event.date}-${event.provider}-${event.section}`}>
           {i > 0 ? <Divider /> : null}
-          <BankMoveRow event={event} />
+          <BankMoveRow event={event} rateContext={bankEventMedianContext(payload, event)} />
         </React.Fragment>
       ))}
     </View>
@@ -216,7 +257,9 @@ export function MoversLeaderboard({
     return (
       <Pressable
         key={provider}
-        onPress={() => openBank(provider)}
+        onPress={() =>
+          openBank(provider, movedOn ? { date: movedOn, section } : { section })
+        }
         accessibilityRole="button"
         accessibilityLabel={`${provider}, net ${bpsLabel(netBps)} on ${movedLabel}, now ${formatRate(current)}`}
       >
