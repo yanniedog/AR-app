@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_MODEL = 'qwen2.5-coder-review:7b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 const DEFAULT_DIFF_MAX = 160_000;
-const DEFAULT_CHUNK_MAX = 24_000;
+const DEFAULT_CHUNK_MAX = 12_000;
 const MAX_FINDINGS = 8;
 
 function fail(message) {
@@ -189,9 +189,9 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
   const configuredTimeout = Number(process.env.QWEN_TIMEOUT_MS || 600_000);
   const timeoutMs =
     Number.isFinite(configuredTimeout) && configuredTimeout > 0 ? configuredTimeout : 600_000;
-  const configuredContext = Number(process.env.QWEN_CONTEXT_TOKENS || 32_768);
+  const configuredContext = Number(process.env.QWEN_CONTEXT_TOKENS || 8_192);
   const contextTokens =
-    Number.isFinite(configuredContext) && configuredContext >= 8_192 ? configuredContext : 32_768;
+    Number.isFinite(configuredContext) && configuredContext >= 4_096 ? configuredContext : 8_192;
   const response = await fetch(`${baseUrl}/api/chat`, {
     method: 'POST',
     headers,
@@ -267,6 +267,15 @@ async function main() {
         ? configuredChunkMax
         : DEFAULT_CHUNK_MAX;
     const chunks = chunkSections(diff.sections, chunkMax);
+    const oversizedSections = diff.sections
+      .filter((section) => section.text.length > chunkMax)
+      .map((section) => section.path);
+    if (oversizedSections.length > 0) {
+      fail(
+        `Qwen review chunk budget cannot safely fit file(s): ${oversizedSections.join(', ')}. ` +
+          'Split the pull request before accepting the review.',
+      );
+    }
     chunkCount = chunks.length;
     const rawFindings = [];
     for (const [index, chunk] of chunks.entries()) {

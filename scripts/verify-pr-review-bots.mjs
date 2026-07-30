@@ -114,8 +114,8 @@ assert.match(
   /github\.event\.comment\.user\.type != 'Bot'[\s\S]+contains\(github\.event\.comment\.body, '@qwen-review'\)/,
 );
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"160000"/);
-assert.match(workflow, /DIFF_CHUNK_CHARS:\s*"24000"/);
-assert.match(workflow, /QWEN_CONTEXT_TOKENS:\s*"32768"/);
+assert.match(workflow, /DIFF_CHUNK_CHARS:\s*"12000"/);
+assert.match(workflow, /QWEN_CONTEXT_TOKENS:\s*"8192"/);
 assert.match(workflow, /refs\/pull\/\$\{\{\s*steps\.pr\.outputs\.number\s*\}\}\/head/);
 assert.doesNotMatch(workflow, /Fork PRs cannot run/);
 assert.match(workflow, /Reviewed files:/);
@@ -132,13 +132,14 @@ assert.match(reviewer, /DEFAULT_DIFF_MAX = 160_000/);
 assert.match(reviewer, /--unified=5/);
 assert.match(reviewer, /Qwen review budget omitted reviewable file/);
 assert.match(reviewer, /excluded_files:/);
-assert.match(reviewer, /DEFAULT_CHUNK_MAX = 24_000/);
+assert.match(reviewer, /DEFAULT_CHUNK_MAX = 12_000/);
 assert.match(reviewer, /\/api\/chat/);
 assert.doesNotMatch(reviewer, /\/chat\/completions/);
 assert.match(reviewer, /num_predict:\s*500/);
 assert.match(reviewer, /num_ctx:\s*contextTokens/);
 assert.match(reviewer, /at most three highest-severity findings for this chunk/);
 assert.match(reviewer, /chunkSections/);
+assert.match(reviewer, /Qwen review chunk budget cannot safely fit file/);
 assert.match(reviewer, /AbortSignal\.timeout/);
 assert.match(reviewer, /UNTRUSTED_PR_DIFF_\$\{randomUUID\(\)\}/);
 assert.doesNotMatch(reviewer, /'```diff'/);
