@@ -2,8 +2,27 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { waitForQueueDrain, ensureApkForMainHead } from './mobile-auto-release-on-drain.mjs';
+import { checkedGhOutput, waitForQueueDrain, ensureApkForMainHead } from './mobile-auto-release-on-drain.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
+
+test('checkedGhOutput returns trimmed stdout for a successful command', () => {
+  assert.equal(checkedGhOutput({ status: 0, stdout: '[]\n', stderr: '' }, ['pr', 'list']), '[]');
+});
+
+test('checkedGhOutput surfaces command and spawn failures', () => {
+  assert.throws(
+    () => checkedGhOutput({ status: 1, stdout: '', stderr: 'denied' }, ['pr', 'list']),
+    /gh pr list failed: denied/,
+  );
+  assert.throws(
+    () =>
+      checkedGhOutput(
+        { status: null, stdout: '', stderr: '', error: new Error('timed out') },
+        ['pr', 'list'],
+      ),
+    /gh pr list failed to execute: timed out/,
+  );
+});
 
 test('generated PRs explicitly dispatch every required check on their head branch', () => {
   assert.deepEqual(requiredPrCheckDispatches(72, 'chore/mobile-auto-release-v1.2.3'), [

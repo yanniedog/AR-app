@@ -29,6 +29,16 @@ const POLL_ATTEMPTS = 6;
 const POLL_SECONDS = 20;
 const SPAWN_TIMEOUT_MS = 60_000;
 
+export function checkedGhOutput(result, args = []) {
+  if (result.error) {
+    throw new Error(`gh ${args.join(' ')} failed to execute: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(`gh ${args.join(' ')} failed: ${(result.stderr || result.stdout || '').trim()}`);
+  }
+  return (result.stdout || '').trim();
+}
+
 function gh(args) {
   const env = ghToken ? { ...process.env, GH_TOKEN: ghToken } : process.env;
   const res = spawnSync('gh', args, {
@@ -37,10 +47,7 @@ function gh(args) {
     env,
     timeout: SPAWN_TIMEOUT_MS,
   });
-  if (res.status !== 0) {
-    throw new Error(`gh ${args.join(' ')} failed: ${(res.stderr || res.stdout || '').trim()}`);
-  }
-  return allowFail ? res : (res.stdout || '').trim();
+  return checkedGhOutput(res, args);
 }
 
 function ghTry(args) {
