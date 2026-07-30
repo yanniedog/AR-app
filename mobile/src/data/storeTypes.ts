@@ -80,6 +80,8 @@ export type Status = 'idle' | 'loading' | 'ready' | 'error';
 export interface AppState {
   status: Status;
   refreshing: boolean;
+  /** Heavy optional-data and suitability warm work still awaited by refresh(). */
+  postRefreshWarming: boolean;
   source: PayloadSource;
   manifest: Manifest | null;
   core: CorePayload | null;
