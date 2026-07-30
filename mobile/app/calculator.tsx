@@ -3,7 +3,10 @@ import { Pressable, TextInput, View } from 'react-native';
 
 import { IndeterminateProgressBar } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
-import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
+import {
+  productRateChangeText,
+  ProductRateChangeSummaryLine,
+} from '../src/components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
@@ -13,6 +16,7 @@ import { assessAccess } from '../src/data/access';
 import { computeLvr, depositToReachLvr, num, type CalcInputs } from '../src/data/calc';
 import { formatRate, humanizeEnum, isBroadlyAvailable, toFraction } from '../src/data/format';
 import { sectionSegmentOptions } from '../src/data/interests';
+import { summarizeProductBestRate } from '../src/data/productHistory';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -46,6 +50,7 @@ export default function Calculator() {
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
+  const productHistory = useStore((s) => s.productHistory);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -352,12 +357,16 @@ export default function Calculator() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
+        const rateChange = summarizeProductBestRate(productHistory, c.row.product_key);
+        const rateChangeLabel = productRateChangeText(rateChange, true);
         return (
           <Pressable
             key={c.row.provider}
             onPress={() => openProduct(c.row.product_key, c.row.rate_index)}
             accessibilityRole="button"
-            accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${formatRate(c.rate)}`}
+            accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${formatRate(c.rate)}${
+              rateChangeLabel ? `, ${rateChangeLabel}` : ''
+            }`}
           >
             <Card style={{ marginBottom: 10 }}>
               <Row gap={12} style={{ alignItems: 'center' }}>
@@ -369,8 +378,8 @@ export default function Calculator() {
                    <AppText variant="tiny" color="textMuted" numberOfLines={1}>
                      {c.row.product_name} · {formatRate(c.rate)}
                    </AppText>
-                   <ProductRateChangeLine
-                     productKey={c.row.product_key}
+                   <ProductRateChangeSummaryLine
+                     summary={rateChange}
                      section={section}
                      compact
                    />

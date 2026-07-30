@@ -133,9 +133,7 @@ export default function BankDetail() {
       setProductHistoryReady(false);
       return;
     }
-    const key = core?.run_date
-      ? `${core.run_date}:${focusDate}:${focusSection}`
-      : null;
+    const key = core?.run_date ?? null;
     if (!key) return;
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
