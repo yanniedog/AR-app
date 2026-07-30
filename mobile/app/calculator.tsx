@@ -3,6 +3,7 @@ import { Pressable, TextInput, View } from 'react-native';
 
 import { IndeterminateProgressBar } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
+import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
@@ -365,9 +366,14 @@ export default function Calculator() {
                   <AppText variant="body" weight="700" numberOfLines={1}>
                     {c.row.provider}
                   </AppText>
-                  <AppText variant="tiny" color="textMuted" numberOfLines={1}>
-                    {c.row.product_name} · {formatRate(c.rate)}
-                  </AppText>
+                   <AppText variant="tiny" color="textMuted" numberOfLines={1}>
+                     {c.row.product_name} · {formatRate(c.rate)}
+                   </AppText>
+                   <ProductRateChangeLine
+                     productKey={c.row.product_key}
+                     section={section}
+                     compact
+                   />
                   {access.badge ? (
                     <AppText variant="tiny" weight="700" style={{ color: theme.colors.warning, marginTop: 2 }}>
                       {access.verify ? `${access.badge}?` : access.badge}

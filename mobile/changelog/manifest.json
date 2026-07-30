@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-30T19:47:09.869Z",
+  "generated_at": "2026-07-30T20:13:53.346Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -437,6 +437,17 @@
         "Fix repeated queue-drain release failures (#82)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.45"
+    },
+    {
+      "version": "1.0.79",
+      "date": "2026-07-31",
+      "summaryBullets": [
+        "Download Android updates automatically from every app screen",
+        "Show each product's observed best-rate direction and last move",
+        "Reveal the individual products behind a selected bank move",
+        "Keep source and published app versions on one monotonic iteration"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.79"
     }
   ]
 }

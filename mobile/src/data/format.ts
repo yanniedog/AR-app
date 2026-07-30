@@ -241,3 +241,23 @@ export function formatRunDate(iso: string | null | undefined): string {
   if (isNaN(d.getTime())) return iso;
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
+
+/**
+ * Calendar-day-safe label for an observed rate change.
+ * Recent observations are relative; older ones use an exact date.
+ */
+export function formatRateChangeDate(
+  iso: string | null | undefined,
+  now: Date = new Date(),
+): string {
+  const ymd = String(iso || '').slice(0, 10);
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!match) return '';
+  const observedDay = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.floor((today - observedDay) / 86_400_000);
+  if (days <= 0) return 'today';
+  if (days === 1) return 'yesterday';
+  if (days < 7) return `${days} days ago`;
+  return formatRunDate(ymd);
+}

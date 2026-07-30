@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { bumpPatchVersion } from './bump-app-patch-version-pure.cjs';
+import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
   approveActionRequiredRuns,
   waitForPullRequestMerge,
@@ -17,6 +17,7 @@ import {
 import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
+const { nextReleaseVersion } = androidReleaseVersion;
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileDir, '..');
 const dryRun = process.argv.includes('--dry-run');
@@ -223,6 +224,26 @@ function readCurrentVersion() {
   return String(appJson.expo?.version ?? '1.0.0').trim();
 }
 
+export function nextAutoReleaseVersion(currentVersion, publishedVersion) {
+  return nextReleaseVersion(currentVersion, publishedVersion);
+}
+
+export async function readPublishedVersion(fetchImpl = fetch) {
+  const url =
+    `https://github.com/${repo}/releases/download/app-apk-latest/app-apk-latest.json` +
+    `?_=${Date.now()}`;
+  const response = await fetchImpl(url, {
+    headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+  });
+  if (!response.ok) {
+    throw new Error(`Could not read rolling APK manifest (HTTP ${response.status})`);
+  }
+  const manifest = await response.json();
+  const version = String(manifest?.version ?? '').trim();
+  if (!version) throw new Error('Rolling APK manifest is missing version');
+  return version;
+}
+
 function bumpBranchName(nextVersion) {
   return `chore/mobile-auto-release-v${nextVersion}`;
 }
@@ -358,8 +379,19 @@ async function main() {
   }
 
   const current = readCurrentVersion();
-  const next = bumpPatchVersion(current);
-  console.log(`mobile-auto-release-on-drain: queue drained — bump ${current} → ${next}`);
+  const published = await readPublishedVersion();
+  const next = nextAutoReleaseVersion(current, published);
+  console.log(
+    `mobile-auto-release-on-drain: queue drained — source ${current}, published ${published}, next ${next}`,
+  );
+
+  if (next === current) {
+    console.log(
+      `mobile-auto-release-on-drain: source v${current} is already the next iteration — ensure APK`,
+    );
+    ensureApkForMainHead();
+    process.exit(0);
+  }
 
   const pending = listOpenAutoBumpPrs(next);
   if (pending.length > 0) {
@@ -376,7 +408,11 @@ async function main() {
     process.exit(0);
   }
 
-  const bump = spawnSync('node', ['scripts/bump-app-patch-version.mjs'], { encoding: 'utf8', cwd: mobileDir });
+  const bump = spawnSync(
+    'node',
+    ['scripts/bump-app-patch-version.mjs', '--to', next],
+    { encoding: 'utf8', cwd: mobileDir },
+  );
   if (bump.status !== 0) throw new Error((bump.stderr || bump.stdout || 'bump-app-patch-version failed').trim());
 
   const ensureEntry = spawnSync(

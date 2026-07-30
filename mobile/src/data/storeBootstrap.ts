@@ -1,6 +1,10 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
-import { effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
+import {
+  effectiveBankInsights,
+  effectiveDeepSearch,
+  effectiveHistoryRibbon,
+} from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
 import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
@@ -46,7 +50,7 @@ export function createBootstrapActions(
         const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
-          effectiveHistoryRibbon(prefs)
+          effectiveHistoryRibbon(prefs) || effectiveBankInsights(prefs)
             ? cache.readProductHistory().then((raw) => {
                 const normalized = normalizeProductHistoryPayload(raw);
                 if (!normalized) return null;

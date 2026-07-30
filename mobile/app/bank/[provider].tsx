@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Pressable, View } from 'react-native';
+import { InteractionManager, Pressable, type ScrollView, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { BankHistoryChart } from '../../src/components/BankHistoryChart';
@@ -32,7 +32,7 @@ import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
-import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
+import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
@@ -102,7 +102,6 @@ export default function BankDetail() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
-  const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
@@ -116,6 +115,7 @@ export default function BankDetail() {
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const key = showBankInsights ? core?.run_date ?? null : null;
@@ -128,12 +128,14 @@ export default function BankDetail() {
     // Product-level move drill-down needs the on-device product history ledger.
     // Do NOT pull history_banks here — bank trend charts use bankInsights only.
     // Defer until after navigation/interactions so the bank page paints instantly.
-    if (!showBankInsights || !historyEnabled) {
+    if (!showBankInsights || !focusDate || !focusSection) {
       historyRequestKey.current = null;
       setProductHistoryReady(false);
       return;
     }
-    const key = core?.run_date ?? null;
+    const key = core?.run_date
+      ? `${core.run_date}:${focusDate}:${focusSection}`
+      : null;
     if (!key) return;
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
@@ -142,14 +144,20 @@ export default function BankDetail() {
         setProductHistoryReady(true);
         if (historyRequestKey.current === key) return;
         historyRequestKey.current = key;
-        void ensureProductHistory();
+        void ensureProductHistory({ purpose: 'bank_move' });
       });
     });
     return () => {
       cancelled = true;
       handle.cancel?.();
     };
-  }, [core?.run_date, ensureProductHistory, historyEnabled, showBankInsights]);
+  }, [
+    core?.run_date,
+    ensureProductHistory,
+    focusDate,
+    focusSection,
+    showBankInsights,
+  ]);
 
   const bySection = useMemo(() => {
     void suitabilityRevision;
@@ -285,6 +293,7 @@ export default function BankDetail() {
   const handleMoveSelect = useCallback(
     (event: BankRateEvent) => {
       router.setParams({ date: event.date, section: event.section });
+      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
     },
     [router],
   );
@@ -294,7 +303,10 @@ export default function BankDetail() {
   return (
     <>
       <Stack.Screen options={{ title: provider }} />
-      <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+      <ScreenScrollView
+        ref={scrollRef}
+        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      >
         <Row gap={14} style={{ marginBottom: 20 }}>
           <BankAvatar provider={provider} size={56} />
           <View style={{ flex: 1 }}>
@@ -306,7 +318,11 @@ export default function BankDetail() {
         </Row>
 
         {showBankInsights && focusEvent && focusSection ? (
-          <Card style={{ marginBottom: 16 }}>
+          <Card
+            style={{ marginBottom: 16 }}
+            accessibilityLiveRegion="polite"
+            accessibilityLabel={`${provider} move detail for ${formatRunDate(focusEvent.date)}`}
+          >
             <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <AppText variant="h3">Move detail</AppText>
               <Chip label="PRO" selected />
@@ -342,16 +358,19 @@ export default function BankDetail() {
                     <ProductMoveRow move={move} section={focusSection} />
                   </React.Fragment>
                 ))}
+                <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
+                  {focusedMoves.length === focusEvent.moved
+                    ? `All ${focusEvent.moved} moved products identified from available daily history.`
+                    : `${focusedMoves.length} of ${focusEvent.moved} moved products identified from available daily history.`}
+                </AppText>
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                {!historyEnabled
-                  ? 'Enable rate history to see which products moved.'
-                  : productHistory
-                    ? 'Could not match individual products for this move yet — try again after daily history finishes syncing.'
-                    : productHistoryError
-                      ? 'Product-level history is unavailable right now — pull to refresh and try again.'
-                      : 'Loading product-level history to identify which accounts moved…'}
+                {productHistory
+                  ? 'Could not match individual products for this move yet — try again after daily history finishes syncing.'
+                  : productHistoryError
+                    ? 'Product-level history is unavailable right now — pull to refresh and try again.'
+                    : 'Loading product-level history to identify which accounts moved…'}
               </AppText>
             )}
           </Card>

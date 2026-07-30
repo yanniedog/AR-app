@@ -6,6 +6,7 @@ import {
   checkedGhOutput,
   ensureApkForMainHead,
   hasApkBuildInFlight,
+  nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
@@ -169,4 +170,9 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
   assert.equal(did, false);
   assert.deepEqual(checkedHeads, ['def5678']);
   assert.equal(dispatchedCount, 0);
+});
+
+test('auto-release advances from the published APK instead of a stale source version', () => {
+  assert.equal(nextAutoReleaseVersion('1.0.44', '1.0.77'), '1.0.78');
+  assert.equal(nextAutoReleaseVersion('1.0.78', '1.0.77'), '1.0.78');
 });

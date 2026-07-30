@@ -3,7 +3,7 @@ import { router, Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
-import { AppUpdateBanner, useAppUpdateBanner } from '../../src/components/AppUpdateBanner';
+import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
 import { BrandLockup } from '../../src/components/BrandLockup';
 import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { M3NavigationBar } from '../../src/components/M3NavigationBar';
@@ -16,18 +16,10 @@ export default function TabsLayout() {
   const theme = useTheme();
   const isAndroid = Platform.OS === 'android';
   const tabPressListener = ({ navigation, route }: { navigation: { getState: () => { index: number; routes: { name: string }[] } }; route: { name: string } }) => ({ tabPress: () => { const state = navigation.getState(); if (state.routes[state.index]?.name === route.name) logTabNoOp(route.name); } });
-  const updateBanner = useAppUpdateBanner();
-  const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
+  const showUpdateBanner = useAppUpdateBannerVisible();
 
   return (
     <>
-    {showUpdateBanner ? (
-      <AppUpdateBanner
-        remote={updateBanner.remote!}
-        download={updateBanner.download}
-        onDismiss={updateBanner.dismiss}
-      />
-    ) : null}
     <Tabs
       tabBar={isAndroid ? (props) => <M3NavigationBar {...props} /> : undefined}
       screenOptions={{

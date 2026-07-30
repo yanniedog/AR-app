@@ -22,6 +22,11 @@ import Animated, {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import {
+  AppUpdateBanner,
+  AppUpdateBannerLayoutProvider,
+  useAppUpdateBanner,
+} from '../src/components/AppUpdateBanner';
 import { ArMarkLogo } from '../src/components/ArMarkLogo';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
@@ -211,6 +216,8 @@ function RootNavigator() {
   const [morphTarget, setMorphTarget] = useState<SplashMorphTarget | null>(null);
 
   const appReady = hydrated && (status === 'ready' || status === 'error');
+  const updateBanner = useAppUpdateBanner(appReady);
+  const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
   useEffect(() => {
     if (!hydrated) return;
@@ -280,10 +287,19 @@ function RootNavigator() {
 
   if (dataUnavailable) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-        <StatusBar style={theme.dark ? 'light' : 'dark'} />
-        <DataUnavailableScreen />
-      </View>
+      <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
+        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+          <StatusBar style={theme.dark ? 'light' : 'dark'} />
+          {showUpdateBanner ? (
+            <AppUpdateBanner
+              remote={updateBanner.remote!}
+              download={updateBanner.download}
+              onDismiss={updateBanner.dismiss}
+            />
+          ) : null}
+          <DataUnavailableScreen />
+        </View>
+      </AppUpdateBannerLayoutProvider>
     );
   }
 
@@ -293,26 +309,35 @@ function RootNavigator() {
       setMorphComplete={setMorphComplete}
       registerTarget={registerTarget}
     >
-      <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-        <View
-          style={{ flex: 1 }}
-          pointerEvents={performanceAuditActive ? 'none' : 'auto'}
-          accessibilityElementsHidden={performanceAuditActive}
-          importantForAccessibility={
-            performanceAuditActive ? 'no-hide-descendants' : 'auto'
-          }
-        >
-          <StatusBar style={theme.dark ? 'light' : 'dark'} />
-          <Stack
-            screenOptions={{
-              headerStyle: { backgroundColor: theme.colors.surface },
-              headerTitleStyle: { color: theme.colors.text },
-              headerTintColor: theme.colors.primary,
-              headerShadowVisible: false,
-              contentStyle: { backgroundColor: theme.colors.bg },
-              ...androidHeader,
-            }}
+      <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
+        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+          {showUpdateBanner ? (
+            <AppUpdateBanner
+              remote={updateBanner.remote!}
+              download={updateBanner.download}
+              onDismiss={updateBanner.dismiss}
+            />
+          ) : null}
+          <View
+            style={{ flex: 1 }}
+            pointerEvents={performanceAuditActive ? 'none' : 'auto'}
+            accessibilityElementsHidden={performanceAuditActive}
+            importantForAccessibility={
+              performanceAuditActive ? 'no-hide-descendants' : 'auto'
+            }
           >
+            <StatusBar style={theme.dark ? 'light' : 'dark'} />
+            <Stack
+              screenOptions={{
+                headerStyle: { backgroundColor: theme.colors.surface },
+                headerTitleStyle: { color: theme.colors.text },
+                headerTintColor: theme.colors.primary,
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: theme.colors.bg },
+                ...androidHeader,
+                ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+              }}
+            >
             <Stack.Screen name="index" options={{ headerShown: false }} />
             <Stack.Screen name="onboarding" options={{ headerShown: false }} />
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -331,18 +356,19 @@ function RootNavigator() {
             />
             <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
             <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
-          </Stack>
-          {appReady ? (
-            <BrandedSplashOverlay
-              visible={overlayVisible}
-              morphTarget={morphTarget}
-              onboarded={onboarded}
-              onMorphComplete={handleMorphComplete}
-            />
-          ) : null}
+            </Stack>
+            {appReady ? (
+              <BrandedSplashOverlay
+                visible={overlayVisible}
+                morphTarget={morphTarget}
+                onboarded={onboarded}
+                onMorphComplete={handleMorphComplete}
+              />
+            ) : null}
+          </View>
+          <PerformanceAuditRunner />
         </View>
-        <PerformanceAuditRunner />
-      </View>
+      </AppUpdateBannerLayoutProvider>
     </SplashMorphProvider>
   );
 }
