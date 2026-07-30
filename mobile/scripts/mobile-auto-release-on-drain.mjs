@@ -70,14 +70,23 @@ function apkReleaseExists(version) {
   return ghTry(['release', 'view', `app-v${version}`, '--repo', repo]).ok;
 }
 
-// A mobile-android-apk run is already queued/in-progress. mobile-android-apk uses
-// cancel-in-progress: false, so without this a second drain run (e.g. the
-// simultaneous-merge path this script polls for) would queue a duplicate full
-// build for the same version before app-v<version> exists (Codex).
-function apkBuildInFlight() {
+export function hasApkBuildInFlight(rows, expectedHeadSha) {
+  return (
+    Array.isArray(rows)
+    && rows.some(
+      (run) =>
+        run?.headSha === expectedHeadSha
+        && (run.status === 'queued' || run.status === 'in_progress'),
+    )
+  );
+}
+
+// A mobile-android-apk run is already queued/in-progress for the exact main head
+// we need to ship. An older build must not suppress the new version's build.
+function apkBuildInFlight(expectedHeadSha) {
   const out = ghTry([
     'run', 'list', '--workflow', 'mobile-android-apk.yml',
-    '--json', 'status', '-L', '20', '--repo', repo,
+    '--json', 'status,headSha', '-L', '20', '--repo', repo,
   ]).stdout;
   let rows = [];
   try {
@@ -85,13 +94,12 @@ function apkBuildInFlight() {
   } catch {
     return false;
   }
-  return Array.isArray(rows) && rows.some((r) => r.status === 'queued' || r.status === 'in_progress');
+  return hasApkBuildInFlight(rows, expectedHeadSha);
 }
 
-// The version-bump push/merge is authored by GITHUB_TOKEN, and GitHub does not
-// trigger workflows from GITHUB_TOKEN-driven push events — so mobile-android-apk's
-// push trigger never fires for auto-releases. Dispatch it explicitly instead (a
-// workflow_dispatch is exempt from that recursion guard). Requires actions:write.
+// mobile-android-apk is intentionally dispatch-only: building the pre-bump main
+// push would publish stale version metadata and duplicate the final release.
+// Dispatch after the generated version PR merges. Requires actions:write.
 // Failure propagates: a silent dispatch failure would leave the new version on
 // main with no APK and no failing check (Codex / Sourcery).
 function dispatchApkBuild(version) {
@@ -109,17 +117,21 @@ function dispatchApkBuild(version) {
 // workflow makes (once per merged PR).
 export function ensureApkForMainHead({
   readVersion = readCurrentVersion,
+  readHeadSha = readHeadCommitSha,
   releaseExists = apkReleaseExists,
   buildInFlight = apkBuildInFlight,
   dispatch = dispatchApkBuild,
 } = {}) {
   const version = readVersion();
+  const headSha = readHeadSha();
   if (releaseExists(version)) {
     console.log(`mobile-auto-release-on-drain: app-v${version} already published — no APK dispatch`);
     return false;
   }
-  if (buildInFlight()) {
-    console.log('mobile-auto-release-on-drain: mobile-android-apk already queued/in-progress — no APK dispatch');
+  if (buildInFlight(headSha)) {
+    console.log(
+      `mobile-auto-release-on-drain: mobile-android-apk already queued/in-progress for ${headSha.slice(0, 7)} — no APK dispatch`,
+    );
     return false;
   }
   dispatch(version);
@@ -220,14 +232,17 @@ function enableAutoMerge(prNumber) {
 
 async function settleGeneratedPr(prNumber, branchName) {
   const seenRunIds = new Set();
-  const approveBlockedRuns = async () => {
+  let fallbackChecked = false;
+  const approveBlockedRuns = async (attempt) => {
+    let runs = [];
     const approved = await approveActionRequiredRuns({
       listRuns: () => {
         const raw = gh([
           'run', 'list', '--branch', branchName, '--event', 'pull_request',
-          '--limit', '20', '--json', 'databaseId,status,conclusion', '--repo', repo,
+          '--limit', '20', '--json', 'databaseId,status,conclusion,workflowName', '--repo', repo,
         ]);
-        return JSON.parse(raw || '[]');
+        runs = JSON.parse(raw || '[]');
+        return runs;
       },
       approveRun: (runId) =>
         gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
@@ -235,6 +250,14 @@ async function settleGeneratedPr(prNumber, branchName) {
     });
     if (approved.length > 0) {
       console.log(`mobile-auto-release-on-drain: approved ${approved.length} generated-PR workflow run(s)`);
+    }
+    if (!fallbackChecked && attempt >= 4) {
+      fallbackChecked = true;
+      dispatchMissingRequiredPrChecks(
+        prNumber,
+        branchName,
+        runs.map((run) => run?.workflowName),
+      );
     }
   };
   enableAutoMerge(prNumber);
@@ -246,8 +269,9 @@ async function settleGeneratedPr(prNumber, branchName) {
   console.log(`mobile-auto-release-on-drain: generated PR #${prNumber} merged`);
 }
 
-function dispatchRequiredPrChecks(prNumber, branchName) {
-  for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
+function dispatchMissingRequiredPrChecks(prNumber, branchName, observedWorkflowNames) {
+  const dispatches = requiredPrCheckDispatches(prNumber, branchName, observedWorkflowNames);
+  for (const dispatch of dispatches) {
     gh([
       'workflow',
       'run',
@@ -259,9 +283,12 @@ function dispatchRequiredPrChecks(prNumber, branchName) {
       repo,
     ]);
   }
-  console.log(
-    `mobile-auto-release-on-drain: dispatched required checks for PR #${prNumber} on ${branchName}`,
-  );
+  if (dispatches.length > 0) {
+    console.log(
+      `mobile-auto-release-on-drain: dispatched ${dispatches.length} missing required check(s) for PR #${prNumber}`,
+    );
+  }
+  return dispatches.length;
 }
 
 async function publishViaPullRequest(next, message) {
@@ -270,7 +297,6 @@ async function publishViaPullRequest(next, message) {
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`mobile-auto-release-on-drain: open bump PR #${pr.number} (${pr.url}) — ensure auto-merge`);
-    dispatchRequiredPrChecks(pr.number, branchName);
     await settleGeneratedPr(pr.number, branchName);
     return pr.number;
   }
@@ -301,7 +327,6 @@ async function publishViaPullRequest(next, message) {
   const prNumber = prUrl.match(/\/pull\/(\d+)/)?.[1];
   if (!prNumber) throw new Error(`mobile-auto-release-on-drain: could not parse PR number from ${prUrl}`);
 
-  dispatchRequiredPrChecks(prNumber, branchName);
   await settleGeneratedPr(prNumber, branchName);
   console.log(`mobile-auto-release-on-drain: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return Number(prNumber);
@@ -335,7 +360,6 @@ async function main() {
   if (pending.length > 0) {
     console.log(`mobile-auto-release-on-drain: bump PR already open for v${next} (#${pending[0].number}) — skip`);
     const branchName = bumpBranchName(next);
-    dispatchRequiredPrChecks(pending[0].number, branchName);
     await settleGeneratedPr(pending[0].number, branchName);
     syncMain();
     ensureApkForMainHead();
