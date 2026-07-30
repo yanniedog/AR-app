@@ -96,8 +96,8 @@ assert.match(workflow, /persist-credentials:\s*false/g);
 assert.match(workflow, /_trusted-reviewer\\scripts\\qwen-pr-review\.mjs/);
 assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
 assert.match(workflow, /```suggestion/);
-assert.match(workflow, /cancel-in-progress:\s*false/);
-assert.match(workflow, /queue:\s*max/);
+assert.match(workflow, /cancel-in-progress:\s*true/);
+assert.doesNotMatch(workflow, /queue:\s*max/);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"120000"/);
 assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
@@ -107,7 +107,7 @@ assert.match(prompt, /"suggested_fix"/);
 assert.match(prompt, /"side"/);
 
 const waitScript = readFileSync('wait_for_bots.mjs', 'utf8');
-assert.doesNotMatch(waitScript, /\bupdatedAt\b/);
+assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);
 assert.match(waitScript, /state\.anchor = anchorFromPr/);
 
 console.log('PASS verify-pr-review-bots');
