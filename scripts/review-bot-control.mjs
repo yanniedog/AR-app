@@ -106,13 +106,21 @@ function workflowState(repo, workflow) {
   return payload?.state || "unavailable";
 }
 
+export function workflowNeedsStateChange(state, enabled) {
+  return enabled ? state !== "active" : !state.startsWith("disabled");
+}
+
 function setWorkflowState(repo, workflow, enabled) {
+  if (!workflowNeedsStateChange(workflowState(repo, workflow), enabled)) {
+    return false;
+  }
   runGh([
     "api",
     "--method",
     "PUT",
     `repos/${repo}/actions/workflows/${workflow}/${enabled ? "enable" : "disable"}`,
   ]);
+  return true;
 }
 
 function cancelActiveRuns(repo, workflow) {

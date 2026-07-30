@@ -22,6 +22,7 @@ import {
   renderDashboard,
   requiredChecksFromProtection,
   requiredChecksFromRules,
+  workflowNeedsStateChange,
 } from "./review-bot-control.mjs";
 
 const sha = "0123456789abcdef0123456789abcdef01234567";
@@ -37,6 +38,10 @@ const qwenFailure =
   "\nQwen Code Review did not complete successfully.";
 
 assert.deepEqual(DEFAULT_REQUIRED_KEYS, []);
+assert.equal(workflowNeedsStateChange("disabled_manually", false), false);
+assert.equal(workflowNeedsStateChange("active", true), false);
+assert.equal(workflowNeedsStateChange("active", false), true);
+assert.equal(workflowNeedsStateChange("disabled_manually", true), true);
 assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
