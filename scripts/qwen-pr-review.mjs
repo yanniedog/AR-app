@@ -203,14 +203,14 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
       keep_alive: '30m',
       options: {
         temperature: 0,
-        num_predict: 500,
+        num_predict: 250,
         num_ctx: contextTokens,
       },
       messages: [
         {
           role: 'system',
           content:
-            'Find only concrete PR-introduced defects. Return strict JSON with at most three highest-severity findings for this chunk. Never summarize.',
+            'Find only concrete PR-introduced defects. Return strict JSON with at most one highest-severity finding for this chunk. Never summarize.',
         },
         { role: 'user', content: userContent },
       ],
