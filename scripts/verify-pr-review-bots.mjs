@@ -107,6 +107,10 @@ assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
 assert.match(workflow, /```suggestion/);
 assert.match(workflow, /cancel-in-progress:\s*true/);
 assert.doesNotMatch(workflow, /queue:\s*max/);
+assert.match(
+  workflow,
+  /github\.event\.comment\.user\.type != 'Bot'[\s\S]+contains\(github\.event\.comment\.body, '@qwen-review'\)/,
+);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"160000"/);
 assert.match(workflow, /DIFF_CHUNK_CHARS:\s*"24000"/);
 assert.match(workflow, /refs\/pull\/\$\{\{\s*steps\.pr\.outputs\.number\s*\}\}\/head/);

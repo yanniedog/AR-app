@@ -23,7 +23,17 @@ permissions:
 concurrency:
   # A new push makes old analysis worthless. Cancel it before another 30B
   # inference starts and debounce the replacement below.
-  group: qwen-review-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number || github.run_id }}
+  group: >-
+    qwen-review-${{
+      github.event.pull_request.number
+      || (github.event_name == 'issue_comment'
+          && github.event.issue.pull_request
+          && github.event.comment.user.type != 'Bot'
+          && contains(github.event.comment.body, '@qwen-review')
+          && github.event.issue.number)
+      || inputs.pr_number
+      || github.run_id
+    }}
   cancel-in-progress: true
 
 jobs:
