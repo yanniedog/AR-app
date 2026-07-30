@@ -91,6 +91,7 @@ assert.equal(isReviewablePath('.github/workflows/app-ci.yml'), true);
 assert.equal(isReviewablePath('scripts/wait-for-bots.mjs'), true);
 assert.equal(isReviewablePath('mobile/package-lock.json'), false);
 assert.equal(isReviewablePath('README.md'), false);
+assert.equal(isReviewablePath('scripts/qwen-review.Modelfile'), true);
 const changedLines = changedLinesFromDiff(
   '@@ -10,2 +10,2 @@\n-old\n+new\n context',
 );
@@ -123,6 +124,10 @@ assert.match(workflow, /Omitted reviewable files:/);
 assert.match(workflow, /Intentionally excluded low-signal files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
 assert.match(workflow, /\$finding\.side -eq 'RIGHT'/);
+assert.match(workflow, /id:\s*publish/);
+assert.match(workflow, /PUBLISH_OUTCOME:\s*\$\{\{\s*steps\.publish\.outcome\s*\}\}/);
+assert.match(workflow, /\$env:PUBLISH_OUTCOME -ne 'success'/);
+assert.match(workflow, /Format-PathList/);
 assert.doesNotMatch(prompt, /## Summary/);
 assert.match(prompt, /"suggested_fix"/);
 assert.match(prompt, /"side"/);

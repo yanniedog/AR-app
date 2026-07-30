@@ -156,6 +156,7 @@ jobs:
           exit 0
 
       - name: Publish direct inline findings and revisions
+        id: publish
         if: steps.qwen.outputs.status == '0'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -167,21 +168,26 @@ jobs:
           $findings = @($review.findings)
           $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
           $model = if ($env:MODEL) { $env:MODEL } else { 'qwen2.5-coder-review:7b' }
-          $reviewed = if (@($review.reviewed_files).Count -eq 0) {
-            '(none)'
-          } else {
-            @($review.reviewed_files) -join ', '
+          function Format-PathList($values) {
+            $items = @($values)
+            if ($items.Count -eq 0) { return '(none)' }
+            $visible = @()
+            $length = 0
+            foreach ($item in $items) {
+              $nextLength = $length + ([string]$item).Length + 2
+              if ($nextLength -gt 12000) { break }
+              $visible += [string]$item
+              $length = $nextLength
+            }
+            $text = $visible -join ', '
+            if ($visible.Count -lt $items.Count) {
+              $text += " ... (+$($items.Count - $visible.Count) more; see workflow output)"
+            }
+            return $text
           }
-          $omitted = if (@($review.omitted_files).Count -eq 0) {
-            '(none)'
-          } else {
-            @($review.omitted_files) -join ', '
-          }
-          $excluded = if (@($review.excluded_files).Count -eq 0) {
-            '(none)'
-          } else {
-            @($review.excluded_files) -join ', '
-          }
+          $reviewed = Format-PathList $review.reviewed_files
+          $omitted = Format-PathList $review.omitted_files
+          $excluded = Format-PathList $review.excluded_files
           $body = @(
             '<!-- qwen-code-review -->'
             '## Qwen Code Review'
@@ -266,6 +272,7 @@ jobs:
           EXEMPT: ${{ steps.exempt.outputs.value }}
           EXISTING: ${{ steps.existing.outputs.value }}
           STATUS: ${{ steps.qwen.outputs.status }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
         run: |
           $conclusion = 'success'
           $summary = 'Qwen review completed for this head commit.'
@@ -273,9 +280,9 @@ jobs:
             $summary = 'Skipped for bot-authored pull request.'
           } elseif ($env:EXISTING -eq 'true') {
             $summary = 'A successful Qwen review already exists for this head commit.'
-          } elseif ($env:STATUS -ne '0') {
+          } elseif ($env:STATUS -ne '0' -or $env:PUBLISH_OUTCOME -ne 'success') {
             $conclusion = 'failure'
-            $summary = 'Qwen review failed. See the workflow log and PR notice.'
+            $summary = 'Qwen review or formal review publication failed. See the workflow log.'
           }
           gh api --method POST "repos/$env:GITHUB_REPOSITORY/check-runs" `
             -f name='qwen-code-review' -f head_sha="$env:HEAD_SHA" `

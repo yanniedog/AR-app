@@ -43,7 +43,7 @@ export function isReviewablePath(filePath) {
   ) return false;
   return (
     /\.(?:[cm]?[jt]sx?|json|ya?ml|gradle|properties|xml|kt|java|sh|ps1)$/i.test(path) ||
-    /(^|\/)(?:Dockerfile|Podfile)$/i.test(path)
+    /(^|\/)(?:Dockerfile|Podfile|[^/]+\.Modelfile)$/i.test(path)
   );
 }
 
