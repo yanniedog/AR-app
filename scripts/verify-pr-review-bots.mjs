@@ -148,7 +148,7 @@ assert.doesNotMatch(prompt, /## Summary/);
 assert.match(prompt, /"suggested_fix"/);
 assert.match(prompt, /"side"/);
 assert.doesNotMatch(reviewer, /\bMAX_FILES\b/);
-assert.match(reviewer, /DEFAULT_MODEL = 'qwen2\.5-coder-review:7b'/);
+assert.match(reviewer, /DEFAULT_MODEL = 'qwen2\.5-coder-review:1\.5b'/);
 assert.match(reviewer, /DEFAULT_DIFF_MAX = 160_000/);
 assert.match(reviewer, /--unified=5/);
 assert.match(reviewer, /Qwen review budget omitted reviewable file/);

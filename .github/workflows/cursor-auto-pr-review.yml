@@ -155,7 +155,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           if (-not $env:QWEN_API_BASE_URL) { $env:QWEN_API_BASE_URL = 'http://127.0.0.1:11434/v1' }
-          if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen2.5-coder-review:7b' }
+          if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen2.5-coder-review:1.5b' }
           $out = Join-Path $env:RUNNER_TEMP 'qwen-review.md'
           $err = Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt'
           $env:OUT_FILE = $out
@@ -177,7 +177,7 @@ jobs:
           $review = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review.md') | ConvertFrom-Json
           $findings = @($review.findings)
           $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
-          $model = if ($env:MODEL) { $env:MODEL } else { 'qwen2.5-coder-review:7b' }
+          $model = if ($env:MODEL) { $env:MODEL } else { 'qwen2.5-coder-review:1.5b' }
           function Format-PathList($values) {
             $items = @($values)
             if ($items.Count -eq 0) { return '(none)' }
