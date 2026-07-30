@@ -381,9 +381,28 @@ export interface SyncProductHistoryOpts {
   currentCore: CorePayload;
   coreSha?: string;
   existing?: ProductHistoryPayload | null;
+  /** Retained for call-site compatibility; dated cores are intentionally sequential. */
   maxConcurrent?: number;
   /** Override circuit trip threshold (tests). */
   circuitLimit?: number;
+  /** Successful dated cores between durable checkpoints. Defaults to five. */
+  checkpointEvery?: number;
+  /** Publish a usable recent-history checkpoint while older dates keep warming. */
+  onCheckpoint?: (
+    payload: ProductHistoryPayload,
+    progress: ProductHistorySyncProgress,
+  ) => void | Promise<void>;
+  /** Stops work when the core revision that requested the sync is no longer current. */
+  isCurrent?: () => boolean;
+}
+
+export interface ProductHistorySyncProgress {
+  successfulDates: number;
+  attemptedDates: number;
+  totalMissingDates: number;
+  lastRunDate: string | null;
+  done: boolean;
+  circuitOpen: boolean;
 }
 
 /**
@@ -420,7 +439,11 @@ export async function syncProductHistoryFromDailyPayloads(
   // Reuse every date already present in the cached payload. Catalog churn must not
   // force a full historical re-download (see sync start fetch= count in debug logs).
   const reusableDates = new Set(opts.existing?.run_dates ?? []);
-  const toFetch = wantedDates.filter((d) => d !== targetRunDate && !reusableDates.has(d));
+  // Recent dates are useful to product charts immediately; older dates continue
+  // warming in the same background task after progressive checkpoints land.
+  const toFetch = wantedDates
+    .filter((d) => d !== targetRunDate && !reusableDates.has(d))
+    .sort((a, b) => b.localeCompare(a));
   const bestByDate = new Map<string, Map<string, number>>([
     [targetRunDate, bestRatesForCore(opts.currentCore, keys)],
   ]);
@@ -437,64 +460,118 @@ export async function syncProductHistoryFromDailyPayloads(
   );
   // #endregion
 
+  const isCurrent = opts.isCurrent ?? (() => true);
+  const checkpointEvery = Math.max(1, Math.floor(opts.checkpointEvery ?? 5));
+  let fetchedOk = 0;
+  let attempted = 0;
+  let lastRunDate: string | null = null;
+  let circuitOpen = false;
+  let superseded = false;
+  let terminalCheckpointPublished = false;
+
+  const buildAvailable = (): ProductHistoryPayload => {
+    const availableDates = wantedDates.filter(
+      (d) => bestByDate.has(d) || reusableDates.has(d),
+    );
+    const built = buildProductHistoryFromRates(
+      bestByDate,
+      keys,
+      availableDates,
+      targetRunDate,
+      opts.existing,
+      opts.coreSha,
+    );
+    if (!Object.keys(built.products).length) {
+      throw new Error('product history sync produced no series');
+    }
+    return built;
+  };
+
+  const publishCheckpoint = async (
+    done: boolean,
+  ): Promise<ProductHistoryPayload | null> => {
+    if (!isCurrent()) {
+      superseded = true;
+      return null;
+    }
+    const built = buildAvailable();
+    await opts.onCheckpoint?.(built, {
+      successfulDates: fetchedOk,
+      attemptedDates: attempted,
+      totalMissingDates: toFetch.length,
+      lastRunDate,
+      done,
+      circuitOpen,
+    });
+    return built;
+  };
+
   if (toFetch.length) {
     const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
-    let next = 0;
-    let fetchedOk = 0;
-    const workers = Array.from(
-      { length: Math.min(opts.maxConcurrent ?? 2, toFetch.length) },
-      async () => {
-        while (next < toFetch.length) {
-          if (circuit.isOpen) return;
-          const runDate = toFetch[next];
-          next += 1;
-          try {
-            const core = await downloadDatedCore(runDate);
-            bestByDate.set(runDate, bestRatesForCore(core, keys));
-            circuit.success();
-            fetchedOk += 1;
-            // Yield after every dated core so tab presses stay responsive during
-            // the one-time ~60-day warm (production logs showed multi-minute JS stalls).
-            await yieldToUi();
-            // #region agent log
-            if (fetchedOk === 1 || fetchedOk % 10 === 0 || fetchedOk === toFetch.length) {
-              debugLog.debug(
-                'perf',
-                `productHistory fetchProgress ok=${fetchedOk}/${toFetch.length} elapsedMs=${Date.now() - _syncT0} last=${runDate}`,
-              );
-            }
-            // #endregion
-          } catch (err) {
-            circuit.failure();
-            debugLog.warn(
-              'productHistory',
-              `dated core failed run_date=${runDate}: ${String((err as Error)?.message ?? err)}`,
-            );
-            if (circuit.isOpen) {
-              debugLog.warn(
-                'productHistory',
-                `dated fetch circuit open after ${opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT} consecutive failures; skipping remaining`,
-              );
-              return;
-            }
-          }
+    for (let fetchIndex = 0; fetchIndex < toFetch.length; fetchIndex += 1) {
+      const runDate = toFetch[fetchIndex];
+      if (!isCurrent()) {
+        superseded = true;
+        break;
+      }
+      if (circuit.isOpen) break;
+      attempted += 1;
+      let datedRates: Map<string, number>;
+      try {
+        const datedCore = await downloadDatedCore(runDate);
+        if (!isCurrent()) {
+          superseded = true;
+          break;
         }
-      },
-    );
-    await Promise.all(workers);
+        datedRates = bestRatesForCore(datedCore, keys);
+      } catch (err) {
+        circuit.failure();
+        debugLog.warn(
+          'productHistory',
+          `dated core failed run_date=${runDate}: ${String((err as Error)?.message ?? err)}`,
+        );
+        if (circuit.isOpen) {
+          circuitOpen = true;
+          debugLog.warn(
+            'productHistory',
+            `dated fetch circuit open after ${opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT} consecutive failures; skipping remaining`,
+          );
+          break;
+        }
+        continue;
+      }
+      bestByDate.set(runDate, datedRates);
+      circuit.success();
+      fetchedOk += 1;
+      lastRunDate = runDate;
+      // Yield after every dated core so tab presses stay responsive during
+      // the one-time ~60-day warm (production logs showed multi-minute JS stalls).
+      await yieldToUi();
+      if (fetchedOk % checkpointEvery === 0) {
+        const isLastAttempt = fetchIndex === toFetch.length - 1;
+        const published = await publishCheckpoint(isLastAttempt);
+        terminalCheckpointPublished = !!published && isLastAttempt;
+        if (superseded) break;
+      }
+      // #region agent log
+      if (fetchedOk === 1 || fetchedOk % 10 === 0 || fetchedOk === toFetch.length) {
+        debugLog.debug(
+          'perf',
+          `productHistory fetchProgress ok=${fetchedOk}/${toFetch.length} elapsedMs=${Date.now() - _syncT0} last=${runDate}`,
+        );
+      }
+      // #endregion
+    }
   }
 
-  const availableDates = wantedDates.filter((d) => bestByDate.has(d) || reusableDates.has(d));
-  const built = buildProductHistoryFromRates(
-    bestByDate,
-    keys,
-    availableDates,
-    targetRunDate,
-    opts.existing,
-    opts.coreSha,
-  );
-  if (!Object.keys(built.products).length) {
-    throw new Error('product history sync produced no series');
+  const built = buildAvailable();
+  if (superseded) {
+    debugLog.info(
+      'productHistory',
+      `sync superseded run_date=${targetRunDate} ok=${fetchedOk}/${toFetch.length}`,
+    );
+  } else if (!terminalCheckpointPublished) {
+    await publishCheckpoint(true);
   }
   debugLog.info(
     'productHistory',

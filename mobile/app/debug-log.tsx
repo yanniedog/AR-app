@@ -100,13 +100,20 @@ export default function DebugLogScreen() {
         app: Application.nativeApplicationVersion ?? 'unknown',
         lines: String(debugLog.getEntries().length),
       });
-      const { url, truncated } = await uploadLogsToPasteRs(body);
+      const { url, truncated, clientTruncated, attempts } =
+        await uploadLogsToPasteRs(body);
       setUploadUrl(url);
       await Clipboard.setStringAsync(url);
       Alert.alert(
-        truncated ? 'Uploaded (truncated)' : 'Uploaded',
-        truncated
-          ? `Link copied to clipboard. paste.rs accepted a partial upload.\n\n${url}`
+        clientTruncated
+          ? 'Newest log tail uploaded'
+          : truncated
+            ? 'Uploaded (truncated)'
+            : 'Uploaded',
+        clientTruncated
+          ? `The full upload failed, so the app uploaded only the newest 128 KiB on attempt ${attempts}. Link copied to clipboard.\n\n${url}`
+          : truncated
+            ? `Link copied to clipboard. paste.rs accepted a partial upload.\n\n${url}`
           : `Link copied to clipboard — paste it into chat or a browser.\n\n${url}`,
         [
           {
@@ -119,11 +126,29 @@ export default function DebugLogScreen() {
         ],
       );
     } catch (err) {
-      Alert.alert('Upload failed', String((err as Error)?.message ?? err));
+      Alert.alert(
+        'Upload unavailable',
+        String((err as Error)?.message ?? err),
+        [
+          {
+            text: 'Copy log',
+            onPress: () => {
+              void onCopy();
+            },
+          },
+          {
+            text: 'Share',
+            onPress: () => {
+              void onShare();
+            },
+          },
+          { text: 'OK' },
+        ],
+      );
     } finally {
       setBusy(null);
     }
-  }, [text]);
+  }, [onCopy, onShare, text]);
 
   const onUpload = useCallback(() => {
     Alert.alert(

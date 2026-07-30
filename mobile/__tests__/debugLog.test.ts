@@ -6,6 +6,8 @@ import {
   ANDROID_LOG_PATH_HINT,
   MAX_LOG_BYTES,
   MAX_LOG_LINES,
+  PASTE_RS_ATTEMPT_TIMEOUT_MS,
+  PASTE_RS_TAIL_MAX_BYTES,
   RingBuffer,
   debugLog,
   formatEntry,
@@ -139,9 +141,18 @@ describe('uploadLogsToPasteRs', () => {
     const result = await uploadLogsToPasteRs('hello', mockFetch);
     expect(result.url).toBe('https://paste.rs/abc123');
     expect(result.truncated).toBe(false);
+    expect(result.clientTruncated).toBe(false);
+    expect(result.attempts).toBe(1);
+    expect(result.originalBytes).toBe(5);
+    expect(result.uploadedBytes).toBe(5);
+    expect(PASTE_RS_ATTEMPT_TIMEOUT_MS).toBe(20_000);
     expect(mockFetch).toHaveBeenCalledWith(
       'https://paste.rs/',
-      expect.objectContaining({ method: 'POST', body: 'hello' }),
+      expect.objectContaining({
+        method: 'POST',
+        body: 'hello',
+        signal: expect.any(AbortSignal),
+      }),
     );
   });
 
@@ -152,14 +163,113 @@ describe('uploadLogsToPasteRs', () => {
     })) as unknown as typeof fetch;
     const result = await uploadLogsToPasteRs('big log', mockFetch);
     expect(result.truncated).toBe(true);
+    expect(result.clientTruncated).toBe(false);
   });
 
-  it('throws on error status', async () => {
+  it('retries 429 once and bounds Retry-After before succeeding', async () => {
+    const sleep = jest.fn(async () => {});
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        status: 429,
+        headers: { get: () => '30' },
+        text: async () => 'rate limited',
+      })
+      .mockResolvedValueOnce({
+        status: 201,
+        text: async () => 'https://paste.rs/retried',
+      }) as unknown as typeof fetch;
+
+    const result = await uploadLogsToPasteRs('x', mockFetch, { sleep });
+
+    expect(result.url).toBe('https://paste.rs/retried');
+    expect(result.attempts).toBe(2);
+    expect(sleep).toHaveBeenCalledWith(5_000);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('uses a UTF-8-safe 128 KiB newest tail for the final attempt', async () => {
+    const body = `${'old😀'.repeat(40_000)}\nNEWEST-END-😀`;
+    const mockFetch = jest
+      .fn()
+      .mockRejectedValueOnce(new TypeError('network request failed'))
+      .mockResolvedValueOnce({
+        status: 503,
+        text: async () => '<html><body>Unavailable</body></html>',
+      })
+      .mockResolvedValueOnce({
+        status: 201,
+        text: async () => 'https://paste.rs/tail',
+      }) as unknown as typeof fetch;
+
+    const result = await uploadLogsToPasteRs(body, mockFetch, {
+      sleep: async () => {},
+    });
+    const tailBody = (mockFetch as jest.Mock).mock.calls[2][1].body as string;
+
+    expect(result.url).toBe('https://paste.rs/tail');
+    expect(result.attempts).toBe(3);
+    expect(result.clientTruncated).toBe(true);
+    expect(result.truncated).toBe(false);
+    expect(result.originalBytes).toBe(new TextEncoder().encode(body).length);
+    expect(result.uploadedBytes).toBe(new TextEncoder().encode(tailBody).length);
+    expect(result.uploadedBytes).toBeLessThanOrEqual(PASTE_RS_TAIL_MAX_BYTES);
+    expect(tailBody).toContain('Earlier debug log content omitted locally');
+    expect(tailBody).toContain('NEWEST-END-😀');
+    expect(tailBody).not.toContain('\uFFFD');
+  });
+
+  it('does not retry other 4xx responses and strips raw HTML from the error', async () => {
     const mockFetch = jest.fn(async () => ({
-      status: 429,
-      text: async () => 'rate limited',
+      status: 400,
+      text: async () =>
+        '<html><head><title>Bad request</title></head><body><script>alert(1)</script>Invalid &lt;upload&gt;</body></html>',
     })) as unknown as typeof fetch;
-    await expect(uploadLogsToPasteRs('x', mockFetch)).rejects.toThrow(/upload failed/);
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep: async () => {} }),
+    ).rejects.toThrow(
+      'paste.rs rejected the upload (status 400): Bad request Invalid <upload> Use Share or Copy instead.',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('makes at most three attempts and reports a friendly 5xx failure', async () => {
+    const sleep = jest.fn(async () => {});
+    const mockFetch = jest.fn(async () => ({
+      status: 500,
+      text: async () =>
+        '<html><head><title>500 Internal Server Error</title></head></html>',
+    })) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, { sleep }),
+    ).rejects.toThrow(
+      'paste.rs is temporarily unavailable (server error 500). Try again later, or use Share or Copy instead.',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1_000);
+    expect(sleep).toHaveBeenNthCalledWith(2, 1_000);
+  });
+
+  it('aborts each timed-out attempt and stops after the tail attempt', async () => {
+    const signals: AbortSignal[] = [];
+    const mockFetch = jest.fn((_url: unknown, init?: RequestInit) => {
+      if (init?.signal) signals.push(init.signal);
+      return new Promise<Response>(() => {});
+    }) as unknown as typeof fetch;
+
+    await expect(
+      uploadLogsToPasteRs('x', mockFetch, {
+        attemptTimeoutMs: 2,
+        sleep: async () => {},
+      }),
+    ).rejects.toThrow('paste.rs did not respond in time');
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(signals).toHaveLength(3);
+    expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 });
 

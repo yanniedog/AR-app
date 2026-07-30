@@ -403,6 +403,223 @@ export function formatLogUploadBody(entriesText: string, meta?: Record<string, s
 }
 
 export const PASTE_RS_URL = 'https://paste.rs/';
+export const PASTE_RS_ATTEMPT_TIMEOUT_MS = 20_000;
+export const PASTE_RS_TAIL_MAX_BYTES = 128 * 1024;
+
+const PASTE_RS_RETRY_BACKOFF_MS = 1_000;
+const PASTE_RS_MAX_RETRY_DELAY_MS = 5_000;
+
+export interface PasteRsUploadResult {
+  url: string;
+  /** paste.rs returned 206 and truncated the submitted body. */
+  truncated: boolean;
+  /** The client submitted only the newest log tail after two transient failures. */
+  clientTruncated: boolean;
+  attempts: number;
+  originalBytes: number;
+  uploadedBytes: number;
+}
+
+export interface PasteRsUploadOptions {
+  attemptTimeoutMs?: number;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+}
+
+type PasteRsFailureKind =
+  | 'timeout'
+  | 'network'
+  | 'rate-limit'
+  | 'server'
+  | 'client'
+  | 'invalid-response';
+
+class PasteRsAttemptError extends Error {
+  constructor(
+    readonly kind: PasteRsFailureKind,
+    readonly status?: number,
+    readonly responseBody = '',
+    readonly retryAfter?: string | null,
+  ) {
+    super(kind);
+    this.name = 'PasteRsAttemptError';
+  }
+
+  get transient(): boolean {
+    return (
+      this.kind === 'timeout' ||
+      this.kind === 'network' ||
+      this.kind === 'rate-limit' ||
+      this.kind === 'server'
+    );
+  }
+}
+
+export class PasteRsUploadError extends Error {
+  constructor(
+    message: string,
+    readonly attempts: number,
+  ) {
+    super(message);
+    this.name = 'PasteRsUploadError';
+  }
+}
+
+function sanitizePasteRsResponse(raw: string): string {
+  return raw
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function friendlyPasteRsError(error: PasteRsAttemptError): string {
+  switch (error.kind) {
+    case 'timeout':
+      return 'paste.rs did not respond in time. Try again, or use Share or Copy instead.';
+    case 'network':
+      return 'Could not reach paste.rs. Check your connection, then try again or use Share or Copy instead.';
+    case 'rate-limit':
+      return 'paste.rs is rate-limiting uploads. Try again later, or use Share or Copy instead.';
+    case 'server':
+      return `paste.rs is temporarily unavailable (server error ${error.status ?? 'unknown'}). Try again later, or use Share or Copy instead.`;
+    case 'client': {
+      const detail = sanitizePasteRsResponse(error.responseBody);
+      return `paste.rs rejected the upload (status ${error.status ?? 'unknown'})${detail ? `: ${detail}` : '.'} Use Share or Copy instead.`;
+    }
+    case 'invalid-response':
+      return 'paste.rs returned an invalid upload link. Use Share or Copy instead.';
+  }
+}
+
+function retryDelayMs(retryAfter: string | null | undefined, now: number): number {
+  if (!retryAfter) return PASTE_RS_RETRY_BACKOFF_MS;
+
+  const seconds = Number(retryAfter);
+  const requestedMs = Number.isFinite(seconds)
+    ? seconds * 1_000
+    : Date.parse(retryAfter) - now;
+  if (!Number.isFinite(requestedMs)) return PASTE_RS_RETRY_BACKOFF_MS;
+  return Math.max(0, Math.min(PASTE_RS_MAX_RETRY_DELAY_MS, requestedMs));
+}
+
+function createNewestLogTail(body: string): {
+  body: string;
+  clientTruncated: boolean;
+  originalBytes: number;
+  uploadedBytes: number;
+} {
+  const encoded = textEncoder.encode(body);
+  if (encoded.length <= PASTE_RS_TAIL_MAX_BYTES) {
+    return {
+      body,
+      clientTruncated: false,
+      originalBytes: encoded.length,
+      uploadedBytes: encoded.length,
+    };
+  }
+
+  let omittedBytes = encoded.length;
+  let uploadBody = '';
+  for (let pass = 0; pass < 4; pass += 1) {
+    const marker =
+      `# Earlier debug log content omitted locally before upload ` +
+      `(omitted_bytes=${omittedBytes}). Only the newest log tail follows.\n`;
+    const markerBytes = textEncoder.encode(marker).length;
+    const tailBudget = Math.max(0, PASTE_RS_TAIL_MAX_BYTES - markerBytes);
+    let tailStart = Math.max(0, encoded.length - tailBudget);
+
+    // Do not start inside a multi-byte UTF-8 sequence.
+    while (tailStart < encoded.length && (encoded[tailStart] & 0xc0) === 0x80) {
+      tailStart += 1;
+    }
+
+    uploadBody = marker + textDecoder.decode(encoded.slice(tailStart));
+    if (tailStart === omittedBytes) break;
+    omittedBytes = tailStart;
+  }
+
+  return {
+    body: uploadBody,
+    clientTruncated: true,
+    originalBytes: encoded.length,
+    uploadedBytes: textEncoder.encode(uploadBody).length,
+  };
+}
+
+async function runPasteRsAttempt(
+  body: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<{ url: string; truncated: boolean }> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new PasteRsAttemptError('timeout'));
+    }, timeoutMs);
+  });
+
+  try {
+    const request = (async () => {
+      const response = await fetchImpl(PASTE_RS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body,
+        signal: controller.signal,
+      });
+      const raw = (await response.text()).trim();
+
+      if (response.status === 201 || response.status === 206) {
+        let parsed: URL;
+        try {
+          parsed = new URL(raw);
+        } catch {
+          throw new PasteRsAttemptError('invalid-response', response.status);
+        }
+        if (parsed.protocol !== 'https:' || parsed.hostname !== 'paste.rs') {
+          throw new PasteRsAttemptError('invalid-response', response.status);
+        }
+        return { url: raw, truncated: response.status === 206 };
+      }
+
+      const retryAfter = response.headers?.get?.('Retry-After');
+      if (response.status === 429) {
+        throw new PasteRsAttemptError('rate-limit', response.status, raw, retryAfter);
+      }
+      if (response.status === 0) {
+        throw new PasteRsAttemptError('network', response.status, raw, retryAfter);
+      }
+      if (response.status >= 500 && response.status <= 599) {
+        throw new PasteRsAttemptError('server', response.status, raw, retryAfter);
+      }
+      throw new PasteRsAttemptError('client', response.status, raw, retryAfter);
+    })();
+    return await Promise.race([request, timeout]);
+  } catch (error) {
+    if (error instanceof PasteRsAttemptError) throw error;
+    if (
+      timedOut ||
+      (error instanceof Error && error.name === 'AbortError')
+    ) {
+      throw new PasteRsAttemptError('timeout');
+    }
+    throw new PasteRsAttemptError('network');
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 type GlobalErrorUtils = {
   getGlobalHandler?: () => (error: unknown, isFatal?: boolean) => void;
@@ -441,23 +658,70 @@ export function installGlobalErrorHandlers(): void {
   });
 }
 
-/** POST plain text to paste.rs; response body is the paste URL. */
+/**
+ * POST plain text to paste.rs. Transient failures get one bounded retry, then
+ * one final attempt containing only a UTF-8-safe 128 KiB newest-log tail.
+ */
 export async function uploadLogsToPasteRs(
   body: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ url: string; truncated: boolean }> {
-  const res = await fetchImpl(PASTE_RS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'text/plain' },
-    body,
-  });
-  const raw = (await res.text()).trim();
-  if (res.status !== 201 && res.status !== 206) {
-    const snippet = raw.slice(0, 120);
-    throw new Error(`paste.rs upload failed (${res.status}): ${snippet}`);
+  options: PasteRsUploadOptions = {},
+): Promise<PasteRsUploadResult> {
+  const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS);
+  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+  const originalBytes = textEncoder.encode(body).length;
+
+  let firstFailure: PasteRsAttemptError;
+  try {
+    const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
+    return {
+      ...result,
+      clientTruncated: false,
+      attempts: 1,
+      originalBytes,
+      uploadedBytes: originalBytes,
+    };
+  } catch (error) {
+    firstFailure = error as PasteRsAttemptError;
+    if (!firstFailure.transient) {
+      throw new PasteRsUploadError(friendlyPasteRsError(firstFailure), 1);
+    }
   }
-  if (!raw.startsWith('http')) {
-    throw new Error(`paste.rs upload failed (${res.status}): invalid response`);
+
+  await sleep(retryDelayMs(firstFailure.retryAfter, now()));
+
+  let secondFailure: PasteRsAttemptError;
+  try {
+    const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
+    return {
+      ...result,
+      clientTruncated: false,
+      attempts: 2,
+      originalBytes,
+      uploadedBytes: originalBytes,
+    };
+  } catch (error) {
+    secondFailure = error as PasteRsAttemptError;
+    if (!secondFailure.transient) {
+      throw new PasteRsUploadError(friendlyPasteRsError(secondFailure), 2);
+    }
   }
-  return { url: raw, truncated: res.status === 206 };
+
+  await sleep(retryDelayMs(secondFailure.retryAfter, now()));
+
+  const tail = createNewestLogTail(body);
+  try {
+    const result = await runPasteRsAttempt(tail.body, fetchImpl, timeoutMs);
+    return {
+      ...result,
+      clientTruncated: tail.clientTruncated,
+      attempts: 3,
+      originalBytes: tail.originalBytes,
+      uploadedBytes: tail.uploadedBytes,
+    };
+  } catch (error) {
+    const finalFailure = error as PasteRsAttemptError;
+    throw new PasteRsUploadError(friendlyPasteRsError(finalFailure), 3);
+  }
 }
