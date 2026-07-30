@@ -1,3 +1,5 @@
+/* eslint-env jest */
+
 // Mock native-only Expo modules so unit tests (pure logic) can import data modules
 // without a native runtime. The app uses the real modules on device.
 jest.mock('expo-haptics', () => ({

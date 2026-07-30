@@ -204,6 +204,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             localUri,
             bytesWritten: bytesDownloaded,
             totalBytes: bytesTotal || manifest.bytes || null,
+            wifiOnly: activeDownloadWifiOnly,
             error: null,
           });
           debugLog.info(
@@ -240,6 +241,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         localUri: null,
         bytesWritten: snapshot.bytesWritten,
         totalBytes: snapshot.totalBytes,
+        wifiOnly: activeDownloadWifiOnly ?? snapshot.wifiOnly,
         error: `${error}${errorCode ? ` (${errorCode})` : ''}`,
       });
       debugLog.error('app-update', `background download failed: ${error} code=${errorCode}`);
@@ -269,6 +271,9 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   if (!match) return false;
 
   const state = String(match.state || '').toUpperCase();
+  const taskWifiOnly =
+    match.downloadParams?.isAllowedOverMetered === false &&
+    match.downloadParams?.isAllowedOverRoaming === false;
   const terminalFailed =
     state === 'FAILED' || state === 'STOPPED' || state === 'ERROR' || state === 'CANCELLED';
 
@@ -288,6 +293,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           localUri: dest.startsWith('file://') ? dest : `file://${dest}`,
           bytesWritten: match.bytesDownloaded,
           totalBytes: match.bytesTotal || manifest.bytes || null,
+          wifiOnly: taskWifiOnly,
           error: null,
         });
         await maybePromptUpgrade(manifest);
@@ -318,6 +324,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   }
 
   attachHandlers(match, manifest);
+  activeDownloadWifiOnly = taskWifiOnly;
   if (state === 'PAUSED') {
     try {
       await match.resume();
@@ -339,6 +346,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     localUri: null,
     bytesWritten: match.bytesDownloaded,
     totalBytes: match.bytesTotal || manifest.bytes || null,
+    wifiOnly: taskWifiOnly,
     error: null,
   });
   return true;
@@ -372,6 +380,7 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
     isAllowedOverMetered: !wifiOnly,
     maxRedirects: 10,
   });
+  activeDownloadWifiOnly = wifiOnly;
   attachHandlers(task, manifest);
   await persist({
     phase: 'downloading',
@@ -382,10 +391,10 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
     localUri: null,
     bytesWritten: 0,
     totalBytes: manifest.bytes ?? null,
+    wifiOnly,
     error: null,
   });
   task.start();
-  activeDownloadWifiOnly = wifiOnly;
   debugLog.info(
     'app-update',
     `background download started build=${manifest.build_number} wifiOnly=${wifiOnly}`,
@@ -418,22 +427,26 @@ export async function ensureApkBackgroundDownload(
       localUri: null,
       bytesWritten: snapshot.bytesWritten,
       totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+      wifiOnly: snapshot.wifiOnly,
       error: message,
     });
     throw err;
   }
 
-  // Android DownloadManager cannot update isAllowedOverMetered on an in-flight
-  // request. If Wi-Fi-only was turned on while a cellular-capable download is
-  // active (or after process death we no longer know), stop and recreate.
+  // Android DownloadManager cannot update network policy on an in-flight task.
+  // Restart only when the requested policy differs from the active/persisted one.
+  const currentWifiOnly = activeDownloadWifiOnly ?? snapshot.wifiOnly;
   if (
     !force &&
-    wifiOnly &&
     String(snapshot.buildNumber) === String(manifest.build_number) &&
     snapshot.phase === 'downloading' &&
-    activeDownloadWifiOnly !== true
+    currentWifiOnly != null &&
+    currentWifiOnly !== wifiOnly
   ) {
-    debugLog.info('app-update', 'wifi-only enabled; restarting active APK download');
+    debugLog.info(
+      'app-update',
+      `network policy changed wifiOnly=${currentWifiOnly}->${wifiOnly}; restarting APK download`,
+    );
     force = true;
   }
 
@@ -456,6 +469,7 @@ export async function ensureApkBackgroundDownload(
           localUri: dest.startsWith('file://') ? dest : `file://${dest}`,
           bytesWritten: snapshot.bytesWritten,
           totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+          wifiOnly: snapshot.wifiOnly,
           error: null,
         });
         await maybePromptUpgrade(manifest);
@@ -471,11 +485,11 @@ export async function ensureApkBackgroundDownload(
 
   if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
     const taskId = apkDownloadTaskId(manifest.build_number);
-    if (activeTask?.id !== taskId) {
-      // Reattach handlers after process death / JS reload.
-      await reattachExisting(manifest);
-    }
-    return snapshot;
+    if (activeTask?.id === taskId) return snapshot;
+    // Reattach handlers after process death / JS reload. If the OS no longer
+    // knows the persisted task, replace it instead of returning stale state.
+    if (await reattachExisting(manifest)) return snapshot;
+    force = true;
   }
 
   if (ensureInFlight && ensureBuild === manifest.build_number && !force) {
@@ -505,6 +519,7 @@ export async function ensureApkBackgroundDownload(
         localUri: null,
         bytesWritten: snapshot.bytesWritten,
         totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+        wifiOnly,
         error: message,
       });
       activeDownloadWifiOnly = null;

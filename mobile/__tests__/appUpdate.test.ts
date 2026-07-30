@@ -159,6 +159,14 @@ describe('APK download integrity', () => {
     ).toEqual({ verifySha256: false });
   });
 
+  it('rejects a large APK when neither hashing nor manifest byte validation is available', () => {
+    expect(() =>
+      assertDownloadedApkMatchesManifest(APK_SHA256_VERIFY_MAX_BYTES + 1, {
+        sha256: baseManifest.sha256,
+      }),
+    ).toThrow(/manifest\.bytes is missing/);
+  });
+
   it('still rejects a truncated large APK before skipping in-memory sha256', async () => {
     jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
       exists: true,
@@ -185,7 +193,7 @@ describe('APK download integrity', () => {
 
     await expect(
       verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual({ size: baseManifest.bytes, verifiedSha256: false });
     expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
   });
 

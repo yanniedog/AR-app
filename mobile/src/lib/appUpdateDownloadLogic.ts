@@ -11,6 +11,7 @@ export interface ApkDownloadSnapshot {
   localUri: string | null;
   bytesWritten: number;
   totalBytes: number | null;
+  wifiOnly: boolean | null;
   error: string | null;
 }
 
@@ -23,6 +24,7 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   localUri: null,
   bytesWritten: 0,
   totalBytes: null,
+  wifiOnly: null,
   error: null,
 };
 

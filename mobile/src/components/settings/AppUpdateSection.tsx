@@ -130,8 +130,7 @@ export function AppUpdateSection() {
           ? 'Check failed'
           : `${installed.version} (${installed.buildNumber})`;
 
-  const upgradeTitle =
-    phase === 'ready' ? 'Upgrade' : phase === 'downloading' ? 'Upgrade when ready' : 'Upgrade';
+  const upgradeTitle = phase === 'downloading' ? 'Upgrade when ready' : 'Upgrade';
 
   return (
     <Section title="App update">
@@ -196,7 +195,7 @@ export function AppUpdateSection() {
             title={upgradeTitle}
             icon={phase === 'ready' ? 'arrow-up-circle-outline' : 'download-outline'}
             style={{ flex: 1 }}
-            loading={upgrading || (phase === 'downloading' && upgrading)}
+            loading={upgrading}
             disabled={checking || upgrading}
             onPress={() => void onUpgrade()}
           />

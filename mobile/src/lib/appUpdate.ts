@@ -12,7 +12,6 @@ import {
 } from './appUpdateDownload';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 import {
-  assertDownloadedApkMatchesManifest,
   checkForAppUpdateAt,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
@@ -189,10 +188,8 @@ export async function resolveApkDownloadUrl(url: string): Promise<string> {
 }
 
 async function assertApkIntegrity(path: string, manifest: ApkManifest): Promise<void> {
-  const size = await localFileSize(path);
-  await verifyDownloadedApk(path, manifest);
-  const { verifySha256: shouldHash } = assertDownloadedApkMatchesManifest(size, manifest);
-  if (shouldHash && manifest.sha256) {
+  const { size, verifiedSha256 } = await verifyDownloadedApk(path, manifest);
+  if (verifiedSha256) {
     debugLog.info('app-update', `sha256 ok size=${size}`);
     return;
   }
@@ -336,6 +333,5 @@ export async function downloadAndInstallUpdate(
   }
 
   const localUri = await downloadApkUpdate(manifest, onProgress, options);
-  await verifyDownloadedApk(localUri, manifest);
   await installDownloadedApk(localUri);
 }

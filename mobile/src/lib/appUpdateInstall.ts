@@ -24,7 +24,7 @@ function toHex(buf: ArrayBuffer): string {
 export async function verifyDownloadedApk(
   path: string,
   manifest: Pick<ApkManifest, 'bytes' | 'sha256'>,
-): Promise<void> {
+): Promise<{ size: number; verifiedSha256: boolean }> {
   const info = await FileSystem.getInfoAsync(path);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
   const { verifySha256: shouldHash } = assertDownloadedApkMatchesManifest(size, manifest);
@@ -35,7 +35,7 @@ export async function verifyDownloadedApk(
         `skipping sha256 verify (APK ${size} bytes > ${APK_SHA256_VERIFY_MAX_BYTES} bytes); size matched manifest.bytes=${manifest.bytes ?? 'n/a'}`,
       );
     }
-    return;
+    return { size, verifiedSha256: false };
   }
 
   const expectedSha = manifest.sha256!;
@@ -54,6 +54,7 @@ export async function verifyDownloadedApk(
       `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
     );
   }
+  return { size, verifiedSha256: true };
 }
 
 /** Prefer verifyDownloadedApk so large files still enforce manifest.bytes. */
