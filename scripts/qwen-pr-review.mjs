@@ -39,10 +39,10 @@ export function isReviewablePath(filePath) {
   const path = String(filePath || '').replace(/\\/g, '/');
   if (
     /(^|\/)(node_modules|dist|build|coverage|reports|assets)\//i.test(path) ||
-    /(?:package-lock\.json|changelog\/|\.snap$)/i.test(path)
+    /(?:package-lock\.json|pnpm-lock\.ya?ml|yarn\.lock|bun\.lockb?|Cargo\.lock|composer\.lock|Podfile\.lock|Gemfile\.lock|poetry\.lock|uv\.lock|changelog\/|\.snap$)/i.test(path)
   ) return false;
   return (
-    /\.(?:[cm]?[jt]sx?|json|ya?ml|gradle|properties|xml|kt|java|sh|ps1)$/i.test(path) ||
+    /\.(?:[cm]?[jt]sx?|py|go|rs|c|cc|cpp|cxx|h|hh|hpp|hxx|swift|rb|php|cs|fsx?|sql|tf|hcl|toml|r|scala|vue|svelte|json|ya?ml|gradle|properties|xml|kt|java|sh|ps1)$/i.test(path) ||
     /(^|\/)(?:Dockerfile|Podfile|[^/]+\.Modelfile)$/i.test(path)
   );
 }
@@ -68,9 +68,8 @@ export function changedLinesFromDiff(diffText) {
       newLine = Number(hunk[2]);
       continue;
     }
-    if (oldLine == null || newLine == null || text.startsWith('---') || text.startsWith('+++')) {
-      continue;
-    }
+    if (oldLine == null || newLine == null) continue;
+    if (text === '\\ No newline at end of file') continue;
     if (text.startsWith('+')) {
       right.add(newLine);
       newLine += 1;
@@ -85,9 +84,10 @@ export function changedLinesFromDiff(diffText) {
   return { left, right };
 }
 
-export function collectDiff(baseRef, maxChars) {
-  runGit(['fetch', '--no-tags', 'origin', baseRef]);
-  const range = `origin/${baseRef}...HEAD`;
+export function collectDiff(baseRef, maxChars, baseSha = process.env.BASE_SHA) {
+  const baseCommit = String(baseSha || `origin/${baseRef}`).trim();
+  runGit(['cat-file', '-e', `${baseCommit}^{commit}`]);
+  const range = `${baseCommit}...HEAD`;
   const changedFiles = runGit(['diff', '--name-only', '--diff-filter=ACDMRTUXB', range])
     .split(/\r?\n/)
     .map((value) => value.trim())

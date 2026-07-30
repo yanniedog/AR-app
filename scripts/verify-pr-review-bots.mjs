@@ -90,20 +90,32 @@ assert(SPREADSHEET_BOT_KEYS.includes('cursor'));
 assert.equal(isReviewablePath('.github/workflows/app-ci.yml'), true);
 assert.equal(isReviewablePath('scripts/wait-for-bots.mjs'), true);
 assert.equal(isReviewablePath('mobile/package-lock.json'), false);
+assert.equal(isReviewablePath('pnpm-lock.yaml'), false);
 assert.equal(isReviewablePath('README.md'), false);
 assert.equal(isReviewablePath('scripts/qwen-review.Modelfile'), true);
+assert.equal(isReviewablePath('service/main.py'), true);
+assert.equal(isReviewablePath('engine/src/lib.rs'), true);
+assert.equal(isReviewablePath('infra/main.tf'), true);
 const changedLines = changedLinesFromDiff(
   '@@ -10,2 +10,2 @@\n-old\n+new\n context',
 );
 assert.deepEqual([...changedLines.left], [10]);
 assert.deepEqual([...changedLines.right], [10]);
+const diffPrefixLines = changedLinesFromDiff(
+  '@@ -20,2 +20,2 @@\n--- yaml separator\n+++counter\n context',
+);
+assert.deepEqual([...diffPrefixLines.left], [20]);
+assert.deepEqual([...diffPrefixLines.right], [20]);
 const workflow = readFileSync('.github/workflows/cursor-auto-pr-review.yml', 'utf8');
 const prompt = readFileSync('.cursor/PR_REVIEW_PROMPT.md', 'utf8');
 const reviewer = readFileSync('scripts/qwen-pr-review.mjs', 'utf8');
 assert.match(workflow, /\bpull_request_target:/);
 assert.match(workflow, /shell:\s*powershell/);
 assert.doesNotMatch(workflow, /shell:\s*pwsh/);
-assert.match(workflow, /ref:\s*main/);
+assert.match(workflow, /ref:\s*\$\{\{\s*github\.event\.repository\.default_branch\s*\}\}/);
+assert.match(workflow, /base_sha=\$\(\$json\.base\.sha\)/);
+assert.match(workflow, /BASE_SHA:\s*\$\{\{\s*steps\.pr\.outputs\.base_sha\s*\}\}/);
+assert.match(workflow, /author_association == 'OWNER'/);
 assert.match(workflow, /persist-credentials:\s*false/g);
 assert.match(workflow, /_trusted-reviewer\\scripts\\qwen-pr-review\.mjs/);
 assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
@@ -124,6 +136,10 @@ assert.match(workflow, /Omitted reviewable files:/);
 assert.match(workflow, /Intentionally excluded low-signal files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
 assert.match(workflow, /\$finding\.side -eq 'RIGHT'/);
+assert.match(workflow, /<!-- qwen-code-review -->[\s\S]+?\*\*\$\(\$finding\.severity\)\*\*/);
+assert.match(workflow, /Contains\('```'\)/);
+assert.match(workflow, /Test-Path -LiteralPath \$errorFile/);
+assert.match(workflow, /gh pr comment \$env:PR_NUMBER --repo \$env:GITHUB_REPOSITORY/);
 assert.match(workflow, /id:\s*publish/);
 assert.match(workflow, /PUBLISH_OUTCOME:\s*\$\{\{\s*steps\.publish\.outcome\s*\}\}/);
 assert.match(workflow, /\$env:PUBLISH_OUTCOME -ne 'success'/);
@@ -148,9 +164,13 @@ assert.match(reviewer, /num_ctx:\s*contextTokens/);
 assert.match(reviewer, /at most one highest-severity finding for this chunk/);
 assert.match(reviewer, /chunkSections/);
 assert.match(reviewer, /Qwen review chunk budget cannot safely fit file/);
+assert.doesNotMatch(reviewer, /runGit\(\['fetch'/);
+assert.match(reviewer, /runGit\(\['cat-file', '-e'/);
 assert.match(reviewer, /AbortSignal\.timeout/);
 assert.match(reviewer, /UNTRUSTED_PR_DIFF_\$\{randomUUID\(\)\}/);
 assert.doesNotMatch(reviewer, /'```diff'/);
+assert.match(prompt, /issue.*at least 20 characters/s);
+assert.match(prompt, /suggested_fix.*at least 10 characters/s);
 
 const waitScript = readFileSync('wait_for_bots.mjs', 'utf8');
 assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);

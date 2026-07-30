@@ -29,6 +29,9 @@ concurrency:
       || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
           && github.event.comment.user.type != 'Bot'
+          && (github.event.comment.author_association == 'OWNER'
+              || github.event.comment.author_association == 'MEMBER'
+              || github.event.comment.author_association == 'COLLABORATOR')
           && contains(github.event.comment.body, '@qwen-review')
           && github.event.issue.number)
       || inputs.pr_number
@@ -45,6 +48,9 @@ jobs:
       || (github.event_name == 'issue_comment'
           && github.event.issue.pull_request
           && github.event.comment.user.type != 'Bot'
+          && (github.event.comment.author_association == 'OWNER'
+              || github.event.comment.author_association == 'MEMBER'
+              || github.event.comment.author_association == 'COLLABORATOR')
           && contains(github.event.comment.body, '@qwen-review'))
     runs-on: [self-hosted, Windows, X64, qwen-local-llm]
     timeout-minutes: 45
@@ -75,6 +81,7 @@ jobs:
           $json = gh api "repos/$env:GITHUB_REPOSITORY/pulls/$pr" | ConvertFrom-Json
           "number=$pr" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "head_sha=$($json.head.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "base_sha=$($json.base.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "base_ref=$($json.base.ref)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "author=$($json.user.login)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "author_type=$($json.user.type)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -84,8 +91,10 @@ jobs:
         env:
           AUTHOR: ${{ steps.pr.outputs.author }}
           AUTHOR_TYPE: ${{ steps.pr.outputs.author_type }}
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          $isBot = $env:AUTHOR_TYPE -eq 'Bot' -or $env:AUTHOR.EndsWith('[bot]')
+          $isBotAuthor = $env:AUTHOR_TYPE -eq 'Bot' -or $env:AUTHOR.EndsWith('[bot]')
+          $isBot = $isBotAuthor -and $env:EVENT_NAME -eq 'pull_request_target'
           "value=$($isBot.ToString().ToLowerInvariant())" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
 
       - name: Check existing current-head result
@@ -111,7 +120,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
-          ref: main
+          ref: ${{ github.event.repository.default_branch }}
           path: _trusted-reviewer
           persist-credentials: false
           clean: true
@@ -136,6 +145,7 @@ jobs:
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
           QWEN_MODEL: ${{ secrets.QWEN_MODEL }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PROMPT_PATH: ${{ github.workspace }}\_trusted-reviewer\.cursor\PR_REVIEW_PROMPT.md
@@ -205,15 +215,19 @@ jobs:
           $comments = @()
           foreach ($finding in $findings) {
             $commentBody = @(
+              '<!-- qwen-code-review -->'
               "**$($finding.severity)**"
               ''
               $finding.issue
               ''
               "**Suggested revision:** $($finding.suggested_fix)"
             )
-            if ($finding.replacement -and $finding.side -eq 'RIGHT') {
-              $replacement = [string]$finding.replacement -replace '```', '``\`'
-              $commentBody += @('', '```suggestion', $replacement, '```')
+            if (
+              $finding.replacement
+              -and $finding.side -eq 'RIGHT'
+              -and -not ([string]$finding.replacement).Contains('```')
+            ) {
+              $commentBody += @('', '```suggestion', [string]$finding.replacement, '```')
             }
             $comments += @{
               path = [string]$finding.path
@@ -248,7 +262,15 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         run: |
-          $errorText = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt')
+          $errorFile = Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt'
+          $errorText = if (Test-Path -LiteralPath $errorFile) {
+            [string](Get-Content -Raw -LiteralPath $errorFile)
+          } else {
+            ''
+          }
+          if ([string]::IsNullOrWhiteSpace($errorText)) {
+            $errorText = 'Reviewer exited without diagnostic output.'
+          }
           $body = @(
             '<!-- qwen-code-review -->'
             '## Qwen Code Review'
@@ -262,7 +284,7 @@ jobs:
             $errorText.Trim()
             '```'
           ) -join "`n"
-          gh pr comment $env:PR_NUMBER --body $body
+          gh pr comment $env:PR_NUMBER --repo $env:GITHUB_REPOSITORY --body $body
 
       - name: Publish current-head qwen-code-review check
         if: always()
