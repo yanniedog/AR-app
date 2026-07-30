@@ -13,16 +13,6 @@ export function requiredPrCheckDispatches(prNumber, branchName) {
   return [
     { workflow: 'app-ci.yml', ref: branch, inputs: [] },
     {
-      workflow: 'cursor-auto-pr-review.yml',
-      ref: branch,
-      inputs: ['-f', `pr_number=${pr}`],
-    },
-    {
-      workflow: 'pr-bot-presence-gate.yml',
-      ref: branch,
-      inputs: ['-f', `pr_number=${pr}`],
-    },
-    {
       workflow: 'pr-bot-feedback-check.yml',
       ref: branch,
       inputs: ['-f', `pr_number=${pr}`],

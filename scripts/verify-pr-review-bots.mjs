@@ -2,8 +2,10 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 import {
+  DEFAULT_REQUIRED_KEYS,
   eventSatisfiesRequiredKey,
   missingRequiredKeysFromEvents,
+  parseRequiredKeys,
   reviewedCommitFromBody,
 } from './lib/bot-wait-config.mjs';
 import { isBotNoise } from './lib/bot-noise.mjs';
@@ -25,6 +27,11 @@ const qwenSuccess = [
 const qwenFailure = qwenSuccess.replace('Review outcome: findings', 'Review outcome: failed')
   + '\nQwen Code Review did not complete successfully.';
 
+assert.deepEqual(DEFAULT_REQUIRED_KEYS, []);
+assert.deepEqual(parseRequiredKeys('off'), []);
+assert.deepEqual(parseRequiredKeys('none'), []);
+assert.deepEqual(parseRequiredKeys('disabled'), []);
+assert.deepEqual(parseRequiredKeys('qwen,coderabbit'), ['qwen', 'coderabbit']);
 assert.equal(reviewedCommitFromBody(qwenSuccess), sha);
 assert.equal(
   eventSatisfiesRequiredKey('github-actions[bot]', qwenSuccess, 'qwen', {
@@ -97,6 +104,9 @@ const changedLines = changedLinesFromDiff(
 assert.deepEqual([...changedLines.left], [10]);
 assert.deepEqual([...changedLines.right], [10]);
 const workflow = readFileSync('.github/workflows/cursor-auto-pr-review.yml', 'utf8');
+const controlWorkflow = readFileSync('.github/workflows/review-bot-control.yml', 'utf8');
+const controlScript = readFileSync('scripts/review-bot-control.mjs', 'utf8');
+const branchProtection = readFileSync('scripts/apply-branch-protection.mjs', 'utf8');
 const prompt = readFileSync('.cursor/PR_REVIEW_PROMPT.md', 'utf8');
 const reviewer = readFileSync('scripts/qwen-pr-review.mjs', 'utf8');
 assert.match(workflow, /\bpull_request_target:/);
@@ -129,6 +139,14 @@ assert.match(reviewer, /max_tokens:\s*1200/);
 assert.match(reviewer, /AbortSignal\.timeout/);
 assert.match(reviewer, /UNTRUSTED_PR_DIFF_\$\{randomUUID\(\)\}/);
 assert.doesNotMatch(reviewer, /'```diff'/);
+assert.match(controlWorkflow, /workflow_dispatch:/);
+assert.match(controlWorkflow, /ref:\s*main/);
+assert.match(controlWorkflow, /actions:\s*write/);
+assert.match(controlScript, /Qwen enabled as advisory; presence gate remains disabled/);
+assert.doesNotMatch(
+  branchProtection.match(/const REQUIRED_CHECKS = \[[\s\S]*?\];/)?.[0] || '',
+  /qwen-code-review|bot-presence-gate/,
+);
 
 const waitScript = readFileSync('wait_for_bots.mjs', 'utf8');
 assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);

@@ -69,10 +69,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Qwen is self-hosted and under this repo's control. Third-party bots
-          # remain visible in the matrix but cannot make merge liveness depend on
-          # their quota or product availability.
-          AR_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED || 'qwen' }}
+          # Presence is disabled unless an owner explicitly selects a required
+          # reviewer. Third-party quota must not make merge liveness fail.
+          AR_BOT_WAIT_REQUIRED: ${{ vars.AR_BOT_WAIT_REQUIRED || 'off' }}
           BOT_WAIT_IGNORE_CHECK_NAMES: bot-presence-gate,bot-feedback-gate,pr-bot-presence-gate,pr-bot-feedback-check,mobile-ci
           BOT_WAIT_POLL_SEC: "90"
           BOT_WAIT_QUIET_SEC: "30"
