@@ -563,9 +563,7 @@ describe('store refresh lifecycle', () => {
       pendingIngestRunDate: null,
       ensureBankInsights: mockEnsureBankInsights,
     });
-    mockFetchManifest
-      .mockResolvedValueOnce(rollingManifest)
-      .mockResolvedValueOnce(datedCoreOnly);
+    mockFetchManifest.mockResolvedValueOnce(rollingManifest);
     mockFetchDatesIndexJson.mockResolvedValue({
       schema_version: 1,
       dates: ['2026-07-27'],
@@ -584,6 +582,7 @@ describe('store refresh lifecycle', () => {
     const changed = await useStore.getState().refresh({});
 
     expect(changed).toBe(false);
+    expect(mockFetchManifest).toHaveBeenCalledTimes(1);
     expect(useStore.getState().manifest?.files.bank_history).toEqual(bankHistory);
     expect(useStore.getState().refreshOutcome).toBe('success');
     expect(mockUpdateMeta).toHaveBeenCalledWith(

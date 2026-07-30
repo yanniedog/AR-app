@@ -107,6 +107,21 @@ export function allCoreRateRows(core: CorePayload): RateRow[] {
 }
 
 /**
+ * Fields consumed by `isBroadlyAvailable`. A product key can occasionally carry
+ * inconsistent duplicate identities in the upstream rows; retain each distinct
+ * identity so the allowed Set keeps its historical "any allowed row wins"
+ * semantics while identical rate tiers are classified only once.
+ */
+function suitabilityIdentity(row: RateRow): string {
+  return JSON.stringify([
+    row.product_key,
+    row.provider ?? '',
+    row.product_name ?? '',
+    row.account_class ?? '',
+  ]);
+}
+
+/**
  * Build the allowed-product Set. Chunks + yields so a post-ingest warm does not
  * freeze tab navigation for hundreds of ms on mid-range Android.
  */
@@ -120,14 +135,21 @@ export async function buildSuitabilityIndex(
   const rows = allCoreRateRows(core);
   const products = details?.products ?? null;
   const allowed = new Set<string>();
+  const identities = new Map<string, RateRow>();
   const t0 = Date.now();
 
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
+  for (const row of rows) {
+    const identity = suitabilityIdentity(row);
+    if (!identities.has(identity)) identities.set(identity, row);
+  }
+
+  let classified = 0;
+  for (const row of identities.values()) {
     if (isBroadlyAvailable(row, products?.[row.product_key] ?? null)) {
       allowed.add(row.product_key);
     }
-    if (chunkSize > 0 && (i + 1) % chunkSize === 0) {
+    classified += 1;
+    if (chunkSize > 0 && classified % chunkSize === 0) {
       await yieldToUi();
     }
   }
@@ -140,7 +162,7 @@ export async function buildSuitabilityIndex(
   };
   debugLog.info(
     'suitability',
-    `index built run_date=${index.runDate} rows=${rows.length} allowed=${allowed.size} ms=${Date.now() - t0} details=${products ? 'yes' : 'no'}`,
+    `index built run_date=${index.runDate} rows=${rows.length} identities=${identities.size} allowed=${allowed.size} ms=${Date.now() - t0} details=${products ? 'yes' : 'no'}`,
   );
   return index;
 }

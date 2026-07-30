@@ -25,11 +25,13 @@ import {
   failPerformanceAudit,
   formatAuditError,
   getPerformanceAuditState,
+  markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
   markPerformanceAuditRunning,
   pathMatches,
   PERFORMANCE_AUDIT_LOG_TAG,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
+  PerformanceAuditInactivityWatchdog,
   ResponsivenessMonitor,
   roundMetric,
   scoreLatency,
@@ -51,7 +53,6 @@ const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
 const DATA_SETTLE_TIMEOUT_MS = 30_000;
 const NETWORK_TIMEOUT_MS = 12_000;
-const AUDIT_SESSION_BUDGET_MS = 120_000;
 const ROUTE_DWELL_MS = 350;
 const RUNTIME_SAMPLE_MS = 1_250;
 const BENCHMARK_CHECKS = 5;
@@ -66,10 +67,13 @@ class AuditCancelledError extends Error {
   }
 }
 
-class AuditDeadlineError extends Error {
-  constructor() {
-    super(`Performance audit exceeded its ${AUDIT_SESSION_BUDGET_MS}ms safety limit`);
-    this.name = 'AuditDeadlineError';
+class AuditInactivityError extends Error {
+  constructor(watchdog: PerformanceAuditInactivityWatchdog) {
+    super(
+      `Performance audit stored no completed check for ${watchdog.hangTimeoutMs}ms ` +
+        `(stored checks: ${watchdog.storedCheckCount})`,
+    );
+    this.name = 'AuditInactivityError';
   }
 }
 
@@ -99,16 +103,16 @@ function assertAuditActive(): void {
   if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
 }
 
-function assertSessionActive(deadlineMs: number): void {
+function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void {
   assertAuditActive();
-  if (now() >= deadlineMs) throw new AuditDeadlineError();
+  if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
 }
 
 function rethrowAuditControl(error: unknown): void {
   if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
     throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
   }
-  if (error instanceof AuditDeadlineError) throw error;
+  if (error instanceof AuditInactivityError) throw error;
   if (error instanceof AuditDatasetChangedError) throw error;
 }
 
@@ -185,15 +189,15 @@ function assertDatasetRevision(expected: AuditDatasetRevision): void {
   }
 }
 
-async function waitForRefreshWork(deadlineMs: number): Promise<void> {
+async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
   while (true) {
-    assertSessionActive(deadlineMs);
+    assertSessionActive(watchdog);
     const state = useStore.getState();
     if (!state.refreshing && !state.postRefreshWarming) {
       // Require a short quiet window so the refresh finally block cannot move
       // into post-warm between the check and the audit snapshot.
       await delay(150);
-      assertSessionActive(deadlineMs);
+      assertSessionActive(watchdog);
       const settled = useStore.getState();
       if (!settled.refreshing && !settled.postRefreshWarming) return;
     }
@@ -206,26 +210,26 @@ async function waitForPath(
   expected: string,
   label: string,
   options: {
-    sessionDeadlineMs?: number;
+    watchdog?: PerformanceAuditInactivityWatchdog;
     checkAuditState?: boolean;
   } = {},
 ): Promise<void> {
   const routeDeadlineMs = now() + ROUTE_TIMEOUT_MS;
   const deadlineMs = Math.min(
     routeDeadlineMs,
-    options.sessionDeadlineMs ?? Number.POSITIVE_INFINITY,
+    options.watchdog?.deadlineMs ?? Number.POSITIVE_INFINITY,
   );
   while (!pathMatches(currentPath(), expected)) {
     if (options.checkAuditState !== false) {
-      if (options.sessionDeadlineMs != null) {
-        assertSessionActive(options.sessionDeadlineMs);
+      if (options.watchdog) {
+        assertSessionActive(options.watchdog);
       } else {
         assertAuditActive();
       }
     }
     if (now() >= deadlineMs) {
-      if (options.sessionDeadlineMs != null && now() >= options.sessionDeadlineMs) {
-        throw new AuditDeadlineError();
+      if (options.watchdog?.isExpired()) {
+        throw new AuditInactivityError(options.watchdog);
       }
       throw new Error(`${label} did not reach ${expected}; current path is ${currentPath()}`);
     }
@@ -336,13 +340,13 @@ async function collectEnvironment(
 
 async function runRuntimeCheck(
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('runtime responsiveness baseline');
   const started = now();
   const snapshot = monitor.snapshot();
   await delay(RUNTIME_SAMPLE_MS);
-  assertSessionActive(sessionDeadlineMs);
+  assertSessionActive(watchdog);
   const metrics = monitor.metricsSince(snapshot);
   return {
     id: 'runtime-responsiveness',
@@ -358,7 +362,7 @@ async function runRuntimeCheck(
 async function runStorageCheck(
   sessionId: string,
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('AsyncStorage write read remove');
   const key = `${STORAGE_KEY_PREFIX}${sessionId}`;
@@ -375,18 +379,18 @@ async function runStorageCheck(
   let temporaryKeyDeleted = false;
   try {
     for (let index = 0; index < 3; index += 1) {
-      assertSessionActive(sessionDeadlineMs);
+      assertSessionActive(watchdog);
       let at = now();
       await AsyncStorage.setItem(key, payload);
-      assertSessionActive(sessionDeadlineMs);
+      assertSessionActive(watchdog);
       writeTimes.push(now() - at);
       at = now();
       const restored = await AsyncStorage.getItem(key);
-      assertSessionActive(sessionDeadlineMs);
+      assertSessionActive(watchdog);
       readTimes.push(now() - at);
       if (restored !== payload) throw new Error('AsyncStorage readback did not match the test payload');
     }
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
   } catch (caught) {
     rethrowAuditControl(caught);
     error = formatAuditError(caught);
@@ -435,7 +439,7 @@ async function runStorageCheck(
 async function runFileSystemCheck(
   sessionId: string,
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('filesystem write read remove');
   const started = now();
@@ -462,19 +466,19 @@ async function runFileSystemCheck(
   let error: string | undefined;
   let temporaryFileDeleted = false;
   try {
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     let at = now();
     await FileSystem.writeAsStringAsync(uri, payload);
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     writeMs = now() - at;
     at = now();
     const restored = await FileSystem.readAsStringAsync(uri);
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     readMs = now() - at;
     if (restored.length !== payload.length) {
       throw new Error(`Filesystem readback length ${restored.length} did not match ${payload.length}`);
     }
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
   } catch (caught) {
     rethrowAuditControl(caught);
     error = formatAuditError(caught);
@@ -513,7 +517,7 @@ async function runFileSystemCheck(
 
 async function runDataCheck(
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('active payload serialize parse filter sort');
   const core = useStore.getState().core;
@@ -538,7 +542,7 @@ async function runDataCheck(
   let rateRows = 0;
   let error: string | undefined;
   try {
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     let at = now();
     const serialized = JSON.stringify(core);
     stringifyMs = now() - at;
@@ -557,7 +561,7 @@ async function runDataCheck(
     }
     traversalMs = now() - at;
     await delay(0);
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
   } catch (caught) {
     rethrowAuditControl(caught);
     error = formatAuditError(caught);
@@ -589,16 +593,16 @@ async function runDataCheck(
 
 async function runNetworkCheck(
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('manifest network request and JSON parse');
   const started = now();
   const responsiveAt = monitor.snapshot();
-  assertSessionActive(sessionDeadlineMs);
+  assertSessionActive(watchdog);
   const abort = new AbortController();
   const timeoutMs = Math.max(
     1,
-    Math.min(NETWORK_TIMEOUT_MS, Math.floor(sessionDeadlineMs - now())),
+    Math.min(NETWORK_TIMEOUT_MS, Math.floor(watchdog.remainingMs())),
   );
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   const cancelTimer = setInterval(() => {
@@ -611,7 +615,7 @@ async function runNetworkCheck(
   let responseChars = 0;
   let error: string | undefined;
   try {
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     const response = await fetch(MANIFEST_URL, {
       method: 'GET',
       headers: { Accept: 'application/json' },
@@ -628,10 +632,10 @@ async function runNetworkCheck(
     const parseStarted = now();
     JSON.parse(body);
     parseMs = now() - parseStarted;
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
   } catch (caught) {
     if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
-    if (now() >= sessionDeadlineMs) throw new AuditDeadlineError();
+    if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
     error = formatAuditError(caught);
   } finally {
     clearTimeout(timer);
@@ -822,7 +826,7 @@ function journeyDataRequirements(
 async function waitForJourneyData(
   journey: AuditJourney,
   logCursor: number,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<{
   labels: string[];
   durationMs: number;
@@ -831,18 +835,18 @@ async function waitForJourneyData(
   // loading state. The subsequent poll keeps that cold work inside this
   // journey instead of letting it spill into later checks.
   await delay(100);
-  assertSessionActive(sessionDeadlineMs);
+  assertSessionActive(watchdog);
   const requirements = journeyDataRequirements(journey, logCursor);
   const labels = [...new Set(requirements.map(({ label }) => label))];
   if (requirements.length === 0) return { labels, durationMs: 0 };
 
   const started = now();
   const settleDeadlineMs = Math.min(
-    sessionDeadlineMs,
+    watchdog.deadlineMs,
     started + DATA_SETTLE_TIMEOUT_MS,
   );
   while (true) {
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     const failed = requirements.find((requirement) => requirement.state() === 'failed');
     if (failed) {
       throw new Error(`${failed.label} failed to settle: ${failed.error() ?? 'unknown error'}`);
@@ -851,7 +855,7 @@ async function waitForJourneyData(
       return { labels, durationMs: now() - started };
     }
     if (now() >= settleDeadlineMs) {
-      if (now() >= sessionDeadlineMs) throw new AuditDeadlineError();
+      if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
       const pending = requirements
         .filter((requirement) => requirement.state() === 'pending')
         .map(({ label }) => label);
@@ -867,7 +871,7 @@ async function runJourney(
   journey: AuditJourney,
   currentPath: () => string,
   monitor: ResponsivenessMonitor,
-  sessionDeadlineMs: number,
+  watchdog: PerformanceAuditInactivityWatchdog,
   datasetRevision: AuditDatasetRevision,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace(`route journey ${journey.id}`);
@@ -897,7 +901,7 @@ async function runJourney(
   let routeError: string | undefined;
 
   try {
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     let at = now();
     router.push(journey.href);
@@ -905,10 +909,10 @@ async function runJourney(
       currentPath,
       journey.expectedPath,
       `${journey.label} forward navigation`,
-      { sessionDeadlineMs },
+      { watchdog },
     );
     await settleUi();
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     forwardMs = now() - at;
     if (
@@ -922,7 +926,7 @@ async function runJourney(
     const background = await waitForJourneyData(
       journey,
       logCursor,
-      sessionDeadlineMs,
+      watchdog,
     );
     backgroundSettleMs = background.durationMs;
     backgroundTasks = background.labels;
@@ -931,7 +935,7 @@ async function runJourney(
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
     await delay(ROUTE_DWELL_MS);
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
 
     const pathBeforeBack = currentPath();
@@ -941,7 +945,7 @@ async function runJourney(
     // root-stack audit screen. Measure the real back transition first, then
     // restore the runner explicitly instead of charging an 8s path timeout.
     await settleUi();
-    assertSessionActive(sessionDeadlineMs);
+    assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     backMs = now() - at;
     backDestination = currentPath();
@@ -955,10 +959,10 @@ async function runJourney(
         currentPath,
         AUDIT_HOME_PATH,
         `${journey.label} return fallback`,
-        { sessionDeadlineMs },
+        { watchdog },
       );
       await settleUi();
-      assertSessionActive(sessionDeadlineMs);
+      assertSessionActive(watchdog);
       returnFallbackMs = now() - fallbackStarted;
     }
   } catch (caught) {
@@ -1042,7 +1046,7 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
-      const sessionDeadlineMs = now() + AUDIT_SESSION_BUDGET_MS;
+      const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
       const originalStore = useStore.getState();
       const originalActiveSection = originalStore.activeSection;
       const originalProfileFilters = JSON.parse(
@@ -1056,12 +1060,18 @@ export function PerformanceAuditRunner() {
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
+      let lastStoredCheckAt: string | null = null;
 
-      const record = (check: AuditCheck) => {
+      const record = async (check: AuditCheck) => {
+        assertSessionActive(watchdog);
         checks.push(check);
         logAuditCheck(sessionId, check);
+        // Only durable completed-check progress keeps the hang watchdog alive.
+        await debugLog.flushToFile();
+        watchdog.recordStoredCheck();
+        lastStoredCheckAt = new Date().toISOString();
         completed += 1;
-        updatePerformanceAuditProgress(completed, total, check.label);
+        markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
       };
 
       markPerformanceAuditRunning(total);
@@ -1073,7 +1083,7 @@ export function PerformanceAuditRunner() {
           total,
           'Waiting for active payload work to finish',
         );
-        await waitForRefreshWork(sessionDeadlineMs);
+        await waitForRefreshWork(watchdog);
         const initialStore = useStore.getState();
         journeys = buildPerformanceAuditJourneys(
           initialStore.core,
@@ -1093,7 +1103,10 @@ export function PerformanceAuditRunner() {
           sessionId,
           startedAt,
           plannedChecks: total,
-          sessionBudgetMs: AUDIT_SESSION_BUDGET_MS,
+          hangTimeoutMs: watchdog.hangTimeoutMs,
+          watchdogMode: 'stored-check-inactivity',
+          storedCheckCount: watchdog.storedCheckCount,
+          lastStoredCheckAt,
           datasetRevision,
           trace: captureAuditTrace('performance audit start'),
         });
@@ -1103,14 +1116,14 @@ export function PerformanceAuditRunner() {
           dimensions.height,
           dimensions.fontScale,
         );
-        assertSessionActive(sessionDeadlineMs);
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
-        record(await runRuntimeCheck(monitor, sessionDeadlineMs));
+        await record(await runRuntimeCheck(monitor, watchdog));
 
         for (const journey of journeys) {
-          assertSessionActive(sessionDeadlineMs);
+          assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
           updatePerformanceAuditProgress(
             completed,
@@ -1124,38 +1137,38 @@ export function PerformanceAuditRunner() {
             label: journey.label,
             trace: captureAuditTrace(`journey start ${journey.id}`),
           });
-          record(
+          await record(
             await runJourney(
               journey,
               () => pathnameRef.current,
               monitor,
-              sessionDeadlineMs,
+              watchdog,
               datasetRevision,
             ),
           );
         }
 
-        assertSessionActive(sessionDeadlineMs);
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing preferences storage');
-        record(await runStorageCheck(sessionId, monitor, sessionDeadlineMs));
+        await record(await runStorageCheck(sessionId, monitor, watchdog));
 
-        assertSessionActive(sessionDeadlineMs);
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing log file storage');
-        record(await runFileSystemCheck(sessionId, monitor, sessionDeadlineMs));
+        await record(await runFileSystemCheck(sessionId, monitor, watchdog));
 
-        assertSessionActive(sessionDeadlineMs);
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Processing the active rates payload');
         await nextFrame();
-        record(await runDataCheck(monitor, sessionDeadlineMs));
+        await record(await runDataCheck(monitor, watchdog));
 
-        assertSessionActive(sessionDeadlineMs);
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
-        record(await runNetworkCheck(monitor, sessionDeadlineMs));
-        assertSessionActive(sessionDeadlineMs);
+        await record(await runNetworkCheck(monitor, watchdog));
+        assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
         const finishedAt = new Date().toISOString();
@@ -1165,13 +1178,18 @@ export function PerformanceAuditRunner() {
           startedAt,
           finishedAt,
           durationMs: Date.now() - startedMs,
+          watchdog: {
+            hangTimeoutMs: watchdog.hangTimeoutMs,
+            storedCheckCount: watchdog.storedCheckCount,
+            lastStoredCheckAt,
+          },
           environment,
           summary: summarizePerformanceAudit(checks),
           checks,
           limitations: [
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'The journey exercises every steady-state app destination plus forward/back navigation; it does not submit forms, change preferences, or mutate favourites.',
-            `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops after ${AUDIT_SESSION_BUDGET_MS}ms if it cannot finish safely.`,
+            `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             'No report is uploaded automatically. The complete structured report and tracebacks are appended to the local debug log for explicit export.',
           ],
         };
@@ -1191,6 +1209,9 @@ export function PerformanceAuditRunner() {
             sessionId,
             completed,
             total,
+            hangTimeoutMs: watchdog.hangTimeoutMs,
+            storedCheckCount: watchdog.storedCheckCount,
+            lastStoredCheckAt,
             trace: formatAuditError(caught),
             recoveryError,
           });
@@ -1203,7 +1224,14 @@ export function PerformanceAuditRunner() {
           ].join('\n');
           debugLog.error(
             PERFORMANCE_AUDIT_LOG_TAG,
-            JSON.stringify({ kind: 'fatal', sessionId, error }),
+            JSON.stringify({
+              kind: 'fatal',
+              sessionId,
+              error,
+              hangTimeoutMs: watchdog.hangTimeoutMs,
+              storedCheckCount: watchdog.storedCheckCount,
+              lastStoredCheckAt,
+            }),
           );
           await debugLog.flushToFile();
           failPerformanceAudit(error);
@@ -1226,6 +1254,7 @@ export function PerformanceAuditRunner() {
     dimensions.fontScale,
     dimensions.height,
     dimensions.width,
+    state.hangTimeoutMs,
     state.sessionId,
     state.startedAt,
     state.status,

@@ -198,6 +198,32 @@ describe('cache core-meta sidecar', () => {
     expect(withStale?.meta.coreSha).toBe(sampleManifest.files.core.sha256);
   });
 
+  it('atomically writes product-history checkpoints and recovers a complete tmp file', async () => {
+    const productHistoryPath = `${FileSystem.documentDirectory}payload/product-history.json`;
+    const productHistoryTmpPath = `${productHistoryPath}.tmp`;
+    const first = JSON.stringify({
+      schema_version: 2,
+      run_date: '2026-07-28',
+      run_dates: ['2026-07-28'],
+      products: { 'P|1': [0.055] },
+    });
+
+    await cache.writeProductHistory(first);
+
+    expect(files.get(productHistoryPath)).toBe(first);
+    expect(files.has(productHistoryTmpPath)).toBe(false);
+    const recovered = JSON.stringify({
+      schema_version: 2,
+      run_date: '2026-07-28',
+      run_dates: ['2026-07-27', '2026-07-28'],
+      products: { 'P|1': [0.06, 0.055] },
+    });
+    files.delete(productHistoryPath);
+    files.set(productHistoryTmpPath, recovered);
+
+    await expect(cache.readProductHistory()).resolves.toEqual(JSON.parse(recovered));
+  });
+
   it('updateMeta no-ops on coreSha mismatch and older manifests', async () => {
     const meta: CacheMeta = {
       manifest: { ...sampleManifest, generated_at: '2026-07-14T12:00:00Z' },

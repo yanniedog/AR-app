@@ -95,6 +95,49 @@ describe('ingestFinalized', () => {
     expect(fetchDated).not.toHaveBeenCalledWith('2026-07-27');
   });
 
+  it('reuses a verified immutable dated manifest for the same rolling core revision', async () => {
+    const verified: Manifest = {
+      ...rolling,
+      tag: 'app-payload-2026-07-28',
+    };
+    const fetchDated = jest.fn(async () => {
+      throw new Error('should reuse verified dated manifest');
+    });
+
+    const resolution = await resolveFinalizedManifest(rolling, {
+      fetchIndex: async () => indexThrough27,
+      fetchDated,
+      verifiedDated: verified,
+    });
+
+    expect(resolution.status).toBe('finalized');
+    expect(resolution.manifest?.tag).toBe('app-payload-2026-07-28');
+    expect(fetchDated).not.toHaveBeenCalled();
+  });
+
+  it('does not reuse a dated manifest from another core revision', async () => {
+    const staleVerified: Manifest = {
+      ...rolling,
+      tag: 'app-payload-2026-07-28',
+      files: {
+        ...rolling.files,
+        core: { ...rolling.files.core, sha256: 'stale-core-sha' },
+      },
+    };
+    const fetchDated = jest.fn(async () => ({
+      ...rolling,
+      tag: 'app-payload-2026-07-28',
+    }));
+
+    await resolveFinalizedManifest(rolling, {
+      fetchIndex: async () => indexThrough27,
+      fetchDated,
+      verifiedDated: staleVerified,
+    });
+
+    expect(fetchDated).toHaveBeenCalledWith('2026-07-28');
+  });
+
   it('restores optional rolling assets when dated lag adopt shares the same core', async () => {
     const bankHistory = optionalAsset('bank-history.json.gz', 'bank-history-sha');
     const rbaCalendar = optionalAsset('rba-calendar.json.gz', 'rba-calendar-sha');

@@ -10,6 +10,7 @@ import {
 import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
+import { debugLog } from '../src/lib/debugLog';
 import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src/types';
 
 jest.mock('../src/data/cache', () => ({
@@ -63,6 +64,53 @@ describe('suitabilityIndex', () => {
     expect(index.allowed.has('a|2')).toBe(false);
     expect(isBroadlyAvailable(open, details.products['a|1'] as ProductDetail)).toBe(true);
     expect(isBroadlyAvailable(staff, details.products['a|2'] as ProductDetail)).toBe(false);
+  });
+
+  it('classifies duplicate rate tiers once and reports row versus identity counts', async () => {
+    const open = row({ product_key: 'dup|1', product_name: 'Standard Variable' });
+    const restricted = row({ product_key: 'dup|2', product_name: 'Staff Home Loan' });
+    const core = {
+      run_date: '2026-07-15',
+      sections: {
+        Mortgage: { rates: [open, { ...open, rate: 0.051 }, restricted, { ...restricted, rate: 0.052 }] },
+      },
+    } as unknown as CorePayload;
+    const infoSpy = jest.spyOn(debugLog, 'info').mockImplementation(() => {});
+
+    const index = await buildSuitabilityIndex(core, null, '');
+
+    expect(index.allowed).toEqual(new Set(['dup|1']));
+    expect(infoSpy).toHaveBeenCalledWith(
+      'suitability',
+      expect.stringMatching(/\brows=4 identities=2 allowed=1\b/),
+    );
+    infoSpy.mockRestore();
+  });
+
+  it('preserves any-allowed semantics for inconsistent identities sharing a product key', async () => {
+    const core = {
+      run_date: '2026-07-15',
+      sections: {
+        Mortgage: {
+          rates: [
+            row({
+              product_key: 'inconsistent|1',
+              product_name: 'Staff Home Loan',
+              account_class: 'non_standard',
+            }),
+            row({
+              product_key: 'inconsistent|1',
+              product_name: 'Everyday Home Loan',
+              account_class: 'standard',
+            }),
+          ],
+        },
+      },
+    } as unknown as CorePayload;
+
+    const index = await buildSuitabilityIndex(core, null, '');
+
+    expect(index.allowed).toEqual(new Set(['inconsistent|1']));
   });
 
   it('makes visibleAccountRows O(1) after install', async () => {

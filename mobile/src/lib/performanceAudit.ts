@@ -3,8 +3,13 @@ import type { Href } from 'expo-router';
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 
-export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 1;
+export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 2;
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
+export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = 300_000;
+export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 30;
+export const MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 3_600;
+export const PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY =
+  '@ar/performance-audit/hang-timeout-seconds';
 
 export type PerformanceAuditStatus =
   | 'idle'
@@ -76,10 +81,17 @@ export interface PerformanceAuditReport {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
   summary: PerformanceAuditSummary;
   checks: AuditCheck[];
   limitations: string[];
+}
+
+export interface PerformanceAuditWatchdogDiagnostics {
+  hangTimeoutMs: number;
+  storedCheckCount: number;
+  lastStoredCheckAt: string | null;
 }
 
 export interface PerformanceAuditProgress {
@@ -92,6 +104,9 @@ export interface PerformanceAuditState {
   status: PerformanceAuditStatus;
   sessionId: string | null;
   startedAt: string | null;
+  hangTimeoutMs: number;
+  storedCheckCount: number;
+  lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
   cancelRequested: boolean;
   report: PerformanceAuditReport | null;
@@ -116,6 +131,9 @@ const IDLE_STATE: PerformanceAuditState = {
   status: 'idle',
   sessionId: null,
   startedAt: null,
+  hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+  storedCheckCount: 0,
+  lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
   cancelRequested: false,
   report: null,
@@ -143,15 +161,90 @@ export function getPerformanceAuditState(): PerformanceAuditState {
   return auditState;
 }
 
-export function requestPerformanceAudit(): string {
+export interface RequestPerformanceAuditOptions {
+  hangTimeoutMs?: number;
+}
+
+export function parsePerformanceAuditHangTimeoutSeconds(
+  value: string | null | undefined,
+): number | null {
+  const trimmed = value?.trim() ?? '';
+  if (!/^\d+$/.test(trimmed)) return null;
+  const seconds = Number(trimmed);
+  if (
+    !Number.isSafeInteger(seconds) ||
+    seconds < MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS ||
+    seconds > MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS
+  ) {
+    return null;
+  }
+  return seconds;
+}
+
+export function resolvePerformanceAuditHangTimeoutMs(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS;
+  }
+  const rounded = Math.round(value);
+  const minimum = MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS * 1_000;
+  const maximum = MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS * 1_000;
+  return Math.max(minimum, Math.min(maximum, rounded));
+}
+
+type MonotonicClock = () => number;
+
+function monotonicNow(): number {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+export class PerformanceAuditInactivityWatchdog {
+  readonly hangTimeoutMs: number;
+  private lastStoredProgressMs: number;
+  private storedChecks = 0;
+
+  constructor(
+    hangTimeoutMs = DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+    private readonly clock: MonotonicClock = monotonicNow,
+  ) {
+    this.hangTimeoutMs = resolvePerformanceAuditHangTimeoutMs(hangTimeoutMs);
+    this.lastStoredProgressMs = this.clock();
+  }
+
+  get storedCheckCount(): number {
+    return this.storedChecks;
+  }
+
+  get deadlineMs(): number {
+    return this.lastStoredProgressMs + this.hangTimeoutMs;
+  }
+
+  remainingMs(): number {
+    return Math.max(0, this.deadlineMs - this.clock());
+  }
+
+  isExpired(): boolean {
+    return this.remainingMs() <= 0;
+  }
+
+  recordStoredCheck(): void {
+    this.lastStoredProgressMs = this.clock();
+    this.storedChecks += 1;
+  }
+}
+
+export function requestPerformanceAudit(options: RequestPerformanceAuditOptions = {}): string {
   if (auditState.status === 'queued' || auditState.status === 'running') {
     return auditState.sessionId ?? 'active';
   }
   const sessionId = makeSessionId();
+  const hangTimeoutMs = resolvePerformanceAuditHangTimeoutMs(options.hangTimeoutMs);
   emit({
     status: 'queued',
     sessionId,
     startedAt: new Date().toISOString(),
+    hangTimeoutMs,
+    storedCheckCount: 0,
+    lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
     cancelRequested: false,
     report: null,
@@ -176,6 +269,21 @@ export function updatePerformanceAuditProgress(
   emit({
     ...auditState,
     status: 'running',
+    progress: { completed, total, label },
+  });
+}
+
+export function markPerformanceAuditCheckStored(
+  completed: number,
+  total: number,
+  label: string,
+  storedAt: string,
+): void {
+  emit({
+    ...auditState,
+    status: 'running',
+    storedCheckCount: completed,
+    lastStoredCheckAt: storedAt,
     progress: { completed, total, label },
   });
 }

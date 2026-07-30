@@ -196,7 +196,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           phaseComplete: false,
         });
         await yieldToUi();
-        const resolution = await resolveFinalizedManifest(rolling);
+        const resolution = await resolveFinalizedManifest(rolling, {
+          verifiedDated: get().manifest,
+        });
         onProgress({
           phase: 'finalize',
           fileName: 'dates-index.json',
