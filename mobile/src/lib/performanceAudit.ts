@@ -548,14 +548,21 @@ export function summarizeResponsiveness(
   lagSamples: number[],
   frameSamples: number[],
 ): ResponsivenessMetrics {
+  const maximum = (values: number[]) => {
+    let result = 0;
+    for (const value of values) {
+      if (value > result) result = value;
+    }
+    return result;
+  };
   return {
     eventLoopSamples: lagSamples.length,
     eventLoopP95Ms: roundMetric(percentile(lagSamples, 0.95)),
-    maxEventLoopLagMs: roundMetric(Math.max(0, ...lagSamples)),
+    maxEventLoopLagMs: roundMetric(maximum(lagSamples)),
     stallsOver100Ms: lagSamples.filter((value) => value > 100).length,
     frameSamples: frameSamples.length,
     frameP95Ms: roundMetric(percentile(frameSamples, 0.95)),
-    maxFrameGapMs: roundMetric(Math.max(0, ...frameSamples)),
+    maxFrameGapMs: roundMetric(maximum(frameSamples)),
     framesOver50Ms: frameSamples.filter((value) => value > 50).length,
   };
 }

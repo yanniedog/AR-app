@@ -456,9 +456,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       } finally {
         // Clear refreshing before post-warm so the UI is interactive even while
         // awaiters (background fetch) still wait for warm/notify to finish.
-        set({ refreshing: false, payloadProgress: null });
+        set({
+          refreshing: false,
+          postRefreshWarming: deferWarm,
+          payloadProgress: null,
+        });
         if (manual) hapticRefreshComplete();
-        if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
+        try {
+          if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
+        } finally {
+          if (deferWarm) set({ postRefreshWarming: false });
+        }
       }
     },
   } satisfies Pick<AppState, 'refresh'>;

@@ -49,8 +49,9 @@ import { AppText, Button, Card, Row } from './ui';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
-const DATA_SETTLE_TIMEOUT_MS = 60_000;
+const DATA_SETTLE_TIMEOUT_MS = 30_000;
 const NETWORK_TIMEOUT_MS = 12_000;
+const AUDIT_SESSION_BUDGET_MS = 120_000;
 const ROUTE_DWELL_MS = 350;
 const RUNTIME_SAMPLE_MS = 1_250;
 const BENCHMARK_CHECKS = 5;
@@ -65,6 +66,27 @@ class AuditCancelledError extends Error {
   }
 }
 
+class AuditDeadlineError extends Error {
+  constructor() {
+    super(`Performance audit exceeded its ${AUDIT_SESSION_BUDGET_MS}ms safety limit`);
+    this.name = 'AuditDeadlineError';
+  }
+}
+
+class AuditDatasetChangedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AuditDatasetChangedError';
+  }
+}
+
+interface AuditDatasetRevision {
+  runDate: string | null;
+  manifestRunDate: string | null;
+  coreSha: string | null;
+  detailsSha: string | null;
+}
+
 function now(): number {
   return globalThis.performance?.now?.() ?? Date.now();
 }
@@ -77,10 +99,17 @@ function assertAuditActive(): void {
   if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
 }
 
-function rethrowAuditCancellation(error: unknown): void {
+function assertSessionActive(deadlineMs: number): void {
+  assertAuditActive();
+  if (now() >= deadlineMs) throw new AuditDeadlineError();
+}
+
+function rethrowAuditControl(error: unknown): void {
   if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
     throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
   }
+  if (error instanceof AuditDeadlineError) throw error;
+  if (error instanceof AuditDatasetChangedError) throw error;
 }
 
 function timeoutAfter<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -107,7 +136,7 @@ async function nextFrame(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 }
 
-async function settleUi(): Promise<void> {
+async function settleUiUnchecked(): Promise<void> {
   await timeoutAfter(
     new Promise<void>((resolve) => {
       InteractionManager.runAfterInteractions(() => resolve());
@@ -117,7 +146,100 @@ async function settleUi(): Promise<void> {
   ).catch(() => {});
   await nextFrame();
   await nextFrame();
+}
+
+async function settleUi(): Promise<void> {
+  await settleUiUnchecked();
   assertAuditActive();
+}
+
+function captureDatasetRevision(): AuditDatasetRevision {
+  const state = useStore.getState();
+  return {
+    runDate: state.core?.run_date ?? null,
+    manifestRunDate: state.manifest?.run_date ?? null,
+    coreSha: state.manifest?.files.core.sha256 ?? null,
+    detailsSha: state.manifest?.files.details.sha256 ?? null,
+  };
+}
+
+function datasetRevisionLabel(revision: AuditDatasetRevision): string {
+  return [
+    revision.runDate ?? 'no-core',
+    revision.manifestRunDate ?? 'no-manifest',
+    revision.coreSha ?? 'no-core-sha',
+    revision.detailsSha ?? 'no-details-sha',
+  ].join('|');
+}
+
+function assertDatasetRevision(expected: AuditDatasetRevision): void {
+  const state = useStore.getState();
+  if (state.refreshing || state.postRefreshWarming) {
+    throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
+  }
+  const actual = captureDatasetRevision();
+  if (datasetRevisionLabel(actual) !== datasetRevisionLabel(expected)) {
+    throw new AuditDatasetChangedError(
+      `Dataset revision changed during the performance audit: expected ${datasetRevisionLabel(expected)}, received ${datasetRevisionLabel(actual)}`,
+    );
+  }
+}
+
+async function waitForRefreshWork(deadlineMs: number): Promise<void> {
+  while (true) {
+    assertSessionActive(deadlineMs);
+    const state = useStore.getState();
+    if (!state.refreshing && !state.postRefreshWarming) {
+      // Require a short quiet window so the refresh finally block cannot move
+      // into post-warm between the check and the audit snapshot.
+      await delay(150);
+      assertSessionActive(deadlineMs);
+      const settled = useStore.getState();
+      if (!settled.refreshing && !settled.postRefreshWarming) return;
+    }
+    await delay(50);
+  }
+}
+
+async function waitForPath(
+  currentPath: () => string,
+  expected: string,
+  label: string,
+  options: {
+    sessionDeadlineMs?: number;
+    checkAuditState?: boolean;
+  } = {},
+): Promise<void> {
+  const routeDeadlineMs = now() + ROUTE_TIMEOUT_MS;
+  const deadlineMs = Math.min(
+    routeDeadlineMs,
+    options.sessionDeadlineMs ?? Number.POSITIVE_INFINITY,
+  );
+  while (!pathMatches(currentPath(), expected)) {
+    if (options.checkAuditState !== false) {
+      if (options.sessionDeadlineMs != null) {
+        assertSessionActive(options.sessionDeadlineMs);
+      } else {
+        assertAuditActive();
+      }
+    }
+    if (now() >= deadlineMs) {
+      if (options.sessionDeadlineMs != null && now() >= options.sessionDeadlineMs) {
+        throw new AuditDeadlineError();
+      }
+      throw new Error(`${label} did not reach ${expected}; current path is ${currentPath()}`);
+    }
+    await delay(25);
+  }
+}
+
+async function recoverAuditRoute(currentPath: () => string): Promise<void> {
+  if (pathMatches(currentPath(), AUDIT_HOME_PATH)) return;
+  router.replace(AUDIT_HOME_PATH);
+  await waitForPath(currentPath, AUDIT_HOME_PATH, 'Performance audit route recovery', {
+    checkAuditState: false,
+  });
+  await settleUiUnchecked();
 }
 
 function logAuditEvent(event: Record<string, unknown>): void {
@@ -214,12 +336,13 @@ async function collectEnvironment(
 
 async function runRuntimeCheck(
   monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('runtime responsiveness baseline');
   const started = now();
   const snapshot = monitor.snapshot();
   await delay(RUNTIME_SAMPLE_MS);
-  assertAuditActive();
+  assertSessionActive(sessionDeadlineMs);
   const metrics = monitor.metricsSince(snapshot);
   return {
     id: 'runtime-responsiveness',
@@ -232,7 +355,11 @@ async function runRuntimeCheck(
   };
 }
 
-async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
+async function runStorageCheck(
+  sessionId: string,
+  monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
+): Promise<AuditCheck> {
   const trace = captureAuditTrace('AsyncStorage write read remove');
   const key = `${STORAGE_KEY_PREFIX}${sessionId}`;
   const payload = JSON.stringify({
@@ -241,24 +368,27 @@ async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
     body: 's'.repeat(STORAGE_PAYLOAD_BYTES),
   });
   const started = now();
+  const responsiveAt = monitor.snapshot();
   const writeTimes: number[] = [];
   const readTimes: number[] = [];
   let error: string | undefined;
   let temporaryKeyDeleted = false;
   try {
     for (let index = 0; index < 3; index += 1) {
-      assertAuditActive();
+      assertSessionActive(sessionDeadlineMs);
       let at = now();
       await AsyncStorage.setItem(key, payload);
+      assertSessionActive(sessionDeadlineMs);
       writeTimes.push(now() - at);
       at = now();
       const restored = await AsyncStorage.getItem(key);
+      assertSessionActive(sessionDeadlineMs);
       readTimes.push(now() - at);
       if (restored !== payload) throw new Error('AsyncStorage readback did not match the test payload');
     }
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
   } catch (caught) {
-    rethrowAuditCancellation(caught);
+    rethrowAuditControl(caught);
     error = formatAuditError(caught);
   } finally {
     try {
@@ -268,8 +398,9 @@ async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
       error ??= formatAuditError(caught);
     }
   }
-  const maxWriteMs = Math.max(0, ...writeTimes);
-  const maxReadMs = Math.max(0, ...readTimes);
+  const maxWriteMs = writeTimes.reduce((maximum, value) => Math.max(maximum, value), 0);
+  const maxReadMs = readTimes.reduce((maximum, value) => Math.max(maximum, value), 0);
+  const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'async-storage',
     label: 'Preferences storage round-trip',
@@ -279,6 +410,7 @@ async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
       : worstStatus(
           scoreLatency(maxWriteMs, 50, 200),
           scoreLatency(maxReadMs, 50, 200),
+          responsivenessStatus(responsiveness),
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
@@ -293,23 +425,33 @@ async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
         readTimes.reduce((sum, value) => sum + value, 0) / Math.max(1, readTimes.length),
       ),
       temporaryKeyDeleted,
+      ...responsivenessRecord(responsiveness),
     },
     trace,
     ...(error ? { error } : {}),
   };
 }
 
-async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
+async function runFileSystemCheck(
+  sessionId: string,
+  monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
+): Promise<AuditCheck> {
   const trace = captureAuditTrace('filesystem write read remove');
   const started = now();
+  const responsiveAt = monitor.snapshot();
   if (!FileSystem.documentDirectory) {
+    const responsiveness = monitor.metricsSince(responsiveAt);
     return {
       id: 'file-system',
       label: 'Log filesystem round-trip',
       kind: 'storage',
       status: 'skipped',
       durationMs: roundMetric(now() - started),
-      metrics: { reason: 'documentDirectory unavailable' },
+      metrics: {
+        reason: 'documentDirectory unavailable',
+        ...responsivenessRecord(responsiveness),
+      },
       trace,
     };
   }
@@ -320,19 +462,21 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
   let error: string | undefined;
   let temporaryFileDeleted = false;
   try {
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
     let at = now();
     await FileSystem.writeAsStringAsync(uri, payload);
+    assertSessionActive(sessionDeadlineMs);
     writeMs = now() - at;
     at = now();
     const restored = await FileSystem.readAsStringAsync(uri);
+    assertSessionActive(sessionDeadlineMs);
     readMs = now() - at;
     if (restored.length !== payload.length) {
       throw new Error(`Filesystem readback length ${restored.length} did not match ${payload.length}`);
     }
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
   } catch (caught) {
-    rethrowAuditCancellation(caught);
+    rethrowAuditControl(caught);
     error = formatAuditError(caught);
   } finally {
     try {
@@ -342,6 +486,7 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
       error ??= formatAuditError(caught);
     }
   }
+  const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'file-system',
     label: 'Log filesystem round-trip',
@@ -351,6 +496,7 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
       : worstStatus(
           scoreLatency(writeMs, 80, 300),
           scoreLatency(readMs, 80, 300),
+          responsivenessStatus(responsiveness),
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
@@ -358,6 +504,7 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
       writeMs: roundMetric(writeMs),
       readMs: roundMetric(readMs),
       temporaryFileDeleted,
+      ...responsivenessRecord(responsiveness),
     },
     trace,
     ...(error ? { error } : {}),
@@ -366,6 +513,7 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
 
 async function runDataCheck(
   monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace('active payload serialize parse filter sort');
   const core = useStore.getState().core;
@@ -390,7 +538,7 @@ async function runDataCheck(
   let rateRows = 0;
   let error: string | undefined;
   try {
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
     let at = now();
     const serialized = JSON.stringify(core);
     stringifyMs = now() - at;
@@ -409,9 +557,9 @@ async function runDataCheck(
     }
     traversalMs = now() - at;
     await delay(0);
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
   } catch (caught) {
-    rethrowAuditCancellation(caught);
+    rethrowAuditControl(caught);
     error = formatAuditError(caught);
   }
   const responsiveness = monitor.metricsSince(responsiveAt);
@@ -439,11 +587,20 @@ async function runDataCheck(
   };
 }
 
-async function runNetworkCheck(): Promise<AuditCheck> {
+async function runNetworkCheck(
+  monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
+): Promise<AuditCheck> {
   const trace = captureAuditTrace('manifest network request and JSON parse');
   const started = now();
+  const responsiveAt = monitor.snapshot();
+  assertSessionActive(sessionDeadlineMs);
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), NETWORK_TIMEOUT_MS);
+  const timeoutMs = Math.max(
+    1,
+    Math.min(NETWORK_TIMEOUT_MS, Math.floor(sessionDeadlineMs - now())),
+  );
+  const timer = setTimeout(() => abort.abort(), timeoutMs);
   const cancelTimer = setInterval(() => {
     if (getPerformanceAuditState().cancelRequested) abort.abort();
   }, 50);
@@ -454,7 +611,7 @@ async function runNetworkCheck(): Promise<AuditCheck> {
   let responseChars = 0;
   let error: string | undefined;
   try {
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
     const response = await fetch(MANIFEST_URL, {
       method: 'GET',
       headers: { Accept: 'application/json' },
@@ -467,24 +624,31 @@ async function runNetworkCheck(): Promise<AuditCheck> {
     const body = await response.text();
     bodyMs = now() - bodyStarted;
     responseChars = body.length;
+    if (!response.ok) throw new Error(`Manifest request returned HTTP ${response.status}`);
     const parseStarted = now();
     JSON.parse(body);
     parseMs = now() - parseStarted;
-    if (!response.ok) throw new Error(`Manifest request returned HTTP ${response.status}`);
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
   } catch (caught) {
     if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
+    if (now() >= sessionDeadlineMs) throw new AuditDeadlineError();
     error = formatAuditError(caught);
   } finally {
     clearTimeout(timer);
     clearInterval(cancelTimer);
   }
   const durationMs = now() - started;
+  const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'manifest-network',
     label: 'Live manifest network round-trip',
     kind: 'network',
-    status: error ? 'fail' : scoreLatency(durationMs, 1_500, 5_000),
+    status: error
+      ? 'fail'
+      : worstStatus(
+          scoreLatency(durationMs, 1_500, 5_000),
+          responsivenessStatus(responsiveness),
+        ),
     durationMs: roundMetric(durationMs),
     metrics: {
       statusCode,
@@ -492,18 +656,49 @@ async function runNetworkCheck(): Promise<AuditCheck> {
       headersMs: roundMetric(headersMs),
       bodyMs: roundMetric(bodyMs),
       parseMs: roundMetric(parseMs),
-      timeoutMs: NETWORK_TIMEOUT_MS,
+      timeoutMs,
+      ...responsivenessRecord(responsiveness),
     },
     trace,
     ...(error ? { error } : {}),
   };
 }
 
-function routeErrorMessages(logCursor: number): string[] {
-  return debugLog
+const JOURNEY_ERROR_TAGS = new Set([
+  'app',
+  'global',
+  'store',
+  'payload',
+  'bankInsights',
+  'historySelectors',
+  'historyPayload',
+  'BankTrendChart',
+  'ProductHistoryChart',
+  'RateHeatCalendar',
+  'LenderRaceChart',
+  'SwitcherEdgeChart',
+  'MarketSeismograph',
+]);
+
+function routeErrorMessages(logCursor: number): {
+  journey: string[];
+  incidental: string[];
+} {
+  const messages = debugLog
     .getEntriesAfter(logCursor)
     .filter((entry) => entry.level === 'error' && entry.tag !== PERFORMANCE_AUDIT_LOG_TAG)
-    .map((entry) => `${entry.tag}: ${entry.message}`);
+    .map((entry) => ({
+      tag: entry.tag,
+      message: `${entry.tag}: ${entry.message}`,
+    }));
+  return {
+    journey: messages
+      .filter(({ tag }) => JOURNEY_ERROR_TAGS.has(tag))
+      .map(({ message }) => message),
+    incidental: messages
+      .filter(({ tag }) => !JOURNEY_ERROR_TAGS.has(tag))
+      .map(({ message }) => message),
+  };
 }
 
 type JourneyDataState = 'pending' | 'ready' | 'failed';
@@ -512,6 +707,10 @@ interface JourneyDataRequirement {
   label: string;
   state: () => JourneyDataState;
   error: () => string | null;
+}
+
+function detailsPayloadMatches(state: ReturnType<typeof useStore.getState>): boolean {
+  return !!state.core && state.details?.run_date === state.core.run_date;
 }
 
 function journeyDataRequirements(
@@ -542,18 +741,21 @@ function journeyDataRequirements(
   if (initial.detailsLoading) {
     add(
       'Product details',
-      (state) => !state.detailsLoading,
-      () => null,
+      (state) => !state.detailsLoading && detailsPayloadMatches(state),
+      (state) =>
+        !state.detailsLoading && !detailsPayloadMatches(state)
+          ? 'Product details finished without a payload matching the active rates date'
+          : null,
     );
   }
 
   if (journey.id === 'search') {
     add(
       'Product details',
-      (state) => !!state.details && !state.detailsLoading,
+      (state) => !state.detailsLoading && detailsPayloadMatches(state),
       (state) =>
-        !state.detailsLoading && !state.details
-          ? 'Product details did not load'
+        !state.detailsLoading && !detailsPayloadMatches(state)
+          ? 'Product details did not load for the active rates date'
           : null,
     );
     if (prefs.rateIntelligencePro && prefs.enableDeepSearch && manifest?.files.search_index) {
@@ -620,6 +822,7 @@ function journeyDataRequirements(
 async function waitForJourneyData(
   journey: AuditJourney,
   logCursor: number,
+  sessionDeadlineMs: number,
 ): Promise<{
   labels: string[];
   durationMs: number;
@@ -628,14 +831,18 @@ async function waitForJourneyData(
   // loading state. The subsequent poll keeps that cold work inside this
   // journey instead of letting it spill into later checks.
   await delay(100);
-  assertAuditActive();
+  assertSessionActive(sessionDeadlineMs);
   const requirements = journeyDataRequirements(journey, logCursor);
   const labels = [...new Set(requirements.map(({ label }) => label))];
   if (requirements.length === 0) return { labels, durationMs: 0 };
 
   const started = now();
+  const settleDeadlineMs = Math.min(
+    sessionDeadlineMs,
+    started + DATA_SETTLE_TIMEOUT_MS,
+  );
   while (true) {
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
     const failed = requirements.find((requirement) => requirement.state() === 'failed');
     if (failed) {
       throw new Error(`${failed.label} failed to settle: ${failed.error() ?? 'unknown error'}`);
@@ -643,7 +850,8 @@ async function waitForJourneyData(
     if (requirements.every((requirement) => requirement.state() === 'ready')) {
       return { labels, durationMs: now() - started };
     }
-    if (now() - started > DATA_SETTLE_TIMEOUT_MS) {
+    if (now() >= settleDeadlineMs) {
+      if (now() >= sessionDeadlineMs) throw new AuditDeadlineError();
       const pending = requirements
         .filter((requirement) => requirement.state() === 'pending')
         .map(({ label }) => label);
@@ -659,6 +867,8 @@ async function runJourney(
   journey: AuditJourney,
   currentPath: () => string,
   monitor: ResponsivenessMonitor,
+  sessionDeadlineMs: number,
+  datasetRevision: AuditDatasetRevision,
 ): Promise<AuditCheck> {
   const trace = captureAuditTrace(`route journey ${journey.id}`);
   const started = now();
@@ -686,25 +896,20 @@ async function runJourney(
   let backChangedPath = false;
   let routeError: string | undefined;
 
-  const waitForPath = async (expected: string, label: string): Promise<void> => {
-    const waitStarted = now();
-    while (!pathMatches(currentPath(), expected)) {
-      assertAuditActive();
-      if (now() - waitStarted > ROUTE_TIMEOUT_MS) {
-        throw new Error(
-          `${label} did not reach ${expected}; current path is ${currentPath()}`,
-        );
-      }
-      await delay(25);
-    }
-  };
-
   try {
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
+    assertDatasetRevision(datasetRevision);
     let at = now();
     router.push(journey.href);
-    await waitForPath(journey.expectedPath, `${journey.label} forward navigation`);
+    await waitForPath(
+      currentPath,
+      journey.expectedPath,
+      `${journey.label} forward navigation`,
+      { sessionDeadlineMs },
+    );
     await settleUi();
+    assertSessionActive(sessionDeadlineMs);
+    assertDatasetRevision(datasetRevision);
     forwardMs = now() - at;
     if (
       journey.expectedSection &&
@@ -714,14 +919,20 @@ async function runJourney(
         `${journey.label} rendered ${useStore.getState().activeSection} instead of ${journey.expectedSection}`,
       );
     }
-    const background = await waitForJourneyData(journey, logCursor);
+    const background = await waitForJourneyData(
+      journey,
+      logCursor,
+      sessionDeadlineMs,
+    );
     backgroundSettleMs = background.durationMs;
     backgroundTasks = background.labels;
+    assertDatasetRevision(datasetRevision);
     // Keep the destination mounted long enough to expose deferred work,
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
     await delay(ROUTE_DWELL_MS);
-    assertAuditActive();
+    assertSessionActive(sessionDeadlineMs);
+    assertDatasetRevision(datasetRevision);
 
     const pathBeforeBack = currentPath();
     at = now();
@@ -730,6 +941,8 @@ async function runJourney(
     // root-stack audit screen. Measure the real back transition first, then
     // restore the runner explicitly instead of charging an 8s path timeout.
     await settleUi();
+    assertSessionActive(sessionDeadlineMs);
+    assertDatasetRevision(datasetRevision);
     backMs = now() - at;
     backDestination = currentPath();
     backReturnedToAudit = pathMatches(backDestination, AUDIT_HOME_PATH);
@@ -738,24 +951,35 @@ async function runJourney(
     if (!backReturnedToAudit) {
       const fallbackStarted = now();
       router.replace(AUDIT_HOME_PATH);
-      await waitForPath(AUDIT_HOME_PATH, `${journey.label} return fallback`);
+      await waitForPath(
+        currentPath,
+        AUDIT_HOME_PATH,
+        `${journey.label} return fallback`,
+        { sessionDeadlineMs },
+      );
       await settleUi();
+      assertSessionActive(sessionDeadlineMs);
       returnFallbackMs = now() - fallbackStarted;
     }
   } catch (caught) {
+    rethrowAuditControl(caught);
     routeError = formatAuditError(caught);
-    if (!(caught instanceof AuditCancelledError) && !pathMatches(currentPath(), AUDIT_HOME_PATH)) {
-      router.replace(AUDIT_HOME_PATH);
-      await delay(100);
+    if (!pathMatches(currentPath(), AUDIT_HOME_PATH)) {
+      try {
+        await recoverAuditRoute(currentPath);
+      } catch (recoveryCaught) {
+        throw new Error(
+          `${routeError}\nRoute recovery failed: ${formatAuditError(recoveryCaught)}`,
+        );
+      }
     }
-    if (caught instanceof AuditCancelledError) throw caught;
   }
 
   const responsiveness = monitor.metricsSince(responsivenessAt);
   const errors = routeErrorMessages(logCursor);
   const backContractStatus =
     journey.navigationKind === 'stack' && !backReturnedToAudit ? 'warn' : 'pass';
-  const status = routeError || errors.length
+  const status = routeError || errors.journey.length
     ? 'fail'
     : worstStatus(
         scoreLatency(forwardMs, 900, 2_500),
@@ -781,8 +1005,10 @@ async function runJourney(
       backChangedPath,
       backReturnedToAudit,
       returnFallbackMs: roundMetric(returnFallbackMs),
-      runtimeErrors: errors.length,
-      runtimeErrorMessages: errors.join(' | ') || null,
+      runtimeErrors: errors.journey.length,
+      runtimeErrorMessages: errors.journey.join(' | ') || null,
+      incidentalRuntimeErrors: errors.incidental.length,
+      incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
       ...responsivenessRecord(responsiveness),
     },
     trace,
@@ -790,7 +1016,7 @@ async function runJourney(
   };
 }
 
-function usePerformanceAuditState() {
+export function usePerformanceAuditState() {
   return useSyncExternalStore(
     subscribePerformanceAudit,
     getPerformanceAuditState,
@@ -816,16 +1042,17 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
-      const initialStore = useStore.getState();
-      const originalActiveSection = initialStore.activeSection;
+      const sessionDeadlineMs = now() + AUDIT_SESSION_BUDGET_MS;
+      const originalStore = useStore.getState();
+      const originalActiveSection = originalStore.activeSection;
       const originalProfileFilters = JSON.parse(
-        JSON.stringify(initialStore.prefs.profileFilters),
-      ) as typeof initialStore.prefs.profileFilters;
-      const journeys = buildPerformanceAuditJourneys(
-        initialStore.core,
-        initialStore.prefs.interests,
+        JSON.stringify(originalStore.prefs.profileFilters),
+      ) as typeof originalStore.prefs.profileFilters;
+      let journeys = buildPerformanceAuditJourneys(
+        originalStore.core,
+        originalStore.prefs.interests,
       );
-      const total = BENCHMARK_CHECKS + journeys.length;
+      let total = BENCHMARK_CHECKS + journeys.length;
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
@@ -839,28 +1066,52 @@ export function PerformanceAuditRunner() {
 
       markPerformanceAuditRunning(total);
       monitor.start();
-      logAuditEvent({
-        kind: 'start',
-        schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-        sessionId,
-        startedAt,
-        plannedChecks: total,
-        trace: captureAuditTrace('performance audit start'),
-      });
 
       try {
+        updatePerformanceAuditProgress(
+          completed,
+          total,
+          'Waiting for active payload work to finish',
+        );
+        await waitForRefreshWork(sessionDeadlineMs);
+        const initialStore = useStore.getState();
+        journeys = buildPerformanceAuditJourneys(
+          initialStore.core,
+          initialStore.prefs.interests,
+        );
+        total = BENCHMARK_CHECKS + journeys.length;
+        const datasetRevision = captureDatasetRevision();
+        assertDatasetRevision(datasetRevision);
+        updatePerformanceAuditProgress(
+          completed,
+          total,
+          'Capturing device and app state',
+        );
+        logAuditEvent({
+          kind: 'start',
+          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+          sessionId,
+          startedAt,
+          plannedChecks: total,
+          sessionBudgetMs: AUDIT_SESSION_BUDGET_MS,
+          datasetRevision,
+          trace: captureAuditTrace('performance audit start'),
+        });
+
         const environment = await collectEnvironment(
           dimensions.width,
           dimensions.height,
           dimensions.fontScale,
         );
-        assertAuditActive();
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
-        record(await runRuntimeCheck(monitor));
+        record(await runRuntimeCheck(monitor, sessionDeadlineMs));
 
         for (const journey of journeys) {
-          assertAuditActive();
+          assertSessionActive(sessionDeadlineMs);
+          assertDatasetRevision(datasetRevision);
           updatePerformanceAuditProgress(
             completed,
             total,
@@ -873,21 +1124,39 @@ export function PerformanceAuditRunner() {
             label: journey.label,
             trace: captureAuditTrace(`journey start ${journey.id}`),
           });
-          record(await runJourney(journey, () => pathnameRef.current, monitor));
+          record(
+            await runJourney(
+              journey,
+              () => pathnameRef.current,
+              monitor,
+              sessionDeadlineMs,
+              datasetRevision,
+            ),
+          );
         }
 
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing preferences storage');
-        record(await runStorageCheck(sessionId));
+        record(await runStorageCheck(sessionId, monitor, sessionDeadlineMs));
 
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing log file storage');
-        record(await runFileSystemCheck(sessionId));
+        record(await runFileSystemCheck(sessionId, monitor, sessionDeadlineMs));
 
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Processing the active rates payload');
         await nextFrame();
-        record(await runDataCheck(monitor));
+        record(await runDataCheck(monitor, sessionDeadlineMs));
 
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
-        record(await runNetworkCheck());
+        record(await runNetworkCheck(monitor, sessionDeadlineMs));
+        assertSessionActive(sessionDeadlineMs);
+        assertDatasetRevision(datasetRevision);
 
         const finishedAt = new Date().toISOString();
         const report: PerformanceAuditReport = {
@@ -902,6 +1171,7 @@ export function PerformanceAuditRunner() {
           limitations: [
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'The journey exercises every steady-state app destination plus forward/back navigation; it does not submit forms, change preferences, or mutate favourites.',
+            `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops after ${AUDIT_SESSION_BUDGET_MS}ms if it cannot finish safely.`,
             'No report is uploaded automatically. The complete structured report and tracebacks are appended to the local debug log for explicit export.',
           ],
         };
@@ -909,9 +1179,11 @@ export function PerformanceAuditRunner() {
         await debugLog.flushToFile();
         completePerformanceAudit(report);
       } catch (caught) {
-        if (!pathMatches(pathnameRef.current, AUDIT_HOME_PATH)) {
-          router.replace(AUDIT_HOME_PATH);
-          await delay(100);
+        let recoveryError: string | null = null;
+        try {
+          await recoverAuditRoute(() => pathnameRef.current);
+        } catch (recoveryCaught) {
+          recoveryError = formatAuditError(recoveryCaught);
         }
         if (caught instanceof AuditCancelledError) {
           logAuditEvent({
@@ -920,11 +1192,15 @@ export function PerformanceAuditRunner() {
             completed,
             total,
             trace: formatAuditError(caught),
+            recoveryError,
           });
           await debugLog.flushToFile();
           markPerformanceAuditCancelled();
         } else {
-          const error = formatAuditError(caught);
+          const error = [
+            formatAuditError(caught),
+            ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
+          ].join('\n');
           debugLog.error(
             PERFORMANCE_AUDIT_LOG_TAG,
             JSON.stringify({ kind: 'fatal', sessionId, error }),

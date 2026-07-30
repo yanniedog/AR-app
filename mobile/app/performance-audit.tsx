@@ -112,9 +112,10 @@ export default function PerformanceAuditScreen() {
               Ready for automated navigation?
             </AppText>
             <AppText variant="tiny" color="textMuted">
-              For about a minute, the app will open every steady-state screen and go back
-              after each one. Do not interact while it runs. You can cancel at any time. It
-              does not change favourites, profile settings, or subscriptions.
+              Usually in about a minute, the app will open every steady-state screen and go
+              back after each one. It stops after two minutes if work cannot finish safely.
+              Do not interact while it runs. You can cancel at any time. It does not change
+              favourites, profile settings, or subscriptions.
             </AppText>
             <Row gap={8}>
               <Button

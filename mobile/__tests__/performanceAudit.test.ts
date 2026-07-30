@@ -188,6 +188,16 @@ describe('performance audit scoring', () => {
     });
   });
 
+  it('summarizes a long responsiveness session without spreading the sample array', () => {
+    const lagSamples = Array.from({ length: 200_000 }, (_, index) => index);
+    expect(summarizeResponsiveness(lagSamples, [])).toMatchObject({
+      eventLoopSamples: 200_000,
+      maxEventLoopLagMs: 199_999,
+      frameSamples: 0,
+      maxFrameGapMs: 0,
+    });
+  });
+
   it('promotes the worst latency and check status', () => {
     expect(scoreLatency(100, 100, 300)).toBe('pass');
     expect(scoreLatency(101, 100, 300)).toBe('warn');
