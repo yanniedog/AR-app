@@ -48,7 +48,7 @@ function mergeCheckContexts(existingContexts, requiredChecks) {
 
 /** Map GET branch protection to PUT input, merging required check contexts. */
 function buildProtectionPayload(existing, mergedContexts) {
-  const strict = existing?.required_status_checks?.strict ?? true;
+  const strict = true;
   const enforceAdmins =
     typeof existing?.enforce_admins?.enabled === 'boolean' ? existing.enforce_admins.enabled : true;
 
