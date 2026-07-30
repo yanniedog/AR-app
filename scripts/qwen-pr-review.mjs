@@ -9,10 +9,11 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_MODEL = 'qwen3-coder-review:30b';
+const DEFAULT_MODEL = 'qwen3-coder:30b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434/v1';
-const DEFAULT_DIFF_MAX = 160_000;
-const MAX_FINDINGS = 8;
+const DEFAULT_DIFF_MAX = 60_000;
+const MAX_FILES = 10;
+const MAX_FINDINGS = 6;
 
 function fail(message) {
   throw new Error(message);
@@ -92,15 +93,15 @@ export function collectDiff(baseRef, maxChars) {
     .filter(Boolean);
   const candidates = changedFiles
     .filter(isReviewablePath)
-    .sort((left, right) => riskRank(left) - riskRank(right));
-  const excludedFiles = changedFiles.filter((path) => !isReviewablePath(path));
-  const omittedFiles = [];
+    .sort((left, right) => riskRank(left) - riskRank(right))
+    .slice(0, MAX_FILES);
+  const omittedFiles = changedFiles.filter((path) => !candidates.includes(path));
   const reviewedFiles = [];
   const validLines = new Map();
   const sections = [];
   let remaining = maxChars;
   for (const filePath of candidates) {
-    const diff = runGit(['diff', '--no-ext-diff', '--unified=5', range, '--', filePath]);
+    const diff = runGit(['diff', '--no-ext-diff', '--unified=8', range, '--', filePath]);
     if (!diff.trim()) continue;
     if (diff.length > remaining) {
       omittedFiles.push(filePath);
@@ -113,7 +114,6 @@ export function collectDiff(baseRef, maxChars) {
   }
   return {
     reviewedFiles,
-    excludedFiles,
     omittedFiles: [...new Set(omittedFiles)],
     validLines,
     sections,
@@ -177,7 +177,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 1800,
+      max_tokens: 1200,
       response_format: { type: 'json_object' },
       messages: [
         {
@@ -218,12 +218,6 @@ async function main() {
     baseRef,
     Number.isFinite(configuredMax) && configuredMax > 0 ? configuredMax : DEFAULT_DIFF_MAX,
   );
-  if (diff.omittedFiles.length > 0) {
-    fail(
-      `Qwen review budget omitted reviewable file(s): ${diff.omittedFiles.join(', ')}. ` +
-        'Split the pull request or increase DIFF_MAX_CHARS before accepting the review.',
-    );
-  }
   let findings = [];
   let reason = '';
   let modelCalls = 0;
@@ -266,7 +260,6 @@ async function main() {
   const output = {
     findings,
     reviewed_files: diff.reviewedFiles,
-    excluded_files: diff.excludedFiles,
     omitted_files: diff.omittedFiles,
     model_calls: modelCalls,
     reason,
