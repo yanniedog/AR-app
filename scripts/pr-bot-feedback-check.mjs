@@ -211,4 +211,9 @@ function main() {
   process.exit(result.violations.length ? 1 : 0);
 }
 
-main();
+try {
+  main();
+} catch (error) {
+  console.error(`pr-bot-feedback-check: GitHub API check could not complete: ${error.message}`);
+  process.exit(2);
+}

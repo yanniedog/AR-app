@@ -112,6 +112,10 @@ assert.deepEqual(
   }),
   {
     values: ["mobile-ci", "bot-feedback-gate"],
+    requirements: [
+      { context: "mobile-ci", appId: null },
+      { context: "bot-feedback-gate", appId: null },
+    ],
     source: "live branch protection + rules",
   },
 );
@@ -174,7 +178,14 @@ assert.deepEqual(
     rulesOk: true,
     rules: [],
   }),
-  { values: [], source: "live rules" },
+  {
+    values: ["mobile-ci", "bot-feedback-gate"],
+    requirements: [
+      { context: "mobile-ci", appId: null },
+      { context: "bot-feedback-gate", appId: null },
+    ],
+    source: "partial live rules + configured policy fallback",
+  },
 );
 assert.deepEqual(
   combineRequiredCheckState({
@@ -185,8 +196,38 @@ assert.deepEqual(
   }),
   {
     values: ["mobile-ci", "bot-feedback-gate"],
+    requirements: [
+      { context: "mobile-ci", appId: null },
+      { context: "bot-feedback-gate", appId: null },
+    ],
     source: "configured policy fallback; live policy APIs unavailable",
   },
+);
+assert.equal(
+  evaluateRequiredCheckState({
+    requiredChecks: [{ context: "mobile-ci", appId: 100 }],
+    headCheckRuns: [{
+      id: 20,
+      name: "mobile-ci",
+      app: { id: 200 },
+      conclusion: "success",
+      completed_at: "2026-01-01T00:00:00Z",
+    }],
+  }).pending,
+  true,
+);
+assert.equal(
+  evaluateRequiredCheckState({
+    requiredChecks: [{ context: "mobile-ci", appId: 100 }],
+    headCheckRuns: [{
+      id: 21,
+      name: "mobile-ci",
+      app: { id: 100 },
+      conclusion: "success",
+      completed_at: "2026-01-01T00:00:00Z",
+    }],
+  }).pending,
+  false,
 );
 const dashboardFixture = renderDashboard({
   repo: "owner/repo",
@@ -404,6 +445,9 @@ assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
 assert.doesNotMatch(feedbackWorkflow, /^concurrency:/m);
 assert.match(feedbackWorkflow, /timeout-minutes:\s*5/);
 assert.match(feedbackWorkflow, /PR_STATE=\$\(gh api/);
+assert.match(feedbackWorkflow, /types:\s*\[created, edited, deleted\]/);
+assert.match(feedbackWorkflow, /for attempt in 1 2 3 4/);
+assert.match(feedbackWorkflow, /sleep 5/);
 assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
 assert.doesNotMatch(feedbackWorkflow, /pull_request\.head\.sha/);
 assert.doesNotMatch(feedbackWorkflow, /seq 1 40|sleep 60|40 minutes/);
