@@ -24,6 +24,30 @@ import {
   workflowNeedsStateChange,
 } from "./review-bot-control.mjs";
 
+function indentedBlock(source, heading) {
+  const lines = source.split(/\r?\n/);
+  const start = lines.indexOf(heading);
+  assert.notEqual(start, -1, `missing block heading: ${heading}`);
+  const indentation = heading.match(/^\s*/)[0].length;
+  const block = [lines[start]];
+  for (let index = start + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() && line.match(/^\s*/)[0].length <= indentation) {
+      break;
+    }
+    block.push(line);
+  }
+  return block.join("\n");
+}
+
+function markedBlock(source, startMarker, endMarker) {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(start, -1, `missing start marker: ${startMarker}`);
+  assert.notEqual(end, -1, `missing end marker: ${endMarker}`);
+  return source.slice(start, end + endMarker.length);
+}
+
 const sha = "0123456789abcdef0123456789abcdef01234567";
 const qwenSuccess = [
   "<!-- qwen-code-review -->",
@@ -313,6 +337,25 @@ assert.match(
   coderabbitRetryWorkflow,
   /--paginate --slurp \|\s*\n\s*jq --arg after/,
 );
+assert.doesNotMatch(coderabbitRetryWorkflow, /^concurrency:/m);
+const coderabbitRetryJob = indentedBlock(
+  coderabbitRetryWorkflow,
+  "  retry-after-rate-limit:",
+);
+assert.match(coderabbitRetryJob, /^    concurrency:/m);
+assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
+assert.match(
+  coderabbitRetryJob,
+  /read_pr_state\(\)[\s\S]*for attempt in 1 2 3[\s\S]*gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"/,
+);
+const transientStatePoll = markedBlock(
+  coderabbitRetryJob,
+  "# transient-safe-pr-state-poll:start",
+  "# transient-safe-pr-state-poll:end",
+);
+assert.match(transientStatePoll, /if STATE="\$\(read_pr_state\)"/);
+assert.match(transientStatePoll, /preserve the active waiter/);
+assert.doesNotMatch(transientStatePoll, /exit 1/);
 assert.doesNotMatch(
   branchProtection.match(/const REQUIRED_CHECKS = \[[\s\S]*?\];/)?.[0] || "",
   /qwen-code-review|bot-presence-gate/,

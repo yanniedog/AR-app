@@ -23,15 +23,6 @@ permissions:
   pull-requests: write
   issues: write
 
-# Do not cancel-in-progress: ordinary PR comments also fire issue_comment and
-# would kill a sleeping rate-limit waiter before the replacement job's `if`
-# filter skips. Keep the sleeper; duplicate rate-limit runs self-skip via the
-# "already armed / already reviewed" checks below.
-concurrency:
-  group: pr-coderabbit-rate-limit-retry-${{ github.event.issue.number || inputs.pr_number || github.run_id }}
-  cancel-in-progress: false
-  queue: max
-
 jobs:
   retry-after-rate-limit:
     if: >-
@@ -48,6 +39,11 @@ jobs:
           || contains(github.event.comment.body, 'reached your PR review limit')
         )
       )
+    # Apply concurrency only after the job filter. Ordinary PR comments now
+    # skip immediately instead of queuing behind a genuine quota waiter.
+    concurrency:
+      group: pr-coderabbit-rate-limit-retry-${{ github.event.issue.number || inputs.pr_number || github.run_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 150
     steps:
@@ -74,7 +70,23 @@ jobs:
             exit 0
           fi
 
-          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
+          read_pr_state() {
+            local state
+            for attempt in 1 2 3; do
+              if state="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null)" &&
+                [ -n "$state" ]; then
+                printf '%s' "$state"
+                return 0
+              fi
+              sleep $(( attempt * 2 ))
+            done
+            return 1
+          }
+
+          if ! STATE="$(read_pr_state)"; then
+            echo "Could not read PR #$PR state after three attempts"
+            exit 1
+          fi
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR not open ($STATE); skip"
             exit 0
@@ -174,13 +186,24 @@ jobs:
               STEP=$(( LEFT > 300 ? 300 : LEFT ))
               sleep "$STEP"
               LEFT=$(( LEFT - STEP ))
+              # transient-safe-pr-state-poll:start
+              if STATE="$(read_pr_state)" && [ "${STATE}" != "OPEN" ]; then
+                echo "PR #$PR closed during wait; skip"
+                exit 0
+              elif [ -z "${STATE:-}" ]; then
+                echo "Could not read PR #$PR state; preserve the active waiter"
+              fi
+              # transient-safe-pr-state-poll:end
               if [ "$LEFT" -gt 0 ]; then
                 echo "… ${LEFT}s remaining"
               fi
             done
           fi
 
-          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
+          if ! STATE="$(read_pr_state)"; then
+            echo "Could not verify PR #$PR state before retry"
+            exit 1
+          fi
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR closed during wait; skip"
             exit 0
