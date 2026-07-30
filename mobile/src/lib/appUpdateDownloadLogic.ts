@@ -37,6 +37,11 @@ export function apkDestinationPath(documentsDir: string, buildNumber: string): s
   return `${base}app-update-${buildNumber}.apk`;
 }
 
+/** Convert a native absolute downloader path to the URI form Expo FileSystem expects. */
+export function toFileUri(path: string): string {
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(path) ? path : `file://${path}`;
+}
+
 export function isApkDownloadForBuild(
   snapshot: ApkDownloadSnapshot,
   buildNumber: string,

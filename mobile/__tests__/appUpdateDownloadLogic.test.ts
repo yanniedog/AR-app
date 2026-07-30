@@ -5,6 +5,7 @@ import {
   downloadPercent,
   isCachedApkReady,
   shouldEnsureBackgroundDownload,
+  toFileUri,
   updateBannerCopy,
 } from '../src/lib/appUpdateDownloadLogic';
 
@@ -13,6 +14,18 @@ describe('appUpdateDownloadLogic', () => {
     expect(apkDownloadTaskId('42')).toBe('apk-update-42');
     expect(apkDestinationPath('file:///docs/', '42')).toBe('file:///docs/app-update-42.apk');
     expect(apkDestinationPath('file:///docs', '42')).toBe('file:///docs/app-update-42.apk');
+  });
+
+  it('normalizes native downloader paths for Expo FileSystem', () => {
+    expect(toFileUri('/data/user/0/app/files/app-update-42.apk')).toBe(
+      'file:///data/user/0/app/files/app-update-42.apk',
+    );
+    expect(toFileUri('file:///docs/app-update-42.apk')).toBe(
+      'file:///docs/app-update-42.apk',
+    );
+    expect(toFileUri('content://downloads/app-update-42.apk')).toBe(
+      'content://downloads/app-update-42.apk',
+    );
   });
 
   it('treats a verified local file as ready', () => {

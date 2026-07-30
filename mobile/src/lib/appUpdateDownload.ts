@@ -18,6 +18,7 @@ import {
   downloadPercent,
   isCachedApkReady,
   shouldEnsureBackgroundDownload,
+  toFileUri,
   type ApkDownloadSnapshot,
 } from './appUpdateDownloadLogic';
 import { preferImmutableApkDownloadUrl, type ApkManifest } from './appUpdateLogic';
@@ -37,6 +38,7 @@ let configReady = false;
 let appStateHooked = false;
 let appStateSub: { remove: () => void } | null = null;
 let pendingPromptManifest: ApkManifest | null = null;
+const explicitUpgradeWaiters = new Map<string, number>();
 const listeners = new Set<(s: ApkDownloadSnapshot) => void>();
 
 function hookAppStatePrompt(): void {
@@ -112,7 +114,7 @@ async function hydrate(): Promise<void> {
 async function fileExists(uri: string | null | undefined): Promise<boolean> {
   if (!uri) return false;
   try {
-    const info = await FileSystem.getInfoAsync(uri);
+    const info = await FileSystem.getInfoAsync(toFileUri(uri));
     return Boolean(info.exists);
   } catch {
     return false;
@@ -193,7 +195,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       void (async () => {
         try {
           await completeHandler(task.id);
-          const localUri = location?.startsWith('file://') ? location : `file://${location}`;
+          const localUri = toFileUri(location);
           await verifyDownloadedApk(localUri, manifest);
           await persist({
             phase: 'ready',
@@ -283,14 +285,15 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
       apkDestinationPath(directories.documents, manifest.build_number);
     if (await fileExists(dest)) {
       try {
-        await verifyDownloadedApk(dest, manifest);
+        const localUri = toFileUri(dest);
+        await verifyDownloadedApk(localUri, manifest);
         await persist({
           phase: 'ready',
           buildNumber: manifest.build_number,
           version: manifest.version,
           downloadUrl: manifest.download_url,
           sha256: manifest.sha256 ?? null,
-          localUri: dest.startsWith('file://') ? dest : `file://${dest}`,
+          localUri,
           bytesWritten: match.bytesDownloaded,
           totalBytes: match.bytesTotal || manifest.bytes || null,
           wifiOnly: taskWifiOnly,
@@ -356,7 +359,7 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
   const destination = apkDestinationPath(directories.documents, manifest.build_number);
   await clearStaleFiles(manifest.build_number);
   try {
-    await FileSystem.deleteAsync(destination, { idempotent: true });
+    await FileSystem.deleteAsync(toFileUri(destination), { idempotent: true });
   } catch {
     // ignore
   }
@@ -459,14 +462,15 @@ export async function ensureApkBackgroundDownload(
     const dest = apkDestinationPath(directories.documents, manifest.build_number);
     if (await fileExists(dest)) {
       try {
-        await verifyDownloadedApk(dest, manifest);
+        const localUri = toFileUri(dest);
+        await verifyDownloadedApk(localUri, manifest);
         await persist({
           phase: 'ready',
           buildNumber: manifest.build_number,
           version: manifest.version,
           downloadUrl: manifest.download_url,
           sha256: manifest.sha256 ?? null,
-          localUri: dest.startsWith('file://') ? dest : `file://${dest}`,
+          localUri,
           bytesWritten: snapshot.bytesWritten,
           totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
           wifiOnly: snapshot.wifiOnly,
@@ -562,7 +566,7 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
       ? snapshot.localUri
       : null;
   const fallback = apkDestinationPath(directories.documents, manifest.build_number);
-  const localUri = readyUri ?? ((await fileExists(fallback)) ? fallback : null);
+  const localUri = readyUri ?? ((await fileExists(fallback)) ? toFileUri(fallback) : null);
   if (!localUri) {
     throw new Error('Update download is not ready yet');
   }
@@ -578,49 +582,68 @@ export async function upgradeFromBackgroundDownload(
   manifest: ApkManifest,
   options?: { wifiOnly?: boolean },
 ): Promise<void> {
-  await ensureApkBackgroundDownload(manifest, options);
-  if (snapshot.phase === 'ready' && String(snapshot.buildNumber) === String(manifest.build_number)) {
-    await installReadyApkUpdate(manifest);
-    return;
-  }
-  if (snapshot.phase === 'error') {
-    await ensureApkBackgroundDownload(manifest, { ...options, force: true });
+  const buildNumber = String(manifest.build_number);
+  explicitUpgradeWaiters.set(buildNumber, (explicitUpgradeWaiters.get(buildNumber) ?? 0) + 1);
+  if (
+    pendingPromptManifest &&
+    String(pendingPromptManifest.build_number) === buildNumber
+  ) {
+    pendingPromptManifest = null;
   }
 
-  await new Promise<void>((resolve, reject) => {
-    let settled = false;
-    let unsub: (() => void) | null = null;
-    const timeout = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      unsub?.();
-      reject(new Error('Timed out waiting for update download'));
-    }, 30 * 60 * 1000);
-    unsub = subscribeApkDownload((s) => {
-      if (settled) return;
-      if (String(s.buildNumber) !== String(manifest.build_number)) return;
-      if (s.phase === 'ready') {
+  try {
+    await ensureApkBackgroundDownload(manifest, options);
+    if (snapshot.phase === 'ready' && String(snapshot.buildNumber) === buildNumber) {
+      await installReadyApkUpdate(manifest);
+      return;
+    }
+    if (snapshot.phase === 'error') {
+      await ensureApkBackgroundDownload(manifest, { ...options, force: true });
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      let settled = false;
+      let unsub: (() => void) | null = null;
+      const timeout = setTimeout(() => {
+        if (settled) return;
         settled = true;
-        clearTimeout(timeout);
         unsub?.();
-        resolve();
-      } else if (s.phase === 'error') {
-        settled = true;
-        clearTimeout(timeout);
-        unsub?.();
-        reject(new Error(s.error ?? 'Update download failed'));
-      }
+        reject(new Error('Timed out waiting for update download'));
+      }, 30 * 60 * 1000);
+      unsub = subscribeApkDownload((s) => {
+        if (settled) return;
+        if (String(s.buildNumber) !== buildNumber) return;
+        if (s.phase === 'ready') {
+          settled = true;
+          clearTimeout(timeout);
+          unsub?.();
+          resolve();
+        } else if (s.phase === 'error') {
+          settled = true;
+          clearTimeout(timeout);
+          unsub?.();
+          reject(new Error(s.error ?? 'Update download failed'));
+        }
+      });
+      if (settled) unsub();
     });
-    if (settled) unsub();
-  });
 
-  await installReadyApkUpdate(manifest);
+    await installReadyApkUpdate(manifest);
+  } finally {
+    const remaining = (explicitUpgradeWaiters.get(buildNumber) ?? 1) - 1;
+    if (remaining > 0) {
+      explicitUpgradeWaiters.set(buildNumber, remaining);
+    } else {
+      explicitUpgradeWaiters.delete(buildNumber);
+    }
+  }
 }
 
 let promptInFlight = false;
 
 async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
   if (Platform.OS !== 'android') return;
+  if (explicitUpgradeWaiters.has(String(manifest.build_number))) return;
   hookAppStatePrompt();
   if (snapshot.phase !== 'ready') return;
   if (String(snapshot.buildNumber) !== String(manifest.build_number)) return;
@@ -682,6 +705,7 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   listeners.clear();
   promptInFlight = false;
   pendingPromptManifest = null;
+  explicitUpgradeWaiters.clear();
 }
 
 export type { ApkDownloadSnapshot };
