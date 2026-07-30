@@ -195,12 +195,13 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     body: JSON.stringify({
       model,
       temperature: 0,
-      max_tokens: 1200,
+      max_tokens: 500,
       response_format: { type: 'json_object' },
       messages: [
         {
           role: 'system',
-          content: 'Find only concrete PR-introduced defects. Return strict JSON. Never summarize.',
+          content:
+            'Find only concrete PR-introduced defects. Return strict JSON with at most three highest-severity findings for this chunk. Never summarize.',
         },
         { role: 'user', content: userContent },
       ],
