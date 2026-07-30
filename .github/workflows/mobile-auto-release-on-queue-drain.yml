@@ -1,6 +1,6 @@
 # Auto mobile release when the last open PR to main is squash-merged.
-# Bumps expo.version and pushes directly to main (gate-exempt PR fallback).
-# See docs/HANDOFF.md for ruleset bypass setup.
+# Bumps expo.version through a bot-authored pull request. Protected main never
+# needs a workflow-wide bypass.
 
 name: mobile-auto-release-on-queue-drain
 
@@ -21,7 +21,10 @@ concurrency:
 
 jobs:
   maybe-release:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >-
+      github.event_name == 'workflow_dispatch'
+      || (github.event.pull_request.merged == true
+          && !startsWith(github.event.pull_request.title, 'docs: refresh Android install QR'))
     name: bump app version when queue drained
     runs-on: ubuntu-latest
     steps:
@@ -39,4 +42,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
+          AUTO_RELEASE_VIA_PR: "true"
         run: node mobile/scripts/mobile-auto-release-on-drain.mjs

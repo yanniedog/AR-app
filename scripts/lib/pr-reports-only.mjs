@@ -6,7 +6,7 @@ import { ghJson } from './gh-pr-review-threads.mjs';
 
 export const REPORTS_ONLY_PREFIX = 'reports/';
 
-/** Title for direct/matrix commits to main (gate-exempt when files match reports/). */
+/** Title for generated matrix report PRs (gate-exempt only when files match reports/). */
 export const MATRIX_COMMIT_TITLE = 'chore: update PR bot feedback matrix';
 
 export function isReportsOnlyPath(filePath) {

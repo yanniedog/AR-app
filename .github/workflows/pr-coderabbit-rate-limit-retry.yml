@@ -30,6 +30,7 @@ permissions:
 concurrency:
   group: pr-coderabbit-rate-limit-retry-${{ github.event.issue.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: false
+  queue: max
 
 jobs:
   retry-after-rate-limit:
@@ -59,7 +60,7 @@ jobs:
           COMMENT_BODY: ${{ github.event.comment.body }}
           COMMENT_CREATED_AT: ${{ github.event.comment.created_at }}
           NO_SLEEP: ${{ inputs.no_sleep }}
-          RETRY_MARKER: "<!-- simjury-coderabbit-rate-limit-retry -->"
+          RETRY_MARKER: "<!-- ar-app-coderabbit-rate-limit-retry -->"
         run: |
           set -euo pipefail
 
@@ -78,14 +79,6 @@ jobs:
             echo "PR #$PR not open ($STATE); skip"
             exit 0
           fi
-
-          TITLE="$(gh pr view "$PR" --json title -q .title 2>/dev/null || true)"
-          case "$TITLE" in
-            chore:*|chore\(*|WIP*|wip*|"do not review"*)
-              echo "PR #$PR title looks chore/WIP ($TITLE); skip"
-              exit 0
-              ;;
-          esac
 
           BODY="${COMMENT_BODY:-}"
           CREATED="${COMMENT_CREATED_AT:-}"

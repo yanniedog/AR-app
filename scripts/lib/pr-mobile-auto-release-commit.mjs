@@ -1,12 +1,9 @@
 /**
- * Git paths and helpers for mobile auto-release version bumps (direct push + gate exempt).
+ * Paths and helpers for bot-authored mobile auto-release pull requests.
  */
 import { ghJson } from './gh-pr-review-threads.mjs';
 
 export const AUTO_RELEASE_BUMP_PREFIX = 'chore(mobile): auto-release bump to v';
-
-/** Staged paths for auto-release commits (app.json + changelog tree). */
-export const AUTO_RELEASE_COMMIT_REL_PATHS = ['mobile/app.json', 'mobile/changelog/'];
 
 const VERSION_JSON_RE = /^mobile\/changelog\/versions\/\d+\.\d+\.\d+\.json$/;
 
@@ -54,11 +51,3 @@ export function isAutoReleaseOnlyPr(prNumber) {
   if (paths.length === 0) return true;
   return isAutoReleaseCommitOnly(paths);
 }
-
-/** Shown when protected main rejects workflow push (no ruleset bypass). */
-export const AUTO_RELEASE_PUSH_BYPASS_HINT = `Protected main rejected the mobile auto-release push. One-time repo setup (Settings -> Rules -> Rulesets):
-1. Add or edit the main branch ruleset.
-2. Under Bypass list, add "GitHub Actions" (bypass mode: always).
-3. Optionally scope bypass to workflow file .github/workflows/mobile-auto-release-on-queue-drain.yml.
-Legacy branch protection alone cannot grant path-scoped push bypass; a ruleset bypass is required.
-See README.md -> "Automation and release channels".`;

@@ -1,7 +1,9 @@
 /**
  * Required-bot aliases for wait-for-bots and pr-bot-feedback-check.
- * Keys are short names (gemini, codex, sourcery); values are GitHub logins to match.
+ * Keys are short names; values are GitHub logins to match.
  */
+import { isQuotaBotMessage } from './bot-noise.mjs';
+
 export const BOT_ALIASES = {
   gemini: [
     'gemini-code-assist',
@@ -12,25 +14,37 @@ export const BOT_ALIASES = {
     // and is matched only via isGeminiCodeReviewBody / eventSatisfiesRequiredKey —
     // do NOT put github-actions[bot] here (login-only consumers would false-positive).
   ],
-  // Cursor Automation "Codex PR Review" posts as cursor[bot]; keep the
-  // legacy chatgpt-codex-connector logins for older connector installs.
   codex: [
     'chatgpt-codex-connector',
     'chatgpt-codex-connector[bot]',
+  ],
+  cursor: [
     'cursor',
     'cursor[bot]',
   ],
   sourcery: ['sourcery-ai', 'sourcery-ai[bot]'],
+  qwen: ['github-actions[bot]'],
 };
 
-export const DEFAULT_REQUIRED_KEYS = ['gemini', 'codex', 'sourcery'];
+// Qwen is the only required reviewer by default because it is self-hosted and
+// controlled by this repository. External bots remain advisory and observable.
+export const DEFAULT_REQUIRED_KEYS = ['qwen'];
 
 export const OPTIONAL_BOT_LOGINS = [
   'github-actions[bot]',
   'copilot-pull-request-reviewer[bot]',
+  'coderabbitai',
   'coderabbitai[bot]',
   'greptile-apps[bot]',
 ];
+
+export function isQwenCodeReviewBody(bodyRaw) {
+  return /<!--\s*(qwen-code-review|cursor-auto-review)\s*-->/i.test(String(bodyRaw || ''));
+}
+
+export function reviewedCommitFromBody(bodyRaw) {
+  return String(bodyRaw || '').match(/\bReviewed commit:\s*`?([0-9a-f]{7,40})`?/i)?.[1]?.toLowerCase() || null;
+}
 
 export function isGeminiCodeReviewBody(bodyRaw) {
   const body = String(bodyRaw || '');
@@ -42,23 +56,38 @@ export function isGeminiCodeReviewBody(bodyRaw) {
 }
 
 /**
- * Body-aware match so github-actions[bot] Gemini reviews are not confused
- * with other Actions comments.
+ * Body-aware match so github-actions[bot] Qwen and Gemini reviews are not
+ * confused with each other, and quota/error notices cannot satisfy presence.
  */
-export function eventSatisfiesRequiredKey(login, body, key) {
+export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
   const lower = String(login || '').toLowerCase();
   const k = String(key || '').toLowerCase();
   if (!lower) return false;
+  if (isQuotaBotMessage(body)) return false;
+  if (k === 'qwen') {
+    const markerMatches =
+      lower === 'github-actions[bot]' &&
+      isQwenCodeReviewBody(body) &&
+      /\bReview outcome:\s*(completed|no findings|findings)\b/i.test(String(body || '')) &&
+      !/did not complete successfully|review failed/i.test(String(body || ''));
+    if (!markerMatches) return false;
+    if (!opts.expectedHeadSha) return true;
+    const reviewed = reviewedCommitFromBody(body);
+    const expected = String(opts.expectedHeadSha).toLowerCase();
+    return Boolean(reviewed && (reviewed === expected || expected.startsWith(reviewed)));
+  }
   if (k === 'gemini') {
-    if (lower === 'github-actions[bot]') return isGeminiCodeReviewBody(body);
+    if (lower === 'github-actions[bot]') {
+      return isGeminiCodeReviewBody(body) && !/^\s*ERROR:/i.test(String(body || ''));
+    }
     return loginMatchesRequiredKey(login, 'gemini');
   }
   return loginMatchesRequiredKey(login, key);
 }
 
-export function missingRequiredKeysFromEvents(requiredKeys, events) {
+export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
   return (requiredKeys || []).filter(
-    (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key)),
+    (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key, opts)),
   );
 }
 

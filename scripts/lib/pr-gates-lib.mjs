@@ -13,7 +13,7 @@ import { gateExemptReason } from './pr-gate-exempt.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = path.resolve(__dirname, '../..');
 
-export const BOT_GATE_CHECK_NAMES = ['bot-presence-gate', 'bot-feedback-gate'];
+export const BOT_GATE_CHECK_NAMES = ['qwen-code-review', 'bot-presence-gate', 'bot-feedback-gate'];
 
 const FEEDBACK_PLAN_RE = /##\s*feedback\s+plan\b/i;
 
@@ -155,7 +155,12 @@ export function fetchNamedChecks(prNumber, names) {
     const lower = (c.name || '').toLowerCase();
     const tail = lower.includes('/') ? lower.slice(lower.lastIndexOf('/') + 1) : lower;
     for (const key of want) {
-      if (lower === key || tail === key) found[key] = c;
+      if (lower === key || tail === key) {
+        const prior = found[key];
+        const priorAt = new Date(prior?.completedAt || 0).getTime();
+        const nextAt = new Date(c.completedAt || 0).getTime();
+        if (!prior || nextAt >= priorAt) found[key] = c;
+      }
     }
   }
   return { found };
@@ -245,7 +250,7 @@ export function gateGithubBotChecks(prNumber) {
     botPresenceCompletedAt,
     action: pass
       ? undefined
-      : 'Wait for bot-presence-gate and bot-feedback-gate on GitHub (branch protection)',
+      : 'Wait for qwen-code-review, bot-presence-gate, and bot-feedback-gate on GitHub',
   };
 }
 

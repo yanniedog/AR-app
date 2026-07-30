@@ -157,6 +157,7 @@ jobs:
             --manifest build/apk-publish/app-apk-latest.json
 
       - name: Upload workflow artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: app-preview-apk

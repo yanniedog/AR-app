@@ -3,31 +3,22 @@ name: app-ci
 # Typecheck + lint + unit tests + bundle export for the mobile app. Daily CDR
 # payload generation remains in yanniedog/AR-local.
 on:
+  # mobile-ci is required by branch protection, so it must always be created.
   pull_request:
-    paths:
-      # Release automation updates the README through a PR. Keep the required
-      # mobile-ci check available so that docs-only release PRs can merge.
-      - 'README.md'
-      - 'AGENTS.md'
-      - 'mobile/**'
-      - 'firebase/**'
-      - 'scripts/**'
-      - '.github/workflows/app-ci.yml'
-      - '.github/workflows/gemini-review.yml'
-      - '.github/workflows/mobile-android-apk.yml'
-      - '.github/workflows/mobile-eas-build.yml'
-      - '.github/workflows/mobile-eas-submit.yml'
   push:
     branches: [main]
     paths:
       - 'mobile/**'
       - 'firebase/**'
       - 'scripts/**'
-      - '.github/workflows/app-ci.yml'
-      - '.github/workflows/gemini-review.yml'
-      - '.github/workflows/mobile-android-apk.yml'
-      - '.github/workflows/mobile-eas-build.yml'
-      - '.github/workflows/mobile-eas-submit.yml'
+      - 'package.json'
+      - 'wait_for_bots.mjs'
+      - '.coderabbit.yaml'
+      - '.cursor/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
 
 jobs:
   mobile:
@@ -43,6 +34,9 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - name: Review and release automation tests
+        working-directory: .
+        run: npm run pr:automation:verify
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Mobile CI (doctor - typecheck - lint - test - export)

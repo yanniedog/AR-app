@@ -168,7 +168,7 @@ export async function fetchPrBotMatrixRow(owner, name, prNumber) {
   for (const t of threadPayload.threads || []) {
     for (const c of t.comments?.nodes || []) {
       const login = c.author?.login;
-      const botKey = loginToBotKey(login);
+      const botKey = loginToBotKey(login, c.body);
       if (!botKey) continue;
       events.push({
         login,

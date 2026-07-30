@@ -1,12 +1,11 @@
 name: pr-bot-spreadsheet
 
-# Maintain an in-repo matrix (Markdown + HTML + JSON): rows = merged PRs, columns = review bots,
-# color-coded by feedback presence, address-before-merge, and quota/limit hits.
+# Produce a downloadable matrix (Markdown + HTML + JSON): rows = merged PRs,
+# columns = review bots, color-coded by feedback presence, address-before-merge,
+# and quota/limit hits. Reports are artifacts instead of protected-main commits.
 on:
   schedule:
     - cron: '0 6 * * *'
-  pull_request:
-    types: [closed]
   workflow_dispatch:
     inputs:
       limit:
@@ -19,29 +18,23 @@ on:
         default: ''
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: pr-bot-spreadsheet
   cancel-in-progress: false
+  queue: max
 
 jobs:
   sync-matrix:
-    if: >-
-      github.event_name == 'schedule'
-      || github.event_name == 'workflow_dispatch'
-      || (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Sync PR bot matrix to repo artifacts
+      - name: Generate PR bot matrix artifacts
         env:
           GH_TOKEN: ${{ secrets.BOT_GATE_TOKEN || github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -51,8 +44,13 @@ jobs:
           if [ -n "${{ inputs.pr_number }}" ]; then
             ARGS+=(--pr "${{ inputs.pr_number }}")
           fi
-          # Merged-PR events run a full sync (no --pr) so the committed matrix keeps
-          # all rows; single-PR mode is workflow_dispatch only and upserts via sync.
           npm run pr:bot-spreadsheet:sync -- "${ARGS[@]}"
-      - name: Commit and push matrix to main
-        run: npm run pr:bot-matrix:commit
+      - name: Publish matrix in workflow summary
+        run: cat reports/pr-bot-matrix.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload PR bot matrix
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-bot-matrix-${{ github.run_id }}
+          path: reports/pr-bot-matrix.*
+          retention-days: 30
+          if-no-files-found: error

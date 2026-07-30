@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  profile: assertive
+  high_level_summary: true
+  review_status: true
+  poem: false
+  enable_prompt_for_ai_agents: false
+  auto_review:
+    enabled: true
+    drafts: false
+    # One final-head review avoids quota churn from reviewing every synchronize.
+    auto_incremental_review: false
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "github-actions[bot]"
+  # Explicitly include every source, test, configuration, and automation surface.
+  # Only dependencies, generated output, caches, and binary assets stay excluded.
+  path_filters:
+    - "AGENTS.md"
+    - "README.md"
+    - "package.json"
+    - "wait_for_bots.mjs"
+    - ".coderabbit.yaml"
+    - ".cursor/**"
+    - ".github/**"
+    - "scripts/**"
+    - "firebase/**"
+    - "mobile/app/**"
+    - "mobile/src/**"
+    - "mobile/scripts/**"
+    - "mobile/__tests__/**"
+    - "mobile/*.{js,json,ts}"
+    # Override CodeRabbit's default lockfile exclusion so dependency changes are visible.
+    - "mobile/package-lock.json"
+    - "!**/node_modules/**"
+    - "!**/dist/**"
+    - "!**/.expo/**"
+    - "!**/.cache/**"
+    - "!mobile/assets/**"
+  path_instructions:
+    - path: ".github/**"
+      instructions: |
+        Treat workflows as production code. Check event-to-PR-head SHA attachment,
+        permissions, fork and secret boundaries, concurrency cancellation, required
+        check liveness, protected-branch writes, rate limits, and noisy failure modes.
+    - path: "scripts/**"
+      instructions: |
+        Check command failures, retries, idempotency, stale branch state, destructive
+        operations, GitHub API pagination, bot identity matching, and exit-code contracts.
+    - path: "mobile/**/*.{ts,tsx}"
+      instructions: |
+        Prioritize React Native and Expo correctness, Android behavior, accessibility,
+        UI responsiveness, offline/error paths, stale async state, and resource cleanup.
+    - path: "mobile/__tests__/**"
+      instructions: |
+        Check that tests exercise reachable regressions with meaningful assertions and
+        do not merely snapshot implementation details or hide asynchronous failures.

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * After APK publish: refresh README install section and land on main.
- * Direct push when ruleset allows; otherwise open a bot-authored docs PR with auto-merge.
+ * After APK publish: refresh README install section through a bot-authored PR.
+ * Protected main is never pushed directly.
  *
  * Usage:
  *   node scripts/publish-readme-app-install.mjs [--repo owner/name] [--manifest path] [--dry-run]
@@ -9,7 +9,6 @@
 import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pushHeadToMain } from '../../scripts/mobile-auto-release-commit.mjs';
 import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -87,7 +86,7 @@ function listOpenReadmeQrPrs(version, buildNumber) {
 }
 
 function enableAutoMerge(prNumber) {
-  gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--repo', repo]);
+  gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--delete-branch', '--repo', repo]);
 }
 
 function publishViaPullRequest(version, buildNumber, message) {
@@ -100,7 +99,14 @@ function publishViaPullRequest(version, buildNumber, message) {
     return { mode: 'pr-existing', prNumber: pr.number };
   }
 
-  git(['fetch', 'origin', branchName], { allowFail: true });
+  git(
+    [
+      'fetch',
+      'origin',
+      `+refs/heads/${branchName}:refs/remotes/origin/${branchName}`,
+    ],
+    { allowFail: true },
+  );
   git(['checkout', '-B', branchName]);
   git(['push', '-u', 'origin', branchName, '--force-with-lease']);
 
@@ -147,7 +153,7 @@ export function publishReadmeAppInstall(opts = {}) {
 
   const message = readmeApkQrCommitMessage(result.version, result.buildNumber);
   if (opts.dryRun || dryRun) {
-    console.log(`publish-readme-app-install: dry-run — would commit "${message}" and push to main`);
+    console.log(`publish-readme-app-install: dry-run — would open a PR with "${message}"`);
     return { ok: true, changed: true, dryRun: true, ...result };
   }
 
@@ -160,19 +166,8 @@ export function publishReadmeAppInstall(opts = {}) {
   git(['add', 'README.md']);
   git(['commit', '-m', message]);
 
-  const push = pushHeadToMain();
-  if (push.ok) {
-    console.log('publish-readme-app-install: pushed README QR refresh to origin/main');
-    return { ok: true, changed: true, mode: 'direct', ...result };
-  }
-
-  if (push.protected) {
-    console.warn('publish-readme-app-install: direct push blocked — falling back to docs PR with auto-merge');
-    const pr = publishViaPullRequest(result.version, result.buildNumber, message);
-    return { ok: true, changed: true, ...pr, ...result };
-  }
-
-  throw new Error(push.error || 'publish-readme-app-install: push to main failed');
+  const pr = publishViaPullRequest(result.version, result.buildNumber, message);
+  return { ok: true, changed: true, ...pr, ...result };
 }
 
 function main() {

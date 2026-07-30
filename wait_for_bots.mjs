@@ -12,6 +12,7 @@ import {
   adjustRequiredKeysForPrContext,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
+  isQwenCodeReviewBody,
   missingRequiredKeysFromEvents,
   parseRequiredKeys,
   resolveRequiredKeys,
@@ -119,7 +120,7 @@ function resolveRepo() {
 }
 
 function resolvePr(prArg, branch) {
-  const fields = 'number,createdAt,headRefName,isCrossRepository';
+  const fields = 'number,createdAt,updatedAt,headRefName,headRefOid,isCrossRepository';
   if (prArg) {
     const r = gh(['pr', 'view', String(prArg), `--json`, fields], { json: true });
     if (!r.ok) return { error: r.error };
@@ -152,7 +153,11 @@ function fetchBotActivity(owner, name, prNumber) {
   const events = [];
   const pushEvent = (login, at, body) => {
     if (!login || !at) return;
-    if (login.toLowerCase() === 'github-actions[bot]' && !isGeminiCodeReviewBody(body)) return;
+    if (
+      login.toLowerCase() === 'github-actions[bot]' &&
+      !isGeminiCodeReviewBody(body) &&
+      !isQwenCodeReviewBody(body)
+    ) return;
     events.push({ login, at, body: body || '', noise: isBotNoise(body) });
   };
   for (const c of pr.comments?.nodes || []) {
@@ -262,7 +267,15 @@ function formatDuration(ms) {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function evaluate({ prNumber, anchorIso, state, repo: repoIn, requiredKeys, singleShot = false }) {
+function evaluate({
+  prNumber,
+  anchorIso,
+  expectedHeadSha,
+  state,
+  repo: repoIn,
+  requiredKeys,
+  singleShot = false,
+}) {
   const anchor = new Date(anchorIso);
   if (!Number.isFinite(anchor.getTime())) {
     return { status: 'error', message: `Invalid anchor time: ${anchorIso}` };
@@ -292,15 +305,14 @@ function evaluate({ prNumber, anchorIso, state, repo: repoIn, requiredKeys, sing
   const botEventsSinceAnchor = activity.events.filter(
     (e) => isKnownBotLogin(e.login, knownBots) && new Date(e.at).getTime() >= anchorMs,
   );
-  // Bot presence counts ANY event (so a quota notice still proves the bot is
-  // wired up to the PR), but the quiet window only looks at substantive
-  // events. Otherwise a bot stuck in a quota / "useful?" loop pegs lastBotAt
-  // forever and the 28-minute safety cap fires while the human has nothing
-  // actionable to respond to.
+  // Failed, quota-limited, obsolete, and stale-head reviewer events never count
+  // as required presence.
   const substantiveBotEvents = botEventsSinceAnchor.filter((e) => !e.noise);
   const noiseEventCount = botEventsSinceAnchor.length - substantiveBotEvents.length;
   const seenLogins = [...new Set(botEventsSinceAnchor.map((e) => e.login))];
-  const missing = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor);
+  const missing = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
+    expectedHeadSha,
+  });
   const allRequiredPosted =
     requiredKeys.length > 0 && botEventsSinceAnchor.length > 0 && missing.length === 0;
   const lastBotAt =
@@ -444,7 +456,7 @@ Options:
   --watch, -w           Poll every ${POLL_INTERVAL_SEC}s until ready or cap
   --bot-tag             Reset wait anchor to now (after @mentioning bots)
   --since <iso>         Anchor wait window to timestamp (ISO 8601)
-  --require-bots <list> Comma-separated required keys (default: gemini,codex,sourcery)
+  --require-bots <list> Comma-separated required keys (default: qwen)
   --help, -h            Show this help
 
 Exit codes: 0 ready | 2 still waiting | 1 error or required bots missing at cap (DO NOT MERGE)
@@ -489,6 +501,7 @@ async function main() {
   }
 
   const prNumber = resolved.pr.number;
+  const headSha = resolved.pr.headRefOid;
   const repo = resolveRepo();
   if (!repo) {
     console.error('>>> BOT WAIT ERROR: Could not resolve repository (gh repo view).');
@@ -502,6 +515,7 @@ async function main() {
   }
   let state = readState(prNumber) || {};
   const anchorFromPr = resolved.pr.createdAt;
+  const anchorFromHead = resolved.pr.updatedAt || anchorFromPr;
 
   if (args.botTag) {
     const anchorIso = new Date().toISOString();
@@ -515,8 +529,15 @@ async function main() {
     state.readyAt = null;
     state.requiredKeys = requiredKeys;
     writeState(prNumber, state);
+  } else if (state.headSha !== headSha) {
+    state.anchor = anchorFromHead;
+    state.readyAt = null;
+    state.headSha = headSha;
+    state.requiredKeys = requiredKeys;
+    writeState(prNumber, state);
   } else if (!state.anchor || new Date(state.anchor) < new Date(anchorFromPr)) {
     state.anchor = anchorFromPr;
+    state.headSha = headSha;
     state.requiredKeys = requiredKeys;
     writeState(prNumber, state);
   } else if (!state.requiredKeys) {
@@ -583,6 +604,7 @@ async function main() {
     return evaluate({
       prNumber,
       anchorIso: st.anchor || anchorFromPr,
+      expectedHeadSha: headSha,
       state: st,
       repo,
       requiredKeys: keys,
