@@ -209,6 +209,7 @@ jobs:
             "Reviewed files: $reviewed"
             "Omitted reviewable files: $omitted"
             "Intentionally excluded low-signal files: $excluded"
+            "Suppressed invalid model candidates: $([int]$review.rejected_findings)"
             if ($findings.Count -eq 0) { 'No actionable defects found in the high-signal diff.' }
             else { "$($findings.Count) actionable inline finding(s) with direct revisions." }
           ) -join "`n"
@@ -252,6 +253,7 @@ jobs:
             "- Omitted: $(@($review.omitted_files).Count) reviewable file(s)"
             "- Intentionally excluded: $(@($review.excluded_files).Count) low-signal file(s)"
             "- Local model calls: $($review.model_calls)"
+            "- Suppressed invalid candidates: $([int]$review.rejected_findings)"
             "- Findings: $($findings.Count)"
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY
 

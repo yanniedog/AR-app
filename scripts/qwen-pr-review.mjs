@@ -14,6 +14,31 @@ const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 const DEFAULT_DIFF_MAX = 160_000;
 const DEFAULT_CHUNK_MAX = 16_000;
 const MAX_FINDINGS = 8;
+const REVIEW_FORMAT = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['findings'],
+  properties: {
+    findings: {
+      type: 'array',
+      maxItems: 1,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['severity', 'path', 'line', 'side', 'issue', 'suggested_fix', 'replacement'],
+        properties: {
+          severity: { type: 'string', enum: ['High', 'Medium', 'Low'] },
+          path: { type: 'string', maxLength: 300 },
+          line: { type: 'integer', minimum: 1 },
+          side: { type: 'string', enum: ['RIGHT', 'LEFT'] },
+          issue: { type: 'string', minLength: 20, maxLength: 300 },
+          suggested_fix: { type: 'string', minLength: 10, maxLength: 300 },
+          replacement: { type: 'string', maxLength: 300 },
+        },
+      },
+    },
+  },
+};
 
 function fail(message) {
   throw new Error(message);
@@ -226,11 +251,11 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     body: JSON.stringify({
       model,
       stream: true,
-      format: 'json',
+      format: REVIEW_FORMAT,
       keep_alive: '30m',
       options: {
         temperature: 0,
-        num_predict: 250,
+        num_predict: 384,
         num_ctx: contextTokens,
       },
       messages: [
@@ -304,6 +329,7 @@ async function main() {
   let reason = '';
   let modelCalls = 0;
   let chunkCount = 0;
+  let rejectedFindings = 0;
   if (diff.reviewedFiles.length === 0) {
     reason = 'No high-signal code or automation changes required local-model review.';
   } else {
@@ -354,11 +380,7 @@ async function main() {
       );
     }
     const normalized = normalizeFindings(rawFindings, diff);
-    if (rawFindings.length > 0 && normalized.length === 0) {
-      fail(
-        `Qwen returned findings, but none referenced a valid changed line: ${JSON.stringify(rawFindings).slice(0, 1200)}`,
-      );
-    }
+    rejectedFindings = rawFindings.length - normalized.length;
     const seen = new Set();
     findings = normalized.filter((finding) => {
       const key = `${finding.path}:${finding.side}:${finding.line}:${finding.issue.toLowerCase()}`;
@@ -366,6 +388,9 @@ async function main() {
       seen.add(key);
       return true;
     });
+    if (findings.length === 0 && rejectedFindings > 0) {
+      reason = `${rejectedFindings} model candidate(s) were suppressed because they did not reference a valid changed-line anchor.`;
+    }
   }
   const output = {
     findings,
@@ -374,6 +399,7 @@ async function main() {
     omitted_files: diff.omittedFiles,
     model_calls: modelCalls,
     chunks: chunkCount,
+    rejected_findings: rejectedFindings,
     reason,
   };
   const json = `${JSON.stringify(output, null, 2)}\n`;
