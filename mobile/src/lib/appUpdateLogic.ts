@@ -73,12 +73,17 @@ export function assertDownloadedApkMatchesManifest(
   if (!Number.isFinite(size) || size <= 0) {
     throw new Error('APK download missing or empty');
   }
-  if (manifest.bytes != null && Number.isFinite(manifest.bytes) && manifest.bytes > 0) {
+  const hasExpectedBytes =
+    manifest.bytes != null && Number.isFinite(manifest.bytes) && manifest.bytes > 0;
+  if (hasExpectedBytes) {
     if (size !== manifest.bytes) {
       throw new Error(`APK size mismatch (expected ${manifest.bytes}, got ${size})`);
     }
   }
   const verifySha256 = Boolean(manifest.sha256) && size <= APK_SHA256_VERIFY_MAX_BYTES;
+  if (manifest.sha256 && !verifySha256 && !hasExpectedBytes) {
+    throw new Error('APK too large for sha256 verification and manifest.bytes is missing');
+  }
   return { verifySha256 };
 }
 

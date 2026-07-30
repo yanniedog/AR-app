@@ -2,10 +2,15 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { AppText, Button, Row } from '../ui';
+import { useStore } from '../../data/store';
 import {
   checkForAppUpdate,
-  downloadAndInstallUpdate,
+  ensureApkBackgroundDownload,
+  getApkDownloadPercent,
   getInstalledAppInfo,
+  subscribeApkDownload,
+  upgradeFromBackgroundDownload,
+  type ApkDownloadSnapshot,
   type ApkManifest,
   type UpdateCheckResult,
   type VersionChangelogSummary,
@@ -15,18 +20,24 @@ import {
   ensureInstallPermission,
   openInstallPermissionSettings,
 } from '../../lib/installPermission';
+import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { DisclosureGroup, InfoRow, Section, SettingsGap } from './settingsUi';
 
 export function AppUpdateSection() {
   const installed = getInstalledAppInfo();
+  const wifiOnly = useStore((s) => s.prefs.wifiOnly);
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
   const [changelogs, setChangelogs] = useState<VersionChangelogSummary[]>([]);
   const [checking, setChecking] = useState(true);
-  const [downloading, setDownloading] = useState(false);
-  const [downloadPct, setDownloadPct] = useState<number | null>(null);
+  const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [installAllowed, setInstallAllowed] = useState<boolean | null>(null);
+  const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
+    ...IDLE_APK_DOWNLOAD,
+  }));
+
+  useEffect(() => subscribeApkDownload(setDownload), []);
 
   const refreshInstallPermission = useCallback(async () => {
     setInstallAllowed(await canInstallApkUpdates());
@@ -53,40 +64,40 @@ export function AppUpdateSection() {
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
+        void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        });
       }
       if (result.status === 'error') {
         setError(result.message);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setChecking(false);
     }
-  }, []);
+  }, [wifiOnly]);
 
   useEffect(() => {
     void onCheck();
   }, [onCheck]);
 
-  const onDownload = useCallback(async () => {
+  const onUpgrade = useCallback(async () => {
     if (!remote) return;
     const allowed = await ensureInstallPermission();
     if (!allowed) return;
-    setDownloading(true);
+    setUpgrading(true);
     setError(null);
-    setDownloadPct(null);
     try {
-      await downloadAndInstallUpdate(remote, (progress) => {
-        if (progress.totalBytes) {
-          setDownloadPct(Math.round((progress.bytesWritten / progress.totalBytes) * 100));
-        }
-      });
+      await upgradeFromBackgroundDownload(remote, { wifiOnly });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       Alert.alert('Update failed', message);
     } finally {
-      setDownloading(false);
+      setUpgrading(false);
     }
-  }, [remote]);
+  }, [remote, wifiOnly]);
 
   if (Platform.OS !== 'android') {
     return null;
@@ -94,13 +105,23 @@ export function AppUpdateSection() {
 
   const updateAvailable = checkResult?.status === 'available';
   const isCurrent = checkResult?.status === 'current';
+  const forThisBuild =
+    remote != null &&
+    download.buildNumber != null &&
+    String(download.buildNumber) === String(remote.build_number);
+  const phase = forThisBuild ? download.phase : 'idle';
+  const downloadPct = forThisBuild ? getApkDownloadPercent(download) : null;
   const latestLabel = remote
     ? `${remote.version} (${remote.build_number})`
     : isCurrent
       ? `${installed.version} (${installed.buildNumber})`
       : '—';
   const statusValue = updateAvailable
-    ? `Update available · ${latestLabel}`
+    ? phase === 'ready'
+      ? `Ready to upgrade · ${latestLabel}`
+      : phase === 'downloading'
+        ? `Downloading in background · ${latestLabel}`
+        : `Update available · ${latestLabel}`
     : isCurrent
       ? `Up to date · ${installed.version} (${installed.buildNumber})`
       : checking || (!checkResult && !error)
@@ -109,13 +130,23 @@ export function AppUpdateSection() {
           ? 'Check failed'
           : `${installed.version} (${installed.buildNumber})`;
 
+  const upgradeTitle = phase === 'downloading' ? 'Upgrade when ready' : 'Upgrade';
+
   return (
     <Section title="App update">
       <InfoRow label="Status" value={statusValue} />
-      {downloadPct !== null ? <InfoRow label="Download" value={`${downloadPct}%`} /> : null}
-      {error ? (
+      {downloadPct !== null && phase === 'downloading' ? (
+        <InfoRow label="Download" value={`${downloadPct}%`} />
+      ) : null}
+      {error || (phase === 'error' && download.error) ? (
         <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>
-          {error}
+          {error ?? download.error}
+        </AppText>
+      ) : null}
+      {updateAvailable ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
+          Updates download automatically in the background, including when the screen is off or you
+          switch apps. Upgrade installs the already-downloaded APK.
         </AppText>
       ) : null}
 
@@ -156,17 +187,17 @@ export function AppUpdateSection() {
           variant="secondary"
           style={{ flex: 1 }}
           loading={checking}
-          disabled={downloading}
+          disabled={upgrading}
           onPress={() => void onCheck()}
         />
         {updateAvailable ? (
           <Button
-            title="Download update"
-            icon="download-outline"
+            title={upgradeTitle}
+            icon={phase === 'ready' ? 'arrow-up-circle-outline' : 'download-outline'}
             style={{ flex: 1 }}
-            loading={downloading}
-            disabled={checking}
-            onPress={() => void onDownload()}
+            loading={upgrading}
+            disabled={checking || upgrading}
+            onPress={() => void onUpgrade()}
           />
         ) : null}
       </Row>

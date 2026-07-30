@@ -1,14 +1,17 @@
 import * as Application from 'expo-application';
-import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
 
 import { APK_MANIFEST_URL } from '../config';
 import { debugLog } from './debugLog';
-import { ensureInstallPermission } from './installPermission';
 import {
-  assertDownloadedApkMatchesManifest,
+  ensureApkBackgroundDownload,
+  getApkDownloadSnapshot,
+  installReadyApkUpdate,
+  subscribeApkDownload,
+} from './appUpdateDownload';
+import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
+import {
   checkForAppUpdateAt,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
@@ -38,6 +41,16 @@ export {
   fetchChangelogSummary,
   selectCumulativeChangelogs,
 } from './changelog';
+export { installDownloadedApk, verifyDownloadedApk, verifyApkSha256 } from './appUpdateInstall';
+export {
+  ensureApkBackgroundDownload,
+  getApkDownloadPercent,
+  getApkDownloadSnapshot,
+  installReadyApkUpdate,
+  subscribeApkDownload,
+  upgradeFromBackgroundDownload,
+} from './appUpdateDownload';
+export type { ApkDownloadSnapshot } from './appUpdateDownloadLogic';
 
 const APK_CACHE = `${FileSystem.cacheDirectory ?? ''}app-update.apk`;
 
@@ -103,34 +116,53 @@ export async function checkForAppUpdate(
   return promise;
 }
 
-function toHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+async function waitForBackgroundApkReady(
+  manifest: ApkManifest,
+  onProgress?: (progress: DownloadProgress) => void,
+): Promise<string> {
+  const current = getApkDownloadSnapshot();
+  if (
+    current.phase === 'ready' &&
+    String(current.buildNumber) === String(manifest.build_number) &&
+    current.localUri
+  ) {
+    onProgress?.({ bytesWritten: current.bytesWritten, totalBytes: current.totalBytes });
+    return current.localUri;
+  }
+
+  return new Promise<string>((resolve, reject) => {
+    let settled = false;
+    let unsub: (() => void) | null = null;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      unsub?.();
+      reject(new Error('Timed out waiting for update download'));
+    }, 30 * 60 * 1000);
+    unsub = subscribeApkDownload((s) => {
+      if (settled) return;
+      if (String(s.buildNumber) !== String(manifest.build_number)) return;
+      onProgress?.({ bytesWritten: s.bytesWritten, totalBytes: s.totalBytes });
+      if (s.phase === 'ready' && s.localUri) {
+        settled = true;
+        clearTimeout(timeout);
+        unsub?.();
+        resolve(s.localUri);
+      } else if (s.phase === 'error') {
+        settled = true;
+        clearTimeout(timeout);
+        unsub?.();
+        reject(new Error(s.error ?? 'Update download failed'));
+      }
+    });
+    if (settled) unsub();
+  });
 }
 
 async function localFileSize(path: string): Promise<number> {
   const info = await FileSystem.getInfoAsync(path);
   if (!info.exists || !('size' in info)) return 0;
   return Number(info.size ?? 0);
-}
-
-async function verifySha256(path: string, expectedSha: string): Promise<void> {
-  const base64 = await FileSystem.readAsStringAsync(path, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
-  const actual = toHex(digest);
-  if (actual !== expectedSha) {
-    throw new Error(
-      `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
-    );
-  }
 }
 
 /**
@@ -156,10 +188,8 @@ export async function resolveApkDownloadUrl(url: string): Promise<string> {
 }
 
 async function assertApkIntegrity(path: string, manifest: ApkManifest): Promise<void> {
-  const size = await localFileSize(path);
-  const { verifySha256: shouldHash } = assertDownloadedApkMatchesManifest(size, manifest);
-  if (shouldHash && manifest.sha256) {
-    await verifySha256(path, manifest.sha256);
+  const { size, verifiedSha256 } = await verifyDownloadedApk(path, manifest);
+  if (verifiedSha256) {
     debugLog.info('app-update', `sha256 ok size=${size}`);
     return;
   }
@@ -212,13 +242,40 @@ async function downloadOnce(
   return result.uri;
 }
 
+/**
+ * Prefer the system background download. Falls back to a foreground FileSystem
+ * transfer only when the native background module is unavailable.
+ */
 export async function downloadApkUpdate(
   manifest: ApkManifest,
   onProgress?: (progress: DownloadProgress) => void,
+  options?: { wifiOnly?: boolean },
 ): Promise<string> {
   if (Platform.OS !== 'android') {
     throw new Error('APK download is Android-only');
   }
+
+  let backgroundStarted = false;
+  try {
+    await ensureApkBackgroundDownload(manifest, options);
+    backgroundStarted = true;
+    return await waitForBackgroundApkReady(manifest, onProgress);
+  } catch (err) {
+    if (backgroundStarted) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+    debugLog.warn(
+      'app-update',
+      `background download unavailable, using foreground fallback: ${String((err as Error)?.message ?? err)}`,
+    );
+    return downloadApkUpdateForeground(manifest, onProgress);
+  }
+}
+
+async function downloadApkUpdateForeground(
+  manifest: ApkManifest,
+  onProgress?: (progress: DownloadProgress) => void,
+): Promise<string> {
   if (!FileSystem.cacheDirectory) {
     throw new Error('cache directory unavailable');
   }
@@ -258,30 +315,23 @@ export async function downloadApkUpdate(
   throw lastError ?? new Error('APK download failed');
 }
 
-export async function installDownloadedApk(localUri: string): Promise<void> {
-  if (Platform.OS !== 'android') {
-    throw new Error('APK install is Android-only');
-  }
-
-  const allowed = await ensureInstallPermission();
-  if (!allowed) {
-    throw new Error('Allow app updates in system settings, then try again');
-  }
-
-  const contentUri = await FileSystem.getContentUriAsync(localUri);
-  debugLog.info('app-update', 'launching package installer');
-
-  await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
-    data: contentUri,
-    flags: 1,
-    type: 'application/vnd.android.package-archive',
-  });
-}
-
 export async function downloadAndInstallUpdate(
   manifest: ApkManifest,
   onProgress?: (progress: DownloadProgress) => void,
+  options?: { wifiOnly?: boolean },
 ): Promise<void> {
-  const localUri = await downloadApkUpdate(manifest, onProgress);
+  // Upgrade path: install from the background-downloaded APK when ready.
+  const snap = getApkDownloadSnapshot();
+  if (
+    snap.phase === 'ready' &&
+    String(snap.buildNumber) === String(manifest.build_number) &&
+    snap.localUri
+  ) {
+    onProgress?.({ bytesWritten: snap.bytesWritten, totalBytes: snap.totalBytes });
+    await installReadyApkUpdate(manifest);
+    return;
+  }
+
+  const localUri = await downloadApkUpdate(manifest, onProgress, options);
   await installDownloadedApk(localUri);
 }
