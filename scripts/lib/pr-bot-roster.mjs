@@ -6,15 +6,27 @@ import {
   BOT_ALIASES,
   eventSatisfiesRequiredKey,
   isGeminiCodeReviewBody,
+  isQwenCodeReviewBody,
   loginMatchesRequiredKey,
 } from './bot-wait-config.mjs';
 
 /** Column order for the spreadsheet (after PR metadata columns). */
-export const SPREADSHEET_BOT_KEYS = ['gemini', 'codex', 'sourcery', 'copilot', 'coderabbit', 'greptile'];
+export const SPREADSHEET_BOT_KEYS = [
+  'qwen',
+  'gemini',
+  'codex',
+  'cursor',
+  'sourcery',
+  'copilot',
+  'coderabbit',
+  'greptile',
+];
 
 export const BOT_KEY_LABELS = {
+  qwen: 'Qwen',
   gemini: 'Gemini',
   codex: 'Codex',
+  cursor: 'Cursor',
   sourcery: 'Sourcery',
   copilot: 'Copilot',
   coderabbit: 'CodeRabbit',
@@ -24,7 +36,7 @@ export const BOT_KEY_LABELS = {
 /** Optional bots not in BOT_ALIASES but tracked as columns. */
 const OPTIONAL_KEY_LOGINS = {
   copilot: ['copilot-pull-request-reviewer[bot]'],
-  coderabbit: ['coderabbitai[bot]'],
+  coderabbit: ['coderabbitai', 'coderabbitai[bot]'],
   greptile: ['greptile-apps[bot]'],
 };
 
@@ -36,7 +48,16 @@ const OPTIONAL_KEY_LOGINS = {
  */
 export function loginMatchesBotKey(login, key, body) {
   if (!login || !key) return false;
+  if (key === 'qwen') return eventSatisfiesRequiredKey(login, body, 'qwen');
   if (key === 'gemini') return eventSatisfiesRequiredKey(login, body, 'gemini');
+  if (key === 'cursor') {
+    return (
+      loginMatchesRequiredKey(login, 'cursor') &&
+      /<!--\s*CURSOR_AUTOMATION_ID\b|##\s*Cursor (?:Bugbot|Code Review)|\bVerdict:\s*(?:PASS|FAIL)\b/i.test(
+        String(body || ''),
+      )
+    );
+  }
   if (BOT_ALIASES[key] && loginMatchesRequiredKey(login, key)) return true;
   const aliases = OPTIONAL_KEY_LOGINS[key];
   if (!aliases) return false;
@@ -53,6 +74,7 @@ export function loginToBotKey(login, body) {
   if (!login) return null;
   const lower = login.toLowerCase();
   if (lower === 'github-actions[bot]') {
+    if (isQwenCodeReviewBody(body)) return 'qwen';
     return isGeminiCodeReviewBody(body) ? 'gemini' : null;
   }
   for (const key of SPREADSHEET_BOT_KEYS) {
