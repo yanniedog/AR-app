@@ -332,6 +332,10 @@ const coderabbitRetryWorkflow = readFileSync(
   ".github/workflows/pr-coderabbit-rate-limit-retry.yml",
   "utf8",
 );
+const feedbackWorkflow = readFileSync(
+  ".github/workflows/pr-bot-feedback-check.yml",
+  "utf8",
+);
 const controlScript = readFileSync("scripts/review-bot-control.mjs", "utf8");
 const branchProtection = readFileSync(
   "scripts/apply-branch-protection.mjs",
@@ -397,6 +401,11 @@ const coderabbitRetryJob = indentedBlock(
 );
 assert.match(coderabbitRetryJob, /^    concurrency:/m);
 assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
+assert.match(feedbackWorkflow, /cancel-in-progress:\s*true/);
+assert.match(feedbackWorkflow, /timeout-minutes:\s*5/);
+assert.match(feedbackWorkflow, /PR_STATE=\$\(gh api/);
+assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
+assert.doesNotMatch(feedbackWorkflow, /seq 1 40|sleep 60|40 minutes/);
 assert.match(
   coderabbitRetryJob,
   /read_pr_state\(\)[\s\S]*for attempt in 1 2 3[\s\S]*gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"/,
