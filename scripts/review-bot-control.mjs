@@ -54,6 +54,14 @@ function ghJson(args, { allowFailure = false } = {}) {
   return JSON.parse(result.stdout);
 }
 
+function ghJsonResult(args) {
+  const result = runGh(args, { allowFailure: true });
+  return {
+    ok: result.ok,
+    data: result.ok && result.stdout ? JSON.parse(result.stdout) : null,
+  };
+}
+
 export function parseArgs(argv) {
   const out = {
     qwen: "unchanged",
@@ -140,7 +148,7 @@ function setVariable(repo, name, value) {
   runGh(["variable", "set", name, "--repo", repo, "--body", value]);
 }
 
-export function mergeVariablePages(pages, fallback = {}) {
+export function mergeVariablePages(pages, fallback = {}, overrides = {}) {
   const merged = Object.fromEntries(
     Object.entries(fallback).filter(
       ([, value]) => value !== undefined && value !== "",
@@ -150,10 +158,17 @@ export function mergeVariablePages(pages, fallback = {}) {
     ? pages.flatMap((page) => page?.variables || [])
     : [];
   for (const row of rows) merged[row.name] = row.value;
-  return merged;
+  return {
+    ...merged,
+    ...Object.fromEntries(
+      Object.entries(overrides).filter(
+        ([, value]) => value !== undefined && value !== "",
+      ),
+    ),
+  };
 }
 
-function variables(repo) {
+function variables(repo, overrides = {}) {
   const pages = ghJson(
     [
       "api",
@@ -163,10 +178,23 @@ function variables(repo) {
     ],
     { allowFailure: true },
   );
-  return mergeVariablePages(pages, {
-    QWEN_ENABLED: process.env.CONTROL_QWEN_ENABLED,
-    AR_BOT_WAIT_REQUIRED: process.env.CONTROL_BOT_WAIT_REQUIRED,
-  });
+  return mergeVariablePages(
+    pages,
+    {
+      QWEN_ENABLED: process.env.CONTROL_QWEN_ENABLED,
+      AR_BOT_WAIT_REQUIRED: process.env.CONTROL_BOT_WAIT_REQUIRED,
+    },
+    overrides,
+  );
+}
+
+export function requiredChecksFromProtection(protection) {
+  return [
+    ...(protection?.required_status_checks?.checks || []).map(
+      (row) => row.context,
+    ),
+    ...(protection?.required_status_checks?.contexts || []),
+  ].filter(Boolean);
 }
 
 export function requiredChecksFromRules(rules) {
@@ -177,28 +205,44 @@ export function requiredChecksFromRules(rules) {
     .filter(Boolean);
 }
 
-function requiredChecks(repo) {
-  const protection = ghJson(["api", `repos/${repo}/branches/main/protection`], {
-    allowFailure: true,
-  });
-  const protectionChecks = (protection?.required_status_checks?.checks || [])
-    .map((row) => row.context)
-    .filter(Boolean);
-  if (protectionChecks.length) {
-    return { values: protectionChecks, source: "live branch protection" };
-  }
-
-  const rules = ghJson(["api", `repos/${repo}/rules/branches/main`], {
-    allowFailure: true,
-  });
-  const ruleChecks = requiredChecksFromRules(rules);
-  if (ruleChecks.length) {
-    return { values: ruleChecks, source: "live branch rules" };
+export function combineRequiredCheckState({
+  protectionOk,
+  protection,
+  rulesOk,
+  rules,
+}) {
+  if (protectionOk || rulesOk) {
+    const sources = [];
+    if (protectionOk) sources.push("branch protection");
+    if (rulesOk) sources.push("rules");
+    return {
+      values: [
+        ...new Set([
+          ...requiredChecksFromProtection(protection),
+          ...requiredChecksFromRules(rules),
+        ]),
+      ],
+      source: `live ${sources.join(" + ")}`,
+    };
   }
   return {
     values: ["mobile-ci", "bot-feedback-gate"],
-    source: "configured policy fallback; live rules API unavailable",
+    source: "configured policy fallback; live policy APIs unavailable",
   };
+}
+
+function requiredChecks(repo) {
+  const protection = ghJsonResult([
+    "api",
+    `repos/${repo}/branches/main/protection`,
+  ]);
+  const rules = ghJsonResult(["api", `repos/${repo}/rules/branches/main`]);
+  return combineRequiredCheckState({
+    protectionOk: protection.ok,
+    protection: protection.data,
+    rulesOk: rules.ok,
+    rules: rules.data,
+  });
 }
 
 function stateLabel(state) {
@@ -231,7 +275,9 @@ export function renderDashboard({
       : "";
     return `| ${name} | Vendor-managed | Advisory | [Manage installed apps](${appSettingsUrl})${configLink} |`;
   }).join("\n");
-  const checkText = checks.map((name) => `\`${name}\``).join(", ");
+  const checkText = checks.length
+    ? checks.map((name) => `\`${name}\``).join(", ")
+    : "**None**";
 
   return `<!-- review-bot-control-dashboard -->
 # Review bot control dashboard
@@ -358,6 +404,7 @@ async function main() {
   }
   const repo = resolveRepo();
   const changes = [];
+  const appliedVariables = {};
 
   if (!args.refreshOnly && args.qwen === "disabled") {
     const cancelled = cancelActiveRuns(repo, QWEN_WORKFLOW);
@@ -365,10 +412,14 @@ async function main() {
     setWorkflowState(repo, PRESENCE_WORKFLOW, false);
     setVariable(repo, "QWEN_ENABLED", "false");
     setVariable(repo, "AR_BOT_WAIT_REQUIRED", "off");
+    appliedVariables.QWEN_ENABLED = "false";
+    appliedVariables.AR_BOT_WAIT_REQUIRED = "off";
     changes.push(`Qwen disabled; ${cancelled} active run(s) cancelled`);
   } else if (!args.refreshOnly && args.qwen === "advisory") {
     setVariable(repo, "QWEN_ENABLED", "true");
     setVariable(repo, "AR_BOT_WAIT_REQUIRED", "off");
+    appliedVariables.QWEN_ENABLED = "true";
+    appliedVariables.AR_BOT_WAIT_REQUIRED = "off";
     setWorkflowState(repo, PRESENCE_WORKFLOW, false);
     setWorkflowState(repo, QWEN_WORKFLOW, true);
     changes.push("Qwen enabled as advisory; presence gate remains disabled");
@@ -390,7 +441,7 @@ async function main() {
     presenceState: workflowState(repo, PRESENCE_WORKFLOW),
     feedbackState: workflowState(repo, FEEDBACK_WORKFLOW),
     coderabbitRetryState: workflowState(repo, CODERABBIT_RETRY_WORKFLOW),
-    repoVariables: variables(repo),
+    repoVariables: variables(repo, appliedVariables),
     checks: checkState.values,
     checkSource: checkState.source,
     updatedAt: new Date().toISOString(),
