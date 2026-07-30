@@ -1,6 +1,6 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { BankHistoryChart } from '../../src/components/BankHistoryChart';
@@ -13,31 +13,101 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
-import { bankTrendChartModel, recentBankEvents } from '../../src/data/bankInsights';
-import { visibleAccountRows } from '../../src/data/format';
+import {
+  bankEventMedianContext,
+  bankTrendChartModel,
+  recentBankEvents,
+  type BankRateEvent,
+} from '../../src/data/bankInsights';
+import { formatRate, formatRunDate, visibleAccountRows } from '../../src/data/format';
+import { productMovesForBankEvent, type ProductRateMove } from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { effectiveBankInsights } from '../../src/lib/proAccess';
+import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
+import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../../src/types';
+import { SECTION_KEYS } from '../../src/types';
+import { useTheme } from '../../src/theme/ThemeProvider';
+
+function bpsLabel(bps: number): string {
+  const rounded = Math.round(bps * 10) / 10;
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bps`;
+}
+
+function isSectionKey(value: string | undefined): value is SectionKey {
+  return !!value && (SECTION_KEYS as readonly string[]).includes(value);
+}
+
+function ProductMoveRow({
+  move,
+  section,
+}: {
+  move: ProductRateMove;
+  section: SectionKey;
+}) {
+  const theme = useTheme();
+  const tone = moveTone(section, move.bps);
+  const color =
+    tone === 'danger' ? theme.colors.danger : tone === 'success' ? theme.colors.success : theme.colors.textMuted;
+  return (
+    <Pressable
+      onPress={() => openProduct(move.productKey, move.rateIndex ?? undefined)}
+      accessibilityRole="button"
+      accessibilityLabel={`${move.productName} moved ${bpsLabel(move.bps)} from ${formatRate(move.fromRate)} to ${formatRate(move.toRate)} on ${formatRunDate(move.date)}`}
+    >
+      <Row gap={10} style={{ paddingVertical: 8 }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <AppText variant="small" weight="700" numberOfLines={2}>
+            {move.productName}
+          </AppText>
+          <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+            {formatRunDate(move.date)} · {formatRate(move.fromRate)} → {formatRate(move.toRate)}
+          </AppText>
+        </View>
+        <AppText variant="small" weight="800" style={{ color }}>
+          {bpsLabel(move.bps)}
+        </AppText>
+      </Row>
+    </Pressable>
+  );
+}
 
 export default function BankDetail() {
   // Already decoded by expo-router — decoding again would throw on a literal '%'.
-  const { provider: raw } = useLocalSearchParams<{ provider: string }>();
+  const {
+    provider: raw,
+    date: focusDateRaw,
+    section: focusSectionRaw,
+  } = useLocalSearchParams<{ provider: string; date?: string; section?: string }>();
   const provider = raw ?? '';
+  const focusDate = typeof focusDateRaw === 'string' ? focusDateRaw.slice(0, 10) : '';
+  const focusSection = isSectionKey(
+    Array.isArray(focusSectionRaw) ? focusSectionRaw[0] : focusSectionRaw,
+  )
+    ? ((Array.isArray(focusSectionRaw) ? focusSectionRaw[0] : focusSectionRaw) as SectionKey)
+    : null;
+
+  const router = useRouter();
   const core = useStore((s) => s.core);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
+  const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
+  const productHistory = useStore((s) => s.productHistory);
+  const productHistoryError = useStore((s) => s.productHistoryError);
+  const ensureProductHistory = useStore((s) => s.ensureProductHistory);
+  const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
+  const historyRequestKey = useRef<string | null>(null);
 
   useEffect(() => {
     const key = showBankInsights ? core?.run_date ?? null : null;
@@ -45,6 +115,26 @@ export default function BankDetail() {
     insightsRequestKey.current = key;
     void ensureBankInsights();
   }, [core?.run_date, ensureBankInsights, showBankInsights]);
+
+  useEffect(() => {
+    // Product-level move drill-down needs the on-device product history ledger.
+    if (!showBankInsights || !historyEnabled) {
+      historyRequestKey.current = null;
+      return;
+    }
+    const key = core?.run_date ?? null;
+    if (!key || historyRequestKey.current === key) return;
+    historyRequestKey.current = key;
+    void ensureHistoryBanks().then(() => {
+      void ensureProductHistory();
+    });
+  }, [
+    core?.run_date,
+    ensureHistoryBanks,
+    ensureProductHistory,
+    historyEnabled,
+    showBankInsights,
+  ]);
 
   const bySection = useMemo(() => {
     void suitabilityRevision;
@@ -76,7 +166,11 @@ export default function BankDetail() {
   );
   const [chartSection, setChartSection] = useState<SectionKey | null>(null);
   const activeChartSection =
-    chartSection && chartSections.includes(chartSection) ? chartSection : chartSections[0] ?? null;
+    chartSection && chartSections.includes(chartSection)
+      ? chartSection
+      : focusSection && chartSections.includes(focusSection)
+        ? focusSection
+        : chartSections[0] ?? null;
 
   const chartModel = useMemo(
     () =>
@@ -86,11 +180,46 @@ export default function BankDetail() {
     [activeChartSection, bankInsights, provider],
   );
   const bankEvents = useMemo(
-    () => recentBankEvents(bankInsights, { provider, limit: 6 }),
+    () => recentBankEvents(bankInsights, { provider, limit: 8 }),
     [bankInsights, provider],
   );
 
+  const focusEvent: BankRateEvent | null = useMemo(() => {
+    if (!focusDate || !focusSection) return null;
+    return (
+      bankEvents.find((e) => e.date === focusDate && e.section === focusSection) ??
+      recentBankEvents(bankInsights, { provider }).find(
+        (e) => e.date === focusDate && e.section === focusSection,
+      ) ??
+      null
+    );
+  }, [bankEvents, bankInsights, focusDate, focusSection, provider]);
+
+  const focusedMoves = useMemo(() => {
+    if (!focusDate || !focusSection) return [] as ProductRateMove[];
+    return productMovesForBankEvent(core, productHistory, {
+      provider,
+      section: focusSection,
+      date: focusDate,
+    });
+  }, [core, focusDate, focusSection, productHistory, provider]);
+
+  const recentMoveBreakdowns = useMemo(() => {
+    const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
+    for (const event of bankEvents.slice(0, 3)) {
+      const moves = productMovesForBankEvent(core, productHistory, {
+        provider: event.provider,
+        section: event.section,
+        date: event.date,
+      });
+      if (moves.length) out.push({ event, moves });
+    }
+    return out;
+  }, [bankEvents, core, productHistory]);
+
   if (!core) return null;
+
+  const focusRateCtx = focusEvent ? bankEventMedianContext(bankInsights, focusEvent) : null;
 
   return (
     <>
@@ -105,6 +234,58 @@ export default function BankDetail() {
             </AppText>
           </View>
         </Row>
+
+        {showBankInsights && focusEvent && focusSection ? (
+          <Card style={{ marginBottom: 16 }}>
+            <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
+              <AppText variant="h3">Move detail</AppText>
+              <Chip label="PRO" selected />
+            </Row>
+            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+              {moveVerb(focusSection, focusEvent.dir)} {SECTIONS[focusSection].title.toLowerCase()} on{' '}
+              {formatRunDate(focusEvent.date)}
+              {focusRateCtx
+                ? ` · median ${formatRate(focusRateCtx.before)} → ${formatRate(focusRateCtx.after)}`
+                : ''}
+            </AppText>
+            <Row gap={8} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
+              <Chip
+                label={`${focusEvent.moved} of ${focusEvent.total} products`}
+                selected={false}
+              />
+              <Chip
+                label={`avg ${bpsLabel(focusEvent.avg_bps)}`}
+                selected
+              />
+            </Row>
+            {focusedMoves.length ? (
+              <>
+                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
+                  Products that moved
+                </AppText>
+                <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
+                  Tap a product to open its rate history
+                </AppText>
+                {focusedMoves.map((move, i) => (
+                  <React.Fragment key={move.productKey}>
+                    {i > 0 ? <Divider /> : null}
+                    <ProductMoveRow move={move} section={focusSection} />
+                  </React.Fragment>
+                ))}
+              </>
+            ) : (
+              <AppText variant="small" color="textMuted">
+                {!historyEnabled
+                  ? 'Enable rate history to see which products moved.'
+                  : productHistory
+                    ? 'Could not match individual products for this move yet — try again after daily history finishes syncing.'
+                    : productHistoryError
+                      ? 'Product-level history is unavailable right now — pull to refresh and try again.'
+                      : 'Loading product-level history to identify which accounts moved…'}
+              </AppText>
+            )}
+          </Card>
+        ) : null}
 
         {showBankInsights ? (
           chartModel && activeChartSection ? (
@@ -121,7 +302,7 @@ export default function BankDetail() {
                 />
               ) : null}
               <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginBottom: 4 }}>
-                Band spans this lender's sharpest offer to its typical rate
+                Band spans this lender&apos;s sharpest offer to its typical rate
               </AppText>
               <ChartErrorBoundary name="BankTrendChart">
                 <BankHistoryChart
@@ -141,7 +322,22 @@ export default function BankDetail() {
                     Recent moves
                   </AppText>
                   {bankEvents.map((event) => (
-                    <BankMoveRow key={`${event.date}-${event.section}`} event={event} />
+                    <BankMoveRow
+                      key={`${event.date}-${event.section}`}
+                      event={event}
+                      rateContext={bankEventMedianContext(bankInsights, event)}
+                      focused={
+                        !!focusEvent &&
+                        event.date === focusEvent.date &&
+                        event.section === focusEvent.section
+                      }
+                      onPress={() =>
+                        router.setParams({
+                          date: event.date,
+                          section: event.section,
+                        })
+                      }
+                    />
                   ))}
                 </>
               ) : null}
@@ -152,6 +348,36 @@ export default function BankDetail() {
             <InsightsLockedCard onUnlock={() => requestPro('bank_insights')} />
           </Card>
         )}
+
+        {showBankInsights && !focusEvent && recentMoveBreakdowns.length ? (
+          <Card style={{ marginBottom: 16 }}>
+            <AppText variant="h3" style={{ marginBottom: 4 }}>
+              Products involved
+            </AppText>
+            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
+              Which accounts drove the latest detected moves
+            </AppText>
+            {recentMoveBreakdowns.map(({ event, moves }, bi) => (
+              <View key={`${event.date}-${event.section}`} style={{ marginBottom: bi < recentMoveBreakdowns.length - 1 ? 12 : 0 }}>
+                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
+                  {formatRunDate(event.date)} · {SECTIONS[event.section].short} · avg{' '}
+                  {bpsLabel(event.avg_bps)}
+                </AppText>
+                {moves.slice(0, 5).map((move, i) => (
+                  <React.Fragment key={move.productKey}>
+                    {i > 0 ? <Divider /> : null}
+                    <ProductMoveRow move={move} section={event.section} />
+                  </React.Fragment>
+                ))}
+                {moves.length > 5 ? (
+                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
+                    +{moves.length - 5} more products
+                  </AppText>
+                ) : null}
+              </View>
+            ))}
+          </Card>
+        ) : null}
 
         {bySection.length === 0 ? (
           <EmptyState title="No products" subtitle="This lender has no rates in the current data set." />

@@ -403,6 +403,38 @@ export function recentBankEvents(
   return opts.limit && opts.limit > 0 ? sorted.slice(0, opts.limit) : sorted;
 }
 
+export interface BankEventRateContext {
+  /** Provider median on the day before the move (fraction). */
+  before: number;
+  /** Provider median on the move date (fraction). */
+  after: number;
+  /** Signed median change in basis points. */
+  medianBps: number;
+}
+
+/**
+ * Median before→after rates for a bank-move event, giving the headline bps
+ * figure a concrete rate context (e.g. 5.99% → 5.94%).
+ */
+export function bankEventMedianContext(
+  payload: BankInsightsPayload | null | undefined,
+  event: Pick<BankRateEvent, 'provider' | 'section' | 'date'>,
+): BankEventRateContext | null {
+  const series = payload?.banks?.[event.provider]?.[event.section]?.median;
+  if (!payload || !series?.length) return null;
+  const idx = payload.run_dates.indexOf(event.date);
+  if (idx < 0) return null;
+  const after = series[idx];
+  if (after == null) return null;
+  const before = lastNonNull(series, idx - 1);
+  if (before == null) return null;
+  return {
+    before,
+    after,
+    medianBps: Math.round((after - before) * 10000 * 10) / 10,
+  };
+}
+
 function windowStartIndex(run_dates: string[], windowDays: number): number {
   const anchor = parseYmd(run_dates[run_dates.length - 1] ?? '');
   if (anchor == null) return 0;
