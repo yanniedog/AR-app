@@ -30,6 +30,8 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 The dedicated CPU-only Qwen runner uses `qwen2.5-coder-review:1.5b` so review
 latency stays bounded. Provision it with
 `ollama create qwen2.5-coder-review:1.5b -f scripts/qwen-review.Modelfile`;
+also provision the targeted quality validator with
+`ollama create qwen2.5-coder-review:7b -f scripts/qwen-validator.Modelfile`.
 the checked-in context size and chunk budget keep the model within this runner's
 memory limit without silently dropping reviewable files.
 

@@ -144,18 +144,20 @@ jobs:
           QWEN_API_BASE_URL: ${{ secrets.QWEN_API_BASE_URL }}
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
           QWEN_MODEL: ${{ secrets.QWEN_MODEL }}
+          QWEN_VALIDATOR_MODEL: ${{ secrets.QWEN_VALIDATOR_MODEL }}
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           BASE_REF: ${{ steps.pr.outputs.base_ref }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PROMPT_PATH: ${{ github.workspace }}\_trusted-reviewer\.cursor\PR_REVIEW_PROMPT.md
           DIFF_MAX_CHARS: "160000"
-          DIFF_CHUNK_CHARS: "16000"
+          DIFF_CHUNK_CHARS: "24000"
           QWEN_CONTEXT_TOKENS: "8192"
         run: |
           $ErrorActionPreference = 'Continue'
           if (-not $env:QWEN_API_BASE_URL) { $env:QWEN_API_BASE_URL = 'http://127.0.0.1:11434/v1' }
           if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen2.5-coder-review:1.5b' }
+          if (-not $env:QWEN_VALIDATOR_MODEL) { $env:QWEN_VALIDATOR_MODEL = 'qwen2.5-coder-review:7b' }
           $out = Join-Path $env:RUNNER_TEMP 'qwen-review.md'
           $err = Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt'
           $env:OUT_FILE = $out
@@ -173,11 +175,13 @@ jobs:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           MODEL: ${{ secrets.QWEN_MODEL }}
+          VALIDATOR_MODEL: ${{ secrets.QWEN_VALIDATOR_MODEL }}
         run: |
           $review = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review.md') | ConvertFrom-Json
           $findings = @($review.findings)
           $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
           $model = if ($env:MODEL) { $env:MODEL } else { 'qwen2.5-coder-review:1.5b' }
+          $validatorModel = if ($env:VALIDATOR_MODEL) { $env:VALIDATOR_MODEL } else { 'qwen2.5-coder-review:7b' }
           function Format-PathList($values) {
             $items = @($values)
             if ($items.Count -eq 0) { return '(none)' }
@@ -205,6 +209,7 @@ jobs:
             "Reviewed commit: ``$env:HEAD_SHA``"
             "Review outcome: $outcome"
             "Model: ``$model``"
+            "Validator model: ``$validatorModel``"
             "Workflow: $env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
             "Reviewed files: $reviewed"
             "Omitted reviewable files: $omitted"
@@ -253,6 +258,8 @@ jobs:
             "- Omitted: $(@($review.omitted_files).Count) reviewable file(s)"
             "- Intentionally excluded: $(@($review.excluded_files).Count) low-signal file(s)"
             "- Local model calls: $($review.model_calls)"
+            "- Validator calls: $($review.validation_calls)"
+            "- Validator errors: $($review.validation_errors)"
             "- Suppressed invalid candidates: $([int]$review.rejected_findings)"
             "- Findings: $($findings.Count)"
           ) -join "`n" | Add-Content $env:GITHUB_STEP_SUMMARY

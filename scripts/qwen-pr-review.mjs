@@ -10,9 +10,10 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const DEFAULT_MODEL = 'qwen2.5-coder-review:1.5b';
+const DEFAULT_VALIDATOR_MODEL = 'qwen2.5-coder-review:7b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 const DEFAULT_DIFF_MAX = 160_000;
-const DEFAULT_CHUNK_MAX = 16_000;
+const DEFAULT_CHUNK_MAX = 24_000;
 const MAX_FINDINGS = 8;
 const REVIEW_FORMAT = {
   type: 'object',
@@ -191,6 +192,42 @@ function changedLineGuide(chunk, diff) {
     .join('\n');
 }
 
+function focusedDiff(sectionText, finding, maxChars = 6_000) {
+  const text = String(sectionText || '');
+  if (text.length <= maxChars) return text;
+  const lines = text.split(/\r?\n/);
+  let oldLine = null;
+  let newLine = null;
+  let anchorIndex = -1;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const hunk = line.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      continue;
+    }
+    if (oldLine == null || newLine == null) continue;
+    if (
+      (finding.side === 'RIGHT' && line.startsWith('+') && newLine === finding.line) ||
+      (finding.side === 'LEFT' && line.startsWith('-') && oldLine === finding.line)
+    ) {
+      anchorIndex = index;
+      break;
+    }
+    if (line.startsWith('+')) newLine += 1;
+    else if (line.startsWith('-')) oldLine += 1;
+    else {
+      oldLine += 1;
+      newLine += 1;
+    }
+  }
+  if (anchorIndex < 0) return text.slice(0, maxChars);
+  const header = lines.slice(0, 4);
+  const excerpt = lines.slice(Math.max(4, anchorIndex - 45), anchorIndex + 46);
+  return [...header, '... focused excerpt ...', ...excerpt].join('\n').slice(0, maxChars);
+}
+
 function parseModelJson(raw) {
   const cleaned = String(raw || '').trim()
     .replace(/^```(?:json)?\s*/i, '')
@@ -251,6 +288,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     body: JSON.stringify({
       model,
       stream: true,
+      think: false,
       format: REVIEW_FORMAT,
       keep_alive: '30m',
       options: {
@@ -330,6 +368,8 @@ async function main() {
   let modelCalls = 0;
   let chunkCount = 0;
   let rejectedFindings = 0;
+  let validationCalls = 0;
+  let validationErrors = 0;
   if (diff.reviewedFiles.length === 0) {
     reason = 'No high-signal code or automation changes required local-model review.';
   } else {
@@ -381,8 +421,44 @@ async function main() {
     }
     const normalized = normalizeFindings(rawFindings, diff);
     rejectedFindings = rawFindings.length - normalized.length;
+    const validatorModel =
+      String(process.env.QWEN_VALIDATOR_MODEL || DEFAULT_VALIDATOR_MODEL).trim() ||
+      DEFAULT_VALIDATOR_MODEL;
+    const validated = [];
+    for (const candidate of normalized) {
+      const section = diff.sections.find((item) => item.path === candidate.path);
+      const validationBoundary = `UNTRUSTED_PR_DIFF_${randomUUID()}`;
+      validationCalls += 1;
+      try {
+        const verdict = await requestFindings({
+          baseUrl: normalizeBaseUrl(process.env.QWEN_API_BASE_URL),
+          apiKey,
+          model: validatorModel,
+          userContent: [
+            'Validate the candidate finding below against only the supplied diff excerpt.',
+            'Return one finding on the exact same path, side, and line only if the diff proves a concrete PR-introduced defect.',
+            'Otherwise return {"findings":[]}. Do not rely on model catalogs, external state, or assumptions.',
+            `Candidate: ${JSON.stringify(candidate)}`,
+            `BEGIN ${validationBoundary}`,
+            focusedDiff(section?.text, candidate),
+            `END ${validationBoundary}`,
+          ].join('\n'),
+        });
+        const confirmed = normalizeFindings(verdict, diff).find(
+          (finding) =>
+            finding.path === candidate.path &&
+            finding.side === candidate.side &&
+            finding.line === candidate.line,
+        );
+        if (confirmed) validated.push(confirmed);
+        else rejectedFindings += 1;
+      } catch {
+        validationErrors += 1;
+        rejectedFindings += 1;
+      }
+    }
     const seen = new Set();
-    findings = normalized.filter((finding) => {
+    findings = validated.filter((finding) => {
       const key = `${finding.path}:${finding.side}:${finding.line}:${finding.issue.toLowerCase()}`;
       if (seen.has(key) || seen.size >= MAX_FINDINGS) return false;
       seen.add(key);
@@ -399,6 +475,8 @@ async function main() {
     omitted_files: diff.omittedFiles,
     model_calls: modelCalls,
     chunks: chunkCount,
+    validation_calls: validationCalls,
+    validation_errors: validationErrors,
     rejected_findings: rejectedFindings,
     reason,
   };
