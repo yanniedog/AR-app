@@ -23,6 +23,7 @@ import {
   requiredChecksFromRules,
   workflowNeedsStateChange,
 } from "./review-bot-control.mjs";
+import { evaluateRequiredCheckState } from "./lib/required-ci-checks.mjs";
 
 function indentedBlock(source, heading) {
   const lines = source.split(/\r?\n/);
@@ -113,6 +114,58 @@ assert.deepEqual(
     values: ["mobile-ci", "bot-feedback-gate"],
     source: "live branch protection + rules",
   },
+);
+assert.deepEqual(
+  evaluateRequiredCheckState({
+    requiredNames: ["mobile-ci", "bot-feedback-gate"],
+    ignoredNames: ["bot-feedback-gate"],
+    prChecks: [],
+    headCheckRuns: [
+      {
+        id: 10,
+        name: "mobile-ci",
+        status: "queued",
+        started_at: "2026-01-01T00:00:00Z",
+      },
+    ],
+  }),
+  {
+    pending: true,
+    failed: false,
+    failedNames: [],
+    pendingNames: ["mobile-ci"],
+    missingNames: [],
+    checks: [{ name: "mobile-ci", state: "pending" }],
+  },
+);
+assert.deepEqual(
+  evaluateRequiredCheckState({
+    requiredNames: ["mobile-ci"],
+    prChecks: [],
+    headCheckRuns: [],
+  }).missingNames,
+  ["mobile-ci"],
+);
+assert.equal(
+  evaluateRequiredCheckState({
+    requiredNames: ["mobile-ci"],
+    prChecks: [
+      {
+        name: "mobile-ci",
+        bucket: "pass",
+        startedAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+    headCheckRuns: [
+      {
+        id: 11,
+        name: "mobile-ci",
+        status: "in_progress",
+        started_at: "2026-01-01T00:01:00Z",
+      },
+    ],
+  }).pending,
+  true,
 );
 assert.deepEqual(
   combineRequiredCheckState({

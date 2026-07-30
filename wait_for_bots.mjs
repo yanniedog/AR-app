@@ -21,6 +21,7 @@ import { readBotWaitStateFile, writeBotWaitStateFile } from './scripts/lib/bot-w
 import { isGithubRateLimitError, repoSlugFromEnv } from './scripts/lib/gh-pr-review-threads.mjs';
 import { isBotNoise } from './scripts/lib/bot-noise.mjs';
 import { gateExemptReason } from './scripts/lib/pr-gate-exempt.mjs';
+import { fetchRequiredCheckState } from './scripts/lib/required-ci-checks.mjs';
 
 const POLL_INTERVAL_SEC = Number(process.env.BOT_WAIT_POLL_SEC || 45);
 const QUIET_WINDOW_SEC = Number(process.env.BOT_WAIT_QUIET_SEC || 90);
@@ -120,7 +121,7 @@ function resolveRepo() {
 }
 
 function resolvePr(prArg, branch) {
-  const fields = 'number,createdAt,headRefName,headRefOid,isCrossRepository';
+  const fields = 'number,createdAt,headRefName,headRefOid,baseRefName,isCrossRepository';
   if (prArg) {
     const r = gh(['pr', 'view', String(prArg), `--json`, fields], { json: true });
     if (!r.ok) return { error: r.error };
@@ -202,62 +203,14 @@ function ignoredCheckNames() {
   return new Set([...DEFAULT_IGNORED_CHECK_NAMES, ...fromEnv]);
 }
 
-/** Match full `gh pr checks` name or trailing job segment (e.g. `workflow / job`). */
-function checkNameMatchesIgnore(checkName, ignore) {
-  const lower = (checkName || '').toLowerCase();
-  if (ignore.has(lower)) return true;
-  const slash = lower.lastIndexOf('/');
-  const tail = slash >= 0 ? lower.slice(slash + 1).trim() : lower;
-  return ignore.has(tail);
-}
-
-function checksPendingShape(extra = {}) {
-  return { pending: true, failed: false, failedNames: [], ...extra };
-}
-
-function fetchChecks(prNumber) {
-  const r = spawnSync(
-    'gh',
-    ['pr', 'checks', String(prNumber), '--required', '--json', 'name,bucket,state'],
-    { encoding: 'utf8' },
-  );
-  if (r.status === 8) return checksPendingShape();
-  if (r.status !== 0) {
-    const msg = (r.stderr || '').trim() || `gh pr checks exit ${r.status}`;
-    // PR branches often have no required checks registered until branch protection applies.
-    if (/no required checks reported/i.test(msg) || /no checks reported/i.test(msg)) {
-      return { pending: false, failed: false, failedNames: [] };
-    }
-    return checksPendingShape({ error: msg });
-  }
-  const stdout = (r.stdout || '').trim();
-  if (!stdout) return checksPendingShape();
-  try {
-    const checks = JSON.parse(stdout);
-    const ignore = ignoredCheckNames();
-    let pending = false;
-    let failed = false;
-    const failedNames = [];
-    if (Array.isArray(checks)) {
-      for (const c of checks) {
-        if (checkNameMatchesIgnore(c.name, ignore)) continue;
-        if (c.bucket === 'pending') pending = true;
-        if (
-          c.bucket === 'fail' ||
-          c.bucket === 'cancel' ||
-          c.state === 'FAILURE' ||
-          c.state === 'ERROR' ||
-          c.state === 'CANCELLED'
-        ) {
-          failed = true;
-          failedNames.push(c.name);
-        }
-      }
-    }
-    return { pending, failed, failedNames };
-  } catch (e) {
-    return checksPendingShape({ error: `Invalid JSON from gh pr checks: ${e.message}` });
-  }
+function fetchChecks(prNumber, repo, headSha, baseRefName) {
+  return fetchRequiredCheckState({
+    prNumber,
+    repo: `${repo.owner}/${repo.name}`,
+    headSha,
+    baseRefName,
+    ignoredNames: [...ignoredCheckNames()],
+  });
 }
 
 function formatDuration(ms) {
@@ -271,6 +224,7 @@ function evaluate({
   prNumber,
   anchorIso,
   expectedHeadSha,
+  baseRefName,
   state,
   repo: repoIn,
   requiredKeys,
@@ -284,7 +238,7 @@ function evaluate({
   if (requiredKeys.length === 0) {
     const elapsedMs = Date.now() - anchor.getTime();
     const maxMs = MAX_WAIT_MIN * 60 * 1000;
-    const checks = fetchChecks(prNumber);
+    const checks = fetchChecks(prNumber, repoIn, expectedHeadSha, baseRefName);
     if (checks.error && !checks.failed) {
       if (isGithubRateLimitError(checks.error)) {
         return {
@@ -375,7 +329,7 @@ function evaluate({
     lastQuietAnchorAt !== null &&
     Date.now() - lastQuietAnchorAt.getTime() >= QUIET_WINDOW_SEC * 1000;
 
-  const checks = fetchChecks(prNumber);
+  const checks = fetchChecks(prNumber, repo, expectedHeadSha, baseRefName);
   if (checks.error && !checks.failed) {
     if (isGithubRateLimitError(checks.error)) {
       return {
@@ -653,6 +607,7 @@ async function main() {
       prNumber,
       anchorIso: st.anchor || anchorFromPr,
       expectedHeadSha: headSha,
+      baseRefName: resolved.pr.baseRefName,
       state: st,
       repo,
       requiredKeys: keys,
