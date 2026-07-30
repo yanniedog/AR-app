@@ -191,7 +191,7 @@ export default function ProductDetail() {
     if (currentBest == null) currentBest = rate;
     else currentBest = meta.lowerIsBetter ? Math.min(currentBest, rate) : Math.max(currentBest, rate);
   }
-  const chartDates = historyModel?.dates ?? [];
+  const chartDates = historyModel?.allDates ?? historyModel?.dates ?? [];
   const productSeries = {
     values: productSeriesRecordForChart(
       productHistory,
@@ -361,7 +361,7 @@ export default function ProductDetail() {
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
-                {productHistoryError && !productHasSeries ? (
+                {productHistoryError && observedProductPoints < 2 ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
                       Couldn&apos;t load this product&apos;s history.
@@ -372,12 +372,10 @@ export default function ProductDetail() {
                       onPress={() => void ensureProductHistory({ force: true })}
                     />
                   </Row>
-                ) : !productHasSeries || observedProductPoints < 2 ? (
+                ) : observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    {formatRate(currentBest)} today
-                    {observedProductPoints < 2
-                      ? ' · gathering prior daily rates so the full line can draw'
-                      : ''}
+                    {formatRate(currentBest)} today · gathering prior daily rates so the full line
+                    can draw
                   </AppText>
                 ) : null}
               </>

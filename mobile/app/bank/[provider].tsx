@@ -102,6 +102,7 @@ export default function BankDetail() {
   const bankInsights = useStore((s) => s.bankInsights);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const productHistory = useStore((s) => s.productHistory);
+  const productHistoryError = useStore((s) => s.productHistoryError);
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
@@ -214,7 +215,7 @@ export default function BankDetail() {
       if (moves.length) out.push({ event, moves });
     }
     return out;
-  }, [bankEvents, core, productHistory, provider]);
+  }, [bankEvents, core, productHistory]);
 
   if (!core) return null;
 
@@ -274,11 +275,13 @@ export default function BankDetail() {
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                {historyEnabled
-                  ? productHistory
+                {!historyEnabled
+                  ? 'Enable rate history to see which products moved.'
+                  : productHistory
                     ? 'Could not match individual products for this move yet — try again after daily history finishes syncing.'
-                    : 'Loading product-level history to identify which accounts moved…'
-                  : 'Enable rate history to see which products moved.'}
+                    : productHistoryError
+                      ? 'Product-level history is unavailable right now — pull to refresh and try again.'
+                      : 'Loading product-level history to identify which accounts moved…'}
               </AppText>
             )}
           </Card>

@@ -289,7 +289,7 @@ export function productMovesForBankEvent(
     if (row.provider !== opts.provider || !row.product_key) continue;
     if (catalog.has(row.product_key)) continue;
     catalog.set(row.product_key, {
-      productName: row.product_name || row.product_key,
+      productName: (row.product_name && row.product_name.trim()) || row.product_key,
       rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
     });
   }
@@ -299,9 +299,9 @@ export function productMovesForBankEvent(
     const series = history.products[productKey];
     if (!series) continue;
     const toRate = series[dateIndex];
-    if (toRate == null || !Number.isFinite(toRate)) continue;
+    if (toRate == null || !Number.isFinite(toRate) || toRate <= 0) continue;
     const fromRate = lastFiniteBefore(series, dateIndex);
-    if (fromRate == null) continue;
+    if (fromRate == null || fromRate <= 0) continue;
     // Compare in rounded bps space — fraction subtraction can land just under
     // 0.0005 for a true 5 bps move (e.g. 0.0600 − 0.0595 → 0.0004999…).
     const bps = Math.round((toRate - fromRate) * 10000 * 10) / 10;
