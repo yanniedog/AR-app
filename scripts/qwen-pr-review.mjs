@@ -198,7 +198,7 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
     signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       model,
-      stream: false,
+      stream: true,
       format: 'json',
       keep_alive: '30m',
       options: {
@@ -216,15 +216,36 @@ async function requestFindings({ baseUrl, apiKey, model, userContent }) {
       ],
     }),
   });
-  const raw = await response.text();
-  if (!response.ok) fail(`Qwen API HTTP ${response.status}: ${raw.slice(0, 1200)}`);
-  let envelope;
-  try {
-    envelope = JSON.parse(raw);
-  } catch {
-    fail(`Qwen API returned invalid JSON envelope: ${raw.slice(0, 500)}`);
+  if (!response.ok) {
+    const raw = await response.text();
+    fail(`Qwen API HTTP ${response.status}: ${raw.slice(0, 1200)}`);
   }
-  const content = envelope?.message?.content || '';
+  if (!response.body) fail('Qwen API returned no response body');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let content = '';
+  const consumeLine = (line) => {
+    if (!line.trim()) return;
+    let envelope;
+    try {
+      envelope = JSON.parse(line);
+    } catch {
+      fail(`Qwen API returned invalid streamed JSON: ${line.slice(0, 500)}`);
+    }
+    if (envelope?.error) fail(`Qwen API stream failed: ${String(envelope.error).slice(0, 1000)}`);
+    content += envelope?.message?.content || '';
+  };
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || '';
+    for (const line of lines) consumeLine(line);
+  }
+  buffer += decoder.decode();
+  consumeLine(buffer);
   return parseModelJson(content).findings;
 }
 
