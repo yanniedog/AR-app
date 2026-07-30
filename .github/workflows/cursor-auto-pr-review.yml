@@ -21,7 +21,7 @@ permissions:
   checks: write
 
 concurrency:
-  # A new push makes old analysis worthless. Cancel it before another 30B
+  # A new push makes old analysis worthless. Cancel it before another local
   # inference starts and debounce the replacement below.
   group: >-
     qwen-review-${{
@@ -144,7 +144,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Continue'
           if (-not $env:QWEN_API_BASE_URL) { $env:QWEN_API_BASE_URL = 'http://127.0.0.1:11434/v1' }
-          if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen3-coder-review:30b' }
+          if (-not $env:QWEN_MODEL) { $env:QWEN_MODEL = 'qwen2.5-coder-review:7b' }
           $out = Join-Path $env:RUNNER_TEMP 'qwen-review.md'
           $err = Join-Path $env:RUNNER_TEMP 'qwen-review-error.txt'
           $env:OUT_FILE = $out
@@ -165,7 +165,7 @@ jobs:
           $review = Get-Content -Raw (Join-Path $env:RUNNER_TEMP 'qwen-review.md') | ConvertFrom-Json
           $findings = @($review.findings)
           $outcome = if ($findings.Count -eq 0) { 'no findings' } else { 'findings' }
-          $model = if ($env:MODEL) { $env:MODEL } else { 'qwen3-coder-review:30b' }
+          $model = if ($env:MODEL) { $env:MODEL } else { 'qwen2.5-coder-review:7b' }
           $reviewed = if (@($review.reviewed_files).Count -eq 0) {
             '(none)'
           } else {

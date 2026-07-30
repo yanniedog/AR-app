@@ -27,8 +27,8 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 - Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
 
-The dedicated local Qwen runner uses `qwen3-coder-review:30b`. Provision that
-model with `ollama create qwen3-coder-review:30b -f scripts/qwen-review.Modelfile`;
+The dedicated local Qwen runner uses `qwen2.5-coder-review:7b`. Provision that
+model with `ollama create qwen2.5-coder-review:7b -f scripts/qwen-review.Modelfile`;
 the checked-in context size and chunk budget keep the model within this runner's
 memory limit without silently dropping reviewable files.
 

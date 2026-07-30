@@ -9,7 +9,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_MODEL = 'qwen3-coder-review:30b';
+const DEFAULT_MODEL = 'qwen2.5-coder-review:7b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434/v1';
 const DEFAULT_DIFF_MAX = 160_000;
 const DEFAULT_CHUNK_MAX = 24_000;
