@@ -29,10 +29,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "24"
       - name: Skip bot wait for bot-authored or exact generated PRs
@@ -50,6 +50,7 @@ jobs:
             workflow_dispatch) PR="$INPUT_PR" ;;
             *)                 PR="$EVENT_PR" ;;
           esac
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::Pull request number must be numeric"; exit 1; }
           export PR
           EXEMPT=$(node scripts/pr-gate-exempt-reason.mjs || true)
           if [ -n "$EXEMPT" ]; then
@@ -85,4 +86,5 @@ jobs:
             workflow_dispatch) PR="$INPUT_PR" ;;
             *)                 PR="$EVENT_PR" ;;
           esac
+          [[ "$PR" =~ ^[0-9]+$ ]] || { echo "::error::Pull request number must be numeric"; exit 1; }
           npm run wait-for-bots -- --watch --pr "$PR"

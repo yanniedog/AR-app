@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { strict as assert } from 'node:assert';
 import {
   eventSatisfiesRequiredKey,
@@ -99,16 +99,22 @@ assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
 assert.match(workflow, /```suggestion/);
 assert.match(workflow, /cancel-in-progress:\s*true/);
 assert.doesNotMatch(workflow, /queue:\s*max/);
-assert.match(workflow, /DIFF_MAX_CHARS:\s*"120000"/);
+assert.match(workflow, /DIFF_MAX_CHARS:\s*"350000"/);
 assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
-assert.doesNotMatch(workflow, /Reviewed files:/);
-assert.doesNotMatch(workflow, /Omitted files:/);
+assert.match(workflow, /refs\/pull\/\$\{\{\s*steps\.pr\.outputs\.number\s*\}\}\/head/);
+assert.doesNotMatch(workflow, /Fork PRs cannot run/);
+assert.match(workflow, /Reviewed files:/);
+assert.match(workflow, /Omitted reviewable files:/);
+assert.match(workflow, /Intentionally excluded low-signal files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
 assert.match(workflow, /\$finding\.side -eq 'RIGHT'/);
 assert.doesNotMatch(prompt, /## Summary/);
 assert.match(prompt, /"suggested_fix"/);
 assert.match(prompt, /"side"/);
-assert.match(reviewer, /MAX_FILES = 16/);
+assert.doesNotMatch(reviewer, /\bMAX_FILES\b/);
+assert.match(reviewer, /DEFAULT_DIFF_MAX = 350_000/);
+assert.match(reviewer, /Qwen review budget omitted reviewable file/);
+assert.match(reviewer, /excluded_files:/);
 assert.match(reviewer, /max_tokens:\s*1800/);
 assert.match(reviewer, /AbortSignal\.timeout/);
 assert.match(reviewer, /UNTRUSTED_PR_DIFF_\$\{randomUUID\(\)\}/);
@@ -118,5 +124,15 @@ const waitScript = readFileSync('wait_for_bots.mjs', 'utf8');
 assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);
 assert.match(waitScript, /state\.anchor = anchorFromPr/);
 assert.match(waitScript, /state = \{ anchor: anchorIso, readyAt: null, headSha, requiredKeys \}/);
+
+const workflowSources = readdirSync('.github/workflows')
+  .filter((name) => /\.ya?ml$/i.test(name))
+  .map((name) => readFileSync(`.github/workflows/${name}`, 'utf8'))
+  .join('\n');
+assert.doesNotMatch(
+  workflowSources,
+  /\buses:\s*[^\r\n#]+@v\d+(?:\s|$)/,
+  'third-party actions must use immutable commit SHAs',
+);
 
 console.log('PASS verify-pr-review-bots');

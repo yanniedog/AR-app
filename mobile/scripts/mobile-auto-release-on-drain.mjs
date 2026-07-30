@@ -40,7 +40,7 @@ function gh(args) {
   if (res.status !== 0) {
     throw new Error(`gh ${args.join(' ')} failed: ${(res.stderr || res.stdout || '').trim()}`);
   }
-  return (res.stdout || '').trim();
+  return allowFail ? res : (res.stdout || '').trim();
 }
 
 function ghTry(args) {
@@ -124,7 +124,7 @@ function git(args, { allowFail = false } = {}) {
   if (res.status !== 0 && !allowFail) {
     throw new Error(`git ${args.join(' ')} failed: ${(res.stderr || res.stdout || '').trim()}`);
   }
-  return allowFail ? res : (res.stdout || '').trim();
+  return (res.stdout || '').trim();
 }
 
 function syncMain() {

@@ -59,6 +59,9 @@ jobs:
           } else {
             $env:EVENT_PR
           }
+          if ($pr -notmatch '^\d+$') {
+            throw "Pull request number must be numeric."
+          }
           $json = gh api "repos/$env:GITHUB_REPOSITORY/pulls/$pr" | ConvertFrom-Json
           if ($json.head.repo.full_name -ne $env:GITHUB_REPOSITORY) {
             throw "Fork PRs cannot run on the private Qwen runner."
@@ -98,7 +101,7 @@ jobs:
           && github.event_name == 'pull_request_target'
         run: Start-Sleep -Seconds 90
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
           ref: main
@@ -106,7 +109,7 @@ jobs:
           persist-credentials: false
           clean: true
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
