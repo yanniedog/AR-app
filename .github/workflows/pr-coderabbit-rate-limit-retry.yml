@@ -186,12 +186,14 @@ jobs:
               STEP=$(( LEFT > 300 ? 300 : LEFT ))
               sleep "$STEP"
               LEFT=$(( LEFT - STEP ))
+              # transient-safe-pr-state-poll:start
               if STATE="$(read_pr_state)" && [ "${STATE}" != "OPEN" ]; then
                 echo "PR #$PR closed during wait; skip"
                 exit 0
               elif [ -z "${STATE:-}" ]; then
                 echo "Could not read PR #$PR state; preserve the active waiter"
               fi
+              # transient-safe-pr-state-poll:end
               if [ "$LEFT" -gt 0 ]; then
                 echo "… ${LEFT}s remaining"
               fi
