@@ -313,6 +313,16 @@ assert.match(
   coderabbitRetryWorkflow,
   /--paginate --slurp \|\s*\n\s*jq --arg after/,
 );
+assert.doesNotMatch(coderabbitRetryWorkflow, /^concurrency:/m);
+assert.match(
+  coderabbitRetryWorkflow,
+  /jobs:[\s\S]*retry-after-rate-limit:[\s\S]*\n    concurrency:/,
+);
+assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
+assert.match(
+  coderabbitRetryWorkflow,
+  /while \[ "\$LEFT" -gt 0 \][\s\S]*gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"[\s\S]*closed during wait; skip/,
+);
 assert.doesNotMatch(
   branchProtection.match(/const REQUIRED_CHECKS = \[[\s\S]*?\];/)?.[0] || "",
   /qwen-code-review|bot-presence-gate/,
