@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-30T19:28:24.961Z",
+  "generated_at": "2026-07-30T19:47:09.869Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -426,6 +426,17 @@
         "Fix repeated queue-drain release failures (#82)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.44"
+    },
+    {
+      "version": "1.0.45",
+      "date": "2026-07-30",
+      "summaryBullets": [
+        "Complete generated release PRs reliably (#85)",
+        "chore(mobile): auto-release bump to v1.0.44 (after e33aa6f) (#84)",
+        "Authenticate release automation branch pushes (#83)",
+        "Fix repeated queue-drain release failures (#82)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.45"
     }
   ]
 }
