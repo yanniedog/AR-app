@@ -1,3 +1,5 @@
+import * as FileSystem from 'expo-file-system/legacy';
+
 import {
   APK_SHA256_VERIFY_MAX_BYTES,
   assertDownloadedApkMatchesManifest,
@@ -8,6 +10,7 @@ import {
   remoteIsNewer,
   type ApkManifest,
 } from '../src/lib/appUpdateLogic';
+import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
 
 const baseManifest: ApkManifest = {
   schema_version: 1,
@@ -154,6 +157,36 @@ describe('APK download integrity', () => {
         sha256: baseManifest.sha256,
       }),
     ).toEqual({ verifySha256: false });
+  });
+
+  it('still rejects a truncated large APK before skipping in-memory sha256', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes! - 1,
+      modificationTime: 0,
+    });
+
+    await expect(
+      verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
+    ).rejects.toThrow(/size mismatch/);
+    expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+  });
+
+  it('accepts an exact-size large APK without reading it into JS memory', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+
+    await expect(
+      verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
+    ).resolves.toBeUndefined();
+    expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
   });
 
   it('requests sha256 verify for small APKs', () => {

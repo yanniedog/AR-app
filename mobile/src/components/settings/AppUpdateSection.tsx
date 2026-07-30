@@ -20,6 +20,7 @@ import {
   ensureInstallPermission,
   openInstallPermissionSettings,
 } from '../../lib/installPermission';
+import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { DisclosureGroup, InfoRow, Section, SettingsGap } from './settingsUi';
 
 export function AppUpdateSection() {
@@ -33,15 +34,7 @@ export function AppUpdateSection() {
   const [error, setError] = useState<string | null>(null);
   const [installAllowed, setInstallAllowed] = useState<boolean | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
-    phase: 'idle',
-    buildNumber: null,
-    version: null,
-    downloadUrl: null,
-    sha256: null,
-    localUri: null,
-    bytesWritten: 0,
-    totalBytes: null,
-    error: null,
+    ...IDLE_APK_DOWNLOAD,
   }));
 
   useEffect(() => subscribeApkDownload(setDownload), []);
@@ -71,11 +64,15 @@ export function AppUpdateSection() {
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
-        void ensureApkBackgroundDownload(result.remote, { wifiOnly });
+        void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        });
       }
       if (result.status === 'error') {
         setError(result.message);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setChecking(false);
     }

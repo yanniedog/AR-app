@@ -5,6 +5,11 @@ import { Platform } from 'react-native';
 
 import { debugLog } from './debugLog';
 import { ensureInstallPermission } from './installPermission';
+import {
+  APK_SHA256_VERIFY_MAX_BYTES,
+  assertDownloadedApkMatchesManifest,
+  type ApkManifest,
+} from './appUpdateLogic';
 
 function toHex(buf: ArrayBuffer): string {
   return Array.from(new Uint8Array(buf))
@@ -12,14 +17,28 @@ function toHex(buf: ArrayBuffer): string {
     .join('');
 }
 
-export async function verifyApkSha256(path: string, expectedSha: string): Promise<void> {
+/**
+ * Validate downloaded APK size (and SHA-256 when small enough).
+ * Large APKs skip in-memory hashing but still must match manifest.bytes.
+ */
+export async function verifyDownloadedApk(
+  path: string,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256'>,
+): Promise<void> {
   const info = await FileSystem.getInfoAsync(path);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
-  // SDK 54 has no FileSystem.hashAsync; skip verify for large APKs to avoid OOM on low-RAM devices.
-  if (size > 64 * 1024 * 1024) {
-    debugLog.warn('app-update', `skipping sha256 verify (APK ${size} bytes > 64 MiB)`);
+  const { verifySha256: shouldHash } = assertDownloadedApkMatchesManifest(size, manifest);
+  if (!shouldHash) {
+    if (manifest.sha256) {
+      debugLog.warn(
+        'app-update',
+        `skipping sha256 verify (APK ${size} bytes > ${APK_SHA256_VERIFY_MAX_BYTES} bytes); size matched manifest.bytes=${manifest.bytes ?? 'n/a'}`,
+      );
+    }
     return;
   }
+
+  const expectedSha = manifest.sha256!;
   const base64 = await FileSystem.readAsStringAsync(path, {
     encoding: FileSystem.EncodingType.Base64,
   });
@@ -35,6 +54,15 @@ export async function verifyApkSha256(path: string, expectedSha: string): Promis
       `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
     );
   }
+}
+
+/** Prefer verifyDownloadedApk so large files still enforce manifest.bytes. */
+export async function verifyApkSha256(
+  path: string,
+  expectedSha: string,
+  expectedBytes?: number | null,
+): Promise<void> {
+  await verifyDownloadedApk(path, { sha256: expectedSha, bytes: expectedBytes ?? undefined });
 }
 
 export async function installDownloadedApk(localUri: string): Promise<void> {

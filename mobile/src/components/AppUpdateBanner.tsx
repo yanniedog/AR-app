@@ -14,7 +14,7 @@ import {
   type ApkManifest,
   type UpdateCheckResult,
 } from '../lib/appUpdate';
-import { updateBannerCopy } from '../lib/appUpdateDownloadLogic';
+import { IDLE_APK_DOWNLOAD, updateBannerCopy } from '../lib/appUpdateDownloadLogic';
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
@@ -37,15 +37,7 @@ export function useAppUpdateBanner(): AppUpdateBannerState {
   const setPref = useStore((s) => s.setPref);
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
-    phase: 'idle',
-    buildNumber: null,
-    version: null,
-    downloadUrl: null,
-    sha256: null,
-    localUri: null,
-    bytesWritten: 0,
-    totalBytes: null,
-    error: null,
+    ...IDLE_APK_DOWNLOAD,
   }));
 
   useEffect(() => subscribeApkDownload(setDownload), []);
@@ -58,7 +50,9 @@ export function useAppUpdateBanner(): AppUpdateBannerState {
         if (cancelled) return;
         setResult(r);
         if (r.status === 'available') {
-          void ensureApkBackgroundDownload(r.remote, { wifiOnly });
+          void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
+            // ensureApkBackgroundDownload persists phase=error for Retry.
+          });
         }
       })
       .catch(() => {});

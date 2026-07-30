@@ -21,7 +21,7 @@ import {
   type ApkDownloadSnapshot,
 } from './appUpdateDownloadLogic';
 import { preferImmutableApkDownloadUrl, type ApkManifest } from './appUpdateLogic';
-import { installDownloadedApk, verifyApkSha256 } from './appUpdateInstall';
+import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 
 const STORAGE_KEY = 'app-update-download-v1';
 const PROMPTED_KEY = 'app-update-prompted-build';
@@ -30,17 +30,19 @@ let snapshot: ApkDownloadSnapshot = { ...IDLE_APK_DOWNLOAD };
 let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 let activeTask: DownloadTask | null = null;
+let activeDownloadWifiOnly: boolean | null = null;
 let ensureInFlight: Promise<void> | null = null;
 let ensureBuild: string | null = null;
 let configReady = false;
 let appStateHooked = false;
+let appStateSub: { remove: () => void } | null = null;
 let pendingPromptManifest: ApkManifest | null = null;
 const listeners = new Set<(s: ApkDownloadSnapshot) => void>();
 
 function hookAppStatePrompt(): void {
   if (appStateHooked || Platform.OS !== 'android') return;
   appStateHooked = true;
-  AppState.addEventListener('change', (state) => {
+  appStateSub = AppState.addEventListener('change', (state) => {
     if (state !== 'active' || !pendingPromptManifest) return;
     const manifest = pendingPromptManifest;
     pendingPromptManifest = null;
@@ -133,6 +135,32 @@ async function clearStaleFiles(keepBuild: string | null): Promise<void> {
   }
 }
 
+async function stopTaskQuietly(task: DownloadTask | null | undefined): Promise<void> {
+  if (!task) return;
+  try {
+    await task.stop();
+  } catch {
+    // ignore
+  }
+}
+
+async function stopMatchingTask(buildNumber: string): Promise<void> {
+  const taskId = apkDownloadTaskId(buildNumber);
+  if (activeTask?.id === taskId) {
+    await stopTaskQuietly(activeTask);
+    activeTask = null;
+  }
+  try {
+    const existing = await getExistingDownloadTasks();
+    for (const task of existing) {
+      if (task.id === taskId) await stopTaskQuietly(task);
+    }
+  } catch {
+    // Best-effort only.
+  }
+  activeDownloadWifiOnly = null;
+}
+
 function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
   activeTask = task;
   task
@@ -166,9 +194,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         try {
           await completeHandler(task.id);
           const localUri = location?.startsWith('file://') ? location : `file://${location}`;
-          if (manifest.sha256) {
-            await verifyApkSha256(localUri, manifest.sha256);
-          }
+          await verifyDownloadedApk(localUri, manifest);
           await persist({
             phase: 'ready',
             buildNumber: manifest.build_number,
@@ -197,7 +223,10 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             error: message,
           });
         } finally {
-          if (activeTask?.id === task.id) activeTask = null;
+          if (activeTask?.id === task.id) {
+            activeTask = null;
+            activeDownloadWifiOnly = null;
+          }
         }
       })();
     })
@@ -214,7 +243,10 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         error: `${error}${errorCode ? ` (${errorCode})` : ''}`,
       });
       debugLog.error('app-update', `background download failed: ${error} code=${errorCode}`);
-      if (activeTask?.id === task.id) activeTask = null;
+      if (activeTask?.id === task.id) {
+        activeTask = null;
+        activeDownloadWifiOnly = null;
+      }
     });
 }
 
@@ -230,25 +262,23 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
 
   const match = existing.find((t) => t.id === taskId);
   for (const task of existing) {
-    if (task.id !== taskId) {
-      try {
-        await task.stop();
-      } catch {
-        // ignore
-      }
+    if (task.id !== taskId && task.id.startsWith('apk-update-')) {
+      await stopTaskQuietly(task);
     }
   }
   if (!match) return false;
 
-  attachHandlers(match, manifest);
-  if (match.state === 'DONE') {
-    // done handler may not re-fire; treat existing destination as candidate.
+  const state = String(match.state || '').toUpperCase();
+  const terminalFailed =
+    state === 'FAILED' || state === 'STOPPED' || state === 'ERROR' || state === 'CANCELLED';
+
+  if (state === 'DONE') {
     const dest =
       match.downloadParams?.destination ??
       apkDestinationPath(directories.documents, manifest.build_number);
     if (await fileExists(dest)) {
       try {
-        if (manifest.sha256) await verifyApkSha256(dest, manifest.sha256);
+        await verifyDownloadedApk(dest, manifest);
         await persist({
           phase: 'ready',
           buildNumber: manifest.build_number,
@@ -264,16 +294,39 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
         return true;
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        debugLog.warn('app-update', `DONE task unusable, will re-download: ${message}`);
         await persist({ ...snapshot, phase: 'error', error: message, localUri: null });
+        await stopTaskQuietly(match);
+        if (activeTask?.id === match.id) activeTask = null;
+        activeDownloadWifiOnly = null;
+        return false;
       }
     }
+    debugLog.warn('app-update', 'DONE task missing destination file; starting a new download');
+    await stopTaskQuietly(match);
+    if (activeTask?.id === match.id) activeTask = null;
+    activeDownloadWifiOnly = null;
+    return false;
   }
 
-  if (match.state === 'PAUSED') {
+  if (terminalFailed) {
+    debugLog.warn('app-update', `terminal task state=${state}; starting a new download`);
+    await stopTaskQuietly(match);
+    if (activeTask?.id === match.id) activeTask = null;
+    activeDownloadWifiOnly = null;
+    return false;
+  }
+
+  attachHandlers(match, manifest);
+  if (state === 'PAUSED') {
     try {
       await match.resume();
     } catch (err) {
       debugLog.warn('app-update', `resume failed: ${String((err as Error)?.message ?? err)}`);
+      await stopTaskQuietly(match);
+      if (activeTask?.id === match.id) activeTask = null;
+      activeDownloadWifiOnly = null;
+      return false;
     }
   }
 
@@ -332,6 +385,7 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
     error: null,
   });
   task.start();
+  activeDownloadWifiOnly = wifiOnly;
   debugLog.info(
     'app-update',
     `background download started build=${manifest.build_number} wifiOnly=${wifiOnly}`,
@@ -350,9 +404,40 @@ export async function ensureApkBackgroundDownload(
   await hydrate();
 
   const wifiOnly = Boolean(options?.wifiOnly);
-  ensureConfig(wifiOnly);
+  let force = Boolean(options?.force);
+  try {
+    ensureConfig(wifiOnly);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await persist({
+      phase: 'error',
+      buildNumber: manifest.build_number,
+      version: manifest.version,
+      downloadUrl: manifest.download_url,
+      sha256: manifest.sha256 ?? null,
+      localUri: null,
+      bytesWritten: snapshot.bytesWritten,
+      totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+      error: message,
+    });
+    throw err;
+  }
 
-  if (!options?.force) {
+  // Android DownloadManager cannot update isAllowedOverMetered on an in-flight
+  // request. If Wi-Fi-only was turned on while a cellular-capable download is
+  // active (or after process death we no longer know), stop and recreate.
+  if (
+    !force &&
+    wifiOnly &&
+    String(snapshot.buildNumber) === String(manifest.build_number) &&
+    snapshot.phase === 'downloading' &&
+    activeDownloadWifiOnly !== true
+  ) {
+    debugLog.info('app-update', 'wifi-only enabled; restarting active APK download');
+    force = true;
+  }
+
+  if (!force) {
     if (isCachedApkReady(snapshot, manifest.build_number, await fileExists(snapshot.localUri))) {
       await maybePromptUpgrade(manifest);
       return snapshot;
@@ -361,7 +446,7 @@ export async function ensureApkBackgroundDownload(
     const dest = apkDestinationPath(directories.documents, manifest.build_number);
     if (await fileExists(dest)) {
       try {
-        if (manifest.sha256) await verifyApkSha256(dest, manifest.sha256);
+        await verifyDownloadedApk(dest, manifest);
         await persist({
           phase: 'ready',
           buildNumber: manifest.build_number,
@@ -384,7 +469,7 @@ export async function ensureApkBackgroundDownload(
     }
   }
 
-  if (!options?.force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
+  if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
     const taskId = apkDownloadTaskId(manifest.build_number);
     if (activeTask?.id !== taskId) {
       // Reattach handlers after process death / JS reload.
@@ -393,16 +478,38 @@ export async function ensureApkBackgroundDownload(
     return snapshot;
   }
 
-  if (ensureInFlight && ensureBuild === manifest.build_number) {
+  if (ensureInFlight && ensureBuild === manifest.build_number && !force) {
     await ensureInFlight;
     return snapshot;
   }
 
   ensureBuild = manifest.build_number;
   ensureInFlight = (async () => {
-    const reattached = await reattachExisting(manifest);
-    if (reattached) return;
-    await startNewDownload(manifest, wifiOnly);
+    try {
+      if (force) {
+        await stopMatchingTask(manifest.build_number);
+      } else {
+        const reattached = await reattachExisting(manifest);
+        if (reattached) return;
+      }
+      await startNewDownload(manifest, wifiOnly);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      debugLog.error('app-update', `background download start failed: ${message}`);
+      await persist({
+        phase: 'error',
+        buildNumber: manifest.build_number,
+        version: manifest.version,
+        downloadUrl: manifest.download_url,
+        sha256: manifest.sha256 ?? null,
+        localUri: null,
+        bytesWritten: snapshot.bytesWritten,
+        totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+        error: message,
+      });
+      activeDownloadWifiOnly = null;
+      throw err;
+    }
   })().finally(() => {
     ensureInFlight = null;
     ensureBuild = null;
@@ -444,9 +551,7 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
   if (!localUri) {
     throw new Error('Update download is not ready yet');
   }
-  if (manifest.sha256) {
-    await verifyApkSha256(localUri, manifest.sha256);
-  }
+  await verifyDownloadedApk(localUri, manifest);
   await installDownloadedApk(localUri);
 }
 
@@ -468,22 +573,30 @@ export async function upgradeFromBackgroundDownload(
   }
 
   await new Promise<void>((resolve, reject) => {
+    let settled = false;
+    let unsub: (() => void) | null = null;
     const timeout = setTimeout(() => {
-      unsub();
+      if (settled) return;
+      settled = true;
+      unsub?.();
       reject(new Error('Timed out waiting for update download'));
     }, 30 * 60 * 1000);
-    const unsub = subscribeApkDownload((s) => {
+    unsub = subscribeApkDownload((s) => {
+      if (settled) return;
       if (String(s.buildNumber) !== String(manifest.build_number)) return;
       if (s.phase === 'ready') {
+        settled = true;
         clearTimeout(timeout);
-        unsub();
+        unsub?.();
         resolve();
       } else if (s.phase === 'error') {
+        settled = true;
         clearTimeout(timeout);
-        unsub();
+        unsub?.();
         reject(new Error(s.error ?? 'Update download failed'));
       }
     });
+    if (settled) unsub();
   });
 
   await installReadyApkUpdate(manifest);
@@ -540,10 +653,14 @@ async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
 }
 
 export async function resetApkDownloadStateForTests(): Promise<void> {
+  appStateSub?.remove();
+  appStateSub = null;
+  appStateHooked = false;
   snapshot = { ...IDLE_APK_DOWNLOAD };
   hydrated = false;
   hydratePromise = null;
   activeTask = null;
+  activeDownloadWifiOnly = null;
   ensureInFlight = null;
   ensureBuild = null;
   configReady = false;
