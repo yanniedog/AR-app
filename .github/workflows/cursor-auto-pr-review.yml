@@ -150,7 +150,7 @@ jobs:
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           PROMPT_PATH: ${{ github.workspace }}\_trusted-reviewer\.cursor\PR_REVIEW_PROMPT.md
           DIFF_MAX_CHARS: "160000"
-          DIFF_CHUNK_CHARS: "12000"
+          DIFF_CHUNK_CHARS: "16000"
           QWEN_CONTEXT_TOKENS: "8192"
         run: |
           $ErrorActionPreference = 'Continue'

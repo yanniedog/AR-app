@@ -12,7 +12,7 @@ import { pathToFileURL } from 'node:url';
 const DEFAULT_MODEL = 'qwen2.5-coder-review:1.5b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434';
 const DEFAULT_DIFF_MAX = 160_000;
-const DEFAULT_CHUNK_MAX = 12_000;
+const DEFAULT_CHUNK_MAX = 16_000;
 const MAX_FINDINGS = 8;
 
 function fail(message) {
