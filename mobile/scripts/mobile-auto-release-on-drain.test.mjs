@@ -6,7 +6,9 @@ import {
   checkedGhOutput,
   ensureApkForMainHead,
   hasApkBuildInFlight,
+  nextAutoReleaseVersion,
   pushBranchWithGhAuth,
+  readPublishedVersion,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
@@ -169,4 +171,38 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
   assert.equal(did, false);
   assert.deepEqual(checkedHeads, ['def5678']);
   assert.equal(dispatchedCount, 0);
+});
+
+test('auto-release advances from the published APK instead of a stale source version', () => {
+  assert.equal(nextAutoReleaseVersion('1.0.44', '1.0.77'), '1.0.78');
+  assert.equal(nextAutoReleaseVersion('1.0.78', '1.0.77'), '1.0.78');
+});
+
+test('rolling-manifest failures fall back to the checked-in release floor', async () => {
+  const warnings = [];
+  const missing = await readPublishedVersion(
+    async () => ({ ok: false, status: 404 }),
+    { warn: (message) => warnings.push(message) },
+  );
+  const malformed = await readPublishedVersion(
+    async () => ({ ok: true, json: async () => ({ version: 'not-semver' }) }),
+    { warn: (message) => warnings.push(message) },
+  );
+
+  assert.equal(missing, null);
+  assert.equal(malformed, null);
+  assert.equal(warnings.length, 2);
+  assert.equal(nextAutoReleaseVersion('1.0.79', missing), '1.0.79');
+});
+
+test('rolling-manifest reads abort after the configured timeout', async () => {
+  const published = await readPublishedVersion(
+    async (_url, { signal }) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      }),
+    { timeoutMs: 1, warn: () => {} },
+  );
+
+  assert.equal(published, null);
 });

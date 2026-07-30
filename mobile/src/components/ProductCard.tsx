@@ -17,6 +17,11 @@ import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
 import type { RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
+import {
+  ProductRateChangeSummaryLine,
+  productRateChangeText,
+  useProductRateChangeSummary,
+} from './product/ProductRateChangeLine';
 import { androidRipple, AppText, Row } from './ui';
 
 function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): string[] {
@@ -75,9 +80,13 @@ export function ProductCard({
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const rateLabel = rateValueLabel(section);
   const rateText = formatRate(row.rate);
+  const rateChange = useProductRateChangeSummary(row.product_key);
+  const rateChangeText = productRateChangeText(rateChange, true);
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
     row.comparison_rate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
-  }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}`;
+  }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
+    rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
+  }`;
 
   return (
     // Card container is a plain View; the nav target and the favorite star are
@@ -129,6 +138,7 @@ export function ProductCard({
         <AppText variant="small" color="textMuted" numberOfLines={1}>
           {row.provider}
         </AppText>
+        <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
         {tags.length || qualifier.conditional || nonStandard || access.badge ? (
           <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 6 }}>
             {access.badge ? (

@@ -12,7 +12,11 @@ import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeBankInsightsPayload } from './bankInsights';
-import { normalizeProductHistoryPayload, syncProductHistoryFromDailyPayloads } from './productHistory';
+import {
+  normalizeProductHistoryPayload,
+  syncProductHistoryFromDailyPayloads,
+  type ProductHistoryPurpose,
+} from './productHistory';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
 import { logDegradation, logEnsureSkipped } from '../lib/degradationLog';
@@ -574,10 +578,17 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       await get().ensureBankInsights({ force: true });
     },
 
-    async ensureProductHistory(opts: { force?: boolean } = {}) {
-      const { force = false } = opts;
-      if (!effectiveHistoryRibbon(get().prefs)) {
-        logEnsureSkipped('ensureProductHistory', 'proGate');
+    async ensureProductHistory(
+      opts: { force?: boolean; purpose?: ProductHistoryPurpose } = {},
+    ) {
+      const { force = false, purpose = 'history_ribbon' } = opts;
+      const prefs = get().prefs;
+      const permitted =
+        purpose === 'bank_move'
+          ? effectiveBankInsights(prefs)
+          : effectiveHistoryRibbon(prefs);
+      if (!permitted) {
+        logEnsureSkipped('ensureProductHistory', `${purpose}Gate`);
         return;
       }
       const currentCoreSha = get().manifest?.files.core.sha256 ?? '';

@@ -30,6 +30,116 @@ export interface ProductHistoryPayload {
   products: Record<string, (number | null)[]>;
 }
 
+export type ProductHistoryPurpose = 'history_ribbon' | 'bank_move';
+
+export type ProductBestRateSummary =
+  | {
+      kind: 'changed';
+      trackedSince: string;
+      observations: number;
+      observedOn: string;
+      fromRate: number;
+      toRate: number;
+      /** Signed basis-point change (to - from). */
+      bps: number;
+    }
+  | {
+      kind: 'tracking';
+      trackedSince: string;
+      observations: number;
+    }
+  | {
+      kind: 'unchanged';
+      trackedSince: string;
+      observations: number;
+    };
+
+export interface CurrentProductBestRate {
+  date: string | null | undefined;
+  rate: number | null | undefined;
+}
+
+function validObservedRate(value: number | null | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+}
+
+/**
+ * Summarise a product's representative best-rate series.
+ *
+ * Null gaps are ignored: a dated snapshot proves when the new value was first
+ * observed, not the lender's exact effective date. `current` is authoritative
+ * for its date so an in-memory ledger retained across a same-day refresh cannot
+ * report stale movement beside the newly installed core rate.
+ */
+export function summarizeProductBestRateSeries(
+  runDates: readonly string[] | null | undefined,
+  series: readonly (number | null)[] | null | undefined,
+  current?: CurrentProductBestRate,
+): ProductBestRateSummary | null {
+  if (!runDates?.length || !series?.length) return null;
+
+  const observations: { date: string; rate: number }[] = [];
+  runDates.forEach((rawDate, index) => {
+    const date = String(rawDate || '').slice(0, 10);
+    const rate = series[index];
+    if (YMD.test(date) && validObservedRate(rate)) observations.push({ date, rate });
+  });
+
+  const currentDate = String(current?.date || '').slice(0, 10);
+  if (YMD.test(currentDate) && validObservedRate(current?.rate)) {
+    const existingIndex = observations.findIndex((item) => item.date === currentDate);
+    const currentObservation = { date: currentDate, rate: current.rate };
+    if (existingIndex < 0) observations.push(currentObservation);
+    else observations[existingIndex] = currentObservation;
+  }
+
+  observations.sort((left, right) => left.date.localeCompare(right.date));
+  if (!observations.length) return null;
+
+  let latestChange:
+    | {
+        observedOn: string;
+        fromRate: number;
+        toRate: number;
+        bps: number;
+      }
+    | null = null;
+  for (let index = 1; index < observations.length; index += 1) {
+    const fromRate = observations[index - 1].rate;
+    const toRate = observations[index].rate;
+    const bps = Math.round((toRate - fromRate) * 10000 * 10) / 10;
+    if (bps === 0) continue;
+    latestChange = {
+      observedOn: observations[index].date,
+      fromRate,
+      toRate,
+      bps,
+    };
+  }
+
+  const base = {
+    trackedSince: observations[0].date,
+    observations: observations.length,
+  };
+  if (latestChange) return { kind: 'changed', ...base, ...latestChange };
+  return {
+    kind: observations.length === 1 ? 'tracking' : 'unchanged',
+    ...base,
+  };
+}
+
+export function summarizeProductBestRate(
+  payload: ProductHistoryPayload | null | undefined,
+  productKey: string,
+  current?: CurrentProductBestRate,
+): ProductBestRateSummary | null {
+  return summarizeProductBestRateSeries(
+    payload?.run_dates,
+    payload?.products?.[productKey],
+    current,
+  );
+}
+
 function productKeysForCore(core: CorePayload): Set<string> {
   const keys = new Set<string>();
   for (const section of SECTION_KEYS) {
@@ -56,6 +166,26 @@ function bestRatesForCore(core: CorePayload, keys: Set<string>): Map<string, num
     }
   }
   return best;
+}
+
+const currentBestRatesCache = new WeakMap<CorePayload, Map<string, number>>();
+
+/**
+ * Current section-aware best rate for a product. The complete core index is
+ * memoized by object identity so many visible product cards share one scan.
+ */
+export function bestRateForProduct(
+  core: CorePayload | null | undefined,
+  productKey: string,
+): number | null {
+  if (!core || !productKey) return null;
+  let best = currentBestRatesCache.get(core);
+  if (!best) {
+    const keys = productKeysForCore(core);
+    best = bestRatesForCore(core, keys);
+    currentBestRatesCache.set(core, best);
+  }
+  return best.get(productKey) ?? null;
 }
 
 /**
