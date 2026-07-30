@@ -444,6 +444,10 @@ assert.match(coderabbitRetryJob, /^    concurrency:/m);
 assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
 assert.doesNotMatch(feedbackWorkflow, /^concurrency:/m);
 assert.match(feedbackWorkflow, /timeout-minutes:\s*5/);
+assert.match(
+  feedbackWorkflow,
+  /ref:\s*\$\{\{\s*github\.event\.pull_request\.base\.sha\s*\|\|\s*github\.event\.repository\.default_branch\s*\}\}/,
+);
 assert.match(feedbackWorkflow, /PR_STATE=\$\(gh api/);
 assert.match(feedbackWorkflow, /types:\s*\[created, edited, deleted\]/);
 assert.match(feedbackWorkflow, /for attempt in 1 2 3 4/);
