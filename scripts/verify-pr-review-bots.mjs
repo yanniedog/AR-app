@@ -60,6 +60,14 @@ assert.deepEqual(
 assert.equal(isBotNoise('ERROR: Gemini API returned HTTP 503'), true);
 assert.equal(isBotNoise('The consumer version has been sunset; review activity has ceased.'), true);
 assert.equal(eventSatisfiesRequiredKey('github-actions[bot]', 'ERROR: Gemini 429', 'gemini'), false);
+assert.equal(
+  eventSatisfiesRequiredKey(
+    'coderabbitai[bot]',
+    'This reachable branch loses the release artifact and should retain it.',
+    'coderabbit',
+  ),
+  true,
+);
 
 assert.equal(loginToBotKey('github-actions[bot]', qwenSuccess), 'qwen');
 assert.equal(loginToBotKey('coderabbitai', 'A real review comment with actionable detail.'), 'coderabbit');
