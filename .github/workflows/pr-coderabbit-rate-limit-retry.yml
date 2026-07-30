@@ -74,7 +74,7 @@ jobs:
             exit 0
           fi
 
-          STATE="$(gh pr view "$PR" --json state -q .state 2>/dev/null || true)"
+          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR not open ($STATE); skip"
             exit 0
@@ -179,7 +179,7 @@ jobs:
             done
           fi
 
-          STATE="$(gh pr view "$PR" --json state -q .state 2>/dev/null || true)"
+          STATE="$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json state -q .state 2>/dev/null || true)"
           if [ "${STATE}" != "OPEN" ]; then
             echo "PR #$PR closed during wait; skip"
             exit 0
@@ -210,5 +210,5 @@ jobs:
           fi
 
           BODY_OUT="${RETRY_MARKER}"$'\n'"@coderabbitai review"
-          gh pr comment "$PR" --body "$BODY_OUT"
+          gh pr comment "$PR" --repo "$GITHUB_REPOSITORY" --body "$BODY_OUT"
           echo "Posted @coderabbitai review on PR #$PR"
