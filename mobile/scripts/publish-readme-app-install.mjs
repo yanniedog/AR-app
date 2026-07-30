@@ -13,6 +13,7 @@ import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
 import {
   approveActionRequiredRuns,
   waitForPullRequestMerge,
+  workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
@@ -101,14 +102,21 @@ function enableAutoMerge(prNumber) {
 
 async function settleGeneratedPr(prNumber, branchName) {
   const seenRunIds = new Set();
-  const approveBlockedRuns = async () => {
+  const headSha = gh([
+    'pr', 'view', String(prNumber), '--json', 'headRefOid', '--jq', '.headRefOid', '--repo', repo,
+  ]);
+  let fallbackChecked = false;
+  const approveBlockedRuns = async (attempt) => {
+    let runs = [];
     const approved = await approveActionRequiredRuns({
       listRuns: () => {
         const raw = gh([
           'run', 'list', '--branch', branchName, '--event', 'pull_request',
-          '--limit', '20', '--json', 'databaseId,status,conclusion', '--repo', repo,
+          '--limit', '20', '--json',
+          'databaseId,status,conclusion,workflowName,headSha', '--repo', repo,
         ]);
-        return JSON.parse(raw || '[]');
+        runs = workflowRunsForHead(JSON.parse(raw || '[]'), headSha);
+        return runs;
       },
       approveRun: (runId) =>
         gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
@@ -116,6 +124,14 @@ async function settleGeneratedPr(prNumber, branchName) {
     });
     if (approved.length > 0) {
       console.log(`publish-readme-app-install: approved ${approved.length} generated-PR workflow run(s)`);
+    }
+    if (!fallbackChecked && attempt >= 4) {
+      fallbackChecked = true;
+      dispatchMissingRequiredPrChecks(
+        prNumber,
+        branchName,
+        runs.map((run) => run?.workflowName),
+      );
     }
   };
   enableAutoMerge(prNumber);
@@ -127,8 +143,9 @@ async function settleGeneratedPr(prNumber, branchName) {
   console.log(`publish-readme-app-install: generated PR #${prNumber} merged`);
 }
 
-function dispatchRequiredPrChecks(prNumber, branchName) {
-  for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
+function dispatchMissingRequiredPrChecks(prNumber, branchName, observedWorkflowNames) {
+  const dispatches = requiredPrCheckDispatches(prNumber, branchName, observedWorkflowNames);
+  for (const dispatch of dispatches) {
     gh([
       'workflow',
       'run',
@@ -140,9 +157,12 @@ function dispatchRequiredPrChecks(prNumber, branchName) {
       repo,
     ]);
   }
-  console.log(
-    `publish-readme-app-install: dispatched required checks for PR #${prNumber} on ${branchName}`,
-  );
+  if (dispatches.length > 0) {
+    console.log(
+      `publish-readme-app-install: dispatched ${dispatches.length} missing required check(s) for PR #${prNumber}`,
+    );
+  }
+  return dispatches.length;
 }
 
 async function publishViaPullRequest(version, buildNumber, message) {
@@ -151,7 +171,6 @@ async function publishViaPullRequest(version, buildNumber, message) {
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`publish-readme-app-install: open README QR PR #${pr.number} (${pr.url}) — ensure auto-merge`);
-    dispatchRequiredPrChecks(pr.number, branchName);
     await settleGeneratedPr(pr.number, branchName);
     return { mode: 'pr-existing', prNumber: pr.number };
   }
@@ -184,7 +203,6 @@ async function publishViaPullRequest(version, buildNumber, message) {
     throw new Error(`publish-readme-app-install: could not parse PR number from ${prUrl}`);
   }
 
-  dispatchRequiredPrChecks(prNumber, branchName);
   await settleGeneratedPr(prNumber, branchName);
   console.log(`publish-readme-app-install: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return { mode: 'pr-created', prNumber };

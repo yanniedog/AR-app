@@ -1,5 +1,11 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
+export function workflowRunsForHead(runs, expectedHeadSha) {
+  const headSha = String(expectedHeadSha || '').trim();
+  if (!headSha) return [];
+  return (Array.isArray(runs) ? runs : []).filter((run) => run?.headSha === headSha);
+}
+
 export function actionRequiredRunIds(runs) {
   return (Array.isArray(runs) ? runs : [])
     .filter((run) => run?.conclusion === 'action_required')

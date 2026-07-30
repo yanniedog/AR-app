@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * Refresh README.md Android install section (stable rolling QR URL + current version).
- * Safe to run from GHA: README.md is outside mobile/** path filter so push won't re-trigger APK build.
+ * Safe to run from GHA: mobile-android-apk is dispatch-only, so the README PR
+ * cannot recursively trigger another APK build.
  *
  * Usage: node scripts/update-readme-app-install.mjs [--repo owner/name] [--readme path]
  */
