@@ -1,0 +1,43 @@
+{
+  "version": "1.0.45",
+  "date": "2026-07-30",
+  "summaryBullets": [
+    "Complete generated release PRs reliably (#85)",
+    "chore(mobile): auto-release bump to v1.0.44 (after e33aa6f) (#84)",
+    "Authenticate release automation branch pushes (#83)",
+    "Fix repeated queue-drain release failures (#82)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Complete generated release PRs reliably (#85)"
+        },
+        {
+          "text": "chore(mobile): auto-release bump to v1.0.44 (after e33aa6f) (#84)"
+        },
+        {
+          "text": "Authenticate release automation branch pushes (#83)"
+        },
+        {
+          "text": "Fix repeated queue-drain release failures (#82)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.45"
+        },
+        {
+          "text": "Since tag: app-v1.0.77"
+        }
+      ]
+    }
+  ]
+}
