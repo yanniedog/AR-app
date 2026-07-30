@@ -7,6 +7,7 @@ import {
   missingRequiredKeysFromEvents,
   parseRequiredKeys,
   reviewedCommitFromBody,
+  resolveRequiredKeys,
 } from "./lib/bot-wait-config.mjs";
 import { isBotNoise } from "./lib/bot-noise.mjs";
 import {
@@ -33,6 +34,7 @@ assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
 assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
+assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.equal(reviewedCommitFromBody(qwenSuccess), sha);
 assert.equal(
   eventSatisfiesRequiredKey("github-actions[bot]", qwenSuccess, "qwen", {
