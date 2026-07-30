@@ -302,7 +302,7 @@ assert.match(
   feedbackWorkflow,
   /group:\s*bot-feedback-gate-\$\{\{\s*github\.event\.pull_request\.number\s*\|\|\s*inputs\.pr_number\s*\|\|\s*github\.run_id\s*\}\}/,
 );
-assert.match(feedbackWorkflow, /cancel-in-progress:\s*true/);
+assert.match(feedbackWorkflow, /cancel-in-progress:\s*false/);
 assert.doesNotMatch(feedbackWorkflow, /pull_request\.head\.sha/);
 assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"60000"/);
