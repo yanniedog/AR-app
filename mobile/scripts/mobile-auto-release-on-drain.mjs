@@ -10,6 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bumpPatchVersion } from './bump-app-patch-version-pure.cjs';
 import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
+import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileDir, '..');
@@ -201,12 +202,31 @@ function enableAutoMerge(prNumber) {
   gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--delete-branch', '--repo', repo]);
 }
 
+function dispatchRequiredPrChecks(prNumber, branchName) {
+  for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
+    gh([
+      'workflow',
+      'run',
+      dispatch.workflow,
+      '--ref',
+      dispatch.ref,
+      ...dispatch.inputs,
+      '--repo',
+      repo,
+    ]);
+  }
+  console.log(
+    `mobile-auto-release-on-drain: dispatched required checks for PR #${prNumber} on ${branchName}`,
+  );
+}
+
 function publishViaPullRequest(next, message) {
   const branchName = bumpBranchName(next);
   const existing = listOpenAutoBumpPrs(next);
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`mobile-auto-release-on-drain: open bump PR #${pr.number} (${pr.url}) — ensure auto-merge`);
+    dispatchRequiredPrChecks(pr.number, branchName);
     enableAutoMerge(pr.number);
     return pr.number;
   }
@@ -237,6 +257,7 @@ function publishViaPullRequest(next, message) {
   const prNumber = prUrl.match(/\/pull\/(\d+)/)?.[1];
   if (!prNumber) throw new Error(`mobile-auto-release-on-drain: could not parse PR number from ${prUrl}`);
 
+  dispatchRequiredPrChecks(prNumber, branchName);
   enableAutoMerge(prNumber);
   console.log(`mobile-auto-release-on-drain: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return Number(prNumber);

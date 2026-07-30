@@ -25,6 +25,7 @@ on:
       - '.github/workflows/mobile-android-apk.yml'
 
 permissions:
+  actions: write
   contents: write
   pull-requests: write
 

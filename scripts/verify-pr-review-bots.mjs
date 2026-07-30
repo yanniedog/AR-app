@@ -12,7 +12,7 @@ import {
   loginToBotKey,
   SPREADSHEET_BOT_KEYS,
 } from './lib/pr-bot-roster.mjs';
-import { isStructuredReview } from './qwen-pr-review.mjs';
+import { changedLinesFromDiff, isReviewablePath } from './qwen-pr-review.mjs';
 
 const sha = '0123456789abcdef0123456789abcdef01234567';
 const qwenSuccess = [
@@ -39,6 +39,15 @@ assert.equal(
   false,
 );
 assert.equal(eventSatisfiesRequiredKey('github-actions[bot]', qwenFailure, 'qwen'), false);
+assert.equal(
+  eventSatisfiesRequiredKey(
+    'github-actions[bot]',
+    `${qwenSuccess}\nThe finding discusses HTTP 429 handling.`,
+    'qwen',
+    { expectedHeadSha: sha },
+  ),
+  true,
+);
 assert.deepEqual(
   missingRequiredKeysFromEvents(
     ['qwen'],
@@ -70,17 +79,35 @@ assert.equal(
 assert.equal(loginMatchesBotKey('cursor[bot]', 'codex', 'Cursor review housekeeping'), false);
 assert(SPREADSHEET_BOT_KEYS.includes('qwen'));
 assert(SPREADSHEET_BOT_KEYS.includes('cursor'));
-assert.equal(
-  isStructuredReview('## Summary\nx\n## Findings\nnone\n## Test Gaps\nnone'),
-  true,
+assert.equal(isReviewablePath('.github/workflows/app-ci.yml'), true);
+assert.equal(isReviewablePath('scripts/wait-for-bots.mjs'), true);
+assert.equal(isReviewablePath('mobile/package-lock.json'), false);
+assert.equal(isReviewablePath('README.md'), false);
+const changedLines = changedLinesFromDiff(
+  '@@ -10,2 +10,2 @@\n-old\n+new\n context',
 );
-assert.equal(isStructuredReview('This script waits for bots and offers general help.'), false);
-
+assert.deepEqual([...changedLines.left], [10]);
+assert.deepEqual([...changedLines.right], [10]);
 const workflow = readFileSync('.github/workflows/cursor-auto-pr-review.yml', 'utf8');
+const prompt = readFileSync('.cursor/PR_REVIEW_PROMPT.md', 'utf8');
 assert.match(workflow, /\bpull_request_target:/);
 assert.match(workflow, /ref:\s*main/);
 assert.match(workflow, /persist-credentials:\s*false/g);
 assert.match(workflow, /_trusted-reviewer\\scripts\\qwen-pr-review\.mjs/);
 assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
+assert.match(workflow, /```suggestion/);
+assert.match(workflow, /cancel-in-progress:\s*false/);
+assert.match(workflow, /queue:\s*max/);
+assert.match(workflow, /DIFF_MAX_CHARS:\s*"120000"/);
+assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
+assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
+assert.match(workflow, /\$finding\.side -eq 'RIGHT'/);
+assert.doesNotMatch(prompt, /## Summary/);
+assert.match(prompt, /"suggested_fix"/);
+assert.match(prompt, /"side"/);
+
+const waitScript = readFileSync('wait_for_bots.mjs', 'utf8');
+assert.doesNotMatch(waitScript, /\bupdatedAt\b/);
+assert.match(waitScript, /state\.anchor = anchorFromPr/);
 
 console.log('PASS verify-pr-review-bots');

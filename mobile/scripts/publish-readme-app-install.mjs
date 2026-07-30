@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { updateReadmeInstallSection } from './update-readme-app-install.mjs';
+import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileDir, '..');
@@ -89,12 +90,31 @@ function enableAutoMerge(prNumber) {
   gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--delete-branch', '--repo', repo]);
 }
 
+function dispatchRequiredPrChecks(prNumber, branchName) {
+  for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
+    gh([
+      'workflow',
+      'run',
+      dispatch.workflow,
+      '--ref',
+      dispatch.ref,
+      ...dispatch.inputs,
+      '--repo',
+      repo,
+    ]);
+  }
+  console.log(
+    `publish-readme-app-install: dispatched required checks for PR #${prNumber} on ${branchName}`,
+  );
+}
+
 function publishViaPullRequest(version, buildNumber, message) {
   const branchName = readmeApkQrBranchName(version, buildNumber);
   const existing = listOpenReadmeQrPrs(version, buildNumber);
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`publish-readme-app-install: open README QR PR #${pr.number} (${pr.url}) — ensure auto-merge`);
+    dispatchRequiredPrChecks(pr.number, branchName);
     enableAutoMerge(pr.number);
     return { mode: 'pr-existing', prNumber: pr.number };
   }
@@ -127,6 +147,7 @@ function publishViaPullRequest(version, buildNumber, message) {
     throw new Error(`publish-readme-app-install: could not parse PR number from ${prUrl}`);
   }
 
+  dispatchRequiredPrChecks(prNumber, branchName);
   enableAutoMerge(prNumber);
   console.log(`publish-readme-app-install: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return { mode: 'pr-created', prNumber };

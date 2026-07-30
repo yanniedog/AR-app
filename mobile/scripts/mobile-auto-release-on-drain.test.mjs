@@ -3,6 +3,28 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { waitForQueueDrain, ensureApkForMainHead } from './mobile-auto-release-on-drain.mjs';
+import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
+
+test('generated PRs explicitly dispatch every required check on their head branch', () => {
+  assert.deepEqual(requiredPrCheckDispatches(72, 'chore/mobile-auto-release-v1.2.3'), [
+    { workflow: 'app-ci.yml', ref: 'chore/mobile-auto-release-v1.2.3', inputs: [] },
+    {
+      workflow: 'cursor-auto-pr-review.yml',
+      ref: 'chore/mobile-auto-release-v1.2.3',
+      inputs: ['-f', 'pr_number=72'],
+    },
+    {
+      workflow: 'pr-bot-presence-gate.yml',
+      ref: 'chore/mobile-auto-release-v1.2.3',
+      inputs: ['-f', 'pr_number=72'],
+    },
+    {
+      workflow: 'pr-bot-feedback-check.yml',
+      ref: 'chore/mobile-auto-release-v1.2.3',
+      inputs: ['-f', 'pr_number=72'],
+    },
+  ]);
+});
 
 test('waitForQueueDrain refreshes main after a queued PR closes', async () => {
   const openCounts = [1, 0];

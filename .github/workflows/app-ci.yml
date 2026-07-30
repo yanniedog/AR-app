@@ -5,6 +5,7 @@ name: app-ci
 on:
   # mobile-ci is required by branch protection, so it must always be created.
   pull_request:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:

@@ -120,7 +120,7 @@ function resolveRepo() {
 }
 
 function resolvePr(prArg, branch) {
-  const fields = 'number,createdAt,updatedAt,headRefName,headRefOid,isCrossRepository';
+  const fields = 'number,createdAt,headRefName,headRefOid,isCrossRepository';
   if (prArg) {
     const r = gh(['pr', 'view', String(prArg), `--json`, fields], { json: true });
     if (!r.ok) return { error: r.error };
@@ -515,7 +515,6 @@ async function main() {
   }
   let state = readState(prNumber) || {};
   const anchorFromPr = resolved.pr.createdAt;
-  const anchorFromHead = resolved.pr.updatedAt || anchorFromPr;
 
   if (args.botTag) {
     const anchorIso = new Date().toISOString();
@@ -530,7 +529,10 @@ async function main() {
     state.requiredKeys = requiredKeys;
     writeState(prNumber, state);
   } else if (state.headSha !== headSha) {
-    state.anchor = anchorFromHead;
+    // A PR comment or review also changes updatedAt. Exact-head Qwen proof makes
+    // PR creation the stable lower bound without letting ordinary discussion
+    // hide an already-posted review for this SHA.
+    state.anchor = anchorFromPr;
     state.readyAt = null;
     state.headSha = headSha;
     state.requiredKeys = requiredKeys;
