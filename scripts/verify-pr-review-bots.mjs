@@ -18,7 +18,6 @@ import {
 import { changedLinesFromDiff, isReviewablePath } from "./qwen-pr-review.mjs";
 import {
   combineRequiredCheckState,
-  mergeVariablePages,
   renderDashboard,
   requiredChecksFromProtection,
   requiredChecksFromRules,
@@ -47,24 +46,6 @@ assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
 assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
-assert.deepEqual(
-  mergeVariablePages(
-    [
-      { variables: [{ name: "QWEN_ENABLED", value: "false" }] },
-      { variables: [{ name: "AR_BOT_WAIT_REQUIRED", value: "off" }] },
-    ],
-    { QWEN_ENABLED: "stale-fallback" },
-  ),
-  { QWEN_ENABLED: "false", AR_BOT_WAIT_REQUIRED: "off" },
-);
-assert.deepEqual(
-  mergeVariablePages(
-    [{ variables: [{ name: "QWEN_ENABLED", value: "false" }] }],
-    { QWEN_ENABLED: "stale-fallback" },
-    { QWEN_ENABLED: "true", AR_BOT_WAIT_REQUIRED: "off" },
-  ),
-  { QWEN_ENABLED: "true", AR_BOT_WAIT_REQUIRED: "off" },
-);
 assert.deepEqual(
   requiredChecksFromProtection({
     required_status_checks: {
@@ -136,10 +117,6 @@ const dashboardFixture = renderDashboard({
   presenceState: "disabled_manually",
   feedbackState: "active",
   coderabbitRetryState: "active",
-  repoVariables: {
-    QWEN_ENABLED: "false",
-    AR_BOT_WAIT_REQUIRED: "off",
-  },
   checks: ["mobile-ci", "bot-feedback-gate"],
   checkSource: "live branch rules",
   updatedAt: "2026-01-01T00:00:00.000Z",
@@ -148,7 +125,6 @@ assert.match(
   dashboardFixture,
   /Required checks on `main` \(live branch rules\)/,
 );
-assert.match(dashboardFixture, /QWEN_ENABLED=false/);
 assert.match(
   renderDashboard({
     repo: "owner/repo",
@@ -156,7 +132,6 @@ assert.match(
     presenceState: "disabled_manually",
     feedbackState: "active",
     coderabbitRetryState: "active",
-    repoVariables: {},
     checks: [],
     checkSource: "live rules",
     updatedAt: "2026-01-01T00:00:00.000Z",
@@ -324,14 +299,7 @@ assert.match(
   controlScript,
   /Qwen enabled as advisory; presence gate remains disabled/,
 );
-assert.match(
-  controlScript,
-  /actions\/variables\?per_page=100[\s\S]{0,200}"--paginate"/,
-);
-assert.match(
-  controlScript,
-  /pages\.flatMap\(\(page\) => page\?\.variables \|\| \[\]\)/,
-);
+assert.doesNotMatch(controlScript, /variable", "set|actions\/variables/);
 assert.match(
   coderabbitRetryWorkflow,
   /gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"/,

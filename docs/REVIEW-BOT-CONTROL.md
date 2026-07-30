@@ -6,9 +6,8 @@ workflow** to apply a repository-owned control or refresh live status.
 
 ## Controls
 
-- **Qwen disabled** cancels active Qwen runs, disables the Qwen workflow and
-  presence workflow, sets `QWEN_ENABLED=false`, and sets
-  `AR_BOT_WAIT_REQUIRED=off`.
+- **Qwen disabled** cancels active Qwen runs and disables both the Qwen
+  workflow and presence workflow.
 - **Qwen advisory** enables the Qwen workflow but leaves Qwen and bot presence
   out of required checks. The dedicated Windows runner must also be enabled
   locally because GitHub cannot start an offline self-hosted runner.
@@ -17,6 +16,11 @@ workflow** to apply a repository-owned control or refresh live status.
 
 `mobile-ci` and the vendor-neutral `bot-feedback-gate` remain required. Qwen,
 bot presence, and every external vendor remain advisory.
+
+Workflow state is the authoritative Qwen switch. The controller deliberately
+does not write repository variables because a workflow's `GITHUB_TOKEN` cannot
+administer Actions variables. The presence workflow stays disabled in both Qwen
+modes.
 
 ## External GitHub Apps
 
