@@ -26,6 +26,11 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 - Enable squash auto-merge via the repo wrapper: `npm run pr:merge -- --pr <N>` (auto squash, delete-branch, freshness). Do not use bare `gh pr merge --squash --auto` without `--delete-branch` / the wrapper.
 - Do not declare the task done while any owned PR is open and mergeable by you. Never end on “CI green” alone.
 
+The dedicated local Qwen runner uses `qwen3-coder-review:30b`. Provision that
+model with `ollama create qwen3-coder-review:30b -f scripts/qwen-review.Modelfile`;
+the Modelfile raises the context window so a bounded whole-PR review cannot
+silently run with Ollama's small hardware-derived default.
+
 ## Bot feedback (mandatory — every finding, every session)
 
 Always respond to **all** substantive bot (and human) review feedback. Green CI does not replace thread closure. Bots in scope include Sourcery, Cursor Auto Review / Codex, Gemini, Copilot, CodeRabbit, Greptile, and similar.

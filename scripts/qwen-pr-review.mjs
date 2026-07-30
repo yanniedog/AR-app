@@ -9,9 +9,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const DEFAULT_MODEL = 'qwen3-coder:30b';
+const DEFAULT_MODEL = 'qwen3-coder-review:30b';
 const DEFAULT_BASE_URL = 'http://127.0.0.1:11434/v1';
-const DEFAULT_DIFF_MAX = 350_000;
+const DEFAULT_DIFF_MAX = 160_000;
 const MAX_FINDINGS = 8;
 
 function fail(message) {
@@ -100,7 +100,7 @@ export function collectDiff(baseRef, maxChars) {
   const sections = [];
   let remaining = maxChars;
   for (const filePath of candidates) {
-    const diff = runGit(['diff', '--no-ext-diff', '--unified=25', range, '--', filePath]);
+    const diff = runGit(['diff', '--no-ext-diff', '--unified=5', range, '--', filePath]);
     if (!diff.trim()) continue;
     if (diff.length > remaining) {
       omittedFiles.push(filePath);
