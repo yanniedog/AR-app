@@ -9,6 +9,10 @@ import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { bumpPatchVersion } from './bump-app-patch-version-pure.cjs';
+import {
+  approveActionRequiredRuns,
+  waitForPullRequestMerge,
+} from '../../scripts/lib/generated-pr-automation.mjs';
 import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
@@ -214,6 +218,34 @@ function enableAutoMerge(prNumber) {
   gh(['pr', 'merge', String(prNumber), '--squash', '--auto', '--delete-branch', '--repo', repo]);
 }
 
+async function settleGeneratedPr(prNumber, branchName) {
+  const seenRunIds = new Set();
+  const approveBlockedRuns = async () => {
+    const approved = await approveActionRequiredRuns({
+      listRuns: () => {
+        const raw = gh([
+          'run', 'list', '--branch', branchName, '--event', 'pull_request',
+          '--limit', '20', '--json', 'databaseId,status,conclusion', '--repo', repo,
+        ]);
+        return JSON.parse(raw || '[]');
+      },
+      approveRun: (runId) =>
+        gh(['api', '--method', 'POST', `repos/${repo}/actions/runs/${runId}/approve`]),
+      seenRunIds,
+    });
+    if (approved.length > 0) {
+      console.log(`mobile-auto-release-on-drain: approved ${approved.length} generated-PR workflow run(s)`);
+    }
+  };
+  enableAutoMerge(prNumber);
+  await waitForPullRequestMerge({
+    beforeRead: approveBlockedRuns,
+    readState: () =>
+      gh(['pr', 'view', String(prNumber), '--json', 'state', '--jq', '.state', '--repo', repo]),
+  });
+  console.log(`mobile-auto-release-on-drain: generated PR #${prNumber} merged`);
+}
+
 function dispatchRequiredPrChecks(prNumber, branchName) {
   for (const dispatch of requiredPrCheckDispatches(prNumber, branchName)) {
     gh([
@@ -232,14 +264,14 @@ function dispatchRequiredPrChecks(prNumber, branchName) {
   );
 }
 
-function publishViaPullRequest(next, message) {
+async function publishViaPullRequest(next, message) {
   const branchName = bumpBranchName(next);
   const existing = listOpenAutoBumpPrs(next);
   if (existing.length > 0) {
     const pr = existing[0];
     console.log(`mobile-auto-release-on-drain: open bump PR #${pr.number} (${pr.url}) — ensure auto-merge`);
     dispatchRequiredPrChecks(pr.number, branchName);
-    enableAutoMerge(pr.number);
+    await settleGeneratedPr(pr.number, branchName);
     return pr.number;
   }
 
@@ -270,7 +302,7 @@ function publishViaPullRequest(next, message) {
   if (!prNumber) throw new Error(`mobile-auto-release-on-drain: could not parse PR number from ${prUrl}`);
 
   dispatchRequiredPrChecks(prNumber, branchName);
-  enableAutoMerge(prNumber);
+  await settleGeneratedPr(prNumber, branchName);
   console.log(`mobile-auto-release-on-drain: opened fallback PR #${prNumber} with auto-merge (${prUrl})`);
   return Number(prNumber);
 }
@@ -302,7 +334,11 @@ async function main() {
   const pending = listOpenAutoBumpPrs(next);
   if (pending.length > 0) {
     console.log(`mobile-auto-release-on-drain: bump PR already open for v${next} (#${pending[0].number}) — skip`);
-    enableAutoMerge(pending[0].number);
+    const branchName = bumpBranchName(next);
+    dispatchRequiredPrChecks(pending[0].number, branchName);
+    await settleGeneratedPr(pending[0].number, branchName);
+    syncMain();
+    ensureApkForMainHead();
     process.exit(0);
   }
 
@@ -339,7 +375,9 @@ async function main() {
   const message = `${AUTO_BUMP_PREFIX}${next}${prHint}`;
   git(['commit', '-m', message]);
 
-  publishViaPullRequest(next, message);
+  await publishViaPullRequest(next, message);
+  syncMain();
+  ensureApkForMainHead();
 }
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
