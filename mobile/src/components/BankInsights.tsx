@@ -68,7 +68,7 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   showDate = true,
   rateContext = null,
   focused = false,
-  onPress,
+  onSelect,
 }: {
   event: BankRateEvent;
   showDate?: boolean;
@@ -76,8 +76,8 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   rateContext?: BankEventRateContext | null;
   /** Highlight when this row is the drill-down focus. */
   focused?: boolean;
-  /** Override navigation (e.g. already on the bank page). */
-  onPress?: () => void;
+  /** Stable select handler (keeps React.memo effective across parent renders). */
+  onSelect?: (event: BankRateEvent) => void;
 }) {
   const theme = useTheme();
   const verb = moveVerb(event.section, event.dir);
@@ -85,8 +85,9 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   return (
     <Pressable
       onPress={
-        onPress ??
-        (() => openBank(event.provider, { date: event.date, section: event.section }))
+        onSelect
+          ? () => onSelect(event)
+          : () => openBank(event.provider, { date: event.date, section: event.section })
       }
       accessibilityRole="button"
       accessibilityLabel={eventA11yLabel(event, rateContext)}

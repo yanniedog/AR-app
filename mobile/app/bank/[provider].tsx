@@ -1,5 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
@@ -175,16 +175,27 @@ export default function BankDetail() {
   }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
 
   const catalogsBySection = useMemo(() => {
+    // Must match bank-insights event scope (unfiltered provider/section products).
+    // Building from `bySection` would omit non-standard / token-rate products that
+    // still contribute to headline moved/total counts when Standard-only is on.
     const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
-    for (const { section, rows } of bySection) {
-      out[section] = rows.map((r) => ({
-        productKey: r.product_key,
-        productName: (r.product_name && r.product_name.trim()) || r.product_key,
-        rateIndex: typeof r.rate_index === 'number' ? r.rate_index : null,
-      }));
+    if (!core) return out;
+    for (const section of SECTION_ORDER) {
+      const catalog: ProductMoveCatalogEntry[] = [];
+      const seen = new Set<string>();
+      for (const row of core.sections[section]?.rates ?? []) {
+        if (row.provider !== provider || !row.product_key || seen.has(row.product_key)) continue;
+        seen.add(row.product_key);
+        catalog.push({
+          productKey: row.product_key,
+          productName: (row.product_name && row.product_name.trim()) || row.product_key,
+          rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
+        });
+      }
+      if (catalog.length) out[section] = catalog;
     }
     return out;
-  }, [bySection]);
+  }, [core, provider]);
 
   const chartSections = useMemo(
     () =>
@@ -270,6 +281,13 @@ export default function BankDetail() {
   }, [bankEvents, catalogsBySection, focusEvent, productHistory]);
 
   const productCount = useMemo(() => bySection.reduce((n, s) => n + s.rows.length, 0), [bySection]);
+
+  const handleMoveSelect = useCallback(
+    (event: BankRateEvent) => {
+      router.setParams({ date: event.date, section: event.section });
+    },
+    [router],
+  );
 
   if (!core) return null;
 
@@ -383,12 +401,7 @@ export default function BankDetail() {
                         event.date === focusEvent.date &&
                         event.section === focusEvent.section
                       }
-                      onPress={() =>
-                        router.setParams({
-                          date: event.date,
-                          section: event.section,
-                        })
-                      }
+                      onSelect={handleMoveSelect}
                     />
                   ))}
                 </>
