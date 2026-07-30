@@ -28,4 +28,4 @@ Return strict JSON only:
 
 `line` must be a changed line on the stated side of the diff. Use `RIGHT` for
 added/replaced lines and `LEFT` for deleted lines. Return an empty findings array
-when there is no concrete defect. Maximum six distinct findings.
+when there is no concrete defect. Maximum eight distinct findings.
