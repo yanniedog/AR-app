@@ -152,50 +152,6 @@ function cancelActiveRuns(repo, workflow) {
   return cancelled;
 }
 
-function setVariable(repo, name, value) {
-  runGh(["variable", "set", name, "--repo", repo, "--body", value]);
-}
-
-export function mergeVariablePages(pages, fallback = {}, overrides = {}) {
-  const merged = Object.fromEntries(
-    Object.entries(fallback).filter(
-      ([, value]) => value !== undefined && value !== "",
-    ),
-  );
-  const rows = Array.isArray(pages)
-    ? pages.flatMap((page) => page?.variables || [])
-    : [];
-  for (const row of rows) merged[row.name] = row.value;
-  return {
-    ...merged,
-    ...Object.fromEntries(
-      Object.entries(overrides).filter(
-        ([, value]) => value !== undefined && value !== "",
-      ),
-    ),
-  };
-}
-
-function variables(repo, overrides = {}) {
-  const pages = ghJson(
-    [
-      "api",
-      `repos/${repo}/actions/variables?per_page=100`,
-      "--paginate",
-      "--slurp",
-    ],
-    { allowFailure: true },
-  );
-  return mergeVariablePages(
-    pages,
-    {
-      QWEN_ENABLED: process.env.CONTROL_QWEN_ENABLED,
-      AR_BOT_WAIT_REQUIRED: process.env.CONTROL_BOT_WAIT_REQUIRED,
-    },
-    overrides,
-  );
-}
-
 export function requiredChecksFromProtection(protection) {
   return [
     ...(protection?.required_status_checks?.checks || []).map(
@@ -265,7 +221,6 @@ export function renderDashboard({
   presenceState,
   feedbackState,
   coderabbitRetryState,
-  repoVariables,
   checks,
   checkSource,
   updatedAt,
@@ -273,10 +228,7 @@ export function renderDashboard({
   const repoUrl = `https://github.com/${repo}`;
   const workflowUrl = `${repoUrl}/actions/workflows/review-bot-control.yml`;
   const appSettingsUrl = "https://github.com/settings/installations";
-  const qwenMode =
-    qwenState === "active" && repoVariables.QWEN_ENABLED === "true"
-      ? "Advisory"
-      : "Disabled";
+  const qwenMode = qwenState === "active" ? "Advisory" : "Disabled";
   const externalRows = EXTERNAL_BOTS.map(([name, config]) => {
     const configLink = config
       ? ` · [repo config](${repoUrl}/blob/main/${config})`
@@ -304,8 +256,6 @@ Last refreshed: ${updatedAt}
 | CodeRabbit retry helper | ${stateLabel(coderabbitRetryState)} | Advisory helper only | [Enable / disable](${workflowUrl}) |
 
 Required checks on \`main\` (${checkSource}): ${checkText}
-
-Repository variables: \`QWEN_ENABLED=${repoVariables.QWEN_ENABLED || "unset"}\`, \`AR_BOT_WAIT_REQUIRED=${repoVariables.AR_BOT_WAIT_REQUIRED || "unset"}\`.
 
 > Qwen's Windows runner is intentionally offline while Qwen is disabled. GitHub cannot start an offline self-hosted runner; re-enabling Qwen in this dashboard arms the advisory workflow, but the local scheduled runner task must also be enabled on that PC.
 
@@ -412,22 +362,13 @@ async function main() {
   }
   const repo = resolveRepo();
   const changes = [];
-  const appliedVariables = {};
 
   if (!args.refreshOnly && args.qwen === "disabled") {
     const cancelled = cancelActiveRuns(repo, QWEN_WORKFLOW);
     setWorkflowState(repo, QWEN_WORKFLOW, false);
     setWorkflowState(repo, PRESENCE_WORKFLOW, false);
-    setVariable(repo, "QWEN_ENABLED", "false");
-    setVariable(repo, "AR_BOT_WAIT_REQUIRED", "off");
-    appliedVariables.QWEN_ENABLED = "false";
-    appliedVariables.AR_BOT_WAIT_REQUIRED = "off";
     changes.push(`Qwen disabled; ${cancelled} active run(s) cancelled`);
   } else if (!args.refreshOnly && args.qwen === "advisory") {
-    setVariable(repo, "QWEN_ENABLED", "true");
-    setVariable(repo, "AR_BOT_WAIT_REQUIRED", "off");
-    appliedVariables.QWEN_ENABLED = "true";
-    appliedVariables.AR_BOT_WAIT_REQUIRED = "off";
     setWorkflowState(repo, PRESENCE_WORKFLOW, false);
     setWorkflowState(repo, QWEN_WORKFLOW, true);
     changes.push("Qwen enabled as advisory; presence gate remains disabled");
@@ -449,7 +390,6 @@ async function main() {
     presenceState: workflowState(repo, PRESENCE_WORKFLOW),
     feedbackState: workflowState(repo, FEEDBACK_WORKFLOW),
     coderabbitRetryState: workflowState(repo, CODERABBIT_RETRY_WORKFLOW),
-    repoVariables: variables(repo, appliedVariables),
     checks: checkState.values,
     checkSource: checkState.source,
     updatedAt: new Date().toISOString(),
