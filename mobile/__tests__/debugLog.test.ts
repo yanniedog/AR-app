@@ -92,6 +92,30 @@ describe('RingBuffer', () => {
     expect(buf.size()).toBeLessThan(lines);
     expect(buf.getText().length).toBeLessThanOrEqual(MAX_LOG_BYTES + 512);
   });
+
+  it('uses a stable cursor after head entries are evicted', () => {
+    const buf = new RingBuffer();
+    for (let i = 0; i < MAX_LOG_LINES; i++) {
+      buf.append({
+        ts: new Date().toISOString(),
+        level: 'debug',
+        tag: 'old',
+        message: `line-${i}`,
+      });
+    }
+    const cursor = buf.getCursor();
+    buf.append({
+      ts: new Date().toISOString(),
+      level: 'error',
+      tag: 'new',
+      message: 'route failed',
+    });
+
+    expect(buf.size()).toBe(MAX_LOG_LINES);
+    expect(buf.getEntriesAfter(cursor)).toEqual([
+      expect.objectContaining({ tag: 'new', message: 'route failed' }),
+    ]);
+  });
 });
 
 describe('formatLogUploadBody', () => {

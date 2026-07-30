@@ -103,6 +103,7 @@ export interface AuditJourney {
   label: string;
   href?: Href;
   expectedPath: string;
+  expectedSection?: SectionKey;
   navigationKind: 'tab' | 'stack';
   skipReason?: string;
 }
@@ -260,16 +261,21 @@ function firstRows(core: CorePayload | null): RateRow[] {
   return rows;
 }
 
-function browseJourney(section: SectionKey): AuditJourney {
+function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourney {
+  const enabled = interests.includes(section);
   return {
     id: `browse-${section.toLowerCase()}`,
     label: `Browse: ${SECTIONS[section].title}`,
-    href: {
-      pathname: '/browse',
-      params: { section: SECTIONS[section].slug },
-    } as unknown as Href,
+    href: enabled
+      ? ({
+          pathname: '/browse',
+          params: { section: SECTIONS[section].slug },
+        } as unknown as Href)
+      : undefined,
     expectedPath: '/browse',
+    expectedSection: section,
     navigationKind: 'tab',
+    skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
   };
 }
 
@@ -278,7 +284,10 @@ function browseJourney(section: SectionKey): AuditJourney {
  * screen and then backed out of. Redirect aliases and first-run onboarding are
  * excluded because they do not represent separate steady-state UI.
  */
-export function buildPerformanceAuditJourneys(core: CorePayload | null): AuditJourney[] {
+export function buildPerformanceAuditJourneys(
+  core: CorePayload | null,
+  interests: SectionKey[] = SECTION_ORDER,
+): AuditJourney[] {
   const rows = firstRows(core);
   const first = rows[0];
   const second = rows[1];
@@ -292,7 +301,7 @@ export function buildPerformanceAuditJourneys(core: CorePayload | null): AuditJo
       expectedPath: '/',
       navigationKind: 'tab',
     },
-    ...SECTION_ORDER.map(browseJourney),
+    ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
     {
       id: 'response',
       label: 'Bank response',

@@ -49,6 +49,7 @@ import { AppText, Button, Card, Row } from './ui';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
+const DATA_SETTLE_TIMEOUT_MS = 60_000;
 const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const RUNTIME_SAMPLE_MS = 1_250;
@@ -74,6 +75,12 @@ function delay(ms: number): Promise<void> {
 
 function assertAuditActive(): void {
   if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
+}
+
+function rethrowAuditCancellation(error: unknown): void {
+  if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
+    throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
+  }
 }
 
 function timeoutAfter<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
@@ -249,7 +256,9 @@ async function runStorageCheck(sessionId: string): Promise<AuditCheck> {
       readTimes.push(now() - at);
       if (restored !== payload) throw new Error('AsyncStorage readback did not match the test payload');
     }
+    assertAuditActive();
   } catch (caught) {
+    rethrowAuditCancellation(caught);
     error = formatAuditError(caught);
   } finally {
     try {
@@ -321,7 +330,9 @@ async function runFileSystemCheck(sessionId: string): Promise<AuditCheck> {
     if (restored.length !== payload.length) {
       throw new Error(`Filesystem readback length ${restored.length} did not match ${payload.length}`);
     }
+    assertAuditActive();
   } catch (caught) {
+    rethrowAuditCancellation(caught);
     error = formatAuditError(caught);
   } finally {
     try {
@@ -400,6 +411,7 @@ async function runDataCheck(
     await delay(0);
     assertAuditActive();
   } catch (caught) {
+    rethrowAuditCancellation(caught);
     error = formatAuditError(caught);
   }
   const responsiveness = monitor.metricsSince(responsiveAt);
@@ -487,12 +499,160 @@ async function runNetworkCheck(): Promise<AuditCheck> {
   };
 }
 
-function routeErrorMessages(entriesStart: number): string[] {
+function routeErrorMessages(logCursor: number): string[] {
   return debugLog
-    .getEntries()
-    .slice(entriesStart)
+    .getEntriesAfter(logCursor)
     .filter((entry) => entry.level === 'error' && entry.tag !== PERFORMANCE_AUDIT_LOG_TAG)
     .map((entry) => `${entry.tag}: ${entry.message}`);
+}
+
+type JourneyDataState = 'pending' | 'ready' | 'failed';
+
+interface JourneyDataRequirement {
+  label: string;
+  state: () => JourneyDataState;
+  error: () => string | null;
+}
+
+function journeyDataRequirements(
+  journey: AuditJourney,
+  logCursor: number,
+): JourneyDataRequirement[] {
+  const initial = useStore.getState();
+  const { prefs, manifest, source } = initial;
+  const requirements: JourneyDataRequirement[] = [];
+  const add = (
+    label: string,
+    ready: (state: ReturnType<typeof useStore.getState>) => boolean,
+    failed: (state: ReturnType<typeof useStore.getState>) => string | null,
+  ) => {
+    requirements.push({
+      label,
+      state: () => {
+        const state = useStore.getState();
+        if (ready(state)) return 'ready';
+        return failed(state) ? 'failed' : 'pending';
+      },
+      error: () => failed(useStore.getState()),
+    });
+  };
+
+  // A destination that starts details processing must finish it before the
+  // runner leaves, even if that destination did not require details up front.
+  if (initial.detailsLoading) {
+    add(
+      'Product details',
+      (state) => !state.detailsLoading,
+      () => null,
+    );
+  }
+
+  if (journey.id === 'search') {
+    add(
+      'Product details',
+      (state) => !!state.details && !state.detailsLoading,
+      (state) =>
+        !state.detailsLoading && !state.details
+          ? 'Product details did not load'
+          : null,
+    );
+    if (prefs.rateIntelligencePro && prefs.enableDeepSearch && manifest?.files.search_index) {
+      add(
+        'Deep-search index',
+        (state) => !!state.searchIndex,
+        () => {
+          const failure = [...debugLog.getEntriesAfter(logCursor)]
+            .reverse()
+            .find(
+              (entry) =>
+                entry.tag === 'store' &&
+                entry.message.startsWith('ensureSearchIndex failed:'),
+            );
+          return failure?.message ?? null;
+        },
+      );
+    }
+  }
+
+  const needsRbaCalendar =
+    source === 'remote' &&
+    !!manifest?.files.rba_calendar &&
+    ['response', 'outlook', 'rba-redirect'].includes(journey.id);
+  if (needsRbaCalendar) {
+    add(
+      'RBA calendar',
+      (state) => !!state.rbaCalendar,
+      (state) => state.rbaCalendarError,
+    );
+  }
+
+  const bankInsightsEnabled = prefs.rateIntelligencePro;
+  if (
+    bankInsightsEnabled &&
+    ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journey.id)
+  ) {
+    add(
+      'Bank response analysis',
+      (state) => !!state.bankInsights,
+      (state) => state.bankInsightsError,
+    );
+  }
+
+  const historyEnabled = prefs.rateIntelligencePro && prefs.showHistoryRibbon;
+  if (historyEnabled && ['outlook', 'rba-redirect', 'product'].includes(journey.id)) {
+    add(
+      'Bank history',
+      (state) => !!state.historyBanks,
+      (state) => state.historyBanksError,
+    );
+  }
+  if (historyEnabled && ['product', 'lender'].includes(journey.id)) {
+    add(
+      'Product history',
+      (state) => !!state.productHistory,
+      (state) => state.productHistoryError,
+    );
+  }
+
+  return requirements;
+}
+
+async function waitForJourneyData(
+  journey: AuditJourney,
+  logCursor: number,
+): Promise<{
+  labels: string[];
+  durationMs: number;
+}> {
+  // Give mounted effects a chance to claim their store work before inspecting
+  // loading state. The subsequent poll keeps that cold work inside this
+  // journey instead of letting it spill into later checks.
+  await delay(100);
+  assertAuditActive();
+  const requirements = journeyDataRequirements(journey, logCursor);
+  const labels = [...new Set(requirements.map(({ label }) => label))];
+  if (requirements.length === 0) return { labels, durationMs: 0 };
+
+  const started = now();
+  while (true) {
+    assertAuditActive();
+    const failed = requirements.find((requirement) => requirement.state() === 'failed');
+    if (failed) {
+      throw new Error(`${failed.label} failed to settle: ${failed.error() ?? 'unknown error'}`);
+    }
+    if (requirements.every((requirement) => requirement.state() === 'ready')) {
+      return { labels, durationMs: now() - started };
+    }
+    if (now() - started > DATA_SETTLE_TIMEOUT_MS) {
+      const pending = requirements
+        .filter((requirement) => requirement.state() === 'pending')
+        .map(({ label }) => label);
+      throw new Error(
+        `Background work did not settle after ${DATA_SETTLE_TIMEOUT_MS}ms: ${pending.join(', ')}`,
+      );
+    }
+    await delay(50);
+  }
 }
 
 async function runJourney(
@@ -515,8 +675,10 @@ async function runJourney(
   }
 
   const responsivenessAt = monitor.snapshot();
-  const entriesStart = debugLog.getEntries().length;
+  const logCursor = debugLog.getCursor();
   let forwardMs = 0;
+  let backgroundSettleMs = 0;
+  let backgroundTasks: string[] = [];
   let backMs = 0;
   let returnFallbackMs = 0;
   let backDestination: string | null = null;
@@ -544,6 +706,17 @@ async function runJourney(
     await waitForPath(journey.expectedPath, `${journey.label} forward navigation`);
     await settleUi();
     forwardMs = now() - at;
+    if (
+      journey.expectedSection &&
+      useStore.getState().activeSection !== journey.expectedSection
+    ) {
+      throw new Error(
+        `${journey.label} rendered ${useStore.getState().activeSection} instead of ${journey.expectedSection}`,
+      );
+    }
+    const background = await waitForJourneyData(journey, logCursor);
+    backgroundSettleMs = background.durationMs;
+    backgroundTasks = background.labels;
     // Keep the destination mounted long enough to expose deferred work,
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
@@ -579,13 +752,14 @@ async function runJourney(
   }
 
   const responsiveness = monitor.metricsSince(responsivenessAt);
-  const errors = routeErrorMessages(entriesStart);
+  const errors = routeErrorMessages(logCursor);
   const backContractStatus =
     journey.navigationKind === 'stack' && !backReturnedToAudit ? 'warn' : 'pass';
   const status = routeError || errors.length
     ? 'fail'
     : worstStatus(
         scoreLatency(forwardMs, 900, 2_500),
+        scoreLatency(backgroundSettleMs, 2_000, 10_000),
         scoreLatency(backMs, 800, 2_000),
         responsivenessStatus(responsiveness),
         backContractStatus,
@@ -600,6 +774,8 @@ async function runJourney(
       expectedPath: journey.expectedPath,
       navigationKind: journey.navigationKind,
       forwardMs: roundMetric(forwardMs),
+      backgroundSettleMs: roundMetric(backgroundSettleMs),
+      backgroundTasks: backgroundTasks.join(', ') || null,
       backMs: roundMetric(backMs),
       backDestination,
       backChangedPath,
@@ -640,7 +816,15 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
-      const journeys = buildPerformanceAuditJourneys(useStore.getState().core);
+      const initialStore = useStore.getState();
+      const originalActiveSection = initialStore.activeSection;
+      const originalProfileFilters = JSON.parse(
+        JSON.stringify(initialStore.prefs.profileFilters),
+      ) as typeof initialStore.prefs.profileFilters;
+      const journeys = buildPerformanceAuditJourneys(
+        initialStore.core,
+        initialStore.prefs.interests,
+      );
       const total = BENCHMARK_CHECKS + journeys.length;
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
@@ -749,6 +933,13 @@ export function PerformanceAuditRunner() {
           failPerformanceAudit(error);
         }
       } finally {
+        useStore.setState((current) => ({
+          activeSection: originalActiveSection,
+          prefs: {
+            ...current.prefs,
+            profileFilters: originalProfileFilters,
+          },
+        }));
         monitor.stop();
         runningRef.current = false;
       }

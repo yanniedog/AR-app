@@ -152,6 +152,19 @@ describe('performance audit journeys', () => {
     );
   });
 
+  it('marks Browse sections outside the user interests as skipped', () => {
+    const journeys = buildPerformanceAuditJourneys(core, ['Mortgage']);
+    expect(journeys.find((journey) => journey.id === 'browse-mortgage')?.href).toBeDefined();
+    expect(journeys.find((journey) => journey.id === 'browse-savings')).toMatchObject({
+      href: undefined,
+      skipReason: 'Savings accounts is disabled in interests',
+    });
+    expect(journeys.find((journey) => journey.id === 'browse-td')).toMatchObject({
+      href: undefined,
+      skipReason: 'Term deposits is disabled in interests',
+    });
+  });
+
   it('matches normalized and decoded Expo Router paths', () => {
     expect(pathMatches('/(tabs)', '/')).toBe(true);
     expect(pathMatches('/settings/', '/settings')).toBe(true);

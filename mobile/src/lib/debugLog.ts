@@ -176,11 +176,13 @@ async function flushPendingToFile(): Promise<void> {
 }
 
 export class RingBuffer {
-  private entries: LogEntry[] = [];
+  private entries: { entry: LogEntry; sequence: number }[] = [];
   private bytes = 0;
+  private nextSequence = 1;
 
   append(entry: LogEntry): void {
-    this.entries.push(entry);
+    this.entries.push({ entry, sequence: this.nextSequence });
+    this.nextSequence += 1;
     this.bytes += entryBytes(entry);
     while (
       this.entries.length > MAX_LOG_LINES ||
@@ -188,7 +190,7 @@ export class RingBuffer {
     ) {
       const removed = this.entries.shift();
       if (!removed) break;
-      this.bytes -= entryBytes(removed);
+      this.bytes -= entryBytes(removed.entry);
     }
   }
 
@@ -198,7 +200,7 @@ export class RingBuffer {
   }
 
   loadHistory(history: LogEntry[]): void {
-    const merged = [...history, ...this.entries];
+    const merged = [...history, ...this.entries.map(({ entry }) => entry)];
     merged.sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
     this.entries = [];
     this.bytes = 0;
@@ -208,11 +210,21 @@ export class RingBuffer {
   }
 
   getEntries(): LogEntry[] {
-    return [...this.entries];
+    return this.entries.map(({ entry }) => entry);
+  }
+
+  getCursor(): number {
+    return this.nextSequence - 1;
+  }
+
+  getEntriesAfter(cursor: number): LogEntry[] {
+    return this.entries
+      .filter(({ sequence }) => sequence > cursor)
+      .map(({ entry }) => entry);
   }
 
   getText(): string {
-    return this.entries.map(formatEntry).join('\n');
+    return this.entries.map(({ entry }) => formatEntry(entry)).join('\n');
   }
 
   size(): number {
@@ -317,6 +329,12 @@ export const debugLog = {
   },
   getEntries(): LogEntry[] {
     return buffer.getEntries();
+  },
+  getCursor(): number {
+    return buffer.getCursor();
+  },
+  getEntriesAfter(cursor: number): LogEntry[] {
+    return buffer.getEntriesAfter(cursor);
   },
   getLogFileUri(): string {
     return LOG_FILE;
