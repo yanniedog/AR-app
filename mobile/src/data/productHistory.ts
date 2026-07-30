@@ -67,8 +67,9 @@ function validObservedRate(value: number | null | undefined): value is number {
  * Summarise a product's representative best-rate series.
  *
  * Null gaps are ignored: a dated snapshot proves when the new value was first
- * observed, not the lender's exact effective date. `current` only fills a
- * missing latest observation and never replaces a value already in the ledger.
+ * observed, not the lender's exact effective date. `current` is authoritative
+ * for its date so an in-memory ledger retained across a same-day refresh cannot
+ * report stale movement beside the newly installed core rate.
  */
 export function summarizeProductBestRateSeries(
   runDates: readonly string[] | null | undefined,
@@ -87,7 +88,9 @@ export function summarizeProductBestRateSeries(
   const currentDate = String(current?.date || '').slice(0, 10);
   if (YMD.test(currentDate) && validObservedRate(current?.rate)) {
     const existingIndex = observations.findIndex((item) => item.date === currentDate);
-    if (existingIndex < 0) observations.push({ date: currentDate, rate: current.rate });
+    const currentObservation = { date: currentDate, rate: current.rate };
+    if (existingIndex < 0) observations.push(currentObservation);
+    else observations[existingIndex] = currentObservation;
   }
 
   observations.sort((left, right) => left.date.localeCompare(right.date));
@@ -163,6 +166,26 @@ function bestRatesForCore(core: CorePayload, keys: Set<string>): Map<string, num
     }
   }
   return best;
+}
+
+const currentBestRatesCache = new WeakMap<CorePayload, Map<string, number>>();
+
+/**
+ * Current section-aware best rate for a product. The complete core index is
+ * memoized by object identity so many visible product cards share one scan.
+ */
+export function bestRateForProduct(
+  core: CorePayload | null | undefined,
+  productKey: string,
+): number | null {
+  if (!core || !productKey) return null;
+  let best = currentBestRatesCache.get(core);
+  if (!best) {
+    const keys = productKeysForCore(core);
+    best = bestRatesForCore(core, keys);
+    currentBestRatesCache.set(core, best);
+  }
+  return best.get(productKey) ?? null;
 }
 
 /**

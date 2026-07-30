@@ -16,7 +16,7 @@ import { assessAccess } from '../src/data/access';
 import { computeLvr, depositToReachLvr, num, type CalcInputs } from '../src/data/calc';
 import { formatRate, humanizeEnum, isBroadlyAvailable, toFraction } from '../src/data/format';
 import { sectionSegmentOptions } from '../src/data/interests';
-import { summarizeProductBestRate } from '../src/data/productHistory';
+import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -27,6 +27,7 @@ import { distinctValues } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
+import { hasProAccess } from '../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -50,7 +51,9 @@ export default function Calculator() {
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const productHistory = useStore((s) => s.productHistory);
+  const productHistory = useStore((s) =>
+    hasProAccess(s.prefs) ? s.productHistory : null,
+  );
   const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -357,7 +360,14 @@ export default function Calculator() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
-        const rateChange = summarizeProductBestRate(productHistory, c.row.product_key);
+        const rateChange = summarizeProductBestRate(
+          productHistory,
+          c.row.product_key,
+          {
+            date: core?.run_date,
+            rate: bestRateForProduct(core, c.row.product_key),
+          },
+        );
         const rateChangeLabel = productRateChangeText(rateChange, true);
         return (
           <Pressable

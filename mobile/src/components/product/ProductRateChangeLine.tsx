@@ -2,12 +2,14 @@ import React, { useMemo } from 'react';
 
 import { formatRate, formatRateChangeDate } from '../../data/format';
 import {
+  bestRateForProduct,
   summarizeProductBestRateSeries,
   type CurrentProductBestRate,
   type ProductBestRateSummary,
 } from '../../data/productHistory';
 import { useStore } from '../../data/store';
 import { moveTone } from '../../lib/moveSemantics';
+import { hasProAccess } from '../../lib/proAccess';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText } from '../ui';
@@ -47,17 +49,22 @@ export function useProductRateChangeSummary(
   productKey: string,
   current?: CurrentProductBestRate,
 ): ProductBestRateSummary | null {
+  const hasPro = useStore((state) => hasProAccess(state.prefs));
   const runDates = useStore((state) => state.productHistory?.run_dates ?? null);
   const series = useStore((state) => state.productHistory?.products?.[productKey] ?? null);
-  const currentDate = current?.date;
-  const currentRate = current?.rate;
+  const coreRunDate = useStore((state) => state.core?.run_date ?? null);
+  const coreBestRate = useStore((state) => bestRateForProduct(state.core, productKey));
+  const currentDate = current?.date ?? coreRunDate;
+  const currentRate = current?.rate ?? coreBestRate;
   return useMemo(
-    () =>
-      summarizeProductBestRateSeries(runDates, series, {
+    () => {
+      if (!hasPro) return null;
+      return summarizeProductBestRateSeries(runDates, series, {
         date: currentDate,
         rate: currentRate,
-      }),
-    [currentDate, currentRate, runDates, series],
+      });
+    },
+    [currentDate, currentRate, hasPro, runDates, series],
   );
 }
 

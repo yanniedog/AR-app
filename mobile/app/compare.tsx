@@ -18,6 +18,7 @@ import {
 } from '../src/data/format';
 import { findByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
+import { hasProAccess } from '../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -44,7 +45,9 @@ export default function Compare() {
   const theme = useTheme();
   const { keys } = useLocalSearchParams<{ keys: string }>();
   const core = useStore((s) => s.core);
-  const productHistoryAvailable = useStore((s) => s.productHistory != null);
+  const productHistoryAvailable = useStore(
+    (s) => hasProAccess(s.prefs) && s.productHistory != null,
+  );
 
   const entries = useMemo<Entry[]>(() => {
     if (!core || !keys) return [];

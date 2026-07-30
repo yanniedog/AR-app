@@ -38,7 +38,7 @@ describe('format', () => {
     expect(formatRateChangeDate('2026-07-30', hobartMorning)).toBe('yesterday');
     expect(formatRateChangeDate('2026-07-27', hobartMorning)).toBe('4 days ago');
     expect(formatRateChangeDate('2026-07-20', hobartMorning)).toBe(
-      new Date('2026-07-20T00:00:00Z').toLocaleDateString(undefined, {
+      new Date(2026, 6, 20).toLocaleDateString(undefined, {
         day: 'numeric',
         month: 'short',
         year: 'numeric',

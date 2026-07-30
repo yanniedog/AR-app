@@ -1,6 +1,7 @@
 import {
   buildProductHistoryFromCores,
   countFiniteSeriesPoints,
+  bestRateForProduct,
   extractProductSeries,
   forwardFillSeriesRecord,
   hasProductSeries,
@@ -169,7 +170,7 @@ describe('summarizeProductBestRateSeries', () => {
     });
   });
 
-  it('seeds a missing current best rate without replacing a ledger observation', () => {
+  it('seeds the authoritative current best rate, including same-day refreshes', () => {
     expect(
       summarizeProductBestRateSeries(
         ['2026-07-20', '2026-07-29'],
@@ -189,9 +190,19 @@ describe('summarizeProductBestRateSeries', () => {
       ),
     ).toMatchObject({
       kind: 'changed',
-      toRate: 0.0575,
-      bps: -25,
+      toRate: 0.055,
+      bps: -50,
     });
+  });
+
+  it('memoizes the current section-aware best rate for each product', () => {
+    const currentCore = core('2026-07-31', {
+      Mortgage: [rateRow('P|1', '0.06'), rateRow('P|1', '0.055')],
+      Savings: [rateRow('S|1', '0.04'), rateRow('S|1', '0.05')],
+    });
+    expect(bestRateForProduct(currentCore, 'P|1')).toBe(0.055);
+    expect(bestRateForProduct(currentCore, 'S|1')).toBe(0.05);
+    expect(bestRateForProduct(currentCore, 'missing')).toBeNull();
   });
 
   it('does not invent a direction from sparse or invalid history', () => {

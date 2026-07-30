@@ -228,20 +228,41 @@ export function nextAutoReleaseVersion(currentVersion, publishedVersion) {
   return nextReleaseVersion(currentVersion, publishedVersion);
 }
 
-export async function readPublishedVersion(fetchImpl = fetch) {
+export async function readPublishedVersion(
+  fetchImpl = fetch,
+  { timeoutMs = 10_000, warn = console.warn } = {},
+) {
   const url =
     `https://github.com/${repo}/releases/download/app-apk-latest/app-apk-latest.json` +
     `?_=${Date.now()}`;
-  const response = await fetchImpl(url, {
-    headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
-  });
-  if (!response.ok) {
-    throw new Error(`Could not read rolling APK manifest (HTTP ${response.status})`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+  try {
+    const response = await fetchImpl(url, {
+      headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const manifest = await response.json();
+    const version = String(manifest?.version ?? '').trim();
+    if (!version) throw new Error('manifest is missing version');
+    // Validate before returning; nextReleaseVersion also validates, but a
+    // malformed rolling asset should take the same safe fallback as a 404.
+    nextReleaseVersion('0.0.0', version);
+    return version;
+  } catch (error) {
+    warn(
+      `mobile-auto-release-on-drain: rolling APK manifest unavailable — use checked-in release floor (${String(
+        error instanceof Error ? error.message : error,
+      )})`,
+    );
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
-  const manifest = await response.json();
-  const version = String(manifest?.version ?? '').trim();
-  if (!version) throw new Error('Rolling APK manifest is missing version');
-  return version;
 }
 
 function bumpBranchName(nextVersion) {
