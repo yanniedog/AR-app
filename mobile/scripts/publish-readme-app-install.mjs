@@ -70,6 +70,11 @@ function git(args, { allowFail = false } = {}) {
   return res;
 }
 
+export function pushBranchWithGhAuth(branchName, { authenticate = gh, runGit = git } = {}) {
+  authenticate(['auth', 'setup-git']);
+  runGit(['push', '-u', 'origin', branchName, '--force-with-lease']);
+}
+
 export function readmeApkQrCommitMessage(version, buildNumber) {
   return `${README_APK_QR_COMMIT_PREFIX} (v${version} build ${buildNumber}) [skip ci]`;
 }
@@ -128,7 +133,7 @@ function publishViaPullRequest(version, buildNumber, message) {
     { allowFail: true },
   );
   git(['checkout', '-B', branchName]);
-  git(['push', '-u', 'origin', branchName, '--force-with-lease']);
+  pushBranchWithGhAuth(branchName);
 
   const body = [
     'Automated README refresh after **mobile-android-apk** published a new preview APK.',

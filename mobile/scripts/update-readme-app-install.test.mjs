@@ -5,6 +5,7 @@ import test from 'node:test';
 import { qrReleaseUrl } from './app-release-meta.mjs';
 import { buildReadmeInstallSection } from './update-readme-app-install.mjs';
 import {
+  pushBranchWithGhAuth,
   readmeApkQrBranchName,
   readmeApkQrCommitMessage,
 } from './publish-readme-app-install.mjs';
@@ -33,4 +34,16 @@ test('readme APK QR commit message and branch are deterministic', () => {
     'docs: refresh Android install QR (v1.0.13 build 27) [skip ci]',
   );
   assert.equal(readmeApkQrBranchName('1.0.13', '27'), 'chore/readme-apk-qr-v1.0.13-b27');
+});
+
+test('README branch publisher configures the GitHub CLI credential helper before push', () => {
+  const calls = [];
+  pushBranchWithGhAuth('chore/readme-apk-qr-v1.0.13-b27', {
+    authenticate: (args) => calls.push(['gh', ...args]),
+    runGit: (args) => calls.push(['git', ...args]),
+  });
+  assert.deepEqual(calls, [
+    ['gh', 'auth', 'setup-git'],
+    ['git', 'push', '-u', 'origin', 'chore/readme-apk-qr-v1.0.13-b27', '--force-with-lease'],
+  ]);
 });

@@ -2,7 +2,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { checkedGhOutput, waitForQueueDrain, ensureApkForMainHead } from './mobile-auto-release-on-drain.mjs';
+import {
+  checkedGhOutput,
+  ensureApkForMainHead,
+  pushBranchWithGhAuth,
+  waitForQueueDrain,
+} from './mobile-auto-release-on-drain.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 test('checkedGhOutput returns trimmed stdout for a successful command', () => {
@@ -22,6 +27,18 @@ test('checkedGhOutput surfaces command and spawn failures', () => {
       ),
     /gh pr list failed to execute: timed out/,
   );
+});
+
+test('pushBranchWithGhAuth configures the GitHub CLI credential helper before push', () => {
+  const calls = [];
+  pushBranchWithGhAuth('chore/mobile-auto-release-v1.2.3', {
+    authenticate: (args) => calls.push(['gh', ...args]),
+    runGit: (args) => calls.push(['git', ...args]),
+  });
+  assert.deepEqual(calls, [
+    ['gh', 'auth', 'setup-git'],
+    ['git', 'push', '-u', 'origin', 'chore/mobile-auto-release-v1.2.3', '--force-with-lease'],
+  ]);
 });
 
 test('generated PRs explicitly dispatch every required check on their head branch', () => {
