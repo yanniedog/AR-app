@@ -10,6 +10,7 @@ export function createHeadScopedRunTracker({ fallbackAttempt = 4 } = {}) {
     observe(nextHeadSha) {
       const normalizedHeadSha = String(nextHeadSha || '').trim();
       if (!normalizedHeadSha) throw new Error('generated pull request head SHA is required');
+      const headChanged = Boolean(headSha) && normalizedHeadSha !== headSha;
       if (normalizedHeadSha !== headSha) {
         headSha = normalizedHeadSha;
         attemptsForHead = 0;
@@ -19,6 +20,7 @@ export function createHeadScopedRunTracker({ fallbackAttempt = 4 } = {}) {
       attemptsForHead += 1;
       return {
         headSha,
+        headChanged,
         seenRunIds,
         shouldCheckFallback: !fallbackChecked && attemptsForHead >= fallbackAttempt,
       };
@@ -61,15 +63,27 @@ export async function waitForPullRequestMerge({
   sleep = delay,
   attempts = 90,
   intervalMs = 10_000,
+  maxHeadChanges = 5,
 }) {
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
-    await beforeRead(attempt);
+  let remaining = attempts;
+  let poll = 0;
+  let headChanges = 0;
+  while (remaining > 0) {
+    poll += 1;
+    remaining -= 1;
+    const beforeResult = await beforeRead(poll);
+    if (beforeResult?.resetWait && headChanges < maxHeadChanges) {
+      headChanges += 1;
+      // The current poll is the first observation of the new head. Replenish
+      // the rest of its full poll budget so fallback and required CI have time.
+      remaining = Math.max(0, attempts - 1);
+    }
     const state = String(await readState()).trim().toUpperCase();
     if (state === 'MERGED') return true;
     if (state === 'CLOSED') {
       throw new Error('generated pull request closed without merging');
     }
-    if (attempt < attempts) await sleep(intervalMs);
+    if (remaining > 0) await sleep(intervalMs);
   }
   throw new Error('generated pull request did not merge before the timeout');
 }

@@ -405,6 +405,7 @@ assert.match(feedbackWorkflow, /cancel-in-progress:\s*true/);
 assert.match(feedbackWorkflow, /timeout-minutes:\s*5/);
 assert.match(feedbackWorkflow, /PR_STATE=\$\(gh api/);
 assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
+assert.doesNotMatch(feedbackWorkflow, /pull_request\.head\.sha/);
 assert.doesNotMatch(feedbackWorkflow, /seq 1 40|sleep 60|40 minutes/);
 assert.match(
   coderabbitRetryJob,

@@ -32,7 +32,7 @@ permissions:
 concurrency:
   # Only the newest evaluation for a PR head matters. Cancel superseded review
   # events so bot bursts cannot consume the repository's runner capacity.
-  group: bot-feedback-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.event.pull_request.head.sha || github.sha }}
+  group: bot-feedback-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
   cancel-in-progress: true
 
 jobs:

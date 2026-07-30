@@ -136,6 +136,7 @@ async function settleGeneratedPr(prNumber, branchName) {
         runs.map((run) => run?.workflowName),
       );
     }
+    return { resetWait: headState.headChanged };
   };
   enableAutoMerge(prNumber);
   await waitForPullRequestMerge({
