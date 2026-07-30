@@ -115,7 +115,14 @@ export function collectDiff(baseRef, maxChars, baseSha = process.env.BASE_SHA) {
   const baseCommit = String(baseSha || `origin/${baseRef}`).trim();
   runGit(['cat-file', '-e', `${baseCommit}^{commit}`]);
   const range = `${baseCommit}...HEAD`;
-  const changedFiles = runGit(['diff', '--name-only', '--diff-filter=ACDMRTUXB', range])
+  const changedFiles = runGit([
+    'diff',
+    '--no-ext-diff',
+    '--text',
+    '--name-only',
+    '--diff-filter=ACDMRTUXB',
+    range,
+  ])
     .split(/\r?\n/)
     .map((value) => value.trim())
     .filter(Boolean);
@@ -129,7 +136,15 @@ export function collectDiff(baseRef, maxChars, baseSha = process.env.BASE_SHA) {
   const sections = [];
   let remaining = maxChars;
   for (const filePath of candidates) {
-    const diff = runGit(['diff', '--no-ext-diff', '--unified=5', range, '--', filePath]);
+    const diff = runGit([
+      'diff',
+      '--no-ext-diff',
+      '--text',
+      '--unified=5',
+      range,
+      '--',
+      filePath,
+    ]);
     if (!diff.trim()) continue;
     if (diff.length > remaining) {
       omittedFiles.push(filePath);
@@ -224,9 +239,32 @@ function focusedDiff(sectionText, finding, maxChars = 6_000) {
     }
   }
   if (anchorIndex < 0) return text.slice(0, maxChars);
-  const header = lines.slice(0, 4);
-  const excerpt = lines.slice(Math.max(4, anchorIndex - 45), anchorIndex + 46);
-  return [...header, '... focused excerpt ...', ...excerpt].join('\n').slice(0, maxChars);
+  const prefix = [...lines.slice(0, 4), '... focused excerpt ...'].join('\n');
+  const anchor = lines[anchorIndex];
+  if (`${prefix}\n${anchor}`.length > maxChars) {
+    fail(`Qwen validator cannot fit the complete changed line at ${finding.path}:${finding.line}`);
+  }
+  const selected = [anchor];
+  let length = prefix.length + anchor.length + 2;
+  let before = anchorIndex - 1;
+  let after = anchorIndex + 1;
+  while (before >= 4 || after < lines.length) {
+    let added = false;
+    if (before >= 4 && length + lines[before].length + 1 <= maxChars) {
+      selected.unshift(lines[before]);
+      length += lines[before].length + 1;
+      before -= 1;
+      added = true;
+    }
+    if (after < lines.length && length + lines[after].length + 1 <= maxChars) {
+      selected.push(lines[after]);
+      length += lines[after].length + 1;
+      after += 1;
+      added = true;
+    }
+    if (!added) break;
+  }
+  return `${prefix}\n${selected.join('\n')}`;
 }
 
 function parseModelJson(raw) {
@@ -470,6 +508,9 @@ async function main() {
         validationErrors += 1;
         rejectedFindings += 1;
       }
+    }
+    if (validationErrors > 0) {
+      fail(`Qwen candidate validation failed for ${validationErrors} candidate(s)`);
     }
     const seen = new Set();
     findings = validated.filter((finding) => {
