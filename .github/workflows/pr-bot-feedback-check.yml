@@ -30,10 +30,10 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Only the newest evaluation for a PR head matters. Cancel superseded review
-  # events so bot bursts cannot consume the repository's runner capacity.
+  # Single-shot checks finish quickly, so retain every same-head result. GitHub
+  # blocks when any duplicate required check is CANCELLED, even if a sibling passed.
   group: bot-feedback-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   bot-feedback-gate:

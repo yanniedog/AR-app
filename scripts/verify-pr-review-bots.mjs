@@ -401,7 +401,7 @@ const coderabbitRetryJob = indentedBlock(
 );
 assert.match(coderabbitRetryJob, /^    concurrency:/m);
 assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
-assert.match(feedbackWorkflow, /cancel-in-progress:\s*true/);
+assert.match(feedbackWorkflow, /cancel-in-progress:\s*false/);
 assert.match(feedbackWorkflow, /timeout-minutes:\s*5/);
 assert.match(feedbackWorkflow, /PR_STATE=\$\(gh api/);
 assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
