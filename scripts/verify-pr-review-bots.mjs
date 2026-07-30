@@ -321,7 +321,11 @@ assert.match(
 assert.doesNotMatch(coderabbitRetryWorkflow, /queue:\s*max/);
 assert.match(
   coderabbitRetryWorkflow,
-  /while \[ "\$LEFT" -gt 0 \][\s\S]*gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"[\s\S]*closed during wait; skip/,
+  /read_pr_state\(\)[\s\S]*for attempt in 1 2 3[\s\S]*gh pr view "\$PR" --repo "\$GITHUB_REPOSITORY"/,
+);
+assert.match(
+  coderabbitRetryWorkflow,
+  /while \[ "\$LEFT" -gt 0 \][\s\S]*if STATE="\$\(read_pr_state\)"[\s\S]*preserve the active waiter/,
 );
 assert.doesNotMatch(
   branchProtection.match(/const REQUIRED_CHECKS = \[[\s\S]*?\];/)?.[0] || "",
