@@ -3,6 +3,10 @@ import { Pressable, TextInput, View } from 'react-native';
 
 import { IndeterminateProgressBar } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
+import {
+  productRateChangeText,
+  ProductRateChangeSummaryLine,
+} from '../src/components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
@@ -12,6 +16,7 @@ import { assessAccess } from '../src/data/access';
 import { computeLvr, depositToReachLvr, num, type CalcInputs } from '../src/data/calc';
 import { formatRate, humanizeEnum, isBroadlyAvailable, toFraction } from '../src/data/format';
 import { sectionSegmentOptions } from '../src/data/interests';
+import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
 import {
   lvrTierForValue,
   parseLvrTier,
@@ -22,6 +27,7 @@ import { distinctValues } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
+import { hasProAccess } from '../src/lib/proAccess';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -45,6 +51,9 @@ export default function Calculator() {
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
+  const productHistory = useStore((s) =>
+    hasProAccess(s.prefs) ? s.productHistory : null,
+  );
   const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -351,12 +360,23 @@ export default function Calculator() {
           details?.products?.[c.row.product_key] ?? null,
           c.row.provider,
         );
+        const rateChange = summarizeProductBestRate(
+          productHistory,
+          c.row.product_key,
+          {
+            date: core?.run_date,
+            rate: bestRateForProduct(core, c.row.product_key),
+          },
+        );
+        const rateChangeLabel = productRateChangeText(rateChange, true);
         return (
           <Pressable
             key={c.row.provider}
             onPress={() => openProduct(c.row.product_key, c.row.rate_index)}
             accessibilityRole="button"
-            accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${formatRate(c.rate)}`}
+            accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${formatRate(c.rate)}${
+              rateChangeLabel ? `, ${rateChangeLabel}` : ''
+            }`}
           >
             <Card style={{ marginBottom: 10 }}>
               <Row gap={12} style={{ alignItems: 'center' }}>
@@ -365,9 +385,14 @@ export default function Calculator() {
                   <AppText variant="body" weight="700" numberOfLines={1}>
                     {c.row.provider}
                   </AppText>
-                  <AppText variant="tiny" color="textMuted" numberOfLines={1}>
-                    {c.row.product_name} · {formatRate(c.rate)}
-                  </AppText>
+                   <AppText variant="tiny" color="textMuted" numberOfLines={1}>
+                     {c.row.product_name} · {formatRate(c.rate)}
+                   </AppText>
+                   <ProductRateChangeSummaryLine
+                     summary={rateChange}
+                     section={section}
+                     compact
+                   />
                   {access.badge ? (
                     <AppText variant="tiny" weight="700" style={{ color: theme.colors.warning, marginTop: 2 }}>
                       {access.verify ? `${access.badge}?` : access.badge}

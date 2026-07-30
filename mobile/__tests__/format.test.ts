@@ -4,6 +4,7 @@ import {
   formatBalanceRange,
   formatRankedFraction,
   formatRate,
+  formatRateChangeDate,
   formatRateDigits,
   formatTerm,
   humanizeEnum,
@@ -29,6 +30,20 @@ describe('format', () => {
     expect(formatRate(null)).toBe('—');
     expect(formatRate(4.35)).toBe('4.35%');
     expect(formatRate(0)).toBe('—');
+  });
+
+  test('formatRateChangeDate uses local calendar days before falling back to a date', () => {
+    const hobartMorning = new Date(2026, 6, 31, 0, 30);
+    expect(formatRateChangeDate('2026-07-31', hobartMorning)).toBe('today');
+    expect(formatRateChangeDate('2026-07-30', hobartMorning)).toBe('yesterday');
+    expect(formatRateChangeDate('2026-07-27', hobartMorning)).toBe('4 days ago');
+    expect(formatRateChangeDate('2026-07-20', hobartMorning)).toBe(
+      new Date(2026, 6, 20).toLocaleDateString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      }),
+    );
   });
 
   test('formatRankedFraction preserves published 0%', () => {

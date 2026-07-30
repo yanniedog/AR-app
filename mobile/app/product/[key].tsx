@@ -7,6 +7,7 @@ import { BankHistoryChart } from '../../src/components/BankHistoryChart';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState } from '../../src/components/feedback';
 import { ProPaywall } from '../../src/components/ProPaywall';
+import { ProductRateChangeLine } from '../../src/components/product/ProductRateChangeLine';
 import {
   AccessNotice,
   DetailGroup,
@@ -293,6 +294,11 @@ export default function ProductDetail() {
               {formatRate(row.comparison_rate)} comparison rate
             </AppText>
           ) : null}
+          <ProductRateChangeLine
+            productKey={productKey}
+            section={section}
+            current={{ date: core?.run_date, rate: currentBest }}
+          />
           {isNonStandard(row) ? (
             <View
               style={{

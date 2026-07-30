@@ -14,7 +14,7 @@ import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { RbaCalendar } from './rbaCalendar';
 import type { HistoryBanksPayload } from './historyPayload';
-import type { ProductHistoryPayload } from './productHistory';
+import type { ProductHistoryPayload, ProductHistoryPurpose } from './productHistory';
 import { DEFAULT_INTERESTS } from './interests';
 import { EMPTY_PROFILE, type ProfileFilters } from './profile';
 import { EMPTY_CALC, type CalcInputs } from './calc';
@@ -137,7 +137,10 @@ export interface AppState {
   ensureHistoryBanks: (opts?: { force?: boolean }) => Promise<void>;
   ensureBankInsights: (opts?: { force?: boolean }) => Promise<void>;
   ensureRbaCalendar: () => Promise<void>;
-  ensureProductHistory: (opts?: { force?: boolean }) => Promise<void>;
+  ensureProductHistory: (opts?: {
+    force?: boolean;
+    purpose?: ProductHistoryPurpose;
+  }) => Promise<void>;
   retryHistoryBanks: () => Promise<void>;
   retryBankInsights: () => Promise<void>;
   getDetail: (productKey: string) => ProductDetail | null;

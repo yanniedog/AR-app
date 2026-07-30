@@ -1,0 +1,34 @@
+{
+  "version": "1.0.79",
+  "date": "2026-07-31",
+  "summaryBullets": [
+    "Download Android updates automatically from every app screen",
+    "Show each product's observed best-rate direction and last move",
+    "Reveal the individual products behind a selected bank move",
+    "Keep source and published app versions on one monotonic iteration"
+  ],
+  "sections": [
+    {
+      "title": "Updates",
+      "bullets": [
+        {
+          "text": "Android update checks now live at the app root, recheck when the app resumes, and start the system-managed download from any screen."
+        },
+        {
+          "text": "Release automation derives the next source version from the latest published APK, preventing stale branches from resetting the version sequence."
+        }
+      ]
+    },
+    {
+      "title": "Rate changes",
+      "bullets": [
+        {
+          "text": "Product cards and details show the direction, size, and observed recency of the latest best-rate change when product history is available."
+        },
+        {
+          "text": "Selecting a bank move loads its product breakdown even when the separate market-history preference is off."
+        }
+      ]
+    }
+  ]
+}

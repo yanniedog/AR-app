@@ -1,6 +1,7 @@
 import {
   buildProductHistoryFromCores,
   countFiniteSeriesPoints,
+  bestRateForProduct,
   extractProductSeries,
   forwardFillSeriesRecord,
   hasProductSeries,
@@ -10,6 +11,7 @@ import {
   productSeriesRecord,
   productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
+  summarizeProductBestRateSeries,
   type ProductHistoryPayload,
 } from '../src/data/productHistory';
 import type { CorePayload, RateRow, SectionKey } from '../src/types';
@@ -127,6 +129,90 @@ describe('extractProductSeries / productSeriesRecord / hasProductSeries', () => 
     expect(hasProductSeries(payload, 'P|1')).toBe(true);
     expect(hasProductSeries(payload, 'X|9')).toBe(false);
     expect(hasProductSeries(null, 'P|1')).toBe(false);
+  });
+});
+
+describe('summarizeProductBestRateSeries', () => {
+  it('reports the most recent observed direction across null gaps', () => {
+    expect(
+      summarizeProductBestRateSeries(
+        ['2026-07-20', '2026-07-22', '2026-07-25', '2026-07-29'],
+        [0.06, null, 0.0575, 0.058],
+      ),
+    ).toEqual({
+      kind: 'changed',
+      trackedSince: '2026-07-20',
+      observations: 3,
+      observedOn: '2026-07-29',
+      fromRate: 0.0575,
+      toRate: 0.058,
+      bps: 5,
+    });
+  });
+
+  it('distinguishes one tracked observation from an observed unchanged series', () => {
+    expect(
+      summarizeProductBestRateSeries(['2026-07-20'], [0.06]),
+    ).toEqual({
+      kind: 'tracking',
+      trackedSince: '2026-07-20',
+      observations: 1,
+    });
+    expect(
+      summarizeProductBestRateSeries(
+        ['2026-07-20', '2026-07-29'],
+        [0.06, 0.06],
+      ),
+    ).toEqual({
+      kind: 'unchanged',
+      trackedSince: '2026-07-20',
+      observations: 2,
+    });
+  });
+
+  it('seeds the authoritative current best rate, including same-day refreshes', () => {
+    expect(
+      summarizeProductBestRateSeries(
+        ['2026-07-20', '2026-07-29'],
+        [0.06, null],
+        { date: '2026-07-29', rate: 0.055 },
+      ),
+    ).toMatchObject({
+      kind: 'changed',
+      observedOn: '2026-07-29',
+      bps: -50,
+    });
+    expect(
+      summarizeProductBestRateSeries(
+        ['2026-07-20', '2026-07-29'],
+        [0.06, 0.0575],
+        { date: '2026-07-29', rate: 0.055 },
+      ),
+    ).toMatchObject({
+      kind: 'changed',
+      toRate: 0.055,
+      bps: -50,
+    });
+  });
+
+  it('memoizes the current section-aware best rate for each product', () => {
+    const currentCore = core('2026-07-31', {
+      Mortgage: [rateRow('P|1', '0.06'), rateRow('P|1', '0.055')],
+      Savings: [rateRow('S|1', '0.04'), rateRow('S|1', '0.05')],
+    });
+    expect(bestRateForProduct(currentCore, 'P|1')).toBe(0.055);
+    expect(bestRateForProduct(currentCore, 'S|1')).toBe(0.05);
+    expect(bestRateForProduct(currentCore, 'missing')).toBeNull();
+  });
+
+  it('does not invent a direction from sparse or invalid history', () => {
+    expect(summarizeProductBestRateSeries([], [])).toBeNull();
+    expect(
+      summarizeProductBestRateSeries(
+        ['2026-07-20', '2026-07-29'],
+        [0, Number.NaN],
+      ),
+    ).toBeNull();
   });
 });
 
