@@ -3,7 +3,8 @@ name: pr-bot-feedback-check
 # Thread closure gate. Runs on PR lifecycle AND on review-comment activity so an
 # in-thread reply (or a bot posting a finding) re-evaluates the gate automatically
 # - no manual re-run / empty re-trigger commit needed. One paginated GraphQL query
-# per run; queue:max preserves every required-check result during event bursts.
+# per run. New events replace obsolete work for the same PR so stale heads cannot
+# occupy runners and starve the current required check.
 # Self-heal triggers are limited to events whose check-run attaches to the PR
 # HEAD: pull_request (push) and pull_request_review[_comment]. Generated PR
 # publishers also dispatch this workflow explicitly with --ref <PR branch>, so
@@ -30,11 +31,8 @@ permissions:
   pull-requests: read
 
 concurrency:
-  # Same-head thread events may burst; keep them queued instead of silently
-  # cancelling the older pending required check.
-  group: bot-feedback-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}-${{ github.event.pull_request.head.sha || github.sha }}
-  cancel-in-progress: false
-  queue: max
+  group: bot-feedback-gate-${{ github.event.pull_request.number || inputs.pr_number || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   bot-feedback-gate:

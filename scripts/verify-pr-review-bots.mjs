@@ -279,6 +279,10 @@ const coderabbitRetryWorkflow = readFileSync(
   ".github/workflows/pr-coderabbit-rate-limit-retry.yml",
   "utf8",
 );
+const feedbackWorkflow = readFileSync(
+  ".github/workflows/pr-bot-feedback-check.yml",
+  "utf8",
+);
 const controlScript = readFileSync("scripts/review-bot-control.mjs", "utf8");
 const branchProtection = readFileSync(
   "scripts/apply-branch-protection.mjs",
@@ -294,6 +298,13 @@ assert.doesNotMatch(workflow, /node scripts\/qwen-pr-review\.mjs/);
 assert.match(workflow, /```suggestion/);
 assert.match(workflow, /cancel-in-progress:\s*true/);
 assert.doesNotMatch(workflow, /queue:\s*max/);
+assert.match(
+  feedbackWorkflow,
+  /group:\s*bot-feedback-gate-\$\{\{\s*github\.event\.pull_request\.number\s*\|\|\s*inputs\.pr_number\s*\|\|\s*github\.run_id\s*\}\}/,
+);
+assert.match(feedbackWorkflow, /cancel-in-progress:\s*true/);
+assert.doesNotMatch(feedbackWorkflow, /pull_request\.head\.sha/);
+assert.doesNotMatch(feedbackWorkflow, /queue:\s*max/);
 assert.match(workflow, /DIFF_MAX_CHARS:\s*"60000"/);
 assert.doesNotMatch(workflow, /DIFF_CHUNK_CHARS/);
 assert.match(workflow, /Fork PRs cannot run/);
