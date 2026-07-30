@@ -26,13 +26,17 @@ import { ArMarkLogo } from '../src/components/ArMarkLogo';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { ErrorScreen } from '../src/components/ErrorScreen';
+import {
+  PerformanceAuditRunner,
+  usePerformanceAuditState,
+} from '../src/components/PerformanceAuditRunner';
 import { AppText } from '../src/components/ui';
 import { routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
-import { debugLog, installGlobalErrorHandlers } from '../src/lib/debugLog';
+import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import { setDiagnosticsEnabled } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
@@ -44,7 +48,7 @@ const MORPH_MS = 680;
 const FADE_MS = 320;
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
-  debugLog.error('app', `render error: ${error.message}`);
+  debugLog.error('app', `render error trace=${formatErrorTrace(error)}`);
   return <ErrorScreen error={error} retry={retry} />;
 }
 
@@ -196,6 +200,9 @@ function RootNavigator() {
   const dataUnavailable = hydrated && status === 'error';
   const diagnosticsEnabled = useStore((s) => s.prefs.diagnosticsEnabled);
   const bootstrap = useStore((s) => s.bootstrap);
+  const performanceAudit = usePerformanceAuditState();
+  const performanceAuditActive =
+    performanceAudit.status === 'queued' || performanceAudit.status === 'running';
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);
@@ -287,40 +294,54 @@ function RootNavigator() {
       registerTarget={registerTarget}
     >
       <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
-        <StatusBar style={theme.dark ? 'light' : 'dark'} />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: theme.colors.surface },
-            headerTitleStyle: { color: theme.colors.text },
-            headerTintColor: theme.colors.primary,
-            headerShadowVisible: false,
-            contentStyle: { backgroundColor: theme.colors.bg },
-            ...androidHeader,
-          }}
+        <View
+          style={{ flex: 1 }}
+          pointerEvents={performanceAuditActive ? 'none' : 'auto'}
+          accessibilityElementsHidden={performanceAuditActive}
+          importantForAccessibility={
+            performanceAuditActive ? 'no-hide-descendants' : 'auto'
+          }
         >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="node" options={{ title: 'Browse' }} />
-          <Stack.Screen name="search" options={{ title: 'Search' }} />
-          <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
-          <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
-          <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
-          <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
-          <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
-          <Stack.Screen name="rba" options={{ title: 'Why rates move' }} />
-          <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
-          <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
-          <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
-        </Stack>
-        {appReady ? (
-          <BrandedSplashOverlay
-            visible={overlayVisible}
-            morphTarget={morphTarget}
-            onboarded={onboarded}
-            onMorphComplete={handleMorphComplete}
-          />
-        ) : null}
+          <StatusBar style={theme.dark ? 'light' : 'dark'} />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: theme.colors.surface },
+              headerTitleStyle: { color: theme.colors.text },
+              headerTintColor: theme.colors.primary,
+              headerShadowVisible: false,
+              contentStyle: { backgroundColor: theme.colors.bg },
+              ...androidHeader,
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="node" options={{ title: 'Browse' }} />
+            <Stack.Screen name="search" options={{ title: 'Search' }} />
+            <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
+            <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
+            <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
+            <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
+            <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
+            <Stack.Screen name="rba" options={{ title: 'Why rates move' }} />
+            <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+            <Stack.Screen
+              name="performance-audit"
+              options={{ title: 'Performance audit', headerBackTitle: 'Settings' }}
+            />
+            <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
+            <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
+          </Stack>
+          {appReady ? (
+            <BrandedSplashOverlay
+              visible={overlayVisible}
+              morphTarget={morphTarget}
+              onboarded={onboarded}
+              onMorphComplete={handleMorphComplete}
+            />
+          ) : null}
+        </View>
+        <PerformanceAuditRunner />
       </View>
     </SplashMorphProvider>
   );
