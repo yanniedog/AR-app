@@ -1,0 +1,32 @@
+{
+  "version": "1.0.85",
+  "releaseTag": "app-arm-v1.0.85",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Activate the separate ARM APK release channel (#116)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Activate the separate ARM APK release channel (#116)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.85"
+        },
+        {
+          "text": "Since tag: app-v1.0.84"
+        }
+      ]
+    }
+  ]
+}
