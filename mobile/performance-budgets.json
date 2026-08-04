@@ -2,12 +2,12 @@
   "schemaVersion": 1,
   "maximumGrowthFraction": 0.05,
   "baseline": {
-    "androidBundleBytes": 10287601,
-    "iosBundleBytes": 10273286,
-    "webBundleBytes": 16045712,
-    "fontBytes": 17645484,
-    "assetBytes": 35403864,
+    "androidBundleBytes": 7549413,
+    "iosBundleBytes": 7535000,
+    "webBundleBytes": 4791934,
+    "fontBytes": 2302456,
+    "assetBytes": 4717808,
     "apkBytes": 132510218
   },
-  "notes": "Bundle, font, and asset baselines are the exact all-platform export of merged main 21b44090d7c212b3969705c6a324db0c91124e2c on 2026-08-04. The APK baseline is the verified app-apk-latest release asset before the optimization. APK enforcement runs only when AR_APP_APK_PATH points to a built APK."
+  "notes": "Bundle, font, and asset baselines are the optimized all-platform export of this upgrade at 3dbded8 on 2026-08-04, so the 5% guard preserves the realized reductions. The APK baseline remains the verified pre-upgrade app-apk-latest asset until a new signed APK is measured. APK enforcement runs only when AR_APP_APK_PATH points to a built APK."
 }

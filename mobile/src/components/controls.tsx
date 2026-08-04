@@ -43,12 +43,14 @@ export function SectionCrossfade({
   style?: StyleProp<ViewStyle>;
 }) {
   const opacity = useSharedValue(1);
-  const mounted = useRef(false);
+  const previousSection = useRef(section);
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
+    const changed = previousSection.current !== section;
+    previousSection.current = section;
+    if (!changed) {
+      opacity.value = 1;
       return;
     }
     if (reducedMotion) {

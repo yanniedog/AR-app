@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { SECTIONS } from '../constants';
-import { formatRate } from '../data/format';
+import { bpsBetween, formatRate } from '../data/format';
 import type { RateStats } from '../data/taxonomy';
 import { ribbonA11ySummary } from '../lib/a11ySummaries';
 import type { SectionKey } from '../types';
@@ -10,8 +10,8 @@ import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
 
 function gapBps(best: number | null, typical: number | null): number | null {
-  if (best == null || typical == null) return null;
-  return Math.round(Math.abs(best - typical) * 10000);
+  const signed = bpsBetween(best, typical);
+  return signed == null ? null : Math.abs(signed);
 }
 
 function Insight({

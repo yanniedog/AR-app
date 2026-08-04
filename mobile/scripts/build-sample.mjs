@@ -53,10 +53,20 @@ export async function validateGeneratedSample(sourceDir) {
   const rateCount = Object.values(artifacts.core.payload.sections ?? {})
     .reduce((sum, section) => sum + (section.rates?.length ?? 0), 0);
   const productCount = Object.keys(artifacts.details.payload.products ?? {}).length;
-  if (manifest.counts?.rates !== rateCount || manifest.counts?.products !== productCount) {
+  const providerCount = new Set(
+    Object.values(artifacts.core.payload.sections ?? {})
+      .flatMap((section) => section.rates ?? [])
+      .map((row) => String(row.provider ?? ''))
+      .filter(Boolean),
+  ).size;
+  if (
+    manifest.counts?.rates !== rateCount ||
+    manifest.counts?.products !== productCount ||
+    manifest.counts?.providers !== providerCount
+  ) {
     throw new Error('Generated sample counts do not match core/details payloads.');
   }
-  return { artifacts, manifest, manifestBytes, productCount, rateCount };
+  return { artifacts, manifest, manifestBytes, productCount, providerCount, rateCount };
 }
 
 export async function installSample(sourceDir, outputDir = defaultOutputDir) {

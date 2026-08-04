@@ -29,7 +29,7 @@ test('installs only a self-consistent producer sample contract', async () => {
       run_date: '2026-08-01',
       repo: 'yanniedog/AR-local',
       tag: 'bundled-sample',
-      counts: { products: 0, rates: 0 },
+      counts: { products: 0, providers: 0, rates: 0 },
       files: {
         core: { name: 'core.json', bytes: Buffer.byteLength(core), sha256: sha256(core), url: 'bundled://sample/core.json' },
         details: { name: 'details.json', bytes: Buffer.byteLength(details), sha256: sha256(details), url: 'bundled://sample/details.json' },

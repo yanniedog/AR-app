@@ -12,7 +12,10 @@ module.exports = {
   sampleCore: require('../../assets/sample/core.json'),
   loadSampleDetails: () => require('../../assets/sample/details.json'),
   sampleFallbackIsUsable: (now = new Date()) => {
-    const observed = Date.parse(`${sampleManifest.run_date}T00:00:00Z`);
-    return Number.isFinite(observed) && now.getTime() - observed <= SAMPLE_MAX_AGE_DAYS * 86400000;
+    // generated_at is an absolute instant; run_date is a Hobart calendar date
+    // and can legitimately be one day ahead of UTC during the overnight ingest.
+    const observed = Date.parse(sampleManifest.generated_at ?? `${sampleManifest.run_date}T00:00:00Z`);
+    const ageMs = now.getTime() - observed;
+    return Number.isFinite(observed) && ageMs >= 0 && ageMs <= SAMPLE_MAX_AGE_DAYS * 86400000;
   },
 };

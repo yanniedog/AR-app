@@ -114,7 +114,7 @@ export function productKeysMatchingIndex(
   }
   const memo = `${scope}:${q}`;
   const cached = memoGet(memo);
-  if (cached) return cached;
+  if (cached) return new Set(cached);
   const tokens = q.split(/\s+/).filter(Boolean);
   const hits = new Set<string>();
   const prefixHits = longestCachedPrefix(scope, q);
@@ -130,8 +130,8 @@ export function productKeysMatchingIndex(
       if (tokens.every((t) => blob.includes(t))) hits.add(key);
     }
   }
-  memoSet(memo, hits);
-  return hits;
+  memoSet(memo, new Set(hits));
+  return new Set(hits);
 }
 
 export function rowMatchesSearchQuery(

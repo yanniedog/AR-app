@@ -8,6 +8,7 @@ import {
   type CrashlyticsLike,
   type ClarityLike,
 } from '../src/lib/observability';
+import firebaseConfig from '../firebase.json';
 
 function makeMocks() {
   const crashlyticsApi: CrashlyticsLike = {
@@ -25,6 +26,10 @@ function makeMocks() {
 }
 
 describe('observability', () => {
+  it('keeps native crash collection disabled until explicit consent is hydrated', () => {
+    expect(firebaseConfig['react-native'].crashlytics_auto_collection_enabled).toBe(false);
+  });
+
   it('blocks replay on financial-input, profile, settings, and authentication routes', () => {
     expect(isSessionReplayRouteAllowed('/calculator')).toBe(false);
     expect(isSessionReplayRouteAllowed('/profile/edit')).toBe(false);

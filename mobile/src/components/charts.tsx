@@ -1,10 +1,7 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Animated, {
-  Easing,
   useAnimatedProps,
-  useSharedValue,
-  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Polygon, Text as SvgText } from 'react-native-svg';
 
@@ -16,6 +13,7 @@ import {
   rbaTimelineDates,
 } from '../data/bankHistoryTransform';
 import { formatRate, formatRateDigits, formatRunDate } from '../data/format';
+import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { rbaChartA11ySummary } from '../lib/a11ySummaries';
 import type { RbaEntry } from '../types';
@@ -25,24 +23,6 @@ import { ChartSliceControls, useChartScrub } from './charts/ChartSliceControls';
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 const DRAW_MS = 800;
-
-function useFirstMountDrawIn(reducedMotion: boolean, duration = DRAW_MS) {
-  const progress = useSharedValue(reducedMotion ? 1 : 0);
-  const started = useRef(false);
-  useEffect(() => {
-    if (reducedMotion) {
-      progress.value = 1;
-      started.current = true;
-      return;
-    }
-    if (started.current) return;
-    started.current = true;
-    progress.value = reducedMotion
-      ? 1
-      : withTiming(1, { duration, easing: Easing.out(Easing.cubic) });
-  }, [duration, progress, reducedMotion]);
-  return progress;
-}
 
 function estimateStepPathLength(data: RbaEntry[], x: (i: number) => number, y: (rate: number) => number): number {
   if (data.length <= 1) return 1;
@@ -67,7 +47,7 @@ export function RbaChart({
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const reducedMotion = useReducedMotion();
-  const drawProgress = useFirstMountDrawIn(reducedMotion);
+  const drawProgress = useFirstMountDrawIn(reducedMotion, DRAW_MS);
   const timeline = useMemo(() => rbaTimelineDates(data, holds), [data, holds]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
 

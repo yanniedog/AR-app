@@ -139,4 +139,34 @@ describe('detailSearch', () => {
     expect(detailSearchMemoSize()).toBe(DETAIL_SEARCH_MEMO_LIMIT);
   });
 
+  test('touches memo hits and defensively owns cached result sets', () => {
+    let reads = 0;
+    const products: Record<string, string> = {};
+    for (const [key, value] of Object.entries({ a: 'needle-a', b: 'needle-b' })) {
+      Object.defineProperty(products, key, {
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return value;
+        },
+      });
+    }
+    const index: SearchIndexPayload = { schema_version: 1, run_date: '2026-08-04', products };
+    const first = productKeysMatchingIndex(index, 'needle-a')!;
+    productKeysMatchingIndex(index, 'needle-b');
+    first.clear();
+    reads = 0;
+    expect(productKeysMatchingIndex(index, 'needle-a')).toEqual(new Set(['a']));
+    expect(reads).toBe(0);
+
+    for (let i = 0; i < DETAIL_SEARCH_MEMO_LIMIT - 1; i += 1) {
+      productKeysMatchingIndex(index, `unrelated-${i}`);
+    }
+    reads = 0;
+    productKeysMatchingIndex(index, 'needle-a');
+    expect(reads).toBe(0);
+    productKeysMatchingIndex(index, 'needle-b');
+    expect(reads).toBeGreaterThan(0);
+  });
+
 });

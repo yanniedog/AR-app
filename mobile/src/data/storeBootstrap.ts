@@ -10,11 +10,11 @@ import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import {
-  SAMPLE_MAX_AGE_DAYS,
   sampleCore,
   sampleFallbackIsUsable,
   sampleManifest,
 } from './sample';
+import { sampleAgeErrorMessage } from './storeHelpers';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
@@ -139,12 +139,13 @@ export function createBootstrapActions(
           );
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
+            void useRegisterLogosStore.getState().ensure();
             await get().refresh({});
             return;
           }
           set({
             status: 'error',
-            error: `Bundled sample observed ${sampleManifest.run_date} is older than the ${SAMPLE_MAX_AGE_DAYS}-day safety limit. Connect to load verified rates.`,
+            error: sampleAgeErrorMessage(),
           });
           return;
         }

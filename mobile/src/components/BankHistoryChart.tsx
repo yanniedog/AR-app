@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, View, type GestureResponderEvent, type PointerEvent } from 'react-native';
 import Animated, {
-  Easing,
   useAnimatedProps,
-  useSharedValue,
-  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -23,6 +20,7 @@ import { SECTIONS } from '../constants';
 import { bankHistoryChartA11ySummary } from '../lib/a11ySummaries';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
 import { debugLog } from '../lib/debugLog';
+import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
@@ -40,22 +38,6 @@ const DRAW_MS = 850;
 const TOUCH_DECIDE_PX = 8;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-
-function useFirstMountDrawIn(reducedMotion: boolean, duration = DRAW_MS) {
-  const progress = useSharedValue(reducedMotion ? 1 : 0);
-  const started = useRef(false);
-  useEffect(() => {
-    if (reducedMotion) {
-      progress.value = 1;
-      started.current = true;
-      return;
-    }
-    if (started.current) return;
-    started.current = true;
-    progress.value = withTiming(1, { duration, easing: Easing.out(Easing.cubic) });
-  }, [duration, progress, reducedMotion]);
-  return progress;
-}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
@@ -134,7 +116,7 @@ export function BankHistoryChart({
   const touchModeRef = useRef<'h' | 'v' | null>(null);
   const touchStartRef = useRef({ x: 0, y: 0 });
   const reducedMotion = useReducedMotion();
-  const drawProgress = useFirstMountDrawIn(reducedMotion);
+  const drawProgress = useFirstMountDrawIn(reducedMotion, DRAW_MS);
   const strokeLength = useMemo(() => Math.max(1, Math.max(1, width - 52) * 1.2), [width]);
   const lineDrawProps = useAnimatedProps(() => ({
     strokeDashoffset: strokeLength * (1 - drawProgress.value),

@@ -30,11 +30,13 @@ export async function readValidatedHistoryBanks(): Promise<HistoryBanksPayload |
   return null;
 }
 
+export function sampleAgeErrorMessage(): string {
+  return `Bundled sample observed ${sampleManifest.run_date} is outside the ${SAMPLE_MAX_AGE_DAYS}-day safety window. Connect to load verified rates.`;
+}
+
 export async function installSampleSeed(): Promise<void> {
   if (!sampleFallbackIsUsable()) {
-    throw new Error(
-      `Bundled sample observed ${sampleManifest.run_date} is older than the ${SAMPLE_MAX_AGE_DAYS}-day safety limit. Connect to load verified rates.`,
-    );
+    throw new Error(sampleAgeErrorMessage());
   }
   const seedMeta: CacheMeta = {
     manifest: sampleManifest,
