@@ -232,29 +232,44 @@ export function remoteIsNewer(installed: InstalledAppInfo, remote: ApkManifest):
   );
 }
 
-export async function fetchApkManifest(url: string): Promise<ApkManifest> {
-  const res = await fetch(manifestFetchUrl(url));
-  if (!res.ok) {
-    throw new Error(`APK manifest HTTP ${res.status}`);
+export async function fetchApkManifest(
+  url: string,
+  timeoutMs = 10_000,
+): Promise<ApkManifest> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(manifestFetchUrl(url), { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`APK manifest HTTP ${res.status}`);
+    }
+    const m = (await res.json()) as ApkManifest;
+    if (typeof m.version !== 'string' || typeof m.build_number !== 'string') {
+      throw new Error('APK manifest missing version or build_number');
+    }
+    if (typeof m.download_url !== 'string' || !m.download_url.startsWith('https://')) {
+      throw new Error('APK manifest missing download_url');
+    }
+    assertTrustedApkManifest(m, url);
+    return m;
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`APK manifest request timed out after ${timeoutMs} ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  const m = (await res.json()) as ApkManifest;
-  if (typeof m.version !== 'string' || typeof m.build_number !== 'string') {
-    throw new Error('APK manifest missing version or build_number');
-  }
-  if (typeof m.download_url !== 'string' || !m.download_url.startsWith('https://')) {
-    throw new Error('APK manifest missing download_url');
-  }
-  assertTrustedApkManifest(m, url);
-  return m;
 }
 
 export async function checkForAppUpdateAt(
   manifestUrl: string,
   installed: InstalledAppInfo,
   deviceAbis?: readonly string[] | null,
+  manifestTimeoutMs?: number,
 ): Promise<UpdateCheckResult> {
   try {
-    const remote = await fetchApkManifest(manifestUrl);
+    const remote = await fetchApkManifest(manifestUrl, manifestTimeoutMs);
     if (remoteIsNewer(installed, remote)) {
       if (!isApkCompatibleWithDevice(remote, deviceAbis)) {
         return {
@@ -289,13 +304,19 @@ export async function checkForAppUpdateAcrossChannels(
   manifestUrls: readonly string[],
   installed: InstalledAppInfo,
   deviceAbis?: readonly string[] | null,
+  perChannelTimeoutMs = 5_000,
 ): Promise<UpdateCheckResult> {
   let result: UpdateCheckResult = {
     status: 'error',
     message: 'No trusted APK channel is available',
   };
   for (const manifestUrl of manifestUrls) {
-    result = await checkForAppUpdateAt(manifestUrl, installed, deviceAbis);
+    result = await checkForAppUpdateAt(
+      manifestUrl,
+      installed,
+      deviceAbis,
+      perChannelTimeoutMs,
+    );
     if (result.status !== 'error') return result;
   }
   return result;
