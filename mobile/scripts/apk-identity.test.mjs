@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 import {
@@ -29,6 +31,14 @@ test('requires exactly the configured release ABIs', () => {
   assert.doesNotThrow(() => assertExpectedAbis([...expected].reverse(), expected));
   assert.throws(() => assertExpectedAbis(expected.slice(0, 2), expected), /APK ABI mismatch/i);
   assert.throws(() => assertExpectedAbis([], expected), /APK ABI mismatch/i);
+});
+
+test('reports a missing rolling-tag CLI value explicitly', () => {
+  const script = fileURLToPath(new URL('./bump-android-version-code.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [script, '--rolling-tag'], { encoding: 'utf8' });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Missing value for --rolling-tag/);
 });
 
 test('keeps universal trust while scoping preview APK builds to ARM', () => {

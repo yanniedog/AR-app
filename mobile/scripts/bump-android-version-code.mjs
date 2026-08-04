@@ -12,6 +12,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  ARM_ROLLING_TAG,
+  ROLLING_TAG,
+  resolveApkRollingTag,
+} from './app-release-meta.mjs';
 
 const require = createRequire(import.meta.url);
 const {
@@ -20,8 +25,6 @@ const {
 } = require('./android-release-version-pure.cjs');
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-const UNIVERSAL_TAG = 'app-apk-latest';
-const ARM_TAG = 'app-apk-arm-latest';
 const MANIFEST_ASSET = 'app-apk-latest.json';
 
 const repoArgIdx = process.argv.indexOf('--repo');
@@ -30,12 +33,11 @@ const repo =
   'yanniedog/AR-app';
 
 const rollingTagArgIdx = process.argv.indexOf('--rolling-tag');
-const rollingTag = String(
-  rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1] : UNIVERSAL_TAG,
-).trim();
-if (rollingTag !== UNIVERSAL_TAG && rollingTag !== ARM_TAG) {
-  throw new Error(`Unsupported APK rolling tag: ${rollingTag}`);
+const rollingTagValue = rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1] : ROLLING_TAG;
+if (rollingTagArgIdx >= 0 && (!rollingTagValue || rollingTagValue.startsWith('--'))) {
+  throw new Error('Missing value for --rolling-tag');
 }
+const rollingTag = resolveApkRollingTag(rollingTagValue);
 
 const fallbackRepoArgIdx = process.argv.indexOf('--fallback-repo');
 const fallbackRepo =
@@ -72,12 +74,12 @@ async function fetchRemoteManifest(targetRepo = repo, tag = rollingTag) {
 async function main() {
   const primaryRemote = await fetchRemoteManifest(repo, rollingTag);
   const universalFloor =
-    primaryRemote == null && rollingTag !== UNIVERSAL_TAG
-      ? await fetchRemoteManifest(repo, UNIVERSAL_TAG)
+    primaryRemote == null && rollingTag !== ROLLING_TAG
+      ? await fetchRemoteManifest(repo, ROLLING_TAG)
       : null;
   const fallbackRemote =
     primaryRemote == null && universalFloor == null && fallbackRepo
-      ? await fetchRemoteManifest(fallbackRepo, UNIVERSAL_TAG)
+      ? await fetchRemoteManifest(fallbackRepo, ROLLING_TAG)
       : null;
   const remote = primaryRemote ?? universalFloor ?? fallbackRemote;
   const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;

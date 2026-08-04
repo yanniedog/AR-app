@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
+import { ARM_ROLLING_TAG, versionTagForApkChannel } from './app-release-meta.mjs';
 import {
   approveActionRequiredRuns,
   createHeadScopedRunTracker,
@@ -35,8 +36,6 @@ export const AUTO_BUMP_PREFIX = AUTO_RELEASE_BUMP_PREFIX;
 const POLL_ATTEMPTS = 6;
 const POLL_SECONDS = 20;
 const SPAWN_TIMEOUT_MS = 60_000;
-const APK_ROLLING_TAG = 'app-apk-arm-latest';
-const APK_VERSION_TAG_PREFIX = 'app-arm-v';
 
 export function checkedGhOutput(result, args = []) {
   if (result.error) {
@@ -72,7 +71,13 @@ function ghTry(args) {
 }
 
 function apkReleaseExists(version) {
-  return ghTry(['release', 'view', `${APK_VERSION_TAG_PREFIX}${version}`, '--repo', repo]).ok;
+  return ghTry([
+    'release',
+    'view',
+    versionTagForApkChannel(version, ARM_ROLLING_TAG),
+    '--repo',
+    repo,
+  ]).ok;
 }
 
 export function hasApkBuildInFlight(rows, expectedHeadSha) {
@@ -131,7 +136,7 @@ export function ensureApkForMainHead({
   const headSha = readHeadSha();
   if (releaseExists(version)) {
     console.log(
-      `mobile-auto-release-on-drain: ${APK_VERSION_TAG_PREFIX}${version} already published — no APK dispatch`,
+      `mobile-auto-release-on-drain: ${versionTagForApkChannel(version, ARM_ROLLING_TAG)} already published — no APK dispatch`,
     );
     return false;
   }
@@ -238,7 +243,7 @@ export async function readPublishedVersion(
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
   const url =
-    `https://github.com/${repo}/releases/download/${APK_ROLLING_TAG}/app-apk-latest.json` +
+    `https://github.com/${repo}/releases/download/${ARM_ROLLING_TAG}/app-apk-latest.json` +
     `?_=${Date.now()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
