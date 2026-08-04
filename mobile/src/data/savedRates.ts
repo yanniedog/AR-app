@@ -17,6 +17,14 @@ export interface ResolvedSavedRate {
   section: SectionKey;
 }
 
+export function unresolvedSavedRateRefs(
+  refs: readonly SavedRateRef[],
+  resolved: readonly ResolvedSavedRate[],
+): SavedRateRef[] {
+  const resolvedIds = new Set(resolved.map((item) => item.ref.id));
+  return refs.filter((ref) => !resolvedIds.has(ref.id));
+}
+
 export function savedRateId(productKey: string, rateIndex: number | null, scope: SavedRateRef['scope']): string {
   return scope === 'rate' && rateIndex != null
     ? `rate:${productKey}:${rateIndex}`

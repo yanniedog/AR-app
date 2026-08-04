@@ -9,7 +9,7 @@ import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { AppText, Button, Row } from '../../src/components/ui';
-import { resolveSavedRates } from '../../src/data/savedRates';
+import { resolveSavedRates, unresolvedSavedRateRefs } from '../../src/data/savedRates';
 import { useStore } from '../../src/data/store';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { openCompare, openProduct } from '../../src/lib/nav';
@@ -29,10 +29,10 @@ export default function Saved() {
   useScrollToTop(scrollRef);
 
   const items = useMemo(() => (core ? resolveSavedRates(core, savedRates) : []), [core, savedRates]);
-  const unavailableRefs = useMemo(() => {
-    const resolvedIds = new Set(items.map((item) => item.ref.id));
-    return savedRates.filter((ref) => ref.scope === 'rate' && !resolvedIds.has(ref.id));
-  }, [items, savedRates]);
+  const unavailableRefs = useMemo(
+    () => unresolvedSavedRateRefs(savedRates, items),
+    [items, savedRates],
+  );
 
   const remove = useCallback(
     (id: string) => {
@@ -62,10 +62,10 @@ export default function Saved() {
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
           <EmptyState
             icon="star-outline"
-            title={unavailableRefs.length ? 'Saved rate unavailable' : 'Nothing saved yet'}
+            title={unavailableRefs.length ? 'Saved item unavailable' : 'Nothing saved yet'}
             subtitle={
               unavailableRefs.length
-                ? 'The exact saved tier is not in this dataset. It has not been replaced with a different product rate.'
+                ? 'The saved product or exact tier is not in this dataset. It has not been replaced with a different rate.'
                 : 'Save an exact rate to track that product variant, or save all variants from its product page.'
             }
           />
@@ -104,7 +104,7 @@ export default function Saved() {
         {unavailableRefs.length ? (
           <View style={{ gap: 8, marginBottom: 12 }}>
             <AppText variant="small" color="textMuted">
-              {unavailableRefs.length} exact saved {unavailableRefs.length === 1 ? 'rate is' : 'rates are'} unavailable in this dataset and hidden rather than substituted.
+              {unavailableRefs.length} saved {unavailableRefs.length === 1 ? 'item is' : 'items are'} unavailable in this dataset and hidden rather than substituted.
             </AppText>
             <Button
               title={`Remove unavailable ${unavailableRefs.length === 1 ? 'save' : 'saves'}`}

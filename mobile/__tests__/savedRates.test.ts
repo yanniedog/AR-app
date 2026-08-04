@@ -4,6 +4,7 @@ import {
   normalizeSavedRates,
   resolveSavedRates,
   toggleSavedRateRefs,
+  unresolvedSavedRateRefs,
 } from '../src/data/savedRates';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -65,6 +66,13 @@ describe('saved rate references', () => {
   it('does not substitute another tier when an exact saved rate disappears', () => {
     const ref = makeSavedRateRef(row(9, '0.07'));
     expect(resolveSavedRates(core, [ref])).toEqual([]);
+  });
+
+  it('surfaces a missing product-wide save for removal', () => {
+    const productRef = normalizeSavedRates(undefined, ['REMOVED|PRODUCT'])[0];
+    expect(unresolvedSavedRateRefs([productRef], resolveSavedRates(core, [productRef]))).toEqual([
+      productRef,
+    ]);
   });
 
   it('clears a migrated all-variant save when its selected rate star is tapped', () => {

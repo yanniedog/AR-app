@@ -28,7 +28,7 @@ import { useStore } from '../src/data/store';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
-import { openCompare, openProduct } from '../src/lib/nav';
+import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
 import { canAddAlertSubscription, effectiveDeepSearch } from '../src/lib/proAccess';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -45,14 +45,20 @@ const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
 export default function Search() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { section: secRaw, path: pathRaw, sort: sortRaw, scope: scopeRaw, query: queryRaw, sub: subRaw } = useLocalSearchParams<{
-    section: string;
-    path?: string;
-    sort?: string;
-    scope?: string;
-    query?: string;
-    sub?: string;
+  const params = useLocalSearchParams<{
+    section: string | string[];
+    path?: string | string[];
+    sort?: string | string[];
+    scope?: string | string[];
+    query?: string | string[];
+    sub?: string | string[];
   }>();
+  const secRaw = scalarRouteParam(params.section);
+  const pathRaw = scalarRouteParam(params.path);
+  const sortRaw = scalarRouteParam(params.sort);
+  const scopeRaw = scalarRouteParam(params.scope);
+  const queryRaw = scalarRouteParam(params.query);
+  const subRaw = scalarRouteParam(params.sub);
   const section = (SECTION_ORDER.includes(secRaw as SectionKey) ? secRaw : 'Mortgage') as SectionKey;
   const path = useMemo(() => (pathRaw ?? '').split('.').filter(Boolean), [pathRaw]);
   const hierarchyScoped = scopeRaw === 'hierarchy';

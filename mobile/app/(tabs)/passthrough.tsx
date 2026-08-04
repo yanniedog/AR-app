@@ -9,6 +9,7 @@ import { AppText, Button, Card } from '../../src/components/ui';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
+import { scalarRouteParam } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function PassThroughTab() {
@@ -23,7 +24,8 @@ export default function PassThroughTab() {
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const [retrying, setRetrying] = useState(false);
-  const { date: decisionDate } = useLocalSearchParams<{ date?: string }>();
+  const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
+  const decisionDate = scalarRouteParam(decisionDateRaw);
 
   useEffect(() => {
     if (!enabled || !core) return;
