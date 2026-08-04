@@ -5,6 +5,8 @@ import {
   TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
   assertApkCompatibleWithDevice,
   assertDownloadedApkMatchesManifest,
+  apkManifestUrlsForDevice,
+  checkForAppUpdateAcrossChannels,
   checkForAppUpdateAt,
   fetchApkManifest,
   isApkCompatibleWithDevice,
@@ -150,6 +152,30 @@ describe('appUpdateLogic', () => {
     expect(() => assertApkCompatibleWithDevice(armOnlyManifest, ['x86_64'])).toThrow(
       /this APK supports/i,
     );
+  });
+
+  it('uses the ARM channel only for channel-aware ARM clients and keeps universal fallback', () => {
+    const universal = 'https://example.test/universal.json';
+    const arm = 'https://example.test/arm.json';
+    expect(apkManifestUrlsForDevice(['arm64 v8'], universal, arm)).toEqual([arm, universal]);
+    expect(apkManifestUrlsForDevice(['armeabi-v7a'], universal, arm)).toEqual([arm, universal]);
+    expect(apkManifestUrlsForDevice(['x86_64'], universal, arm)).toEqual([universal]);
+    expect(apkManifestUrlsForDevice(undefined, universal, arm)).toEqual([universal]);
+  });
+
+  it('falls back to the universal channel while the ARM channel is unavailable', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      checkForAppUpdateAcrossChannels(
+        ['https://example.test/arm.json', manifestUrl],
+        installed,
+        ['arm64-v8a'],
+      ),
+    ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('reports current when installed matches remote', async () => {

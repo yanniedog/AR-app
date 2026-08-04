@@ -47,10 +47,20 @@ function gitExec(args) {
 }
 
 export const ROLLING_TAG = "app-apk-latest";
+export const ARM_ROLLING_TAG = "app-apk-arm-latest";
 export const APK_ASSET = "app-preview.apk";
 export const MANIFEST_ASSET = "app-apk-latest.json";
 export const QR_ASSET = "app-preview-qr.png";
 export const INSTALL_HTML = "install.html";
+
+/** Keep release publication on one of the two client-trusted rolling channels. */
+export function resolveApkRollingTag(value) {
+  const tag = String(value || ROLLING_TAG).trim();
+  if (tag !== ROLLING_TAG && tag !== ARM_ROLLING_TAG) {
+    throw new Error(`Unsupported APK rolling tag: ${tag}`);
+  }
+  return tag;
+}
 
 /** @param {string} repo owner/name @param {string} tag */
 export function apkDownloadUrl(repo, tag) {

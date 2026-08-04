@@ -171,6 +171,20 @@ function normalizeAndroidAbi(value: string): string {
   return abi;
 }
 
+export function apkManifestUrlsForDevice(
+  deviceAbis: readonly string[] | null | undefined,
+  universalManifestUrl: string,
+  armManifestUrl: string,
+): string[] {
+  const isArmDevice = deviceAbis?.some((abi) => {
+    const normalized = normalizeAndroidAbi(abi);
+    return normalized === 'arm64-v8a' || normalized === 'armeabi-v7a';
+  });
+  return isArmDevice
+    ? [armManifestUrl, universalManifestUrl]
+    : [universalManifestUrl];
+}
+
 export function isApkCompatibleWithDevice(
   manifest: Pick<ApkManifest, 'supported_abis'>,
   deviceAbis: readonly string[] | null | undefined,
@@ -269,4 +283,20 @@ export async function checkForAppUpdateAt(
     const message = err instanceof Error ? err.message : String(err);
     return { status: 'error', message };
   }
+}
+
+export async function checkForAppUpdateAcrossChannels(
+  manifestUrls: readonly string[],
+  installed: InstalledAppInfo,
+  deviceAbis?: readonly string[] | null,
+): Promise<UpdateCheckResult> {
+  let result: UpdateCheckResult = {
+    status: 'error',
+    message: 'No trusted APK channel is available',
+  };
+  for (const manifestUrl of manifestUrls) {
+    result = await checkForAppUpdateAt(manifestUrl, installed, deviceAbis);
+    if (result.status !== 'error') return result;
+  }
+  return result;
 }

@@ -10,6 +10,8 @@ type Extra = {
   apkRepo?: string;
   apkReleaseTag?: string;
   apkManifestUrl?: string;
+  apkArmReleaseTag?: string;
+  apkArmManifestUrl?: string;
   payloadDecKeyHex?: string;
   googleWebClientId?: string;
   keyServiceUrl?: string;
@@ -45,11 +47,17 @@ export function datedManifestUrl(runDate: string): string {
 }
 
 export const APK_RELEASE_TAG = extra.apkReleaseTag ?? 'app-apk-latest';
+export const APK_ARM_RELEASE_TAG = extra.apkArmReleaseTag ?? 'app-apk-arm-latest';
 
 /** Rolling APK manifest published after preview EAS builds (see mobile-eas-build.yml). */
 export const APK_MANIFEST_URL =
   extra.apkManifestUrl ??
   `https://github.com/${APK_REPO}/releases/download/${APK_RELEASE_TAG}/app-apk-latest.json`;
+
+/** ARM-only channel used only by clients that understand ABI-scoped updates. */
+export const APK_ARM_MANIFEST_URL =
+  extra.apkArmManifestUrl ??
+  `https://github.com/${APK_REPO}/releases/download/${APK_ARM_RELEASE_TAG}/app-apk-latest.json`;
 
 /** Schema version this build understands. Older payloads still load best-effort. */
 export const SUPPORTED_SCHEMA = 1;

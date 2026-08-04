@@ -2,7 +2,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { qrReleaseUrl } from './app-release-meta.mjs';
+import {
+  ARM_ROLLING_TAG,
+  qrReleaseUrl,
+  resolveApkRollingTag,
+} from './app-release-meta.mjs';
 import { buildReadmeInstallSection } from './update-readme-app-install.mjs';
 import {
   pushBranchWithGhAuth,
@@ -16,6 +20,12 @@ test('qrReleaseUrl appends build cache-bust query', () => {
     url,
     'https://github.com/owner/repo/releases/download/app-apk-latest/app-preview-qr.png?v=42',
   );
+});
+
+test('release publisher accepts only the universal and ARM rolling channels', () => {
+  assert.equal(resolveApkRollingTag(undefined), 'app-apk-latest');
+  assert.equal(resolveApkRollingTag(ARM_ROLLING_TAG), 'app-apk-arm-latest');
+  assert.throws(() => resolveApkRollingTag('attacker-controlled-tag'), /unsupported APK rolling tag/i);
 });
 
 test('buildReadmeInstallSection embeds cache-busted QR from manifest', () => {
