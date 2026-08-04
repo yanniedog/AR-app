@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-04T19:47:23.885Z",
+  "generated_at": "2026-08-04T21:36:55.649Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -490,6 +490,14 @@
         "Stage a safe ARM update channel (#110)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.84"
+    },
+    {
+      "version": "1.0.85",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Activate the separate ARM APK release channel (#116)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.85"
     }
   ]
 }
