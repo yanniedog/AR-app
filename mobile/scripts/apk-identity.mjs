@@ -17,10 +17,10 @@ export function parseAaptBadging(output) {
 
 export function parseApksignerCertificateSha256(output) {
   // apksigner labels and separators vary between build-tools releases. Anchor
-  // the semantic app-signer field so source-stamp certificates are excluded.
+  // app-signer fields (including "V2 Signer:") while excluding Source Stamp.
   const matches = [
     ...String(output || '').matchAll(
-      /^(?:Signer #\d+\s+)?certificate SHA[\t -]?256 digest[\t ]*[:=][\t ]*((?:[A-Fa-f0-9]{2}[: ]?){32})[\t ]*$/gim,
+      /^(?!Source Stamp)(?:(?:V\d+(?:\.\d+)?[\t ]+)?Signer(?::| #\d+)[\t ]+)?certificate SHA[\t -]?256 digest[\t ]*[:=][\t ]*((?:[A-Fa-f0-9]{2}[: ]?){32})[\t ]*$/gim,
     ),
   ].map((match) => match[1].replace(/[^A-Fa-f0-9]/g, '').toLowerCase());
   const unique = [...new Set(matches)];
