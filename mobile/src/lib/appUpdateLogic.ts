@@ -13,6 +13,7 @@ export interface ApkManifest {
   sha256?: string;
   bytes?: number;
   package_name?: string;
+  supported_abis?: string[];
   signing_certificate_sha256?: string;
   published_at?: string;
   repo?: string;
@@ -26,6 +27,7 @@ export interface ApkManifest {
 export const TRUSTED_ANDROID_PACKAGE = releaseIdentity.android_package;
 export const TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 =
   releaseIdentity.signing_certificate_sha256.toLowerCase();
+const KNOWN_ANDROID_APK_ABIS = new Set(['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']);
 
 export interface InstalledAppInfo {
   version: string;
@@ -40,6 +42,7 @@ export type UpdateCheckResult =
       remote: ApkManifest;
       changelogs: VersionChangelogSummary[];
     }
+  | { status: 'incompatible'; installed: InstalledAppInfo; remote: ApkManifest; message: string }
   | { status: 'error'; message: string };
 
 export type { VersionChangelogSummary } from './changelog';
@@ -105,6 +108,22 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   if (manifest.package_name !== TRUSTED_ANDROID_PACKAGE) {
     throw new Error('APK manifest package does not match Australian Rates');
   }
+  if (manifest.supported_abis != null) {
+    if (
+      !Array.isArray(manifest.supported_abis) ||
+      manifest.supported_abis.some((abi) => typeof abi !== 'string')
+    ) {
+      throw new Error('APK manifest ABI list is invalid');
+    }
+    const supportedAbis = [...new Set(manifest.supported_abis.map((abi) => abi.trim()))];
+    if (
+      !supportedAbis.length ||
+      supportedAbis.length !== manifest.supported_abis.length ||
+      supportedAbis.some((abi) => !KNOWN_ANDROID_APK_ABIS.has(abi))
+    ) {
+      throw new Error('APK manifest ABI list is invalid');
+    }
+  }
   if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {
     throw new Error('APK manifest signing certificate is missing or invalid');
   }
@@ -141,6 +160,34 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   const prefix = `/${repo}/releases/download/${tag}/`;
   if (!parsed.pathname.startsWith(prefix) || parsed.pathname.length <= prefix.length) {
     throw new Error('APK download URL does not match its immutable release');
+  }
+}
+
+function normalizeAndroidAbi(value: string): string {
+  const abi = value.trim().toLowerCase().replaceAll(' ', '-');
+  if (abi === 'arm64-v8' || abi === 'aarch64') return 'arm64-v8a';
+  if (abi === 'armv7' || abi === 'armeabi-v7') return 'armeabi-v7a';
+  if (abi === 'x86-64') return 'x86_64';
+  return abi;
+}
+
+export function isApkCompatibleWithDevice(
+  manifest: Pick<ApkManifest, 'supported_abis'>,
+  deviceAbis: readonly string[] | null | undefined,
+): boolean {
+  if (!manifest.supported_abis?.length || !deviceAbis?.length) return true;
+  const supported = new Set(manifest.supported_abis.map(normalizeAndroidAbi));
+  return deviceAbis.some((abi) => supported.has(normalizeAndroidAbi(abi)));
+}
+
+export function assertApkCompatibleWithDevice(
+  manifest: Pick<ApkManifest, 'supported_abis'>,
+  deviceAbis: readonly string[] | null | undefined,
+): void {
+  if (!isApkCompatibleWithDevice(manifest, deviceAbis)) {
+    throw new Error(
+      `This APK supports ${manifest.supported_abis?.join(', ')}, but this device reports ${deviceAbis?.join(', ')}.`,
+    );
   }
 }
 
@@ -190,10 +237,19 @@ export async function fetchApkManifest(url: string): Promise<ApkManifest> {
 export async function checkForAppUpdateAt(
   manifestUrl: string,
   installed: InstalledAppInfo,
+  deviceAbis?: readonly string[] | null,
 ): Promise<UpdateCheckResult> {
   try {
     const remote = await fetchApkManifest(manifestUrl);
     if (remoteIsNewer(installed, remote)) {
+      if (!isApkCompatibleWithDevice(remote, deviceAbis)) {
+        return {
+          status: 'incompatible',
+          installed,
+          remote,
+          message: `The latest APK supports ${remote.supported_abis?.join(', ')}, but this device reports ${deviceAbis?.join(', ')}.`,
+        };
+      }
       let changelogs: VersionChangelogSummary[] = [];
       if (versionGt(remote.version, installed.version)) {
         try {

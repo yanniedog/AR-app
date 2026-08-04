@@ -37,6 +37,7 @@ import {
   versionTag,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
+import { assertApkSizeBudget } from './report-artifact-sizes.mjs';
 import releaseIdentity from '../release-identity.json' with { type: 'json' };
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -330,6 +331,11 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     process.exit(1);
   }
 
+  const performanceBudgets = JSON.parse(
+    readFileSync(join(mobileRoot, 'performance-budgets.json'), 'utf8'),
+  );
+  assertApkSizeBudget(apkBuf.length, performanceBudgets);
+
   const outDir = join(mobileRoot, 'build', 'apk-publish');
   mkdirSync(outDir, { recursive: true });
   const apkPath = join(outDir, APK_ASSET);
@@ -342,6 +348,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     versionName: version,
     versionCode: buildNumber,
     certificateSha256: releaseIdentity.signing_certificate_sha256,
+    supportedAbis: releaseIdentity.android_release_abis,
   });
   if (packageName !== releaseIdentity.android_package) {
     throw new Error(
@@ -369,6 +376,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     sha256,
     bytes: apkBuf.length,
     package_name: identity.packageName,
+    supported_abis: identity.supportedAbis,
     signing_certificate_sha256: identity.certificateSha256,
     published_at: new Date().toISOString(),
     repo,

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import {
+  assertExpectedAbis,
   assertExpectedSigningCertificate,
   parseAaptBadging,
   parseApksignerCertificateSha256,
@@ -9,19 +11,58 @@ import {
 
 test('parses the package and version identity reported by aapt', () => {
   assert.deepEqual(
-    parseAaptBadging("package: name='com.eyex.australianrates' versionCode='195' versionName='1.0.82' platformBuildVersionName='15'"),
+    parseAaptBadging([
+      "package: name='com.eyex.australianrates' versionCode='196' versionName='1.0.83' platformBuildVersionName='15'",
+      "native-code: 'armeabi-v7a' 'arm64-v8a'",
+    ].join('\n')),
     {
       packageName: 'com.eyex.australianrates',
-      versionCode: '195',
-      versionName: '1.0.82',
+      versionCode: '196',
+      versionName: '1.0.83',
+      supportedAbis: ['armeabi-v7a', 'arm64-v8a'],
     },
   );
+});
+
+test('requires exactly the configured release ABIs', () => {
+  const expected = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'];
+  assert.doesNotThrow(() => assertExpectedAbis([...expected].reverse(), expected));
+  assert.throws(() => assertExpectedAbis(expected.slice(0, 2), expected), /APK ABI mismatch/i);
+  assert.throws(() => assertExpectedAbis([], expected), /APK ABI mismatch/i);
+});
+
+test('keeps the transition APK compatible with every previously shipped ABI', () => {
+  const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
+  const easJson = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
+  const releaseIdentity = JSON.parse(
+    readFileSync(new URL('../release-identity.json', import.meta.url), 'utf8'),
+  );
+  const buildProperties = appJson.expo.plugins.find(
+    (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-build-properties',
+  )?.[1];
+  assert.deepEqual(
+    releaseIdentity.android_release_abis,
+    ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'],
+  );
+  assert.equal(buildProperties?.android?.buildArchs, undefined);
+  assert.equal(easJson.build.preview.android.gradleCommand, undefined);
+  assert.equal(easJson.build.development.android.gradleCommand, undefined);
+  assert.equal(easJson.build.production.android.gradleCommand, undefined);
+  const workflow = readFileSync(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(workflow, /-PreactNativeArchitectures=/);
 });
 
 test('normalizes exactly one apksigner certificate digest', () => {
   const digest = 'AA:'.repeat(31) + 'AA';
   assert.equal(
     parseApksignerCertificateSha256(`Signer #1 certificate SHA-256 digest: ${digest}`),
+    'aa'.repeat(32),
+  );
+  assert.equal(
+    parseApksignerCertificateSha256(`Certificate SHA 256 digest = ${digest}`),
     'aa'.repeat(32),
   );
   assert.equal(

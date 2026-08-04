@@ -3,27 +3,37 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 export function parseAaptBadging(output) {
-  const line = String(output || '').split(/\r?\n/).find((item) => item.startsWith('package:')) || '';
+  const lines = String(output || '').split(/\r?\n/);
+  const line = lines.find((item) => item.startsWith('package:')) || '';
   const value = (name) => new RegExp(`${name}='([^']+)'`).exec(line)?.[1] || '';
+  const nativeCodeLine = lines.find((item) => item.startsWith('native-code:')) || '';
   return {
     packageName: value('name'),
     versionCode: value('versionCode'),
     versionName: value('versionName'),
+    supportedAbis: [...nativeCodeLine.matchAll(/'([^']+)'/g)].map((match) => match[1]),
   };
 }
 
 export function parseApksignerCertificateSha256(output) {
-  // apksigner labels vary between Android build-tools releases (some omit the
-  // "Signer #n" prefix or separate bytes with spaces). Match the semantic
-  // certificate field, then normalize separators before enforcing one signer.
+  // apksigner labels and separators vary between build-tools releases. Anchor
+  // the semantic app-signer field so source-stamp certificates are excluded.
   const matches = [
     ...String(output || '').matchAll(
-      /^(?:Signer #\d+\s+)?certificate SHA-256 digest:[\t ]*([A-Fa-f0-9: ]+)/gim,
+      /^(?:Signer #\d+\s+)?certificate SHA[\t -]?256 digest[\t ]*[:=][\t ]*((?:[A-Fa-f0-9]{2}[: ]?){32})[\t ]*$/gim,
     ),
   ].map((match) => match[1].replace(/[^A-Fa-f0-9]/g, '').toLowerCase());
   const unique = [...new Set(matches)];
   if (unique.length !== 1 || !/^[a-f0-9]{64}$/.test(unique[0] || '')) {
-    throw new Error(`Expected exactly one APK signing certificate, found ${unique.length}`);
+    const labels = String(output || '')
+      .split(/\r?\n/)
+      .filter((line) => /certificate|signer|verified/i.test(line))
+      .slice(0, 20)
+      .join(' | ');
+    throw new Error(
+      `Expected exactly one APK signing certificate, found ${unique.length}` +
+      (labels ? `; apksigner reported: ${labels}` : ''),
+    );
   }
   return unique[0];
 }
@@ -37,6 +47,18 @@ export function assertExpectedSigningCertificate(actual, expected) {
   if (normalizedActual !== normalizedExpected) {
     throw new Error(
       `APK signing certificate mismatch (expected ${normalizedExpected}, got ${normalizedActual || 'missing'})`,
+    );
+  }
+}
+
+export function assertExpectedAbis(actual, expected) {
+  const normalize = (values) => [...new Set((values ?? []).map((value) => String(value).trim()).filter(Boolean))].sort();
+  const normalizedActual = normalize(actual);
+  const normalizedExpected = normalize(expected);
+  if (!normalizedExpected.length) throw new Error('Trusted APK ABI list is missing or invalid');
+  if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) {
+    throw new Error(
+      `APK ABI mismatch (expected ${normalizedExpected.join(', ')}, got ${normalizedActual.join(', ') || 'none'})`,
     );
   }
 }
@@ -90,6 +112,7 @@ export function inspectApkIdentity(apkPath, expected) {
   if (badging.versionCode !== String(expected.versionCode)) {
     throw new Error(`APK build mismatch (expected ${expected.versionCode}, got ${badging.versionCode})`);
   }
+  assertExpectedAbis(badging.supportedAbis, expected.supportedAbis);
   const certificateSha256 = parseApksignerCertificateSha256(
     runTool(androidTool('apksigner'), ['verify', '--verbose', '--print-certs', apkPath]),
   );
