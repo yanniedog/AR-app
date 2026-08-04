@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useScrollToTop } from '@react-navigation/native';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -10,6 +10,8 @@ import {
   MoversLeaderboard,
 } from '../../src/components/BankInsights';
 import { HistoryExplorer } from '../../src/components/viz/HistoryExplorer';
+import type { HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
+import { PulseDayMovers } from '../../src/components/PulseDayMovers';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
 import { ProPaywall } from '../../src/components/ProPaywall';
 import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
@@ -26,6 +28,7 @@ import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
+import { rbaRateAsOf } from '../../src/data/bankHistoryTransform';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
@@ -35,11 +38,13 @@ import { runStoreRetry } from '../../src/lib/degradationLog';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBrowse } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
+import { yieldToUiFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Trends() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const calendar = useStore((s) => s.rbaCalendar);
   const interests = useStore((s) => s.prefs.interests);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -68,12 +73,36 @@ export default function Trends() {
   useScrollToTop(scrollRef);
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
+  const [deferredChartRevision, setDeferredChartRevision] = useState<string | null>(null);
+  const deferredChartsReady = !!core?.run_date && deferredChartRevision === core.run_date;
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
+  const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
+  const ensureProductHistory = useStore((s) => s.ensureProductHistory);
+  const productHistory = useStore((s) => s.productHistory);
+  const productHistoryError = useStore((s) => s.productHistoryError);
 
   useEffect(() => {
     setRewindDate(null);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (showHistoryRibbon && explorerMode === 'pulse') void ensureProductHistory();
+  }, [core?.run_date, coreSha, ensureProductHistory, explorerMode, showHistoryRibbon]);
+
+  useEffect(() => {
+    const revision = core?.run_date;
+    if (!revision) return;
+    let active = true;
+    // Let the tab transition and its first touch/paint complete before
+    // constructing the large SVG and historical derived models below.
+    void yieldToUiFrames(2).then(() => {
+      if (active) setDeferredChartRevision(revision);
+    });
+    return () => {
+      active = false;
+    };
+  }, [core?.run_date]);
 
   const handleRetryInsights = async () => {
     setRetryingInsights(true);
@@ -107,16 +136,17 @@ export default function Trends() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
+    if (!deferredChartsReady) return null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
       includeNonStandard,
       detailsProducts,
     );
-  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, core, deferredChartsReady, detailsProducts, includeNonStandard, suitabilityRevision]);
   const historyModel = useMemo(() => {
     void suitabilityRevision;
-    return core
+    return core && deferredChartsReady
       ? selectBankHistoryChartModel(
           {
             core,
@@ -132,6 +162,7 @@ export default function Trends() {
   }, [
     activeSection,
     core,
+    deferredChartsReady,
     detailsProducts,
     explorerInsights,
     historyBanks,
@@ -171,13 +202,20 @@ export default function Trends() {
 
   const payloadDecisions = useMemo(() => {
     if (!core?.rba) return [];
-    const out: { date: string; rate: number; prior: number }[] = [];
+    const out: { date: string; rate: number; prior: number; held?: boolean }[] = [];
     for (let i = 1; i < core.rba.length; i++) {
       if (core.rba[i].rate !== core.rba[i - 1].rate) {
         out.push({ date: core.rba[i].date, rate: core.rba[i].rate, prior: core.rba[i - 1].rate });
       }
     }
-    return out.reverse().slice(0, 8);
+    for (const raw of core.rba_holds ?? []) {
+      const date = String(raw || '').slice(0, 10);
+      if (!date || out.some((decision) => decision.date === date)) continue;
+      const rate = rbaRateAsOf(core.rba, date);
+      if (rate != null) out.push({ date, rate, prior: rate, held: true });
+    }
+    out.sort((left, right) => right.date.localeCompare(left.date));
+    return out.slice(0, 12);
   }, [core]);
 
   const trend = useMemo(() => rbaTrend(calendar), [calendar]);
@@ -246,7 +284,11 @@ export default function Trends() {
         </Card>
       )}
 
-      <RbaOutlook rba={core.rba} />
+      {deferredChartsReady ? (
+        <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
+      ) : (
+        <DeferredChartPlaceholder label="Preparing economic outlook" />
+      )}
 
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
@@ -260,7 +302,11 @@ export default function Trends() {
             {trend.summary}
           </AppText>
         ) : null}
-        <RbaChart data={core.rba} height={190} />
+        {deferredChartsReady ? (
+          <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
+        ) : (
+          <DeferredChartPlaceholder label="Preparing cash-rate chart" height={190} />
+        )}
         <View style={{ marginTop: 12 }}>
           <RbaCountdownCard expandable={false} />
         </View>
@@ -290,16 +336,20 @@ export default function Trends() {
                   </View>
                 ))
               : payloadDecisions.map((d) => {
-                  const up = d.rate > d.prior;
-                  const down = d.rate < d.prior;
-                  const direction = up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
+                  const up = !d.held && d.rate > d.prior;
+                  const down = !d.held && d.rate < d.prior;
+                  const direction = d.held ? 'Held' : up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
                   return (
                     <Row
                       key={d.date}
                       style={{ justifyContent: 'space-between', paddingVertical: 6 }}
                       accessible
                       accessibilityRole="text"
-                      accessibilityLabel={rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))}
+                      accessibilityLabel={
+                        d.held
+                          ? `Held at ${formatRate(d.rate)}, ${formatRunDate(d.date)}`
+                          : rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))
+                      }
                     >
                       <AppText variant="small" color="textMuted">
                         {formatRunDate(d.date)}
@@ -316,7 +366,7 @@ export default function Trends() {
                           />
                         ) : null}
                         <AppText variant="small" weight="700">
-                          {formatRate(d.prior)} → {formatRate(d.rate)}
+                          {d.held ? `${formatRate(d.rate)} · on hold` : `${formatRate(d.prior)} → ${formatRate(d.rate)}`}
                         </AppText>
                       </Row>
                     </Row>
@@ -336,7 +386,7 @@ export default function Trends() {
           </View>
           <Chip label="PRO" selected={showHistoryRibbon} />
         </Row>
-        {showHistoryRibbon ? (
+        {showHistoryRibbon && deferredChartsReady ? (
           <>
             {sectionOptions.length > 1 ? (
               <SegmentedControl
@@ -358,9 +408,28 @@ export default function Trends() {
                 brands={core.brands}
                 selectedDate={rewindDate}
                 onDateSelect={setRewindDate}
+                mode={explorerMode}
+                onModeChange={setExplorerMode}
               />
             </View>
-            {rewindDate ? (
+            {rewindDate && explorerMode === 'pulse' ? (
+              <View style={{ marginTop: 12 }}>
+                <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                  <AppText variant="small" weight="700">Moves on {formatRunDate(rewindDate)}</AppText>
+                  <Button title="Clear" variant="ghost" onPress={() => setRewindDate(null)} />
+                </Row>
+                <PulseDayMovers
+                  payload={explorerInsights}
+                  section={activeSection}
+                  date={rewindDate}
+                  productHistory={productHistory}
+                  productHistoryError={productHistoryError}
+                  onRetryProductHistory={() => void ensureProductHistory({ force: true })}
+                  core={core}
+                />
+              </View>
+            ) : null}
+            {rewindDate && explorerMode !== 'pulse' ? (
               <View style={{ marginTop: 12 }}>
                 <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                   <AppText variant="small" weight="700">
@@ -390,6 +459,8 @@ export default function Trends() {
               </Row>
             ) : null}
           </>
+        ) : showHistoryRibbon ? (
+          <DeferredChartPlaceholder label="Preparing market history" height={220} />
         ) : (
           <Button
             title="Enable Market explorer"
@@ -476,5 +547,27 @@ export default function Trends() {
         }}
       />
     </ScreenScrollView>
+  );
+}
+
+function DeferredChartPlaceholder({ label, height = 96 }: { label: string; height?: number }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        minHeight: height,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+        backgroundColor: theme.colors.surfaceAlt,
+      }}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+    >
+      <AppText variant="tiny" color="textFaint">
+        {label}
+      </AppText>
+    </View>
   );
 }

@@ -125,6 +125,8 @@ export interface RaceSeries {
   provider: string;
   /** Rank (1 = best) at each model date; null until the provider has data. */
   ranks: (number | null)[];
+  /** Best advertised rate at each sampled date (fraction). */
+  values: (number | null)[];
   /** Latest best advertised rate (fraction). */
   current: number | null;
   /** Rank change over the window (positive = climbed the board). */
@@ -137,6 +139,8 @@ export interface LenderRaceModel {
   topN: number;
   /** Total ranked lenders at the latest date (for "of N" context). */
   fieldSize: number;
+  /** Total ranked lenders at each sampled date. */
+  fieldSizes: number[];
 }
 
 const RACE_MAX_COLUMNS = 26;
@@ -197,6 +201,7 @@ export function lenderRaceModel(
     providers.map((p) => [p.provider, columns.map(() => null as number | null)]),
   );
   let fieldSize = 0;
+  const fieldSizes = columns.map(() => 0);
   for (let c = 0; c < columns.length; c += 1) {
     const col = columns[c];
     const ranked = providers
@@ -206,6 +211,7 @@ export function lenderRaceModel(
         (lowerIsBetter ? a.value - b.value : b.value - a.value) || a.provider.localeCompare(b.provider),
       );
     if (c === columns.length - 1) fieldSize = ranked.length;
+    fieldSizes[c] = ranked.length;
     ranked.forEach((r, i) => {
       ranksByProvider.get(r.provider)![c] = i + 1;
     });
@@ -234,12 +240,13 @@ export function lenderRaceModel(
     return {
       provider: p.provider,
       ranks,
+      values: columns.map((column) => p.values[column]),
       current,
       climbed: firstRank != null ? firstRank - endRank : 0,
     };
   });
 
-  return { dates, series, topN, fieldSize };
+  return { dates, series, topN, fieldSize, fieldSizes };
 }
 
 // ---------------------------------------------------------------------------

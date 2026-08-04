@@ -9,7 +9,13 @@ import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
-import { sampleCore, sampleManifest } from './sample';
+import {
+  sampleCore,
+  sampleFallbackIsUsable,
+  sampleManifestIsUsable,
+  sampleManifest,
+} from './sample';
+import { sampleAgeErrorMessage } from './storeHelpers';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
@@ -54,9 +60,25 @@ export function createBootstrapActions(
 
       try {
         const prefs = get().prefs;
-        const bundle = await cache.readBundle();
-        const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
+        const cachedBundle = await cache.readBundle();
+        const staleSample =
+          cachedBundle?.meta.source === 'sample' &&
+          (
+            !sampleManifestIsUsable(cachedBundle.meta.manifest) ||
+            cachedBundle.meta.coreSha !== sampleManifest.files.core.sha256 ||
+            cachedBundle.meta.manifest.files.core.sha256 !== sampleManifest.files.core.sha256 ||
+            cachedBundle.core.run_date !== sampleCore.run_date
+          );
+        const bundle = staleSample ? null : cachedBundle;
+        if (staleSample) {
+          debugLog.warn(
+            'store',
+            `ignoring stale or replaced bundled sample cache observed ${cachedBundle?.meta.manifest.run_date}`,
+          );
+        }
+        const [rawCachedSearch, cachedOptionalMeta, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
+          effectiveDeepSearch(prefs) ? cache.readOptionalMeta() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
           // Bank insights are free, but remain screen-lazy so first paint does
           // not hydrate product history unless the user enabled history charts.
@@ -73,6 +95,19 @@ export function createBootstrapActions(
               })
             : Promise.resolve(null),
         ]);
+        const searchAsset = bundle?.meta.manifest.files.search_index;
+        const cachedSearch =
+          rawCachedSearch &&
+          bundle &&
+          searchAsset &&
+          rawCachedSearch.run_date === bundle.core.run_date &&
+          cachedOptionalMeta?.coreSha === bundle.meta.coreSha &&
+          cachedOptionalMeta.searchIndexSha === searchAsset.sha256
+            ? rawCachedSearch
+            : null;
+        if (rawCachedSearch && !cachedSearch) {
+          debugLog.warn('store', 'ignoring search index that does not match the cached core revision');
+        }
         if (bundle) {
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
@@ -106,7 +141,7 @@ export function createBootstrapActions(
           }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(bundle.core, get);
-        } else {
+        } else if (sampleFallbackIsUsable()) {
           debugLog.info('store', 'cache miss — seeding bundled sample');
           clearSuitabilityIndex();
           await installSampleSeed();
@@ -119,6 +154,25 @@ export function createBootstrapActions(
           });
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(sampleCore, get);
+        } else {
+          debugLog.warn(
+            'store',
+            `bundled sample observed ${sampleManifest.run_date} is too old; refreshing before display`,
+          );
+          set({ status: 'idle', error: null });
+          if (!opts.skipRefresh) {
+            void useRegisterLogosStore.getState().ensure();
+            const refreshed = await get().refresh({});
+            if (!refreshed && get().status !== 'ready' && get().status !== 'error') {
+              set({ status: 'error', error: sampleAgeErrorMessage() });
+            }
+            return;
+          }
+          set({
+            status: 'error',
+            error: sampleAgeErrorMessage(),
+          });
+          return;
         }
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
@@ -137,10 +191,13 @@ export function createBootstrapActions(
       set({ status: 'idle', error: null });
       await get().bootstrap({ skipRefresh: true });
       if (get().status !== 'ready') {
-        logRetry('retryDataLoad', 'failure', get().error ?? undefined);
-        return;
+        // An expired bundled/cached sample is intentionally not displayable,
+        // but Retry must still be able to recover online from an empty state.
+        set({ status: 'idle', error: null });
+        await get().refresh({ repairCache: true, manual: true });
+      } else {
+        await get().refresh({ repairCache: true, manual: true });
       }
-      await get().refresh({ repairCache: true, manual: true });
       if (get().refreshOutcome === 'failure') {
         logRetry('retryDataLoad', 'failure', get().error ?? 'refresh failed');
       } else {
@@ -184,7 +241,15 @@ export function createBootstrapActions(
     async ensureCoreLoaded() {
       if (get().core) return;
       const bundle = await cache.readBundle();
-      if (bundle) {
+      const sampleIsCurrent =
+        bundle?.meta.source !== 'sample' ||
+        (
+          sampleManifestIsUsable(bundle.meta.manifest) &&
+          bundle.meta.coreSha === sampleManifest.files.core.sha256 &&
+          bundle.meta.manifest.files.core.sha256 === sampleManifest.files.core.sha256 &&
+          bundle.core.run_date === sampleCore.run_date
+        );
+      if (bundle && sampleIsCurrent) {
         set({ core: bundle.core, manifest: bundle.meta.manifest, source: bundle.meta.source });
       }
     },

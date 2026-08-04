@@ -33,6 +33,25 @@ export function recentBankEvents(
   return opts.limit && opts.limit > 0 ? sorted.slice(0, opts.limit) : sorted;
 }
 
+/** Lender moves that contributed to a Pulse column on `date`, largest first. */
+export function eventsOnDate(
+  payload: BankInsightsPayload | null | undefined,
+  section: SectionKey,
+  date: string,
+): BankRateEvent[] {
+  if (!payload?.events?.length) return [];
+  const day = String(date || '').slice(0, 10);
+  if (!day) return [];
+  return payload.events
+    .filter((event) => event.section === section && event.date === day)
+    .slice()
+    .sort(
+      (a, b) =>
+        Math.abs(b.avg_bps) - Math.abs(a.avg_bps) ||
+        a.provider.localeCompare(b.provider),
+    );
+}
+
 export interface BankEventRateContext {
   /** Provider median on the day before the move (fraction). */
   before: number;
@@ -254,7 +273,8 @@ export function bankSnapshotAt(
         const v = series.best[i];
         if (v == null) continue;
         if (v !== best.value) {
-          changeBps = Math.round((best.value - v) * 1000) / 10;
+          // Rates are fractions (0.0574), so one basis point is 0.0001.
+          changeBps = Math.round((best.value - v) * 10000 * 10) / 10;
           changedOn = payload.run_dates[firstHeldIdx];
           break;
         }
@@ -312,5 +332,4 @@ export function marketPulse(
   }
   return { banksMoved: movers.size, cuts, hikes, sinceDate };
 }
-
 

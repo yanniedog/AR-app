@@ -20,10 +20,10 @@ describe('ribbonStats', () => {
     const ribbon = sample.sections.Mortgage.ribbon;
     expect(hasPayloadRibbon(ribbon)).toBe(true);
     const stats = ribbonToRateStats(ribbon);
-    expect(stats.min).toBeCloseTo(0.0279, 4);
-    expect(stats.max).toBeCloseTo(0.1177, 4);
-    expect(stats.count).toBe(5346);
-    expect(stats.providers).toBe(51);
+    expect(stats.min).toBeCloseTo(ribbon.range.min!, 8);
+    expect(stats.max).toBeCloseTo(ribbon.range.max!, 8);
+    expect(stats.count).toBe(ribbon.counts.rates);
+    expect(stats.providers).toBe(ribbon.counts.providers);
   });
 
   it('uses filtered hierarchy rows when non-standard is excluded', () => {

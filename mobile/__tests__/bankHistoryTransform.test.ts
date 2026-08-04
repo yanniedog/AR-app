@@ -3,9 +3,11 @@ import {
   chartYDomain,
   historyDatesInWindow,
   normalizeTimelineDates,
+  plotLocalX,
   rbaChangesInWindow,
   rbaHoldsInWindow,
   rbaRateAsOf,
+  rbaTimelineDates,
   rbaStepForDates,
   sanitizeRibbonPoint,
   sliceChartTimeline,
@@ -78,6 +80,12 @@ describe('bankHistoryTransform', () => {
     expect(sliceIndexFromPlotX(10, 100, 1)).toBe(0);
   });
 
+  it('subtracts chart padding before clamping scrub coordinates', () => {
+    expect(plotLocalX(34, 34, 200)).toBe(0);
+    expect(plotLocalX(134, 34, 200)).toBe(100);
+    expect(plotLocalX(260, 34, 200)).toBe(200);
+  });
+
   it('builds RBA step values and change marks for mortgage overlay', () => {
     const rba: RbaEntry[] = [
       { date: '2026-01-01', rate: 4.0 },
@@ -113,6 +121,16 @@ describe('bankHistoryTransform', () => {
     expect(rbaHoldsInWindow(dates, ['2026-12-08'], rba)).toEqual([]);
     expect(rbaHoldsInWindow(dates, undefined, rba)).toEqual([]);
     expect(rbaHoldsInWindow(dates, ['2026-06-16'], [])).toEqual([]);
+  });
+
+  it('extends the RBA timeline through holds after the last rate change', () => {
+    const rba: RbaEntry[] = [{ date: '2026-05-01', rate: 4.5 }];
+    expect(rbaTimelineDates(rba, ['2026-07-08', '2026-06-16'])).toEqual([
+      '2026-05-01',
+      '2026-06-16',
+      '2026-07-08',
+    ]);
+    expect(rbaTimelineDates(rba, ['2026-04-01'])).toEqual(['2026-05-01']);
   });
 
   it('maps multiple in-window holds in chronological order, snapped to the timeline', () => {

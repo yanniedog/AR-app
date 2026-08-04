@@ -1,7 +1,9 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { shouldWarmDetails } from '../src/data/optionalPrefs';
-import { sampleCore, sampleDetails, sampleManifest } from '../src/data/sample';
+import { loadSampleDetails, sampleCore, sampleManifest } from '../src/data/sample';
 import { DEFAULT_PREFS } from '../src/data/store';
+
+const sampleDetails = loadSampleDetails();
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();

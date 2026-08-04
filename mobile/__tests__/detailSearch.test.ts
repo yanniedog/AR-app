@@ -1,10 +1,12 @@
 import core from '../assets/sample/core.json';
 
-import details from '../assets/sample/details.json';
-
 import {
 
   detailSearchIndex,
+
+  DETAIL_SEARCH_MEMO_LIMIT,
+
+  detailSearchMemoSize,
 
   productDetailSearchText,
 
@@ -18,13 +20,7 @@ import {
 
 } from '../src/data/detailSearch';
 
-import type { CorePayload, DetailsPayload, ProductDetail } from '../src/types';
-
-
-
-const WESTPAC_KEY =
-
-  'Westpac|HLSustainableUpgradesInvestment|RESIDENTIAL_MORTGAGES|Sustainable Upgrades Investment Loan';
+import type { CorePayload, ProductDetail } from '../src/types';
 
 
 
@@ -62,15 +58,11 @@ describe('detailSearch', () => {
 
 
 
-  test('payload index matches energy for Westpac sustainable product', () => {
+  test('payload index can match detail-only text for a sampled product', () => {
 
-    const sampleDetails = details as DetailsPayload;
+    const row = (core as CorePayload).sections.Mortgage.rates[0];
 
-    const blob = sampleDetails.products[WESTPAC_KEY]
-
-      ? `westpac sustainable ${sampleDetails.products[WESTPAC_KEY].description ?? ''}`
-
-      : 'westpac sustainable energy efficiency';
+    expect(row).toBeTruthy();
 
     const index: SearchIndexPayload = {
 
@@ -78,17 +70,13 @@ describe('detailSearch', () => {
 
       run_date: '2026-05-19',
 
-      products: { [WESTPAC_KEY]: blob.toLowerCase() },
+      products: { [row.product_key]: 'renewable energy efficiency' },
 
     };
 
-    const row = (core as CorePayload).sections.Mortgage.rates.find((r) => r.product_key === WESTPAC_KEY);
+    expect(rowMatchesSearchQuery(row, 'energy', index)).toBe(true);
 
-    expect(row).toBeTruthy();
-
-    expect(rowMatchesSearchQuery(row!, 'energy', index)).toBe(true);
-
-    expect(productKeysMatchingIndex(index, 'energy')?.has(WESTPAC_KEY)).toBe(true);
+    expect(productKeysMatchingIndex(index, 'energy')?.has(row.product_key)).toBe(true);
 
   });
 
@@ -112,6 +100,89 @@ describe('detailSearch', () => {
 
     expect(detailSearchIndex(null).size).toBe(0);
 
+  });
+
+  test('narrows an extended query from cached prefix hits', () => {
+    let reads = 0;
+    const products: Record<string, string> = {};
+    for (const [key, value] of Object.entries({
+      a: 'solar offset home loan',
+      b: 'solar savings account',
+      c: 'fixed home loan',
+    })) {
+      Object.defineProperty(products, key, {
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return value;
+        },
+      });
+    }
+    const index: SearchIndexPayload = { schema_version: 1, run_date: '2026-08-04', products };
+
+    expect(productKeysMatchingIndex(index, 'solar')).toEqual(new Set(['a', 'b']));
+    expect(reads).toBe(3);
+    reads = 0;
+    expect(productKeysMatchingIndex(index, 'solar off')).toEqual(new Set(['a']));
+    expect(reads).toBe(2);
+  });
+
+  test('bounds the query memo with least-recently-used eviction', () => {
+    const index: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'alpha beta gamma' },
+    };
+    for (let i = 0; i < DETAIL_SEARCH_MEMO_LIMIT + 10; i += 1) {
+      productKeysMatchingIndex(index, `query-${i}`);
+    }
+    expect(detailSearchMemoSize()).toBe(DETAIL_SEARCH_MEMO_LIMIT);
+  });
+
+  test('invalidates prefix memoization when a corrected index object keeps the same date', () => {
+    const first: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'solar offset home loan' },
+    };
+    const corrected: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'solar offset home loan', b: 'solar offset saver' },
+    };
+
+    expect(productKeysMatchingIndex(first, 'solar')).toEqual(new Set(['a']));
+    expect(productKeysMatchingIndex(corrected, 'solar off')).toEqual(new Set(['a', 'b']));
+  });
+
+  test('touches memo hits and defensively owns cached result sets', () => {
+    let reads = 0;
+    const products: Record<string, string> = {};
+    for (const [key, value] of Object.entries({ a: 'needle-a', b: 'needle-b' })) {
+      Object.defineProperty(products, key, {
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return value;
+        },
+      });
+    }
+    const index: SearchIndexPayload = { schema_version: 1, run_date: '2026-08-04', products };
+    const first = productKeysMatchingIndex(index, 'needle-a')!;
+    productKeysMatchingIndex(index, 'needle-b');
+    first.clear();
+    reads = 0;
+    expect(productKeysMatchingIndex(index, 'needle-a')).toEqual(new Set(['a']));
+    expect(reads).toBe(0);
+
+    for (let i = 0; i < DETAIL_SEARCH_MEMO_LIMIT - 1; i += 1) {
+      productKeysMatchingIndex(index, `unrelated-${i}`);
+    }
+    reads = 0;
+    productKeysMatchingIndex(index, 'needle-a');
+    expect(reads).toBe(0);
+    productKeysMatchingIndex(index, 'needle-b');
+    expect(reads).toBeGreaterThan(0);
   });
 
 });

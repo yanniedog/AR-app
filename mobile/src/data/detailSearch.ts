@@ -10,6 +10,8 @@ type DetailIndex = Map<string, string>;
 let runtimeCache: { ref: Record<string, ProductDetail> | null | undefined; index: DetailIndex } | null = null;
 const queryMemo = new Map<string, Set<string>>();
 let lastMemoScope: string | null = null;
+let lastMemoIndex: SearchIndexPayload | null = null;
+export const DETAIL_SEARCH_MEMO_LIMIT = 32;
 
 function indexMemoScope(index: SearchIndexPayload, contentSha?: string | null): string {
   return contentSha ?? `${index.schema_version}:${index.run_date}`;
@@ -59,6 +61,45 @@ export function resetDetailSearchIndexCache(): void {
   runtimeCache = null;
   queryMemo.clear();
   lastMemoScope = null;
+  lastMemoIndex = null;
+}
+
+/** Test/diagnostic hook: the production cache remains encapsulated. */
+export function detailSearchMemoSize(): number {
+  return queryMemo.size;
+}
+
+function memoGet(key: string): Set<string> | undefined {
+  const hit = queryMemo.get(key);
+  if (!hit) return undefined;
+  // Map insertion order is our LRU order. Touch a hit so active queries remain.
+  queryMemo.delete(key);
+  queryMemo.set(key, hit);
+  return hit;
+}
+
+function memoSet(key: string, hits: Set<string>): void {
+  queryMemo.set(key, hits);
+  while (queryMemo.size > DETAIL_SEARCH_MEMO_LIMIT) {
+    const oldest = queryMemo.keys().next().value as string | undefined;
+    if (!oldest) break;
+    queryMemo.delete(oldest);
+  }
+}
+
+function longestCachedPrefix(scope: string, query: string): Set<string> | null {
+  const prefix = `${scope}:`;
+  let bestLength = -1;
+  let best: Set<string> | null = null;
+  for (const [key, hits] of queryMemo) {
+    if (!key.startsWith(prefix)) continue;
+    const cachedQuery = key.slice(prefix.length);
+    if (cachedQuery.length > bestLength && query.startsWith(cachedQuery)) {
+      bestLength = cachedQuery.length;
+      best = hits;
+    }
+  }
+  return best;
 }
 
 export function productKeysMatchingIndex(
@@ -69,19 +110,34 @@ export function productKeysMatchingIndex(
   const q = query.trim().toLowerCase();
   if (!q || !index?.products) return null;
   const scope = indexMemoScope(index, contentSha);
-  if (lastMemoScope !== scope) {
+  // A corrected asset can legitimately retain its schema version and run date.
+  // Store refresh replaces the parsed object, so identity is the safe fallback
+  // revision key when a caller has no manifest content SHA available.
+  if (lastMemoScope !== scope || lastMemoIndex !== index) {
     queryMemo.clear();
     lastMemoScope = scope;
+    lastMemoIndex = index;
   }
   const memo = `${scope}:${q}`;
-  if (queryMemo.has(memo)) return queryMemo.get(memo)!;
+  const cached = memoGet(memo);
+  if (cached) return new Set(cached);
   const tokens = q.split(/\s+/).filter(Boolean);
   const hits = new Set<string>();
-  for (const [key, blob] of Object.entries(index.products)) {
-    if (tokens.every((t) => blob.includes(t))) hits.add(key);
+  const prefixHits = longestCachedPrefix(scope, q);
+  if (prefixHits) {
+    // Adding characters/tokens can only narrow substring matches, so avoid a
+    // second full-index walk while the user continues typing the same query.
+    for (const key of prefixHits) {
+      const blob = index.products[key];
+      if (blob && tokens.every((t) => blob.includes(t))) hits.add(key);
+    }
+  } else {
+    for (const [key, blob] of Object.entries(index.products)) {
+      if (tokens.every((t) => blob.includes(t))) hits.add(key);
+    }
   }
-  queryMemo.set(memo, hits);
-  return hits;
+  memoSet(memo, new Set(hits));
+  return new Set(hits);
 }
 
 export function rowMatchesSearchQuery(

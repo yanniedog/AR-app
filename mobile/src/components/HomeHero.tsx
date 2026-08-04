@@ -1,9 +1,10 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import { dataSourceLabel } from '../lib/nextIngest';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { PayloadSource } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
@@ -20,11 +21,16 @@ export function SpringOnNewData({
   children: ReactNode;
 }) {
   const scale = useSharedValue(1);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reducedMotion !== false) {
+      scale.value = 1;
+      return;
+    }
     scale.value = 0.94;
     scale.value = withSpring(1, SPRING);
-  }, [dataKey, scale]);
+  }, [dataKey, reducedMotion, scale]);
 
   const style = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -71,11 +77,16 @@ export function HomeHero({
       ? theme.colors.primary
       : theme.colors.success;
   const datePulse = useSharedValue(1);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
+    if (reducedMotion !== false) {
+      datePulse.value = 1;
+      return;
+    }
     datePulse.value = 0.92;
     datePulse.value = withSpring(1, SPRING);
-  }, [dataKey, datePulse]);
+  }, [dataKey, datePulse, reducedMotion]);
 
   const dateStyle = useAnimatedStyle(() => ({
     transform: [{ scale: datePulse.value }],

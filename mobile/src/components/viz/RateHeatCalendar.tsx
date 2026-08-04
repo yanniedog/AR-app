@@ -8,6 +8,7 @@ import { moveTone } from '../../lib/moveSemantics';
 import type { BankHistoryPoint, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls } from '../charts/ChartSliceControls';
 import { AppText, Row } from '../ui';
 
 const CELL_GAP = 3;
@@ -30,7 +31,7 @@ export function RateHeatCalendar({
   points: BankHistoryPoint[];
   section: SectionKey;
   selectedDate?: string | null;
-  onDateSelect?: (date: string) => void;
+  onDateSelect?: (date: string | null) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -59,11 +60,40 @@ export function RateHeatCalendar({
 
   const better = SECTIONS[section].lowerIsBetter ? 'Rates fell' : 'Rates rose';
   const worse = SECTIONS[section].lowerIsBetter ? 'Rates rose' : 'Rates fell';
+  const observations = model.weeks.flatMap((week) => week.filter((cell) => cell?.hasData));
+  const activeDate = selectedDate && observations.some((cell) => cell?.date === selectedDate)
+    ? selectedDate
+    : observations.at(-1)?.date ?? '';
+  const activeIndex = Math.max(0, observations.findIndex((cell) => cell?.date === activeDate));
+  const activeCell = observations[activeIndex];
+  const activeValue = activeCell?.deltaBps == null
+    ? 'First observation'
+    : activeCell.deltaBps === 0
+      ? 'No change'
+      : `${activeCell.deltaBps > 0 ? '+' : ''}${Math.round(activeCell.deltaBps * 10) / 10} basis points`;
 
   return (
-    <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-      {width > 0 ? (
-        <Svg width={gridW} height={gridH} accessibilityLabel={`Daily ${SECTIONS[section].title} rate-move calendar`}>
+    <View>
+      <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`${SECTIONS[section].title} rate-move calendar. Selected ${activeDate}: ${activeValue}.`}
+        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next date' },
+          { name: 'decrement', label: 'Previous date' },
+        ]}
+        onAccessibilityAction={(event) => {
+          const next = event.nativeEvent.actionName === 'increment'
+            ? Math.min(observations.length - 1, activeIndex + 1)
+            : Math.max(0, activeIndex - 1);
+          onDateSelect?.(observations[next]?.date ?? null);
+        }}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        style={{ width: '100%' }}
+      >
+        {width > 0 ? (
+          <Svg width={gridW} height={gridH} importantForAccessibility="no-hide-descendants">
           {model.monthLabels.map((m) => (
             <SvgText
               key={`${m.weekIndex}-${m.label}`}
@@ -101,16 +131,24 @@ export function RateHeatCalendar({
                     height={cell}
                     rx={3}
                     fill={fillFor(c.deltaBps, c.hasData, c.intensity)}
-                    stroke={selectedDate === c.date ? theme.colors.primary : 'none'}
-                    strokeWidth={selectedDate === c.date ? 2 : 0}
+                    stroke={activeDate === c.date ? theme.colors.primary : 'none'}
+                    strokeWidth={activeDate === c.date ? 2 : 0}
                     onPress={c.hasData && onDateSelect ? () => onDateSelect(c.date) : undefined}
                   />
                 ) : null,
               )}
             </G>
           ))}
-        </Svg>
-      ) : null}
+          </Svg>
+        ) : null}
+      </View>
+      <ChartSliceControls
+        dates={observations.map((cell) => cell?.date ?? '')}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => onDateSelect?.(observations[index]?.date ?? null)}
+        valueLabel={activeValue}
+        detail="median advertised rate move"
+      />
       <Row gap={12} style={{ marginTop: 8, flexWrap: 'wrap' }}>
         <LegendSwatch color={withAlpha(goodInk, 0.8)} label={better} />
         <LegendSwatch color={withAlpha(badInk, 0.8)} label={worse} />

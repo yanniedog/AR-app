@@ -1,5 +1,5 @@
 import type { CorePayload, Manifest } from '../src/types';
-import { sampleCore, sampleManifest } from '../src/data/sample';
+import { SAMPLE_MAX_AGE_DAYS, sampleCore, sampleManifest } from '../src/data/sample';
 
 const mockReadBundle = jest.fn();
 const mockReadSuitabilityIndex = jest.fn();
@@ -77,7 +77,7 @@ function resetStore() {
     lastCheckedAt: null,
     payloadProgress: null,
     hydrated: true,
-    prefs: useStore.getState().prefs,
+    prefs: { ...useStore.getState().prefs, wifiOnly: false },
     favorites: [],
   });
 }
@@ -101,6 +101,8 @@ describe('store error recovery', () => {
       text: JSON.stringify(remoteCore),
       core: remoteCore,
     });
+    (jest.requireMock('expo-network').getNetworkStateAsync as jest.Mock)
+      .mockResolvedValue({ type: 'WIFI' });
   });
 
   it('loadSampleFallback installs bundled sample and clears error', async () => {
@@ -135,6 +137,119 @@ describe('store error recovery', () => {
     expect(state.error).toBeNull();
     expect(state.core).toEqual(remoteCore);
     expect(mockFetchManifest).toHaveBeenCalled();
+  });
+
+  it('retryDataLoad bypasses an expired cached sample and still refreshes remotely', async () => {
+    const observed = Date.parse(`${sampleManifest.run_date}T00:00:00Z`);
+    jest.useFakeTimers().setSystemTime(observed + (SAMPLE_MAX_AGE_DAYS + 1) * 86400000);
+    try {
+      mockReadBundle.mockResolvedValue({
+        meta: {
+          manifest: sampleManifest,
+          source: 'sample',
+          savedAt: `${sampleManifest.run_date}T00:00:00Z`,
+          coreSha: sampleManifest.files.core.sha256,
+          detailsSha: null,
+        },
+        core: sampleCore,
+      });
+
+      const retry = useStore.getState().retryDataLoad();
+      await jest.runAllTimersAsync();
+      await retry;
+
+      expect(mockFetchManifest).toHaveBeenCalled();
+      expect(useStore.getState().status).toBe('ready');
+      expect(useStore.getState().source).toBe('remote');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('rejects an old cached sample even when this app bundles a fresh sample', async () => {
+    const bundledObserved = Date.parse(sampleManifest.generated_at);
+    const oldGeneratedAt = new Date(
+      bundledObserved - (SAMPLE_MAX_AGE_DAYS + 1) * 86400000,
+    ).toISOString();
+    const oldRunDate = oldGeneratedAt.slice(0, 10);
+    const oldManifest = { ...sampleManifest, run_date: oldRunDate, generated_at: oldGeneratedAt };
+    const oldCore = { ...sampleCore, run_date: oldRunDate };
+    jest.useFakeTimers().setSystemTime(new Date(sampleManifest.generated_at));
+    try {
+      useStore.setState({ status: 'idle', core: null, error: null });
+      mockReadBundle.mockResolvedValue({
+        meta: {
+          manifest: oldManifest,
+          source: 'sample',
+          savedAt: oldGeneratedAt,
+          coreSha: sampleManifest.files.core.sha256,
+          detailsSha: null,
+        },
+        core: oldCore,
+      });
+
+      await useStore.getState().bootstrap({ skipRefresh: true });
+
+      expect(useStore.getState().core?.run_date).toBe(sampleManifest.run_date);
+      expect(mockWriteBundle).toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('leaves the splash for an error screen when Wi-Fi policy skips expired-sample refresh', async () => {
+    const observed = Date.parse(sampleManifest.generated_at);
+    jest.useFakeTimers().setSystemTime(
+      observed + (SAMPLE_MAX_AGE_DAYS + 1) * 86400000,
+    );
+    try {
+      useStore.setState({
+        status: 'idle',
+        core: null,
+        error: null,
+        prefs: { ...useStore.getState().prefs, wifiOnly: true },
+      });
+      mockReadBundle.mockResolvedValue(null);
+      (jest.requireMock('expo-network').getNetworkStateAsync as jest.Mock)
+        .mockResolvedValue({ type: 'CELLULAR' });
+
+      await useStore.getState().bootstrap();
+
+      expect(useStore.getState().refreshOutcome).toBe('wifi-skip');
+      expect(useStore.getState().status).toBe('error');
+      expect(useStore.getState().error).toContain('safety window');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('replaces an older cached sample when the embedded sample revision changes', async () => {
+    const oldManifest: Manifest = {
+      ...sampleManifest,
+      run_date: '2026-05-19',
+      files: {
+        ...sampleManifest.files,
+        core: { ...sampleManifest.files.core, sha256: 'old-sample-core' },
+      },
+    };
+    mockReadBundle.mockResolvedValue({
+      meta: {
+        manifest: oldManifest,
+        source: 'sample',
+        savedAt: '2026-05-19T00:00:00Z',
+        coreSha: 'old-sample-core',
+        detailsSha: null,
+      },
+      core: { ...sampleCore, run_date: '2026-05-19' },
+    });
+    useStore.setState({ status: 'idle', core: null, manifest: null, error: null });
+
+    await useStore.getState().bootstrap({ skipRefresh: true });
+
+    expect(mockWriteBundle).toHaveBeenCalled();
+    expect(useStore.getState().status).toBe('ready');
+    expect(useStore.getState().manifest?.files.core.sha256).toBe(sampleManifest.files.core.sha256);
+    expect(useStore.getState().core?.run_date).toBe(sampleManifest.run_date);
   });
 
   it('fails closed on cached startup until the exact post-ingest suitability index is rebuilt', async () => {

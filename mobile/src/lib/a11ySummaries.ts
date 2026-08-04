@@ -26,7 +26,7 @@ export function ribbonA11ySummary(
     `${title} market opportunity`,
     best != null ? `best advertised ${formatRate(best)}` : null,
     typical != null ? `typical advertised ${formatRate(typical)}` : null,
-    gap != null ? `advertised spread ${gap} basis points` : null,
+    gap != null ? `${gap} basis points between best and typical` : null,
     `${stats.count} rates from ${stats.providers} lenders`,
   ].filter(Boolean) as string[];
   if (rbaRate != null) {
@@ -36,19 +36,21 @@ export function ribbonA11ySummary(
 }
 
 /** Plain-language TalkBack summary for the RBA cash-rate step chart. */
-export function rbaChartA11ySummary(data: RbaEntry[]): string {
+export function rbaChartA11ySummary(data: RbaEntry[], holdCount = 0): string {
   if (!data.length) return 'RBA cash rate chart: no data';
   const rates = data.map((d) => d.rate);
   const minR = Math.min(...rates);
   const maxR = Math.max(...rates);
   const first = data[0];
   const last = data[data.length - 1];
-  return [
+  const parts = [
     'RBA cash rate chart',
     `from ${first.date} to ${last.date}`,
     `current ${last.rate.toFixed(2)} percent`,
     `range ${minR.toFixed(2)} to ${maxR.toFixed(2)} percent`,
-  ].join(', ');
+  ];
+  if (holdCount > 0) parts.push(`${holdCount} on-hold meeting${holdCount === 1 ? '' : 's'} marked`);
+  return parts.join(', ');
 }
 
 function pct(v: number): string {

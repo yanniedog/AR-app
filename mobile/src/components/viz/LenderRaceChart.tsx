@@ -5,11 +5,12 @@ import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { formatRate } from '../../data/format';
 import { lenderRaceModel } from '../../data/vizModels';
-import { formatAxisDateLabel } from '../../data/bankHistoryTransform';
+import { formatAxisDateLabel, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { openBank } from '../../lib/nav';
 import type { Brand, HistoryWindow, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { BankAvatar } from '../BankAvatar';
 import { AppText, Row } from '../ui';
 
@@ -25,6 +26,8 @@ export function LenderRaceChart({
   lowerIsBetter,
   window,
   brands,
+  selectedDate,
+  onDateSelect,
   height = 170,
   topN = 6,
 }: {
@@ -33,6 +36,8 @@ export function LenderRaceChart({
   lowerIsBetter: boolean;
   window: HistoryWindow;
   brands?: Record<string, Brand>;
+  selectedDate?: string | null;
+  onDateSelect?: (date: string | null) => void;
   height?: number;
   topN?: number;
 }) {
@@ -42,19 +47,29 @@ export function LenderRaceChart({
     () => lenderRaceModel(payload, section, lowerIsBetter, window, topN),
     [payload, section, lowerIsBetter, window, topN],
   );
-  if (!model) {
-    return (
-      <AppText variant="small" color="textMuted">
-        Not enough ranking history in this window yet.
-      </AppText>
-    );
-  }
-
   const padL = 24;
   const padR = 10;
   const padT = 8;
   const padB = 18;
   const innerW = Math.max(1, width - padL - padR);
+  const scrub = useChartScrub({
+    sliceCount: model?.dates.length ?? 0,
+    plotWidth: innerW,
+    plotLeft: padL,
+    indexFromPlotX: sliceIndexFromPlotX,
+    onSelectIndex: (index) => {
+      const date = model?.dates[index];
+      if (date) onDateSelect?.(date);
+    },
+  });
+  if (!model) {
+    return (
+      <AppText variant="small" color="textMuted">
+        Not enough ranking history in this window yet. Leaders need at least two lenders with observations.
+      </AppText>
+    );
+  }
+
   const innerH = height - padT - padB;
   const lanes = model.topN;
   const xAt = (i: number) =>
@@ -65,15 +80,52 @@ export function LenderRaceChart({
 
   const colorFor = (provider: string, i: number) =>
     brands?.[provider]?.color || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length];
+  const selectedIndex = selectedDate ? model.dates.indexOf(selectedDate) : -1;
+  const activeIndex = selectedIndex >= 0 ? selectedIndex : model.dates.length - 1;
+  const ranked = model.series
+    .map((series, seriesIndex) => {
+      const rank = series.ranks[activeIndex];
+      const previousRank = series.ranks[Math.max(0, activeIndex - 1)];
+      return {
+        provider: series.provider,
+        rank,
+        rate: series.values[activeIndex],
+        moved: rank != null && previousRank != null ? previousRank - rank : 0,
+        seriesIndex,
+      };
+    })
+    .filter((entry) => entry.rank != null)
+    .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
 
   return (
     <View>
-      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ width: '100%', height }}>
+      <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`Lender ranking on ${formatAxisDateLabel(model.dates[activeIndex])}. ${ranked.length ? ranked.slice(0, 3).map((entry) => `Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}`).join('. ') : 'No ranked lenders.'}`}
+        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next date' },
+          { name: 'decrement', label: 'Previous date' },
+        ]}
+        onAccessibilityAction={(event) => {
+          const next = event.nativeEvent.actionName === 'increment'
+            ? Math.min(model.dates.length - 1, activeIndex + 1)
+            : Math.max(0, activeIndex - 1);
+          onDateSelect?.(model.dates[next] ?? null);
+        }}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onTouchStart={scrub.onTouchStart}
+        onTouchMove={scrub.onTouchMove}
+        onTouchEnd={scrub.onTouchEnd}
+        onTouchCancel={scrub.onTouchCancel}
+        style={{ width: '100%', height }}
+      >
         {width > 0 ? (
           <Svg
             width={width}
             height={height}
-            accessibilityLabel={`Top ${model.series.length} lender ranking race over time`}
+            importantForAccessibility="no-hide-descendants"
           >
             {Array.from({ length: lanes }, (_, lane) => (
               <React.Fragment key={`lane-${lane}`}>
@@ -118,6 +170,15 @@ export function LenderRaceChart({
                 </React.Fragment>
               );
             })}
+            <Line
+              x1={xAt(activeIndex)}
+              y1={padT}
+              x2={xAt(activeIndex)}
+              y2={padT + innerH}
+              stroke={withAlpha(theme.colors.primary, 0.45)}
+              strokeWidth={1.2}
+              strokeDasharray="3 3"
+            />
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
               {formatAxisDateLabel(model.dates[0])}
             </SvgText>
@@ -128,41 +189,50 @@ export function LenderRaceChart({
         ) : null}
       </View>
 
-      {model.series.map((s, si) => (
+      <ChartSliceControls
+        dates={model.dates}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => onDateSelect?.(model.dates[index] ?? null)}
+        valueLabel={ranked.length ? ranked.slice(0, 3).map((entry) => `#${entry.rank} ${entry.provider}`).join(' · ') : 'No ranks'}
+        detail={`Leaders on ${formatAxisDateLabel(model.dates[activeIndex])}`}
+      />
+
+      {ranked.map((entry) => (
         <Pressable
-          key={s.provider}
-          onPress={() => openBank(s.provider)}
+          key={entry.provider}
+          onPress={() => openBank(entry.provider, { date: model.dates[activeIndex], section })}
           accessibilityRole="button"
-          accessibilityLabel={`Rank ${si + 1}, ${s.provider}, ${formatRate(s.current)}${
-            s.climbed ? `, ${s.climbed > 0 ? 'up' : 'down'} ${Math.abs(s.climbed)} places` : ''
+          accessibilityLabel={`Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}, observed ${formatAxisDateLabel(model.dates[activeIndex])}${
+            entry.moved ? `, ${entry.moved > 0 ? 'up' : 'down'} ${Math.abs(entry.moved)} places since the previous observation` : ''
           }`}
+          style={{ minHeight: 48, justifyContent: 'center' }}
         >
           <Row gap={8} style={{ paddingVertical: 5 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(s.provider, si) }} />
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(entry.provider, entry.seriesIndex) }} />
             <AppText variant="tiny" weight="700" color="textFaint" style={{ width: 22 }}>
-              #{si + 1}
+              #{entry.rank}
             </AppText>
-            <BankAvatar provider={s.provider} size={22} />
+            <BankAvatar provider={entry.provider} size={22} />
             <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
-              {s.provider}
+              {entry.provider}
             </AppText>
-            {s.climbed !== 0 ? (
+            {entry.moved !== 0 ? (
               <AppText
                 variant="tiny"
                 weight="700"
-                style={{ color: s.climbed > 0 ? theme.colors.success : theme.colors.danger }}
+                style={{ color: entry.moved > 0 ? theme.colors.success : theme.colors.danger }}
               >
-                {s.climbed > 0 ? '▲' : '▼'} {Math.abs(s.climbed)}
+                {entry.moved > 0 ? '▲' : '▼'} {Math.abs(entry.moved)}
               </AppText>
             ) : null}
             <AppText variant="small" weight="800">
-              {formatRate(s.current)}
+              {formatRate(entry.rate)}
             </AppText>
           </Row>
         </Pressable>
       ))}
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        Best advertised rate ranking across {model.fieldSize} lenders · tap a lender for their profile
+        Observed {formatAxisDateLabel(model.dates[activeIndex])} ranking across {model.fieldSizes[activeIndex]} lenders · tap a lender for their dated profile
       </AppText>
     </View>
   );

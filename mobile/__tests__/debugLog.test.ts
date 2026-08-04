@@ -380,6 +380,7 @@ describe('debugLog integration', () => {
 
     await debugLog.restoreFromStorage();
     expect(debugLog.getText()).toContain('persist me');
+    expect(debugLog.getEntries().filter((entry) => entry.message === 'persist me')).toHaveLength(1);
   });
 
   it('forwards warn/error lines to Crashlytics', () => {

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "maximumGrowthFraction": 0.05,
+  "baseline": {
+    "androidBundleBytes": 7857942,
+    "iosBundleBytes": 7842205,
+    "webBundleBytes": 5365957,
+    "fontBytes": 2302456,
+    "assetBytes": 4717808,
+    "apkBytes": 132510218
+  },
+  "notes": "Bundle, font, and asset baselines are the optimized all-platform export with the fresh 2026-08-05 producer sample on 2026-08-04, so the 5% guard preserves the realized reductions. The APK baseline remains the verified pre-upgrade app-apk-latest asset until a new signed APK is measured. APK enforcement runs only when AR_APP_APK_PATH points to a built APK."
+}

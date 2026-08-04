@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type LayoutChangeEvent,
@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { hapticSelection } from '../lib/haptics';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { androidRipple, AppText } from './ui';
@@ -42,18 +43,25 @@ export function SectionCrossfade({
   style?: StyleProp<ViewStyle>;
 }) {
   const opacity = useSharedValue(1);
-  const mounted = useRef(false);
+  const previousSection = useRef(section);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
+    const changed = previousSection.current !== section;
+    previousSection.current = section;
+    if (!changed) {
+      opacity.value = 1;
+      return;
+    }
+    if (reducedMotion !== false) {
+      opacity.value = 1;
       return;
     }
     opacity.value = withSequence(
       withTiming(0.22, { duration: 90 }),
       withTiming(1, { duration: 200 }),
     );
-  }, [section, opacity]);
+  }, [section, opacity, reducedMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
@@ -69,6 +77,7 @@ export function SegmentedControl<T extends string>({
   onChange: (v: T) => void;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [layouts, setLayouts] = useState<Partial<Record<T, SegmentLayout>>>({});
   const pillX = useSharedValue(0);
   const pillW = useSharedValue(0);
@@ -76,7 +85,7 @@ export function SegmentedControl<T extends string>({
 
   const movePill = useCallback(
     (layout: SegmentLayout, animate: boolean) => {
-      if (animate) {
+      if (animate && reducedMotion === false) {
         pillX.value = withSpring(layout.x, PILL_SPRING);
         pillW.value = withSpring(layout.width, PILL_SPRING);
       } else {
@@ -84,7 +93,7 @@ export function SegmentedControl<T extends string>({
         pillW.value = layout.width;
       }
     },
-    [pillW, pillX],
+    [pillW, pillX, reducedMotion],
   );
 
   useEffect(() => {
@@ -147,14 +156,14 @@ export function SegmentedControl<T extends string>({
               borderRadius: theme.radius.sm,
               alignItems: 'center',
               justifyContent: 'center',
-              overflow: 'hidden',
+              paddingVertical: 4,
             }}
           >
             <AppText
               variant="small"
               weight={active ? '700' : '500'}
               color={active ? 'text' : 'textMuted'}
-              numberOfLines={1}
+              style={{ textAlign: 'center' }}
             >
               {opt.label}
             </AppText>

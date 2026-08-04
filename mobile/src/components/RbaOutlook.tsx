@@ -15,7 +15,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
 import { AppText, Button, Card, Row } from './ui';
 
-function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaEntry[] }) {
+function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload; rba: RbaEntry[]; rbaHolds?: string[] }) {
   const counts = data.indicators.reduce(
     (acc, indicator) => ({ ...acc, [indicator.signal.direction]: acc[indicator.signal.direction] + 1 }),
     { higher: 0, lower: 0, balanced: 0 },
@@ -37,7 +37,7 @@ function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaE
         </AppText>
       ) : null}
       <EconomicReleasesList data={data} />
-      <EconomicExplorer data={data} rba={rba} />
+      <EconomicExplorer data={data} rba={rba} rbaHolds={rbaHolds} />
       <Row gap={4} style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <AppText variant="tiny" color="textFaint">
           Checked {relativeDate(data.checkedAt)}
@@ -80,7 +80,7 @@ function OutlookContent({ data, rba }: { data: EconomicOutlookPayload; rba: RbaE
   );
 }
 
-export function RbaOutlook({ rba }: { rba: RbaEntry[] }) {
+export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: string[] }) {
   const theme = useTheme();
   const [data, setData] = useState<EconomicOutlookPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -143,7 +143,7 @@ export function RbaOutlook({ rba }: { rba: RbaEntry[] }) {
         </View>
       ) : data ? (
         <>
-          <OutlookContent data={data} rba={rba} />
+          <OutlookContent data={data} rba={rba} rbaHolds={rbaHolds} />
           {error ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
               Could not verify the latest data: {error}

@@ -1,10 +1,6 @@
-import {
-  MaterialSymbols_400Regular,
-} from '@expo-google-fonts/material-symbols';
-import {
-  MaterialSymbolsOutlined_400Regular,
-  useFonts,
-} from '@expo-google-fonts/material-symbols-outlined';
+import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
+import { MaterialSymbolsOutlined_400Regular } from '@expo-google-fonts/material-symbols-outlined/400Regular';
+import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
@@ -39,8 +35,9 @@ import { AppText } from '../src/components/ui';
 import { routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
-import { subscribeAuth } from '../src/lib/auth';
+import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
+import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import {
@@ -49,6 +46,7 @@ import {
   setSessionReplayEnabled,
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
+import { yieldToUi } from '../src/lib/yieldToUi';
 
 SplashScreen.preventAutoHideAsync().catch((err) => logSwallowedError('splash.preventAutoHide', err));
 
@@ -82,6 +80,7 @@ function BrandedSplashOverlay({
   const progress = useSharedValue(0);
   const overlayOpacity = useSharedValue(1);
   const [morphWaitExpired, setMorphWaitExpired] = useState(false);
+  const reducedMotion = useReducedMotion();
 
   const finish = useCallback(() => {
     onMorphComplete();
@@ -113,6 +112,14 @@ function BrandedSplashOverlay({
     const canMorph = onboarded && morphTarget != null;
     const shouldFade = !onboarded || morphWaitExpired;
     if (!canMorph && !shouldFade) return;
+    if (reducedMotion == null) return;
+
+    if (reducedMotion) {
+      progress.value = canMorph ? 1 : 0;
+      overlayOpacity.value = 0;
+      finish();
+      return;
+    }
 
     if (canMorph) {
       progress.value = withTiming(1, { duration: MORPH_MS, easing: Easing.out(Easing.cubic) }, (done) => {
@@ -127,7 +134,7 @@ function BrandedSplashOverlay({
     overlayOpacity.value = withTiming(0, { duration: FADE_MS }, (done) => {
       if (done) runOnJS(finish)();
     });
-  }, [visible, onboarded, morphTarget, morphWaitExpired, finish, overlayOpacity, progress]);
+  }, [visible, onboarded, morphTarget, morphWaitExpired, finish, overlayOpacity, progress, reducedMotion]);
 
   const startX = screenW / 2 - SPLASH_MARK / 2;
   const startY = screenH / 2 - SPLASH_MARK / 2 - 28;
@@ -217,6 +224,7 @@ function RootNavigator() {
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);
+  const diagnosticsRestored = useRef(false);
   const [morphComplete, setMorphComplete] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [morphTarget, setMorphTarget] = useState<SplashMorphTarget | null>(null);
@@ -235,17 +243,29 @@ function RootNavigator() {
 
   useEffect(() => {
     installGlobalErrorHandlers();
-    void debugLog.restoreFromStorage().then(() => {
-      debugLog.info('app', 'bootstrap starting');
-      void bootstrap();
-    });
+    debugLog.info('app', 'bootstrap starting');
+    void bootstrap();
   }, [bootstrap]);
+
+  // Debug history is useful after startup, but reading and parsing the log
+  // file must not delay the verified cache path or first usable paint.
+  useEffect(() => {
+    if (!appReady || diagnosticsRestored.current) return;
+    diagnosticsRestored.current = true;
+    void yieldToUi()
+      .then(() => debugLog.restoreFromStorage())
+      .then(() => debugLog.info('app', 'debug history restored after first paint'))
+      .catch((err) => logSwallowedError('debugLog.restore', err));
+  }, [appReady]);
 
   // Refresh tier-issued content keys on app start / sign-in (Phase D; no-op
   // until the key service URL is configured).
-  useEffect(() => subscribeAuth((user) => {
-    if (user) void syncContentKeys();
-  }), []);
+  useEffect(() => {
+    if (!isSignInConfigured()) return;
+    return subscribeAuth((user) => {
+      if (user) void syncContentKeys();
+    });
+  }, []);
 
   useEffect(() => {
     if (!appReady) return;

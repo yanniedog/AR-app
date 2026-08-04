@@ -56,6 +56,7 @@ export {
   bankEventMedianContext,
   bankSnapshotAt,
   bankTrendChartModel,
+  eventsOnDate,
   marketPulse,
   recentBankEvents,
   topMovers,
