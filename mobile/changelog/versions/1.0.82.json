@@ -1,0 +1,35 @@
+{
+  "version": "1.0.82",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Finish accessible charts and mobile performance upgrade (#102)",
+    "Center the app on saved rate decisions (#99)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Finish accessible charts and mobile performance upgrade (#102)"
+        },
+        {
+          "text": "Center the app on saved rate decisions (#99)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.82"
+        },
+        {
+          "text": "Since tag: app-v1.0.81"
+        }
+      ]
+    }
+  ]
+}
