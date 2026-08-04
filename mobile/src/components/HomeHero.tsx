@@ -41,6 +41,7 @@ export function HomeHero({
   dataKey,
   onShare,
   pendingIngest = false,
+  coverageLabel,
 }: {
   runDateLabel: string;
   runAgeLabel: string;
@@ -52,6 +53,8 @@ export function HomeHero({
   onShare?: () => void;
   /** Rolling ingest for today is still uploading on GitHub. */
   pendingIngest?: boolean;
+  /** Measured payload coverage; never implies whole-market completeness. */
+  coverageLabel: string;
 }) {
   const theme = useTheme();
   const sourceLabel = pendingIngest ? 'Updating' : dataSourceLabel(source);
@@ -102,11 +105,14 @@ export function HomeHero({
             Rate intelligence
           </AppText>
           <AppText variant="h2" weight="800" style={{ lineHeight: 28 }}>
-            Every lender. Every rate. Daily.
+            Compare observed Australian rates.
           </AppText>
           <Animated.View style={dateStyle}>
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
               {runDateLabel} · {runAgeLabel}
+            </AppText>
+            <AppText variant="tiny" color="textFaint" style={{ marginTop: 2 }}>
+              {source === 'sample' ? 'Bundled sample · not today’s market' : coverageLabel}
             </AppText>
           </Animated.View>
         </View>

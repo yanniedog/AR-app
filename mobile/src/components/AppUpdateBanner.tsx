@@ -53,7 +53,7 @@ export function useAppUpdateBannerVisible(): boolean {
  */
 export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const dismissedBuild = useStore((s) => s.prefs.dismissedUpdateBuild);
-  const wifiOnly = useStore((s) => s.prefs.wifiOnly);
+  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const setPref = useStore((s) => s.setPref);
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
@@ -70,7 +70,9 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
         .then((r) => {
           if (cancelled) return;
           setResult(r);
-          if (r.status === 'available') {
+          // Automatic downloads are Wi-Fi-only. Cellular downloads require an
+          // explicit size-labelled confirmation in Settings.
+          if (r.status === 'available' && wifiOnly) {
             void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
               // ensureApkBackgroundDownload persists phase=error for Retry.
             });
@@ -111,7 +113,7 @@ export function AppUpdateBanner({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const wifiOnly = useStore((s) => s.prefs.wifiOnly);
+  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const [busy, setBusy] = useState(false);
   const forThisBuild =
     download.buildNumber != null && String(download.buildNumber) === String(remote.build_number);
@@ -121,6 +123,20 @@ export function AppUpdateBanner({
 
   const onUpgrade = async () => {
     if (busy) return;
+    if (phase === 'error' && !wifiOnly) {
+      const size = remote.bytes
+        ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
+        : 'an unknown size';
+      Alert.alert('Download over cellular?', `This verified APK is ${size}. Carrier data charges may apply.`, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Download',
+          onPress: () => void ensureApkBackgroundDownload(remote, { wifiOnly: false, force: true })
+            .catch((error) => Alert.alert('Update failed', error instanceof Error ? error.message : String(error))),
+        },
+      ]);
+      return;
+    }
     setBusy(true);
     try {
       if (phase === 'error') {

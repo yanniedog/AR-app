@@ -1,4 +1,12 @@
-import { computeLvr, depositToReachLvr, EMPTY_CALC, normalizeCalcInputs } from '../src/data/calc';
+import {
+  advertisedTermMonths,
+  computeLvr,
+  depositToReachLvr,
+  EMPTY_CALC,
+  fixedRateProjectionMonths,
+  normalizeCalcInputs,
+  termDepositInterestDifference,
+} from '../src/data/calc';
 
 describe('computeLvr (buying)', () => {
   it('derives loan and LVR from price, deposit and costs', () => {
@@ -35,5 +43,18 @@ describe('normalizeCalcInputs', () => {
     expect(normalizeCalcInputs(null)).toEqual(EMPTY_CALC);
     expect(normalizeCalcInputs({ mode: 'refi', propertyValue: 5 as unknown as string }).mode).toBe('refi');
     expect(normalizeCalcInputs({ mode: 'weird' as never }).mode).toBe('buy');
+  });
+});
+
+describe('financial projection periods', () => {
+  it('limits a fixed mortgage projection to the published fixed period', () => {
+    expect(advertisedTermMonths({ term: 'P2Y' })).toBe(24);
+    expect(fixedRateProjectionMonths(300, 24)).toBe(24);
+    expect(fixedRateProjectionMonths(12, 24)).toBe(12);
+  });
+
+  it('projects a term deposit only to maturity', () => {
+    expect(termDepositInterestDifference(100_000, 0.04, 0.05, 6)).toBeCloseTo(500);
+    expect(advertisedTermMonths({ term_months: 9 })).toBe(9);
   });
 });

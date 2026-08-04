@@ -12,6 +12,7 @@ import {
 } from './appUpdateDownload';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 import {
+  assertTrustedApkManifest,
   checkForAppUpdateAt,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
@@ -31,6 +32,7 @@ export type {
 export {
   APK_SHA256_VERIFY_MAX_BYTES,
   assertDownloadedApkMatchesManifest,
+  assertTrustedApkManifest,
   fetchApkManifest,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
@@ -254,6 +256,7 @@ export async function downloadApkUpdate(
   if (Platform.OS !== 'android') {
     throw new Error('APK download is Android-only');
   }
+  assertTrustedApkManifest(manifest);
 
   let backgroundStarted = false;
   try {

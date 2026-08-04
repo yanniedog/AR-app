@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 
 import type { LogLevel } from './debugLog';
 
-let diagnosticsEnabled = false;
+let crashReportsEnabled = false;
+let sessionReplayEnabled = false;
 let clarityInitialized = false;
 
 export type CrashlyticsLike = {
@@ -63,23 +64,56 @@ export function setObservabilityDepsForTests(next: ObservabilityDeps | null): vo
   deps = next;
   if (!next) {
     clarityInitialized = false;
-    diagnosticsEnabled = false;
+    crashReportsEnabled = false;
+    sessionReplayEnabled = false;
   }
 }
 
 export function isDiagnosticsEnabled(): boolean {
-  return diagnosticsEnabled;
+  return crashReportsEnabled;
 }
 
+const SENSITIVE_REPLAY_ROUTES = [
+  '/calculator',
+  '/profile',
+  '/onboarding',
+  '/settings',
+  '/search',
+  '/auth',
+  '/login',
+];
+
+export function isSessionReplayRouteAllowed(pathname: string): boolean {
+  const normalized = `/${pathname}`.replace(/\/+/, '/').toLowerCase();
+  return !SENSITIVE_REPLAY_ROUTES.some(
+    (route) => normalized === route || normalized.startsWith(`${route}/`),
+  );
+}
+
+/** @deprecated Compatibility wrapper for callers/tests predating split consent. */
 export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
-  diagnosticsEnabled = enabled;
+  await Promise.all([setCrashReportsEnabled(enabled), setSessionReplayEnabled(enabled)]);
+}
+
+export async function setCrashReportsEnabled(enabled: boolean): Promise<void> {
+  crashReportsEnabled = enabled;
   const native = getDeps();
   if (!native) return;
   try {
     await native.crashlytics().setCrashlyticsCollectionEnabled(enabled);
-    if (enabled && !clarityInitialized) {
-      tryInitializeClarity(native);
-    } else if (clarityInitialized) {
+  } catch {
+    // Expo Go / tests without native modules
+  }
+}
+
+export async function setSessionReplayEnabled(enabled: boolean): Promise<void> {
+  sessionReplayEnabled = enabled;
+  const native = getDeps();
+  if (!native) return;
+  try {
+    const wasInitialized = clarityInitialized;
+    if (enabled && !wasInitialized) tryInitializeClarity(native);
+    if (wasInitialized) {
       if (enabled) await native.clarity.resume();
       else await native.clarity.pause();
     }
@@ -94,18 +128,17 @@ export async function initObservability(): Promise<void> {
   if (!native) return;
 
   try {
-    await native.crashlytics().setCrashlyticsCollectionEnabled(diagnosticsEnabled);
+    await native.crashlytics().setCrashlyticsCollectionEnabled(crashReportsEnabled);
   } catch {
     // non-fatal
   }
 
-  if (!diagnosticsEnabled) return;
-  tryInitializeClarity(native);
+  if (sessionReplayEnabled) tryInitializeClarity(native);
 }
 
 /** Forward debugLog lines to Crashlytics when diagnostics are enabled. */
 export function bridgeLogToCrashlytics(level: LogLevel, tag: string, message: string): void {
-  if (!diagnosticsEnabled || level === 'debug') return;
+  if (!crashReportsEnabled || level === 'debug') return;
   const native = getDeps();
   if (!native) return;
 

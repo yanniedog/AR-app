@@ -42,8 +42,8 @@ export type DownloadProgress = {
   totalBytes: number | null;
 };
 
-/** Above this size, in-memory sha256 (base64→atob) risks OOM; size match is the gate. */
-export const APK_SHA256_VERIFY_MAX_BYTES = 64 * 1024 * 1024;
+/** Retained for API compatibility; hashing is now incremental for every APK size. */
+export const APK_SHA256_VERIFY_MAX_BYTES = Number.MAX_SAFE_INTEGER;
 
 function manifestFetchUrl(url: string): string {
   const sep = url.includes('?') ? '&' : '?';
@@ -80,11 +80,49 @@ export function assertDownloadedApkMatchesManifest(
       throw new Error(`APK size mismatch (expected ${manifest.bytes}, got ${size})`);
     }
   }
-  const verifySha256 = Boolean(manifest.sha256) && size <= APK_SHA256_VERIFY_MAX_BYTES;
-  if (manifest.sha256 && !verifySha256 && !hasExpectedBytes) {
-    throw new Error('APK too large for sha256 verification and manifest.bytes is missing');
+  if (!hasExpectedBytes) throw new Error('APK manifest.bytes is missing or invalid');
+  if (!manifest.sha256 || !/^[a-f0-9]{64}$/i.test(manifest.sha256)) {
+    throw new Error('APK manifest.sha256 is missing or invalid');
   }
+  const verifySha256 = true;
   return { verifySha256 };
+}
+
+export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: string): void {
+  if (manifest.schema_version !== 1) throw new Error('Unsupported APK manifest schema');
+  if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(manifest.version)) {
+    throw new Error('APK manifest version is invalid');
+  }
+  if (!/^\d+$/.test(manifest.build_number)) throw new Error('APK manifest build_number is invalid');
+  assertDownloadedApkMatchesManifest(manifest.bytes ?? 0, manifest);
+
+  const immutable = preferImmutableApkDownloadUrl(manifest);
+  let parsed: URL;
+  try {
+    parsed = new URL(immutable);
+  } catch {
+    throw new Error('APK download URL is invalid');
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'github.com') {
+    throw new Error('APK download must use an approved GitHub release URL');
+  }
+  let repo = 'yanniedog/AR-app';
+  if (manifestUrl) {
+    const source = new URL(manifestUrl);
+    const match = /^\/([^/]+\/[^/]+)\/releases\/download\//.exec(source.pathname);
+    if (source.protocol !== 'https:' || source.hostname !== 'github.com' || !match) {
+      throw new Error('APK manifest must use an approved GitHub release URL');
+    }
+    repo = match[1];
+  }
+  if (manifest.repo && manifest.repo.trim() !== repo) {
+    throw new Error('APK manifest repository does not match its trusted source');
+  }
+  const tag = manifest.version_tag?.trim() || `app-v${manifest.version}`;
+  const prefix = `/${repo}/releases/download/${tag}/`;
+  if (!parsed.pathname.startsWith(prefix) || parsed.pathname.length <= prefix.length) {
+    throw new Error('APK download URL does not match its immutable release');
+  }
 }
 
 /**
@@ -126,6 +164,7 @@ export async function fetchApkManifest(url: string): Promise<ApkManifest> {
   if (typeof m.download_url !== 'string' || !m.download_url.startsWith('https://')) {
     throw new Error('APK manifest missing download_url');
   }
+  assertTrustedApkManifest(m, url);
   return m;
 }
 

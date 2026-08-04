@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
@@ -14,12 +14,11 @@ import {
   formatTerm,
   humanizeEnum,
   isNonStandard,
-  toFraction,
 } from '../src/data/format';
-import { findByKey } from '../src/data/selectors';
+import { findByKey, rankFraction } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { hasProAccess } from '../src/lib/proAccess';
-import type { RateRow, SectionKey } from '../src/types';
+import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 const LABEL_W = 108;
@@ -41,10 +40,23 @@ interface AttrRow {
   tabular?: boolean;
 }
 
+function detailSummary(items: DetailItem[] | undefined, empty = 'None published'): string {
+  if (!items?.length) return empty;
+  return items
+    .slice(0, 2)
+    .map((item) => [item.label ?? item.name, item.value ?? item.info].filter(Boolean).join(': '))
+    .filter(Boolean)
+    .join(' · ') || empty;
+}
+
 export default function Compare() {
   const theme = useTheme();
   const { keys } = useLocalSearchParams<{ keys: string }>();
   const core = useStore((s) => s.core);
+  const details = useStore((s) => s.details);
+  const ensureDetails = useStore((s) => s.ensureDetails);
+  const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const productHistoryAvailable = useStore(
     (s) => hasProAccess(s.prefs) && s.productHistory != null,
   );
@@ -71,6 +83,10 @@ export default function Compare() {
       .filter((x): x is Entry => x !== null);
   }, [core, keys]);
 
+  useEffect(() => {
+    if (entries.length >= 2 && !details) void ensureDetails();
+  }, [details, ensureDetails, entries.length]);
+
   if (!core) return null;
   if (entries.length < 2) {
     return (
@@ -85,7 +101,9 @@ export default function Compare() {
 
   const sameSection = entries.every((e) => e.section === entries[0].section);
   const lowerIsBetter = SECTIONS[entries[0].section].lowerIsBetter;
-  const fractions = entries.map((e) => toFraction(e.row.rate));
+  const fractions = entries.map((e) =>
+    rankFraction(e.row, e.section, depositRankMetric, mortgageRateMetric),
+  );
   const valid = fractions.filter((f): f is number => f !== null);
   const bestVal =
     sameSection && valid.length ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
@@ -96,7 +114,15 @@ export default function Compare() {
   const rateColorFor = (section: SectionKey) =>
     SECTIONS[section].lowerIsBetter ? theme.colors.success : theme.colors.primary;
 
-  const attrRows: AttrRow[] = [
+  const detailFor = (entry: Entry): ProductDetail | undefined =>
+    details?.products?.[entry.row.product_key];
+  const commonRows: AttrRow[] = [
+    { label: 'Advertised rate', get: (e) => formatRate(e.row.rate), tabular: true },
+    {
+      label: 'Ongoing rate',
+      get: (e) => e.row.ongoing_rate ? formatRate(e.row.ongoing_rate) : 'Not separately published',
+      tabular: true,
+    },
     {
       label: 'Comparison rate',
       get: (e) => (e.row.comparison_rate ? formatRate(e.row.comparison_rate) : '—'),
@@ -111,7 +137,18 @@ export default function Compare() {
     { label: 'LVR', get: (e) => humanizeEnum(e.row.lvr_tier) || '—' },
     { label: 'Balance', get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
     { label: 'Account', get: (e) => (isNonStandard(e.row) ? 'Non-standard' : 'Standard') },
+    { label: 'Fees', get: (e) => detailSummary(detailFor(e)?.fees) },
+    { label: 'Eligibility', get: (e) => detailSummary(detailFor(e)?.eligibility, 'No criteria published') },
+    { label: 'Features', get: (e) => detailSummary(detailFor(e)?.features) },
+    { label: 'Observed', get: (e) => e.row.last_updated?.slice(0, 10) || core.run_date },
   ];
+  const attrRows = commonRows.filter((item) => {
+    if (item.label === 'Comparison rate' || item.label === 'Repayment' || item.label === 'LVR') {
+      return entries.some((entry) => entry.section === 'Mortgage');
+    }
+    if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
+    return true;
+  });
 
   const labelCell = (label: string, height: number, weight: '600' | '700' = '600') => (
     <View
@@ -171,7 +208,7 @@ export default function Compare() {
                 },
               ]}
             />
-             {labelCell('Rate', RATE_ROW_H, '700')}
+             {labelCell('Ranked rate', RATE_ROW_H, '700')}
              {productHistoryAvailable ? labelCell('Best-rate move', CHANGE_ROW_H) : null}
              {attrRows.map((r) => labelCell(r.label, ROW_H))}
           </View>
@@ -221,7 +258,7 @@ export default function Compare() {
                       <View style={styles.rateCell}>
                         {isBest ? <Badge label="Best" tone={bestTone} /> : null}
                         <AppText variant="rate" style={{ color: entryRateColor }}>
-                          {formatRate(e.row.rate)}
+                          {f === null ? '—' : formatRate(f)}
                         </AppText>
                       </View>,
                       entryHighlightBg,
@@ -265,8 +302,14 @@ export default function Compare() {
       <Divider style={{ marginTop: 16 }} />
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 8 }}>
         {sameSection
-          ? `${entries.length} products · scroll for more columns`
+          ? `${entries.length} products · “Best” uses ${entries[0].section === 'Mortgage'
+            ? mortgageRateMetric === 'comparison' ? 'lowest comparison rate' : 'lowest advertised rate'
+            : depositRankMetric === 'base' ? 'highest published ongoing/base rate' : 'highest headline rate'} · scroll for more columns`
           : `${entries.length} products · mixed categories — no best badge`}
+      </AppText>
+      <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
+        Missing details mean the lender did not publish that field in the loaded CDR payload. Confirm fees,
+        conditions, eligibility, and current rates with the lender before acting.
       </AppText>
     </Screen>
   );

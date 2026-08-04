@@ -6,7 +6,6 @@ import React, { useCallback, useEffect, useRef } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 
 import { SegmentedControl } from '../../src/components/controls';
-import { ProPaywall } from '../../src/components/ProPaywall';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SubscriptionRow } from '../../src/components/SubscriptionRow';
@@ -33,16 +32,13 @@ import {
 } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
-import { useProPaywall } from '../../src/hooks/useProPaywall';
-import { setDiagnosticsEnabled } from '../../src/lib/observability';
+import { setCrashReportsEnabled, setSessionReplayEnabled } from '../../src/lib/observability';
 import type { Subscription } from '../../src/data/subscriptions';
 import type { ThemeMode } from '../../src/theme/theme';
 import { dataSourceLabel } from '../../src/lib/nextIngest';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
-  hasProAccess,
-  RATE_INTELLIGENCE_PRO,
 } from '../../src/lib/proAccess';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 
@@ -61,7 +57,6 @@ export default function Settings() {
   const removeSubscription = useStore((s) => s.removeSubscription);
   const restoreSubscription = useStore((s) => s.restoreSubscription);
   const { snack, showUndo, undo } = useUndoSnackbar();
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
@@ -77,21 +72,11 @@ export default function Settings() {
   }, [focus, t, router]);
 
   const onToggleDeepSearch = (value: boolean) => {
-    if (!value) {
-      setPref('enableDeepSearch', false);
-      return;
-    }
-    if (!requestPro('deep_search')) return;
-    setPref('enableDeepSearch', true);
+    setPref('enableDeepSearch', value);
   };
 
   const onToggleHistoryRibbon = (value: boolean) => {
-    if (!value) {
-      setPref('showHistoryRibbon', false);
-      return;
-    }
-    if (!requestPro('history_ribbon')) return;
-    setPref('showHistoryRibbon', true);
+    setPref('showHistoryRibbon', value);
   };
 
   const removeSubscriptionWithUndo = useCallback(
@@ -124,23 +109,12 @@ export default function Settings() {
   return (
     <Screen>
     <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}>
-      <Section title={RATE_INTELLIGENCE_PRO}>
-        <InfoRow label="Status" value={hasProAccess(prefs) ? 'Active' : 'Free'} />
-        {!hasProAccess(prefs) ? (
-          <>
-            <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-              Unlimited alerts, deep search, bank intelligence, and history explorer.
-            </AppText>
-            <Button
-              title="Upgrade to Pro"
-              icon="sparkles"
-              style={{ marginTop: 10 }}
-              onPress={() => {
-                requestPro('bank_insights');
-              }}
-            />
-          </>
-        ) : null}
+      <Section title="Rate insights (free beta)">
+        <InfoRow label="Access" value="Included" />
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
+          Alerts, deep search, lender behaviour, and history are included while these features are in beta.
+          No purchase or subscription is required.
+        </AppText>
       </Section>
 
       <View onLayout={(e) => { updateSectionY.current = e.nativeEvent.layout.y; }}>
@@ -250,7 +224,7 @@ export default function Settings() {
         <ToggleRow
           icon="search-outline"
           label="Deep product search"
-          sub={hasProAccess(prefs) ? 'Search fees and features' : 'Pro'}
+          sub="Search fees, features, and eligibility · free beta"
           value={effectiveDeepSearch(prefs)}
           onChange={onToggleDeepSearch}
         />
@@ -258,7 +232,7 @@ export default function Settings() {
         <ToggleRow
           icon="analytics-outline"
           label="History explorer"
-          sub={hasProAccess(prefs) ? 'Charts, market history and lender trends' : 'Pro'}
+          sub="Charts, market history, and lender trends · free beta"
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />
@@ -349,7 +323,25 @@ export default function Settings() {
           <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
           <InfoRow label="Source" value={dataSourceLabel(source)} />
           <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
-          <InfoRow label="Lenders" value={core ? String(Object.keys(core.brands ?? {}).length) : '—'} />
+          <InfoRow label="Brands observed" value={core ? String(Object.keys(core.brands ?? {}).length) : '—'} />
+          <InfoRow
+            label="Products observed"
+            value={core ? String(Object.values(core.sections).reduce((sum, item) => sum + (item.ribbon?.counts?.products ?? 0), 0)) : '—'}
+          />
+          <InfoRow
+            label="Rates observed"
+            value={core ? String(Object.values(core.sections).reduce((sum, item) => sum + item.rates.length, 0)) : '—'}
+          />
+          <InfoRow label="Provider failures" value={core?.coverage?.failures ? String(core.coverage.failures.length) : 'Not reported by this data set'} />
+          {source === 'sample' ? (
+            <AppText variant="tiny" color="warning" style={{ marginTop: 6, lineHeight: 16 }}>
+              Bundled sample only — not today’s market. Connect and refresh before relying on a rate.
+            </AppText>
+          ) : null}
+          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
+            Coverage reflects successfully observed CDR publications, not every product in the Australian market.
+            Lenders may publish incomplete fees, eligibility, or conditional-rate details.
+          </AppText>
         </DisclosureGroup>
       </Section>
 
@@ -361,20 +353,37 @@ export default function Settings() {
         <SettingsGap size={8} />
         <DisclosureGroup
           title="Diagnostics & debug"
-          summary={prefs.diagnosticsEnabled ? 'Reporting on' : 'Reporting off'}
+          summary={
+            prefs.crashReportsEnabled || prefs.sessionReplayEnabled
+              ? 'Optional reporting on'
+              : 'Reporting off'
+          }
         >
           <ToggleRow
             icon="pulse-outline"
-            label="Diagnostics & crash reporting"
-            sub="Clarity replay and Crashlytics"
-            value={prefs.diagnosticsEnabled}
+            label="Crash reports"
+            sub="Send technical crashes and non-debug error logs through Crashlytics"
+            value={prefs.crashReportsEnabled}
             onChange={(value) => {
-              setPref('diagnosticsEnabled', value);
-              void setDiagnosticsEnabled(value);
+              setPref('crashReportsEnabled', value);
+              setPref('privacyChoiceVersion', 1);
+              void setCrashReportsEnabled(value);
+            }}
+          />
+          <SettingsGap size={8} />
+          <ToggleRow
+            icon="eye-outline"
+            label="Session replay"
+            sub="Share interaction replays through Clarity; financial-input screens stay excluded"
+            value={prefs.sessionReplayEnabled}
+            onChange={(value) => {
+              setPref('sessionReplayEnabled', value);
+              setPref('privacyChoiceVersion', 1);
+              void setSessionReplayEnabled(value);
             }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-            Disabling stops new uploads. A native rebuild may be needed for full SDK teardown.
+            Both choices are off by default and independent. Disabling a choice stops new collection.
           </AppText>
           <SettingsGap size={8} />
           <NavRow
@@ -410,15 +419,6 @@ export default function Settings() {
         </AppText>
       </Section>
 
-      <ProPaywall
-        visible={paywallVisible}
-        intent={paywallIntent}
-        onClose={closePaywall}
-        onUpgraded={() => {
-          if (paywallIntent === 'deep_search') setPref('enableDeepSearch', true);
-          if (paywallIntent === 'history_ribbon') setPref('showHistoryRibbon', true);
-        }}
-      />
     </ScreenScrollView>
     <UndoSnackbar snack={snack} onUndo={undo} />
     </Screen>

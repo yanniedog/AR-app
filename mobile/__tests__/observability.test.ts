@@ -1,6 +1,7 @@
 import {
   bridgeLogToCrashlytics,
   initObservability,
+  isSessionReplayRouteAllowed,
   isDiagnosticsEnabled,
   setDiagnosticsEnabled,
   setObservabilityDepsForTests,
@@ -24,6 +25,13 @@ function makeMocks() {
 }
 
 describe('observability', () => {
+  it('blocks replay on financial-input, profile, settings, and authentication routes', () => {
+    expect(isSessionReplayRouteAllowed('/calculator')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/profile/edit')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/settings')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/auth/login')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/product/abc')).toBe(true);
+  });
   const originalDev = (global as { __DEV__?: boolean }).__DEV__;
   const originalClarityId = process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID;
 

@@ -327,7 +327,7 @@ async function collectEnvironment(
     payloadProviders: Object.keys(store.core?.brands ?? {}).length,
     detailsLoaded: store.details != null,
     historyLoaded: store.historyBanks != null,
-    diagnosticsUploadEnabled: store.prefs.diagnosticsEnabled,
+    diagnosticsUploadEnabled: store.prefs.crashReportsEnabled,
     networkType: network?.type != null ? String(network.type) : null,
     networkConnected: network?.isConnected ?? null,
     networkInternetReachable: network?.isInternetReachable ?? null,

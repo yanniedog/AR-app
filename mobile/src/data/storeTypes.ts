@@ -25,9 +25,17 @@ export interface Prefs {
   themeMode: ThemeMode;
   defaultSection: SectionKey;
   notificationsEnabled: boolean;
-  /** Session replay (Clarity) + crash/log reporting (Firebase Crashlytics). */
-  diagnosticsEnabled: boolean;
+  /** Firebase Crashlytics collection. Explicit opt-in; never inferred from legacy diagnostics. */
+  crashReportsEnabled: boolean;
+  /** Microsoft Clarity session replay. Explicit, independent opt-in. */
+  sessionReplayEnabled: boolean;
+  /** Consent-copy version accepted by the user (0 means no current consent). */
+  privacyChoiceVersion: number;
+  /** @deprecated Legacy combined toggle, retained only so old persisted state can be migrated. */
+  diagnosticsEnabled?: boolean;
   wifiOnly: boolean;
+  /** APK downloads are Wi-Fi only by default, independent of daily rates refreshes. */
+  apkUpdatesWifiOnly: boolean;
   includeNonStandard: boolean;
   /** How savings & term-deposit lists rank: 'base' ongoing rate (default, honest)
    *  vs 'max' headline/bonus rate. Mirrors RankMetric in data/selectors. */
@@ -58,8 +66,12 @@ export const DEFAULT_PREFS: Prefs = {
   themeMode: 'system',
   defaultSection: 'Mortgage',
   notificationsEnabled: false,
-  diagnosticsEnabled: true,
+  crashReportsEnabled: false,
+  sessionReplayEnabled: false,
+  privacyChoiceVersion: 0,
+  diagnosticsEnabled: false,
   wifiOnly: false,
+  apkUpdatesWifiOnly: true,
   includeNonStandard: false,
   depositRankMetric: 'base',
   mortgageRateMetric: 'headline',

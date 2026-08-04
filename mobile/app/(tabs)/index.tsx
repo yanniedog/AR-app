@@ -259,6 +259,7 @@ export default function Home() {
         offline={offline}
         pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
+        coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${core.coverage?.failures?.length ? ` · ${core.coverage.failures.length} provider failures` : ''}`}
       />
 
       {sectionOptions.length > 1 ? (

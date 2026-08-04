@@ -1,7 +1,6 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
 import {
-  effectiveBankInsights,
   effectiveDeepSearch,
   effectiveHistoryRibbon,
 } from '../lib/proAccess';
@@ -27,6 +26,15 @@ function reportSuitabilityExclusions(core: CorePayload | null | undefined): void
   logSuitabilityExclusions(core.run_date, countSuitabilityExclusions(rows));
 }
 
+function deferSuitabilityReport(core: CorePayload, get: StoreGet): void {
+  // Jest tears its RN module registry down immediately after assertions; do
+  // not leave a diagnostic-only InteractionManager continuation behind.
+  if (process.env.NODE_ENV === 'test') return;
+  void yieldToUi().then(() => {
+    if (get().core?.run_date === core.run_date) reportSuitabilityExclusions(core);
+  });
+}
+
 export function createBootstrapActions(
   set: StoreSet,
   get: StoreGet,
@@ -50,7 +58,9 @@ export function createBootstrapActions(
         const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
-          effectiveHistoryRibbon(prefs) || effectiveBankInsights(prefs)
+          // Bank insights are free, but remain screen-lazy so first paint does
+          // not hydrate product history unless the user enabled history charts.
+          effectiveHistoryRibbon(prefs)
             ? cache.readProductHistory().then((raw) => {
                 const normalized = normalizeProductHistoryPayload(raw);
                 if (!normalized) return null;
@@ -95,10 +105,7 @@ export function createBootstrapActions(
             void get().ensureDetails({ force: true });
           }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
-          const readyCore = bundle.core;
-          void yieldToUi().then(() => {
-            if (get().core?.run_date === readyCore.run_date) reportSuitabilityExclusions(readyCore);
-          });
+          deferSuitabilityReport(bundle.core, get);
         } else {
           debugLog.info('store', 'cache miss — seeding bundled sample');
           clearSuitabilityIndex();
@@ -111,10 +118,7 @@ export function createBootstrapActions(
             error: null,
           });
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
-          const seeded = sampleCore;
-          void yieldToUi().then(() => {
-            if (get().core?.run_date === seeded.run_date) reportSuitabilityExclusions(seeded);
-          });
+          deferSuitabilityReport(sampleCore, get);
         }
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
