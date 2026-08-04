@@ -16,11 +16,23 @@ export function parseAaptBadging(output) {
 }
 
 export function parseApksignerCertificateSha256(output) {
-  const matches = [...String(output || '').matchAll(/Signer #\d+ certificate SHA-256 digest:\s*([A-Fa-f0-9:]+)/g)]
-    .map((match) => match[1].replaceAll(':', '').toLowerCase());
+  const matches = String(output || '')
+    .split(/\r?\n/)
+    .filter((line) => /certificate/i.test(line) && /sha\W*256/i.test(line) && /digest/i.test(line))
+    .map((line) => /(?:[A-Fa-f0-9]{2}:){31}[A-Fa-f0-9]{2}|[A-Fa-f0-9]{64}/.exec(line)?.[0] || '')
+    .filter(Boolean)
+    .map((digest) => digest.replaceAll(':', '').toLowerCase());
   const unique = [...new Set(matches)];
   if (unique.length !== 1 || !/^[a-f0-9]{64}$/.test(unique[0] || '')) {
-    throw new Error(`Expected exactly one APK signing certificate, found ${unique.length}`);
+    const labels = String(output || '')
+      .split(/\r?\n/)
+      .filter((line) => /certificate|signer|verified/i.test(line))
+      .slice(0, 20)
+      .join(' | ');
+    throw new Error(
+      `Expected exactly one APK signing certificate, found ${unique.length}` +
+      (labels ? `; apksigner reported: ${labels}` : ''),
+    );
   }
   return unique[0];
 }
