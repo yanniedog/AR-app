@@ -38,6 +38,7 @@ import { runStoreRetry } from '../../src/lib/degradationLog';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBrowse } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
+import { yieldToUiFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Trends() {
@@ -71,6 +72,8 @@ export default function Trends() {
   useScrollToTop(scrollRef);
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
+  const [deferredChartRevision, setDeferredChartRevision] = useState<string | null>(null);
+  const deferredChartsReady = !!core?.run_date && deferredChartRevision === core.run_date;
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
@@ -84,6 +87,20 @@ export default function Trends() {
   useEffect(() => {
     if (showHistoryRibbon && explorerMode === 'pulse') void ensureProductHistory();
   }, [ensureProductHistory, explorerMode, showHistoryRibbon]);
+
+  useEffect(() => {
+    const revision = core?.run_date;
+    if (!revision) return;
+    let active = true;
+    // Let the tab transition and its first touch/paint complete before
+    // constructing the large SVG and historical derived models below.
+    void yieldToUiFrames(2).then(() => {
+      if (active) setDeferredChartRevision(revision);
+    });
+    return () => {
+      active = false;
+    };
+  }, [core?.run_date]);
 
   const handleRetryInsights = async () => {
     setRetryingInsights(true);
@@ -117,16 +134,17 @@ export default function Trends() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
+    if (!deferredChartsReady) return null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
       includeNonStandard,
       detailsProducts,
     );
-  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, core, deferredChartsReady, detailsProducts, includeNonStandard, suitabilityRevision]);
   const historyModel = useMemo(() => {
     void suitabilityRevision;
-    return core
+    return core && deferredChartsReady
       ? selectBankHistoryChartModel(
           {
             core,
@@ -142,6 +160,7 @@ export default function Trends() {
   }, [
     activeSection,
     core,
+    deferredChartsReady,
     detailsProducts,
     explorerInsights,
     historyBanks,
@@ -263,7 +282,11 @@ export default function Trends() {
         </Card>
       )}
 
-      <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
+      {deferredChartsReady ? (
+        <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
+      ) : (
+        <DeferredChartPlaceholder label="Preparing economic outlook" />
+      )}
 
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
@@ -277,7 +300,11 @@ export default function Trends() {
             {trend.summary}
           </AppText>
         ) : null}
-        <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
+        {deferredChartsReady ? (
+          <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
+        ) : (
+          <DeferredChartPlaceholder label="Preparing cash-rate chart" height={190} />
+        )}
         <View style={{ marginTop: 12 }}>
           <RbaCountdownCard expandable={false} />
         </View>
@@ -353,7 +380,7 @@ export default function Trends() {
           </View>
           <Chip label="PRO" selected={showHistoryRibbon} />
         </Row>
-        {showHistoryRibbon ? (
+        {showHistoryRibbon && deferredChartsReady ? (
           <>
             {sectionOptions.length > 1 ? (
               <SegmentedControl
@@ -424,6 +451,8 @@ export default function Trends() {
               </Row>
             ) : null}
           </>
+        ) : showHistoryRibbon ? (
+          <DeferredChartPlaceholder label="Preparing market history" height={220} />
         ) : (
           <Button
             title="Enable Market explorer"
@@ -510,5 +539,27 @@ export default function Trends() {
         }}
       />
     </ScreenScrollView>
+  );
+}
+
+function DeferredChartPlaceholder({ label, height = 96 }: { label: string; height?: number }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{
+        minHeight: height,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 12,
+        backgroundColor: theme.colors.surfaceAlt,
+      }}
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+    >
+      <AppText variant="tiny" color="textFaint">
+        {label}
+      </AppText>
+    </View>
   );
 }

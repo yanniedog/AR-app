@@ -6,6 +6,10 @@ import {
 
   detailSearchIndex,
 
+  DETAIL_SEARCH_MEMO_LIMIT,
+
+  detailSearchMemoSize,
+
   productDetailSearchText,
 
   productKeysMatchingIndex,
@@ -112,6 +116,43 @@ describe('detailSearch', () => {
 
     expect(detailSearchIndex(null).size).toBe(0);
 
+  });
+
+  test('narrows an extended query from cached prefix hits', () => {
+    let reads = 0;
+    const products: Record<string, string> = {};
+    for (const [key, value] of Object.entries({
+      a: 'solar offset home loan',
+      b: 'solar savings account',
+      c: 'fixed home loan',
+    })) {
+      Object.defineProperty(products, key, {
+        enumerable: true,
+        get: () => {
+          reads += 1;
+          return value;
+        },
+      });
+    }
+    const index: SearchIndexPayload = { schema_version: 1, run_date: '2026-08-04', products };
+
+    expect(productKeysMatchingIndex(index, 'solar')).toEqual(new Set(['a', 'b']));
+    expect(reads).toBe(3);
+    reads = 0;
+    expect(productKeysMatchingIndex(index, 'solar off')).toEqual(new Set(['a']));
+    expect(reads).toBe(2);
+  });
+
+  test('bounds the query memo with least-recently-used eviction', () => {
+    const index: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'alpha beta gamma' },
+    };
+    for (let i = 0; i < DETAIL_SEARCH_MEMO_LIMIT + 10; i += 1) {
+      productKeysMatchingIndex(index, `query-${i}`);
+    }
+    expect(detailSearchMemoSize()).toBe(DETAIL_SEARCH_MEMO_LIMIT);
   });
 
 });

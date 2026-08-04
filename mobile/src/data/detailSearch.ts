@@ -10,6 +10,7 @@ type DetailIndex = Map<string, string>;
 let runtimeCache: { ref: Record<string, ProductDetail> | null | undefined; index: DetailIndex } | null = null;
 const queryMemo = new Map<string, Set<string>>();
 let lastMemoScope: string | null = null;
+export const DETAIL_SEARCH_MEMO_LIMIT = 32;
 
 function indexMemoScope(index: SearchIndexPayload, contentSha?: string | null): string {
   return contentSha ?? `${index.schema_version}:${index.run_date}`;
@@ -61,6 +62,44 @@ export function resetDetailSearchIndexCache(): void {
   lastMemoScope = null;
 }
 
+/** Test/diagnostic hook: the production cache remains encapsulated. */
+export function detailSearchMemoSize(): number {
+  return queryMemo.size;
+}
+
+function memoGet(key: string): Set<string> | undefined {
+  const hit = queryMemo.get(key);
+  if (!hit) return undefined;
+  // Map insertion order is our LRU order. Touch a hit so active queries remain.
+  queryMemo.delete(key);
+  queryMemo.set(key, hit);
+  return hit;
+}
+
+function memoSet(key: string, hits: Set<string>): void {
+  queryMemo.set(key, hits);
+  while (queryMemo.size > DETAIL_SEARCH_MEMO_LIMIT) {
+    const oldest = queryMemo.keys().next().value as string | undefined;
+    if (!oldest) break;
+    queryMemo.delete(oldest);
+  }
+}
+
+function longestCachedPrefix(scope: string, query: string): Set<string> | null {
+  const prefix = `${scope}:`;
+  let bestLength = -1;
+  let best: Set<string> | null = null;
+  for (const [key, hits] of queryMemo) {
+    if (!key.startsWith(prefix)) continue;
+    const cachedQuery = key.slice(prefix.length);
+    if (cachedQuery.length > bestLength && query.startsWith(cachedQuery)) {
+      bestLength = cachedQuery.length;
+      best = hits;
+    }
+  }
+  return best;
+}
+
 export function productKeysMatchingIndex(
   index: SearchIndexPayload | null | undefined,
   query: string,
@@ -74,13 +113,24 @@ export function productKeysMatchingIndex(
     lastMemoScope = scope;
   }
   const memo = `${scope}:${q}`;
-  if (queryMemo.has(memo)) return queryMemo.get(memo)!;
+  const cached = memoGet(memo);
+  if (cached) return cached;
   const tokens = q.split(/\s+/).filter(Boolean);
   const hits = new Set<string>();
-  for (const [key, blob] of Object.entries(index.products)) {
-    if (tokens.every((t) => blob.includes(t))) hits.add(key);
+  const prefixHits = longestCachedPrefix(scope, q);
+  if (prefixHits) {
+    // Adding characters/tokens can only narrow substring matches, so avoid a
+    // second full-index walk while the user continues typing the same query.
+    for (const key of prefixHits) {
+      const blob = index.products[key];
+      if (blob && tokens.every((t) => blob.includes(t))) hits.add(key);
+    }
+  } else {
+    for (const [key, blob] of Object.entries(index.products)) {
+      if (tokens.every((t) => blob.includes(t))) hits.add(key);
+    }
   }
-  queryMemo.set(memo, hits);
+  memoSet(memo, hits);
   return hits;
 }
 

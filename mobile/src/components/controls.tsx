@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { hapticSelection } from '../lib/haptics';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { androidRipple, AppText } from './ui';
@@ -43,17 +44,22 @@ export function SectionCrossfade({
 }) {
   const opacity = useSharedValue(1);
   const mounted = useRef(false);
+  const reducedMotion = useReducedMotion();
 
   useEffect(() => {
     if (!mounted.current) {
       mounted.current = true;
       return;
     }
+    if (reducedMotion) {
+      opacity.value = 1;
+      return;
+    }
     opacity.value = withSequence(
       withTiming(0.22, { duration: 90 }),
       withTiming(1, { duration: 200 }),
     );
-  }, [section, opacity]);
+  }, [section, opacity, reducedMotion]);
 
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return <Animated.View style={[style, animatedStyle]}>{children}</Animated.View>;
@@ -69,6 +75,7 @@ export function SegmentedControl<T extends string>({
   onChange: (v: T) => void;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [layouts, setLayouts] = useState<Partial<Record<T, SegmentLayout>>>({});
   const pillX = useSharedValue(0);
   const pillW = useSharedValue(0);
@@ -76,7 +83,7 @@ export function SegmentedControl<T extends string>({
 
   const movePill = useCallback(
     (layout: SegmentLayout, animate: boolean) => {
-      if (animate) {
+      if (animate && !reducedMotion) {
         pillX.value = withSpring(layout.x, PILL_SPRING);
         pillW.value = withSpring(layout.width, PILL_SPRING);
       } else {
@@ -84,7 +91,7 @@ export function SegmentedControl<T extends string>({
         pillW.value = layout.width;
       }
     },
-    [pillW, pillX],
+    [pillW, pillX, reducedMotion],
   );
 
   useEffect(() => {
@@ -154,7 +161,7 @@ export function SegmentedControl<T extends string>({
               variant="small"
               weight={active ? '700' : '500'}
               color={active ? 'text' : 'textMuted'}
-              numberOfLines={1}
+              style={{ textAlign: 'center' }}
             >
               {opt.label}
             </AppText>

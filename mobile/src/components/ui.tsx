@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   type TextProps,
+  useWindowDimensions,
   View,
   type ViewProps,
   type ViewStyle,
@@ -26,10 +27,6 @@ const VARIANT_WEIGHT: Partial<Record<FontVariant, '700' | '800'>> = {
   rate: '700',
   rateHero: '700',
 };
-
-function maxFontSizeMultiplierFor(variant: FontVariant): number {
-  return variant === 'tiny' || variant === 'small' || variant === 'rate' ? 1.2 : 1.35;
-}
 
 export function androidRipple(color: string, borderless = false) {
   return Platform.OS === 'android' ? { color, borderless } : undefined;
@@ -51,15 +48,16 @@ export function AppText({
   weight?: '400' | '500' | '600' | '700' | '800';
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   return (
     <Text
       allowFontScaling
-      maxFontSizeMultiplier={maxFontSizeMultiplierFor(variant)}
       style={[
         {
           color: theme.colors[color],
           fontSize: theme.font[variant],
-          lineHeight: theme.lineHeight[variant],
+          // Fixed line heights clip glyphs at large accessibility text sizes.
+          lineHeight: fontScale > 1 ? undefined : theme.lineHeight[variant],
           fontWeight: weight ?? VARIANT_WEIGHT[variant],
         },
         variant === 'h1' && { letterSpacing: -0.5 },

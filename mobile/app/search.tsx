@@ -26,6 +26,7 @@ import { profileToFilters } from '../src/data/profile';
 import { findSearchSubscription, type SearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
+import { useDebouncedValue } from '../src/hooks/useDebouncedValue';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
@@ -97,6 +98,7 @@ export default function Search() {
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
+  const debouncedQuery = useDebouncedValue(query, 120);
   const [sortKey, setSortKey] = useState<SortKey>(() => normalizeSortKey(restoredSub?.sort ?? sortRaw));
   // Seed from the saved product profile so users don't re-select the same
   // attributes on every screen; still fully overridable here.
@@ -136,7 +138,7 @@ export default function Search() {
       void suitabilityRevision,
       queryAndSort(
         baseRows,
-        { ...effectiveFilters, query },
+        { ...effectiveFilters, query: debouncedQuery },
         sortKey,
         section,
         // Always pass loaded details for suitability (standard-only) filtering —
@@ -147,11 +149,11 @@ export default function Search() {
         mortgageRateMetric,
       )
     ),
-    [baseRows, effectiveFilters, query, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, mortgageRateMetric, suitabilityRevision],
+    [baseRows, effectiveFilters, debouncedQuery, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, mortgageRateMetric, suitabilityRevision],
   );
 
   const showDeepSearchHint =
-    !!query.trim() && !deepSearchActive && rows.length === 0 && !activeFilterCount(effectiveFilters);
+    !!debouncedQuery.trim() && !deepSearchActive && rows.length === 0 && !activeFilterCount(effectiveFilters);
 
   const searchSnapshot = useMemo(
     () => ({
