@@ -25,13 +25,13 @@ test('parses the package and version identity reported by aapt', () => {
 });
 
 test('requires exactly the configured release ABIs', () => {
-  const expected = ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'];
+  const expected = ['armeabi-v7a', 'arm64-v8a'];
   assert.doesNotThrow(() => assertExpectedAbis([...expected].reverse(), expected));
-  assert.throws(() => assertExpectedAbis(expected.slice(0, 2), expected), /APK ABI mismatch/i);
+  assert.throws(() => assertExpectedAbis([...expected, 'x86_64'], expected), /APK ABI mismatch/i);
   assert.throws(() => assertExpectedAbis([], expected), /APK ABI mismatch/i);
 });
 
-test('keeps the transition APK compatible with every previously shipped ABI', () => {
+test('scopes ARM release architectures to native and EAS preview APK builds', () => {
   const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
   const easJson = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
   const releaseIdentity = JSON.parse(
@@ -42,17 +42,21 @@ test('keeps the transition APK compatible with every previously shipped ABI', ()
   )?.[1];
   assert.deepEqual(
     releaseIdentity.android_release_abis,
-    ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'],
+    ['armeabi-v7a', 'arm64-v8a'],
   );
+  const expected = releaseIdentity.android_release_abis.join(',');
   assert.equal(buildProperties?.android?.buildArchs, undefined);
-  assert.equal(easJson.build.preview.android.gradleCommand, undefined);
+  assert.equal(
+    easJson.build.preview.android.gradleCommand,
+    `:app:assembleRelease -PreactNativeArchitectures=${expected}`,
+  );
   assert.equal(easJson.build.development.android.gradleCommand, undefined);
   assert.equal(easJson.build.production.android.gradleCommand, undefined);
   const workflow = readFileSync(
     new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(workflow, /-PreactNativeArchitectures=/);
+  assert.match(workflow, new RegExp(`-PreactNativeArchitectures=${expected}`));
 });
 
 test('normalizes exactly one apksigner certificate digest', () => {
