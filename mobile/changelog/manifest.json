@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-04T12:45:22.309Z",
+  "generated_at": "2026-08-04T16:21:56.093Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -456,6 +456,23 @@
         "Recover progressive history and diagnostic resilience (#96)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.80"
+    },
+    {
+      "version": "1.0.81",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Build trustworthy rate decisions and private defaults (#98)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.81"
+    },
+    {
+      "version": "1.0.82",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Finish accessible charts and mobile performance upgrade (#102)",
+        "Center the app on saved rate decisions (#99)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.82"
     }
   ]
 }
