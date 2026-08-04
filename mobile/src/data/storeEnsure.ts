@@ -16,6 +16,7 @@ import {
   normalizeProductHistoryPayload,
   syncProductHistoryFromDailyPayloads,
   type ProductHistoryPurpose,
+  type ProductHistoryPayload,
 } from './productHistory';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
@@ -610,6 +611,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
         const coreSha = manifest?.files.core.sha256 ?? '';
         const requestId = ++productHistorySyncState.request;
+        let lastPublished = cached ?? null;
         const revisionIsCurrent = () => {
           const current = get();
           return (
@@ -620,22 +622,51 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           );
         };
         try {
+          let finalCheckpointPublished = false;
+          const persistCheckpoint = async (
+            checkpoint: ProductHistoryPayload,
+            logSuffix: string,
+          ): Promise<boolean> => {
+            if (!revisionIsCurrent()) return false;
+            // ~2.7k products × dozens of dates — stringify can stall the JS
+            // thread, so every durable checkpoint yields around the work.
+            await yieldToUi();
+            const text = JSON.stringify(checkpoint);
+            await yieldToUi();
+            if (!revisionIsCurrent()) return false;
+            await cache.writeProductHistory(text);
+            if (!revisionIsCurrent()) return false;
+            set({ productHistory: checkpoint, productHistoryError: null });
+            lastPublished = checkpoint;
+            debugLog.info(
+              'store',
+              `ensureProductHistory checkpoint run_date=${checkpoint.run_date} slices=${checkpoint.run_dates.length} ${logSuffix}`,
+            );
+            return true;
+          };
           const synced = await syncProductHistoryFromDailyPayloads({
             targetRunDate: core.run_date,
             currentCore: core,
             coreSha,
             existing: cached,
+            isCurrent: revisionIsCurrent,
+            onCheckpoint: async (checkpoint, progress) => {
+              const published = await persistCheckpoint(
+                checkpoint,
+                `ok=${progress.successfulDates}/${progress.totalMissingDates} done=${progress.done}`,
+              );
+              if (published && progress.done) finalCheckpointPublished = true;
+            },
           });
           if (!revisionIsCurrent()) {
             debugLog.info('store', `ensureProductHistory superseded run_date=${synced.run_date}`);
             return;
           }
-          // ~2.7k products × ~60 dates — stringify can stall the JS thread.
-          await yieldToUi();
-          const text = JSON.stringify(synced);
-          await yieldToUi();
-          await cache.writeProductHistory(text);
-          set({ productHistory: synced, productHistoryError: null });
+          // Keep callers robust if a custom/test sync implementation returns a
+          // final payload without invoking the progressive callback.
+          if (!finalCheckpointPublished) {
+            await persistCheckpoint(synced, 'done=true');
+          }
           debugLog.info(
             'store',
             `ensureProductHistory ok run_date=${synced.run_date} slices=${synced.run_dates.length} products=${Object.keys(synced.products).length}`,
@@ -645,7 +676,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           debugLog.warn('store', `ensureProductHistory failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureProductHistory', error: msg });
           if (!revisionIsCurrent()) return;
-          set({ productHistory: cached ?? null, productHistoryError: msg });
+          set({ productHistory: lastPublished, productHistoryError: msg });
         }
       })();
       productHistorySyncState.inFlightCoreSha = currentCoreSha;

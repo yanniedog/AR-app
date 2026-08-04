@@ -2,8 +2,11 @@ import type { CorePayload } from '../src/types';
 import {
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
+  DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
+  parsePerformanceAuditHangTimeoutSeconds,
   pathMatches,
+  PerformanceAuditInactivityWatchdog,
   percentile,
   requestPerformanceAudit,
   resetPerformanceAuditForTests,
@@ -232,11 +235,16 @@ describe('performance audit lifecycle', () => {
   it('retains the completed report for the settings result screen', () => {
     const sessionId = requestPerformanceAudit();
     const report = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       sessionId,
       startedAt: '2026-07-31T00:00:00.000Z',
       finishedAt: '2026-07-31T00:01:00.000Z',
       durationMs: 60_000,
+      watchdog: {
+        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+        storedCheckCount: 0,
+        lastStoredCheckAt: null,
+      },
       environment,
       summary: summarizePerformanceAudit([]),
       checks: [],
@@ -248,5 +256,75 @@ describe('performance audit lifecycle', () => {
       sessionId,
       report,
     });
+  });
+
+  it('stores a validated custom hang timeout on the queued audit', () => {
+    requestPerformanceAudit({ hangTimeoutMs: 420_000 });
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'queued',
+      hangTimeoutMs: 420_000,
+      storedCheckCount: 0,
+      lastStoredCheckAt: null,
+    });
+  });
+});
+
+describe('performance audit inactivity watchdog', () => {
+  it('uses the five-minute default and accepts a custom timeout', () => {
+    let elapsedMs = 0;
+    const clock = () => elapsedMs;
+    expect(new PerformanceAuditInactivityWatchdog(undefined, clock).hangTimeoutMs).toBe(
+      300_000,
+    );
+    expect(new PerformanceAuditInactivityWatchdog(420_000, clock).hangTimeoutMs).toBe(
+      420_000,
+    );
+  });
+
+  it('parses only persisted whole-second values inside the safe range', () => {
+    expect(parsePerformanceAuditHangTimeoutSeconds('300')).toBe(300);
+    expect(parsePerformanceAuditHangTimeoutSeconds(' 420 ')).toBe(420);
+    expect(parsePerformanceAuditHangTimeoutSeconds(null)).toBeNull();
+    expect(parsePerformanceAuditHangTimeoutSeconds('29')).toBeNull();
+    expect(parsePerformanceAuditHangTimeoutSeconds('3601')).toBeNull();
+    expect(parsePerformanceAuditHangTimeoutSeconds('5 minutes')).toBeNull();
+  });
+
+  it('resets only when a completed check is recorded as stored', () => {
+    let elapsedMs = 1_000;
+    const watchdog = new PerformanceAuditInactivityWatchdog(300_000, () => elapsedMs);
+
+    elapsedMs += 240_000;
+    expect(watchdog.isExpired()).toBe(false);
+    expect(watchdog.storedCheckCount).toBe(0);
+    watchdog.recordStoredCheck();
+    expect(watchdog.storedCheckCount).toBe(1);
+    expect(watchdog.remainingMs()).toBe(300_000);
+  });
+
+  it('allows a run longer than five minutes while stored checks keep progressing', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(300_000, () => elapsedMs);
+
+    elapsedMs += 240_000;
+    watchdog.recordStoredCheck();
+    elapsedMs += 240_000;
+    expect(elapsedMs).toBeGreaterThan(300_000);
+    expect(watchdog.isExpired()).toBe(false);
+    watchdog.recordStoredCheck();
+    elapsedMs += 240_000;
+    expect(watchdog.isExpired()).toBe(false);
+    expect(watchdog.storedCheckCount).toBe(2);
+  });
+
+  it('expires after genuine inactivity', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(300_000, () => elapsedMs);
+
+    elapsedMs = 299_999;
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 300_000;
+    expect(watchdog.isExpired()).toBe(true);
+    expect(watchdog.remainingMs()).toBe(0);
   });
 });

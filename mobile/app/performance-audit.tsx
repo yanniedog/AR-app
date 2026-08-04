@@ -1,11 +1,17 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import React, { useState, useSyncExternalStore } from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import { TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
+  DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
+  MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
+  MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
+  parsePerformanceAuditHangTimeoutSeconds,
+  PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
   subscribePerformanceAudit,
   type AuditCheck,
@@ -50,8 +56,40 @@ export default function PerformanceAuditScreen() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
   const [confirming, setConfirming] = useState(false);
+  const [hangTimeoutInput, setHangTimeoutInput] = useState(
+    String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
+  );
+  const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const report = state.report;
   const running = state.status === 'queued' || state.status === 'running';
+  const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
+
+  useEffect(() => {
+    let active = true;
+    void AsyncStorage.getItem(PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY)
+      .then((stored) => {
+        if (!active) return;
+        const parsed = parsePerformanceAuditHangTimeoutSeconds(stored);
+        setHangTimeoutInput(
+          String(parsed ?? DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
+        );
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setHangTimeoutLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
+    void AsyncStorage.setItem(
+      PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
+      String(hangTimeoutSeconds),
+    ).catch(() => {});
+  }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = () => {
     setConfirming(true);
@@ -91,10 +129,54 @@ export default function PerformanceAuditScreen() {
             the debug log when you want performance feedback.
           </AppText>
         </View>
+        <View style={{ gap: 6 }}>
+          <AppText variant="small" weight="700">
+            Hang prevention timeout
+          </AppText>
+          <Row style={{ alignItems: 'center' }} gap={8}>
+            <TextInput
+              accessibilityLabel="Audit hang prevention timeout in seconds"
+              accessibilityHint={`Enter a value from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} seconds`}
+              value={hangTimeoutInput}
+              onChangeText={setHangTimeoutInput}
+              editable={!running}
+              keyboardType="number-pad"
+              inputMode="numeric"
+              maxLength={4}
+              selectTextOnFocus
+              style={{
+                minWidth: 112,
+                minHeight: 48,
+                paddingHorizontal: 12,
+                borderWidth: 1,
+                borderColor:
+                  hangTimeoutSeconds == null
+                    ? theme.colors.danger
+                    : theme.colors.border,
+                borderRadius: theme.radius.md,
+                backgroundColor: theme.colors.surfaceAlt,
+                color: theme.colors.text,
+                fontSize: theme.font.body,
+              }}
+            />
+            <AppText variant="small" color="textMuted">
+              seconds
+            </AppText>
+          </Row>
+          <AppText
+            variant="tiny"
+            color={hangTimeoutSeconds == null ? 'danger' : 'textFaint'}
+          >
+            {hangTimeoutSeconds == null
+              ? `Enter a whole number from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS}.`
+              : 'The timer restarts only after a completed check is saved to the debug log.'}
+          </AppText>
+        </View>
         <Button
           title={report ? 'Run audit again' : 'Run full audit'}
           icon="pulse-outline"
           loading={running}
+          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
           onPress={runAudit}
         />
         {confirming && !running ? (
@@ -113,7 +195,8 @@ export default function PerformanceAuditScreen() {
             </AppText>
             <AppText variant="tiny" color="textMuted">
               Usually in about a minute, the app will open every steady-state screen and go
-              back after each one. It stops after two minutes if work cannot finish safely.
+              back after each one. It may run longer while completed checks keep being saved,
+              and stops only after {hangTimeoutSeconds ?? 0} seconds without a saved result.
               Do not interact while it runs. You can cancel at any time. It does not change
               favourites, profile settings, or subscriptions.
             </AppText>
@@ -128,9 +211,11 @@ export default function PerformanceAuditScreen() {
                 title="Start audit"
                 icon="play"
                 style={{ flex: 1 }}
+                disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
                 onPress={() => {
+                  if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
                   setConfirming(false);
-                  requestPerformanceAudit();
+                  requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
                 }}
               />
             </Row>
@@ -156,6 +241,10 @@ export default function PerformanceAuditScreen() {
           </AppText>
           <AppText variant="tiny" selectable style={{ fontFamily: 'monospace' }}>
             {state.error}
+          </AppText>
+          <AppText variant="tiny" color="textMuted">
+            Saved {state.storedCheckCount} checks
+            {state.lastStoredCheckAt ? `; last progress ${state.lastStoredCheckAt}` : ''}.
           </AppText>
         </Card>
       ) : null}
@@ -185,6 +274,10 @@ export default function PerformanceAuditScreen() {
               Worst JS lag {report.summary.maxEventLoopLagMs.toFixed(0)} ms · Worst frame gap{' '}
               {report.summary.maxFrameGapMs.toFixed(0)} ms · Total{' '}
               {(report.durationMs / 1_000).toFixed(1)} s
+            </AppText>
+            <AppText variant="small" color="textMuted">
+              Hang timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}
+              {report.watchdog.storedCheckCount} checks
             </AppText>
             <Button
               title="Open logs to export"

@@ -62,6 +62,21 @@ export function isManifestFinalized(manifest: Manifest, index: DatesIndex): bool
   return index.dates.includes(runDate);
 }
 
+/**
+ * A previously adopted immutable dated manifest remains proof of finalisation
+ * while the rolling run date and core revision are unchanged.
+ */
+function matchesVerifiedDatedManifest(
+  rolling: Manifest,
+  verified: Manifest | null | undefined,
+): verified is Manifest {
+  if (!verified) return false;
+  const runDate = String(rolling.run_date || '').slice(0, 10);
+  if (!runDate || String(verified.run_date || '').slice(0, 10) !== runDate) return false;
+  if (verified.tag !== `app-payload-${runDate}`) return false;
+  return verified.files.core.sha256 === rolling.files.core.sha256;
+}
+
 export type FinalizedManifestResolution =
   | {
       status: 'finalized';
@@ -98,6 +113,8 @@ export async function resolveFinalizedManifest(
   opts: {
     fetchIndex?: () => Promise<DatesIndex>;
     fetchDated?: (runDate: string) => Promise<Manifest>;
+    /** Previously adopted immutable manifest, normally the installed cache meta. */
+    verifiedDated?: Manifest | null;
   } = {},
 ): Promise<FinalizedManifestResolution> {
   const fetchIndex = opts.fetchIndex ?? fetchDatesIndexJson;
@@ -137,14 +154,26 @@ export async function resolveFinalizedManifest(
   // Only probe when rolling is strictly ahead of the index — never adopt an
   // older dated snapshot when the index claims a newer day than rolling.
   if (pendingIngestRunDate && latestFinal && pendingIngestRunDate > latestFinal) {
-    let datedRolling: Manifest | undefined;
-    try {
-      datedRolling = await fetchDated(pendingIngestRunDate);
-    } catch (err) {
-      debugLog.info(
+    let datedRolling: Manifest | undefined = matchesVerifiedDatedManifest(
+      rolling,
+      opts.verifiedDated,
+    )
+      ? opts.verifiedDated
+      : undefined;
+    if (datedRolling) {
+      debugLog.debug(
         'ingest',
-        `dated release not ready for run_date=${pendingIngestRunDate}: ${String((err as Error)?.message ?? err)}`,
+        `reusing verified dated manifest run_date=${pendingIngestRunDate} core_sha=${rolling.files.core.sha256.slice(0, 12)}`,
       );
+    } else {
+      try {
+        datedRolling = await fetchDated(pendingIngestRunDate);
+      } catch (err) {
+        debugLog.info(
+          'ingest',
+          `dated release not ready for run_date=${pendingIngestRunDate}: ${String((err as Error)?.message ?? err)}`,
+        );
+      }
     }
 
     if (datedRolling) {

@@ -8,7 +8,7 @@ import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
-import type { ProductHistoryPayload } from './productHistory';
+import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 
@@ -21,6 +21,7 @@ const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
+const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
 const SUITABILITY_INDEX = `${DIR}suitability-index.json`;
 const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
@@ -358,16 +359,33 @@ export const cache = {
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {
-    return readJson<ProductHistoryPayload>(PRODUCT_HISTORY);
+    const primary = normalizeProductHistoryPayload(
+      await readJson<ProductHistoryPayload>(PRODUCT_HISTORY),
+    );
+    if (primary) return primary;
+    // Recover the last complete checkpoint if the app stopped between writing
+    // the temp file and moving it over the primary path.
+    const recovered = normalizeProductHistoryPayload(
+      await readJson<ProductHistoryPayload>(PRODUCT_HISTORY_TMP),
+    );
+    if (!recovered) await deletePath(PRODUCT_HISTORY_TMP);
+    return recovered;
   },
 
   async writeProductHistory(json: string): Promise<void> {
-    await ensureDir();
-    await writeText(PRODUCT_HISTORY, json);
+    return serialize(async () => {
+      await ensureDir();
+      await writeText(PRODUCT_HISTORY_TMP, json);
+      await deletePath(PRODUCT_HISTORY);
+      await movePath(PRODUCT_HISTORY_TMP, PRODUCT_HISTORY);
+    });
   },
 
   async clearProductHistory(): Promise<void> {
-    await deletePath(PRODUCT_HISTORY);
+    return serialize(async () => {
+      await deletePath(PRODUCT_HISTORY);
+      await deletePath(PRODUCT_HISTORY_TMP);
+    });
   },
 
   async readEconomicOutlook(): Promise<EconomicOutlookPayload | null> {
