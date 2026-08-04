@@ -48,16 +48,18 @@ export function datedManifestUrl(runDate: string): string {
 
 export const APK_RELEASE_TAG = extra.apkReleaseTag ?? 'app-apk-latest';
 export const APK_ARM_RELEASE_TAG = extra.apkArmReleaseTag ?? 'app-apk-arm-latest';
+/** Both rolling tags intentionally use the same asset name; the tag selects the channel. */
+export const APK_MANIFEST_ASSET = 'app-apk-latest.json';
 
 /** Rolling APK manifest published after preview EAS builds (see mobile-eas-build.yml). */
 export const APK_MANIFEST_URL =
   extra.apkManifestUrl ??
-  `https://github.com/${APK_REPO}/releases/download/${APK_RELEASE_TAG}/app-apk-latest.json`;
+  `https://github.com/${APK_REPO}/releases/download/${APK_RELEASE_TAG}/${APK_MANIFEST_ASSET}`;
 
 /** ARM-only rolling channel used only by ABI-aware clients; universal remains the fallback. */
 export const APK_ARM_MANIFEST_URL =
   extra.apkArmManifestUrl ??
-  `https://github.com/${APK_REPO}/releases/download/${APK_ARM_RELEASE_TAG}/app-apk-latest.json`;
+  `https://github.com/${APK_REPO}/releases/download/${APK_ARM_RELEASE_TAG}/${APK_MANIFEST_ASSET}`;
 
 /** Schema version this build understands. Older payloads still load best-effort. */
 export const SUPPORTED_SCHEMA = 1;

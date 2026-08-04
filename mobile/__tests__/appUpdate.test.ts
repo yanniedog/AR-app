@@ -6,6 +6,7 @@ import {
   assertApkCompatibleWithDevice,
   apkManifestUrlsForDevice,
   assertDownloadedApkMatchesManifest,
+  checkForAppUpdateAcrossChannels,
   checkForAppUpdateAt,
   fetchApkManifest,
   isApkCompatibleWithDevice,
@@ -153,12 +154,64 @@ describe('appUpdateLogic', () => {
     );
   });
 
-  it('routes only ARM-capable clients to the opt-in ARM channel with universal fallback', () => {
-    const arm = 'https://example.test/app-apk-arm-latest.json';
-    const universal = 'https://example.test/app-apk-latest.json';
-    expect(apkManifestUrlsForDevice(['arm64-v8a'], arm, universal)).toEqual([arm, universal]);
-    expect(apkManifestUrlsForDevice(['x86_64'], arm, universal)).toEqual([universal]);
-    expect(apkManifestUrlsForDevice(null, arm, universal)).toEqual([universal]);
+  it('uses the ARM channel only for channel-aware ARM clients and keeps universal fallback', () => {
+    const universal = 'https://example.test/universal.json';
+    const arm = 'https://example.test/arm.json';
+    expect(apkManifestUrlsForDevice(['arm64 v8'], universal, arm)).toEqual([arm, universal]);
+    expect(apkManifestUrlsForDevice(['armeabi-v7a'], universal, arm)).toEqual([arm, universal]);
+    expect(apkManifestUrlsForDevice(['x86_64'], universal, arm)).toEqual([universal]);
+    expect(apkManifestUrlsForDevice(undefined, universal, arm)).toEqual([universal]);
+  });
+
+  it('falls back to the universal channel while the ARM channel is unavailable', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      checkForAppUpdateAcrossChannels(
+        ['https://example.test/arm.json', manifestUrl],
+        installed,
+        ['arm64-v8a'],
+      ),
+    ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('prefers a newer universal update when the ARM channel is stale', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ...baseManifest, build_number: '41' }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      checkForAppUpdateAcrossChannels(
+        ['https://example.test/arm.json', manifestUrl],
+        installed,
+        ['arm64-v8a'],
+      ),
+    ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('aborts a stalled ARM channel before falling back to universal', async () => {
+    (global.fetch as jest.Mock)
+      .mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
+        init.signal.addEventListener('abort', () => reject(new Error('aborted')));
+      }))
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      checkForAppUpdateAcrossChannels(
+        ['https://example.test/arm.json', manifestUrl],
+        installed,
+        ['arm64-v8a'],
+        10,
+      ),
+    ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
   it('reports current when installed matches remote', async () => {

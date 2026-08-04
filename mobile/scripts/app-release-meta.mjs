@@ -47,10 +47,32 @@ function gitExec(args) {
 }
 
 export const ROLLING_TAG = "app-apk-latest";
+export const ARM_ROLLING_TAG = "app-apk-arm-latest";
+export const ARM_RELEASE_ABIS = ["armeabi-v7a", "arm64-v8a"];
 export const APK_ASSET = "app-preview.apk";
 export const MANIFEST_ASSET = "app-apk-latest.json";
 export const QR_ASSET = "app-preview-qr.png";
 export const INSTALL_HTML = "install.html";
+
+/** Keep release publication on one of the two client-trusted rolling channels. */
+export function resolveApkRollingTag(value) {
+  const tag = String(value || ROLLING_TAG).trim();
+  if (tag !== ROLLING_TAG && tag !== ARM_ROLLING_TAG) {
+    throw new Error(`Unsupported APK rolling tag: ${tag}`);
+  }
+  return tag;
+}
+
+export function versionTagForApkChannel(version, rollingTag) {
+  const tag = resolveApkRollingTag(rollingTag);
+  return tag === ARM_ROLLING_TAG ? `app-arm-v${version}` : versionTag(version);
+}
+
+export function expectedAbisForApkChannel(rollingTag, universalAbis) {
+  return resolveApkRollingTag(rollingTag) === ARM_ROLLING_TAG
+    ? [...ARM_RELEASE_ABIS]
+    : [...universalAbis];
+}
 
 /** @param {string} repo owner/name @param {string} tag */
 export function apkDownloadUrl(repo, tag) {

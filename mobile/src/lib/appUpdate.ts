@@ -16,7 +16,7 @@ import {
   apkManifestUrlsForDevice,
   assertApkCompatibleWithDevice,
   assertTrustedApkManifest,
-  checkForAppUpdateAt,
+  checkForAppUpdateAcrossChannels,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
   type ApkManifest,
@@ -93,8 +93,8 @@ export async function checkForAppUpdate(
     ? [url]
     : apkManifestUrlsForDevice(
         Device.supportedCpuArchitectures,
-        APK_ARM_MANIFEST_URL,
         APK_MANIFEST_URL,
+        APK_ARM_MANIFEST_URL,
       );
   const cacheKey = urls.join('|');
   const now = Date.now();
@@ -108,18 +108,11 @@ export async function checkForAppUpdate(
   let promise!: Promise<UpdateCheckResult>;
   promise = (async () => {
     try {
-      let result: UpdateCheckResult = { status: 'error', message: 'No APK update channel available' };
-      for (const candidate of urls) {
-        result = await checkForAppUpdateAt(
-          candidate,
-          getInstalledAppInfo(),
-          Device.supportedCpuArchitectures,
-        );
-        if (result.status !== 'error') break;
-        if (candidate !== urls.at(-1)) {
-          debugLog.warn('app-update', `preferred APK channel unavailable; trying universal fallback`);
-        }
-      }
+      const result = await checkForAppUpdateAcrossChannels(
+        urls,
+        getInstalledAppInfo(),
+        Device.supportedCpuArchitectures,
+      );
       if (
         result.status === 'available' ||
         result.status === 'current' ||

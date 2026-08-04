@@ -109,6 +109,8 @@
       "apkRepo": "yanniedog/AR-app",
       "apkReleaseTag": "app-apk-latest",
       "apkManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-apk-latest.json",
+      "apkArmReleaseTag": "app-apk-arm-latest",
+      "apkArmManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-apk-latest.json",
       "payloadDecKeyHex": "",
       "googleWebClientId": "",
       "keyServiceUrl": "",

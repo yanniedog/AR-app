@@ -7,6 +7,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import QRCode from 'qrcode';
 import {
+  ARM_ROLLING_TAG,
   INSTALL_HTML,
   MANIFEST_ASSET,
   QR_ASSET,
@@ -37,7 +38,9 @@ export async function generateInstallAssets(outDir, downloadUrl, repo, tag, mani
 
   const qrUrl = qrReleaseUrl(repo, tag);
   const manifestUrl =
-    manifestTag === ROLLING_TAG ? manifestReleaseUrl(repo, manifestTag) : null;
+    manifestTag === ROLLING_TAG || manifestTag === ARM_ROLLING_TAG
+      ? manifestReleaseUrl(repo, manifestTag)
+      : null;
   const manifestLine = manifestUrl
     ? `  <p><small>Manifest: <a href="${manifestUrl}">${MANIFEST_ASSET}</a></small></p>\n`
     : '';
