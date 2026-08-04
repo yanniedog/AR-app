@@ -224,6 +224,15 @@ describe('cache core-meta sidecar', () => {
     await expect(cache.readProductHistory()).resolves.toEqual(JSON.parse(recovered));
   });
 
+  it('deletes an invalid product-history tmp checkpoint instead of retrying it', async () => {
+    const productHistoryPath = `${FileSystem.documentDirectory}payload/product-history.json`;
+    const productHistoryTmpPath = `${productHistoryPath}.tmp`;
+    files.set(productHistoryTmpPath, JSON.stringify({ schema_version: 2, run_dates: ['invalid'] }));
+
+    await expect(cache.readProductHistory()).resolves.toBeNull();
+    expect(files.has(productHistoryTmpPath)).toBe(false);
+  });
+
   it('updateMeta no-ops on coreSha mismatch and older manifests', async () => {
     const meta: CacheMeta = {
       manifest: { ...sampleManifest, generated_at: '2026-07-14T12:00:00Z' },

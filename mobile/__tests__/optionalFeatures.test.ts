@@ -654,6 +654,48 @@ describe('optional feature prefs', () => {
     expect(mockWriteProductHistory).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the last installed checkpoint when a later checkpoint write fails', async () => {
+    const first = {
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      core_sha: remoteManifest.files.core.sha256,
+      run_dates: [remoteCore.run_date],
+      products: { product: [0.05] },
+    };
+    const later = {
+      ...first,
+      run_dates: ['2026-06-09', remoteCore.run_date],
+      products: { product: [0.051, 0.05] },
+    };
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      productHistory: null,
+    });
+    mockWriteProductHistory
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('checkpoint write failed'));
+    mockSyncProductHistoryFromDailyPayloads.mockImplementationOnce(
+      async (options: {
+        onCheckpoint: (
+          payload: typeof first,
+          progress: { successfulDates: number; totalMissingDates: number; done: boolean },
+        ) => Promise<void>;
+      }) => {
+        await options.onCheckpoint(first, { successfulDates: 1, totalMissingDates: 2, done: false });
+        await options.onCheckpoint(later, { successfulDates: 2, totalMissingDates: 2, done: true });
+        return later;
+      },
+    );
+
+    await store.getState().ensureProductHistory();
+
+    expect(store.getState().productHistory).toEqual(first);
+    expect(store.getState().productHistoryError).toContain('checkpoint write failed');
+  });
+
   it('ensureProductHistory does not install a result from a superseded core revision', async () => {
     let finishOldSync!: (value: unknown) => void;
     const oldSync = new Promise((resolve) => {

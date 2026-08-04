@@ -611,6 +611,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
         const coreSha = manifest?.files.core.sha256 ?? '';
         const requestId = ++productHistorySyncState.request;
+        let lastPublished = cached ?? null;
         const revisionIsCurrent = () => {
           const current = get();
           return (
@@ -636,6 +637,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             await cache.writeProductHistory(text);
             if (!revisionIsCurrent()) return false;
             set({ productHistory: checkpoint, productHistoryError: null });
+            lastPublished = checkpoint;
             debugLog.info(
               'store',
               `ensureProductHistory checkpoint run_date=${checkpoint.run_date} slices=${checkpoint.run_dates.length} ${logSuffix}`,
@@ -674,7 +676,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           debugLog.warn('store', `ensureProductHistory failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureProductHistory', error: msg });
           if (!revisionIsCurrent()) return;
-          set({ productHistory: cached ?? null, productHistoryError: msg });
+          set({ productHistory: lastPublished, productHistoryError: msg });
         }
       })();
       productHistorySyncState.inFlightCoreSha = currentCoreSha;

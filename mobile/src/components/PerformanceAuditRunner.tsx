@@ -215,10 +215,6 @@ async function waitForPath(
   } = {},
 ): Promise<void> {
   const routeDeadlineMs = now() + ROUTE_TIMEOUT_MS;
-  const deadlineMs = Math.min(
-    routeDeadlineMs,
-    options.watchdog?.deadlineMs ?? Number.POSITIVE_INFINITY,
-  );
   while (!pathMatches(currentPath(), expected)) {
     if (options.checkAuditState !== false) {
       if (options.watchdog) {
@@ -227,10 +223,7 @@ async function waitForPath(
         assertAuditActive();
       }
     }
-    if (now() >= deadlineMs) {
-      if (options.watchdog?.isExpired()) {
-        throw new AuditInactivityError(options.watchdog);
-      }
+    if (now() >= routeDeadlineMs) {
       throw new Error(`${label} did not reach ${expected}; current path is ${currentPath()}`);
     }
     await delay(25);
@@ -841,10 +834,7 @@ async function waitForJourneyData(
   if (requirements.length === 0) return { labels, durationMs: 0 };
 
   const started = now();
-  const settleDeadlineMs = Math.min(
-    watchdog.deadlineMs,
-    started + DATA_SETTLE_TIMEOUT_MS,
-  );
+  const settleDeadlineMs = started + DATA_SETTLE_TIMEOUT_MS;
   while (true) {
     assertSessionActive(watchdog);
     const failed = requirements.find((requirement) => requirement.state() === 'failed');
@@ -855,7 +845,6 @@ async function waitForJourneyData(
       return { labels, durationMs: now() - started };
     }
     if (now() >= settleDeadlineMs) {
-      if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
       const pending = requirements
         .filter((requirement) => requirement.state() === 'pending')
         .map(({ label }) => label);
@@ -1062,12 +1051,33 @@ export function PerformanceAuditRunner() {
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
 
+      const awaitStoredCheckFlush = async (): Promise<void> => {
+        let settled = false;
+        let failure: unknown;
+        const flush = debugLog.flushToFile().then(
+          () => {
+            settled = true;
+          },
+          (error: unknown) => {
+            failure = error;
+            settled = true;
+          },
+        );
+        while (!settled) {
+          assertSessionActive(watchdog);
+          await delay(Math.min(50, Math.max(1, watchdog.remainingMs())));
+        }
+        await flush;
+        assertSessionActive(watchdog);
+        if (failure) throw failure;
+      };
+
       const record = async (check: AuditCheck) => {
         assertSessionActive(watchdog);
         checks.push(check);
         logAuditCheck(sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
-        await debugLog.flushToFile();
+        await awaitStoredCheckFlush();
         watchdog.recordStoredCheck();
         lastStoredCheckAt = new Date().toISOString();
         completed += 1;

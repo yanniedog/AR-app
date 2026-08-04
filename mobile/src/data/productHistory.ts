@@ -511,8 +511,6 @@ export interface SyncProductHistoryOpts {
   currentCore: CorePayload;
   coreSha?: string;
   existing?: ProductHistoryPayload | null;
-  /** Retained for call-site compatibility; dated cores are intentionally sequential. */
-  maxConcurrent?: number;
   /** Override circuit trip threshold (tests). */
   circuitLimit?: number;
   /** Successful dated cores between durable checkpoints. Defaults to five. */

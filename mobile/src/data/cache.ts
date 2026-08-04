@@ -8,7 +8,7 @@ import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
-import type { ProductHistoryPayload } from './productHistory';
+import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 
@@ -359,11 +359,17 @@ export const cache = {
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {
-    const primary = await readJson<ProductHistoryPayload>(PRODUCT_HISTORY);
+    const primary = normalizeProductHistoryPayload(
+      await readJson<ProductHistoryPayload>(PRODUCT_HISTORY),
+    );
     if (primary) return primary;
     // Recover the last complete checkpoint if the app stopped between writing
     // the temp file and moving it over the primary path.
-    return readJson<ProductHistoryPayload>(PRODUCT_HISTORY_TMP);
+    const recovered = normalizeProductHistoryPayload(
+      await readJson<ProductHistoryPayload>(PRODUCT_HISTORY_TMP),
+    );
+    if (!recovered) await deletePath(PRODUCT_HISTORY_TMP);
+    return recovered;
   },
 
   async writeProductHistory(json: string): Promise<void> {

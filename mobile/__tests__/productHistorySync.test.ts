@@ -148,7 +148,6 @@ test('stops dated fetches after consecutive network failures', async () => {
   const result = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-06',
     currentCore: core('2026-06-06', { Mortgage: [rateRow('P|1', '0.055')] }),
-    maxConcurrent: 1,
     circuitLimit: 3,
   });
 
@@ -176,7 +175,6 @@ test('downloads missing dates newest-first with only one heavy core in flight', 
   await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-04',
     currentCore: core('2026-06-04', { Mortgage: [rateRow('P|1', '0.055')] }),
-    maxConcurrent: 99,
   });
 
   expect(mockedDownload.mock.calls.map(([runDate]) => runDate)).toEqual([
