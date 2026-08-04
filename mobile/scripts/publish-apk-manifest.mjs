@@ -37,6 +37,7 @@ import {
   versionTag,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
+import releaseIdentity from '../release-identity.json' with { type: 'json' };
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const mobileRoot = join(__dirname, '..');
@@ -337,10 +338,16 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   const appJson = JSON.parse(readFileSync(join(mobileRoot, 'app.json'), 'utf8'));
   const packageName = String(appJson.expo?.android?.package || '');
   const identity = inspectApkIdentity(apkPath, {
-    packageName,
+    packageName: releaseIdentity.android_package,
     versionName: version,
     versionCode: buildNumber,
+    certificateSha256: releaseIdentity.signing_certificate_sha256,
   });
+  if (packageName !== releaseIdentity.android_package) {
+    throw new Error(
+      `app.json package mismatch (expected ${releaseIdentity.android_package}, got ${packageName || 'missing'})`,
+    );
+  }
 
   const sha256 = sha256File(apkPath);
   // Point in-app updates at the immutable versioned asset. The rolling

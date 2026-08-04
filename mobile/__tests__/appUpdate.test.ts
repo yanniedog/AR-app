@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import {
   APK_SHA256_VERIFY_MAX_BYTES,
+  TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
   assertDownloadedApkMatchesManifest,
   checkForAppUpdateAt,
   fetchApkManifest,
@@ -21,7 +22,7 @@ const baseManifest: ApkManifest = {
   bytes: 130_000_000,
   sha256: '518fdd8767ca26d02775e585e3ea4bfc53b92e0788c9ae5751cc0eb593e5607a',
   package_name: 'com.eyex.australianrates',
-  signing_certificate_sha256: 'a'.repeat(64),
+  signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
 };
 
 const installed = { version: '1.0.0', buildNumber: '41' };
@@ -100,6 +101,12 @@ describe('appUpdateLogic', () => {
       json: async () => ({ ...baseManifest, signing_certificate_sha256: undefined }),
     });
     await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/signing certificate/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, signing_certificate_sha256: 'a'.repeat(64) }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/does not match/i);
   });
 
   it('reports available update when remote build is newer', async () => {

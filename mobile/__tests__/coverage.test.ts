@@ -1,5 +1,6 @@
 import {
   coverageFailures,
+  coverageFailureProvenanceReported,
   coverageObservedAt,
   coverageProvidersAttempted,
   coverageProvidersSucceeded,
@@ -30,5 +31,15 @@ describe('coverage compatibility', () => {
     expect(coverageFailures(coverage)).toEqual(coverage.failures);
     expect(coverageProvidersAttempted(coverage)).toBe(62);
     expect(coverageProvidersSucceeded(coverage)).toBe(60);
+  });
+
+  it('treats an empty canonical failure list as authoritative', () => {
+    const coverage = {
+      provider_failures: [],
+      failures: [{ provider: 'stale alias' }],
+    };
+    expect(coverageFailures(coverage)).toEqual([]);
+    expect(coverageFailureProvenanceReported(coverage)).toBe(true);
+    expect(coverageFailureProvenanceReported({ limitations: ['sample'] })).toBe(false);
   });
 });

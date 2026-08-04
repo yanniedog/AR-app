@@ -3,6 +3,7 @@ import {
   fetchCumulativeChangelogs,
   type VersionChangelogSummary,
 } from './changelog';
+import releaseIdentity from '../../release-identity.json';
 
 export interface ApkManifest {
   schema_version: number;
@@ -22,7 +23,9 @@ export interface ApkManifest {
   profile?: string;
 }
 
-export const TRUSTED_ANDROID_PACKAGE = 'com.eyex.australianrates';
+export const TRUSTED_ANDROID_PACKAGE = releaseIdentity.android_package;
+export const TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 =
+  releaseIdentity.signing_certificate_sha256.toLowerCase();
 
 export interface InstalledAppInfo {
   version: string;
@@ -104,6 +107,12 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   }
   if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {
     throw new Error('APK manifest signing certificate is missing or invalid');
+  }
+  if (
+    manifest.signing_certificate_sha256?.toLowerCase() !==
+    TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256
+  ) {
+    throw new Error('APK manifest signing certificate does not match Australian Rates');
   }
 
   const immutable = preferImmutableApkDownloadUrl(manifest);

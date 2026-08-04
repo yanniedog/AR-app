@@ -22,6 +22,19 @@ export function parseApksignerCertificateSha256(output) {
   return unique[0];
 }
 
+export function assertExpectedSigningCertificate(actual, expected) {
+  const normalizedActual = String(actual || '').replaceAll(':', '').toLowerCase();
+  const normalizedExpected = String(expected || '').replaceAll(':', '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(normalizedExpected)) {
+    throw new Error('Trusted APK signing certificate is missing or invalid');
+  }
+  if (normalizedActual !== normalizedExpected) {
+    throw new Error(
+      `APK signing certificate mismatch (expected ${normalizedExpected}, got ${normalizedActual || 'missing'})`,
+    );
+  }
+}
+
 function androidTool(name) {
   const override = process.env[`ANDROID_${name.toUpperCase()}`]?.trim();
   if (override) return override;
@@ -44,7 +57,13 @@ function androidTool(name) {
 }
 
 function runTool(command, args) {
-  const result = spawnSync(command, args, { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+  const windowsBatch = process.platform === 'win32' && /\.(?:bat|cmd)$/i.test(command);
+  const executable = windowsBatch ? process.env.ComSpec || 'cmd.exe' : command;
+  const toolArgs = windowsBatch ? ['/d', '/s', '/c', command, ...args] : args;
+  const result = spawnSync(executable, toolArgs, {
+    encoding: 'utf8',
+    maxBuffer: 8 * 1024 * 1024,
+  });
   if (result.error || result.status !== 0) {
     throw new Error(
       `APK identity tool failed (${command}): ${result.error?.message || result.stderr || `exit ${result.status}`}`,
@@ -68,5 +87,6 @@ export function inspectApkIdentity(apkPath, expected) {
   const certificateSha256 = parseApksignerCertificateSha256(
     runTool(androidTool('apksigner'), ['verify', '--verbose', '--print-certs', apkPath]),
   );
+  assertExpectedSigningCertificate(certificateSha256, expected.certificateSha256);
   return { ...badging, certificateSha256 };
 }

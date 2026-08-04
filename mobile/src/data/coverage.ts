@@ -1,8 +1,14 @@
 import type { CoverageFailure, PayloadCoverage } from '../types';
 
 export function coverageFailures(coverage: PayloadCoverage | null | undefined): CoverageFailure[] {
-  if (coverage?.provider_failures?.length) return coverage.provider_failures;
+  if (Array.isArray(coverage?.provider_failures)) return coverage.provider_failures;
   return coverage?.failures ?? [];
+}
+
+export function coverageFailureProvenanceReported(
+  coverage: PayloadCoverage | null | undefined,
+): boolean {
+  return Array.isArray(coverage?.provider_failures) || Array.isArray(coverage?.failures);
 }
 
 export function coverageObservedAt(coverage: PayloadCoverage | null | undefined): string | null {

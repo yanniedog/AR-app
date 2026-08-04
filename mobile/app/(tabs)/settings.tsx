@@ -25,6 +25,7 @@ import {
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
 import { formatRunDate, relativeDate } from '../../src/data/format';
 import {
+  coverageFailureProvenanceReported,
   coverageFailures,
   coverageObservedAt,
   coverageProvidersAttempted,
@@ -350,7 +351,12 @@ export default function Settings() {
             label="Providers observed"
             value={coverageProvidersSucceeded(core?.coverage) != null ? String(coverageProvidersSucceeded(core?.coverage)) : 'Not reported by this data set'}
           />
-          <InfoRow label="Provider failure groups" value={core?.coverage ? String(coverageFailures(core.coverage).length) : 'Not reported by this data set'} />
+          <InfoRow
+            label="Provider failure groups"
+            value={coverageFailureProvenanceReported(core?.coverage)
+              ? String(coverageFailures(core?.coverage).length)
+              : 'Not reported by this data set'}
+          />
           {source === 'sample' ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 6, lineHeight: 16 }}>
               Bundled sample only — not today’s market. Connect and refresh before relying on a rate.
