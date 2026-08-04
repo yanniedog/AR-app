@@ -107,7 +107,7 @@ describe('filter matching helpers', () => {
     expect(rowsForSearchSubscription(core(rows), sub)).toHaveLength(1);
   });
 
-  test('saved search identity preserves the selected sort', () => {
+  test('saved search stores display sort without duplicating alert identity', () => {
     const input = {
       section: 'Mortgage' as const,
       path: ['OO'],
@@ -129,7 +129,7 @@ describe('filter matching helpers', () => {
     };
     const sub = makeSearchSubscription(input);
     expect(sub.sort).toBe('bank');
-    expect(sub.id).not.toBe(makeSearchSubscription({ ...input, sort: 'rate' }).id);
+    expect(sub.id).toBe(makeSearchSubscription({ ...input, sort: 'rate' }).id);
   });
 
   test('buildSearchLabel is compact', () => {

@@ -1,4 +1,4 @@
-import { loyaltyGapInsight } from '../src/data/decisionInsights';
+import { loyaltyGapInsight, percentageInputFraction } from '../src/data/decisionInsights';
 
 describe('loyalty gap insight', () => {
   it('measures mortgage cost above an eligibility-matched best', () => {
@@ -19,5 +19,17 @@ describe('loyalty gap insight', () => {
 
   it('does not invent a negative gap when the user already has the better rate', () => {
     expect(loyaltyGapInsight('TD', 50_000, 0.055, 0.05, null)?.annualDollars).toBe(0);
+  });
+});
+
+describe('percentageInputFraction', () => {
+  it('parses calculator values as percentages even below one percent', () => {
+    expect(percentageInputFraction('0.50')).toBe(0.005);
+    expect(percentageInputFraction('6.00%')).toBe(0.06);
+  });
+
+  it('does not invent a rate for an empty or invalid field', () => {
+    expect(percentageInputFraction('')).toBeNull();
+    expect(percentageInputFraction('not a rate')).toBeNull();
   });
 });

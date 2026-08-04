@@ -1,4 +1,4 @@
-import { useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
@@ -12,10 +12,10 @@ import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
 import { computeLvr, num } from '../../src/data/calc';
-import { loyaltyGapInsight } from '../../src/data/decisionInsights';
+import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
-import { profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
+import { lvrTierForValue, profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { conditionalNote } from '../../src/lib/rateQualifier';
@@ -56,15 +56,17 @@ export default function Home() {
   const [userScenario, setUserScenario] = useState(EMPTY_USER_RATE_SCENARIO);
   const filterPrepAttempts = useRef(0);
 
-  useEffect(() => {
-    let active = true;
-    void loadUserRateScenario().then((value) => {
-      if (active) setUserScenario(value);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadUserRateScenario().then((value) => {
+        if (active) setUserScenario(value);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -184,6 +186,18 @@ export default function Home() {
   const sectionRows = core?.sections[section]?.rates;
   const sectionData = core?.sections[section];
   const hierRows = useMemo(() => rowsUnder(sectionRows ?? [], section, []), [sectionRows, section]);
+  const mortgageScenario = useMemo(() => computeLvr(userScenario.mortgage), [userScenario.mortgage]);
+  const scenarioLvrTier = useMemo(() => {
+    if (section !== 'Mortgage' || mortgageScenario.lvr == null) return null;
+    return lvrTierForValue(
+      mortgageScenario.lvr,
+      [...new Set((sectionRows ?? []).map((row) => row.lvr_tier).filter((tier): tier is string => !!tier))],
+    );
+  }, [mortgageScenario.lvr, section, sectionRows]);
+  const decisionProfileFilters = useMemo(
+    () => scenarioLvrTier ? { ...profileFilters, lvrTiers: [scenarioLvrTier] } : profileFilters,
+    [profileFilters, scenarioLvrTier],
+  );
   const stats = useMemo(
     () => {
       void suitabilityRevision;
@@ -201,12 +215,12 @@ export default function Home() {
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR,
   // and must-have account features once details are warm).
-  const profileCount = profileSectionCount(profileFilters, section);
+  const profileCount = profileSectionCount(decisionProfileFilters, section);
   const best = useMemo(
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(hierRows, profileFilters, section, detailsProducts),
+        profileFilterRows(hierRows, decisionProfileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -214,13 +228,13 @@ export default function Home() {
         mortgageRateMetric,
       );
     },
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
+    [hierRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
   const fallbackBest = useMemo(
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(sectionRows ?? [], profileFilters, section, detailsProducts),
+        profileFilterRows(sectionRows ?? [], decisionProfileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -228,7 +242,7 @@ export default function Home() {
         mortgageRateMetric,
       );
     },
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
+    [sectionRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];
@@ -243,28 +257,30 @@ export default function Home() {
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
   const scenarioSummary = useMemo(() => {
-    const mortgage = computeLvr(userScenario.mortgage);
     if (section === 'Mortgage') {
       return {
-        currentRate: toFraction(userScenario.mortgage.currentRate),
-        principal: mortgage.loan ?? num(userScenario.mortgage.loanBalance),
+        currentRate: percentageInputFraction(userScenario.mortgage.currentRate),
+        principal: mortgageScenario.loan ?? num(userScenario.mortgage.loanBalance),
       };
     }
     const deposit = section === 'Savings' ? userScenario.savings : userScenario.termDeposit;
-    return { currentRate: toFraction(deposit.currentRate), principal: num(deposit.balance) };
-  }, [section, userScenario]);
+    return { currentRate: percentageInputFraction(deposit.currentRate), principal: num(deposit.balance) };
+  }, [mortgageScenario.loan, section, userScenario]);
+  const loyaltyComparisonRate = section === 'Mortgage' && activeBest
+    ? toFraction(activeBest.rate)
+    : heroRate;
   const loyaltyGap = useMemo(
     () =>
-      heroRate != null && scenarioSummary.currentRate != null
+      loyaltyComparisonRate != null && scenarioSummary.currentRate != null
         ? loyaltyGapInsight(
             section,
             scenarioSummary.principal,
             scenarioSummary.currentRate,
-            heroRate,
+            loyaltyComparisonRate,
             stats.median,
           )
         : null,
-    [heroRate, scenarioSummary, section, stats.median],
+    [loyaltyComparisonRate, scenarioSummary, section, stats.median],
   );
   const shareMessage = useMemo(() => {
     if (!core) return null;
@@ -315,7 +331,7 @@ export default function Home() {
               <View style={{ alignItems: 'flex-end' }}>
                 <AppText variant="small" color="textMuted">Matched observed best</AppText>
                 <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
-                  {formatRate(heroRate)}
+                  {formatRate(loyaltyComparisonRate)}
                 </AppText>
               </View>
             </Row>
@@ -329,6 +345,11 @@ export default function Home() {
             <AppText variant="tiny" color="textMuted">
               Based on ${Math.round(scenarioSummary.principal).toLocaleString()} and the selected profile. Excludes fees, tax, switching costs and future rate changes; not financial advice.
             </AppText>
+            {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
+              <AppText variant="tiny" color="textMuted">
+                Product selection follows your comparison-rate ranking; the dollar illustration uses its advertised interest rate.
+              </AppText>
+            ) : null}
             {activeBest ? (
               <Button
                 title="View supporting rate"

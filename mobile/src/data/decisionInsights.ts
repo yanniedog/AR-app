@@ -7,6 +7,14 @@ export interface LoyaltyGapInsight {
   typicalGapRate: number | null;
 }
 
+/** Calculator fields are labelled and persisted as percentages, including values below 1%. */
+export function percentageInputFraction(input: string): number | null {
+  const raw = String(input ?? '').trim().replace(/%$/, '').trim();
+  if (!raw) return null;
+  const percentage = Number(raw);
+  return Number.isFinite(percentage) ? percentage / 100 : null;
+}
+
 /**
  * Illustrative observed gap only: no forecast, switching cost, tax or advice claim.
  * Rates are fractions (for example 0.055 for 5.5%).

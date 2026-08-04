@@ -51,7 +51,6 @@ function searchSnapshotKey(input: {
     path: input.path,
     hierarchyScoped: input.hierarchyScoped,
     query: input.query.trim().toLowerCase(),
-    sort: input.sort ?? 'rate',
     filters: normalizeFilterSnapshot(input.filters),
   });
 }
@@ -169,7 +168,11 @@ export function findSearchSubscription(
   },
 ): SearchSubscription | undefined {
   const id = `search:${searchSnapshotKey(input)}`;
-  const hit = list.find((s) => s.id === id);
+  const hit = list.find(
+    (s) =>
+      s.kind === 'search' &&
+      (s.id === id || searchSnapshotKey(s) === searchSnapshotKey(input)),
+  );
   return hit?.kind === 'search' ? hit : undefined;
 }
 

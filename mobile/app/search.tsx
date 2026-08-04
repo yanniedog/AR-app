@@ -118,8 +118,11 @@ export default function Search() {
   }, [core, section, path, hierarchyScoped]);
 
   const effectiveFilters = useMemo(
-    () => ({ ...filters, includeNonStandard }),
-    [filters, includeNonStandard],
+    () => ({
+      ...filters,
+      includeNonStandard: restoredSub ? filters.includeNonStandard : includeNonStandard,
+    }),
+    [filters, includeNonStandard, restoredSub],
   );
 
   const rows = useMemo(

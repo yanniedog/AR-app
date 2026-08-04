@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
 import { InsightsLockedCard } from '../../src/components/BankInsights';
@@ -22,6 +23,7 @@ export default function PassThroughTab() {
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const [retrying, setRetrying] = useState(false);
+  const { date: decisionDate } = useLocalSearchParams<{ date?: string }>();
 
   useEffect(() => {
     if (!enabled || !core) return;
@@ -79,5 +81,12 @@ export default function PassThroughTab() {
     );
   }
 
-  return <PassThroughDashboard payload={payload} rba={core.rba} calendar={calendar} />;
+  return (
+    <PassThroughDashboard
+      payload={payload}
+      rba={core.rba}
+      calendar={calendar}
+      initialDecisionDate={decisionDate}
+    />
+  );
 }
