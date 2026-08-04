@@ -21,6 +21,13 @@ export async function validateGeneratedSample(sourceDir) {
   if (manifest.schema_version !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(manifest.run_date ?? '')) {
     throw new Error('Generated sample manifest must be schema version 1 with an ISO run_date.');
   }
+  if (
+    typeof manifest.generated_at !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(manifest.generated_at) ||
+    !Number.isFinite(Date.parse(manifest.generated_at))
+  ) {
+    throw new Error('Generated sample manifest must include an absolute ISO generated_at timestamp.');
+  }
   if (manifest.repo !== 'yanniedog/AR-local' || manifest.tag !== 'bundled-sample') {
     throw new Error('Generated sample must identify AR-local and the bundled-sample contract.');
   }

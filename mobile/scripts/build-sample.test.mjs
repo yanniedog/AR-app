@@ -18,6 +18,7 @@ test('installs only a self-consistent producer sample contract', async () => {
     const core = JSON.stringify({
       schema_version: 1,
       run_date: '2026-08-01',
+      generated_at: '2026-08-01T00:00:00Z',
       sections: { Mortgage: { rates: [], ribbon: {} }, Savings: { rates: [], ribbon: {} }, TD: { rates: [], ribbon: {} } },
       brands: {},
       rba: [],
@@ -27,6 +28,7 @@ test('installs only a self-consistent producer sample contract', async () => {
     const manifest = {
       schema_version: 1,
       run_date: '2026-08-01',
+      generated_at: '2026-08-01T00:00:00Z',
       repo: 'yanniedog/AR-local',
       tag: 'bundled-sample',
       counts: { products: 0, providers: 0, rates: 0 },
@@ -45,6 +47,11 @@ test('installs only a self-consistent producer sample contract', async () => {
     const invalid = { ...manifest, files: { ...manifest.files, core: { ...manifest.files.core, sha256: 'bad' } } };
     await writeFile(path.join(source, 'manifest.json'), JSON.stringify(invalid));
     await assert.rejects(() => installSample(source, target), /SHA-256 mismatch/);
+    await writeFile(path.join(source, 'manifest.json'), JSON.stringify({ ...manifest, generated_at: 'not-a-time' }));
+    await assert.rejects(() => installSample(source, target), /absolute ISO generated_at/);
+    const { generated_at: _omitted, ...missingGeneratedAt } = manifest;
+    await writeFile(path.join(source, 'manifest.json'), JSON.stringify(missingGeneratedAt));
+    await assert.rejects(() => installSample(source, target), /absolute ISO generated_at/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

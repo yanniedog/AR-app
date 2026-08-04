@@ -76,8 +76,9 @@ export function createBootstrapActions(
             `ignoring stale or replaced bundled sample cache observed ${cachedBundle?.meta.manifest.run_date}`,
           );
         }
-        const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
+        const [rawCachedSearch, cachedOptionalMeta, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
+          effectiveDeepSearch(prefs) ? cache.readOptionalMeta() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
           // Bank insights are free, but remain screen-lazy so first paint does
           // not hydrate product history unless the user enabled history charts.
@@ -94,6 +95,19 @@ export function createBootstrapActions(
               })
             : Promise.resolve(null),
         ]);
+        const searchAsset = bundle?.meta.manifest.files.search_index;
+        const cachedSearch =
+          rawCachedSearch &&
+          bundle &&
+          searchAsset &&
+          rawCachedSearch.run_date === bundle.core.run_date &&
+          cachedOptionalMeta?.coreSha === bundle.meta.coreSha &&
+          cachedOptionalMeta.searchIndexSha === searchAsset.sha256
+            ? rawCachedSearch
+            : null;
+        if (rawCachedSearch && !cachedSearch) {
+          debugLog.warn('store', 'ignoring search index that does not match the cached core revision');
+        }
         if (bundle) {
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();

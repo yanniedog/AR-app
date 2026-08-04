@@ -146,7 +146,6 @@ export function RbaChart({
 
   if (!data.length) return null;
 
-  const last = data[data.length - 1];
   const a11ySummary = rbaChartA11ySummary(data, holdMarks.length);
 
   return (
@@ -202,17 +201,21 @@ export function RbaChart({
               />
             );
           })}
-          <Circle cx={xAtDate(chartEndDate)} cy={y(last.rate)} r={4} fill={theme.colors.rba} />
-          <SvgText
-            x={xAtDate(chartEndDate)}
-            y={y(last.rate) - 8}
-            fontSize={11}
-            fontWeight="bold"
-            fill={theme.colors.text}
-            textAnchor="end"
-          >
-            {formatRate(last.rate)}
-          </SvgText>
+          {activeRate != null ? (
+            <>
+              <Circle cx={xAtDate(activeDate)} cy={y(activeRate)} r={4} fill={theme.colors.rba} />
+              <SvgText
+                x={xAtDate(activeDate)}
+                y={y(activeRate) - 8}
+                fontSize={11}
+                fontWeight="bold"
+                fill={theme.colors.text}
+                textAnchor="end"
+              >
+                {formatRate(activeRate)}
+              </SvgText>
+            </>
+          ) : null}
           </Svg>
         ) : null}
       </View>
