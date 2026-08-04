@@ -3,6 +3,7 @@ import {
   fetchCumulativeChangelogs,
   type VersionChangelogSummary,
 } from './changelog';
+import releaseIdentity from '../../release-identity.json';
 
 export interface ApkManifest {
   schema_version: number;
@@ -11,6 +12,8 @@ export interface ApkManifest {
   download_url: string;
   sha256?: string;
   bytes?: number;
+  package_name?: string;
+  signing_certificate_sha256?: string;
   published_at?: string;
   repo?: string;
   tag?: string;
@@ -19,6 +22,10 @@ export interface ApkManifest {
   eas_build_id?: string;
   profile?: string;
 }
+
+export const TRUSTED_ANDROID_PACKAGE = releaseIdentity.android_package;
+export const TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 =
+  releaseIdentity.signing_certificate_sha256.toLowerCase();
 
 export interface InstalledAppInfo {
   version: string;
@@ -95,6 +102,18 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   }
   if (!/^\d+$/.test(manifest.build_number)) throw new Error('APK manifest build_number is invalid');
   assertDownloadedApkMatchesManifest(manifest.bytes ?? 0, manifest);
+  if (manifest.package_name !== TRUSTED_ANDROID_PACKAGE) {
+    throw new Error('APK manifest package does not match Australian Rates');
+  }
+  if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {
+    throw new Error('APK manifest signing certificate is missing or invalid');
+  }
+  if (
+    manifest.signing_certificate_sha256?.toLowerCase() !==
+    TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256
+  ) {
+    throw new Error('APK manifest signing certificate does not match Australian Rates');
+  }
 
   const immutable = preferImmutableApkDownloadUrl(manifest);
   let parsed: URL;

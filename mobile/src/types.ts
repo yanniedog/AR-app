@@ -93,13 +93,38 @@ export interface CorePayload {
   /** RBA meeting dates that left the cash-rate target unchanged (holds). */
   rba_holds?: string[];
   /** Optional producer-measured ingest coverage; absent on older payloads. */
-  coverage?: {
-    observed_at?: string;
-    providers_attempted?: number;
-    providers_succeeded?: number;
-    failures?: { provider: string; reason?: string }[];
-    limitations?: string[];
+  coverage?: PayloadCoverage;
+}
+
+export interface CoverageFailure {
+  provider: string;
+  reason?: string;
+  phase?: string;
+  status?: string;
+  count?: number;
+}
+
+export interface PayloadCoverage {
+  schema_version?: number;
+  /** Canonical producer observation date. */
+  observed_on?: string;
+  /** Backward-compatible timestamp alias. */
+  observed_at?: string;
+  providers_attempted?: number;
+  providers_succeeded?: number;
+  /** Canonical producer failure groups. */
+  provider_failures?: CoverageFailure[];
+  /** Backward-compatible failure alias. */
+  failures?: CoverageFailure[];
+  counts?: {
+    brands_observed?: number;
+    providers_failed?: number;
+    providers_partial?: number;
+    products?: number;
+    rates?: number;
+    failure_records?: number;
   };
+  limitations?: string[];
 }
 
 export interface DetailItem {
