@@ -7,7 +7,7 @@
     "webBundleBytes": 5365957,
     "fontBytes": 2302456,
     "assetBytes": 4717808,
-    "apkBytes": 75000000
+    "apkBytes": 132510218
   },
-  "notes": "Bundle, font, and asset baselines are the canonical fresh-install all-platform export. The APK ceiling allows 5% growth over 75 MB and therefore remains well below the 92.8 MB maximum required for a 30% reduction from v1.0.81. APK enforcement runs in the shared publisher and the native release report."
+  "notes": "Bundle, font, asset, and transition APK baselines are the canonical fresh-install artifacts. The shared publisher and native release report enforce these budgets. After the ABI-aware transition release is live, the ARM-only release lowers the APK baseline to 75 MB."
 }

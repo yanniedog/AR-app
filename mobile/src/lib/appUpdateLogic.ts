@@ -25,9 +25,9 @@ export interface ApkManifest {
 }
 
 export const TRUSTED_ANDROID_PACKAGE = releaseIdentity.android_package;
-export const TRUSTED_ANDROID_RELEASE_ABIS = [...releaseIdentity.android_release_abis].sort();
 export const TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 =
   releaseIdentity.signing_certificate_sha256.toLowerCase();
+const KNOWN_ANDROID_APK_ABIS = new Set(['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64']);
 
 export interface InstalledAppInfo {
   version: string;
@@ -115,9 +115,13 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
     ) {
       throw new Error('APK manifest ABI list is invalid');
     }
-    const supportedAbis = [...new Set(manifest.supported_abis)].sort();
-    if (JSON.stringify(supportedAbis) !== JSON.stringify(TRUSTED_ANDROID_RELEASE_ABIS)) {
-      throw new Error('APK manifest ABI list does not match Australian Rates');
+    const supportedAbis = [...new Set(manifest.supported_abis.map((abi) => abi.trim()))];
+    if (
+      !supportedAbis.length ||
+      supportedAbis.length !== manifest.supported_abis.length ||
+      supportedAbis.some((abi) => !KNOWN_ANDROID_APK_ABIS.has(abi))
+    ) {
+      throw new Error('APK manifest ABI list is invalid');
     }
   }
   if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {

@@ -24,7 +24,7 @@ const baseManifest: ApkManifest = {
   bytes: 130_000_000,
   sha256: '518fdd8767ca26d02775e585e3ea4bfc53b92e0788c9ae5751cc0eb593e5607a',
   package_name: 'com.eyex.australianrates',
-  supported_abis: ['armeabi-v7a', 'arm64-v8a'],
+  supported_abis: ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'],
   signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
 };
 
@@ -101,7 +101,7 @@ describe('appUpdateLogic', () => {
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: async () => ({ ...baseManifest, supported_abis: ['arm64-v8a', 'x86_64'] }),
+      json: async () => ({ ...baseManifest, supported_abis: ['arm64-v8a', 'mips'] }),
     });
     await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/ABI list/i);
 
@@ -132,18 +132,22 @@ describe('appUpdateLogic', () => {
   });
 
   it('does not offer or download an APK that cannot run on this device', async () => {
-    expect(isApkCompatibleWithDevice(baseManifest, ['arm64 v8'])).toBe(true);
-    expect(isApkCompatibleWithDevice(baseManifest, ['x86_64'])).toBe(false);
+    const armOnlyManifest = {
+      ...baseManifest,
+      supported_abis: ['armeabi-v7a', 'arm64-v8a'],
+    };
+    expect(isApkCompatibleWithDevice(armOnlyManifest, ['arm64 v8'])).toBe(true);
+    expect(isApkCompatibleWithDevice(armOnlyManifest, ['x86_64'])).toBe(false);
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
-      json: async () => baseManifest,
+      json: async () => armOnlyManifest,
     });
     await expect(checkForAppUpdateAt(manifestUrl, installed, ['x86_64'])).resolves.toMatchObject({
       status: 'incompatible',
       installed,
-      remote: baseManifest,
+      remote: armOnlyManifest,
     });
-    expect(() => assertApkCompatibleWithDevice(baseManifest, ['x86_64'])).toThrow(
+    expect(() => assertApkCompatibleWithDevice(armOnlyManifest, ['x86_64'])).toThrow(
       /this APK supports/i,
     );
   });
