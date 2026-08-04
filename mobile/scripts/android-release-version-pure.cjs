@@ -46,8 +46,23 @@ function nextVersionCode(current, remote, runFloor = 0) {
     : Math.max(currentCode, workflowFloor);
 }
 
+/** Combine channel manifests without allowing either version or versionCode to move backwards. */
+function mergeReleaseFloors(remotes) {
+  const valid = (remotes || []).filter(Boolean);
+  if (!valid.length) return null;
+  return {
+    version: valid.reduce(
+      (latest, item) =>
+        compareVersions(String(item.version), String(latest)) > 0 ? String(item.version) : latest,
+      String(valid[0].version),
+    ),
+    buildNumber: Math.max(...valid.map((item) => Number(item.buildNumber))),
+  };
+}
+
 module.exports = {
   compareVersions,
+  mergeReleaseFloors,
   nextReleaseVersion,
   nextVersionCode,
 };

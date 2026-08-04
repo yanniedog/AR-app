@@ -8,6 +8,7 @@ import {
   assertDownloadedApkMatchesManifest,
   checkForAppUpdateAcrossChannels,
   checkForAppUpdateAt,
+  fetchBestCompatibleApkManifest,
   fetchApkManifest,
   isApkCompatibleWithDevice,
   isSuccessfulDownloadStatus,
@@ -194,6 +195,29 @@ describe('appUpdateLogic', () => {
       ),
     ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
     expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('shares the newest trusted compatible APK across active channels', async () => {
+    const armManifestUrl =
+      'https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-apk-latest.json';
+    const armManifest: ApkManifest = {
+      ...baseManifest,
+      build_number: '41',
+      supported_abis: ['armeabi-v7a', 'arm64-v8a'],
+      version_tag: 'app-arm-v1.0.0',
+      download_url:
+        'https://github.com/yanniedog/AR-app/releases/download/app-arm-v1.0.0/app-preview.apk',
+    };
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, json: async () => armManifest })
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      fetchBestCompatibleApkManifest(
+        [armManifestUrl, manifestUrl],
+        ['arm64-v8a'],
+      ),
+    ).resolves.toEqual(baseManifest);
   });
 
   it('aborts a stalled ARM channel before falling back to universal', async () => {

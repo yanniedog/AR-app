@@ -10,8 +10,8 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   ARM_ROLLING_TAG,
   ROLLING_TAG,
@@ -20,6 +20,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const {
+  mergeReleaseFloors,
   nextReleaseVersion,
   nextVersionCode,
 } = require('./android-release-version-pure.cjs');
@@ -51,37 +52,58 @@ const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
 const currentVersion = String(appJson.expo?.version ?? '1.0.0');
 const currentCode = Number(appJson.expo?.android?.versionCode ?? 1) || 1;
 
-async function fetchRemoteManifest(targetRepo = repo, tag = rollingTag) {
+export async function fetchRemoteManifest(
+  targetRepo = repo,
+  tag = rollingTag,
+  timeoutMs = 10_000,
+  fetchImpl = fetch,
+) {
   if (!targetRepo) return null;
   const url = `https://github.com/${targetRepo}/releases/download/${tag}/${MANIFEST_ASSET}`;
-  const res = await fetch(url, { headers: { Accept: 'application/json' } });
-  if (res.status === 404) {
-    console.log(`bump-android-version-code: no manifest at ${url}; starting from current`);
-    return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  timer.unref?.();
+  try {
+    const res = await fetchImpl(url, {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    });
+    if (res.status === 404) {
+      console.log(`bump-android-version-code: no manifest at ${url}; starting from current`);
+      return null;
+    }
+    if (!res.ok) {
+      throw new Error(`Could not read release manifest at ${url} (HTTP ${res.status})`);
+    }
+    const manifest = await res.json();
+    const buildNumber = parseInt(String(manifest.build_number ?? ''), 10);
+    const version = String(manifest.version ?? '').trim();
+    if (!Number.isFinite(buildNumber) || !version) {
+      throw new Error(`Release manifest at ${url} is missing version or build_number`);
+    }
+    return { buildNumber, version };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      console.warn(`bump-android-version-code: manifest request timed out after ${timeoutMs} ms: ${url}`);
+      return null;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  if (!res.ok) {
-    throw new Error(`Could not read release manifest at ${url} (HTTP ${res.status})`);
-  }
-  const manifest = await res.json();
-  const buildNumber = parseInt(String(manifest.build_number ?? ''), 10);
-  const version = String(manifest.version ?? '').trim();
-  if (!Number.isFinite(buildNumber) || !version) {
-    throw new Error(`Release manifest at ${url} is missing version or build_number`);
-  }
-  return { buildNumber, version };
 }
 
 async function main() {
   const primaryRemote = await fetchRemoteManifest(repo, rollingTag);
   const universalFloor =
-    primaryRemote == null && rollingTag !== ROLLING_TAG
+    rollingTag !== ROLLING_TAG
       ? await fetchRemoteManifest(repo, ROLLING_TAG)
       : null;
   const fallbackRemote =
     primaryRemote == null && universalFloor == null && fallbackRepo
       ? await fetchRemoteManifest(fallbackRepo, ROLLING_TAG)
       : null;
-  const remote = primaryRemote ?? universalFloor ?? fallbackRemote;
+  const remote = mergeReleaseFloors([primaryRemote, universalFloor, fallbackRemote]);
   const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
   const nextVersion = nextReleaseVersion(currentVersion, remote?.version);
   const nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
@@ -101,7 +123,9 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error(err instanceof Error ? err.message : err);
-  process.exit(1);
-});
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : err);
+    process.exit(1);
+  });
+}

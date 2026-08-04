@@ -204,6 +204,25 @@ test('first ARM auto-release uses the universal manifest as its version floor', 
   assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
 });
 
+test('ARM manifest timeout still allows the universal transition floor', async () => {
+  const requestedUrls = [];
+  const published = await readPublishedVersion(
+    async (url, { signal }) => {
+      requestedUrls.push(url);
+      if (url.includes('/app-apk-arm-latest/')) {
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('arm timed out')), { once: true });
+        });
+      }
+      return { ok: true, json: async () => ({ version: '1.0.84' }) };
+    },
+    { timeoutMs: 5, warn: () => {} },
+  );
+
+  assert.equal(published, '1.0.84');
+  assert.equal(requestedUrls.length, 2);
+});
+
 test('rolling-manifest failures fall back to the checked-in release floor', async () => {
   const warnings = [];
   const missing = await readPublishedVersion(

@@ -10,6 +10,7 @@ import {
   parseAaptBadging,
   parseApksignerCertificateSha256,
 } from './apk-identity.mjs';
+import { fetchRemoteManifest } from './bump-android-version-code.mjs';
 
 test('parses the package and version identity reported by aapt', () => {
   assert.deepEqual(
@@ -35,6 +36,39 @@ test('requires exactly the configured release ABIs', () => {
 
 test('reports a missing rolling-tag CLI value explicitly', () => {
   const script = fileURLToPath(new URL('./bump-android-version-code.mjs', import.meta.url));
+  const result = spawnSync(process.execPath, [script, '--rolling-tag'], { encoding: 'utf8' });
+
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /Missing value for --rolling-tag/);
+});
+
+test('bounds each release-floor manifest request independently', async () => {
+  const stalled = await fetchRemoteManifest(
+    'owner/repo',
+    'app-apk-arm-latest',
+    5,
+    (_url, { signal }) =>
+      new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+      }),
+  );
+  assert.equal(stalled, null);
+
+  const universal = await fetchRemoteManifest(
+    'owner/repo',
+    'app-apk-latest',
+    5,
+    async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ version: '1.0.84', build_number: '205' }),
+    }),
+  );
+  assert.deepEqual(universal, { version: '1.0.84', buildNumber: 205 });
+});
+
+test('rejects a missing rolling tag before generating changelog metadata', () => {
+  const script = fileURLToPath(new URL('./ensure-changelog-entry.mjs', import.meta.url));
   const result = spawnSync(process.execPath, [script, '--rolling-tag'], { encoding: 'utf8' });
 
   assert.notEqual(result.status, 0);

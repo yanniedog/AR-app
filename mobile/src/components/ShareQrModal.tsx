@@ -1,14 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import * as Device from 'expo-device';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, Share, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
-import { APK_MANIFEST_URL, APK_RELEASE_TAG, REPO } from '../config';
-import { fetchApkManifest } from '../lib/appUpdateLogic';
+import {
+  APK_ARM_MANIFEST_URL,
+  APK_ARM_RELEASE_TAG,
+  APK_MANIFEST_URL,
+  APK_RELEASE_TAG,
+  REPO,
+} from '../config';
+import {
+  apkManifestUrlsForDevice,
+  fetchBestCompatibleApkManifest,
+} from '../lib/appUpdateLogic';
 import { logSwallowedError } from '../lib/degradationLog';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
-
-const RELEASE_PAGE_URL = `https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`;
 
 /**
  * Share dialog with a scannable QR for the latest Android APK — point a friend's
@@ -26,11 +34,23 @@ export function ShareQrModal({
 }) {
   const theme = useTheme();
   const [apkUrl, setApkUrl] = useState<string | null>(null);
+  const manifestUrls = useMemo(
+    () =>
+      apkManifestUrlsForDevice(
+        Device.supportedCpuArchitectures,
+        APK_MANIFEST_URL,
+        APK_ARM_MANIFEST_URL,
+      ),
+    [],
+  );
+  const preferredReleaseTag =
+    manifestUrls[0] === APK_ARM_MANIFEST_URL ? APK_ARM_RELEASE_TAG : APK_RELEASE_TAG;
+  const releasePageUrl = `https://github.com/${REPO}/releases/tag/${preferredReleaseTag}`;
 
   useEffect(() => {
     if (!visible || apkUrl) return;
     let alive = true;
-    fetchApkManifest(APK_MANIFEST_URL)
+    fetchBestCompatibleApkManifest(manifestUrls, Device.supportedCpuArchitectures)
       .then((m) => {
         if (alive && m?.download_url) setApkUrl(m.download_url);
       })
@@ -38,9 +58,9 @@ export function ShareQrModal({
     return () => {
       alive = false;
     };
-  }, [visible, apkUrl]);
+  }, [visible, apkUrl, manifestUrls]);
 
-  const qrValue = apkUrl ?? RELEASE_PAGE_URL;
+  const qrValue = apkUrl ?? releasePageUrl;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -78,7 +98,7 @@ export function ShareQrModal({
                 icon="share-social-outline"
                 variant="secondary"
                 onPress={() => {
-                  void Share.share({ message: shareMessage });
+                  void Share.share({ message: `${shareMessage}\nGet the app: ${qrValue}` });
                 }}
               />
             ) : null}

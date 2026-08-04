@@ -77,6 +77,12 @@ test('uses a separate lower APK ceiling for the ARM channel', () => {
     /exceeds 78750000 bytes/i,
   );
   assert.equal(artifactBudgetForChannel(configured).baseline.apkBytes, 132_510_218);
+  for (const arm of [undefined, 0, -1, Number.POSITIVE_INFINITY]) {
+    assert.throws(
+      () => artifactBudgetForChannel({ ...configured, apkBaselineByChannel: { arm } }, 'arm'),
+      /missing APK size baseline for channel: arm/i,
+    );
+  }
   assert.throws(
     () => artifactBudgetForChannel(configured, 'attacker-controlled'),
     /unsupported APK size-budget channel/i,

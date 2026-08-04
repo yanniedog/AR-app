@@ -24,7 +24,6 @@ import { ShareQrModal } from '../../src/components/ShareQrModal';
 import { rowsUnder } from '../../src/data/taxonomy';
 import { useStore } from '../../src/data/store';
 import { shouldWarmDetails } from '../../src/data/optionalPrefs';
-import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -289,7 +288,6 @@ export default function Home() {
     return [
       `Best ${meta.title.toLowerCase()} rate today: ${formatRate(heroRate)} (${formatRunDate(core.run_date)})`,
       `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
-      `Get the AustralianRates app: https://github.com/${REPO}/releases/tag/${APK_RELEASE_TAG}`,
     ].join('\n');
   }, [core, meta, heroRate]);
   const shareToday = useCallback(() => setShareOpen(true), []);

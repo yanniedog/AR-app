@@ -28,9 +28,12 @@ const version =
   (vIdx >= 0 ? process.argv[vIdx + 1] : null)?.trim() ||
   String(JSON.parse(readFileSync(join(mobileRoot, "app.json"), "utf8")).expo?.version ?? "1.0.0").trim();
 const rollingTagArgIdx = process.argv.indexOf("--rolling-tag");
-const rollingTag = resolveApkRollingTag(
-  rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1] : ROLLING_TAG,
-);
+const rollingTagValue =
+  rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1]?.trim() : ROLLING_TAG;
+if (rollingTagArgIdx >= 0 && (!rollingTagValue || rollingTagValue.startsWith("--"))) {
+  throw new Error("Missing value for --rolling-tag");
+}
+const rollingTag = resolveApkRollingTag(rollingTagValue);
 
 const result = ensureVersionEntry({
   version,

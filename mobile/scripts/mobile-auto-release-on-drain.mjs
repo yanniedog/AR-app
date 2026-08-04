@@ -246,12 +246,12 @@ export async function readPublishedVersion(
   fetchImpl = fetch,
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
   try {
     let lastError = null;
     for (const tag of [ARM_ROLLING_TAG, ROLLING_TAG]) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      timer.unref?.();
       const url =
         `https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json` +
         `?_=${Date.now()}`;
@@ -272,7 +272,8 @@ export async function readPublishedVersion(
         return version;
       } catch (error) {
         lastError = error;
-        if (controller.signal.aborted) throw error;
+      } finally {
+        clearTimeout(timer);
       }
     }
     throw lastError ?? new Error('rolling manifests unavailable');
@@ -283,8 +284,6 @@ export async function readPublishedVersion(
       )})`,
     );
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
