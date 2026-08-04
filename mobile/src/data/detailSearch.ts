@@ -10,6 +10,7 @@ type DetailIndex = Map<string, string>;
 let runtimeCache: { ref: Record<string, ProductDetail> | null | undefined; index: DetailIndex } | null = null;
 const queryMemo = new Map<string, Set<string>>();
 let lastMemoScope: string | null = null;
+let lastMemoIndex: SearchIndexPayload | null = null;
 export const DETAIL_SEARCH_MEMO_LIMIT = 32;
 
 function indexMemoScope(index: SearchIndexPayload, contentSha?: string | null): string {
@@ -60,6 +61,7 @@ export function resetDetailSearchIndexCache(): void {
   runtimeCache = null;
   queryMemo.clear();
   lastMemoScope = null;
+  lastMemoIndex = null;
 }
 
 /** Test/diagnostic hook: the production cache remains encapsulated. */
@@ -108,9 +110,13 @@ export function productKeysMatchingIndex(
   const q = query.trim().toLowerCase();
   if (!q || !index?.products) return null;
   const scope = indexMemoScope(index, contentSha);
-  if (lastMemoScope !== scope) {
+  // A corrected asset can legitimately retain its schema version and run date.
+  // Store refresh replaces the parsed object, so identity is the safe fallback
+  // revision key when a caller has no manifest content SHA available.
+  if (lastMemoScope !== scope || lastMemoIndex !== index) {
     queryMemo.clear();
     lastMemoScope = scope;
+    lastMemoIndex = index;
   }
   const memo = `${scope}:${q}`;
   const cached = memoGet(memo);

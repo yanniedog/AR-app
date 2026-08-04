@@ -73,25 +73,27 @@ export function RateHeatCalendar({
       : `${activeCell.deltaBps > 0 ? '+' : ''}${Math.round(activeCell.deltaBps * 10) / 10} basis points`;
 
   return (
-    <View
-      accessible
-      accessibilityRole="adjustable"
-      accessibilityLabel={`${SECTIONS[section].title} rate-move calendar. Selected ${activeDate}: ${activeValue}.`}
-      accessibilityHint="Swipe up or down to move between observation dates."
-      accessibilityActions={[
-        { name: 'increment', label: 'Next date' },
-        { name: 'decrement', label: 'Previous date' },
-      ]}
-      onAccessibilityAction={(event) => {
-        const next = event.nativeEvent.actionName === 'increment'
-          ? Math.min(observations.length - 1, activeIndex + 1)
-          : Math.max(0, activeIndex - 1);
-        onDateSelect?.(observations[next]?.date ?? null);
-      }}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-    >
-      {width > 0 ? (
-        <Svg width={gridW} height={gridH} importantForAccessibility="no-hide-descendants">
+    <View>
+      <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`${SECTIONS[section].title} rate-move calendar. Selected ${activeDate}: ${activeValue}.`}
+        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next date' },
+          { name: 'decrement', label: 'Previous date' },
+        ]}
+        onAccessibilityAction={(event) => {
+          const next = event.nativeEvent.actionName === 'increment'
+            ? Math.min(observations.length - 1, activeIndex + 1)
+            : Math.max(0, activeIndex - 1);
+          onDateSelect?.(observations[next]?.date ?? null);
+        }}
+        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        style={{ width: '100%' }}
+      >
+        {width > 0 ? (
+          <Svg width={gridW} height={gridH} importantForAccessibility="no-hide-descendants">
           {model.monthLabels.map((m) => (
             <SvgText
               key={`${m.weekIndex}-${m.label}`}
@@ -137,8 +139,9 @@ export function RateHeatCalendar({
               )}
             </G>
           ))}
-        </Svg>
-      ) : null}
+          </Svg>
+        ) : null}
+      </View>
       <ChartSliceControls
         dates={observations.map((cell) => cell?.date ?? '')}
         activeIndex={activeIndex}

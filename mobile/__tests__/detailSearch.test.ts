@@ -139,6 +139,22 @@ describe('detailSearch', () => {
     expect(detailSearchMemoSize()).toBe(DETAIL_SEARCH_MEMO_LIMIT);
   });
 
+  test('invalidates prefix memoization when a corrected index object keeps the same date', () => {
+    const first: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'solar offset home loan' },
+    };
+    const corrected: SearchIndexPayload = {
+      schema_version: 1,
+      run_date: '2026-08-04',
+      products: { a: 'solar offset home loan', b: 'solar offset saver' },
+    };
+
+    expect(productKeysMatchingIndex(first, 'solar')).toEqual(new Set(['a']));
+    expect(productKeysMatchingIndex(corrected, 'solar off')).toEqual(new Set(['a', 'b']));
+  });
+
   test('touches memo hits and defensively owns cached result sets', () => {
     let reads = 0;
     const products: Record<string, string> = {};
