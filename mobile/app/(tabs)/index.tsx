@@ -1,4 +1,5 @@
 import { useScrollToTop } from '@react-navigation/native';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
@@ -9,7 +10,9 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
 import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { formatRate, formatRunDate, relativeDate } from '../../src/data/format';
+import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
+import { computeLvr, num } from '../../src/data/calc';
+import { loyaltyGapInsight } from '../../src/data/decisionInsights';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
@@ -24,6 +27,7 @@ import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { EMPTY_USER_RATE_SCENARIO, loadUserRateScenario } from '../../src/data/userRateScenario';
 
 export default function Home() {
   const theme = useTheme();
@@ -49,7 +53,18 @@ export default function Home() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
+  const [userScenario, setUserScenario] = useState(EMPTY_USER_RATE_SCENARIO);
   const filterPrepAttempts = useRef(0);
+
+  useEffect(() => {
+    let active = true;
+    void loadUserRateScenario().then((value) => {
+      if (active) setUserScenario(value);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -227,6 +242,30 @@ export default function Home() {
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const scenarioSummary = useMemo(() => {
+    const mortgage = computeLvr(userScenario.mortgage);
+    if (section === 'Mortgage') {
+      return {
+        currentRate: toFraction(userScenario.mortgage.currentRate),
+        principal: mortgage.loan ?? num(userScenario.mortgage.loanBalance),
+      };
+    }
+    const deposit = section === 'Savings' ? userScenario.savings : userScenario.termDeposit;
+    return { currentRate: toFraction(deposit.currentRate), principal: num(deposit.balance) };
+  }, [section, userScenario]);
+  const loyaltyGap = useMemo(
+    () =>
+      heroRate != null && scenarioSummary.currentRate != null
+        ? loyaltyGapInsight(
+            section,
+            scenarioSummary.principal,
+            scenarioSummary.currentRate,
+            heroRate,
+            stats.median,
+          )
+        : null,
+    [heroRate, scenarioSummary, section, stats.median],
+  );
   const shareMessage = useMemo(() => {
     if (!core) return null;
     if (heroRate == null) return null; // nothing worth sharing until rates are loaded
@@ -261,6 +300,50 @@ export default function Home() {
         onShare={shareToday}
         coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${core.coverage?.failures?.length ? ` · ${core.coverage.failures.length} provider failures` : ''}`}
       />
+
+      <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
+        <AppText variant="tiny" color="textFaint" weight="700">
+          MY LOYALTY GAP
+        </AppText>
+        {loyaltyGap && scenarioSummary.currentRate != null ? (
+          <>
+            <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <View>
+                <AppText variant="small" color="textMuted">My saved rate</AppText>
+                <AppText variant="h3">{formatRate(scenarioSummary.currentRate)}</AppText>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <AppText variant="small" color="textMuted">Matched observed best</AppText>
+                <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
+                  {formatRate(heroRate)}
+                </AppText>
+              </View>
+            </Row>
+            <AppText variant="body" weight="700">
+              {loyaltyGap.gapRate > 0
+                ? `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
+                : 'Your saved rate is at least as strong as this matched observed rate.'}
+            </AppText>
+            <AppText variant="tiny" color="textMuted">
+              Based on ${Math.round(scenarioSummary.principal).toLocaleString()} and the selected profile. Excludes fees, tax, switching costs and future rate changes; not financial advice.
+            </AppText>
+            {activeBest ? (
+              <Button
+                title="View supporting rate"
+                variant="secondary"
+                onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+              />
+            ) : null}
+          </>
+        ) : (
+          <>
+            <AppText variant="body" color="textMuted">
+              Add your current rate and balance to compare your situation with profile-matched observed rates.
+            </AppText>
+            <Button title="Add my rate" variant="secondary" onPress={() => router.push('/calculator')} />
+          </>
+        )}
+      </Card>
 
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={section} onChange={setActiveSection} />
