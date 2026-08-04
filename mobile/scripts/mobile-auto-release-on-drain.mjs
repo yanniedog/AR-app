@@ -272,6 +272,7 @@ export async function readPublishedVersion(
         return version;
       } catch (error) {
         lastError = error;
+        if (controller.signal.aborted) throw error;
       }
     }
     throw lastError ?? new Error('rolling manifests unavailable');
