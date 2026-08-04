@@ -1,0 +1,35 @@
+{
+  "version": "1.0.84",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Split universal and ARM APK update channels (#113)",
+    "Stage a safe ARM update channel (#110)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Split universal and ARM APK update channels (#113)"
+        },
+        {
+          "text": "Stage a safe ARM update channel (#110)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.84"
+        },
+        {
+          "text": "Since tag: app-v1.0.83"
+        }
+      ]
+    }
+  ]
+}
