@@ -2,12 +2,13 @@ import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
-import { formatAxisDateLabel } from '../../data/bankHistoryTransform';
+import { formatAxisDateLabel, historyDatesInWindow, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { spreadGapModel } from '../../data/vizModels';
-import type { BankHistoryPoint, SectionKey } from '../../types';
+import type { BankHistoryPoint, HistoryWindow, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { AppText, Badge, Row } from '../ui';
 
 /**
@@ -18,20 +19,59 @@ export function SwitcherEdgeChart({
   dates,
   points,
   section,
+  window = 'All',
+  selectedDate,
+  onDateSelect,
   height = 150,
 }: {
   dates: string[];
   points: BankHistoryPoint[];
   section: SectionKey;
+  window?: HistoryWindow;
+  selectedDate?: string | null;
+  onDateSelect?: (date: string | null) => void;
   height?: number;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
+  const windowDates = useMemo(() => historyDatesInWindow(dates, window), [dates, window]);
+  const windowPoints = useMemo(() => {
+    const byDate = new Map(points.map((point) => [point.date, point]));
+    return windowDates.map((date) => byDate.get(date) ?? {
+      date,
+      min: null,
+      max: null,
+      mean: null,
+      median: null,
+      count: 0,
+    });
+  }, [points, windowDates]);
   const model = useMemo(
-    () => spreadGapModel(dates, points, lowerIsBetter),
-    [dates, points, lowerIsBetter],
+    () => spreadGapModel(windowDates, windowPoints, lowerIsBetter),
+    [windowDates, windowPoints, lowerIsBetter],
   );
+
+  const padL = 34;
+  const padR = 10;
+  const padT = 8;
+  const padB = 18;
+  const innerW = Math.max(1, width - padL - padR);
+  const count = model?.points.length ?? 0;
+  const activeDate = selectedDate && model?.points.some((point) => point.date === selectedDate)
+    ? selectedDate
+    : model?.points.at(-1)?.date ?? '';
+  const activeIndex = Math.max(0, model?.points.findIndex((point) => point.date === activeDate) ?? 0);
+  const scrub = useChartScrub({
+    sliceCount: count,
+    plotWidth: innerW,
+    plotLeft: padL,
+    indexFromPlotX: sliceIndexFromPlotX,
+    onSelectIndex: (index) => {
+      const date = model?.points[index]?.date;
+      if (date) onDateSelect?.(date);
+    },
+  });
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
@@ -40,11 +80,6 @@ export function SwitcherEdgeChart({
     );
   }
 
-  const padL = 34;
-  const padR = 10;
-  const padT = 8;
-  const padB = 18;
-  const innerW = Math.max(1, width - padL - padR);
   const innerH = height - padT - padB;
   const yMax = Math.max(1, model.maxBps * 1.1);
   const n = model.points.length;
@@ -74,6 +109,7 @@ export function SwitcherEdgeChart({
   const widestPoint = widestIdx >= 0 ? model.points[widestIdx] : null;
   const atWidest =
     model.currentBps != null && model.maxBps > 0 && model.currentBps >= model.maxBps;
+  const activePoint = model.points[activeIndex];
 
   return (
     <View>
@@ -88,7 +124,14 @@ export function SwitcherEdgeChart({
         </View>
         {atWidest ? <Badge label="widest in window" tone="primary" /> : null}
       </Row>
-      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ width: '100%', height }}>
+      <View
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onTouchStart={scrub.onTouchStart}
+        onTouchMove={scrub.onTouchMove}
+        onTouchEnd={scrub.onTouchEnd}
+        onTouchCancel={scrub.onTouchCancel}
+        style={{ width: '100%', height }}
+      >
         {width > 0 && started ? (
           <Svg
             width={width}
@@ -112,6 +155,9 @@ export function SwitcherEdgeChart({
             {widestPoint?.gapBps != null && !atWidest ? (
               <Circle cx={xAt(widestIdx)} cy={yAt(widestPoint.gapBps)} r={3.5} fill={theme.colors.warning} />
             ) : null}
+            {activePoint?.gapBps != null ? (
+              <Circle cx={xAt(activeIndex)} cy={yAt(activePoint.gapBps)} r={4.5} fill={ink} />
+            ) : null}
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
               {formatAxisDateLabel(model.points[0].date)}
             </SvgText>
@@ -121,6 +167,16 @@ export function SwitcherEdgeChart({
           </Svg>
         ) : null}
       </View>
+      <ChartSliceControls
+        dates={model.points.map((point) => point.date)}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => {
+          const date = model.points[index]?.date;
+          if (date) onDateSelect?.(date);
+        }}
+        valueLabel={activePoint?.gapBps != null ? `${Math.round(activePoint.gapBps * 10) / 10} bp spread` : '—'}
+        detail="best versus typical advertised"
+      />
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
         This spread mixes advertised products and tiers. Compare eligibility, fees, conditions, LVRs and terms before acting.
       </AppText>

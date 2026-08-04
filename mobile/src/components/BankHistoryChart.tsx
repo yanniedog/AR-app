@@ -23,9 +23,11 @@ import { SECTIONS } from '../constants';
 import { bankHistoryChartA11ySummary } from '../lib/a11ySummaries';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
 import { debugLog } from '../lib/debugLog';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Chip, Row } from './ui';
+import { ChartSliceControls } from './charts/ChartSliceControls';
+import { Chip, Row } from './ui';
 
 const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
   { value: '30D', label: '30D' },
@@ -39,14 +41,19 @@ const TOUCH_DECIDE_PX = 8;
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-function useFirstMountDrawIn(duration = DRAW_MS) {
-  const progress = useSharedValue(0);
+function useFirstMountDrawIn(reducedMotion: boolean, duration = DRAW_MS) {
+  const progress = useSharedValue(reducedMotion ? 1 : 0);
   const started = useRef(false);
   useEffect(() => {
+    if (reducedMotion) {
+      progress.value = 1;
+      started.current = true;
+      return;
+    }
     if (started.current) return;
     started.current = true;
     progress.value = withTiming(1, { duration, easing: Easing.out(Easing.cubic) });
-  }, [duration, progress]);
+  }, [duration, progress, reducedMotion]);
   return progress;
 }
 
@@ -126,7 +133,8 @@ export function BankHistoryChart({
   const [hoverDate, setHoverDate] = useState<string | null>(null);
   const touchModeRef = useRef<'h' | 'v' | null>(null);
   const touchStartRef = useRef({ x: 0, y: 0 });
-  const drawProgress = useFirstMountDrawIn();
+  const reducedMotion = useReducedMotion();
+  const drawProgress = useFirstMountDrawIn(reducedMotion);
   const strokeLength = useMemo(() => Math.max(1, Math.max(1, width - 52) * 1.2), [width]);
   const lineDrawProps = useAnimatedProps(() => ({
     strokeDashoffset: strokeLength * (1 - drawProgress.value),
@@ -151,6 +159,11 @@ export function BankHistoryChart({
 
   const plotDates = sliced.dates;
   const plotPoints = sliced.points;
+  const revision = `${section}:${dates.at(-1) ?? ''}:${dates.length}`;
+  useEffect(() => {
+    setSelectedDate(null);
+    setHoverDate(null);
+  }, [revision, window]);
   const showRba = section === 'Mortgage' && !!rba?.length;
 
   const rbaSteps = useMemo(
@@ -591,21 +604,24 @@ export function BankHistoryChart({
         ) : null}
       </View>
 
-      {activePoint ? (
-        <Row style={{ justifyContent: 'space-between', marginTop: 6 }}>
-          <AppText variant="tiny" color="textFaint">
-            {activeDate}
-          </AppText>
-          <AppText variant="tiny" weight="700">
-            {activeHighlight != null
-              ? pct(activeHighlight)
-              : activePoint.min != null && activePoint.max != null
-                ? `${pct(activePoint.min)} – ${pct(activePoint.max)}`
-                : '—'}
-            {activePoint.median != null ? ` · med ${pct(activePoint.median)}` : ''}
-            {activePoint.mean != null ? ` · μ ${pct(activePoint.mean)}` : ''}
-          </AppText>
-        </Row>
+      {plotDates.length ? (
+        <ChartSliceControls
+          dates={plotDates}
+          activeIndex={activeIndex}
+          onChangeIndex={(index) => {
+            const date = plotDates[index];
+            if (date) handleSlicePress(date);
+          }}
+          valueLabel={activeHighlight != null
+            ? pct(activeHighlight)
+            : activePoint?.min != null && activePoint?.max != null
+              ? `${pct(activePoint.min)} – ${pct(activePoint.max)}`
+              : '—'}
+          detail={activePoint ? [
+            activePoint.median != null ? `median ${pct(activePoint.median)}` : null,
+            activePoint.mean != null ? `mean ${pct(activePoint.mean)}` : null,
+          ].filter(Boolean).join(' · ') || null : null}
+        />
       ) : null}
     </View>
   );

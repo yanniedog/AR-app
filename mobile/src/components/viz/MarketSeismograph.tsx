@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { View, type GestureResponderEvent } from 'react-native';
+import { View } from 'react-native';
 import Svg, { Line, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import { SECTIONS } from '../../constants';
@@ -11,10 +11,11 @@ import {
 } from '../../data/bankHistoryTransform';
 import { marketActivityModel } from '../../data/vizModels';
 import type { BankInsightsPayload } from '../../data/bankInsights';
-import { moveTone } from '../../lib/moveSemantics';
+import { isLoanSection, moveTone } from '../../lib/moveSemantics';
 import type { HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { AppText, Row } from '../ui';
 
 /**
@@ -39,7 +40,7 @@ export function MarketSeismograph({
   /** RBA meeting dates the rate was held (hollow diamonds). */
   rbaHolds?: string[];
   selectedDate?: string | null;
-  onDateSelect?: (date: string) => void;
+  onDateSelect?: (date: string | null) => void;
   height?: number;
 }) {
   const theme = useTheme();
@@ -53,6 +54,21 @@ export function MarketSeismograph({
     () => (rba?.length && model ? rbaHoldsInWindow(model.days.map((d) => d.date), rbaHolds, rba) : []),
     [rba, rbaHolds, model],
   );
+  const padL = 8;
+  const padR = 8;
+  const padT = 16;
+  const padB = 18;
+  const innerW = Math.max(1, width - padL - padR);
+  const scrub = useChartScrub({
+    sliceCount: model?.days.length ?? 0,
+    plotWidth: innerW,
+    plotLeft: padL,
+    indexFromPlotX: sliceIndexFromPlotX,
+    onSelectIndex: (index) => {
+      const date = model?.days[index]?.date;
+      if (date) onDateSelect?.(date);
+    },
+  });
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
@@ -61,11 +77,6 @@ export function MarketSeismograph({
     );
   }
 
-  const padL = 8;
-  const padR = 8;
-  const padT = 16;
-  const padB = 18;
-  const innerW = Math.max(1, width - padL - padR);
   const innerH = height - padT - padB;
   const midY = padT + innerH / 2;
   const n = model.days.length;
@@ -81,21 +92,22 @@ export function MarketSeismograph({
 
   const quiet = model.totalMoves === 0;
   const selectedIdx = selectedDate ? model.days.findIndex((d) => d.date === selectedDate) : -1;
-
-  const handleTap = (e: GestureResponderEvent) => {
-    if (!onDateSelect || !n) return;
-    const idx = sliceIndexFromPlotX(e.nativeEvent.locationX - padL, innerW, n);
-    const day = model.days[idx];
-    if (day) onDateSelect(day.date);
-  };
+  const activeIndex = selectedIdx >= 0 ? selectedIdx : Math.max(0, n - 1);
+  const activeDay = model.days[activeIndex];
+  const loan = isLoanSection(section);
+  const upWord = loan ? 'hikes' : 'increases';
+  const downWord = loan ? 'cuts' : 'decreases';
 
   return (
     <View>
       <View
         onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-        onTouchEnd={handleTap}
+        onTouchStart={scrub.onTouchStart}
+        onTouchMove={scrub.onTouchMove}
+        onTouchEnd={scrub.onTouchEnd}
+        onTouchCancel={scrub.onTouchCancel}
         accessible
-        accessibilityRole="image"
+        accessibilityRole="adjustable"
         accessibilityLabel={`${SECTIONS[section].title} rate-move seismograph: ${model.totalMoves} lender moves in this window`}
         style={{ width: '100%', height }}
       >
@@ -106,7 +118,7 @@ export function MarketSeismograph({
               const x = xAt(i);
               return (
                 <React.Fragment key={d.date}>
-                  {selectedIdx === i ? (
+                  {activeIndex === i ? (
                     <Rect
                       x={x - slotW / 2}
                       y={padT}
@@ -191,11 +203,22 @@ export function MarketSeismograph({
           </Svg>
         ) : null}
       </View>
+      <ChartSliceControls
+        dates={model.days.map((day) => day.date)}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => onDateSelect?.(model.days[index]?.date ?? null)}
+        valueLabel={activeDay ? [
+          activeDay.hikeBps > 0 ? `+${Math.round(activeDay.hikeBps)} bp ${upWord}` : null,
+          activeDay.cutBps > 0 ? `−${Math.round(activeDay.cutBps)} bp ${downWord}` : null,
+          activeDay.mixed > 0 ? `${activeDay.mixed} mixed` : null,
+        ].filter(Boolean).join(' · ') || 'No moves' : '—'}
+        detail={activeDay ? `${activeDay.hikes + activeDay.cuts + activeDay.mixed} lender moves` : null}
+      />
       <Row gap={12} style={{ marginTop: 6, flexWrap: 'wrap' }}>
         <AppText variant="tiny" color="textMuted">
           {quiet
             ? 'A quiet market — no lender moves detected in this window.'
-            : `${model.totalMoves} lender move${model.totalMoves === 1 ? '' : 's'} · bars above the line are increases, below are cuts`}
+            : `${model.totalMoves} lender move${model.totalMoves === 1 ? '' : 's'} · bars above are ${upWord}, below are ${downWord}`}
         </AppText>
       </Row>
     </View>

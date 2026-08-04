@@ -1,13 +1,15 @@
-import React, { useMemo, useState } from 'react';
-import { View, type GestureResponderEvent } from 'react-native';
-import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View } from 'react-native';
+import Svg, { Circle, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
 import { economicPointAtOrBefore } from '../../data/economicModels';
+import { parseYmd } from '../../data/bankHistoryTransform';
 import { formatRunDate } from '../../data/format';
 import { buildLinePath } from '../../lib/chartSvgPaths';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { AppText, Row } from '../ui';
 
 export interface EconomicChartSeries {
@@ -25,6 +27,8 @@ export interface EconomicChartFrameProps {
   targetBand?: [number, number];
   targetBandLabel?: string;
   height?: number;
+  holdDates?: string[];
+  holdSeriesId?: string;
 }
 
 function validTime(date: string): number {
@@ -68,6 +72,8 @@ export function EconomicChartFrame({
   targetBand,
   targetBandLabel = 'RBA 2–3% reference band',
   height = 208,
+  holdDates,
+  holdSeriesId,
 }: EconomicChartFrameProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -75,19 +81,21 @@ export function EconomicChartFrame({
     () => series.flatMap((item) => item.points.map((point) => ({ ...point, seriesId: item.id }))),
     [series],
   );
-  const dates = useMemo(
-    () => [...new Set(allPoints.map((point) => point.date))].sort(),
-    [allPoints],
-  );
+  const dates = useMemo(() => {
+    const values = new Set(allPoints.map((point) => point.date));
+    if (holdSeriesId && series.some((item) => item.id === holdSeriesId)) {
+      for (const raw of holdDates ?? []) {
+        const date = String(raw || '').slice(0, 10);
+        if (parseYmd(date) != null) values.add(date);
+      }
+    }
+    return [...values].sort();
+  }, [allPoints, holdDates, holdSeriesId, series]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const activeDate = selectedDate && dates.includes(selectedDate)
     ? selectedDate
     : dates.at(-1) ?? '';
   const activeIndex = Math.max(0, dates.indexOf(activeDate));
-
-  if (!allPoints.length) {
-    return <AppText variant="small" color="textMuted">No observations available for this view.</AppText>;
-  }
 
   const padL = 38;
   const padR = 10;
@@ -95,9 +103,26 @@ export function EconomicChartFrame({
   const padB = 26;
   const innerW = Math.max(1, width - padL - padR);
   const innerH = height - padT - padB;
-  const times = dates.map(validTime);
-  const firstTime = times[0];
-  const timeSpan = Math.max(1, times.at(-1)! - firstTime);
+  const times = useMemo(() => dates.map(validTime), [dates]);
+  const firstTime = times[0] ?? 0;
+  const timeSpan = Math.max(1, (times.at(-1) ?? firstTime) - firstTime);
+  const scrub = useChartScrub({
+    sliceCount: dates.length,
+    plotWidth: innerW,
+    onSelectIndex: (index) => {
+      if (dates[index]) setSelectedDate(dates[index]);
+    },
+    indexFromPlotX: (plotX, plotWidth) => {
+      const clamped = Math.max(0, Math.min(plotWidth, plotX));
+      return nearestIndex(times, firstTime + (clamped / Math.max(1, plotWidth)) * timeSpan);
+    },
+  });
+  const revision = `${series.map((item) => `${item.id}:${item.points.at(-1)?.date ?? ''}:${item.points.length}`).join('|')}:${holdDates?.at(-1) ?? ''}`;
+  useEffect(() => setSelectedDate(null), [revision]);
+
+  if (!allPoints.length) {
+    return <AppText variant="small" color="textMuted">No observations available for this view.</AppText>;
+  }
   const values = allPoints.map((point) => point.value);
   if (targetBand) values.push(...targetBand);
   const rawMin = Math.min(...values);
@@ -118,15 +143,6 @@ export function EconomicChartFrame({
     .filter((item) => item.point)
     .map((item) => `${item.label} ${item.point!.value.toFixed(2)} percent on ${item.point!.date}`)
     .join('; ');
-
-  const selectFromTouch = (event: GestureResponderEvent) => {
-    // The interaction view is already inset to the plot bounds, so locationX
-    // is plot-local (unlike the outer SVG's coordinate space).
-    const plotX = Math.max(0, Math.min(innerW, event.nativeEvent.locationX));
-    const targetTime = firstTime + (plotX / innerW) * timeSpan;
-    const index = nearestIndex(times, targetTime);
-    if (dates[index]) setSelectedDate(dates[index]);
-  };
 
   const onAccessibilityAction = (event: { nativeEvent: { actionName: string } }) => {
     if (event.nativeEvent.actionName === 'increment') {
@@ -216,6 +232,23 @@ export function EconomicChartFrame({
                 </React.Fragment>
               );
             })}
+            {(holdDates ?? []).map((raw) => {
+              const date = String(raw || '').slice(0, 10);
+              const holdSeries = holdSeriesId ? series.find((item) => item.id === holdSeriesId) : null;
+              const point = holdSeries ? economicPointAtOrBefore(holdSeries.points, date) : null;
+              if (!point || !dates.includes(date)) return null;
+              const cx = xForDate(date);
+              const cy = yForValue(point.value);
+              return (
+                <Polygon
+                  key={`hold-${date}`}
+                  points={`${cx},${cy - 6} ${cx + 5},${cy} ${cx},${cy + 6} ${cx - 5},${cy}`}
+                  fill={theme.colors.surface}
+                  stroke={theme.colors.rba}
+                  strokeWidth={1.4}
+                />
+              );
+            })}
             <Line
               x1={activeX}
               y1={padT}
@@ -243,20 +276,20 @@ export function EconomicChartFrame({
             { name: 'decrement', label: 'Previous observation' },
           ]}
           onAccessibilityAction={onAccessibilityAction}
-          onTouchEnd={selectFromTouch}
+          onTouchStart={scrub.onTouchStart}
+          onTouchMove={scrub.onTouchMove}
+          onTouchEnd={scrub.onTouchEnd}
+          onTouchCancel={scrub.onTouchCancel}
           style={{ position: 'absolute', left: padL, right: padR, top: padT, bottom: padB }}
         />
       </View>
-      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start', marginTop: 4 }}>
-        <AppText variant="tiny" color="textFaint">{formatRunDate(activeDate)}</AppText>
-        <View style={{ flex: 1, marginLeft: 12, alignItems: 'flex-end' }}>
-          {selectedValues.map((item) => item.point ? (
-            <AppText key={item.id} variant="tiny" weight="700" style={{ color: item.color }}>
-              {item.label}: {item.point.value.toFixed(2)}% <AppText variant="tiny" color="textFaint">({formatRunDate(item.point.date)})</AppText>
-            </AppText>
-          ) : null)}
-        </View>
-      </Row>
+      <ChartSliceControls
+        dates={dates}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => setSelectedDate(dates[index] ?? null)}
+        valueLabel={selectedValues.filter((item) => item.point).map((item) => `${item.label} ${item.point!.value.toFixed(2)}%`).join(' · ') || '—'}
+        detail={selectedValues.some((item) => item.point?.date !== activeDate) ? 'Latest observations at or before this date' : null}
+      />
     </View>
   );
 }

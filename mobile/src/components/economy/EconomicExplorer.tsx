@@ -33,6 +33,7 @@ const WINDOWS: EconomicWindow[] = ['1Y', '3Y', '5Y', 'All'];
 export interface EconomicExplorerProps {
   data: EconomicOutlookPayload;
   rba: RbaEntry[];
+  rbaHolds?: string[];
   /** @deprecated Prefer tapping a mini chart; kept for callers that pin a view. */
   initialLens?: EconomicExplorerLens;
 }
@@ -133,6 +134,7 @@ function MiniTile({
         flexGrow: 1,
         flexBasis: '47%',
         minWidth: 148,
+        minHeight: 48,
         paddingVertical: 10,
         paddingHorizontal: 12,
         borderRadius: theme.radius.md,
@@ -142,7 +144,7 @@ function MiniTile({
       }}
     >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <AppText variant="tiny" weight="700" numberOfLines={1} style={{ flex: 1, paddingRight: 6 }}>
+        <AppText variant="tiny" weight="700" style={{ flex: 1, paddingRight: 6 }}>
           {title}
         </AppText>
         <AppText variant="tiny" weight="800" style={{ color }}>
@@ -150,7 +152,7 @@ function MiniTile({
         </AppText>
       </Row>
       <MiniSparkline points={points} color={color} targetBand={targetBand} />
-      <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+      <AppText variant="tiny" color="textFaint">
         {subtitle}
       </AppText>
     </Pressable>
@@ -194,10 +196,10 @@ function ExpandedDetail({
 export function EconomicExplorer({
   data,
   rba,
+  rbaHolds,
   initialLens,
 }: EconomicExplorerProps) {
   const theme = useTheme();
-  const [expanded, setExpanded] = useState<EconomicExplorerLens | null>(initialLens ?? null);
   const [window, setWindow] = useState<EconomicWindow>('5Y');
 
   const comparison = useMemo(
@@ -206,9 +208,12 @@ export function EconomicExplorer({
   );
   const momentum = useMemo(() => economicMomentumModel(data), [data]);
   const policy = useMemo(() => policyPathModel(data, rba, window), [data, rba, window]);
+  const [expanded, setExpanded] = useState<EconomicExplorerLens>(
+    initialLens ?? (policy ? 'policy' : data.indicators[0]?.id ?? 'momentum'),
+  );
 
   const toggle = (id: EconomicExplorerLens) => {
-    setExpanded((current) => (current === id ? null : id));
+    setExpanded(id);
   };
 
   const indicatorTiles = data.indicators.map((indicator) => {
@@ -239,7 +244,7 @@ export function EconomicExplorer({
   return (
     <View>
       <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-        Tap a mini chart to open it. Tap again to close.
+        Choose one evidence lens to focus below.
       </AppText>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -370,10 +375,12 @@ export function EconomicExplorer({
                   dashed: true,
                 },
               ]}
+              holdDates={rbaHolds}
+              holdSeriesId="actual"
               accessibilitySummary={policy.summary}
             />
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 5 }}>
-              Solid = official cash-rate history · dashed = survey median, not a probability
+              Solid = official cash-rate history · dashed = survey median, not a probability · hollow diamonds = held
             </AppText>
           </ExpandedDetail>
         ) : (

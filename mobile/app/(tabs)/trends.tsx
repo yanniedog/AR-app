@@ -10,6 +10,8 @@ import {
   MoversLeaderboard,
 } from '../../src/components/BankInsights';
 import { HistoryExplorer } from '../../src/components/viz/HistoryExplorer';
+import type { HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
+import { PulseDayMovers } from '../../src/components/PulseDayMovers';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
 import { ProPaywall } from '../../src/components/ProPaywall';
 import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
@@ -26,6 +28,7 @@ import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
+import { rbaRateAsOf } from '../../src/data/bankHistoryTransform';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
@@ -70,10 +73,17 @@ export default function Trends() {
   const [retryingHistory, setRetryingHistory] = useState(false);
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
+  const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
+  const ensureProductHistory = useStore((s) => s.ensureProductHistory);
+  const productHistory = useStore((s) => s.productHistory);
 
   useEffect(() => {
     setRewindDate(null);
   }, [activeSection]);
+
+  useEffect(() => {
+    if (showHistoryRibbon && explorerMode === 'pulse') void ensureProductHistory();
+  }, [ensureProductHistory, explorerMode, showHistoryRibbon]);
 
   const handleRetryInsights = async () => {
     setRetryingInsights(true);
@@ -171,13 +181,20 @@ export default function Trends() {
 
   const payloadDecisions = useMemo(() => {
     if (!core?.rba) return [];
-    const out: { date: string; rate: number; prior: number }[] = [];
+    const out: { date: string; rate: number; prior: number; held?: boolean }[] = [];
     for (let i = 1; i < core.rba.length; i++) {
       if (core.rba[i].rate !== core.rba[i - 1].rate) {
         out.push({ date: core.rba[i].date, rate: core.rba[i].rate, prior: core.rba[i - 1].rate });
       }
     }
-    return out.reverse().slice(0, 8);
+    for (const raw of core.rba_holds ?? []) {
+      const date = String(raw || '').slice(0, 10);
+      if (!date || out.some((decision) => decision.date === date)) continue;
+      const rate = rbaRateAsOf(core.rba, date);
+      if (rate != null) out.push({ date, rate, prior: rate, held: true });
+    }
+    out.sort((left, right) => right.date.localeCompare(left.date));
+    return out.slice(0, 12);
   }, [core]);
 
   const trend = useMemo(() => rbaTrend(calendar), [calendar]);
@@ -246,7 +263,7 @@ export default function Trends() {
         </Card>
       )}
 
-      <RbaOutlook rba={core.rba} />
+      <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
 
       <Card style={{ marginBottom: 16 }}>
         <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
@@ -260,7 +277,7 @@ export default function Trends() {
             {trend.summary}
           </AppText>
         ) : null}
-        <RbaChart data={core.rba} height={190} />
+        <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
         <View style={{ marginTop: 12 }}>
           <RbaCountdownCard expandable={false} />
         </View>
@@ -290,9 +307,9 @@ export default function Trends() {
                   </View>
                 ))
               : payloadDecisions.map((d) => {
-                  const up = d.rate > d.prior;
-                  const down = d.rate < d.prior;
-                  const direction = up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
+                  const up = !d.held && d.rate > d.prior;
+                  const down = !d.held && d.rate < d.prior;
+                  const direction = d.held ? 'Held' : up ? 'Increased' : down ? 'Decreased' : 'Unchanged';
                   return (
                     <Row
                       key={d.date}
@@ -316,7 +333,7 @@ export default function Trends() {
                           />
                         ) : null}
                         <AppText variant="small" weight="700">
-                          {formatRate(d.prior)} → {formatRate(d.rate)}
+                          {d.held ? `${formatRate(d.rate)} · on hold` : `${formatRate(d.prior)} → ${formatRate(d.rate)}`}
                         </AppText>
                       </Row>
                     </Row>
@@ -358,9 +375,26 @@ export default function Trends() {
                 brands={core.brands}
                 selectedDate={rewindDate}
                 onDateSelect={setRewindDate}
+                mode={explorerMode}
+                onModeChange={setExplorerMode}
               />
             </View>
-            {rewindDate ? (
+            {rewindDate && explorerMode === 'pulse' ? (
+              <View style={{ marginTop: 12 }}>
+                <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
+                  <AppText variant="small" weight="700">Moves on {formatRunDate(rewindDate)}</AppText>
+                  <Button title="Clear" variant="ghost" onPress={() => setRewindDate(null)} />
+                </Row>
+                <PulseDayMovers
+                  payload={explorerInsights}
+                  section={activeSection}
+                  date={rewindDate}
+                  productHistory={productHistory}
+                  core={core}
+                />
+              </View>
+            ) : null}
+            {rewindDate && explorerMode !== 'pulse' ? (
               <View style={{ marginTop: 12 }}>
                 <Row style={{ justifyContent: 'space-between', marginBottom: 4 }}>
                   <AppText variant="small" weight="700">

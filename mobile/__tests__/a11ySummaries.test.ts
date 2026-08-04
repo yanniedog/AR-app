@@ -21,7 +21,7 @@ describe('a11ySummaries', () => {
     const s = ribbonA11ySummary(stats, 'Mortgage', 0.0435);
     expect(s).toContain('Home loans market opportunity');
     expect(s).toContain('best advertised 5.89%');
-    expect(s).toContain('advertised spread 23 basis points');
+    expect(s).toContain('23 basis points between best and typical');
     expect(s).toContain('842 rates from 67 lenders');
     expect(s).toContain('RBA cash rate 4.35%');
   });
@@ -34,6 +34,11 @@ describe('a11ySummaries', () => {
     expect(s).toContain('RBA cash rate chart');
     expect(s).toContain('current 4.60 percent');
     expect(s).toContain('range 4.35 to 4.60 percent');
+  });
+
+  it('announces marked hold meetings', () => {
+    const s = rbaChartA11ySummary([{ date: '2024-01-01', rate: 4.35 }], 2);
+    expect(s).toContain('2 on-hold meetings marked');
   });
 
   it('builds bank history chart summary', () => {

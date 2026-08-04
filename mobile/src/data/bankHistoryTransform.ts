@@ -100,6 +100,12 @@ export function sliceIndexFromPlotX(plotLocalX: number, plotWidth: number, slice
   return Math.max(0, Math.min(sliceCount - 1, idx));
 }
 
+/** Convert a chart-container X coordinate to the clamped plot-local coordinate. */
+export function plotLocalX(containerX: number, plotLeft: number, plotWidth: number): number {
+  const width = Math.max(1, plotWidth);
+  return Math.max(0, Math.min(width, containerX - Math.max(0, plotLeft)));
+}
+
 export function sliceChartTimeline(
   dates: string[],
   points: BankHistoryPoint[],
@@ -127,6 +133,16 @@ export function rbaRateAsOf(rba: RbaEntry[], dateYmd: string): number | null {
     else break;
   }
   return last;
+}
+
+/** Change points plus valid hold meetings, including holds after the last rate change. */
+export function rbaTimelineDates(rba: RbaEntry[], holds?: string[]): string[] {
+  const dates = new Set(rba.map((entry) => String(entry.date).slice(0, 10)));
+  for (const raw of holds ?? []) {
+    const date = String(raw || '').slice(0, 10);
+    if (parseYmd(date) != null && rbaRateAsOf(rba, date) != null) dates.add(date);
+  }
+  return normalizeTimelineDates([...dates]);
 }
 
 /** Cash-rate step values per plotted date (fraction, dashboard parity). */

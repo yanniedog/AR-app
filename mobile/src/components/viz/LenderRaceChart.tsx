@@ -5,11 +5,12 @@ import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { formatRate } from '../../data/format';
 import { lenderRaceModel } from '../../data/vizModels';
-import { formatAxisDateLabel } from '../../data/bankHistoryTransform';
+import { formatAxisDateLabel, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { openBank } from '../../lib/nav';
 import type { Brand, HistoryWindow, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { BankAvatar } from '../BankAvatar';
 import { AppText, Row } from '../ui';
 
@@ -25,6 +26,8 @@ export function LenderRaceChart({
   lowerIsBetter,
   window,
   brands,
+  selectedDate,
+  onDateSelect,
   height = 170,
   topN = 6,
 }: {
@@ -33,6 +36,8 @@ export function LenderRaceChart({
   lowerIsBetter: boolean;
   window: HistoryWindow;
   brands?: Record<string, Brand>;
+  selectedDate?: string | null;
+  onDateSelect?: (date: string | null) => void;
   height?: number;
   topN?: number;
 }) {
@@ -42,19 +47,29 @@ export function LenderRaceChart({
     () => lenderRaceModel(payload, section, lowerIsBetter, window, topN),
     [payload, section, lowerIsBetter, window, topN],
   );
-  if (!model) {
-    return (
-      <AppText variant="small" color="textMuted">
-        Not enough ranking history in this window yet.
-      </AppText>
-    );
-  }
-
   const padL = 24;
   const padR = 10;
   const padT = 8;
   const padB = 18;
   const innerW = Math.max(1, width - padL - padR);
+  const scrub = useChartScrub({
+    sliceCount: model?.dates.length ?? 0,
+    plotWidth: innerW,
+    plotLeft: padL,
+    indexFromPlotX: sliceIndexFromPlotX,
+    onSelectIndex: (index) => {
+      const date = model?.dates[index];
+      if (date) onDateSelect?.(date);
+    },
+  });
+  if (!model) {
+    return (
+      <AppText variant="small" color="textMuted">
+        Not enough ranking history in this window yet. Leaders need at least two lenders with observations.
+      </AppText>
+    );
+  }
+
   const innerH = height - padT - padB;
   const lanes = model.topN;
   const xAt = (i: number) =>
@@ -65,10 +80,23 @@ export function LenderRaceChart({
 
   const colorFor = (provider: string, i: number) =>
     brands?.[provider]?.color || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length];
+  const selectedIndex = selectedDate ? model.dates.indexOf(selectedDate) : -1;
+  const activeIndex = selectedIndex >= 0 ? selectedIndex : model.dates.length - 1;
+  const ranked = model.series
+    .map((series) => ({ provider: series.provider, rank: series.ranks[activeIndex] }))
+    .filter((entry) => entry.rank != null)
+    .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
 
   return (
     <View>
-      <View onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ width: '100%', height }}>
+      <View
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onTouchStart={scrub.onTouchStart}
+        onTouchMove={scrub.onTouchMove}
+        onTouchEnd={scrub.onTouchEnd}
+        onTouchCancel={scrub.onTouchCancel}
+        style={{ width: '100%', height }}
+      >
         {width > 0 ? (
           <Svg
             width={width}
@@ -118,6 +146,15 @@ export function LenderRaceChart({
                 </React.Fragment>
               );
             })}
+            <Line
+              x1={xAt(activeIndex)}
+              y1={padT}
+              x2={xAt(activeIndex)}
+              y2={padT + innerH}
+              stroke={withAlpha(theme.colors.primary, 0.45)}
+              strokeWidth={1.2}
+              strokeDasharray="3 3"
+            />
             <SvgText x={padL} y={height - 4} fontSize={9} fill={theme.colors.textFaint}>
               {formatAxisDateLabel(model.dates[0])}
             </SvgText>
@@ -127,6 +164,14 @@ export function LenderRaceChart({
           </Svg>
         ) : null}
       </View>
+
+      <ChartSliceControls
+        dates={model.dates}
+        activeIndex={activeIndex}
+        onChangeIndex={(index) => onDateSelect?.(model.dates[index] ?? null)}
+        valueLabel={ranked.length ? ranked.slice(0, 3).map((entry) => `#${entry.rank} ${entry.provider}`).join(' · ') : 'No ranks'}
+        detail={`Leaders on ${formatAxisDateLabel(model.dates[activeIndex])}`}
+      />
 
       {model.series.map((s, si) => (
         <Pressable

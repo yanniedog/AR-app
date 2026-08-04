@@ -266,7 +266,7 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
     };
     const catalog = core('2026-06-10', {
       Mortgage: [
-        { ...rateRow('P|cut', '0.055', 'AlphaBank'), product_name: 'Cut loan' },
+        { ...rateRow('P|cut', '0.055', 'AlphaBank'), product_name: 'Cut loan', rate_index: 7 },
         { ...rateRow('P|flat', '0.0598', 'AlphaBank'), product_name: 'Flat loan' },
         { ...rateRow('P|hike', '0.055', 'AlphaBank'), product_name: 'Hike loan' },
         { ...rateRow('P|other', '0.07', 'OtherBank'), product_name: 'Other' },
@@ -283,6 +283,7 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
       fromRate: 0.06,
       toRate: 0.055,
       bps: -50,
+      rateIndex: 7,
     });
     expect(moves[1].bps).toBe(50);
   });

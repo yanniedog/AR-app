@@ -18,12 +18,14 @@ function Insight({
   label,
   value,
   detail,
+  footnote,
   compact,
   accent,
 }: {
   label: string;
   value: string;
   detail?: string;
+  footnote?: string;
   compact?: boolean;
   accent?: string;
 }) {
@@ -35,8 +37,8 @@ function Insight({
           ? { flex: 1, minWidth: 0 }
           : {
               flexGrow: 1,
-              flexBasis: '29%',
-              minWidth: 92,
+              flexBasis: '46%',
+              minWidth: 120,
               padding: 10,
               borderRadius: theme.radius.md,
               backgroundColor: theme.colors.surfaceAlt,
@@ -58,6 +60,9 @@ function Insight({
         <AppText variant="tiny" color="textMuted" style={{ marginTop: 1 }}>
           {detail}
         </AppText>
+      ) : null}
+      {footnote && !compact ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 3 }}>{footnote}</AppText>
       ) : null}
     </View>
   );
@@ -96,16 +101,19 @@ export function Ribbon({
   return (
     <View accessible accessibilityRole="text" accessibilityLabel={a11ySummary}>
       <Row gap={compact ? 8 : 10} style={{ alignItems: 'stretch', flexWrap: compact ? 'nowrap' : 'wrap' }}>
-        <Insight label="Best" value={formatRate(best)} detail="best advertised" compact={compact} accent={accent} />
-        <Insight label="Typical" value={formatRate(typical)} detail="median advertised rate" compact={compact} />
         <Insight
-          label={compact ? 'Spread' : 'Advertised spread'}
-          value={gap == null ? '—' : `${gap} bp`}
-          detail="best versus typical"
+          label="Best"
+          value={formatRate(best)}
+          detail="best advertised"
+          footnote={gap == null || compact ? undefined : `${gap} bp from typical`}
           compact={compact}
-          accent={gap && gap > 0 ? theme.colors.primary : undefined}
+          accent={accent}
         />
+        <Insight label="Typical" value={formatRate(typical)} detail="median advertised rate" compact={compact} />
       </Row>
+      {compact && gap != null ? (
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 3 }}>Best is {gap} bp from typical</AppText>
+      ) : null}
       {!compact ? (
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 7 }}>
           {stats.count} advertised rates · {stats.providers} lenders

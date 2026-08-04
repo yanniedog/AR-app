@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
@@ -39,6 +39,8 @@ export function HistoryExplorer({
   brands,
   selectedDate,
   onDateSelect,
+  mode: controlledMode,
+  onModeChange,
 }: {
   section: SectionKey;
   historyModel: BankHistoryChartModel | null;
@@ -54,15 +56,31 @@ export function HistoryExplorer({
   rbaHolds?: string[];
   brands?: Record<string, Brand>;
   selectedDate?: string | null;
-  onDateSelect?: (date: string) => void;
+  onDateSelect?: (date: string | null) => void;
+  mode?: HistoryViewMode;
+  onModeChange?: (mode: HistoryViewMode) => void;
 }) {
-  const [mode, setMode] = useState<HistoryViewMode>('edge');
+  const [localMode, setLocalMode] = useState<HistoryViewMode>(controlledMode ?? 'edge');
   const [window, setWindow] = useState<HistoryWindow>('90D');
 
+  useEffect(() => {
+    if (controlledMode) setLocalMode(controlledMode);
+  }, [controlledMode]);
+
+  const setMode = (next: HistoryViewMode) => {
+    setLocalMode(next);
+    onModeChange?.(next);
+  };
+
   const modes: HistoryViewMode[] = ['edge', 'calendar', 'pulse', 'race'];
-  const activeMode = modes.includes(mode) ? mode : 'edge';
+  const activeMode = modes.includes(localMode) ? localMode : 'edge';
   const needsInsights = activeMode === 'race' || activeMode === 'pulse';
-  const showWindowChips = activeMode === 'race' || activeMode === 'pulse';
+  const showWindowChips = activeMode === 'race' || activeMode === 'pulse' || activeMode === 'edge';
+
+  const revision = `${section}:${historyModel?.dates.at(-1) ?? ''}:${insights?.run_date ?? ''}`;
+  useEffect(() => {
+    onDateSelect?.(null);
+  }, [activeMode, window, revision, onDateSelect]);
 
   return (
     <View>
@@ -133,6 +151,8 @@ export function HistoryExplorer({
                 lowerIsBetter={SECTIONS[section].lowerIsBetter}
                 window={window}
                 brands={brands}
+                selectedDate={selectedDate}
+                onDateSelect={onDateSelect}
               />
             </ChartErrorBoundary>
           ) : null}
@@ -142,6 +162,9 @@ export function HistoryExplorer({
                 dates={historyModel.dates}
                 points={historyModel.points}
                 section={section}
+                window={window}
+                selectedDate={selectedDate}
+                onDateSelect={onDateSelect}
               />
             </ChartErrorBoundary>
           ) : null}
