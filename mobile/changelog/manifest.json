@@ -458,6 +458,14 @@
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.80"
     },
     {
+      "version": "1.0.81",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Build trustworthy rate decisions and private defaults (#98)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.81"
+    },
+    {
       "version": "1.0.82",
       "date": "2026-08-04",
       "summaryBullets": [

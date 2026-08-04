@@ -1,0 +1,31 @@
+{
+  "version": "1.0.81",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Build trustworthy rate decisions and private defaults (#98)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Build trustworthy rate decisions and private defaults (#98)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.81"
+        },
+        {
+          "text": "Since tag: app-v1.0.80"
+        }
+      ]
+    }
+  ]
+}
