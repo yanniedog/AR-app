@@ -10,7 +10,10 @@ import {
   parseAaptBadging,
   parseApksignerCertificateSha256,
 } from './apk-identity.mjs';
-import { fetchRemoteManifest } from './bump-android-version-code.mjs';
+import {
+  fetchRemoteManifest,
+  releaseFloorTags,
+} from './bump-android-version-code.mjs';
 
 test('parses the package and version identity reported by aapt', () => {
   assert.deepEqual(
@@ -43,16 +46,18 @@ test('reports a missing rolling-tag CLI value explicitly', () => {
 });
 
 test('bounds each release-floor manifest request independently', async () => {
-  const stalled = await fetchRemoteManifest(
-    'owner/repo',
-    'app-apk-arm-latest',
-    5,
-    (_url, { signal }) =>
-      new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      }),
+  await assert.rejects(
+    () => fetchRemoteManifest(
+      'owner/repo',
+      'app-apk-arm-latest',
+      5,
+      (_url, { signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+    ),
+    /manifest request timed out/i,
   );
-  assert.equal(stalled, null);
 
   const universal = await fetchRemoteManifest(
     'owner/repo',
@@ -65,6 +70,14 @@ test('bounds each release-floor manifest request independently', async () => {
     }),
   );
   assert.deepEqual(universal, { version: '1.0.84', buildNumber: 205 });
+  assert.deepEqual(
+    releaseFloorTags('app-apk-arm-latest'),
+    ['app-apk-arm-latest', 'app-apk-latest'],
+  );
+  assert.deepEqual(
+    releaseFloorTags('app-apk-latest'),
+    ['app-apk-latest', 'app-apk-arm-latest'],
+  );
 });
 
 test('rejects a missing rolling tag before generating changelog metadata', () => {

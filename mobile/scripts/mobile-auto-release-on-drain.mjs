@@ -24,7 +24,7 @@ import {
 import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
-const { nextReleaseVersion } = androidReleaseVersion;
+const { compareVersions, nextReleaseVersion } = androidReleaseVersion;
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileDir, '..');
 const dryRun = process.argv.includes('--dry-run');
@@ -277,9 +277,13 @@ export async function readPublishedVersion(
   };
 
   const armVersion = await fetchVersion(ARM_ROLLING_TAG);
-  if (armVersion) return armVersion;
   const universalVersion = await fetchVersion(ROLLING_TAG);
-  if (universalVersion) return universalVersion;
+  if (armVersion && universalVersion) {
+    return compareVersions(armVersion, universalVersion) >= 0
+      ? armVersion
+      : universalVersion;
+  }
+  if (armVersion || universalVersion) return armVersion ?? universalVersion;
   warn(
     'mobile-auto-release-on-drain: ARM and universal rolling manifests are missing; use checked-in release floor',
   );

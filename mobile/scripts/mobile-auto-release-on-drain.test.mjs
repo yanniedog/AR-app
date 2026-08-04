@@ -179,14 +179,16 @@ test('auto-release advances from the published APK instead of a stale source ver
 });
 
 test('auto-release reads the ARM channel after the universal transition', async () => {
-  let requestedUrl = '';
+  const requestedUrls = [];
   const published = await readPublishedVersion(async (url) => {
-    requestedUrl = url;
+    requestedUrls.push(url);
     return { ok: true, json: async () => ({ version: '1.0.85' }) };
   });
 
   assert.equal(published, '1.0.85');
-  assert.match(requestedUrl, /\/releases\/download\/app-apk-arm-latest\/app-apk-latest\.json/);
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /\/releases\/download\/app-apk-arm-latest\/app-apk-latest\.json/);
+  assert.match(requestedUrls[1], /\/releases\/download\/app-apk-latest\/app-apk-latest\.json/);
 });
 
 test('first ARM auto-release uses the universal manifest as its version floor', async () => {
@@ -201,6 +203,19 @@ test('first ARM auto-release uses the universal manifest as its version floor', 
   assert.equal(requestedUrls.length, 2);
   assert.match(requestedUrls[0], /\/app-apk-arm-latest\//);
   assert.match(requestedUrls[1], /\/app-apk-latest\//);
+  assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
+});
+
+test('auto-release merges a newer universal floor with an older ARM channel', async () => {
+  const published = await readPublishedVersion(async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      version: url.includes('/app-apk-arm-latest/') ? '1.0.83' : '1.0.84',
+    }),
+  }));
+
+  assert.equal(published, '1.0.84');
   assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
 });
 
@@ -250,6 +265,21 @@ test('ARM server errors do not fall back to the older universal channel', async 
     /app-apk-arm-latest HTTP 500/i,
   );
   assert.equal(requests, 1);
+});
+
+test('universal read errors fail closed even after a valid ARM response', async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => readPublishedVersion(async (url) => {
+      requests += 1;
+      if (url.includes('/app-apk-arm-latest/')) {
+        return { ok: true, status: 200, json: async () => ({ version: '1.0.85' }) };
+      }
+      return { ok: false, status: 500 };
+    }),
+    /app-apk-latest HTTP 500/i,
+  );
+  assert.equal(requests, 2);
 });
 
 test('rolling-manifest timeouts reject the release decision', async () => {

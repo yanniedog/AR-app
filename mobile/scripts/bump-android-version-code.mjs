@@ -84,8 +84,9 @@ export async function fetchRemoteManifest(
     return { buildNumber, version };
   } catch (error) {
     if (controller.signal.aborted) {
-      console.warn(`bump-android-version-code: manifest request timed out after ${timeoutMs} ms: ${url}`);
-      return null;
+      throw new Error(
+        `bump-android-version-code: manifest request timed out after ${timeoutMs} ms: ${url}`,
+      );
     }
     throw error;
   } finally {
@@ -93,17 +94,22 @@ export async function fetchRemoteManifest(
   }
 }
 
+export function releaseFloorTags(selectedTag) {
+  const tag = resolveApkRollingTag(selectedTag);
+  return tag === ARM_ROLLING_TAG
+    ? [ARM_ROLLING_TAG, ROLLING_TAG]
+    : [ROLLING_TAG, ARM_ROLLING_TAG];
+}
+
 async function main() {
-  const primaryRemote = await fetchRemoteManifest(repo, rollingTag);
-  const universalFloor =
-    rollingTag !== ROLLING_TAG
-      ? await fetchRemoteManifest(repo, ROLLING_TAG)
-      : null;
+  const [primaryTag, otherTag] = releaseFloorTags(rollingTag);
+  const primaryRemote = await fetchRemoteManifest(repo, primaryTag);
+  const otherChannelFloor = await fetchRemoteManifest(repo, otherTag);
   const fallbackRemote =
-    primaryRemote == null && universalFloor == null && fallbackRepo
+    primaryRemote == null && otherChannelFloor == null && fallbackRepo
       ? await fetchRemoteManifest(fallbackRepo, ROLLING_TAG)
       : null;
-  const remote = mergeReleaseFloors([primaryRemote, universalFloor, fallbackRemote]);
+  const remote = mergeReleaseFloors([primaryRemote, otherChannelFloor, fallbackRemote]);
   const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
   const nextVersion = nextReleaseVersion(currentVersion, remote?.version);
   const nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
