@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-07-30T20:13:53.346Z",
+  "generated_at": "2026-08-04T12:45:22.309Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -448,6 +448,14 @@
         "Keep source and published app versions on one monotonic iteration"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.79"
+    },
+    {
+      "version": "1.0.80",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Recover progressive history and diagnostic resilience (#96)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.80"
     }
   ]
 }

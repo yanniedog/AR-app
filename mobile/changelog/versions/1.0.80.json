@@ -1,0 +1,31 @@
+{
+  "version": "1.0.80",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Recover progressive history and diagnostic resilience (#96)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Recover progressive history and diagnostic resilience (#96)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.80"
+        },
+        {
+          "text": "Since tag: app-v1.0.79"
+        }
+      ]
+    }
+  ]
+}
