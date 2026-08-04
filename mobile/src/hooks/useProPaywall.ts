@@ -1,34 +1,19 @@
-import { useCallback, useState } from 'react';
+import { useCallback } from 'react';
 
-import { useStore } from '../data/store';
-import { logProGateBlocked } from '../lib/degradationLog';
-import { hasProAccess, type ProGateIntent } from '../lib/proAccess';
+import type { ProGateIntent } from '../lib/proAccess';
 
 export function useProPaywall() {
-  const pro = useStore((s) => s.prefs.rateIntelligencePro);
-  const [gate, setGate] = useState<{ visible: boolean; intent: ProGateIntent }>({
-    visible: false,
-    intent: 'alert_limit',
-  });
-
   const requestPro = useCallback(
-    (intent: ProGateIntent): boolean => {
-      if (hasProAccess({ rateIntelligencePro: pro })) return true;
-      logProGateBlocked(intent);
-      setGate({ visible: true, intent });
-      return false;
-    },
-    [pro],
+    (_intent: ProGateIntent): boolean => true,
+    [],
   );
 
-  const closePaywall = useCallback(() => {
-    setGate((g) => ({ ...g, visible: false }));
-  }, []);
+  const closePaywall = useCallback(() => undefined, []);
 
   return {
-    pro,
-    paywallVisible: gate.visible,
-    paywallIntent: gate.intent,
+    pro: true,
+    paywallVisible: false,
+    paywallIntent: 'alert_limit' as ProGateIntent,
     requestPro,
     closePaywall,
   };

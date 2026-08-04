@@ -28,13 +28,15 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   error: null,
 };
 
-export function apkDownloadTaskId(buildNumber: string): string {
-  return `apk-update-${buildNumber}`;
+export function apkDownloadTaskId(buildNumber: string, sha256?: string | null): string {
+  const integrityKey = sha256?.slice(0, 12).toLowerCase();
+  return `apk-update-${buildNumber}${integrityKey ? `-${integrityKey}` : ''}`;
 }
 
-export function apkDestinationPath(documentsDir: string, buildNumber: string): string {
+export function apkDestinationPath(documentsDir: string, buildNumber: string, sha256?: string | null): string {
   const base = documentsDir.endsWith('/') ? documentsDir : `${documentsDir}/`;
-  return `${base}app-update-${buildNumber}.apk`;
+  const integrityKey = sha256?.slice(0, 12).toLowerCase();
+  return `${base}app-update-${buildNumber}${integrityKey ? `-${integrityKey}` : ''}.apk`;
 }
 
 /** Convert a native absolute downloader path to the URI form Expo FileSystem expects. */

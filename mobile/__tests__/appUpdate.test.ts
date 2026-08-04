@@ -68,6 +68,26 @@ describe('appUpdateLogic', () => {
     await expect(fetchApkManifest(manifestUrl)).resolves.toEqual(baseManifest);
   });
 
+  it('rejects mutable, untrusted, or unverifiable APK manifests', async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, download_url: 'https://example.com/app.apk' }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/approved GitHub release URL/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, sha256: undefined }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/sha256/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, repo: 'attacker/fake-app' }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/repository/i);
+  });
+
   it('reports available update when remote build is newer', async () => {
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
@@ -101,7 +121,7 @@ describe('appUpdateLogic', () => {
 
   it('attaches cumulative changelogs when remote semver is newer', async () => {
     const remote: ApkManifest = {
-      schema_version: 1,
+      ...baseManifest,
       version: '1.0.2',
       build_number: '11',
       download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.2/app-preview.apk',
@@ -119,7 +139,7 @@ describe('appUpdateLogic', () => {
 
   it('omits changelogs on same-version build bump', async () => {
     const remote: ApkManifest = {
-      schema_version: 1,
+      ...baseManifest,
       version: '1.0.0',
       build_number: '43',
       download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.0/app-preview.apk',
@@ -149,14 +169,14 @@ describe('APK download integrity', () => {
     expect(() => assertDownloadedApkMatchesManifest(4096, baseManifest)).toThrow(/size mismatch/);
   });
 
-  it('skips in-memory sha256 for large APKs when size matches', () => {
+  it('requires sha256 verification for large APKs when size matches', () => {
     const large = APK_SHA256_VERIFY_MAX_BYTES + 1;
     expect(
       assertDownloadedApkMatchesManifest(large, {
         bytes: large,
         sha256: baseManifest.sha256,
       }),
-    ).toEqual({ verifySha256: false });
+    ).toEqual({ verifySha256: true });
   });
 
   it('rejects a large APK when neither hashing nor manifest byte validation is available', () => {
@@ -182,7 +202,7 @@ describe('APK download integrity', () => {
     expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
   });
 
-  it('accepts an exact-size large APK without reading it into JS memory', async () => {
+  it('streams an exact-size large APK through the hash verifier', async () => {
     jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
       exists: true,
       isDirectory: false,
@@ -191,17 +211,21 @@ describe('APK download integrity', () => {
       modificationTime: 0,
     });
 
+    jest.mocked(FileSystem.readAsStringAsync).mockResolvedValue('');
     await expect(
-      verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
-    ).resolves.toEqual({ size: baseManifest.bytes, verifiedSha256: false });
-    expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+      verifyDownloadedApk('file:///docs/app-update-42.apk', {
+        ...baseManifest,
+        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      }),
+    ).resolves.toEqual({ size: baseManifest.bytes, verifiedSha256: true });
+    expect(FileSystem.readAsStringAsync).toHaveBeenCalled();
   });
 
   it('requests sha256 verify for small APKs', () => {
     expect(
       assertDownloadedApkMatchesManifest(1024, {
         bytes: 1024,
-        sha256: 'abc',
+        sha256: baseManifest.sha256,
       }),
     ).toEqual({ verifySha256: true });
   });

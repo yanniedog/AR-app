@@ -21,7 +21,11 @@ import {
   toFileUri,
   type ApkDownloadSnapshot,
 } from './appUpdateDownloadLogic';
-import { preferImmutableApkDownloadUrl, type ApkManifest } from './appUpdateLogic';
+import {
+  assertTrustedApkManifest,
+  preferImmutableApkDownloadUrl,
+  type ApkManifest,
+} from './appUpdateLogic';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 
 const STORAGE_KEY = 'app-update-download-v1';
@@ -33,7 +37,7 @@ let hydratePromise: Promise<void> | null = null;
 let activeTask: DownloadTask | null = null;
 let activeDownloadWifiOnly: boolean | null = null;
 let ensureInFlight: Promise<void> | null = null;
-let ensureBuild: string | null = null;
+let ensureKey: string | null = null;
 let configReady = false;
 let appStateHooked = false;
 let appStateSub: { remove: () => void } | null = null;
@@ -121,7 +125,7 @@ async function fileExists(uri: string | null | undefined): Promise<boolean> {
   }
 }
 
-async function clearStaleFiles(keepBuild: string | null): Promise<void> {
+async function clearStaleFiles(keepFilename: string | null): Promise<void> {
   const docs = FileSystem.documentDirectory;
   if (!docs) return;
   try {
@@ -129,7 +133,7 @@ async function clearStaleFiles(keepBuild: string | null): Promise<void> {
     await Promise.all(
       entries
         .filter((name) => name.startsWith('app-update-') && name.endsWith('.apk'))
-        .filter((name) => (keepBuild ? name !== `app-update-${keepBuild}.apk` : true))
+        .filter((name) => (keepFilename ? name !== keepFilename : true))
         .map((name) => FileSystem.deleteAsync(`${docs}${name}`, { idempotent: true })),
     );
   } catch {
@@ -146,8 +150,8 @@ async function stopTaskQuietly(task: DownloadTask | null | undefined): Promise<v
   }
 }
 
-async function stopMatchingTask(buildNumber: string): Promise<void> {
-  const taskId = apkDownloadTaskId(buildNumber);
+async function stopMatchingTask(manifest: ApkManifest): Promise<void> {
+  const taskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
   if (activeTask?.id === taskId) {
     await stopTaskQuietly(activeTask);
     activeTask = null;
@@ -155,7 +159,9 @@ async function stopMatchingTask(buildNumber: string): Promise<void> {
   try {
     const existing = await getExistingDownloadTasks();
     for (const task of existing) {
-      if (task.id === taskId) await stopTaskQuietly(task);
+      if (task.id === taskId || task.id.startsWith(`apk-update-${manifest.build_number}-`)) {
+        await stopTaskQuietly(task);
+      }
     }
   } catch {
     // Best-effort only.
@@ -255,7 +261,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
 }
 
 async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
-  const taskId = apkDownloadTaskId(manifest.build_number);
+  const taskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
   let existing: DownloadTask[] = [];
   try {
     existing = await getExistingDownloadTasks();
@@ -282,7 +288,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   if (state === 'DONE') {
     const dest =
       match.downloadParams?.destination ??
-      apkDestinationPath(directories.documents, manifest.build_number);
+      apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
@@ -356,8 +362,9 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
 }
 
 async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promise<void> {
-  const destination = apkDestinationPath(directories.documents, manifest.build_number);
-  await clearStaleFiles(manifest.build_number);
+  const destination = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
+  const keepFilename = destination.split('/').pop() ?? null;
+  await clearStaleFiles(keepFilename);
   try {
     await FileSystem.deleteAsync(toFileUri(destination), { idempotent: true });
   } catch {
@@ -372,7 +379,7 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
     );
   }
   const task = createDownloadTask({
-    id: apkDownloadTaskId(manifest.build_number),
+    id: apkDownloadTaskId(manifest.build_number, manifest.sha256),
     url: downloadUrl,
     destination,
     metadata: {
@@ -413,6 +420,7 @@ export async function ensureApkBackgroundDownload(
   options?: { wifiOnly?: boolean; force?: boolean },
 ): Promise<ApkDownloadSnapshot> {
   if (Platform.OS !== 'android') return getApkDownloadSnapshot();
+  assertTrustedApkManifest(manifest);
   await hydrate();
 
   const wifiOnly = Boolean(options?.wifiOnly);
@@ -459,7 +467,7 @@ export async function ensureApkBackgroundDownload(
       return snapshot;
     }
 
-    const dest = apkDestinationPath(directories.documents, manifest.build_number);
+    const dest = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
@@ -488,7 +496,7 @@ export async function ensureApkBackgroundDownload(
   }
 
   if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
-    const taskId = apkDownloadTaskId(manifest.build_number);
+    const taskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
     if (activeTask?.id === taskId) return snapshot;
     // Reattach handlers after process death / JS reload. If the OS no longer
     // knows the persisted task, replace it instead of returning stale state.
@@ -496,16 +504,18 @@ export async function ensureApkBackgroundDownload(
     force = true;
   }
 
-  if (ensureInFlight && ensureBuild === manifest.build_number && !force) {
+  const manifestKey = apkDownloadTaskId(manifest.build_number, manifest.sha256);
+  if (ensureInFlight) {
+    const inFlightKey = ensureKey;
     await ensureInFlight;
-    return snapshot;
+    if (!force && inFlightKey === manifestKey) return snapshot;
   }
 
-  ensureBuild = manifest.build_number;
+  ensureKey = manifestKey;
   ensureInFlight = (async () => {
     try {
       if (force) {
-        await stopMatchingTask(manifest.build_number);
+        await stopMatchingTask(manifest);
       } else {
         const reattached = await reattachExisting(manifest);
         if (reattached) return;
@@ -531,7 +541,7 @@ export async function ensureApkBackgroundDownload(
     }
   })().finally(() => {
     ensureInFlight = null;
-    ensureBuild = null;
+    ensureKey = null;
   });
 
   await ensureInFlight;
@@ -565,7 +575,7 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
     snapshot.localUri
       ? snapshot.localUri
       : null;
-  const fallback = apkDestinationPath(directories.documents, manifest.build_number);
+  const fallback = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
   const localUri = readyUri ?? ((await fileExists(fallback)) ? toFileUri(fallback) : null);
   if (!localUri) {
     throw new Error('Update download is not ready yet');
@@ -700,7 +710,7 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   activeTask = null;
   activeDownloadWifiOnly = null;
   ensureInFlight = null;
-  ensureBuild = null;
+  ensureKey = null;
   configReady = false;
   listeners.clear();
   promptInFlight = false;

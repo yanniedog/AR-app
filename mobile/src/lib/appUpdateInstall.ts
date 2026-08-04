@@ -1,18 +1,17 @@
-import * as Crypto from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
+import { sha256 } from '@noble/hashes/sha2.js';
 
 import { debugLog } from './debugLog';
 import { ensureInstallPermission } from './installPermission';
 import {
-  APK_SHA256_VERIFY_MAX_BYTES,
   assertDownloadedApkMatchesManifest,
   type ApkManifest,
 } from './appUpdateLogic';
 
-function toHex(buf: ArrayBuffer): string {
-  return Array.from(new Uint8Array(buf))
+function toHex(buf: Uint8Array): string {
+  return Array.from(buf)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
@@ -27,28 +26,23 @@ export async function verifyDownloadedApk(
 ): Promise<{ size: number; verifiedSha256: boolean }> {
   const info = await FileSystem.getInfoAsync(path);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
-  const { verifySha256: shouldHash } = assertDownloadedApkMatchesManifest(size, manifest);
-  if (!shouldHash) {
-    if (manifest.sha256) {
-      debugLog.warn(
-        'app-update',
-        `skipping sha256 verify (APK ${size} bytes > ${APK_SHA256_VERIFY_MAX_BYTES} bytes); size matched manifest.bytes=${manifest.bytes ?? 'n/a'}`,
-      );
-    }
-    return { size, verifiedSha256: false };
-  }
+  assertDownloadedApkMatchesManifest(size, manifest);
 
   const expectedSha = manifest.sha256!;
-  const base64 = await FileSystem.readAsStringAsync(path, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
+  const digest = sha256.create();
+  const chunkSize = 1024 * 1024;
+  for (let position = 0; position < size; position += chunkSize) {
+    const base64 = await FileSystem.readAsStringAsync(path, {
+      encoding: FileSystem.EncodingType.Base64,
+      position,
+      length: Math.min(chunkSize, size - position),
+    });
+    const binary = atob(base64);
+    const chunk = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) chunk[i] = binary.charCodeAt(i);
+    digest.update(chunk);
   }
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
-  const actual = toHex(digest);
+  const actual = toHex(digest.digest());
   if (actual !== expectedSha) {
     throw new Error(
       `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
