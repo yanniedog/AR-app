@@ -306,18 +306,40 @@ export async function checkForAppUpdateAcrossChannels(
   deviceAbis?: readonly string[] | null,
   perChannelTimeoutMs = 5_000,
 ): Promise<UpdateCheckResult> {
-  let result: UpdateCheckResult = {
+  let lastError: UpdateCheckResult = {
     status: 'error',
     message: 'No trusted APK channel is available',
   };
+  let bestAvailable: Extract<UpdateCheckResult, { status: 'available' }> | null = null;
+  let current: Extract<UpdateCheckResult, { status: 'current' }> | null = null;
+  let incompatible: Extract<UpdateCheckResult, { status: 'incompatible' }> | null = null;
   for (const manifestUrl of manifestUrls) {
-    result = await checkForAppUpdateAt(
+    const result = await checkForAppUpdateAt(
       manifestUrl,
       installed,
       deviceAbis,
       perChannelTimeoutMs,
     );
-    if (result.status !== 'error') return result;
+    if (result.status === 'available') {
+      if (
+        !bestAvailable ||
+        remoteIsNewer(
+          {
+            version: bestAvailable.remote.version,
+            buildNumber: bestAvailable.remote.build_number,
+          },
+          result.remote,
+        )
+      ) {
+        bestAvailable = result;
+      }
+    } else if (result.status === 'current') {
+      current ??= result;
+    } else if (result.status === 'incompatible') {
+      incompatible ??= result;
+    } else {
+      lastError = result;
+    }
   }
-  return result;
+  return bestAvailable ?? current ?? incompatible ?? lastError;
 }

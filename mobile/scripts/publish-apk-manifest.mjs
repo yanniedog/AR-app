@@ -2,7 +2,7 @@
 /**
  * Publish Android preview APK to GitHub Releases:
  *   1. Universal or ARM rolling tag (manifest + in-app self-update)
- *   2. Versioned tag app-v{semver} (immutable install history + per-version QR)
+ *   2. Channel-specific immutable tag app-v{semver} or app-arm-v{semver}
  *
  * Usage:
  *   GH_TOKEN=… node scripts/publish-apk-manifest.mjs --apk <path> [--repo owner/name] [--rolling-tag app-apk-latest|app-apk-arm-latest]
@@ -24,6 +24,7 @@ import {
   buildChangelogManifest,
   ensureGitHubRelease,
   ensureVersionEntry,
+  expectedAbisForApkChannel,
   generateInstallAssets,
   generateReleaseNotes,
   gh,
@@ -35,7 +36,7 @@ import {
   releaseTitle,
   renderRollingReleaseNotes,
   resolveApkRollingTag,
-  versionTag,
+  versionTagForApkChannel,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
 import { assertApkSizeBudget } from './report-artifact-sizes.mjs';
@@ -249,8 +250,7 @@ function writeJobSummary({ downloadUrl, qrUrl, installUrl, version, buildNumber,
   writeFileSync(summaryPath, `${lines.join('\n')}\n`, { flag: 'a' });
 }
 
-async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, changelogSummaryPath }) {
-  const tag = versionTag(version);
+async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, changelogSummaryPath, tag }) {
   const title = releaseTitle(version);
   const notes = generateReleaseNotes({ version, buildNumber, mobileRoot, repo });
   const versionOutDir = join(outDir, 'versioned');
@@ -315,7 +315,7 @@ async function dryRunQrLocal() {
   const rollingUrl = rollingApkDownloadUrl();
   const rolling = await generateInstallAssets(outDir, rollingUrl, repo, rollingTag, rollingTag);
 
-  const versionedTag = versionTag(version);
+  const versionedTag = versionTagForApkChannel(version, rollingTag);
   const versionedUrl = apkDownloadUrl(repo, versionedTag);
   const versionedDir = join(outDir, 'versioned');
   const versioned = await generateInstallAssets(versionedDir, versionedUrl, repo, versionedTag, rollingTag);
@@ -354,7 +354,10 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     versionName: version,
     versionCode: buildNumber,
     certificateSha256: releaseIdentity.signing_certificate_sha256,
-    supportedAbis: releaseIdentity.android_release_abis,
+    supportedAbis: expectedAbisForApkChannel(
+      rollingTag,
+      releaseIdentity.android_release_abis,
+    ),
   });
   if (packageName !== releaseIdentity.android_package) {
     throw new Error(
@@ -366,8 +369,8 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   // Point in-app updates at the immutable versioned asset. The rolling
   // app-apk-latest/app-preview.apk URL is clobbered on every publish; clients that
   // raced that replace downloaded a tiny/wrong body and failed sha256 checks.
-  const versionedTagName = versionTag(version);
-  if (!/^app-v\d+\.\d+\.\d+/.test(String(versionedTagName || ''))) {
+  const versionedTagName = versionTagForApkChannel(version, rollingTag);
+  if (!/^app(?:-arm)?-v\d+\.\d+\.\d+/.test(String(versionedTagName || ''))) {
     throw new Error(
       `publish-apk-manifest: refusing to publish with malformed version tag from version=${JSON.stringify(version)} → ${JSON.stringify(versionedTagName)}`,
     );
@@ -406,6 +409,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     buildNumber,
     outDir,
     changelogSummaryPath,
+    tag: versionedTagName,
   });
 
   // Rolling QR/install page also deep-link the versioned APK (immutable bytes).

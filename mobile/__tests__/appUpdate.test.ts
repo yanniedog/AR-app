@@ -178,6 +178,24 @@ describe('appUpdateLogic', () => {
     expect(global.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it('prefers a newer universal update when the ARM channel is stale', async () => {
+    (global.fetch as jest.Mock)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ...baseManifest, build_number: '41' }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => baseManifest });
+
+    await expect(
+      checkForAppUpdateAcrossChannels(
+        ['https://example.test/arm.json', manifestUrl],
+        installed,
+        ['arm64-v8a'],
+      ),
+    ).resolves.toMatchObject({ status: 'available', remote: baseManifest });
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+  });
+
   it('aborts a stalled ARM channel before falling back to universal', async () => {
     (global.fetch as jest.Mock)
       .mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
