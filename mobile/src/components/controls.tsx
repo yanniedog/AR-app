@@ -156,7 +156,7 @@ export function SegmentedControl<T extends string>({
               borderRadius: theme.radius.sm,
               alignItems: 'center',
               justifyContent: 'center',
-              overflow: 'hidden',
+              paddingVertical: 4,
             }}
           >
             <AppText

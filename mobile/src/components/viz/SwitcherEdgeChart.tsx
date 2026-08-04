@@ -126,6 +126,20 @@ export function SwitcherEdgeChart({
         {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
       </Row>
       <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`${SECTIONS[section].title} advertised spread on ${formatAxisDateLabel(activeDate)}: ${activeGapBps != null ? `${Math.round(activeGapBps * 10) / 10} basis points` : 'no spread observation'}.`}
+        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next date' },
+          { name: 'decrement', label: 'Previous date' },
+        ]}
+        onAccessibilityAction={(event) => {
+          const next = event.nativeEvent.actionName === 'increment'
+            ? Math.min(model.points.length - 1, activeIndex + 1)
+            : Math.max(0, activeIndex - 1);
+          onDateSelect?.(model.points[next]?.date ?? null);
+        }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
@@ -137,7 +151,7 @@ export function SwitcherEdgeChart({
           <Svg
             width={width}
             height={height}
-            accessibilityLabel={`Gap between typical and best ${SECTIONS[section].title} rate over time`}
+            importantForAccessibility="no-hide-descendants"
           >
             {[0, 0.5, 1].map((frac) => {
               const bps = yMax * frac;

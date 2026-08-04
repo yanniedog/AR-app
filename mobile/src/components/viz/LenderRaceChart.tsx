@@ -100,6 +100,20 @@ export function LenderRaceChart({
   return (
     <View>
       <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={`Lender ranking on ${formatAxisDateLabel(model.dates[activeIndex])}. ${ranked.length ? ranked.slice(0, 3).map((entry) => `Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}`).join('. ') : 'No ranked lenders.'}`}
+        accessibilityHint="Swipe up or down to move between observation dates."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next date' },
+          { name: 'decrement', label: 'Previous date' },
+        ]}
+        onAccessibilityAction={(event) => {
+          const next = event.nativeEvent.actionName === 'increment'
+            ? Math.min(model.dates.length - 1, activeIndex + 1)
+            : Math.max(0, activeIndex - 1);
+          onDateSelect?.(model.dates[next] ?? null);
+        }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
@@ -111,7 +125,7 @@ export function LenderRaceChart({
           <Svg
             width={width}
             height={height}
-            accessibilityLabel={`Top ${model.series.length} lender ranking race over time`}
+            importantForAccessibility="no-hide-descendants"
           >
             {Array.from({ length: lanes }, (_, lane) => (
               <React.Fragment key={`lane-${lane}`}>
@@ -191,6 +205,7 @@ export function LenderRaceChart({
           accessibilityLabel={`Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}, observed ${formatAxisDateLabel(model.dates[activeIndex])}${
             entry.moved ? `, ${entry.moved > 0 ? 'up' : 'down'} ${Math.abs(entry.moved)} places since the previous observation` : ''
           }`}
+          style={{ minHeight: 48, justifyContent: 'center' }}
         >
           <Row gap={8} style={{ paddingVertical: 5 }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(entry.provider, entry.seriesIndex) }} />
