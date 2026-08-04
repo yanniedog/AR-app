@@ -19,7 +19,7 @@ import type { AppState, Prefs, StoreGet, StoreSet } from './storeTypes';
 import {
   isSavedRate as savedRateExists,
   makeLegacySavedRateRef,
-  makeSavedRateRef,
+  toggleSavedRateRefs,
 } from './savedRates';
 
 export function createUserActions(set: StoreSet, get: StoreGet) {
@@ -47,11 +47,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     },
 
     toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
-      const ref = makeSavedRateRef(row, scope);
-      const exists = get().savedRates.some((item) => item.id === ref.id);
-      const savedRates = exists
-        ? get().savedRates.filter((item) => item.id !== ref.id)
-        : [...get().savedRates, ref];
+      const savedRates = toggleSavedRateRefs(get().savedRates, row, scope);
       set({
         savedRates,
         favorites: [...new Set(savedRates.map((item) => item.productKey))],

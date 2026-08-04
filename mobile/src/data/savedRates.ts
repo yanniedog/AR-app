@@ -99,6 +99,24 @@ export function isSavedRate(
   );
 }
 
+export function toggleSavedRateRefs(
+  refs: readonly SavedRateRef[],
+  row: RateRow,
+  scope: SavedRateRef['scope'] = 'rate',
+): SavedRateRef[] {
+  const next = makeSavedRateRef(row, scope);
+  if (refs.some((ref) => ref.id === next.id)) {
+    return refs.filter((ref) => ref.id !== next.id);
+  }
+  // A migrated product-scoped save is what makes every variant appear selected.
+  // Tapping one of those selected stars must clear that all-variant save first,
+  // rather than adding an exact save underneath an indefinitely selected star.
+  if (scope === 'rate' && refs.some((ref) => ref.scope === 'product' && ref.productKey === row.product_key)) {
+    return refs.filter((ref) => !(ref.scope === 'product' && ref.productKey === row.product_key));
+  }
+  return [...refs, next];
+}
+
 export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef[]): ResolvedSavedRate[] {
   const resolved: ResolvedSavedRate[] = [];
   for (const ref of refs) {
@@ -112,7 +130,7 @@ export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef
           fallback = null;
           break;
         }
-        fallback ??= candidate;
+        if (ref.scope === 'product') fallback ??= candidate;
       }
       if (resolved.at(-1)?.ref.id === ref.id) break;
     }

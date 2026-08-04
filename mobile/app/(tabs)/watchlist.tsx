@@ -30,6 +30,10 @@ export default function Saved() {
   useScrollToTop(scrollRef);
 
   const items = useMemo(() => (core ? resolveSavedRates(core, savedRates) : []), [core, savedRates]);
+  const unavailableRefs = useMemo(() => {
+    const resolvedIds = new Set(items.map((item) => item.ref.id));
+    return savedRates.filter((ref) => ref.scope === 'rate' && !resolvedIds.has(ref.id));
+  }, [items, savedRates]);
 
   const remove = useCallback(
     (id: string) => {
@@ -54,9 +58,20 @@ export default function Saved() {
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
           <EmptyState
             icon="star-outline"
-            title="Nothing saved yet"
-            subtitle="Save an exact rate to track that product variant, or save all variants from its product page."
+            title={unavailableRefs.length ? 'Saved rate unavailable' : 'Nothing saved yet'}
+            subtitle={
+              unavailableRefs.length
+                ? 'The exact saved tier is not in this dataset. It has not been replaced with a different product rate.'
+                : 'Save an exact rate to track that product variant, or save all variants from its product page.'
+            }
           />
+          {unavailableRefs.length ? (
+            <Button
+              title="Remove unavailable save"
+              variant="secondary"
+              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+            />
+          ) : null}
           <Button title="Browse products" onPress={() => router.push('/(tabs)/browse')} />
           <Button title="Search rates" variant="secondary" onPress={() => router.push('/search?section=Mortgage')} />
         </View>
@@ -82,6 +97,11 @@ export default function Saved() {
             />
           ) : null}
         </Row>
+        {unavailableRefs.length ? (
+          <AppText variant="small" color="textMuted" style={{ marginBottom: 12 }}>
+            {unavailableRefs.length} exact saved {unavailableRefs.length === 1 ? 'rate is' : 'rates are'} unavailable in this dataset and hidden rather than substituted.
+          </AppText>
+        ) : null}
         {selectMode && selected.length >= 2 ? (
           <Button
             title={`Compare ${selected.length}`}

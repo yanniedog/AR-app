@@ -3,6 +3,7 @@ import {
   makeSavedRateRef,
   normalizeSavedRates,
   resolveSavedRates,
+  toggleSavedRateRefs,
 } from '../src/data/savedRates';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -59,5 +60,15 @@ describe('saved rate references', () => {
   it('resolves the saved variant rather than the first product row', () => {
     const ref = makeSavedRateRef(row(2, '0.06'));
     expect(resolveSavedRates(core, [ref])[0]?.row.rate_index).toBe(2);
+  });
+
+  it('does not substitute another tier when an exact saved rate disappears', () => {
+    const ref = makeSavedRateRef(row(9, '0.07'));
+    expect(resolveSavedRates(core, [ref])).toEqual([]);
+  });
+
+  it('clears a migrated all-variant save when its selected rate star is tapped', () => {
+    const legacy = normalizeSavedRates(undefined, ['EX|HOME']);
+    expect(toggleSavedRateRefs(legacy, row(2, '0.06'))).toEqual([]);
   });
 });

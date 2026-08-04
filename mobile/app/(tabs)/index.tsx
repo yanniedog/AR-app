@@ -321,7 +321,9 @@ export default function Home() {
             </Row>
             <AppText variant="body" weight="700">
               {loyaltyGap.gapRate > 0
-                ? `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
+                ? section === 'TD'
+                  ? `Illustrative annualised gap: $${Math.round(loyaltyGap.annualDollars).toLocaleString()} across a full year; actual interest depends on term and maturity.`
+                  : `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
                 : 'Your saved rate is at least as strong as this matched observed rate.'}
             </AppText>
             <AppText variant="tiny" color="textMuted">
