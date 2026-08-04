@@ -221,17 +221,22 @@ function gitExec(repoRoot, args) {
   });
 }
 
-function findPreviousVersionTag(mobileRoot, version) {
+function findPreviousVersionTag(mobileRoot, version, releaseTag = versionTag(version)) {
   const repoRoot = join(mobileRoot, "..");
-  const current = versionTag(version);
+  const current = releaseTag;
   try {
-    const raw = gitExec(repoRoot, ["tag", "--list", "app-v*", "--sort=-version:refname"]);
-    return raw
-      .trim()
-      .split("\n")
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .find((t) => t !== current) ?? null;
+    const patterns = releaseTag.startsWith("app-arm-v") ? ["app-arm-v*", "app-v*"] : ["app-v*"];
+    for (const pattern of patterns) {
+      const raw = gitExec(repoRoot, ["tag", "--list", pattern, "--sort=-version:refname"]);
+      const previous = raw
+        .trim()
+        .split("\n")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .find((t) => t !== current);
+      if (previous) return previous;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -243,7 +248,7 @@ function stripCommitPrefix(line) {
 
 function generateStubEntry({ version, mobileRoot, repo, releaseTag = versionTag(version) }) {
   const repoRoot = join(mobileRoot, "..");
-  const prevTag = findPreviousVersionTag(mobileRoot, version);
+  const prevTag = findPreviousVersionTag(mobileRoot, version, releaseTag);
   const logArgs = prevTag
     ? ["log", `${prevTag}..HEAD`, "--pretty=format:%s", "--", "mobile/"]
     : ["log", "--pretty=format:%s", "-30", "--", "mobile/"];

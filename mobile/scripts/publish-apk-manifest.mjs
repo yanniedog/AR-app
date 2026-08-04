@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   APK_ASSET,
+  ARM_ROLLING_TAG,
   MANIFEST_ASSET,
   ROLLING_TAG as DEFAULT_ROLLING_TAG,
   CHANGELOG_SUMMARY_ASSET,
@@ -39,7 +40,10 @@ import {
   versionTagForApkChannel,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
-import { assertApkSizeBudget } from './report-artifact-sizes.mjs';
+import {
+  artifactBudgetForChannel,
+  assertApkSizeBudget,
+} from './report-artifact-sizes.mjs';
 import releaseIdentity from '../release-identity.json' with { type: 'json' };
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -345,7 +349,11 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   const performanceBudgets = JSON.parse(
     readFileSync(join(mobileRoot, 'performance-budgets.json'), 'utf8'),
   );
-  assertApkSizeBudget(apkBuf.length, performanceBudgets);
+  const apkChannel = rollingTag === ARM_ROLLING_TAG ? 'arm' : 'universal';
+  assertApkSizeBudget(
+    apkBuf.length,
+    artifactBudgetForChannel(performanceBudgets, apkChannel),
+  );
 
   const outDir = join(mobileRoot, 'build', 'apk-publish');
   mkdirSync(outDir, { recursive: true });
