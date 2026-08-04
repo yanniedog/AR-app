@@ -21,7 +21,7 @@
     "export:android": "expo export --platform android",
     "preexport:ios": "node scripts/ensure-firebase-config.mjs",
     "export:ios": "expo export --platform ios",
-    "preexport": "node scripts/ensure-firebase-config.mjs",
+    "preexport": "node scripts/clean-export-dir.mjs && node scripts/ensure-firebase-config.mjs",
     "export": "expo export --platform all",
     "size:report": "node scripts/report-artifact-sizes.mjs --guard",
     "ci": "npm run doctor && npm run typecheck && npm run lint && npm run test:scripts && npm run test -- --ci && npm run export && npm run size:report",

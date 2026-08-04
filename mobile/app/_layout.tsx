@@ -112,6 +112,7 @@ function BrandedSplashOverlay({
     const canMorph = onboarded && morphTarget != null;
     const shouldFade = !onboarded || morphWaitExpired;
     if (!canMorph && !shouldFade) return;
+    if (reducedMotion == null) return;
 
     if (reducedMotion) {
       progress.value = canMorph ? 1 : 0;

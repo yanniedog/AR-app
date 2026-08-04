@@ -53,7 +53,7 @@ export function SectionCrossfade({
       opacity.value = 1;
       return;
     }
-    if (reducedMotion) {
+    if (reducedMotion !== false) {
       opacity.value = 1;
       return;
     }
@@ -85,7 +85,7 @@ export function SegmentedControl<T extends string>({
 
   const movePill = useCallback(
     (layout: SegmentLayout, animate: boolean) => {
-      if (animate && !reducedMotion) {
+      if (animate && reducedMotion === false) {
         pillX.value = withSpring(layout.x, PILL_SPRING);
         pillW.value = withSpring(layout.width, PILL_SPRING);
       } else {

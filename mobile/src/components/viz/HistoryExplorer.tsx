@@ -77,10 +77,16 @@ export function HistoryExplorer({
   const needsInsights = activeMode === 'race' || activeMode === 'pulse';
   const showWindowChips = activeMode === 'race' || activeMode === 'pulse' || activeMode === 'edge';
 
-  const revision = `${section}:${historyModel?.dates.at(-1) ?? ''}:${insights?.run_date ?? ''}`;
   useEffect(() => {
     onDateSelect?.(null);
-  }, [activeMode, window, revision, onDateSelect]);
+  }, [activeMode, window, onDateSelect]);
+
+  const availableDates = needsInsights ? insights?.run_dates : historyModel?.dates;
+  useEffect(() => {
+    if (selectedDate && availableDates?.length && !availableDates.includes(selectedDate)) {
+      onDateSelect?.(null);
+    }
+  }, [availableDates, onDateSelect, selectedDate]);
 
   return (
     <View>

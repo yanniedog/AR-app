@@ -345,7 +345,11 @@ export default function Trends() {
                       style={{ justifyContent: 'space-between', paddingVertical: 6 }}
                       accessible
                       accessibilityRole="text"
-                      accessibilityLabel={rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))}
+                      accessibilityLabel={
+                        d.held
+                          ? `Held at ${formatRate(d.rate)}, ${formatRunDate(d.date)}`
+                          : rbaDecisionA11yLabel(d.prior, d.rate, formatRunDate(d.date))
+                      }
                     >
                       <AppText variant="small" color="textMuted">
                         {formatRunDate(d.date)}

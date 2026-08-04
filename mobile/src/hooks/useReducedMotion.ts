@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo } from 'react-native';
 
-/** Mirrors the operating-system reduce-motion preference and updates live. */
-export function useReducedMotion(): boolean {
-  // Be conservative until the asynchronous native preference resolves: no
-  // first-frame animation is preferable to flashing motion at opted-out users.
-  const [enabled, setEnabled] = useState(true);
+/** Mirrors the OS preference; `null` means native state is still resolving. */
+export function useReducedMotion(): boolean | null {
+  const [enabled, setEnabled] = useState<boolean | null>(null);
 
   useEffect(() => {
     let active = true;

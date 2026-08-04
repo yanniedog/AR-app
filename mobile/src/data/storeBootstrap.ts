@@ -65,7 +65,9 @@ export function createBootstrapActions(
           cachedBundle?.meta.source === 'sample' &&
           (
             !sampleManifestIsUsable(cachedBundle.meta.manifest) ||
-            cachedBundle.meta.coreSha !== sampleManifest.files.core.sha256
+            cachedBundle.meta.coreSha !== sampleManifest.files.core.sha256 ||
+            cachedBundle.meta.manifest.files.core.sha256 !== sampleManifest.files.core.sha256 ||
+            cachedBundle.core.run_date !== sampleCore.run_date
           );
         const bundle = staleSample ? null : cachedBundle;
         if (staleSample) {
@@ -229,7 +231,9 @@ export function createBootstrapActions(
         bundle?.meta.source !== 'sample' ||
         (
           sampleManifestIsUsable(bundle.meta.manifest) &&
-          bundle.meta.coreSha === sampleManifest.files.core.sha256
+          bundle.meta.coreSha === sampleManifest.files.core.sha256 &&
+          bundle.meta.manifest.files.core.sha256 === sampleManifest.files.core.sha256 &&
+          bundle.core.run_date === sampleCore.run_date
         );
       if (bundle && sampleIsCurrent) {
         set({ core: bundle.core, manifest: bundle.meta.manifest, source: bundle.meta.source });

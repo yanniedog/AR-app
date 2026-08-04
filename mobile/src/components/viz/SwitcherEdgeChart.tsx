@@ -107,22 +107,23 @@ export function SwitcherEdgeChart({
   const ink = theme.colors.primary;
   const widestIdx = model.widestDate ? model.points.findIndex((p) => p.date === model.widestDate) : -1;
   const widestPoint = widestIdx >= 0 ? model.points[widestIdx] : null;
-  const atWidest =
-    model.currentBps != null && model.maxBps > 0 && model.currentBps >= model.maxBps;
   const activePoint = model.points[activeIndex];
+  const activeGapBps = activePoint?.gapBps ?? null;
+  const isHistorical = activeIndex < model.points.length - 1;
+  const activeAtWidest = activeGapBps != null && model.maxBps > 0 && activeGapBps >= model.maxBps;
 
   return (
     <View>
       <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 6 }}>
         <AppText variant="rateHero" style={{ color: ink }}>
-          {model.currentBps != null ? `${Math.round(model.currentBps)} bps` : '—'}
+          {activeGapBps != null ? `${Math.round(activeGapBps)} bps` : '—'}
         </AppText>
         <View style={{ flex: 1, paddingBottom: 4 }}>
           <AppText variant="tiny" color="textMuted">
-            today's gap between the typical rate and the best on the market
+            {isHistorical ? 'selected-date observed gap' : 'latest observed gap'} between the typical rate and the best on the market
           </AppText>
         </View>
-        {atWidest ? <Badge label="widest in window" tone="primary" /> : null}
+        {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
       </Row>
       <View
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
@@ -152,7 +153,7 @@ export function SwitcherEdgeChart({
             })}
             <Path d={area} fill={withAlpha(ink, theme.dark ? 0.28 : 0.18)} />
             <Path d={line} stroke={ink} strokeWidth={2} fill="none" strokeLinecap="round" />
-            {widestPoint?.gapBps != null && !atWidest ? (
+            {widestPoint?.gapBps != null && !activeAtWidest ? (
               <Circle cx={xAt(widestIdx)} cy={yAt(widestPoint.gapBps)} r={3.5} fill={theme.colors.warning} />
             ) : null}
             {activePoint?.gapBps != null ? (

@@ -24,7 +24,7 @@ export function SpringOnNewData({
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion !== false) {
       scale.value = 1;
       return;
     }
@@ -80,7 +80,7 @@ export function HomeHero({
   const reducedMotion = useReducedMotion();
 
   useEffect(() => {
-    if (reducedMotion) {
+    if (reducedMotion !== false) {
       datePulse.value = 1;
       return;
     }
