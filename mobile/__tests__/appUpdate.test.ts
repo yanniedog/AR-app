@@ -22,6 +22,7 @@ const baseManifest: ApkManifest = {
   bytes: 130_000_000,
   sha256: '518fdd8767ca26d02775e585e3ea4bfc53b92e0788c9ae5751cc0eb593e5607a',
   package_name: 'com.eyex.australianrates',
+  supported_abis: ['armeabi-v7a', 'arm64-v8a'],
   signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
 };
 
@@ -95,6 +96,12 @@ describe('appUpdateLogic', () => {
       json: async () => ({ ...baseManifest, package_name: 'com.attacker.fake' }),
     });
     await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/package/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, supported_abis: ['arm64-v8a', 'x86_64'] }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/ABI list/i);
 
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,

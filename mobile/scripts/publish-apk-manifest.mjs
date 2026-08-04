@@ -342,6 +342,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     versionName: version,
     versionCode: buildNumber,
     certificateSha256: releaseIdentity.signing_certificate_sha256,
+    supportedAbis: releaseIdentity.android_release_abis,
   });
   if (packageName !== releaseIdentity.android_package) {
     throw new Error(
@@ -369,6 +370,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     sha256,
     bytes: apkBuf.length,
     package_name: identity.packageName,
+    supported_abis: identity.supportedAbis,
     signing_certificate_sha256: identity.certificateSha256,
     published_at: new Date().toISOString(),
     repo,

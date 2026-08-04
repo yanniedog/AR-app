@@ -13,6 +13,7 @@ export interface ApkManifest {
   sha256?: string;
   bytes?: number;
   package_name?: string;
+  supported_abis?: string[];
   signing_certificate_sha256?: string;
   published_at?: string;
   repo?: string;
@@ -24,6 +25,7 @@ export interface ApkManifest {
 }
 
 export const TRUSTED_ANDROID_PACKAGE = releaseIdentity.android_package;
+export const TRUSTED_ANDROID_RELEASE_ABIS = [...releaseIdentity.android_release_abis].sort();
 export const TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 =
   releaseIdentity.signing_certificate_sha256.toLowerCase();
 
@@ -104,6 +106,12 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   assertDownloadedApkMatchesManifest(manifest.bytes ?? 0, manifest);
   if (manifest.package_name !== TRUSTED_ANDROID_PACKAGE) {
     throw new Error('APK manifest package does not match Australian Rates');
+  }
+  if (manifest.supported_abis != null) {
+    const supportedAbis = [...new Set(manifest.supported_abis)].sort();
+    if (JSON.stringify(supportedAbis) !== JSON.stringify(TRUSTED_ANDROID_RELEASE_ABIS)) {
+      throw new Error('APK manifest ABI list does not match Australian Rates');
+    }
   }
   if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {
     throw new Error('APK manifest signing certificate is missing or invalid');

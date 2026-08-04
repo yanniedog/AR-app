@@ -1,5 +1,9 @@
 {
   "schema_version": 1,
   "android_package": "com.eyex.australianrates",
+  "android_release_abis": [
+    "armeabi-v7a",
+    "arm64-v8a"
+  ],
   "signing_certificate_sha256": "5f9ab77ef2b0c68307d652abe28dfa96690851af1a28353bb84d277ef83682c1"
 }

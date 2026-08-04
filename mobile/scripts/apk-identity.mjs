@@ -3,12 +3,15 @@ import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 export function parseAaptBadging(output) {
-  const line = String(output || '').split(/\r?\n/).find((item) => item.startsWith('package:')) || '';
+  const lines = String(output || '').split(/\r?\n/);
+  const line = lines.find((item) => item.startsWith('package:')) || '';
   const value = (name) => new RegExp(`${name}='([^']+)'`).exec(line)?.[1] || '';
+  const nativeCodeLine = lines.find((item) => item.startsWith('native-code:')) || '';
   return {
     packageName: value('name'),
     versionCode: value('versionCode'),
     versionName: value('versionName'),
+    supportedAbis: [...nativeCodeLine.matchAll(/'([^']+)'/g)].map((match) => match[1]),
   };
 }
 
@@ -31,6 +34,18 @@ export function assertExpectedSigningCertificate(actual, expected) {
   if (normalizedActual !== normalizedExpected) {
     throw new Error(
       `APK signing certificate mismatch (expected ${normalizedExpected}, got ${normalizedActual || 'missing'})`,
+    );
+  }
+}
+
+export function assertExpectedAbis(actual, expected) {
+  const normalize = (values) => [...new Set((values ?? []).map((value) => String(value).trim()).filter(Boolean))].sort();
+  const normalizedActual = normalize(actual);
+  const normalizedExpected = normalize(expected);
+  if (!normalizedExpected.length) throw new Error('Trusted APK ABI list is missing or invalid');
+  if (JSON.stringify(normalizedActual) !== JSON.stringify(normalizedExpected)) {
+    throw new Error(
+      `APK ABI mismatch (expected ${normalizedExpected.join(', ')}, got ${normalizedActual.join(', ') || 'none'})`,
     );
   }
 }
@@ -84,6 +99,7 @@ export function inspectApkIdentity(apkPath, expected) {
   if (badging.versionCode !== String(expected.versionCode)) {
     throw new Error(`APK build mismatch (expected ${expected.versionCode}, got ${badging.versionCode})`);
   }
+  assertExpectedAbis(badging.supportedAbis, expected.supportedAbis);
   const certificateSha256 = parseApksignerCertificateSha256(
     runTool(androidTool('apksigner'), ['verify', '--verbose', '--print-certs', apkPath]),
   );
