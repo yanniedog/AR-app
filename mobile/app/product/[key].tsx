@@ -57,8 +57,8 @@ export default function ProductDetail() {
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const favorite = useStore((s) => s.favorites.includes(productKey));
-  const toggleFavorite = useStore((s) => s.toggleFavorite);
+  const favorite = useStore((s) => s.isRateSaved(productKey, rateIndex));
+  const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
   const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex));
@@ -263,8 +263,8 @@ export default function ProductDetail() {
               <IconButton
                 icon={favorite ? 'star' : 'star-outline'}
                 color={favorite ? 'warning' : 'text'}
-                onPress={() => toggleFavorite(productKey)}
-                accessibilityLabel="Toggle favourite"
+                onPress={() => toggleSavedRate(row)}
+                accessibilityLabel={favorite ? 'Remove this rate from saved' : 'Save this exact rate'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
             </Row>

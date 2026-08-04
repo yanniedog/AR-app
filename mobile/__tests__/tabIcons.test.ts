@@ -25,6 +25,13 @@ describe('tabIcons', () => {
   it('presents the macro and market analysis destination as Outlook', () => {
     expect(getTabLabel('trends')).toBe('Outlook');
   });
+
+  it('uses decision-oriented labels for the primary navigation', () => {
+    expect(getTabLabel('index')).toBe('Today');
+    expect(getTabLabel('browse')).toBe('Products');
+    expect(getTabLabel('passthrough')).toBe('Moves');
+    expect(getTabLabel('watchlist')).toBe('Saved');
+  });
 });
 
 describe('androidChrome', () => {

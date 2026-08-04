@@ -222,6 +222,7 @@ export const bootstrapInitialState = {
   hydrated: false,
   activeSection: DEFAULT_PREFS.defaultSection,
   prefs: DEFAULT_PREFS,
+  savedRates: [],
   favorites: [] as string[],
   subscriptions: [],
 };

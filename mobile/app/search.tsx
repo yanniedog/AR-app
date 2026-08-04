@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +23,7 @@ import {
 } from '../src/data/selectors';
 import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifications';
 import { profileToFilters } from '../src/data/profile';
-import { findSearchSubscription } from '../src/data/subscriptions';
+import { findSearchSubscription, type SearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
@@ -45,11 +45,13 @@ const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
 export default function Search() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
-  const { section: secRaw, path: pathRaw, sort: sortRaw, scope: scopeRaw } = useLocalSearchParams<{
+  const { section: secRaw, path: pathRaw, sort: sortRaw, scope: scopeRaw, query: queryRaw, sub: subRaw } = useLocalSearchParams<{
     section: string;
     path?: string;
     sort?: string;
     scope?: string;
+    query?: string;
+    sub?: string;
   }>();
   const section = (SECTION_ORDER.includes(secRaw as SectionKey) ? secRaw : 'Mortgage') as SectionKey;
   const path = useMemo(() => (pathRaw ?? '').split('.').filter(Boolean), [pathRaw]);
@@ -60,6 +62,12 @@ export default function Search() {
   const searchIndex = useStore((s) => s.searchIndex);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
+  const restoredSub = useMemo(
+    () => subscriptions.find(
+      (sub): sub is SearchSubscription => sub.kind === 'search' && sub.id === subRaw,
+    ),
+    [subscriptions, subRaw],
+  );
   const ensureDetails = useStore((s) => s.ensureDetails);
   const ensureSearchIndex = useStore((s) => s.ensureSearchIndex);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -82,18 +90,27 @@ export default function Search() {
     void ensureSearchIndex();
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey]);
 
-  const [query, setQuery] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>(() => normalizeSortKey(sortRaw));
+  const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
+  const [sortKey, setSortKey] = useState<SortKey>(() => normalizeSortKey(restoredSub?.sort ?? sortRaw));
   // Seed from the saved product profile so users don't re-select the same
   // attributes on every screen; still fully overridable here.
   const [filters, setFilters] = useState<Filters>(() =>
-    profileToFilters(useStore.getState().prefs.profileFilters, section, EMPTY_FILTERS),
+    restoredSub
+      ? { ...EMPTY_FILTERS, ...restoredSub.filters }
+      : profileToFilters(useStore.getState().prefs.profileFilters, section, EMPTY_FILTERS),
   );
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => setSortKey(normalizeSortKey(sortRaw)), [sortRaw]);
+
+  useEffect(() => {
+    if (!restoredSub) return;
+    setQuery(restoredSub.query);
+    setSortKey(normalizeSortKey(restoredSub.sort));
+    setFilters({ ...EMPTY_FILTERS, ...restoredSub.filters });
+  }, [restoredSub]);
 
   const baseRows = useMemo(() => {
     const all = core?.sections[section]?.rates ?? [];
@@ -133,6 +150,7 @@ export default function Search() {
       path,
       hierarchyScoped,
       query,
+      sort: sortKey,
       filters: {
         providers: effectiveFilters.providers,
         rateTypes: effectiveFilters.rateTypes,
@@ -146,7 +164,7 @@ export default function Search() {
         includeNonStandard: effectiveFilters.includeNonStandard,
       },
     }),
-    [section, path, hierarchyScoped, query, effectiveFilters],
+    [section, path, hierarchyScoped, query, sortKey, effectiveFilters],
   );
 
   const searchSub = useStore((s) => findSearchSubscription(s.subscriptions, searchSnapshot));
@@ -220,11 +238,10 @@ export default function Search() {
             onPress={() => void onToggleSearchAlert()}
           />
         </Row>
-        {searchSub ? (
-          <AppText variant="tiny" color="textFaint">
-            {rows.length} products · {searchSub.label}
-          </AppText>
-        ) : null}
+        <AppText variant="tiny" color="textFaint">
+          {rows.length} {rows.length === 1 ? 'product' : 'products'}
+          {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
+        </AppText>
         {showDeepSearchHint ? (
           <Pressable onPress={() => setPref('enableDeepSearch', true)}>
             <AppText variant="tiny" color="primary" style={{ lineHeight: 16 }}>
@@ -281,7 +298,21 @@ export default function Search() {
             ) : searchIndexLoading ? (
               <LoadingRows />
             ) : (
-              <EmptyState title="No matching products" subtitle="Try clearing filters or a different search." />
+              <View style={{ gap: theme.spacing(3), paddingTop: theme.spacing(4) }}>
+                <EmptyState
+                  title="No matching products"
+                  subtitle="Your profile, search, or session filters may be narrowing the result."
+                />
+                <Button
+                  title="Clear search and filters"
+                  variant="secondary"
+                  onPress={() => {
+                    setQuery('');
+                    setFilters({ ...EMPTY_FILTERS, includeNonStandard });
+                  }}
+                />
+                <Button title="Edit product profile" variant="ghost" onPress={() => router.push('/profile')} />
+              </View>
             )
           }
         />

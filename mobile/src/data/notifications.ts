@@ -5,6 +5,7 @@ import type { Href } from 'expo-router';
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import { debugLog } from '../lib/debugLog';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
+import type { SavedRateRef } from './savedRates';
 import { ongoingRateCaveat } from '../lib/rateQualifier';
 import { bpsBetween, formatRate, toFraction } from './format';
 import { bestRow, rankFraction, type MortgageRateMetric, type RankMetric } from './selectors';
@@ -31,6 +32,7 @@ Notifications.setNotificationHandler({
 
 export interface NotifySearchRoute {
   section: SectionKey;
+  subscriptionId?: string;
   path?: string[];
   hierarchyScoped?: boolean;
   query?: string;
@@ -44,6 +46,7 @@ export interface NotifyMessage {
   productKey?: string;
   rateIndex?: number | null;
   search?: NotifySearchRoute;
+  href?: string;
 }
 
 export interface NotificationRoutePayload {
@@ -55,6 +58,7 @@ export interface NotificationRoutePayload {
   query?: string;
   scope?: string;
   sort?: string;
+  subscriptionId?: string;
 }
 
 export function productDeepLink(productKey: string, rateIndex?: number | null): string {
@@ -71,11 +75,16 @@ export function searchDeepLink(route: NotifySearchRoute): string {
   else if (route.scope) params.set('scope', route.scope);
   if (route.query) params.set('query', route.query);
   if (route.sort) params.set('sort', route.sort);
+  if (route.subscriptionId) params.set('sub', route.subscriptionId);
   return `${DEEP_LINK_SCHEME}://search?${params.toString()}`;
 }
 
 export function notificationDataFromMessage(msg: NotifyMessage): NotificationRoutePayload {
   const data: NotificationRoutePayload = {};
+  if (msg.href?.startsWith(`${DEEP_LINK_SCHEME}://`)) {
+    data.url = msg.href;
+    return data;
+  }
   if (msg.productKey) {
     data.productKey = msg.productKey;
     if (msg.rateIndex != null) data.rateIndex = String(msg.rateIndex);
@@ -87,6 +96,7 @@ export function notificationDataFromMessage(msg: NotifyMessage): NotificationRou
     if (msg.search.path?.length) data.path = msg.search.path.join('.');
     if (msg.search.query) data.query = msg.search.query;
     if (msg.search.sort) data.sort = msg.search.sort;
+    if (msg.search.subscriptionId) data.subscriptionId = msg.search.subscriptionId;
     if (msg.search.hierarchyScoped) data.scope = 'hierarchy';
     else if (msg.search.scope) data.scope = msg.search.scope;
     data.url = searchDeepLink(msg.search);
@@ -124,6 +134,7 @@ export function hrefFromNotificationData(
     if (typeof raw.path === 'string' && raw.path) params.path = raw.path;
     if (typeof raw.query === 'string' && raw.query) params.query = raw.query;
     if (typeof raw.sort === 'string' && raw.sort) params.sort = raw.sort;
+    if (typeof raw.subscriptionId === 'string' && raw.subscriptionId) params.sub = raw.subscriptionId;
     if (typeof raw.scope === 'string' && raw.scope) params.scope = raw.scope;
     return { pathname: '/search', params } as Href;
   }
@@ -274,9 +285,11 @@ function enrichSubscriptionRouting(
       ...base,
       search: {
         section: sub.section,
+        subscriptionId: sub.id,
         path: sub.path,
         hierarchyScoped: sub.hierarchyScoped,
         query: sub.query,
+        sort: sub.sort,
       },
     });
   }
@@ -303,7 +316,7 @@ function dedupeNotifyMessages(messages: NotifyMessage[]): NotifyMessage[] {
 export function computeChanges(
   oldCore: CorePayload | null,
   newCore: CorePayload,
-  favorites: string[],
+  favorites: readonly (string | SavedRateRef)[],
   thresholdBps: number,
   subscriptions: Subscription[] = [],
   oldDetailsProducts?: Record<string, ProductDetail> | null,
@@ -360,14 +373,17 @@ export function computeChanges(
     messages.push({
       title: 'RBA cash rate changed',
       body: `Cash rate is now ${newRba.rate.toFixed(2)}% (was ${oldRba.rate.toFixed(2)}%).`,
+      href: `${DEEP_LINK_SCHEME}://(tabs)/passthrough?date=${encodeURIComponent(newRba.date)}`,
     });
   }
 
   // Watchlisted products — compare row-for-row by rate_index and report the largest
   // qualifying move (order-independent; catches changes to any rate row, not just the first).
-  for (const key of favorites) {
-    const before = ratesByIndex(oldCore, key);
-    const after = ratesByIndex(newCore, key);
+  for (const saved of favorites) {
+    const key = typeof saved === 'string' ? saved : saved.productKey;
+    const exactIndex = typeof saved === 'string' || saved.scope === 'product' ? null : saved.rateIndex;
+    const before = exactIndex == null ? ratesByIndex(oldCore, key) : productRatesByIndex(oldCore, key, exactIndex);
+    const after = exactIndex == null ? ratesByIndex(newCore, key) : productRatesByIndex(newCore, key, exactIndex);
     let biggest: { row: RateRow; from: number; to: number; bps: number } | null = null;
     for (const [index, nw] of after) {
       const od = before.get(index);

@@ -14,11 +14,11 @@ export type TabIoniconName =
 
 /** Human-readable labels for the bottom navigation bar. */
 export const TAB_LABELS: Record<TabRouteName, string> = {
-  index: 'Home',
-  browse: 'Browse',
-  watchlist: 'Watchlist',
+  index: 'Today',
+  browse: 'Products',
+  watchlist: 'Saved',
   trends: 'Outlook',
-  passthrough: 'Response',
+  passthrough: 'Moves',
   settings: 'Settings',
 };
 

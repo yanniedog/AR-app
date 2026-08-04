@@ -16,6 +16,11 @@ import { debugLog } from '../lib/debugLog';
 import { hapticSelection } from '../lib/haptics';
 import { clearSuitabilityIndex } from './suitabilityIndex';
 import type { AppState, Prefs, StoreGet, StoreSet } from './storeTypes';
+import {
+  isSavedRate as savedRateExists,
+  makeLegacySavedRateRef,
+  makeSavedRateRef,
+} from './savedRates';
 
 export function createUserActions(set: StoreSet, get: StoreGet) {
   return {
@@ -25,16 +30,45 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
 
     toggleFavorite(key: string) {
       const favorites = get().favorites;
+      const removing = favorites.includes(key);
       set({
-        favorites: favorites.includes(key)
+        favorites: removing
           ? favorites.filter((k) => k !== key)
           : [...favorites, key],
+        savedRates: removing
+          ? get().savedRates.filter((ref) => ref.productKey !== key)
+          : [...get().savedRates, makeLegacySavedRateRef(key)],
       });
       hapticSelection();
     },
 
     isFavorite(key: string) {
-      return get().favorites.includes(key);
+      return get().savedRates.some((ref) => ref.productKey === key);
+    },
+
+    toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
+      const ref = makeSavedRateRef(row, scope);
+      const exists = get().savedRates.some((item) => item.id === ref.id);
+      const savedRates = exists
+        ? get().savedRates.filter((item) => item.id !== ref.id)
+        : [...get().savedRates, ref];
+      set({
+        savedRates,
+        favorites: [...new Set(savedRates.map((item) => item.productKey))],
+      });
+      hapticSelection();
+    },
+
+    removeSavedRate(id: string) {
+      const savedRates = get().savedRates.filter((item) => item.id !== id);
+      set({
+        savedRates,
+        favorites: [...new Set(savedRates.map((item) => item.productKey))],
+      });
+    },
+
+    isRateSaved(productKey: string, rateIndex: number | null) {
+      return savedRateExists(get().savedRates, productKey, rateIndex);
     },
 
     subscribeProduct(productKey: string, rateIndex: number | null, labelRow: Parameters<AppState['subscribeProduct']>[2]) {
@@ -179,6 +213,9 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'getDetail'
     | 'toggleFavorite'
     | 'isFavorite'
+    | 'toggleSavedRate'
+    | 'removeSavedRate'
+    | 'isRateSaved'
     | 'subscribeProduct'
     | 'unsubscribeProduct'
     | 'subscribeSearch'

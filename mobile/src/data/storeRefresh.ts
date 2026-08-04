@@ -139,7 +139,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             const messages = computeChanges(
               notifyCtx.previousCore,
               notifyCtx.core,
-              state.favorites,
+              state.savedRates?.length ? state.savedRates : state.favorites,
               state.prefs.rateMoveThresholdBps,
               state.subscriptions,
               notifyCtx.previousDetailsProducts,
