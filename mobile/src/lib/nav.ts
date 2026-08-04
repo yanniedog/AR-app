@@ -16,6 +16,13 @@ export const openProduct = (productKey: string, rateIndex?: number) =>
     params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
   });
 
+/** Open the on-device receipt for one exact product-rate row. */
+export const openRateReceipt = (productKey: string, rateIndex?: number) =>
+  router.push({
+    pathname: '/rate-receipt',
+    params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
+  });
+
 /** Open a lender page; optional date/section focus a specific bank-move drill-down. */
 export const openBank = (
   provider: string,

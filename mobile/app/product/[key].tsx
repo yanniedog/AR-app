@@ -33,7 +33,7 @@ import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/not
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { openBank } from '../../src/lib/nav';
+import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
 import {
@@ -350,6 +350,14 @@ export default function ProductDetail() {
         ) : null}
 
         <ProductSpecs row={row} section={section} />
+
+        <Button
+          title="Rate receipt & conversation brief"
+          icon="receipt-outline"
+          variant="secondary"
+          style={{ marginBottom: 16 }}
+          onPress={() => openRateReceipt(productKey, row.rate_index)}
+        />
 
         <SectionTitle text="Rate history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
