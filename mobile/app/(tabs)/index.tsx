@@ -12,6 +12,7 @@ import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
 import { computeLvr, num } from '../../src/data/calc';
+import { coverageFailures } from '../../src/data/coverage';
 import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
@@ -314,7 +315,7 @@ export default function Home() {
         offline={offline}
         pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
-        coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${core.coverage?.failures?.length ? ` · ${core.coverage.failures.length} provider failures` : ''}`}
+        coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${coverageFailures(core.coverage).length ? ` · ${coverageFailures(core.coverage).length} provider failure groups` : ''}`}
       />
 
       <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>

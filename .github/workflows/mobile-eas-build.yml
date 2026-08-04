@@ -67,6 +67,16 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+
+      - name: Install APK identity tools
+        run: sdkmanager "build-tools;35.0.0"
+
       - name: Require EXPO_TOKEN
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

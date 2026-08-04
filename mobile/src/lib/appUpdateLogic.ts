@@ -11,6 +11,8 @@ export interface ApkManifest {
   download_url: string;
   sha256?: string;
   bytes?: number;
+  package_name?: string;
+  signing_certificate_sha256?: string;
   published_at?: string;
   repo?: string;
   tag?: string;
@@ -19,6 +21,8 @@ export interface ApkManifest {
   eas_build_id?: string;
   profile?: string;
 }
+
+export const TRUSTED_ANDROID_PACKAGE = 'com.eyex.australianrates';
 
 export interface InstalledAppInfo {
   version: string;
@@ -95,6 +99,12 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   }
   if (!/^\d+$/.test(manifest.build_number)) throw new Error('APK manifest build_number is invalid');
   assertDownloadedApkMatchesManifest(manifest.bytes ?? 0, manifest);
+  if (manifest.package_name !== TRUSTED_ANDROID_PACKAGE) {
+    throw new Error('APK manifest package does not match Australian Rates');
+  }
+  if (!/^[a-f0-9]{64}$/i.test(manifest.signing_certificate_sha256 ?? '')) {
+    throw new Error('APK manifest signing certificate is missing or invalid');
+  }
 
   const immutable = preferImmutableApkDownloadUrl(manifest);
   let parsed: URL;

@@ -20,6 +20,8 @@ const baseManifest: ApkManifest = {
   published_at: '2026-06-09T00:00:00Z',
   bytes: 130_000_000,
   sha256: '518fdd8767ca26d02775e585e3ea4bfc53b92e0788c9ae5751cc0eb593e5607a',
+  package_name: 'com.eyex.australianrates',
+  signing_certificate_sha256: 'a'.repeat(64),
 };
 
 const installed = { version: '1.0.0', buildNumber: '41' };
@@ -86,6 +88,18 @@ describe('appUpdateLogic', () => {
       json: async () => ({ ...baseManifest, repo: 'attacker/fake-app' }),
     });
     await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/repository/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, package_name: 'com.attacker.fake' }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/package/i);
+
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ...baseManifest, signing_certificate_sha256: undefined }),
+    });
+    await expect(fetchApkManifest(manifestUrl)).rejects.toThrow(/signing certificate/i);
   });
 
   it('reports available update when remote build is newer', async () => {

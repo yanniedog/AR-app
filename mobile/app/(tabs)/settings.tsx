@@ -24,6 +24,12 @@ import {
 } from '../../src/components/settings/settingsUi';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
 import { formatRunDate, relativeDate } from '../../src/data/format';
+import {
+  coverageFailures,
+  coverageObservedAt,
+  coverageProvidersAttempted,
+  coverageProvidersSucceeded,
+} from '../../src/data/coverage';
 import { moveInterest, orderedInterestSections, toggleInterest } from '../../src/data/interests';
 import {
   ensurePermissions,
@@ -332,7 +338,19 @@ export default function Settings() {
             label="Rates observed"
             value={core ? String(Object.values(core.sections).reduce((sum, item) => sum + item.rates.length, 0)) : '—'}
           />
-          <InfoRow label="Provider failures" value={core?.coverage?.failures ? String(core.coverage.failures.length) : 'Not reported by this data set'} />
+          <InfoRow
+            label="Coverage observed"
+            value={coverageObservedAt(core?.coverage) ? formatRunDate(coverageObservedAt(core?.coverage)!) : 'Not reported by this data set'}
+          />
+          <InfoRow
+            label="Providers reached"
+            value={coverageProvidersAttempted(core?.coverage) != null ? String(coverageProvidersAttempted(core?.coverage)) : 'Not reported by this data set'}
+          />
+          <InfoRow
+            label="Providers observed"
+            value={coverageProvidersSucceeded(core?.coverage) != null ? String(coverageProvidersSucceeded(core?.coverage)) : 'Not reported by this data set'}
+          />
+          <InfoRow label="Provider failure groups" value={core?.coverage ? String(coverageFailures(core.coverage).length) : 'Not reported by this data set'} />
           {source === 'sample' ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 6, lineHeight: 16 }}>
               Bundled sample only — not today’s market. Connect and refresh before relying on a rate.
