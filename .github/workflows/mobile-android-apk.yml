@@ -1,7 +1,8 @@
 # Free unlimited Android preview APK builds on GitHub Actions (no EAS cloud quota).
-# Produces a signed release APK and publishes to:
-#   Rolling:   app-apk-latest  (manifest app-apk-latest.json for in-app self-update)
-#   Versioned: app-v{semver}   e.g. app-v1.0.0 - each APK advances the patch iteration
+# Produces a signed ARM release APK and publishes to:
+#   Rolling:   app-apk-arm-latest  (preferred by compatible in-app self-updates)
+#   Versioned: app-arm-v{semver}   e.g. app-arm-v1.0.85
+# The universal app-apk-latest channel stays frozen as the legacy/x86 fallback.
 # Both releases ship app-preview.apk, app-preview-qr.png, and install.html.
 #
 # Secrets (Settings - Secrets and variables - Actions):
@@ -81,6 +82,7 @@ jobs:
           node scripts/bump-android-version-code.mjs
           --repo "${{ github.repository }}"
           --fallback-repo yanniedog/AR-local
+          --rolling-tag app-apk-arm-latest
 
       - name: Materialize Android release keystore
         id: keystore
@@ -111,6 +113,7 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon \
+            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
             -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
@@ -139,29 +142,8 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         run: |
           node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
-            --repo "${{ github.repository }}"
-
-      - name: Bridge legacy AR-local APK update channel
-        if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ secrets.AR_LOCAL_RELEASE_TOKEN }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::AR_LOCAL_RELEASE_TOKEN is not set; skipping legacy AR-local APK bridge."
-            exit 0
-          fi
-          node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
-            --repo yanniedog/AR-local
-
-      - name: Publish README Android install QR section
-        if: github.ref == 'refs/heads/main'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/publish-readme-app-install.mjs \
             --repo "${{ github.repository }}" \
-            --manifest build/apk-publish/app-apk-latest.json
+            --rolling-tag app-apk-arm-latest
 
       - name: Upload workflow artifact
         if: always()

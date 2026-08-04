@@ -35,6 +35,8 @@ export const AUTO_BUMP_PREFIX = AUTO_RELEASE_BUMP_PREFIX;
 const POLL_ATTEMPTS = 6;
 const POLL_SECONDS = 20;
 const SPAWN_TIMEOUT_MS = 60_000;
+const APK_ROLLING_TAG = 'app-apk-arm-latest';
+const APK_VERSION_TAG_PREFIX = 'app-arm-v';
 
 export function checkedGhOutput(result, args = []) {
   if (result.error) {
@@ -70,7 +72,7 @@ function ghTry(args) {
 }
 
 function apkReleaseExists(version) {
-  return ghTry(['release', 'view', `app-v${version}`, '--repo', repo]).ok;
+  return ghTry(['release', 'view', `${APK_VERSION_TAG_PREFIX}${version}`, '--repo', repo]).ok;
 }
 
 export function hasApkBuildInFlight(rows, expectedHeadSha) {
@@ -116,7 +118,7 @@ function dispatchApkBuild(version) {
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers
 // must only invoke this once main HEAD already carries the version to ship; the
-// app-v<version> + in-flight guards keep it idempotent across the many runs this
+// app-arm-v<version> + in-flight guards keep it idempotent across the many runs this
 // workflow makes (once per merged PR).
 export function ensureApkForMainHead({
   readVersion = readCurrentVersion,
@@ -128,7 +130,9 @@ export function ensureApkForMainHead({
   const version = readVersion();
   const headSha = readHeadSha();
   if (releaseExists(version)) {
-    console.log(`mobile-auto-release-on-drain: app-v${version} already published — no APK dispatch`);
+    console.log(
+      `mobile-auto-release-on-drain: ${APK_VERSION_TAG_PREFIX}${version} already published — no APK dispatch`,
+    );
     return false;
   }
   if (buildInFlight(headSha)) {
@@ -234,7 +238,7 @@ export async function readPublishedVersion(
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
   const url =
-    `https://github.com/${repo}/releases/download/app-apk-latest/app-apk-latest.json` +
+    `https://github.com/${repo}/releases/download/${APK_ROLLING_TAG}/app-apk-latest.json` +
     `?_=${Date.now()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

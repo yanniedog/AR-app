@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Unique version iteration and monotonic android.versionCode for APK builds.
- * Reads version/build_number from the rolling app-apk-latest manifest (if present),
+ * Reads version/build_number from the selected rolling manifest (if present),
  * advances the visible patch version, and increments expo.android.versionCode.
  * A fallback repo keeps the first AR-app build monotonic with the legacy AR-local
  * update channel.
  *
- * Usage: node scripts/bump-android-version-code.mjs [--repo owner/name] [--fallback-repo owner/name]
+ * Usage: node scripts/bump-android-version-code.mjs [--repo owner/name] [--fallback-repo owner/name] [--rolling-tag app-apk-latest|app-apk-arm-latest]
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -20,13 +20,22 @@ const {
 } = require('./android-release-version-pure.cjs');
 
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
-const TAG = 'app-apk-latest';
+const UNIVERSAL_TAG = 'app-apk-latest';
+const ARM_TAG = 'app-apk-arm-latest';
 const MANIFEST_ASSET = 'app-apk-latest.json';
 
 const repoArgIdx = process.argv.indexOf('--repo');
 const repo =
   (repoArgIdx >= 0 ? process.argv[repoArgIdx + 1] : process.env.GITHUB_REPOSITORY)?.trim() ||
   'yanniedog/AR-app';
+
+const rollingTagArgIdx = process.argv.indexOf('--rolling-tag');
+const rollingTag = String(
+  rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1] : UNIVERSAL_TAG,
+).trim();
+if (rollingTag !== UNIVERSAL_TAG && rollingTag !== ARM_TAG) {
+  throw new Error(`Unsupported APK rolling tag: ${rollingTag}`);
+}
 
 const fallbackRepoArgIdx = process.argv.indexOf('--fallback-repo');
 const fallbackRepo =
@@ -40,9 +49,9 @@ const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
 const currentVersion = String(appJson.expo?.version ?? '1.0.0');
 const currentCode = Number(appJson.expo?.android?.versionCode ?? 1) || 1;
 
-async function fetchRemoteManifest(targetRepo = repo) {
+async function fetchRemoteManifest(targetRepo = repo, tag = rollingTag) {
   if (!targetRepo) return null;
-  const url = `https://github.com/${targetRepo}/releases/download/${TAG}/${MANIFEST_ASSET}`;
+  const url = `https://github.com/${targetRepo}/releases/download/${tag}/${MANIFEST_ASSET}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (res.status === 404) {
     console.log(`bump-android-version-code: no manifest at ${url}; starting from current`);
@@ -61,10 +70,16 @@ async function fetchRemoteManifest(targetRepo = repo) {
 }
 
 async function main() {
-  const primaryRemote = await fetchRemoteManifest(repo);
+  const primaryRemote = await fetchRemoteManifest(repo, rollingTag);
+  const universalFloor =
+    primaryRemote == null && rollingTag !== UNIVERSAL_TAG
+      ? await fetchRemoteManifest(repo, UNIVERSAL_TAG)
+      : null;
   const fallbackRemote =
-    primaryRemote == null && fallbackRepo ? await fetchRemoteManifest(fallbackRepo) : null;
-  const remote = primaryRemote ?? fallbackRemote;
+    primaryRemote == null && universalFloor == null && fallbackRepo
+      ? await fetchRemoteManifest(fallbackRepo, UNIVERSAL_TAG)
+      : null;
+  const remote = primaryRemote ?? universalFloor ?? fallbackRemote;
   const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
   const nextVersion = nextReleaseVersion(currentVersion, remote?.version);
   const nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);

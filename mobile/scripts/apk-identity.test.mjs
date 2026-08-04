@@ -31,7 +31,7 @@ test('requires exactly the configured release ABIs', () => {
   assert.throws(() => assertExpectedAbis([], expected), /APK ABI mismatch/i);
 });
 
-test('keeps the universal channel compatible with every previously shipped ABI', () => {
+test('keeps universal trust while scoping preview APK builds to ARM', () => {
   const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
   const easJson = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
   const releaseIdentity = JSON.parse(
@@ -45,14 +45,28 @@ test('keeps the universal channel compatible with every previously shipped ABI',
     ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'],
   );
   assert.equal(buildProperties?.android?.buildArchs, undefined);
-  assert.equal(easJson.build.preview.android.gradleCommand, undefined);
+  assert.equal(
+    easJson.build.preview.android.gradleCommand,
+    ':app:assembleRelease -PreactNativeArchitectures=armeabi-v7a,arm64-v8a',
+  );
   assert.equal(easJson.build.development.android.gradleCommand, undefined);
   assert.equal(easJson.build.production.android.gradleCommand, undefined);
   const workflow = readFileSync(
     new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(workflow, /-PreactNativeArchitectures=/);
+  assert.match(workflow, /-PreactNativeArchitectures=armeabi-v7a,arm64-v8a/);
+  assert.match(workflow, /--rolling-tag app-apk-arm-latest/);
+  assert.equal(workflow.match(/--rolling-tag app-apk-arm-latest/g)?.length, 2);
+  assert.doesNotMatch(workflow, /Bridge legacy AR-local APK update channel/);
+  assert.doesNotMatch(workflow, /Publish README Android install QR section/);
+
+  const easWorkflow = readFileSync(
+    new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(easWorkflow, /--rolling-tag app-apk-arm-latest/);
+  assert.equal(easWorkflow.match(/--rolling-tag app-apk-arm-latest/g)?.length, 2);
 });
 
 test('normalizes exactly one apksigner certificate digest', () => {

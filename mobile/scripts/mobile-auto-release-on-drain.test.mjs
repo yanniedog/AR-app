@@ -178,6 +178,17 @@ test('auto-release advances from the published APK instead of a stale source ver
   assert.equal(nextAutoReleaseVersion('1.0.78', '1.0.77'), '1.0.78');
 });
 
+test('auto-release reads the ARM channel after the universal transition', async () => {
+  let requestedUrl = '';
+  const published = await readPublishedVersion(async (url) => {
+    requestedUrl = url;
+    return { ok: true, json: async () => ({ version: '1.0.85' }) };
+  });
+
+  assert.equal(published, '1.0.85');
+  assert.match(requestedUrl, /\/releases\/download\/app-apk-arm-latest\/app-apk-latest\.json/);
+});
+
 test('rolling-manifest failures fall back to the checked-in release floor', async () => {
   const warnings = [];
   const missing = await readPublishedVersion(
