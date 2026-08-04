@@ -31,7 +31,7 @@ test('requires exactly the configured release ABIs', () => {
   assert.throws(() => assertExpectedAbis([], expected), /APK ABI mismatch/i);
 });
 
-test('keeps the transition APK compatible with every previously shipped ABI', () => {
+test('keeps the universal channel compatible with every previously shipped ABI', () => {
   const appJson = JSON.parse(readFileSync(new URL('../app.json', import.meta.url), 'utf8'));
   const easJson = JSON.parse(readFileSync(new URL('../eas.json', import.meta.url), 'utf8'));
   const releaseIdentity = JSON.parse(

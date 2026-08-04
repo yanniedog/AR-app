@@ -180,6 +180,17 @@ export function isApkCompatibleWithDevice(
   return deviceAbis.some((abi) => supported.has(normalizeAndroidAbi(abi)));
 }
 
+export function apkManifestUrlsForDevice(
+  deviceAbis: readonly string[] | null | undefined,
+  armUrl: string,
+  universalUrl: string,
+): string[] {
+  const normalized = new Set((deviceAbis ?? []).map(normalizeAndroidAbi));
+  return normalized.has('arm64-v8a') || normalized.has('armeabi-v7a')
+    ? [armUrl, universalUrl]
+    : [universalUrl];
+}
+
 export function assertApkCompatibleWithDevice(
   manifest: Pick<ApkManifest, 'supported_abis'>,
   deviceAbis: readonly string[] | null | undefined,
