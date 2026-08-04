@@ -13,8 +13,12 @@ export function parseAaptBadging(output) {
 }
 
 export function parseApksignerCertificateSha256(output) {
-  const matches = [...String(output || '').matchAll(/Signer #\d+ certificate SHA-256 digest:\s*([A-Fa-f0-9:]+)/g)]
-    .map((match) => match[1].replaceAll(':', '').toLowerCase());
+  // apksigner labels vary between Android build-tools releases (some omit the
+  // "Signer #n" prefix or separate bytes with spaces). Match the semantic
+  // certificate field, then normalize separators before enforcing one signer.
+  const matches = [
+    ...String(output || '').matchAll(/certificate SHA-256 digest:\s*([A-Fa-f0-9: ]+)/gi),
+  ].map((match) => match[1].replace(/[^A-Fa-f0-9]/g, '').toLowerCase());
   const unique = [...new Set(matches)];
   if (unique.length !== 1 || !/^[a-f0-9]{64}$/.test(unique[0] || '')) {
     throw new Error(`Expected exactly one APK signing certificate, found ${unique.length}`);
