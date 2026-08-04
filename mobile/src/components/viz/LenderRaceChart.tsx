@@ -83,7 +83,17 @@ export function LenderRaceChart({
   const selectedIndex = selectedDate ? model.dates.indexOf(selectedDate) : -1;
   const activeIndex = selectedIndex >= 0 ? selectedIndex : model.dates.length - 1;
   const ranked = model.series
-    .map((series) => ({ provider: series.provider, rank: series.ranks[activeIndex] }))
+    .map((series, seriesIndex) => {
+      const rank = series.ranks[activeIndex];
+      const previousRank = series.ranks[Math.max(0, activeIndex - 1)];
+      return {
+        provider: series.provider,
+        rank,
+        rate: series.values[activeIndex],
+        moved: rank != null && previousRank != null ? previousRank - rank : 0,
+        seriesIndex,
+      };
+    })
     .filter((entry) => entry.rank != null)
     .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
 
@@ -173,41 +183,41 @@ export function LenderRaceChart({
         detail={`Leaders on ${formatAxisDateLabel(model.dates[activeIndex])}`}
       />
 
-      {model.series.map((s, si) => (
+      {ranked.map((entry) => (
         <Pressable
-          key={s.provider}
-          onPress={() => openBank(s.provider)}
+          key={entry.provider}
+          onPress={() => openBank(entry.provider, { date: model.dates[activeIndex], section })}
           accessibilityRole="button"
-          accessibilityLabel={`Rank ${si + 1}, ${s.provider}, ${formatRate(s.current)}${
-            s.climbed ? `, ${s.climbed > 0 ? 'up' : 'down'} ${Math.abs(s.climbed)} places` : ''
+          accessibilityLabel={`Rank ${entry.rank}, ${entry.provider}, ${formatRate(entry.rate)}, observed ${formatAxisDateLabel(model.dates[activeIndex])}${
+            entry.moved ? `, ${entry.moved > 0 ? 'up' : 'down'} ${Math.abs(entry.moved)} places since the previous observation` : ''
           }`}
         >
           <Row gap={8} style={{ paddingVertical: 5 }}>
-            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(s.provider, si) }} />
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: colorFor(entry.provider, entry.seriesIndex) }} />
             <AppText variant="tiny" weight="700" color="textFaint" style={{ width: 22 }}>
-              #{si + 1}
+              #{entry.rank}
             </AppText>
-            <BankAvatar provider={s.provider} size={22} />
+            <BankAvatar provider={entry.provider} size={22} />
             <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
-              {s.provider}
+              {entry.provider}
             </AppText>
-            {s.climbed !== 0 ? (
+            {entry.moved !== 0 ? (
               <AppText
                 variant="tiny"
                 weight="700"
-                style={{ color: s.climbed > 0 ? theme.colors.success : theme.colors.danger }}
+                style={{ color: entry.moved > 0 ? theme.colors.success : theme.colors.danger }}
               >
-                {s.climbed > 0 ? '▲' : '▼'} {Math.abs(s.climbed)}
+                {entry.moved > 0 ? '▲' : '▼'} {Math.abs(entry.moved)}
               </AppText>
             ) : null}
             <AppText variant="small" weight="800">
-              {formatRate(s.current)}
+              {formatRate(entry.rate)}
             </AppText>
           </Row>
         </Pressable>
       ))}
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-        Best advertised rate ranking across {model.fieldSize} lenders · tap a lender for their profile
+        Observed {formatAxisDateLabel(model.dates[activeIndex])} ranking across {model.fieldSizes[activeIndex]} lenders · tap a lender for their dated profile
       </AppText>
     </View>
   );

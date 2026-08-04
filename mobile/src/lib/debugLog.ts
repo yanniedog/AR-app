@@ -385,7 +385,11 @@ export const debugLog = {
     }
 
     if (restored.length === 0) return;
-    buffer.loadHistory(restored);
+    // Startup logging may have flushed to the same file while this deferred
+    // read was in flight. Do not merge those exact current-session entries a
+    // second time into the bounded diagnostic buffer.
+    const liveLines = new Set(buffer.getEntries().map(formatEntry));
+    buffer.loadHistory(restored.filter((entry) => !liveLines.has(formatEntry(entry))));
     notify();
   },
 };

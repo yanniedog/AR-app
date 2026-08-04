@@ -80,6 +80,7 @@ export default function Trends() {
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const productHistory = useStore((s) => s.productHistory);
+  const productHistoryError = useStore((s) => s.productHistoryError);
 
   useEffect(() => {
     setRewindDate(null);
@@ -418,6 +419,8 @@ export default function Trends() {
                   section={activeSection}
                   date={rewindDate}
                   productHistory={productHistory}
+                  productHistoryError={productHistoryError}
+                  onRetryProductHistory={() => void ensureProductHistory({ force: true })}
                   core={core}
                 />
               </View>

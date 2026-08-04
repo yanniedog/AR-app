@@ -90,6 +90,8 @@ describe('lenderRaceModel', () => {
     // Day 1: Beta (0.053) beats Alpha (0.055); day 3: Alpha (0.052) leads.
     const alpha = model!.series[0];
     expect(alpha.ranks).toEqual([2, 2, 1]);
+    expect(alpha.values).toEqual([0.055, 0.0545, 0.052]);
+    expect(model!.fieldSizes).toEqual([2, 2, 2]);
     expect(alpha.climbed).toBe(1);
     expect(alpha.current).toBeCloseTo(0.052);
   });

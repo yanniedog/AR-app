@@ -12,6 +12,7 @@ import { countSuitabilityExclusions } from './access';
 import {
   sampleCore,
   sampleFallbackIsUsable,
+  sampleManifestIsUsable,
   sampleManifest,
 } from './sample';
 import { sampleAgeErrorMessage } from './storeHelpers';
@@ -60,12 +61,17 @@ export function createBootstrapActions(
       try {
         const prefs = get().prefs;
         const cachedBundle = await cache.readBundle();
-        const staleSample = cachedBundle?.meta.source === 'sample' && !sampleFallbackIsUsable();
+        const staleSample =
+          cachedBundle?.meta.source === 'sample' &&
+          (
+            !sampleManifestIsUsable(cachedBundle.meta.manifest) ||
+            cachedBundle.meta.coreSha !== sampleManifest.files.core.sha256
+          );
         const bundle = staleSample ? null : cachedBundle;
         if (staleSample) {
           debugLog.warn(
             'store',
-            `ignoring bundled sample cache observed ${sampleManifest.run_date}; age limit exceeded`,
+            `ignoring stale or replaced bundled sample cache observed ${cachedBundle?.meta.manifest.run_date}`,
           );
         }
         const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
@@ -140,7 +146,10 @@ export function createBootstrapActions(
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             void useRegisterLogosStore.getState().ensure();
-            await get().refresh({});
+            const refreshed = await get().refresh({});
+            if (!refreshed && get().status !== 'ready' && get().status !== 'error') {
+              set({ status: 'error', error: sampleAgeErrorMessage() });
+            }
             return;
           }
           set({
@@ -216,7 +225,12 @@ export function createBootstrapActions(
     async ensureCoreLoaded() {
       if (get().core) return;
       const bundle = await cache.readBundle();
-      const sampleIsCurrent = bundle?.meta.source !== 'sample' || sampleFallbackIsUsable();
+      const sampleIsCurrent =
+        bundle?.meta.source !== 'sample' ||
+        (
+          sampleManifestIsUsable(bundle.meta.manifest) &&
+          bundle.meta.coreSha === sampleManifest.files.core.sha256
+        );
       if (bundle && sampleIsCurrent) {
         set({ core: bundle.core, manifest: bundle.meta.manifest, source: bundle.meta.source });
       }

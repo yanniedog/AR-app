@@ -1,6 +1,7 @@
 import {
   SAMPLE_MAX_AGE_DAYS,
   sampleFallbackIsUsable,
+  sampleManifestIsUsable,
   sampleManifest,
 } from '../src/data/sample';
 
@@ -17,5 +18,14 @@ describe('bundled sample safety', () => {
   it('rejects a sample dated after the device clock', () => {
     const observed = Date.parse(sampleManifest.generated_at);
     expect(sampleFallbackIsUsable(new Date(observed - 1))).toBe(false);
+  });
+
+  it('checks a cached sample against its own generation time', () => {
+    const now = new Date(sampleManifest.generated_at);
+    expect(sampleManifestIsUsable({
+      run_date: '2025-01-01',
+      generated_at: '2025-01-01T00:00:00Z',
+    }, now)).toBe(false);
+    expect(sampleManifestIsUsable(sampleManifest, now)).toBe(true);
   });
 });

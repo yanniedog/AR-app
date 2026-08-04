@@ -3,6 +3,7 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { useStore } from '../data/store';
+import { sampleFallbackIsUsable } from '../data/sample';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
 import { Screen } from './Screen';
@@ -17,6 +18,7 @@ export function DataUnavailableScreen() {
   const retryDataLoad = useStore((s) => s.retryDataLoad);
   const loadSampleFallback = useStore((s) => s.loadSampleFallback);
   const busy = refreshing || status === 'loading';
+  const sampleUsable = sampleFallbackIsUsable();
 
   return (
     <Screen style={{ justifyContent: 'center', paddingHorizontal: 28 }}>
@@ -39,7 +41,9 @@ export function DataUnavailableScreen() {
           Data unavailable
         </AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-          We could not load rates. Check your connection and try again, or use bundled sample data offline.
+          {sampleUsable
+            ? 'We could not load rates. Check your connection and try again, or use the clearly labelled bundled sample offline.'
+            : 'We could not load verified rates, and the bundled sample is outside its safety window. Connect to Wi-Fi or allow a manual refresh and try again.'}
         </AppText>
         {error ? (
           <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }} numberOfLines={4}>
@@ -48,13 +52,15 @@ export function DataUnavailableScreen() {
         ) : null}
         <View style={{ marginTop: 22, width: '100%', gap: 10 }}>
           <Button title="Try again" icon="refresh" onPress={() => void retryDataLoad()} loading={busy} disabled={busy} />
-          <Button
-            title="Use sample data"
-            variant="secondary"
-            icon="flask-outline"
-            onPress={() => void loadSampleFallback()}
-            disabled={busy}
-          />
+          {sampleUsable ? (
+            <Button
+              title="Use sample data"
+              variant="secondary"
+              icon="flask-outline"
+              onPress={() => void loadSampleFallback()}
+              disabled={busy}
+            />
+          ) : null}
         </View>
       </View>
     </Screen>

@@ -18,11 +18,13 @@ function bpsLabel(value: number): string {
   return `${bps > 0 ? '+' : bps < 0 ? '−' : ''}${Math.abs(bps)} bps`;
 }
 
-function Mover({ event, payload, core, history }: {
+function Mover({ event, payload, core, history, historyError, onRetryHistory }: {
   event: BankRateEvent;
   payload: BankInsightsPayload;
   core: CorePayload | null;
   history: ProductHistoryPayload | null;
+  historyError: string | null;
+  onRetryHistory: () => void;
 }) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
@@ -61,7 +63,19 @@ function Mover({ event, payload, core, history }: {
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
             Reconstructed product-best movements from dated observations; these are not exact tier histories.
           </AppText>
-          {products.length ? products.map((move) => (
+          {historyError && !history ? (
+            <View>
+              <AppText variant="tiny" color="danger">Product history could not load: {historyError}</AppText>
+              <Pressable
+                onPress={onRetryHistory}
+                accessibilityRole="button"
+                accessibilityLabel="Retry product history"
+                style={{ minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' }}
+              >
+                <AppText variant="tiny" color="primary" weight="700">Retry history</AppText>
+              </Pressable>
+            </View>
+          ) : products.length ? products.map((move) => (
             <View key={`${move.productKey}:${move.rateIndex ?? 'all'}`}>
               <Pressable
                 disabled={move.rateIndex == null}
@@ -103,11 +117,13 @@ function Mover({ event, payload, core, history }: {
   );
 }
 
-export function PulseDayMovers({ payload, section, date, productHistory, core }: {
+export function PulseDayMovers({ payload, section, date, productHistory, productHistoryError, onRetryProductHistory, core }: {
   payload: BankInsightsPayload | null;
   section: SectionKey;
   date: string;
   productHistory: ProductHistoryPayload | null;
+  productHistoryError: string | null;
+  onRetryProductHistory: () => void;
   core: CorePayload | null;
 }) {
   const events = useMemo(() => eventsOnDate(payload, section, date), [date, payload, section]);
@@ -118,7 +134,14 @@ export function PulseDayMovers({ payload, section, date, productHistory, core }:
       {events.map((event, index) => (
         <React.Fragment key={`${event.provider}:${event.section}:${event.date}`}>
           {index ? <Divider /> : null}
-          <Mover event={event} payload={payload} core={core} history={productHistory} />
+          <Mover
+            event={event}
+            payload={payload}
+            core={core}
+            history={productHistory}
+            historyError={productHistoryError}
+            onRetryHistory={onRetryProductHistory}
+          />
         </React.Fragment>
       ))}
     </View>
