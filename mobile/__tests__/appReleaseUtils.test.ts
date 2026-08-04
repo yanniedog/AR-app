@@ -6,6 +6,7 @@ const {
 
 const {
   CHANGELOG_SUMMARY_ASSET,
+  buildChangelogManifest,
   renderGithubReleaseBody,
   selectCumulativeSummaries,
   versionGt,
@@ -79,5 +80,31 @@ describe('changelog-lib', () => {
     expect(body).toContain('<summary>Install</summary>');
     expect(body).toContain('changelog-summary.json');
     expect(body).toContain('Rolling manifest');
+  });
+
+  it('keeps mixed universal and ARM changelog links on their published channels', () => {
+    const manifest = buildChangelogManifest({
+      repo: 'yanniedog/AR-app',
+      mobileRoot: '',
+      entries: [
+        { version: '1.0.84', summaryBullets: ['Universal'] },
+        { version: '1.0.85', releaseTag: 'app-arm-v1.0.85', summaryBullets: ['ARM'] },
+      ],
+    });
+    expect(manifest.versions[0].releaseUrl).toContain('/releases/tag/app-v1.0.84');
+    expect(manifest.versions[1].releaseUrl).toContain('/releases/tag/app-arm-v1.0.85');
+
+    const body = renderGithubReleaseBody({
+      entry: {
+        version: '1.0.85',
+        releaseTag: 'app-arm-v1.0.85',
+        summaryBullets: ['ARM'],
+      },
+      buildNumber: '198',
+      repo: 'yanniedog/AR-app',
+      rollingTag: 'app-apk-arm-latest',
+    });
+    expect(body).toContain('/releases/tag/app-arm-v1.0.85');
+    expect(body).toContain('/releases/download/app-apk-arm-latest/changelog-summary.json');
   });
 });

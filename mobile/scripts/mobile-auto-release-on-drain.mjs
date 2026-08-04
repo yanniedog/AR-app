@@ -9,7 +9,11 @@ import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
-import { ARM_ROLLING_TAG, versionTagForApkChannel } from './app-release-meta.mjs';
+import {
+  ARM_ROLLING_TAG,
+  ROLLING_TAG,
+  versionTagForApkChannel,
+} from './app-release-meta.mjs';
 import {
   approveActionRequiredRuns,
   createHeadScopedRunTracker,
@@ -242,27 +246,35 @@ export async function readPublishedVersion(
   fetchImpl = fetch,
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
-  const url =
-    `https://github.com/${repo}/releases/download/${ARM_ROLLING_TAG}/app-apk-latest.json` +
-    `?_=${Date.now()}`;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   timer.unref?.();
   try {
-    const response = await fetchImpl(url, {
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+    let lastError = null;
+    for (const tag of [ARM_ROLLING_TAG, ROLLING_TAG]) {
+      const url =
+        `https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json` +
+        `?_=${Date.now()}`;
+      try {
+        const response = await fetchImpl(url, {
+          headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`${tag} HTTP ${response.status}`);
+        }
+        const manifest = await response.json();
+        const version = String(manifest?.version ?? '').trim();
+        if (!version) throw new Error(`${tag} manifest is missing version`);
+        // Validate before returning; nextReleaseVersion also validates, but a
+        // malformed rolling asset should safely try the universal transition floor.
+        nextReleaseVersion('0.0.0', version);
+        return version;
+      } catch (error) {
+        lastError = error;
+      }
     }
-    const manifest = await response.json();
-    const version = String(manifest?.version ?? '').trim();
-    if (!version) throw new Error('manifest is missing version');
-    // Validate before returning; nextReleaseVersion also validates, but a
-    // malformed rolling asset should take the same safe fallback as a 404.
-    nextReleaseVersion('0.0.0', version);
-    return version;
+    throw lastError ?? new Error('rolling manifests unavailable');
   } catch (error) {
     warn(
       `mobile-auto-release-on-drain: rolling APK manifest unavailable — use checked-in release floor (${String(
@@ -451,7 +463,15 @@ async function main() {
 
   const ensureEntry = spawnSync(
     'node',
-    ['scripts/ensure-changelog-entry.mjs', '--version', next, '--repo', repo],
+    [
+      'scripts/ensure-changelog-entry.mjs',
+      '--version',
+      next,
+      '--repo',
+      repo,
+      '--rolling-tag',
+      ARM_ROLLING_TAG,
+    ],
     { encoding: 'utf8', cwd: mobileDir },
   );
   if (ensureEntry.status !== 0) {

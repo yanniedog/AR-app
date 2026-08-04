@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  artifactBudgetForChannel,
   assertApkSizeBudget,
   collectArtifactSizes,
   evaluateArtifactBudgets,
@@ -60,4 +61,24 @@ test('enforces the APK budget for every publisher path', () => {
   const budget = { maximumGrowthFraction: 0.05, baseline: { apkBytes: 200 } };
   assert.doesNotThrow(() => assertApkSizeBudget(210, budget));
   assert.throws(() => assertApkSizeBudget(211, budget), /APK size 211 bytes exceeds 210 bytes/i);
+});
+
+test('uses a separate lower APK ceiling for the ARM channel', () => {
+  const configured = {
+    maximumGrowthFraction: 0.05,
+    baseline: { apkBytes: 132_510_218 },
+    apkBaselineByChannel: { arm: 75_000_000 },
+  };
+  const armBudget = artifactBudgetForChannel(configured, 'arm');
+  assert.equal(armBudget.baseline.apkBytes, 75_000_000);
+  assert.doesNotThrow(() => assertApkSizeBudget(78_750_000, armBudget));
+  assert.throws(
+    () => assertApkSizeBudget(78_750_001, armBudget),
+    /exceeds 78750000 bytes/i,
+  );
+  assert.equal(artifactBudgetForChannel(configured).baseline.apkBytes, 132_510_218);
+  assert.throws(
+    () => artifactBudgetForChannel(configured, 'attacker-controlled'),
+    /unsupported APK size-budget channel/i,
+  );
 });

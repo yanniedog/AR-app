@@ -209,7 +209,12 @@ function ensureRollingReleaseExists() {
 }
 
 function writeChangelogSummaryArtifact({ version, outDir }) {
-  ensureVersionEntry({ version, mobileRoot, repo });
+  ensureVersionEntry({
+    version,
+    mobileRoot,
+    repo,
+    releaseTag: versionTagForApkChannel(version, rollingTag),
+  });
   const manifest = buildChangelogManifest({ repo, mobileRoot });
   const summaryPath = join(outDir, CHANGELOG_SUMMARY_ASSET);
   writeFileSync(summaryPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
@@ -218,7 +223,7 @@ function writeChangelogSummaryArtifact({ version, outDir }) {
 
 function refreshRollingReleaseNotes({ version, buildNumber }) {
   const title = 'Australian Rates app (rolling preview APK)';
-  const notes = renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot });
+  const notes = renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot, rollingTag });
   ensureGitHubRelease(ghToken, repo, rollingTag, title, notes);
 }
 
@@ -252,7 +257,7 @@ function writeJobSummary({ downloadUrl, qrUrl, installUrl, version, buildNumber,
 
 async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, changelogSummaryPath, tag }) {
   const title = releaseTitle(version);
-  const notes = generateReleaseNotes({ version, buildNumber, mobileRoot, repo });
+  const notes = generateReleaseNotes({ version, buildNumber, mobileRoot, repo, rollingTag });
   const versionOutDir = join(outDir, 'versioned');
   mkdirSync(versionOutDir, { recursive: true });
 

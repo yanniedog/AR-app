@@ -1,8 +1,8 @@
 # Free unlimited Android preview APK builds on GitHub Actions (no EAS cloud quota).
-# Produces a signed ARM release APK and publishes to:
-#   Rolling:   app-apk-arm-latest  (preferred by compatible in-app self-updates)
-#   Versioned: app-arm-v{semver}   e.g. app-arm-v1.0.85
-# The universal app-apk-latest channel stays frozen as the legacy/x86 fallback.
+# Produces a signed release APK for one explicitly selected channel:
+#   arm (default): app-apk-arm-latest / app-arm-v{semver}, ARM ABIs only
+#   universal:     app-apk-latest / app-v{semver}, all legacy ABIs
+# The universal channel remains available as the legacy/x86 fallback.
 # Both releases ship app-preview.apk, app-preview-qr.png, and install.html.
 #
 # Secrets (Settings - Secrets and variables - Actions):
@@ -15,11 +15,21 @@
 # Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
 
 name: mobile-android-apk
+run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }})
 
 # Queue-drain automation dispatches this only after the final patch-version PR
 # merges. Building on every preceding main push produced duplicate/stale APKs.
 on:
   workflow_dispatch:
+    inputs:
+      apk_channel:
+        description: APK compatibility channel to build and publish
+        required: true
+        default: arm
+        type: choice
+        options:
+          - arm
+          - universal
 
 permissions:
   actions: write
@@ -34,10 +44,11 @@ concurrency:
 
 jobs:
   android-apk:
-    name: android preview apk (GHA)
+    name: android ${{ inputs.apk_channel || 'arm' }} preview apk (GHA)
     runs-on: ubuntu-latest
     env:
       NODE_ENV: production
+      APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
     defaults:
       run:
         working-directory: mobile
@@ -78,11 +89,15 @@ jobs:
       - name: Advance APK version iteration from rolling manifest
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-        run: >-
-          node scripts/bump-android-version-code.mjs
-          --repo "${{ github.repository }}"
-          --fallback-repo yanniedog/AR-local
-          --rolling-tag app-apk-arm-latest
+        run: |
+          rolling_tag="app-apk-arm-latest"
+          if [ "$APK_CHANNEL" = "universal" ]; then
+            rolling_tag="app-apk-latest"
+          fi
+          node scripts/bump-android-version-code.mjs \
+            --repo "${{ github.repository }}" \
+            --fallback-repo yanniedog/AR-local \
+            --rolling-tag "$rolling_tag"
 
       - name: Materialize Android release keystore
         id: keystore
@@ -112,8 +127,11 @@ jobs:
           set -euo pipefail
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon \
-            -PreactNativeArchitectures=armeabi-v7a,arm64-v8a \
+          architecture_args=()
+          if [ "$APK_CHANNEL" = "arm" ]; then
+            architecture_args+=("-PreactNativeArchitectures=armeabi-v7a,arm64-v8a")
+          fi
+          ./gradlew assembleRelease --no-daemon "${architecture_args[@]}" \
             -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
@@ -134,6 +152,7 @@ jobs:
       - name: Enforce APK size budget
         env:
           AR_APP_APK_PATH: ${{ steps.apk.outputs.path }}
+          AR_APP_APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
         run: npm run size:report
 
       - name: Publish preview APK manifest (GitHub release)
@@ -141,15 +160,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
+          rolling_tag="app-apk-arm-latest"
+          if [ "$APK_CHANNEL" = "universal" ]; then
+            rolling_tag="app-apk-latest"
+          fi
           node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
             --repo "${{ github.repository }}" \
-            --rolling-tag app-apk-arm-latest
+            --rolling-tag "$rolling_tag"
+
+      - name: Bridge legacy AR-local APK update channel
+        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal'
+        env:
+          GH_TOKEN: ${{ secrets.AR_LOCAL_RELEASE_TOKEN }}
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::warning::AR_LOCAL_RELEASE_TOKEN is not set; skipping legacy AR-local APK bridge."
+            exit 0
+          fi
+          node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
+            --repo yanniedog/AR-local
+
+      - name: Publish README Android install QR section
+        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/publish-readme-app-install.mjs \
+            --repo "${{ github.repository }}" \
+            --manifest build/apk-publish/app-apk-latest.json
 
       - name: Upload workflow artifact
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: app-preview-apk
+          name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
           path: |
             mobile/build/apk-publish/app-preview.apk
             mobile/build/apk-publish/app-apk-latest.json

@@ -86,6 +86,25 @@ export function assertApkSizeBudget(apkBytes, budgetConfig) {
   }
 }
 
+export function artifactBudgetForChannel(budgetConfig, channel = 'universal') {
+  const normalized = String(channel || 'universal').trim().toLowerCase();
+  if (normalized !== 'universal' && normalized !== 'arm') {
+    throw new Error(`Unsupported APK size-budget channel: ${normalized}`);
+  }
+  if (normalized === 'universal') return budgetConfig;
+  const apkBaseline = Number(budgetConfig.apkBaselineByChannel?.[normalized]);
+  if (!Number.isFinite(apkBaseline) || apkBaseline <= 0) {
+    throw new Error(`Missing APK size baseline for channel: ${normalized}`);
+  }
+  return {
+    ...budgetConfig,
+    baseline: {
+      ...budgetConfig.baseline,
+      apkBytes: apkBaseline,
+    },
+  };
+}
+
 function formatBytes(bytes) {
   if (bytes == null) return 'not built';
   if (bytes < 1024) return `${bytes} B`;
@@ -117,7 +136,11 @@ async function main() {
   const guard = process.argv.includes('--guard');
   const apkPaths = (process.env.AR_APP_APK_PATH ?? '').split(path.delimiter).filter(Boolean);
   const report = await collectArtifactSizes({ apkPaths });
-  const budgetConfig = JSON.parse(await readFile(new URL('../performance-budgets.json', import.meta.url), 'utf8'));
+  const configuredBudget = JSON.parse(await readFile(new URL('../performance-budgets.json', import.meta.url), 'utf8'));
+  const budgetConfig = artifactBudgetForChannel(
+    configuredBudget,
+    process.env.AR_APP_APK_CHANNEL,
+  );
   const failures = guard ? evaluateArtifactBudgets(report, budgetConfig) : [];
   const outputPath = path.resolve('dist', 'artifact-sizes.json');
   await mkdir(path.dirname(outputPath), { recursive: true });

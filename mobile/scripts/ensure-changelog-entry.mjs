@@ -8,6 +8,11 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
+import {
+  ROLLING_TAG,
+  resolveApkRollingTag,
+  versionTagForApkChannel,
+} from "./app-release-meta.mjs";
 
 const require = createRequire(import.meta.url);
 const { ensureVersionEntry } = require("./changelog-lib.cjs");
@@ -22,7 +27,16 @@ const repo =
 const version =
   (vIdx >= 0 ? process.argv[vIdx + 1] : null)?.trim() ||
   String(JSON.parse(readFileSync(join(mobileRoot, "app.json"), "utf8")).expo?.version ?? "1.0.0").trim();
+const rollingTagArgIdx = process.argv.indexOf("--rolling-tag");
+const rollingTag = resolveApkRollingTag(
+  rollingTagArgIdx >= 0 ? process.argv[rollingTagArgIdx + 1] : ROLLING_TAG,
+);
 
-const result = ensureVersionEntry({ version, mobileRoot, repo });
+const result = ensureVersionEntry({
+  version,
+  mobileRoot,
+  repo,
+  releaseTag: versionTagForApkChannel(version, rollingTag),
+});
 const action = result.created ? "created" : "exists";
 console.log(`changelog: ${action} ${version}.json (${result.entry.summaryBullets.length} summary bullets)`);

@@ -138,17 +138,28 @@ export function findPreviousVersionTag(version) {
 /**
  * @param {{ version: string, buildNumber: string, mobileRoot: string, repo?: string }} opts
  */
-export function generateReleaseNotes({ version, buildNumber, mobileRoot, repo }) {
+export function generateReleaseNotes({
+  version,
+  buildNumber,
+  mobileRoot,
+  repo,
+  rollingTag = ROLLING_TAG,
+}) {
   const ghRepo =
     repo?.trim() || process.env.GITHUB_REPOSITORY?.trim() || "yanniedog/AR-app";
 
   let entry = loadVersionEntryIfExists(mobileRoot, version);
   if (!entry) {
-    const stub = ensureVersionEntry({ version, mobileRoot, repo: ghRepo });
+    const stub = ensureVersionEntry({
+      version,
+      mobileRoot,
+      repo: ghRepo,
+      releaseTag: versionTagForApkChannel(version, rollingTag),
+    });
     entry = stub.entry ?? null;
   }
   if (entry) {
-    return renderGithubReleaseBody({ entry, buildNumber, repo: ghRepo });
+    return renderGithubReleaseBody({ entry, buildNumber, repo: ghRepo, rollingTag });
   }
 
   const changelogPath = join(mobileRoot, "CHANGELOG.md");

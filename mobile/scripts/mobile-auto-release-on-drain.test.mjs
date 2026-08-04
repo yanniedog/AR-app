@@ -189,6 +189,21 @@ test('auto-release reads the ARM channel after the universal transition', async 
   assert.match(requestedUrl, /\/releases\/download\/app-apk-arm-latest\/app-apk-latest\.json/);
 });
 
+test('first ARM auto-release uses the universal manifest as its version floor', async () => {
+  const requestedUrls = [];
+  const published = await readPublishedVersion(async (url) => {
+    requestedUrls.push(url);
+    if (url.includes('/app-apk-arm-latest/')) return { ok: false, status: 404 };
+    return { ok: true, json: async () => ({ version: '1.0.84' }) };
+  });
+
+  assert.equal(published, '1.0.84');
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /\/app-apk-arm-latest\//);
+  assert.match(requestedUrls[1], /\/app-apk-latest\//);
+  assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
+});
+
 test('rolling-manifest failures fall back to the checked-in release floor', async () => {
   const warnings = [];
   const missing = await readPublishedVersion(
