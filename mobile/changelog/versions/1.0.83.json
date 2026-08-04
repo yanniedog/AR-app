@@ -1,0 +1,31 @@
+{
+  "version": "1.0.83",
+  "date": "2026-08-04",
+  "summaryBullets": [
+    "Verify APK identity and preserve coverage provenance (#104)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Verify APK identity and preserve coverage provenance (#104)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-v1.0.83"
+        },
+        {
+          "text": "Since tag: app-v1.0.82"
+        }
+      ]
+    }
+  ]
+}

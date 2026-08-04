@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-04T16:21:56.093Z",
+  "generated_at": "2026-08-04T17:05:37.288Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -473,6 +473,14 @@
         "Center the app on saved rate decisions (#99)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.82"
+    },
+    {
+      "version": "1.0.83",
+      "date": "2026-08-04",
+      "summaryBullets": [
+        "Verify APK identity and preserve coverage provenance (#104)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-v1.0.83"
     }
   ]
 }
