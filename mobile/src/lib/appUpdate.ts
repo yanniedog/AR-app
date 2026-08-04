@@ -13,9 +13,9 @@ import {
 } from './appUpdateDownload';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 import {
+  apkManifestUrlsForDevice,
   assertApkCompatibleWithDevice,
   assertTrustedApkManifest,
-  apkManifestUrlsForDevice,
   checkForAppUpdateAcrossChannels,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,

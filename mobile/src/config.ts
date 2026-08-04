@@ -54,7 +54,7 @@ export const APK_MANIFEST_URL =
   extra.apkManifestUrl ??
   `https://github.com/${APK_REPO}/releases/download/${APK_RELEASE_TAG}/app-apk-latest.json`;
 
-/** ARM-only channel used only by clients that understand ABI-scoped updates. */
+/** ARM-only rolling channel used only by ABI-aware clients; universal remains the fallback. */
 export const APK_ARM_MANIFEST_URL =
   extra.apkArmManifestUrl ??
   `https://github.com/${APK_REPO}/releases/download/${APK_ARM_RELEASE_TAG}/app-apk-latest.json`;
