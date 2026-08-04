@@ -99,19 +99,25 @@ export function RbaChart({
     [data, holds, timeline],
   );
 
-  const pathD = useMemo(() => {
-    if (!data.length) return '';
-    let d = `M ${x(0)} ${y(data[0].rate)}`;
+  const pathModel = useMemo(() => {
+    if (!data.length) return { pathD: '', pathLength: 1 };
+    const xForDate = (date: string) => {
+      const ts = parseYmd(date);
+      if (ts == null || firstTs == null) return padL;
+      return padL + ((ts - firstTs) / timeSpan) * innerW;
+    };
+    const xForIndex = (index: number) => xForDate(data[index].date);
+    const yForRate = (rate: number) => padT + innerH - ((rate - minR) / span) * innerH;
+    let d = `M ${xForIndex(0)} ${yForRate(data[0].rate)}`;
     for (let i = 1; i < data.length; i += 1) {
-      d += ` L ${x(i)} ${y(data[i - 1].rate)} L ${x(i)} ${y(data[i].rate)}`;
+      d += ` L ${xForIndex(i)} ${yForRate(data[i - 1].rate)} L ${xForIndex(i)} ${yForRate(data[i].rate)}`;
     }
-    return d;
-  }, [data, innerW, innerH, minR, maxR]);
-
-  const pathLength = useMemo(() => {
-    if (!data.length || width <= 0) return 1;
-    return estimateStepPathLength(data, x, y);
-  }, [data, width, innerW, innerH, minR, maxR]);
+    return {
+      pathD: d,
+      pathLength: width <= 0 ? 1 : estimateStepPathLength(data, xForIndex, yForRate),
+    };
+  }, [data, firstTs, innerH, innerW, minR, span, timeSpan, width]);
+  const { pathD, pathLength } = pathModel;
 
   const pathAnimatedProps = useAnimatedProps(() => ({
     strokeDashoffset: pathLength * (1 - drawProgress.value),
