@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global AbortController, clearTimeout, setTimeout */
 /**
  * When the last open PR to main is squash-merged, bump expo.version through a
  * bot-authored pull request. Protected main is never pushed directly.
@@ -10,6 +11,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
+  ARM_ROLLING_TAG,
+  ROLLING_TAG,
+  versionTagForApkChannel,
+} from './app-release-meta.mjs';
+import {
   approveActionRequiredRuns,
   createHeadScopedRunTracker,
   waitForPullRequestMerge,
@@ -18,7 +24,7 @@ import {
 import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
-const { nextReleaseVersion } = androidReleaseVersion;
+const { compareVersions, nextReleaseVersion } = androidReleaseVersion;
 const mobileDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const repoRoot = join(mobileDir, '..');
 const dryRun = process.argv.includes('--dry-run');
@@ -70,7 +76,13 @@ function ghTry(args) {
 }
 
 function apkReleaseExists(version) {
-  return ghTry(['release', 'view', `app-v${version}`, '--repo', repo]).ok;
+  return ghTry([
+    'release',
+    'view',
+    versionTagForApkChannel(version, ARM_ROLLING_TAG),
+    '--repo',
+    repo,
+  ]).ok;
 }
 
 export function hasApkBuildInFlight(rows, expectedHeadSha) {
@@ -116,7 +128,7 @@ function dispatchApkBuild(version) {
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers
 // must only invoke this once main HEAD already carries the version to ship; the
-// app-v<version> + in-flight guards keep it idempotent across the many runs this
+// app-arm-v<version> + in-flight guards keep it idempotent across the many runs this
 // workflow makes (once per merged PR).
 export function ensureApkForMainHead({
   readVersion = readCurrentVersion,
@@ -128,7 +140,9 @@ export function ensureApkForMainHead({
   const version = readVersion();
   const headSha = readHeadSha();
   if (releaseExists(version)) {
-    console.log(`mobile-auto-release-on-drain: app-v${version} already published — no APK dispatch`);
+    console.log(
+      `mobile-auto-release-on-drain: ${versionTagForApkChannel(version, ARM_ROLLING_TAG)} already published — no APK dispatch`,
+    );
     return false;
   }
   if (buildInFlight(headSha)) {
@@ -233,37 +247,47 @@ export async function readPublishedVersion(
   fetchImpl = fetch,
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
-  const url =
-    `https://github.com/${repo}/releases/download/app-apk-latest/app-apk-latest.json` +
-    `?_=${Date.now()}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  timer.unref?.();
-  try {
-    const response = await fetchImpl(url, {
-      headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
-      signal: controller.signal,
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+  const fetchVersion = async (tag) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+    const url =
+      `https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json` +
+      `?_=${Date.now()}`;
+    try {
+      const response = await fetchImpl(url, {
+        headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+        signal: controller.signal,
+      });
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`${tag} HTTP ${response.status}`);
+      const manifest = await response.json();
+      const version = String(manifest?.version ?? '').trim();
+      if (!version) throw new Error(`${tag} manifest is missing version`);
+      nextReleaseVersion('0.0.0', version);
+      return version;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`${tag} request timed out after ${timeoutMs} ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-    const manifest = await response.json();
-    const version = String(manifest?.version ?? '').trim();
-    if (!version) throw new Error('manifest is missing version');
-    // Validate before returning; nextReleaseVersion also validates, but a
-    // malformed rolling asset should take the same safe fallback as a 404.
-    nextReleaseVersion('0.0.0', version);
-    return version;
-  } catch (error) {
-    warn(
-      `mobile-auto-release-on-drain: rolling APK manifest unavailable — use checked-in release floor (${String(
-        error instanceof Error ? error.message : error,
-      )})`,
-    );
-    return null;
-  } finally {
-    clearTimeout(timer);
+  };
+
+  const armVersion = await fetchVersion(ARM_ROLLING_TAG);
+  const universalVersion = await fetchVersion(ROLLING_TAG);
+  if (armVersion && universalVersion) {
+    return compareVersions(armVersion, universalVersion) >= 0
+      ? armVersion
+      : universalVersion;
   }
+  if (armVersion || universalVersion) return armVersion ?? universalVersion;
+  warn(
+    'mobile-auto-release-on-drain: ARM and universal rolling manifests are missing; use checked-in release floor',
+  );
+  return null;
 }
 
 function bumpBranchName(nextVersion) {
@@ -442,7 +466,15 @@ async function main() {
 
   const ensureEntry = spawnSync(
     'node',
-    ['scripts/ensure-changelog-entry.mjs', '--version', next, '--repo', repo],
+    [
+      'scripts/ensure-changelog-entry.mjs',
+      '--version',
+      next,
+      '--repo',
+      repo,
+      '--rolling-tag',
+      ARM_ROLLING_TAG,
+    ],
     { encoding: 'utf8', cwd: mobileDir },
   );
   if (ensureEntry.status !== 0) {

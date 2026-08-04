@@ -9,5 +9,8 @@
     "assetBytes": 4717808,
     "apkBytes": 132510218
   },
-  "notes": "Bundle, font, asset, and universal APK baselines are the canonical fresh-install artifacts. The universal channel remains the safe fallback for legacy/x86 clients; the separate ARM channel enforces its own lower ceiling when published."
+  "apkBaselineByChannel": {
+    "arm": 75000000
+  },
+  "notes": "Bundle, font, asset, and universal APK baselines are the canonical fresh-install artifacts. The active ARM APK publisher allows 5% growth over 75 MB, still below the 92.8 MB maximum required for a 30% reduction from v1.0.81."
 }

@@ -1,3 +1,7 @@
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 const {
   versionTag,
   releaseTitle,
@@ -6,6 +10,8 @@ const {
 
 const {
   CHANGELOG_SUMMARY_ASSET,
+  buildChangelogManifest,
+  ensureVersionEntry,
   renderGithubReleaseBody,
   selectCumulativeSummaries,
   versionGt,
@@ -79,5 +85,63 @@ describe('changelog-lib', () => {
     expect(body).toContain('<summary>Install</summary>');
     expect(body).toContain('changelog-summary.json');
     expect(body).toContain('Rolling manifest');
+  });
+
+  it('keeps mixed universal and ARM changelog links on their published channels', () => {
+    const manifest = buildChangelogManifest({
+      repo: 'yanniedog/AR-app',
+      mobileRoot: '',
+      entries: [
+        { version: '1.0.84', summaryBullets: ['Universal'] },
+        { version: '1.0.85', releaseTag: 'app-arm-v1.0.85', summaryBullets: ['ARM'] },
+      ],
+    });
+    expect(manifest.versions[0].releaseUrl).toContain('/releases/tag/app-v1.0.84');
+    expect(manifest.versions[1].releaseUrl).toContain('/releases/tag/app-arm-v1.0.85');
+
+    const body = renderGithubReleaseBody({
+      entry: {
+        version: '1.0.85',
+        releaseTag: 'app-arm-v1.0.85',
+        summaryBullets: ['ARM'],
+      },
+      buildNumber: '198',
+      repo: 'yanniedog/AR-app',
+      rollingTag: 'app-apk-arm-latest',
+    });
+    expect(body).toContain('/releases/tag/app-arm-v1.0.85');
+    expect(body).toContain('/releases/download/app-apk-arm-latest/changelog-summary.json');
+  });
+
+  it('retags existing same-version metadata for the channel being published', () => {
+    const mobileRoot = mkdtempSync(join(tmpdir(), 'ar-changelog-channel-'));
+    const versions = join(mobileRoot, 'changelog', 'versions');
+    mkdirSync(versions, { recursive: true });
+    writeFileSync(
+      join(versions, '1.0.85.json'),
+      JSON.stringify({
+        version: '1.0.85',
+        releaseTag: 'app-arm-v1.0.85',
+        summaryBullets: ['ARM release'],
+        sections: [
+          { title: 'Release metadata', bullets: [{ text: 'Version tag: app-arm-v1.0.85' }] },
+        ],
+      }),
+    );
+    try {
+      const result = ensureVersionEntry({
+        version: '1.0.85',
+        mobileRoot,
+        repo: 'yanniedog/AR-app',
+        releaseTag: 'app-v1.0.85',
+      });
+      expect(result.updated).toBe(true);
+      expect(result.entry.releaseTag).toBe('app-v1.0.85');
+      const persisted = JSON.parse(readFileSync(join(versions, '1.0.85.json'), 'utf8'));
+      expect(persisted.releaseTag).toBe('app-v1.0.85');
+      expect(persisted.sections[0].bullets[0].text).toBe('Version tag: app-v1.0.85');
+    } finally {
+      rmSync(mobileRoot, { recursive: true, force: true });
+    }
   });
 });

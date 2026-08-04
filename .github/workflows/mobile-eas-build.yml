@@ -110,6 +110,7 @@ jobs:
           node scripts/bump-android-version-code.mjs
           --repo "${{ github.repository }}"
           --fallback-repo yanniedog/AR-local
+          --rolling-tag app-apk-arm-latest
 
       # Fail fast in Actions before uploading to EAS cloud (same Metro bundle step).
       - name: Validate JS bundle (typecheck + export)
@@ -213,7 +214,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           node scripts/publish-apk-manifest.mjs --eas-build-id "${{ steps.eas_build.outputs.eas_build_id }}" \
-            --repo "${{ github.repository }}"
+            --repo "${{ github.repository }}" \
+            --rolling-tag app-apk-arm-latest
 
       - name: Build queued
         run: |

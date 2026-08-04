@@ -178,31 +178,119 @@ test('auto-release advances from the published APK instead of a stale source ver
   assert.equal(nextAutoReleaseVersion('1.0.78', '1.0.77'), '1.0.78');
 });
 
-test('rolling-manifest failures fall back to the checked-in release floor', async () => {
+test('auto-release reads the ARM channel after the universal transition', async () => {
+  const requestedUrls = [];
+  const published = await readPublishedVersion(async (url) => {
+    requestedUrls.push(url);
+    return { ok: true, json: async () => ({ version: '1.0.85' }) };
+  });
+
+  assert.equal(published, '1.0.85');
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /\/releases\/download\/app-apk-arm-latest\/app-apk-latest\.json/);
+  assert.match(requestedUrls[1], /\/releases\/download\/app-apk-latest\/app-apk-latest\.json/);
+});
+
+test('first ARM auto-release uses the universal manifest as its version floor', async () => {
+  const requestedUrls = [];
+  const published = await readPublishedVersion(async (url) => {
+    requestedUrls.push(url);
+    if (url.includes('/app-apk-arm-latest/')) return { ok: false, status: 404 };
+    return { ok: true, json: async () => ({ version: '1.0.84' }) };
+  });
+
+  assert.equal(published, '1.0.84');
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /\/app-apk-arm-latest\//);
+  assert.match(requestedUrls[1], /\/app-apk-latest\//);
+  assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
+});
+
+test('auto-release merges a newer universal floor with an older ARM channel', async () => {
+  const published = await readPublishedVersion(async (url) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      version: url.includes('/app-apk-arm-latest/') ? '1.0.83' : '1.0.84',
+    }),
+  }));
+
+  assert.equal(published, '1.0.84');
+  assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
+});
+
+test('ARM manifest timeout fails closed instead of using a stale universal floor', async () => {
+  const requestedUrls = [];
+  await assert.rejects(
+    () => readPublishedVersion(
+      async (url, { signal }) => {
+        requestedUrls.push(url);
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('arm timed out')), { once: true });
+        });
+      },
+      { timeoutMs: 5, warn: () => {} },
+    ),
+    /app-apk-arm-latest request timed out/i,
+  );
+  assert.equal(requestedUrls.length, 1);
+});
+
+test('only definitively missing rolling manifests use the checked-in release floor', async () => {
   const warnings = [];
   const missing = await readPublishedVersion(
     async () => ({ ok: false, status: 404 }),
     { warn: (message) => warnings.push(message) },
   );
-  const malformed = await readPublishedVersion(
-    async () => ({ ok: true, json: async () => ({ version: 'not-semver' }) }),
-    { warn: (message) => warnings.push(message) },
+  await assert.rejects(
+    () => readPublishedVersion(
+      async () => ({ ok: true, json: async () => ({ version: 'not-semver' }) }),
+      { warn: (message) => warnings.push(message) },
+    ),
+    /x\.y\.z/i,
   );
 
   assert.equal(missing, null);
-  assert.equal(malformed, null);
-  assert.equal(warnings.length, 2);
+  assert.equal(warnings.length, 1);
   assert.equal(nextAutoReleaseVersion('1.0.79', missing), '1.0.79');
 });
 
-test('rolling-manifest reads abort after the configured timeout', async () => {
-  const published = await readPublishedVersion(
-    async (_url, { signal }) =>
-      new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      }),
-    { timeoutMs: 1, warn: () => {} },
+test('ARM server errors do not fall back to the older universal channel', async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => readPublishedVersion(async () => {
+      requests += 1;
+      return { ok: false, status: 500 };
+    }),
+    /app-apk-arm-latest HTTP 500/i,
   );
+  assert.equal(requests, 1);
+});
 
-  assert.equal(published, null);
+test('universal read errors fail closed even after a valid ARM response', async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => readPublishedVersion(async (url) => {
+      requests += 1;
+      if (url.includes('/app-apk-arm-latest/')) {
+        return { ok: true, status: 200, json: async () => ({ version: '1.0.85' }) };
+      }
+      return { ok: false, status: 500 };
+    }),
+    /app-apk-latest HTTP 500/i,
+  );
+  assert.equal(requests, 2);
+});
+
+test('rolling-manifest timeouts reject the release decision', async () => {
+  await assert.rejects(
+    () => readPublishedVersion(
+      async (_url, { signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+      { timeoutMs: 1, warn: () => {} },
+    ),
+    /request timed out/i,
+  );
 });

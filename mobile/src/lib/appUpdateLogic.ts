@@ -343,3 +343,35 @@ export async function checkForAppUpdateAcrossChannels(
   }
   return bestAvailable ?? current ?? incompatible ?? lastError;
 }
+
+/** Select the newest trusted APK that can run on this device, without changelog fetches. */
+export async function fetchBestCompatibleApkManifest(
+  manifestUrls: readonly string[],
+  deviceAbis?: readonly string[] | null,
+  perChannelTimeoutMs = 5_000,
+): Promise<ApkManifest> {
+  let best: ApkManifest | null = null;
+  let lastError: Error | null = null;
+  for (const manifestUrl of manifestUrls) {
+    try {
+      const candidate = await fetchApkManifest(manifestUrl, perChannelTimeoutMs);
+      if (!isApkCompatibleWithDevice(candidate, deviceAbis)) {
+        lastError = new Error(`APK at ${manifestUrl} is not compatible with this device`);
+        continue;
+      }
+      if (
+        !best ||
+        remoteIsNewer(
+          { version: best.version, buildNumber: best.build_number },
+          candidate,
+        )
+      ) {
+        best = candidate;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  if (best) return best;
+  throw lastError ?? new Error('No trusted compatible APK channel is available');
+}

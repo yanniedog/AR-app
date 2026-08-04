@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const {
   compareVersions,
+  mergeReleaseFloors,
   nextReleaseVersion,
   nextVersionCode,
 } = require('../scripts/android-release-version-pure.cjs');
@@ -35,5 +36,15 @@ describe('Android APK release iteration', () => {
     expect(nextVersionCode(142, 156, 25)).toBe(157);
     expect(nextVersionCode(200, 156, 25)).toBe(200);
     expect(nextVersionCode(142, null, 300)).toBe(300);
+  });
+
+  it('merges ARM and universal floors without version or build rollback', () => {
+    expect(
+      mergeReleaseFloors([
+        { version: '1.0.85', buildNumber: 198 },
+        { version: '1.0.84', buildNumber: 205 },
+      ]),
+    ).toEqual({ version: '1.0.85', buildNumber: 205 });
+    expect(mergeReleaseFloors([null, undefined])).toBeNull();
   });
 });

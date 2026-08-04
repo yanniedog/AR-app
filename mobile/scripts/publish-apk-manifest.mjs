@@ -17,6 +17,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   APK_ASSET,
+  ARM_ROLLING_TAG,
   MANIFEST_ASSET,
   ROLLING_TAG as DEFAULT_ROLLING_TAG,
   CHANGELOG_SUMMARY_ASSET,
@@ -39,7 +40,10 @@ import {
   versionTagForApkChannel,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
-import { assertApkSizeBudget } from './report-artifact-sizes.mjs';
+import {
+  artifactBudgetForChannel,
+  assertApkSizeBudget,
+} from './report-artifact-sizes.mjs';
 import releaseIdentity from '../release-identity.json' with { type: 'json' };
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -209,7 +213,12 @@ function ensureRollingReleaseExists() {
 }
 
 function writeChangelogSummaryArtifact({ version, outDir }) {
-  ensureVersionEntry({ version, mobileRoot, repo });
+  ensureVersionEntry({
+    version,
+    mobileRoot,
+    repo,
+    releaseTag: versionTagForApkChannel(version, rollingTag),
+  });
   const manifest = buildChangelogManifest({ repo, mobileRoot });
   const summaryPath = join(outDir, CHANGELOG_SUMMARY_ASSET);
   writeFileSync(summaryPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
@@ -218,7 +227,7 @@ function writeChangelogSummaryArtifact({ version, outDir }) {
 
 function refreshRollingReleaseNotes({ version, buildNumber }) {
   const title = 'Australian Rates app (rolling preview APK)';
-  const notes = renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot });
+  const notes = renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot, rollingTag });
   ensureGitHubRelease(ghToken, repo, rollingTag, title, notes);
 }
 
@@ -252,7 +261,7 @@ function writeJobSummary({ downloadUrl, qrUrl, installUrl, version, buildNumber,
 
 async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, changelogSummaryPath, tag }) {
   const title = releaseTitle(version);
-  const notes = generateReleaseNotes({ version, buildNumber, mobileRoot, repo });
+  const notes = generateReleaseNotes({ version, buildNumber, mobileRoot, repo, rollingTag });
   const versionOutDir = join(outDir, 'versioned');
   mkdirSync(versionOutDir, { recursive: true });
 
@@ -340,7 +349,11 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
   const performanceBudgets = JSON.parse(
     readFileSync(join(mobileRoot, 'performance-budgets.json'), 'utf8'),
   );
-  assertApkSizeBudget(apkBuf.length, performanceBudgets);
+  const apkChannel = rollingTag === ARM_ROLLING_TAG ? 'arm' : 'universal';
+  assertApkSizeBudget(
+    apkBuf.length,
+    artifactBudgetForChannel(performanceBudgets, apkChannel),
+  );
 
   const outDir = join(mobileRoot, 'build', 'apk-publish');
   mkdirSync(outDir, { recursive: true });

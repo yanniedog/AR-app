@@ -12,8 +12,8 @@ function changelogSummaryUrl(repo, tag) {
   return `https://github.com/${repo}/releases/download/${tag}/${CHANGELOG_SUMMARY_ASSET}`;
 }
 
-function releasePageUrl(repo, version) {
-  return `https://github.com/${repo}/releases/tag/${versionTag(version)}`;
+function releasePageUrl(repo, version, releaseTag = versionTag(version)) {
+  return `https://github.com/${repo}/releases/tag/${releaseTag}`;
 }
 
 function parseVersionParts(version) {
@@ -75,6 +75,14 @@ function loadVersionEntry(filePath) {
       ? raw.summaryBullets.map((s) => String(s).trim()).filter(Boolean)
       : [],
   };
+  if (raw.releaseTag) {
+    const releaseTag = String(raw.releaseTag).trim();
+    const allowed = new Set([versionTag(entry.version), `app-arm-v${entry.version}`]);
+    if (!allowed.has(releaseTag)) {
+      throw new Error(`Invalid changelog releaseTag for ${entry.version}: ${releaseTag}`);
+    }
+    entry.releaseTag = releaseTag;
+  }
   if (raw.date) entry.date = String(raw.date).trim();
   if (Array.isArray(raw.sections)) {
     entry.sections = raw.sections
@@ -123,7 +131,7 @@ function buildChangelogManifest({ repo, mobileRoot, entries }) {
       version: entry.version,
       ...(entry.date ? { date: entry.date } : {}),
       summaryBullets: entry.summaryBullets,
-      releaseUrl: releasePageUrl(repo, entry.version),
+      releaseUrl: releasePageUrl(repo, entry.version, entry.releaseTag),
     })),
   };
 }
@@ -144,7 +152,8 @@ function renderBulletMarkdown(bullets, depth = 0) {
   return lines.filter(Boolean).join("\n");
 }
 
-function renderGithubReleaseBody({ entry, buildNumber, repo }) {
+function renderGithubReleaseBody({ entry, buildNumber, repo, rollingTag = "app-apk-latest" }) {
+  const releaseTag = entry.releaseTag || versionTag(entry.version);
   const lines = [`## ${entry.version} (build ${buildNumber})`, ""];
   if (entry.date) lines.push(`Released **${entry.date}**.`, "");
   lines.push("Preview APK published by **mobile-android-apk** (GitHub Actions).", "");
@@ -171,8 +180,8 @@ function renderGithubReleaseBody({ entry, buildNumber, repo }) {
     "",
     "Scan **app-preview-qr.png** with Android Chrome, or open **install.html** on this release.",
     "",
-    `- Versioned tag: [\`${versionTag(entry.version)}\`](${releasePageUrl(repo, entry.version)})`,
-    `- Rolling manifest: [\`${CHANGELOG_SUMMARY_ASSET}\`](${changelogSummaryUrl(repo, "app-apk-latest")})`,
+    `- Versioned tag: [\`${releaseTag}\`](${releasePageUrl(repo, entry.version, releaseTag)})`,
+    `- Rolling manifest: [\`${CHANGELOG_SUMMARY_ASSET}\`](${changelogSummaryUrl(repo, rollingTag)})`,
     "",
     `</details>`,
     "",
@@ -182,8 +191,9 @@ function renderGithubReleaseBody({ entry, buildNumber, repo }) {
   return lines.join("\n");
 }
 
-function renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot }) {
+function renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot, rollingTag = "app-apk-latest" }) {
   const entry = loadVersionEntryIfExists(mobileRoot, version);
+  const releaseTag = entry?.releaseTag || versionTag(version);
   const highlights = entry?.summaryBullets?.length
     ? entry.summaryBullets.map((b) => `- ${b}`).join("\n")
     : "_See versioned release for details._";
@@ -198,7 +208,7 @@ function renderRollingReleaseNotes({ version, buildNumber, repo, mobileRoot }) {
     "",
     highlights,
     "",
-    `Full changelog: [${versionTag(version)}](${releasePageUrl(repo, version)})`,
+    `Full changelog: [${releaseTag}](${releasePageUrl(repo, version, releaseTag)})`,
     "",
   ].join("\n");
 }
@@ -211,17 +221,22 @@ function gitExec(repoRoot, args) {
   });
 }
 
-function findPreviousVersionTag(mobileRoot, version) {
+function findPreviousVersionTag(mobileRoot, version, releaseTag = versionTag(version)) {
   const repoRoot = join(mobileRoot, "..");
-  const current = versionTag(version);
+  const current = releaseTag;
   try {
-    const raw = gitExec(repoRoot, ["tag", "--list", "app-v*", "--sort=-version:refname"]);
-    return raw
-      .trim()
-      .split("\n")
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .find((t) => t !== current) ?? null;
+    const patterns = releaseTag.startsWith("app-arm-v") ? ["app-arm-v*", "app-v*"] : ["app-v*"];
+    for (const pattern of patterns) {
+      const raw = gitExec(repoRoot, ["tag", "--list", pattern, "--sort=-version:refname"]);
+      const previous = raw
+        .trim()
+        .split("\n")
+        .map((t) => t.trim())
+        .filter(Boolean)
+        .find((t) => t !== current);
+      if (previous) return previous;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -231,9 +246,9 @@ function stripCommitPrefix(line) {
   return line.replace(/^-\s+/, "").trim();
 }
 
-function generateStubEntry({ version, mobileRoot, repo }) {
+function generateStubEntry({ version, mobileRoot, repo, releaseTag = versionTag(version) }) {
   const repoRoot = join(mobileRoot, "..");
-  const prevTag = findPreviousVersionTag(mobileRoot, version);
+  const prevTag = findPreviousVersionTag(mobileRoot, version, releaseTag);
   const logArgs = prevTag
     ? ["log", `${prevTag}..HEAD`, "--pretty=format:%s", "--", "mobile/"]
     : ["log", "--pretty=format:%s", "-30", "--", "mobile/"];
@@ -249,6 +264,7 @@ function generateStubEntry({ version, mobileRoot, repo }) {
   if (!summaryBullets.length) summaryBullets.push(`Maintenance release ${version}`);
   return {
     version,
+    releaseTag,
     date: new Date().toISOString().slice(0, 10),
     summaryBullets,
     sections: [
@@ -257,7 +273,7 @@ function generateStubEntry({ version, mobileRoot, repo }) {
         title: "Release metadata",
         bullets: [
           { text: `Repository: ${repo}` },
-          { text: `Version tag: ${versionTag(version)}` },
+          { text: `Version tag: ${releaseTag}` },
           ...(prevTag ? [{ text: `Since tag: ${prevTag}` }] : []),
         ],
       },
@@ -273,10 +289,28 @@ function writeVersionEntry(entry, mobileRoot) {
   return path;
 }
 
-function ensureVersionEntry({ version, mobileRoot, repo, force = false }) {
+function ensureVersionEntry({ version, mobileRoot, repo, releaseTag, force = false }) {
   const existing = loadVersionEntryIfExists(mobileRoot, version);
-  if (existing && !force) return { created: false, entry: existing };
-  const entry = generateStubEntry({ version, mobileRoot, repo });
+  if (existing && !force) {
+    if (releaseTag && existing.releaseTag !== releaseTag) {
+      const sections = (existing.sections ?? []).map((section) => ({
+        ...section,
+        bullets:
+          section.title === "Release metadata"
+            ? section.bullets.map((bullet) =>
+                bullet.text.startsWith("Version tag:")
+                  ? { ...bullet, text: `Version tag: ${releaseTag}` }
+                  : bullet,
+              )
+            : section.bullets,
+      }));
+      const entry = { ...existing, releaseTag, ...(sections.length ? { sections } : {}) };
+      const path = writeVersionEntry(entry, mobileRoot);
+      return { created: false, updated: true, path, entry };
+    }
+    return { created: false, entry: existing };
+  }
+  const entry = generateStubEntry({ version, mobileRoot, repo, releaseTag });
   const path = writeVersionEntry(entry, mobileRoot);
   return { created: true, path, entry };
 }
