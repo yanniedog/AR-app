@@ -291,7 +291,25 @@ function writeVersionEntry(entry, mobileRoot) {
 
 function ensureVersionEntry({ version, mobileRoot, repo, releaseTag, force = false }) {
   const existing = loadVersionEntryIfExists(mobileRoot, version);
-  if (existing && !force) return { created: false, entry: existing };
+  if (existing && !force) {
+    if (releaseTag && existing.releaseTag !== releaseTag) {
+      const sections = (existing.sections ?? []).map((section) => ({
+        ...section,
+        bullets:
+          section.title === "Release metadata"
+            ? section.bullets.map((bullet) =>
+                bullet.text.startsWith("Version tag:")
+                  ? { ...bullet, text: `Version tag: ${releaseTag}` }
+                  : bullet,
+              )
+            : section.bullets,
+      }));
+      const entry = { ...existing, releaseTag, ...(sections.length ? { sections } : {}) };
+      const path = writeVersionEntry(entry, mobileRoot);
+      return { created: false, updated: true, path, entry };
+    }
+    return { created: false, entry: existing };
+  }
   const entry = generateStubEntry({ version, mobileRoot, repo, releaseTag });
   const path = writeVersionEntry(entry, mobileRoot);
   return { created: true, path, entry };

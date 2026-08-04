@@ -204,50 +204,63 @@ test('first ARM auto-release uses the universal manifest as its version floor', 
   assert.equal(nextAutoReleaseVersion('1.0.84', published), '1.0.85');
 });
 
-test('ARM manifest timeout still allows the universal transition floor', async () => {
+test('ARM manifest timeout fails closed instead of using a stale universal floor', async () => {
   const requestedUrls = [];
-  const published = await readPublishedVersion(
-    async (url, { signal }) => {
-      requestedUrls.push(url);
-      if (url.includes('/app-apk-arm-latest/')) {
+  await assert.rejects(
+    () => readPublishedVersion(
+      async (url, { signal }) => {
+        requestedUrls.push(url);
         return new Promise((_resolve, reject) => {
           signal.addEventListener('abort', () => reject(new Error('arm timed out')), { once: true });
         });
-      }
-      return { ok: true, json: async () => ({ version: '1.0.84' }) };
-    },
-    { timeoutMs: 5, warn: () => {} },
+      },
+      { timeoutMs: 5, warn: () => {} },
+    ),
+    /app-apk-arm-latest request timed out/i,
   );
-
-  assert.equal(published, '1.0.84');
-  assert.equal(requestedUrls.length, 2);
+  assert.equal(requestedUrls.length, 1);
 });
 
-test('rolling-manifest failures fall back to the checked-in release floor', async () => {
+test('only definitively missing rolling manifests use the checked-in release floor', async () => {
   const warnings = [];
   const missing = await readPublishedVersion(
     async () => ({ ok: false, status: 404 }),
     { warn: (message) => warnings.push(message) },
   );
-  const malformed = await readPublishedVersion(
-    async () => ({ ok: true, json: async () => ({ version: 'not-semver' }) }),
-    { warn: (message) => warnings.push(message) },
+  await assert.rejects(
+    () => readPublishedVersion(
+      async () => ({ ok: true, json: async () => ({ version: 'not-semver' }) }),
+      { warn: (message) => warnings.push(message) },
+    ),
+    /x\.y\.z/i,
   );
 
   assert.equal(missing, null);
-  assert.equal(malformed, null);
-  assert.equal(warnings.length, 2);
+  assert.equal(warnings.length, 1);
   assert.equal(nextAutoReleaseVersion('1.0.79', missing), '1.0.79');
 });
 
-test('rolling-manifest reads abort after the configured timeout', async () => {
-  const published = await readPublishedVersion(
-    async (_url, { signal }) =>
-      new Promise((_resolve, reject) => {
-        signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
-      }),
-    { timeoutMs: 1, warn: () => {} },
+test('ARM server errors do not fall back to the older universal channel', async () => {
+  let requests = 0;
+  await assert.rejects(
+    () => readPublishedVersion(async () => {
+      requests += 1;
+      return { ok: false, status: 500 };
+    }),
+    /app-apk-arm-latest HTTP 500/i,
   );
+  assert.equal(requests, 1);
+});
 
-  assert.equal(published, null);
+test('rolling-manifest timeouts reject the release decision', async () => {
+  await assert.rejects(
+    () => readPublishedVersion(
+      async (_url, { signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+      { timeoutMs: 1, warn: () => {} },
+    ),
+    /request timed out/i,
+  );
 });

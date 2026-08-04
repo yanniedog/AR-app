@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global AbortController, clearTimeout, setTimeout */
 /**
  * When the last open PR to main is squash-merged, bump expo.version through a
  * bot-authored pull request. Protected main is never pushed directly.
@@ -246,45 +247,43 @@ export async function readPublishedVersion(
   fetchImpl = fetch,
   { timeoutMs = 10_000, warn = console.warn } = {},
 ) {
-  try {
-    let lastError = null;
-    for (const tag of [ARM_ROLLING_TAG, ROLLING_TAG]) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      timer.unref?.();
-      const url =
-        `https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json` +
-        `?_=${Date.now()}`;
-      try {
-        const response = await fetchImpl(url, {
-          headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
-          signal: controller.signal,
-        });
-        if (!response.ok) {
-          throw new Error(`${tag} HTTP ${response.status}`);
-        }
-        const manifest = await response.json();
-        const version = String(manifest?.version ?? '').trim();
-        if (!version) throw new Error(`${tag} manifest is missing version`);
-        // Validate before returning; nextReleaseVersion also validates, but a
-        // malformed rolling asset should safely try the universal transition floor.
-        nextReleaseVersion('0.0.0', version);
-        return version;
-      } catch (error) {
-        lastError = error;
-      } finally {
-        clearTimeout(timer);
+  const fetchVersion = async (tag) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+    const url =
+      `https://github.com/${repo}/releases/download/${tag}/app-apk-latest.json` +
+      `?_=${Date.now()}`;
+    try {
+      const response = await fetchImpl(url, {
+        headers: { Accept: 'application/json', 'Cache-Control': 'no-cache' },
+        signal: controller.signal,
+      });
+      if (response.status === 404) return null;
+      if (!response.ok) throw new Error(`${tag} HTTP ${response.status}`);
+      const manifest = await response.json();
+      const version = String(manifest?.version ?? '').trim();
+      if (!version) throw new Error(`${tag} manifest is missing version`);
+      nextReleaseVersion('0.0.0', version);
+      return version;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`${tag} request timed out after ${timeoutMs} ms`);
       }
+      throw error;
+    } finally {
+      clearTimeout(timer);
     }
-    throw lastError ?? new Error('rolling manifests unavailable');
-  } catch (error) {
-    warn(
-      `mobile-auto-release-on-drain: rolling APK manifest unavailable — use checked-in release floor (${String(
-        error instanceof Error ? error.message : error,
-      )})`,
-    );
-    return null;
-  }
+  };
+
+  const armVersion = await fetchVersion(ARM_ROLLING_TAG);
+  if (armVersion) return armVersion;
+  const universalVersion = await fetchVersion(ROLLING_TAG);
+  if (universalVersion) return universalVersion;
+  warn(
+    'mobile-auto-release-on-drain: ARM and universal rolling manifests are missing; use checked-in release floor',
+  );
+  return null;
 }
 
 function bumpBranchName(nextVersion) {
