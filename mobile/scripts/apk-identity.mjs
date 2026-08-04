@@ -20,7 +20,7 @@ export function parseApksignerCertificateSha256(output) {
   // the semantic app-signer field so source-stamp certificates are excluded.
   const matches = [
     ...String(output || '').matchAll(
-      /^(?:Signer #\d+\s+)?certificate SHA[\t -]?256 digest[\t ]*[:=][\t ]*((?:[A-Fa-f0-9]{2}[: ]?){32})[\t ]*$/gim,
+      /^(?:(?:Signer #\d+|V\d+ Signer)\s*:?\s*)?certificate SHA[\t -]?256 digest[\t ]*[:=][\t ]*((?:[A-Fa-f0-9]{2}[: ]?){32})[\t ]*$/gim,
     ),
   ].map((match) => match[1].replace(/[^A-Fa-f0-9]/g, '').toLowerCase());
   const unique = [...new Set(matches)];
