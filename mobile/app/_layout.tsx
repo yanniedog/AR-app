@@ -1,10 +1,6 @@
-import {
-  MaterialSymbols_400Regular,
-} from '@expo-google-fonts/material-symbols';
-import {
-  MaterialSymbolsOutlined_400Regular,
-  useFonts,
-} from '@expo-google-fonts/material-symbols-outlined';
+import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
+import { MaterialSymbolsOutlined_400Regular } from '@expo-google-fonts/material-symbols-outlined/400Regular';
+import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';

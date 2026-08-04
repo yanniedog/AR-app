@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useRef } from 'react';
 import { Pressable, View, type GestureResponderEvent } from 'react-native';
 

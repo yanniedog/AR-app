@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import React, { useEffect, useMemo, useRef } from 'react';

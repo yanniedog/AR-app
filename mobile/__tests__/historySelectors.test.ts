@@ -20,8 +20,8 @@ describe('historySelectors', () => {
     );
     expect(model).not.toBeNull();
     expect(model?.dates).toEqual([sample.run_date]);
-    expect(model?.points[0].min).toBeCloseTo(0.0279, 4);
-    expect(model?.points[0].max).toBeCloseTo(0.1177, 4);
+    expect(model?.points[0].min).toBeCloseTo(sample.sections.Mortgage.ribbon.range.min!, 8);
+    expect(model?.points[0].max).toBeCloseTo(sample.sections.Mortgage.ribbon.range.max!, 8);
   });
 
   it('builds aggregate ribbon from cached history rows', () => {

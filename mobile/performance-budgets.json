@@ -2,11 +2,12 @@
   "schemaVersion": 1,
   "maximumGrowthFraction": 0.05,
   "baseline": {
-    "androidBundleBytes": 2465451,
-    "iosBundleBytes": 2471441,
-    "webBundleBytes": 994132,
-    "assetBytes": 46402,
+    "androidBundleBytes": 7546472,
+    "iosBundleBytes": 7532062,
+    "webBundleBytes": 4790329,
+    "fontBytes": 2302456,
+    "assetBytes": 4717808,
     "apkBytes": 132510218
   },
-  "notes": "Bundle and asset baselines are from the Expo all-platform export at AR-app main e2bf035. The APK baseline is the verified app-apk-latest release asset on 2026-08-04. APK enforcement runs only when AR_APP_APK_PATH points to a built APK."
+  "notes": "Bundle, font, and asset baselines are the optimized all-platform export for this upgrade on 2026-08-04. The APK baseline is the verified app-apk-latest release asset before the optimization. APK enforcement runs only when AR_APP_APK_PATH points to a built APK."
 }

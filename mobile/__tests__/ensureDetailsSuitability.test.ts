@@ -1,6 +1,6 @@
 // @ts-nocheck — Jest mock factories use hoisted fns with loose call signatures.
 import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
-import { sampleCore, sampleDetails, sampleManifest } from '../src/data/sample';
+import { loadSampleDetails, sampleCore, sampleManifest } from '../src/data/sample';
 import { DEFAULT_PREFS } from '../src/data/store';
 import {
   clearSuitabilityIndex,
@@ -8,6 +8,8 @@ import {
   getSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
+
+const sampleDetails = loadSampleDetails();
 
 const mockReadMeta = jest.fn();
 const mockReadDetails = jest.fn();
