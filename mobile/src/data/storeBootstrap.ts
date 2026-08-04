@@ -9,7 +9,7 @@ import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
-import { sampleCore, sampleManifest } from './sample';
+import { sampleCore, sampleFallbackIsUsable, sampleManifest } from './sample';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
@@ -54,7 +54,15 @@ export function createBootstrapActions(
 
       try {
         const prefs = get().prefs;
-        const bundle = await cache.readBundle();
+        const cachedBundle = await cache.readBundle();
+        const staleSample = cachedBundle?.meta.source === 'sample' && !sampleFallbackIsUsable();
+        const bundle = staleSample ? null : cachedBundle;
+        if (staleSample) {
+          debugLog.warn(
+            'store',
+            `ignoring bundled sample cache observed ${sampleManifest.run_date}; age limit exceeded`,
+          );
+        }
         const [cachedSearch, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveHistoryRibbon(prefs) ? readValidatedHistoryBanks() : Promise.resolve(null),
@@ -106,7 +114,7 @@ export function createBootstrapActions(
           }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(bundle.core, get);
-        } else {
+        } else if (sampleFallbackIsUsable()) {
           debugLog.info('store', 'cache miss — seeding bundled sample');
           clearSuitabilityIndex();
           await installSampleSeed();
@@ -119,6 +127,21 @@ export function createBootstrapActions(
           });
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(sampleCore, get);
+        } else {
+          debugLog.warn(
+            'store',
+            `bundled sample observed ${sampleManifest.run_date} is too old; refreshing before display`,
+          );
+          set({ status: 'idle', error: null });
+          if (!opts.skipRefresh) {
+            await get().refresh({});
+            return;
+          }
+          set({
+            status: 'error',
+            error: `Bundled sample observed ${sampleManifest.run_date} is older than the 90-day safety limit. Connect to load verified rates.`,
+          });
+          return;
         }
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
