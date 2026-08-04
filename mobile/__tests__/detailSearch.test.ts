@@ -1,7 +1,5 @@
 import core from '../assets/sample/core.json';
 
-import details from '../assets/sample/details.json';
-
 import {
 
   detailSearchIndex,
@@ -22,13 +20,7 @@ import {
 
 } from '../src/data/detailSearch';
 
-import type { CorePayload, DetailsPayload, ProductDetail } from '../src/types';
-
-
-
-const WESTPAC_KEY =
-
-  'Westpac|HLSustainableUpgradesInvestment|RESIDENTIAL_MORTGAGES|Sustainable Upgrades Investment Loan';
+import type { CorePayload, ProductDetail } from '../src/types';
 
 
 
