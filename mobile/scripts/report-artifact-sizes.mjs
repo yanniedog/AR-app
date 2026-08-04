@@ -75,6 +75,17 @@ export function evaluateArtifactBudgets(report, budgetConfig) {
   return failures;
 }
 
+export function assertApkSizeBudget(apkBytes, budgetConfig) {
+  const failure = evaluateArtifactBudgets({ apkBytes }, budgetConfig)
+    .find((item) => item.metric === 'apkBytes');
+  if (failure) {
+    throw new Error(
+      `APK size ${failure.actual} bytes exceeds ${failure.maximum} bytes ` +
+      `(baseline ${failure.baseline}, +${Number(budgetConfig.maximumGrowthFraction) * 100}%)`,
+    );
+  }
+}
+
 function formatBytes(bytes) {
   if (bytes == null) return 'not built';
   if (bytes < 1024) return `${bytes} B`;

@@ -37,6 +37,7 @@ import {
   versionTag,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
+import { assertApkSizeBudget } from './report-artifact-sizes.mjs';
 import releaseIdentity from '../release-identity.json' with { type: 'json' };
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -329,6 +330,11 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     console.error('GH_TOKEN is not set');
     process.exit(1);
   }
+
+  const performanceBudgets = JSON.parse(
+    readFileSync(join(mobileRoot, 'performance-budgets.json'), 'utf8'),
+  );
+  assertApkSizeBudget(apkBuf.length, performanceBudgets);
 
   const outDir = join(mobileRoot, 'build', 'apk-publish');
   mkdirSync(outDir, { recursive: true });

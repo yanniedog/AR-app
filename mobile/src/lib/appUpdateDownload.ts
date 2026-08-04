@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Alert, AppState, Platform } from 'react-native';
 import {
@@ -22,6 +23,7 @@ import {
   type ApkDownloadSnapshot,
 } from './appUpdateDownloadLogic';
 import {
+  assertApkCompatibleWithDevice,
   assertTrustedApkManifest,
   preferImmutableApkDownloadUrl,
   type ApkManifest,
@@ -421,6 +423,7 @@ export async function ensureApkBackgroundDownload(
 ): Promise<ApkDownloadSnapshot> {
   if (Platform.OS !== 'android') return getApkDownloadSnapshot();
   assertTrustedApkManifest(manifest);
+  assertApkCompatibleWithDevice(manifest, Device.supportedCpuArchitectures);
   await hydrate();
 
   const wifiOnly = Boolean(options?.wifiOnly);

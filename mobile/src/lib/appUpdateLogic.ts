@@ -42,6 +42,7 @@ export type UpdateCheckResult =
       remote: ApkManifest;
       changelogs: VersionChangelogSummary[];
     }
+  | { status: 'incompatible'; installed: InstalledAppInfo; remote: ApkManifest; message: string }
   | { status: 'error'; message: string };
 
 export type { VersionChangelogSummary } from './changelog';
@@ -108,6 +109,12 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
     throw new Error('APK manifest package does not match Australian Rates');
   }
   if (manifest.supported_abis != null) {
+    if (
+      !Array.isArray(manifest.supported_abis) ||
+      manifest.supported_abis.some((abi) => typeof abi !== 'string')
+    ) {
+      throw new Error('APK manifest ABI list is invalid');
+    }
     const supportedAbis = [...new Set(manifest.supported_abis)].sort();
     if (JSON.stringify(supportedAbis) !== JSON.stringify(TRUSTED_ANDROID_RELEASE_ABIS)) {
       throw new Error('APK manifest ABI list does not match Australian Rates');
@@ -149,6 +156,34 @@ export function assertTrustedApkManifest(manifest: ApkManifest, manifestUrl?: st
   const prefix = `/${repo}/releases/download/${tag}/`;
   if (!parsed.pathname.startsWith(prefix) || parsed.pathname.length <= prefix.length) {
     throw new Error('APK download URL does not match its immutable release');
+  }
+}
+
+function normalizeAndroidAbi(value: string): string {
+  const abi = value.trim().toLowerCase().replaceAll(' ', '-');
+  if (abi === 'arm64-v8' || abi === 'aarch64') return 'arm64-v8a';
+  if (abi === 'armv7' || abi === 'armeabi-v7') return 'armeabi-v7a';
+  if (abi === 'x86-64') return 'x86_64';
+  return abi;
+}
+
+export function isApkCompatibleWithDevice(
+  manifest: Pick<ApkManifest, 'supported_abis'>,
+  deviceAbis: readonly string[] | null | undefined,
+): boolean {
+  if (!manifest.supported_abis?.length || !deviceAbis?.length) return true;
+  const supported = new Set(manifest.supported_abis.map(normalizeAndroidAbi));
+  return deviceAbis.some((abi) => supported.has(normalizeAndroidAbi(abi)));
+}
+
+export function assertApkCompatibleWithDevice(
+  manifest: Pick<ApkManifest, 'supported_abis'>,
+  deviceAbis: readonly string[] | null | undefined,
+): void {
+  if (!isApkCompatibleWithDevice(manifest, deviceAbis)) {
+    throw new Error(
+      `This APK supports ${manifest.supported_abis?.join(', ')}, but this device reports ${deviceAbis?.join(', ')}.`,
+    );
   }
 }
 
@@ -198,10 +233,19 @@ export async function fetchApkManifest(url: string): Promise<ApkManifest> {
 export async function checkForAppUpdateAt(
   manifestUrl: string,
   installed: InstalledAppInfo,
+  deviceAbis?: readonly string[] | null,
 ): Promise<UpdateCheckResult> {
   try {
     const remote = await fetchApkManifest(manifestUrl);
     if (remoteIsNewer(installed, remote)) {
+      if (!isApkCompatibleWithDevice(remote, deviceAbis)) {
+        return {
+          status: 'incompatible',
+          installed,
+          remote,
+          message: `The latest APK supports ${remote.supported_abis?.join(', ')}, but this device reports ${deviceAbis?.join(', ')}.`,
+        };
+      }
       let changelogs: VersionChangelogSummary[] = [];
       if (versionGt(remote.version, installed.version)) {
         try {

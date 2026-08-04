@@ -60,7 +60,11 @@ export function AppUpdateSection() {
     try {
       const result = await checkForAppUpdate();
       setCheckResult(result);
-      if (result.status === 'available' || result.status === 'current') {
+      if (
+        result.status === 'available' ||
+        result.status === 'current' ||
+        result.status === 'incompatible'
+      ) {
         setRemote(result.remote);
       }
       if (result.status === 'available') {
@@ -127,6 +131,7 @@ export function AppUpdateSection() {
 
   const updateAvailable = checkResult?.status === 'available';
   const isCurrent = checkResult?.status === 'current';
+  const isIncompatible = checkResult?.status === 'incompatible';
   const forThisBuild =
     remote != null &&
     download.buildNumber != null &&
@@ -146,7 +151,9 @@ export function AppUpdateSection() {
         : `Update available · ${latestLabel}`
     : isCurrent
       ? `Up to date · ${installed.version} (${installed.buildNumber})`
-      : checking || (!checkResult && !error)
+      : isIncompatible
+        ? `Update unavailable on this device · ${installed.version} (${installed.buildNumber})`
+        : checking || (!checkResult && !error)
         ? 'Checking…'
         : error
           ? 'Check failed'
@@ -171,6 +178,11 @@ export function AppUpdateSection() {
       {error || (phase === 'error' && download.error) ? (
         <AppText variant="tiny" color="danger" style={{ marginTop: 4 }}>
           {error ?? download.error}
+        </AppText>
+      ) : null}
+      {isIncompatible ? (
+        <AppText variant="tiny" color="warning" style={{ marginTop: 4, lineHeight: 16 }}>
+          {checkResult.message}
         </AppText>
       ) : null}
       {updateAvailable ? (

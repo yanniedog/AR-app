@@ -1,4 +1,5 @@
 import * as Application from 'expo-application';
+import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
@@ -12,6 +13,7 @@ import {
 } from './appUpdateDownload';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 import {
+  assertApkCompatibleWithDevice,
   assertTrustedApkManifest,
   checkForAppUpdateAt,
   isSuccessfulDownloadStatus,
@@ -97,8 +99,16 @@ export async function checkForAppUpdate(
   let promise!: Promise<UpdateCheckResult>;
   promise = (async () => {
     try {
-      const result = await checkForAppUpdateAt(url, getInstalledAppInfo());
-      if (result.status === 'available' || result.status === 'current') {
+      const result = await checkForAppUpdateAt(
+        url,
+        getInstalledAppInfo(),
+        Device.supportedCpuArchitectures,
+      );
+      if (
+        result.status === 'available' ||
+        result.status === 'current' ||
+        result.status === 'incompatible'
+      ) {
         debugLog.info(
           'app-update',
           `check ${result.status} installed=${result.installed.version}/${result.installed.buildNumber} remote=${result.remote.version}/${result.remote.build_number}`,
@@ -257,6 +267,7 @@ export async function downloadApkUpdate(
     throw new Error('APK download is Android-only');
   }
   assertTrustedApkManifest(manifest);
+  assertApkCompatibleWithDevice(manifest, Device.supportedCpuArchitectures);
 
   let backgroundStarted = false;
   try {

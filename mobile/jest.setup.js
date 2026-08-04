@@ -190,6 +190,7 @@ jest.mock('expo-application', () => ({
 
 jest.mock('expo-device', () => ({
   platformApiLevel: 34,
+  supportedCpuArchitectures: ['arm64-v8a'],
   isSideLoadingEnabledAsync: jest.fn(async () => false),
 }));
 

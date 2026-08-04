@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import {
+  assertApkSizeBudget,
   collectArtifactSizes,
   evaluateArtifactBudgets,
 } from './report-artifact-sizes.mjs';
@@ -53,4 +54,10 @@ test('fails only metrics that grow beyond the configured tolerance', () => {
       { metric: 'apkBytes', actual: 211, baseline: 200, maximum: 210 },
     ],
   );
+});
+
+test('enforces the APK budget for every publisher path', () => {
+  const budget = { maximumGrowthFraction: 0.05, baseline: { apkBytes: 200 } };
+  assert.doesNotThrow(() => assertApkSizeBudget(210, budget));
+  assert.throws(() => assertApkSizeBudget(211, budget), /APK size 211 bytes exceeds 210 bytes/i);
 });

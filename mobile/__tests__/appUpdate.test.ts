@@ -3,9 +3,11 @@ import * as FileSystem from 'expo-file-system/legacy';
 import {
   APK_SHA256_VERIFY_MAX_BYTES,
   TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+  assertApkCompatibleWithDevice,
   assertDownloadedApkMatchesManifest,
   checkForAppUpdateAt,
   fetchApkManifest,
+  isApkCompatibleWithDevice,
   isSuccessfulDownloadStatus,
   preferImmutableApkDownloadUrl,
   remoteIsNewer,
@@ -127,6 +129,23 @@ describe('appUpdateLogic', () => {
       expect(result.remote.build_number).toBe('42');
       expect(result.changelogs).toEqual([]);
     }
+  });
+
+  it('does not offer or download an APK that cannot run on this device', async () => {
+    expect(isApkCompatibleWithDevice(baseManifest, ['arm64 v8'])).toBe(true);
+    expect(isApkCompatibleWithDevice(baseManifest, ['x86_64'])).toBe(false);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      json: async () => baseManifest,
+    });
+    await expect(checkForAppUpdateAt(manifestUrl, installed, ['x86_64'])).resolves.toMatchObject({
+      status: 'incompatible',
+      installed,
+      remote: baseManifest,
+    });
+    expect(() => assertApkCompatibleWithDevice(baseManifest, ['x86_64'])).toThrow(
+      /this APK supports/i,
+    );
   });
 
   it('reports current when installed matches remote', async () => {
