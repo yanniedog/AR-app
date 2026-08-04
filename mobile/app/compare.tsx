@@ -15,7 +15,8 @@ import {
   humanizeEnum,
   isNonStandard,
 } from '../src/data/format';
-import { findByKey, rankFraction } from '../src/data/selectors';
+import { rankFraction } from '../src/data/selectors';
+import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { hasProAccess } from '../src/lib/proAccess';
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
@@ -69,18 +70,7 @@ export default function Compare() {
     } catch {
       list = keys.split(',');
     }
-    return list
-      .map((token) => {
-        const m = /^(\d+)#([\s\S]+)$/.exec(token);
-        const rateIndex = m ? Number(m[1]) : null;
-        const key = m ? m[2] : token;
-        const found = findByKey(core.sections, key);
-        if (!found) return null;
-        const exact =
-          rateIndex !== null ? found.siblings.find((s) => s.rate_index === rateIndex) : undefined;
-        return { row: exact ?? found.row, section: found.section };
-      })
-      .filter((x): x is Entry => x !== null);
+    return resolveCompareSelections(core, list);
   }, [core, keys]);
 
   useEffect(() => {

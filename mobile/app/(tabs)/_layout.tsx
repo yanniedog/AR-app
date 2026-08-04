@@ -65,7 +65,7 @@ export default function TabsLayout() {
         name="index"
         listeners={tabPressListener}
         options={{
-          title: 'Home',
+          title: 'Today',
           headerTitle: () => <BrandLockup markSize={28} />,
           tabBarIcon: isAndroid
             ? () => null
@@ -76,7 +76,7 @@ export default function TabsLayout() {
         name="browse"
         listeners={tabPressListener}
         options={{
-          title: 'Browse',
+          title: 'Products',
           tabBarIcon: isAndroid
             ? () => null
             : ({ color, size }) => <Ionicons name={getTabIonicon('browse')!} size={size} color={color} />,
@@ -86,8 +86,7 @@ export default function TabsLayout() {
         name="passthrough"
         listeners={tabPressListener}
         options={{
-          title: 'Bank pass-through',
-          tabBarLabel: 'Response',
+          title: 'Moves',
           tabBarIcon: isAndroid
             ? () => null
             : ({ color, size }) => <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />,
@@ -107,7 +106,7 @@ export default function TabsLayout() {
         name="watchlist"
         listeners={tabPressListener}
         options={{
-          title: 'Watchlist',
+          title: 'Saved',
           tabBarIcon: isAndroid
             ? () => null
             : ({ color, size }) => <Ionicons name={getTabIonicon('watchlist')!} size={size} color={color} />,

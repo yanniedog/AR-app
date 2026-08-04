@@ -1,7 +1,7 @@
 import { SECTIONS } from '../constants';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
-import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric } from './selectors';
+import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 
 export type FilterSnapshot = Omit<Filters, 'query'>;
@@ -22,6 +22,7 @@ export interface SearchSubscription {
   path: string[];
   hierarchyScoped: boolean;
   query: string;
+  sort?: SortKey;
   filters: FilterSnapshot;
   label: string;
   createdAt: string;
@@ -42,6 +43,7 @@ function searchSnapshotKey(input: {
   path: string[];
   hierarchyScoped: boolean;
   query: string;
+  sort?: SortKey;
   filters: FilterSnapshot;
 }): string {
   return JSON.stringify({
@@ -113,6 +115,7 @@ export function makeSearchSubscription(input: {
   path: string[];
   hierarchyScoped: boolean;
   query: string;
+  sort?: SortKey;
   filters: FilterSnapshot;
 }): SearchSubscription {
   const filters = normalizeFilterSnapshot(input.filters);
@@ -124,6 +127,7 @@ export function makeSearchSubscription(input: {
     path: [...input.path],
     hierarchyScoped: input.hierarchyScoped,
     query,
+    sort: input.sort ?? 'rate',
     filters,
     label: buildSearchLabel(input.section, input.path, query, filters),
     createdAt: new Date().toISOString(),
@@ -159,11 +163,16 @@ export function findSearchSubscription(
     path: string[];
     hierarchyScoped: boolean;
     query: string;
+    sort?: SortKey;
     filters: FilterSnapshot;
   },
 ): SearchSubscription | undefined {
   const id = `search:${searchSnapshotKey(input)}`;
-  const hit = list.find((s) => s.id === id);
+  const hit = list.find(
+    (s) =>
+      s.kind === 'search' &&
+      (s.id === id || searchSnapshotKey(s) === searchSnapshotKey(input)),
+  );
   return hit?.kind === 'search' ? hit : undefined;
 }
 

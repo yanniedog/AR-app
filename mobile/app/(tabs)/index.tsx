@@ -1,4 +1,5 @@
-import { useScrollToTop } from '@react-navigation/native';
+import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
@@ -9,10 +10,12 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
 import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { formatRate, formatRunDate, relativeDate } from '../../src/data/format';
+import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
+import { computeLvr, num } from '../../src/data/calc';
+import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
-import { profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
+import { lvrTierForValue, profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { conditionalNote } from '../../src/lib/rateQualifier';
@@ -24,6 +27,7 @@ import { APK_RELEASE_TAG, REPO } from '../../src/config';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { EMPTY_USER_RATE_SCENARIO, loadUserRateScenario } from '../../src/data/userRateScenario';
 
 export default function Home() {
   const theme = useTheme();
@@ -49,7 +53,20 @@ export default function Home() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
+  const [userScenario, setUserScenario] = useState(EMPTY_USER_RATE_SCENARIO);
   const filterPrepAttempts = useRef(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadUserRateScenario().then((value) => {
+        if (active) setUserScenario(value);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -169,6 +186,18 @@ export default function Home() {
   const sectionRows = core?.sections[section]?.rates;
   const sectionData = core?.sections[section];
   const hierRows = useMemo(() => rowsUnder(sectionRows ?? [], section, []), [sectionRows, section]);
+  const mortgageScenario = useMemo(() => computeLvr(userScenario.mortgage), [userScenario.mortgage]);
+  const scenarioLvrTier = useMemo(() => {
+    if (section !== 'Mortgage' || mortgageScenario.lvr == null) return null;
+    return lvrTierForValue(
+      mortgageScenario.lvr,
+      [...new Set((sectionRows ?? []).map((row) => row.lvr_tier).filter((tier): tier is string => !!tier))],
+    );
+  }, [mortgageScenario.lvr, section, sectionRows]);
+  const decisionProfileFilters = useMemo(
+    () => scenarioLvrTier ? { ...profileFilters, lvrTiers: [scenarioLvrTier] } : profileFilters,
+    [profileFilters, scenarioLvrTier],
+  );
   const stats = useMemo(
     () => {
       void suitabilityRevision;
@@ -186,12 +215,12 @@ export default function Home() {
   );
   // The hero "best" honours the saved product profile (e.g. OO, P&I, your LVR,
   // and must-have account features once details are warm).
-  const profileCount = profileSectionCount(profileFilters, section);
+  const profileCount = profileSectionCount(decisionProfileFilters, section);
   const best = useMemo(
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(hierRows, profileFilters, section, detailsProducts),
+        profileFilterRows(hierRows, decisionProfileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -199,13 +228,13 @@ export default function Home() {
         mortgageRateMetric,
       );
     },
-    [hierRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
+    [hierRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
   const fallbackBest = useMemo(
     () => {
       void suitabilityRevision;
       return bestRow(
-        profileFilterRows(sectionRows ?? [], profileFilters, section, detailsProducts),
+        profileFilterRows(sectionRows ?? [], decisionProfileFilters, section, detailsProducts),
         section,
         includeNonStandard,
         depositRankMetric,
@@ -213,7 +242,7 @@ export default function Home() {
         mortgageRateMetric,
       );
     },
-    [sectionRows, profileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
+    [sectionRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];
@@ -227,6 +256,32 @@ export default function Home() {
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const scenarioSummary = useMemo(() => {
+    if (section === 'Mortgage') {
+      return {
+        currentRate: percentageInputFraction(userScenario.mortgage.currentRate),
+        principal: mortgageScenario.loan ?? num(userScenario.mortgage.loanBalance),
+      };
+    }
+    const deposit = section === 'Savings' ? userScenario.savings : userScenario.termDeposit;
+    return { currentRate: percentageInputFraction(deposit.currentRate), principal: num(deposit.balance) };
+  }, [mortgageScenario.loan, section, userScenario]);
+  const loyaltyComparisonRate = section === 'Mortgage' && activeBest
+    ? toFraction(activeBest.rate)
+    : heroRate;
+  const loyaltyGap = useMemo(
+    () =>
+      loyaltyComparisonRate != null && scenarioSummary.currentRate != null
+        ? loyaltyGapInsight(
+            section,
+            scenarioSummary.principal,
+            scenarioSummary.currentRate,
+            loyaltyComparisonRate,
+            stats.median,
+          )
+        : null,
+    [loyaltyComparisonRate, scenarioSummary, section, stats.median],
+  );
   const shareMessage = useMemo(() => {
     if (!core) return null;
     if (heroRate == null) return null; // nothing worth sharing until rates are loaded
@@ -261,6 +316,57 @@ export default function Home() {
         onShare={shareToday}
         coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${core.coverage?.failures?.length ? ` · ${core.coverage.failures.length} provider failures` : ''}`}
       />
+
+      <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
+        <AppText variant="tiny" color="textFaint" weight="700">
+          MY LOYALTY GAP
+        </AppText>
+        {loyaltyGap && scenarioSummary.currentRate != null ? (
+          <>
+            <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <View>
+                <AppText variant="small" color="textMuted">My saved rate</AppText>
+                <AppText variant="h3">{formatRate(scenarioSummary.currentRate)}</AppText>
+              </View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <AppText variant="small" color="textMuted">Matched observed best</AppText>
+                <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
+                  {formatRate(loyaltyComparisonRate)}
+                </AppText>
+              </View>
+            </Row>
+            <AppText variant="body" weight="700">
+              {loyaltyGap.gapRate > 0
+                ? section === 'TD'
+                  ? `Observed rate gap: ${(loyaltyGap.gapRate * 100).toFixed(2)} percentage points. Use the TD calculator for a term-specific maturity amount.`
+                  : `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
+                : 'Your saved rate is at least as strong as this matched observed rate.'}
+            </AppText>
+            <AppText variant="tiny" color="textMuted">
+              Based on ${Math.round(scenarioSummary.principal).toLocaleString()} and the selected profile. Excludes fees, tax, switching costs and future rate changes; not financial advice.
+            </AppText>
+            {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
+              <AppText variant="tiny" color="textMuted">
+                Product selection follows your comparison-rate ranking; the dollar illustration uses its advertised interest rate.
+              </AppText>
+            ) : null}
+            {activeBest ? (
+              <Button
+                title="View supporting rate"
+                variant="secondary"
+                onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+              />
+            ) : null}
+          </>
+        ) : (
+          <>
+            <AppText variant="body" color="textMuted">
+              Add your current rate and balance to compare your situation with profile-matched observed rates.
+            </AppText>
+            <Button title="Add my rate" variant="secondary" onPress={() => router.push('/calculator')} />
+          </>
+        )}
+      </Card>
 
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={section} onChange={setActiveSection} />

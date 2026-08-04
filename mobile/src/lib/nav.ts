@@ -6,6 +6,10 @@ import type { SortKey } from '../data/selectors';
 import { logNavDrillAttempt, markDrillAttempt } from './degradationLog';
 import type { SectionKey } from '../types';
 
+/** Expo Router represents repeated query parameters as arrays; consumers use the first value. */
+export const scalarRouteParam = (value?: string | string[]): string | undefined =>
+  Array.isArray(value) ? value[0] : value;
+
 // Use expo-router's object form so it handles param encoding/decoding. Passing
 // pre-encoded strings caused double-decode crashes for keys containing '%' and
 // ambiguous splits for keys containing ','. useLocalSearchParams returns the
@@ -13,6 +17,13 @@ import type { SectionKey } from '../types';
 export const openProduct = (productKey: string, rateIndex?: number) =>
   router.push({
     pathname: '/product/[key]',
+    params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
+  });
+
+/** Open the on-device receipt for one exact product-rate row. */
+export const openRateReceipt = (productKey: string, rateIndex?: number) =>
+  router.push({
+    pathname: '/rate-receipt',
     params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
   });
 
@@ -32,7 +43,7 @@ export const openBank = (
 
 /** Dot-delimited Browse drill path from expo-router search params. */
 export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {
-  const raw = Array.isArray(pathRaw) ? pathRaw[0] : pathRaw;
+  const raw = scalarRouteParam(pathRaw);
   return (raw ?? '').split('.').filter(Boolean);
 };
 

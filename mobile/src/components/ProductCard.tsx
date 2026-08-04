@@ -67,8 +67,8 @@ export function ProductCard({
   const theme = useTheme();
   const { width } = useWindowDimensions();
   const compact = width < 380;
-  const favorite = useStore((s) => s.favorites.includes(row.product_key));
-  const toggleFavorite = useStore((s) => s.toggleFavorite);
+  const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
+  const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
@@ -235,10 +235,14 @@ export function ProductCard({
 
       {!selectMode ? (
         <Pressable
-          onPress={() => toggleFavorite(row.product_key)}
+          onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel={favorite ? 'Remove from watchlist' : 'Add to watchlist'}
+          accessibilityLabel={favorite
+            ? 'Remove this rate from saved'
+            : Number.isInteger(row.rate_index)
+              ? 'Save this exact rate'
+              : 'Save all product variants'}
           accessibilityState={{ selected: favorite }}
           android_ripple={androidRipple(theme.colors.primaryMuted, true)}
           style={{

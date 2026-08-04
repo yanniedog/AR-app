@@ -16,6 +16,7 @@ import { createEnsureActions } from './storeEnsure';
 import { createUserActions } from './storeUser';
 import { DEFAULT_PREFS, type AppState } from './storeTypes';
 import type { SectionKey } from '../types';
+import { normalizeSavedRates } from './savedRates';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -51,6 +52,8 @@ export const useStore = create<AppState>()(
           Object.entries(s.prefs).filter(([key]) =>
             key !== 'calc' && key !== 'diagnosticsEnabled' && key !== 'rateIntelligencePro'),
         ) as AppState['prefs'],
+        savedRates: s.savedRates,
+        // Kept for one compatibility cycle so older builds still see product-wide saves.
         favorites: s.favorites,
         subscriptions: s.subscriptions,
         activeSection: s.activeSection,
@@ -59,6 +62,7 @@ export const useStore = create<AppState>()(
         const p = persisted as Partial<AppState> | undefined;
         const persistedPrefs = p?.prefs as Partial<AppState['prefs']> | undefined;
         const hasCurrentPrivacyChoice = persistedPrefs?.privacyChoiceVersion === 1;
+        const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
         const prefs = {
           ...DEFAULT_PREFS,
           ...persistedPrefs,
@@ -86,6 +90,8 @@ export const useStore = create<AppState>()(
           ...current,
           ...p,
           prefs,
+          savedRates,
+          favorites: [...new Set(savedRates.map((ref) => ref.productKey))],
           activeSection,
         };
       },

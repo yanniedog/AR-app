@@ -20,6 +20,8 @@ import { EMPTY_PROFILE, type ProfileFilters } from './profile';
 import { EMPTY_CALC, type CalcInputs } from './calc';
 import type { ThemeMode } from '../theme/theme';
 import type { RefreshOutcomeKind } from '../components/bannerState';
+import type { SavedRateRef } from './savedRates';
+import type { SortKey } from './selectors';
 
 export interface Prefs {
   themeMode: ThemeMode;
@@ -131,6 +133,9 @@ export interface AppState {
   activeSection: SectionKey;
 
   prefs: Prefs;
+  /** Versioned saved variants. `favorites` is retained only for persisted-state compatibility. */
+  savedRates: SavedRateRef[];
+  /** @deprecated Use savedRates. */
   favorites: string[];
   subscriptions: Subscription[];
 
@@ -158,6 +163,9 @@ export interface AppState {
   getDetail: (productKey: string) => ProductDetail | null;
   toggleFavorite: (key: string) => void;
   isFavorite: (key: string) => boolean;
+  toggleSavedRate: (row: RateRow, scope?: SavedRateRef['scope']) => void;
+  removeSavedRate: (id: string) => void;
+  isRateSaved: (productKey: string, rateIndex: number | null) => boolean;
   subscribeProduct: (productKey: string, rateIndex: number | null, labelRow: RateRow) => boolean;
   unsubscribeProduct: (productKey: string, rateIndex: number | null) => void;
   subscribeSearch: (input: {
@@ -165,6 +173,7 @@ export interface AppState {
     path: string[];
     hierarchyScoped: boolean;
     query: string;
+    sort?: SortKey;
     filters: FilterSnapshot;
   }) => boolean;
   unsubscribeSearch: (id: string) => void;
@@ -176,6 +185,7 @@ export interface AppState {
     path: string[];
     hierarchyScoped: boolean;
     query: string;
+    sort?: SortKey;
     filters: FilterSnapshot;
   }) => Subscription | undefined;
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;

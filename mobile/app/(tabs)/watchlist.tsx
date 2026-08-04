@@ -1,5 +1,6 @@
 import { useScrollToTop } from '@react-navigation/native';
-import React, { useCallback, useMemo, useRef } from 'react';
+import { router } from 'expo-router';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
 import { EmptyState } from '../../src/components/feedback';
@@ -7,41 +8,50 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
-import { AppText, Button } from '../../src/components/ui';
-import { findByKey } from '../../src/data/selectors';
+import { AppText, Button, Row } from '../../src/components/ui';
+import { resolveSavedRates, unresolvedSavedRateRefs } from '../../src/data/savedRates';
 import { useStore } from '../../src/data/store';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { openCompare, openProduct } from '../../src/lib/nav';
-import type { RateRow, SectionKey } from '../../src/types';
 
-export default function Watchlist() {
+function compareToken(productKey: string, rateIndex: number | null): string {
+  return rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
+}
+
+export default function Saved() {
   const core = useStore((s) => s.core);
-  const favorites = useStore((s) => s.favorites);
-  const toggleFavorite = useStore((s) => s.toggleFavorite);
+  const savedRates = useStore((s) => s.savedRates);
+  const removeSavedRate = useStore((s) => s.removeSavedRate);
   const { snack, showUndo, undo } = useUndoSnackbar();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
-  const items = useMemo(() => {
-    if (!core) return [] as { row: RateRow; section: SectionKey }[];
-    return favorites
-      .map((key) => findByKey(core.sections, key))
-      .filter((x): x is { row: RateRow; section: SectionKey; siblings: RateRow[] } => x !== null)
-      .map(({ row, section }) => ({ row, section }));
-  }, [core, favorites]);
+  const items = useMemo(() => (core ? resolveSavedRates(core, savedRates) : []), [core, savedRates]);
+  const unavailableRefs = useMemo(
+    () => unresolvedSavedRateRefs(savedRates, items),
+    [items, savedRates],
+  );
 
-  const removeFavorite = useCallback(
-    (productKey: string, productName: string) => {
-      if (!favorites.includes(productKey)) return;
-      toggleFavorite(productKey);
-      showUndo(`Removed ${productName}`, () => {
-        const current = useStore.getState().favorites;
-        if (!current.includes(productKey)) {
-          useStore.getState().toggleFavorite(productKey);
-        }
+  const remove = useCallback(
+    (id: string) => {
+      const item = items.find((candidate) => candidate.ref.id === id);
+      if (!item) return;
+      removeSavedRate(id);
+      setSelected((prev) => prev.filter((token) => token !== compareToken(item.row.product_key, item.row.rate_index ?? null)));
+      showUndo(`Removed ${item.row.product_name}`, () => {
+        useStore.setState((state) => {
+          if (state.savedRates.some((ref) => ref.id === id)) return state;
+          const restored = [...state.savedRates, item.ref];
+          return {
+            savedRates: restored,
+            favorites: [...new Set(restored.map((ref) => ref.productKey))],
+          };
+        });
       });
     },
-    [favorites, showUndo, toggleFavorite],
+    [items, removeSavedRate, showUndo],
   );
 
   if (!core) return null;
@@ -49,12 +59,26 @@ export default function Watchlist() {
   if (!items.length) {
     return (
       <Screen>
-        <EmptyState
-          icon="star-outline"
-          title="No saved products yet"
-          subtitle="Tap the star on any product to add it to your watchlist and get rate-change alerts."
-          fill
-        />
+        <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
+          <EmptyState
+            icon="star-outline"
+            title={unavailableRefs.length ? 'Saved item unavailable' : 'Nothing saved yet'}
+            subtitle={
+              unavailableRefs.length
+                ? 'The saved product or exact tier is not in this dataset. It has not been replaced with a different rate.'
+                : 'Save an exact rate to track that product variant, or save all variants from its product page.'
+            }
+          />
+          {unavailableRefs.length ? (
+            <Button
+              title="Remove unavailable save"
+              variant="secondary"
+              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+            />
+          ) : null}
+          <Button title="Browse products" onPress={() => router.push('/(tabs)/browse')} />
+          <Button title="Search rates" variant="secondary" onPress={() => router.push('/search?section=Mortgage')} />
+        </View>
       </Screen>
     );
   }
@@ -62,31 +86,72 @@ export default function Watchlist() {
   return (
     <Screen>
       <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 32 }}>
-        <AppText variant="small" color="textMuted" style={{ marginBottom: 12 }}>
-          {items.length} saved {items.length === 1 ? 'product' : 'products'}
-        </AppText>
-        {items.length >= 2 ? (
+        <Row style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <AppText variant="small" color="textMuted">
+            {items.length} saved {items.length === 1 ? 'rate' : 'rates'}
+          </AppText>
+          {items.length >= 2 ? (
+            <Button
+              title={selectMode ? 'Done' : 'Choose to compare'}
+              variant="secondary"
+              onPress={() => {
+                setSelectMode((value) => !value);
+                setSelected([]);
+              }}
+            />
+          ) : null}
+        </Row>
+        {unavailableRefs.length ? (
+          <View style={{ gap: 8, marginBottom: 12 }}>
+            <AppText variant="small" color="textMuted">
+              {unavailableRefs.length} saved {unavailableRefs.length === 1 ? 'item is' : 'items are'} unavailable in this dataset and hidden rather than substituted.
+            </AppText>
+            <Button
+              title={`Remove unavailable ${unavailableRefs.length === 1 ? 'save' : 'saves'}`}
+              variant="secondary"
+              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+            />
+          </View>
+        ) : null}
+        {selectMode && selected.length >= 2 ? (
           <Button
-            title={`Compare ${items.length > 4 ? 'first 4' : items.length} products`}
+            title={`Compare ${selected.length}`}
             icon="git-compare"
-            variant="secondary"
             style={{ marginBottom: 16 }}
-            onPress={() => openCompare(items.slice(0, 4).map((i) => i.row.product_key))}
+            onPress={() => openCompare(selected)}
           />
         ) : null}
-        {items.map(({ row, section }) => (
-          <SwipeableRow
-            key={row.product_key}
-            onDelete={() => removeFavorite(row.product_key, row.product_name)}
-            deleteLabel="Remove from watchlist"
-          >
-            <ProductCard
-              row={row}
-              section={section}
-              onPress={() => openProduct(row.product_key, row.rate_index)}
-            />
-          </SwipeableRow>
-        ))}
+        {items.map(({ ref, row, section }) => {
+          const token = compareToken(row.product_key, row.rate_index ?? null);
+          const selectedNow = selected.includes(token);
+          return (
+            <SwipeableRow
+              key={ref.id}
+              onDelete={() => remove(ref.id)}
+              deleteLabel="Remove from saved"
+            >
+              <ProductCard
+                row={row}
+                section={section}
+                selectMode={selectMode}
+                selected={selectedNow}
+                onPress={() => {
+                  if (!selectMode) {
+                    openProduct(row.product_key, row.rate_index);
+                    return;
+                  }
+                  setSelected((prev) =>
+                    prev.includes(token)
+                      ? prev.filter((value) => value !== token)
+                      : prev.length < 4
+                        ? [...prev, token]
+                        : [...prev.slice(1), token],
+                  );
+                }}
+              />
+            </SwipeableRow>
+          );
+        })}
         <View style={{ height: 8 }} />
       </ScreenScrollView>
       <UndoSnackbar snack={snack} onUndo={undo} />

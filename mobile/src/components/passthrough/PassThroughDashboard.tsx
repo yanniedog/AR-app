@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import React, { memo, startTransition, useCallback, useMemo, useRef, useState } from 'react';
+import React, { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { SECTION_ORDER, SECTIONS } from '../../constants';
@@ -348,13 +348,15 @@ export function PassThroughDashboard({
   payload,
   rba,
   calendar,
+  initialDecisionDate,
 }: {
   payload: BankInsightsPayload;
   rba: RbaEntry[];
   calendar: RbaCalendar | null;
+  initialDecisionDate?: string;
 }) {
   const [section, setSection] = useState<SectionKey>('Mortgage');
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(initialDecisionDate ?? null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PassThroughSort>('response');
@@ -363,6 +365,9 @@ export function PassThroughDashboard({
     () => rbaPassThroughDecisionList(payload, rba, { calendar }),
     [payload, rba, calendar],
   );
+  useEffect(() => {
+    if (initialDecisionDate) setSelectedDate(initialDecisionDate);
+  }, [initialDecisionDate]);
   const activeDate = selectedDate && decisions.some((decision) => decision.date === selectedDate)
     ? selectedDate
     : decisions[0]?.date;

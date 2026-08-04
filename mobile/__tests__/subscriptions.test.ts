@@ -107,6 +107,31 @@ describe('filter matching helpers', () => {
     expect(rowsForSearchSubscription(core(rows), sub)).toHaveLength(1);
   });
 
+  test('saved search stores display sort without duplicating alert identity', () => {
+    const input = {
+      section: 'Mortgage' as const,
+      path: ['OO'],
+      hierarchyScoped: true,
+      query: 'offset',
+      sort: 'bank' as const,
+      filters: normalizeFilterSnapshot({
+        providers: ['Bank A'],
+        rateTypes: [],
+        lvrTiers: [],
+        repaymentTypes: [],
+        loanPurposes: [],
+        depositKinds: [],
+        interestPayments: [],
+        accountFeatures: [],
+        eligibilityCriteria: [],
+        includeNonStandard: false,
+      }),
+    };
+    const sub = makeSearchSubscription(input);
+    expect(sub.sort).toBe('bank');
+    expect(sub.id).toBe(makeSearchSubscription({ ...input, sort: 'rate' }).id);
+  });
+
   test('buildSearchLabel is compact', () => {
     const label = buildSearchLabel('Mortgage', ['OO'], 'bonus', {
       providers: [],

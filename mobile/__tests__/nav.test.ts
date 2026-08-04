@@ -1,4 +1,12 @@
-import { parseBrowsePath } from '../src/lib/nav';
+import { parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
+
+describe('scalarRouteParam', () => {
+  test('normalizes repeated and missing query parameters', () => {
+    expect(scalarRouteParam(['first', 'second'])).toBe('first');
+    expect(scalarRouteParam('only')).toBe('only');
+    expect(scalarRouteParam()).toBeUndefined();
+  });
+});
 
 describe('parseBrowsePath', () => {
   test('splits dot-delimited path segments', () => {

@@ -31,9 +31,10 @@ import {
 } from '../../src/data/productHistory';
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
+import { isSavedRate } from '../../src/data/savedRates';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { openBank } from '../../src/lib/nav';
+import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
 import {
@@ -50,15 +51,17 @@ export default function ProductDetail() {
   const theme = useTheme();
   const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
   const productKey = key ?? '';
-  const rateIndex = ri != null && ri !== '' ? Number(ri) : null;
+  const exactRateRequested = ri != null && ri !== '';
+  const parsedRateIndex = exactRateRequested ? Number(ri) : null;
+  const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const favorite = useStore((s) => s.favorites.includes(productKey));
-  const toggleFavorite = useStore((s) => s.toggleFavorite);
+  const savedRates = useStore((s) => s.savedRates);
+  const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
   const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex));
@@ -185,8 +188,28 @@ export default function ProductDetail() {
   }
 
   const { section, siblings } = found;
-  const row =
-    (rateIndex != null ? siblings.find((s) => s.rate_index === rateIndex) : undefined) ?? found.row;
+  const row = exactRateRequested
+    ? rateIndex == null
+      ? null
+      : siblings.find((s) => s.rate_index === rateIndex) ?? null
+    : found.row;
+  if (!row) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Product rate unavailable' }} />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Exact rate no longer available"
+          subtitle="This rate index is not present in the current dataset. Choose a current product tier instead."
+          fill
+        />
+      </>
+    );
+  }
+  const favorite = isSavedRate(savedRates, productKey, row.rate_index ?? null);
+  const productWideSaved = savedRates.some(
+    (ref) => ref.scope === 'product' && ref.productKey === productKey,
+  );
   const meta = SECTIONS[section];
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
   const rateRows = sortRows(siblings, 'rate', section, depositRankMetric, mortgageRateMetric);
@@ -263,8 +286,8 @@ export default function ProductDetail() {
               <IconButton
                 icon={favorite ? 'star' : 'star-outline'}
                 color={favorite ? 'warning' : 'text'}
-                onPress={() => toggleFavorite(productKey)}
-                accessibilityLabel="Toggle favourite"
+                onPress={() => toggleSavedRate(row)}
+                accessibilityLabel={favorite ? 'Remove this rate from saved' : 'Save this exact rate'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
             </Row>
@@ -350,6 +373,21 @@ export default function ProductDetail() {
         ) : null}
 
         <ProductSpecs row={row} section={section} />
+
+        <Button
+          title="Rate receipt & conversation brief"
+          icon="receipt-outline"
+          variant="secondary"
+          style={{ marginBottom: 16 }}
+          onPress={() => openRateReceipt(productKey, row.rate_index)}
+        />
+        <Button
+          title={productWideSaved ? 'Remove all variants from Saved' : 'Save all product variants'}
+          icon={productWideSaved ? 'star' : 'star-outline'}
+          variant="secondary"
+          style={{ marginBottom: 16 }}
+          onPress={() => toggleSavedRate(row, 'product')}
+        />
 
         <SectionTitle text="Rate history" icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>

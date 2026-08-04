@@ -6,6 +6,7 @@ import {
   searchDeepLink,
 } from '../src/data/notifications';
 import type { CorePayload, RateRow } from '../src/types';
+import { makeSavedRateRef } from '../src/data/savedRates';
 
 const mk = (over: Partial<RateRow>): RateRow => ({
   provider: 'Bank A',
@@ -100,6 +101,19 @@ describe('computeChanges', () => {
     expect(computeChanges(before, after, ['M|1'], 5).some((m) => m.body.includes('→'))).toBe(true);
   });
 
+  test('exact saved rate ignores changes to sibling variants', () => {
+    const before = multiRowCore([
+      { rate_index: 1, rate: '0.0600' },
+      { rate_index: 2, rate: '0.0700' },
+    ]);
+    const after = multiRowCore([
+      { rate_index: 1, rate: '0.0600' },
+      { rate_index: 2, rate: '0.0650' },
+    ]);
+    const exact = makeSavedRateRef(before.sections.Mortgage.rates[0]);
+    expect(computeChanges(before, after, [exact], 5)).toEqual([]);
+  });
+
   test('watchlist message includes productKey for tap routing', () => {
     const msgs = computeChanges(core('0.0579'), core('0.0574'), ['A|1'], 5);
     const hit = msgs.find((m) => m.body.includes('→'));
@@ -125,10 +139,11 @@ describe('notification deep links', () => {
   });
 
   test('searchDeepLink carries section and query', () => {
-    const url = searchDeepLink({ section: 'Mortgage', query: 'offset' });
+    const url = searchDeepLink({ section: 'Mortgage', query: 'offset', subscriptionId: 'search:abc' });
     expect(url).toContain('arrates://search?');
     expect(url).toContain('section=Mortgage');
     expect(url).toContain('query=offset');
+    expect(url).toContain('sub=search%3Aabc');
   });
 
   test('notificationDataFromMessage includes productKey', () => {
