@@ -6,7 +6,7 @@ import {
   useFonts,
 } from '@expo-google-fonts/material-symbols-outlined';
 import * as Notifications from 'expo-notifications';
-import { Stack, router, type Href } from 'expo-router';
+import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -43,7 +43,11 @@ import { subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
-import { setDiagnosticsEnabled } from '../src/lib/observability';
+import {
+  isSessionReplayRouteAllowed,
+  setCrashReportsEnabled,
+  setSessionReplayEnabled,
+} from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 
 SplashScreen.preventAutoHideAsync().catch((err) => logSwallowedError('splash.preventAutoHide', err));
@@ -203,7 +207,9 @@ function RootNavigator() {
   const hydrated = useStore((s) => s.hydrated);
   const onboarded = useStore((s) => s.prefs.onboarded);
   const dataUnavailable = hydrated && status === 'error';
-  const diagnosticsEnabled = useStore((s) => s.prefs.diagnosticsEnabled);
+  const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
+  const sessionReplayEnabled = useStore((s) => s.prefs.sessionReplayEnabled);
+  const pathname = usePathname();
   const bootstrap = useStore((s) => s.bootstrap);
   const performanceAudit = usePerformanceAuditState();
   const performanceAuditActive =
@@ -221,8 +227,11 @@ function RootNavigator() {
 
   useEffect(() => {
     if (!hydrated) return;
-    void setDiagnosticsEnabled(diagnosticsEnabled);
-  }, [hydrated, diagnosticsEnabled]);
+    void setCrashReportsEnabled(crashReportsEnabled);
+    void setSessionReplayEnabled(
+      sessionReplayEnabled && isSessionReplayRouteAllowed(pathname),
+    );
+  }, [hydrated, crashReportsEnabled, sessionReplayEnabled, pathname]);
 
   useEffect(() => {
     installGlobalErrorHandlers();

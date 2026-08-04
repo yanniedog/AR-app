@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from './interests';
 import { normalizeProfileFilters } from './profile';
 import { normalizeCalcInputs } from './calc';
+import { migrateLegacyCalculatorInputs } from './userRateScenario';
 import { shouldWarmDetails } from './optionalPrefs';
 import { BACKGROUND_TASK } from './notifications';
 import { effectiveDeepSearch } from '../lib/proAccess';
@@ -46,19 +47,33 @@ export const useStore = create<AppState>()(
       name: 'ar-rates',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (s) => ({
-        prefs: s.prefs,
+        prefs: Object.fromEntries(
+          Object.entries(s.prefs).filter(([key]) =>
+            key !== 'calc' && key !== 'diagnosticsEnabled' && key !== 'rateIntelligencePro'),
+        ) as AppState['prefs'],
         favorites: s.favorites,
         subscriptions: s.subscriptions,
         activeSection: s.activeSection,
       }),
       merge: (persisted, current) => {
         const p = persisted as Partial<AppState> | undefined;
+        const persistedPrefs = p?.prefs as Partial<AppState['prefs']> | undefined;
+        const hasCurrentPrivacyChoice = persistedPrefs?.privacyChoiceVersion === 1;
         const prefs = {
           ...DEFAULT_PREFS,
-          ...p?.prefs,
-          interests: normalizeInterests(p?.prefs?.interests ?? DEFAULT_INTERESTS),
-          profileFilters: normalizeProfileFilters(p?.prefs?.profileFilters),
-          calc: normalizeCalcInputs(p?.prefs?.calc),
+          ...persistedPrefs,
+          // The old combined diagnostics flag was on by default and was not
+          // informed, granular consent. Never migrate it to either collector.
+          crashReportsEnabled:
+            hasCurrentPrivacyChoice && persistedPrefs?.crashReportsEnabled === true,
+          sessionReplayEnabled:
+            hasCurrentPrivacyChoice && persistedPrefs?.sessionReplayEnabled === true,
+          privacyChoiceVersion: hasCurrentPrivacyChoice ? 1 : 0,
+          diagnosticsEnabled: false,
+          apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
+          interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
+          profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
+          calc: normalizeCalcInputs(persistedPrefs?.calc),
         };
         const persistedActiveSection = p?.activeSection;
         const isValidActiveSection =
@@ -75,6 +90,8 @@ export const useStore = create<AppState>()(
         };
       },
       onRehydrateStorage: () => () => {
+        const legacyCalc = useStore.getState().prefs.calc;
+        void migrateLegacyCalculatorInputs(legacyCalc);
         useStore.setState({ hydrated: true });
       },
     },

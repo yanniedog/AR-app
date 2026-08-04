@@ -21,11 +21,12 @@ import {
   openInstallPermissionSettings,
 } from '../../lib/installPermission';
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
-import { DisclosureGroup, InfoRow, Section, SettingsGap } from './settingsUi';
+import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 
 export function AppUpdateSection() {
   const installed = getInstalledAppInfo();
-  const wifiOnly = useStore((s) => s.prefs.wifiOnly);
+  const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
+  const setPref = useStore((s) => s.setPref);
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
   const [changelogs, setChangelogs] = useState<VersionChangelogSummary[]>([]);
@@ -64,9 +65,11 @@ export function AppUpdateSection() {
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
-        void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
-          setError(err instanceof Error ? err.message : String(err));
-        });
+        if (wifiOnly) {
+          void ensureApkBackgroundDownload(result.remote, { wifiOnly: true }).catch((err) => {
+            setError(err instanceof Error ? err.message : String(err));
+          });
+        }
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -82,7 +85,7 @@ export function AppUpdateSection() {
     void onCheck();
   }, [onCheck]);
 
-  const onUpgrade = useCallback(async () => {
+  const performUpgrade = useCallback(async () => {
     if (!remote) return;
     const allowed = await ensureInstallPermission();
     if (!allowed) return;
@@ -98,6 +101,25 @@ export function AppUpdateSection() {
       setUpgrading(false);
     }
   }, [remote, wifiOnly]);
+
+  const onUpgrade = useCallback(() => {
+    if (!remote) return;
+    if (wifiOnly || download.phase === 'ready') {
+      void performUpgrade();
+      return;
+    }
+    const size = remote.bytes
+      ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
+      : 'an unknown size';
+    Alert.alert(
+      'Download over cellular?',
+      `This verified APK is ${size}. Carrier data charges may apply.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Download', onPress: () => void performUpgrade() },
+      ],
+    );
+  }, [download.phase, performUpgrade, remote, wifiOnly]);
 
   if (Platform.OS !== 'android') {
     return null;
@@ -134,6 +156,14 @@ export function AppUpdateSection() {
 
   return (
     <Section title="App update">
+      <ToggleRow
+        icon="wifi-outline"
+        label="Download APKs on Wi-Fi only"
+        sub="Recommended for large app updates; rate-data refresh settings are separate"
+        value={wifiOnly}
+        onChange={(value) => setPref('apkUpdatesWifiOnly', value)}
+      />
+      <SettingsGap size={8} />
       <InfoRow label="Status" value={statusValue} />
       {downloadPct !== null && phase === 'downloading' ? (
         <InfoRow label="Download" value={`${downloadPct}%`} />
@@ -145,8 +175,9 @@ export function AppUpdateSection() {
       ) : null}
       {updateAvailable ? (
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          Updates download automatically in the background, including when the screen is off or you
-          switch apps. Upgrade installs the already-downloaded APK.
+          {wifiOnly
+            ? 'The verified APK downloads automatically on Wi-Fi, including in the background.'
+            : 'Cellular download starts only after you confirm the displayed APK size.'}
         </AppText>
       ) : null}
 

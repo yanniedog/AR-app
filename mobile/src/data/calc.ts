@@ -90,3 +90,38 @@ export function depositToReachLvr(
   const needed = propertyValue * (1 - targetLvrPct / 100);
   return Math.max(0, needed - depositApplied);
 }
+
+/** Parse the advertised period without inventing a duration when none is published. */
+export function advertisedTermMonths(input: {
+  term_months?: string | number;
+  term?: string;
+  ribbon_fixed_term?: string | number;
+}): number | null {
+  const explicit = Number(input.term_months);
+  if (Number.isFinite(explicit) && explicit > 0) return explicit;
+  const iso = /^P(?:(\d+)Y)?(?:(\d+)M)?$/.exec(input.term ?? '');
+  if (iso) return Number(iso[1] ?? 0) * 12 + Number(iso[2] ?? 0) || null;
+  const fixedYears = Number(input.ribbon_fixed_term);
+  return Number.isFinite(fixedYears) && fixedYears > 0 ? fixedYears * 12 : null;
+}
+
+export function fixedRateProjectionMonths(
+  remainingMonths: number,
+  advertisedFixedMonths: number | null,
+): number {
+  if (!Number.isFinite(remainingMonths) || remainingMonths <= 0) return 0;
+  return advertisedFixedMonths && advertisedFixedMonths > 0
+    ? Math.min(remainingMonths, advertisedFixedMonths)
+    : remainingMonths;
+}
+
+export function termDepositInterestDifference(
+  balance: number,
+  currentRate: number,
+  candidateRate: number,
+  termMonths: number,
+): number {
+  if (![balance, currentRate, candidateRate, termMonths].every(Number.isFinite)) return 0;
+  if (balance <= 0 || termMonths <= 0) return 0;
+  return balance * (candidateRate - currentRate) * termMonths / 12;
+}

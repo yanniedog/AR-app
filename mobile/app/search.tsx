@@ -7,7 +7,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../src/components/FilterSheet';
 import { EmptyState, IndeterminateProgressBar, LoadingRows } from '../src/components/feedback';
-import { ProPaywall } from '../src/components/ProPaywall';
 import { ProductCard } from '../src/components/ProductCard';
 import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../src/components/Screen';
 import { ToolbarIconButton } from '../src/components/ToolbarIconButton';
@@ -26,7 +25,6 @@ import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifi
 import { profileToFilters } from '../src/data/profile';
 import { findSearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
-import { useProPaywall } from '../src/hooks/useProPaywall';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
@@ -72,7 +70,6 @@ export default function Search() {
   const subscribeSearch = useStore((s) => s.subscribeSearch);
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const suitabilityRevision = useSuitabilityRevision();
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   // Re-run when core/details identity changes so Search warms after cold start
   // or a dataset refresh that cleared details (storeRefresh SHA swap).
   const coreKey = core?.run_date ?? null;
@@ -165,7 +162,6 @@ export default function Search() {
       return;
     }
     if (!canAddAlertSubscription(subscriptions, useStore.getState().prefs)) {
-      requestPro('alert_limit');
       return;
     }
     const ok = await ensurePermissions();
@@ -230,9 +226,9 @@ export default function Search() {
           </AppText>
         ) : null}
         {showDeepSearchHint ? (
-          <Pressable onPress={() => requestPro('deep_search')}>
+          <Pressable onPress={() => setPref('enableDeepSearch', true)}>
             <AppText variant="tiny" color="primary" style={{ lineHeight: 16 }}>
-              Deep product search (Pro) matches fees and features — tap to upgrade.
+              Deep product search (free beta) matches fees, features, and eligibility.
             </AppText>
           </Pressable>
         ) : null}
@@ -307,14 +303,6 @@ export default function Search() {
         filters={effectiveFilters}
         detailsProducts={details?.products}
         onApply={setFilters}
-      />
-      <ProPaywall
-        visible={paywallVisible}
-        intent={paywallIntent}
-        onClose={closePaywall}
-        onUpgraded={() => {
-          if (paywallIntent === 'deep_search') setPref('enableDeepSearch', true);
-        }}
       />
     </Screen>
   );

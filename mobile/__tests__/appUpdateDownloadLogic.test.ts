@@ -14,6 +14,10 @@ describe('appUpdateDownloadLogic', () => {
     expect(apkDownloadTaskId('42')).toBe('apk-update-42');
     expect(apkDestinationPath('file:///docs/', '42')).toBe('file:///docs/app-update-42.apk');
     expect(apkDestinationPath('file:///docs', '42')).toBe('file:///docs/app-update-42.apk');
+    expect(apkDownloadTaskId('42', 'ABCDEF1234567890')).toBe('apk-update-42-abcdef123456');
+    expect(apkDestinationPath('file:///docs', '42', 'ABCDEF1234567890')).toBe(
+      'file:///docs/app-update-42-abcdef123456.apk',
+    );
   });
 
   it('normalizes native downloader paths for Expo FileSystem', () => {

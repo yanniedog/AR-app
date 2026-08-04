@@ -328,9 +328,8 @@ export function InsightsLockedCard({ onUnlock }: { onUnlock: () => void }) {
         <Badge label="PRO" tone="primary" />
       </Row>
       <AppText variant="small" color="textMuted">
-        Everyone shows today's rates. Only Australian Rates tracks every bank, every day — see who
-        moved rates which way, who drags their feet after RBA decisions, and how each lender's
-        rates moved over time.
+        See observed movements across tracked lenders: who changed advertised rates, how quickly
+        they responded after RBA decisions, and how their published rates moved over time.
       </AppText>
       <Button title="Unlock bank intelligence" icon="sparkles" onPress={onUnlock} />
     </View>

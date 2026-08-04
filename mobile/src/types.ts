@@ -92,6 +92,14 @@ export interface CorePayload {
   rba: RbaEntry[];
   /** RBA meeting dates that left the cash-rate target unchanged (holds). */
   rba_holds?: string[];
+  /** Optional producer-measured ingest coverage; absent on older payloads. */
+  coverage?: {
+    observed_at?: string;
+    providers_attempted?: number;
+    providers_succeeded?: number;
+    failures?: { provider: string; reason?: string }[];
+    limitations?: string[];
+  };
 }
 
 export interface DetailItem {

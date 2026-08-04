@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import React from 'react';
 import { Modal, Pressable, View } from 'react-native';
 
-import { useStore } from '../data/store';
 import { proGateCopy, type ProGateIntent, RATE_INTELLIGENCE_PRO } from '../lib/proAccess';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
@@ -19,11 +18,9 @@ export function ProPaywall({
   onUpgraded?: () => void;
 }) {
   const theme = useTheme();
-  const setPref = useStore((s) => s.setPref);
   const copy = proGateCopy(intent);
 
   const onUpgrade = () => {
-    setPref('rateIntelligencePro', true);
     onUpgraded?.();
     onClose();
   };
@@ -82,14 +79,8 @@ export function ProPaywall({
               </Row>
             ))}
 
-            <Button title="Upgrade to Pro" icon="sparkles" onPress={onUpgrade} />
-            <Button title="Not now" variant="ghost" onPress={onClose} />
-
-            {__DEV__ ? (
-              <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', lineHeight: 16 }}>
-                Dev stub: Upgrade sets a local Pro flag (no store billing yet).
-              </AppText>
-            ) : null}
+            <Button title="Use free beta" icon="sparkles" onPress={onUpgrade} />
+            <Button title="Close" variant="ghost" onPress={onClose} />
           </Card>
         </Pressable>
       </Pressable>

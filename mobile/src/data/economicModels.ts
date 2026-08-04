@@ -38,7 +38,8 @@ export interface EconomicReleaseRow {
 export interface MeetingBiasModel {
   lean: MeetingLean;
   leanLabel: string;
-  confidence: 'low' | 'medium' | 'high';
+  /** Descriptive evidence balance, not a calibrated probability or forecast confidence. */
+  signalBalance: 'mixed' | 'moderate' | 'strong';
   rationale: string;
   summary: string;
   rows: EconomicReleaseRow[];
@@ -488,8 +489,8 @@ export function meetingBiasModel(
   const average = weightSum > 0 ? weighted / weightSum : 0;
   const lean: MeetingLean = average >= 0.25 ? 'raise' : average <= -0.25 ? 'cut' : 'hold';
   const magnitude = Math.abs(average);
-  const confidence: MeetingBiasModel['confidence'] =
-    magnitude >= 0.55 ? 'high' : magnitude >= 0.3 ? 'medium' : 'low';
+  const signalBalance: MeetingBiasModel['signalBalance'] =
+    magnitude >= 0.55 ? 'strong' : magnitude >= 0.3 ? 'moderate' : 'mixed';
 
   const drivers = rows
     .filter((row) => row.meetingLean === lean)
@@ -508,11 +509,11 @@ export function meetingBiasModel(
   return {
     lean,
     leanLabel: leanLabel(lean),
-    confidence,
+    signalBalance,
     rationale:
       `${rationale} This is an app interpretation of official ABS/RBA series — not a market probability or RBA forecast.`,
     summary:
-      `Next-meeting lean: ${leanLabel(lean).toLowerCase()} (${confidence} confidence). ${rationale}`,
+      `Next-meeting lean: ${leanLabel(lean).toLowerCase()} (${signalBalance} signal balance). ${rationale}`,
     rows,
   };
 }
