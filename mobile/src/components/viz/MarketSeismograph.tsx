@@ -9,6 +9,7 @@ import {
   rbaHoldsInWindow,
   sliceIndexFromPlotX,
 } from '../../data/bankHistoryTransform';
+import { formatRunDate } from '../../data/format';
 import { marketActivityModel } from '../../data/vizModels';
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { isLoanSection, moveTone } from '../../lib/moveSemantics';
@@ -97,6 +98,15 @@ export function MarketSeismograph({
   const loan = isLoanSection(section);
   const upWord = loan ? 'hikes' : 'increases';
   const downWord = loan ? 'cuts' : 'decreases';
+  const activeValueLabel = activeDay ? [
+    activeDay.hikeBps > 0 ? `+${Math.round(activeDay.hikeBps)} bp ${upWord}` : null,
+    activeDay.cutBps > 0 ? `−${Math.round(activeDay.cutBps)} bp ${downWord}` : null,
+    activeDay.mixed > 0 ? `${activeDay.mixed} mixed` : null,
+  ].filter(Boolean).join(' · ') || 'No moves' : 'No observation';
+  const selectAccessibleIndex = (index: number) => {
+    const date = model.days[Math.max(0, Math.min(n - 1, index))]?.date;
+    if (date) onDateSelect?.(date);
+  };
 
   return (
     <View>
@@ -108,7 +118,16 @@ export function MarketSeismograph({
         onTouchCancel={scrub.onTouchCancel}
         accessible
         accessibilityRole="adjustable"
-        accessibilityLabel={`${SECTIONS[section].title} rate-move seismograph: ${model.totalMoves} lender moves in this window`}
+        accessibilityLabel={`${SECTIONS[section].title} rate-move seismograph: ${model.totalMoves} lender moves in this window. Selected ${formatRunDate(activeDay.date)}: ${activeValueLabel}, ${activeDay.hikes + activeDay.cuts + activeDay.mixed} lender moves.`}
+        accessibilityHint="Swipe up or down to move between days."
+        accessibilityActions={[
+          { name: 'increment', label: 'Next day' },
+          { name: 'decrement', label: 'Previous day' },
+        ]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'increment') selectAccessibleIndex(activeIndex + 1);
+          if (event.nativeEvent.actionName === 'decrement') selectAccessibleIndex(activeIndex - 1);
+        }}
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
@@ -207,11 +226,7 @@ export function MarketSeismograph({
         dates={model.days.map((day) => day.date)}
         activeIndex={activeIndex}
         onChangeIndex={(index) => onDateSelect?.(model.days[index]?.date ?? null)}
-        valueLabel={activeDay ? [
-          activeDay.hikeBps > 0 ? `+${Math.round(activeDay.hikeBps)} bp ${upWord}` : null,
-          activeDay.cutBps > 0 ? `−${Math.round(activeDay.cutBps)} bp ${downWord}` : null,
-          activeDay.mixed > 0 ? `${activeDay.mixed} mixed` : null,
-        ].filter(Boolean).join(' · ') || 'No moves' : '—'}
+        valueLabel={activeValueLabel}
         detail={activeDay ? `${activeDay.hikes + activeDay.cuts + activeDay.mixed} lender moves` : null}
       />
       <Row gap={12} style={{ marginTop: 6, flexWrap: 'wrap' }}>

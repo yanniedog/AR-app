@@ -9,7 +9,12 @@ import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
-import { sampleCore, sampleFallbackIsUsable, sampleManifest } from './sample';
+import {
+  SAMPLE_MAX_AGE_DAYS,
+  sampleCore,
+  sampleFallbackIsUsable,
+  sampleManifest,
+} from './sample';
 import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
@@ -139,7 +144,7 @@ export function createBootstrapActions(
           }
           set({
             status: 'error',
-            error: `Bundled sample observed ${sampleManifest.run_date} is older than the 90-day safety limit. Connect to load verified rates.`,
+            error: `Bundled sample observed ${sampleManifest.run_date} is older than the ${SAMPLE_MAX_AGE_DAYS}-day safety limit. Connect to load verified rates.`,
           });
           return;
         }
@@ -160,10 +165,13 @@ export function createBootstrapActions(
       set({ status: 'idle', error: null });
       await get().bootstrap({ skipRefresh: true });
       if (get().status !== 'ready') {
-        logRetry('retryDataLoad', 'failure', get().error ?? undefined);
-        return;
+        // An expired bundled/cached sample is intentionally not displayable,
+        // but Retry must still be able to recover online from an empty state.
+        set({ status: 'idle', error: null });
+        await get().refresh({ repairCache: true, manual: true });
+      } else {
+        await get().refresh({ repairCache: true, manual: true });
       }
-      await get().refresh({ repairCache: true, manual: true });
       if (get().refreshOutcome === 'failure') {
         logRetry('retryDataLoad', 'failure', get().error ?? 'refresh failed');
       } else {
@@ -207,7 +215,8 @@ export function createBootstrapActions(
     async ensureCoreLoaded() {
       if (get().core) return;
       const bundle = await cache.readBundle();
-      if (bundle) {
+      const sampleIsCurrent = bundle?.meta.source !== 'sample' || sampleFallbackIsUsable();
+      if (bundle && sampleIsCurrent) {
         set({ core: bundle.core, manifest: bundle.meta.manifest, source: bundle.meta.source });
       }
     },

@@ -4,10 +4,11 @@
 // shim (with a matching sample.d.ts) so TypeScript never parses the multi-MB
 // JSON literals — Metro still bundles them at build time.
 const sampleManifest = require('../../assets/sample/manifest.json');
-const SAMPLE_MAX_AGE_DAYS = 90;
+const SAMPLE_MAX_AGE_DAYS = 180;
 
 module.exports = {
   sampleManifest,
+  SAMPLE_MAX_AGE_DAYS,
   sampleCore: require('../../assets/sample/core.json'),
   loadSampleDetails: () => require('../../assets/sample/details.json'),
   sampleFallbackIsUsable: (now = new Date()) => {

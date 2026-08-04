@@ -44,6 +44,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 export default function Trends() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const calendar = useStore((s) => s.rbaCalendar);
   const interests = useStore((s) => s.prefs.interests);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -86,7 +87,7 @@ export default function Trends() {
 
   useEffect(() => {
     if (showHistoryRibbon && explorerMode === 'pulse') void ensureProductHistory();
-  }, [ensureProductHistory, explorerMode, showHistoryRibbon]);
+  }, [core?.run_date, coreSha, ensureProductHistory, explorerMode, showHistoryRibbon]);
 
   useEffect(() => {
     const revision = core?.run_date;

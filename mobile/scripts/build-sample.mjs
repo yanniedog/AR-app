@@ -1,151 +1,85 @@
-// Regenerate a deliberately small, historical bundled sample from a built
-// AR-local payload directory. The sample is a representative offline preview,
-// never a complete or current-market substitute.
+// Install a producer-generated historical sample bundle. Product selection,
+// aggregate calculation, and manifest construction belong to AR-local.
 //
-//   node scripts/build-sample.mjs [pathToAppPayloadDir]
+//   npm run sample -- C:\path\to\ar-local\generated-sample
 import { createHash } from 'node:crypto';
-import { gunzipSync } from 'node:zlib';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const mobileDir = resolve(here, '..');
-const repoDir = resolve(mobileDir, '..');
-const srcDir = process.argv[2]
-  ? resolve(process.argv[2])
-  : join(repoDir, 'runs', '2026-05-19', '_exports', 'app-payload');
-const outDir = join(mobileDir, 'assets', 'sample');
-mkdirSync(outDir, { recursive: true });
+const defaultOutputDir = resolve(here, '..', 'assets', 'sample');
+const LIMITS = { core: 2 * 1024 * 1024, details: 8 * 1024 * 1024 };
 
-const sourceManifest = JSON.parse(readFileSync(join(srcDir, 'manifest.json'), 'utf8'));
-const readPayload = (kind) => JSON.parse(
-  gunzipSync(readFileSync(join(srcDir, sourceManifest.files[kind].name))).toString('utf8'),
-);
-const sourceCore = readPayload('core');
-const sourceDetails = readPayload('details');
-
-const numericRate = (row) => {
-  const value = Number(row.comparison_rate || row.rate);
-  return Number.isFinite(value) && value > 0 ? value : null;
-};
-
-const stats = (rows) => {
-  const values = rows.map(numericRate).filter((value) => value !== null).sort((a, b) => a - b);
-  if (!values.length) return { min: null, max: null, mean: null, median: null };
-  const middle = Math.floor(values.length / 2);
-  return {
-    min: values[0],
-    max: values.at(-1),
-    mean: values.reduce((sum, value) => sum + value, 0) / values.length,
-    median: values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2,
-  };
-};
-
-const representativeRows = (rows, section) => {
-  const byProvider = new Map();
-  for (const row of rows) {
-    const list = byProvider.get(row.provider) ?? [];
-    list.push(row);
-    byProvider.set(row.provider, list);
-  }
-  return [...byProvider.values()].flatMap((providerRows) => {
-    const sorted = [...providerRows].sort((a, b) => {
-      const av = numericRate(a);
-      const bv = numericRate(b);
-      if (av === null) return 1;
-      if (bv === null) return -1;
-      return section === 'Mortgage' ? av - bv : bv - av;
-    });
-    const chosen = [];
-    const products = new Set();
-    for (const row of sorted) {
-      if (products.has(row.product_key)) continue;
-      chosen.push(row);
-      products.add(row.product_key);
-      if (chosen.length === 2) break;
-    }
-    return chosen;
-  });
-};
-
-const sections = Object.fromEntries(Object.entries(sourceCore.sections).map(([section, data]) => {
-  const rates = representativeRows(data.rates, section);
-  const providerGroups = new Map();
-  for (const row of rates) {
-    const list = providerGroups.get(row.provider) ?? [];
-    list.push(row);
-    providerGroups.set(row.provider, list);
-  }
-  const providers = [...providerGroups.entries()].map(([provider, providerRows]) => ({
-    provider,
-    rates: providerRows.length,
-    products: new Set(providerRows.map((row) => row.product_key)).size,
-    ...stats(providerRows),
-  }));
-  return [section, {
-    rates,
-    ribbon: {
-      counts: {
-        rates: rates.length,
-        products: new Set(rates.map((row) => row.product_key)).size,
-        providers: providerGroups.size,
-      },
-      range: stats(rates),
-      providers,
-    },
-  }];
-}));
-
-const selectedProductKeys = new Set(
-  Object.values(sections).flatMap((section) => section.rates.map((row) => row.product_key)),
-);
-const products = Object.fromEntries(
-  Object.entries(sourceDetails.products).filter(([key]) => selectedProductKeys.has(key)),
-);
-const usedProviders = new Set(
-  Object.values(sections).flatMap((section) => section.rates.map((row) => row.provider)),
-);
-const core = {
-  ...sourceCore,
-  sections,
-  brands: Object.fromEntries(
-    Object.entries(sourceCore.brands).filter(([provider]) => usedProviders.has(provider)),
-  ),
-  coverage: {
-    ...(sourceCore.coverage ?? {}),
-    limitations: [
-      ...(sourceCore.coverage?.limitations ?? []),
-      'Bundled sample only: up to two representative published products per provider and section; not a complete or current market view.',
-    ],
-  },
-};
-const details = { ...sourceDetails, products };
-const jsonByKind = { core: JSON.stringify(core), details: JSON.stringify(details) };
-const fileMeta = (kind) => ({
-  ...sourceManifest.files[kind],
-  name: `sample-${kind}.json`,
-  bytes: Buffer.byteLength(jsonByKind[kind]),
-  sha256: createHash('sha256').update(jsonByKind[kind]).digest('hex'),
-});
-const detailValues = Object.values(products);
-const manifest = {
-  ...sourceManifest,
-  counts: {
-    ...sourceManifest.counts,
-    products: selectedProductKeys.size,
-    rates: Object.values(sections).reduce((sum, section) => sum + section.rates.length, 0),
-    fees: detailValues.reduce((sum, item) => sum + (item.fees?.length ?? 0), 0),
-    features: detailValues.reduce((sum, item) => sum + (item.features?.length ?? 0), 0),
-    eligibility: detailValues.reduce((sum, item) => sum + (item.eligibility?.length ?? 0), 0),
-    constraints: detailValues.reduce((sum, item) => sum + (item.constraints?.length ?? 0), 0),
-  },
-  files: { ...sourceManifest.files, core: fileMeta('core'), details: fileMeta('details') },
-};
-
-writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest));
-for (const [kind, json] of Object.entries(jsonByKind)) {
-  writeFileSync(join(outDir, `${kind}.json`), json);
-  console.log(`wrote assets/sample/${kind}.json (${(Buffer.byteLength(json) / 1024) | 0} KiB)`);
+function sha256(bytes) {
+  return createHash('sha256').update(bytes).digest('hex');
 }
-console.log(`sample run_date=${manifest.run_date} products=${selectedProductKeys.size}`);
+
+export async function validateGeneratedSample(sourceDir) {
+  const manifestBytes = await readFile(join(sourceDir, 'manifest.json'));
+  const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  if (manifest.schema_version !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(manifest.run_date ?? '')) {
+    throw new Error('Generated sample manifest must be schema version 1 with an ISO run_date.');
+  }
+  if (manifest.repo !== 'yanniedog/AR-local' || manifest.tag !== 'bundled-sample') {
+    throw new Error('Generated sample must identify AR-local and the bundled-sample contract.');
+  }
+  if (Object.keys(manifest.files ?? {}).sort().join(',') !== 'core,details') {
+    throw new Error('Generated sample manifest may contain only core and details files.');
+  }
+
+  const artifacts = {};
+  for (const kind of ['core', 'details']) {
+    const expectedName = `${kind}.json`;
+    const entry = manifest.files[kind];
+    if (entry?.name !== expectedName || entry.url !== `bundled://sample/${expectedName}` || entry.enc) {
+      throw new Error(`${kind} must use the local ${expectedName} bundled-sample contract.`);
+    }
+    const bytes = await readFile(join(sourceDir, expectedName));
+    if (bytes.length !== entry.bytes) throw new Error(`${kind} byte count mismatch.`);
+    if (bytes.length > LIMITS[kind]) throw new Error(`${kind} exceeds the bundled-sample size limit.`);
+    if (sha256(bytes) !== entry.sha256) throw new Error(`${kind} SHA-256 mismatch.`);
+    const payload = JSON.parse(bytes.toString('utf8'));
+    if (payload.schema_version !== 1 || payload.run_date !== manifest.run_date) {
+      throw new Error(`${kind} schema/run_date does not match manifest.`);
+    }
+    artifacts[kind] = { bytes, payload };
+  }
+
+  const limitations = artifacts.core.payload.coverage?.limitations ?? [];
+  if (!limitations.some((value) => /bundled sample/i.test(String(value)))) {
+    throw new Error('Generated core must declare its bundled-sample limitation.');
+  }
+  const rateCount = Object.values(artifacts.core.payload.sections ?? {})
+    .reduce((sum, section) => sum + (section.rates?.length ?? 0), 0);
+  const productCount = Object.keys(artifacts.details.payload.products ?? {}).length;
+  if (manifest.counts?.rates !== rateCount || manifest.counts?.products !== productCount) {
+    throw new Error('Generated sample counts do not match core/details payloads.');
+  }
+  return { artifacts, manifest, manifestBytes, productCount, rateCount };
+}
+
+export async function installSample(sourceDir, outputDir = defaultOutputDir) {
+  const validated = await validateGeneratedSample(resolve(sourceDir));
+  await mkdir(outputDir, { recursive: true });
+  for (const kind of ['core', 'details']) {
+    await writeFile(join(outputDir, `${kind}.json`), validated.artifacts[kind].bytes);
+  }
+  // Manifest last: a killed import cannot advertise a partially installed set.
+  await writeFile(join(outputDir, 'manifest.json'), validated.manifestBytes);
+  return validated;
+}
+
+async function main() {
+  const sourceArg = process.argv[2];
+  if (!sourceArg) {
+    throw new Error('Pass an AR-local generated sample directory containing manifest.json, core.json, and details.json.');
+  }
+  const result = await installSample(sourceArg);
+  console.log(
+    `sample imported run_date=${result.manifest.run_date} ` +
+    `products=${result.productCount} rates=${result.rateCount}`,
+  );
+}
+
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) await main();

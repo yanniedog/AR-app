@@ -50,6 +50,22 @@ function nearestIndex(values: number[], target: number): number {
   return best;
 }
 
+export function holdDatesWithinSeriesWindow(
+  points: EconomicPoint[],
+  holdDates: string[] | undefined,
+): string[] {
+  const times = points.map((point) => parseYmd(point.date)).filter((value) => value != null);
+  if (!times.length) return [];
+  const first = Math.min(...times);
+  const last = Math.max(...times);
+  return (holdDates ?? [])
+    .map((raw) => String(raw || '').slice(0, 10))
+    .filter((date) => {
+      const time = parseYmd(date);
+      return time != null && time >= first && time <= last;
+    });
+}
+
 function buildStepPath(
   points: EconomicPoint[],
   xForDate: (date: string) => number,
@@ -83,11 +99,9 @@ export function EconomicChartFrame({
   );
   const dates = useMemo(() => {
     const values = new Set(allPoints.map((point) => point.date));
-    if (holdSeriesId && series.some((item) => item.id === holdSeriesId)) {
-      for (const raw of holdDates ?? []) {
-        const date = String(raw || '').slice(0, 10);
-        if (parseYmd(date) != null) values.add(date);
-      }
+    const holdSeries = holdSeriesId ? series.find((item) => item.id === holdSeriesId) : null;
+    if (holdSeries) {
+      for (const date of holdDatesWithinSeriesWindow(holdSeries.points, holdDates)) values.add(date);
     }
     return [...values].sort();
   }, [allPoints, holdDates, holdSeriesId, series]);

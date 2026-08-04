@@ -2,7 +2,12 @@ import * as Network from 'expo-network';
 
 import { cache, type CacheMeta } from './cache';
 import { normalizeHistoryBanksPayload } from './historyPayload';
-import { sampleCore, sampleFallbackIsUsable, sampleManifest } from './sample';
+import {
+  SAMPLE_MAX_AGE_DAYS,
+  sampleCore,
+  sampleFallbackIsUsable,
+  sampleManifest,
+} from './sample';
 import { debugLog } from '../lib/debugLog';
 import type { HistoryBanksPayload } from './historyPayload';
 
@@ -28,7 +33,7 @@ export async function readValidatedHistoryBanks(): Promise<HistoryBanksPayload |
 export async function installSampleSeed(): Promise<void> {
   if (!sampleFallbackIsUsable()) {
     throw new Error(
-      `Bundled sample observed ${sampleManifest.run_date} is older than the 90-day safety limit. Connect to load verified rates.`,
+      `Bundled sample observed ${sampleManifest.run_date} is older than the ${SAMPLE_MAX_AGE_DAYS}-day safety limit. Connect to load verified rates.`,
     );
   }
   const seedMeta: CacheMeta = {

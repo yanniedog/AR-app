@@ -145,6 +145,13 @@ export function rbaTimelineDates(rba: RbaEntry[], holds?: string[]): string[] {
   return normalizeTimelineDates([...dates]);
 }
 
+/** Extend a cash-rate step through a later held meeting without inventing a change. */
+export function rbaSeriesThroughDate(rba: RbaEntry[], endDate: string): RbaEntry[] {
+  const last = rba.at(-1);
+  if (!last || parseYmd(endDate) == null || endDate <= last.date) return rba;
+  return [...rba, { date: endDate, rate: last.rate }];
+}
+
 /** Cash-rate step values per plotted date (fraction, dashboard parity). */
 export function rbaStepForDates(dates: string[], rba: RbaEntry[]): (number | null)[] {
   return dates.map((date) => {

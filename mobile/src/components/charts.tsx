@@ -8,7 +8,13 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Line, Path, Polygon, Text as SvgText } from 'react-native-svg';
 
-import { parseYmd, rbaHoldsInWindow, rbaRateAsOf, rbaTimelineDates } from '../data/bankHistoryTransform';
+import {
+  parseYmd,
+  rbaHoldsInWindow,
+  rbaRateAsOf,
+  rbaSeriesThroughDate,
+  rbaTimelineDates,
+} from '../data/bankHistoryTransform';
 import { formatRate, formatRateDigits, formatRunDate } from '../data/format';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { rbaChartA11ySummary } from '../lib/a11ySummaries';
@@ -84,6 +90,7 @@ export function RbaChart({
 
   const firstTs = data.length ? parseYmd(data[0].date) : null;
   const chartEndDate = timeline.at(-1) ?? data.at(-1)?.date ?? '';
+  const plottedData = useMemo(() => rbaSeriesThroughDate(data, chartEndDate), [chartEndDate, data]);
   const lastTs = parseYmd(chartEndDate);
   const timeSpan = firstTs != null && lastTs != null ? Math.max(1, lastTs - firstTs) : 1;
   const xAtDate = (date: string) => {
@@ -91,7 +98,6 @@ export function RbaChart({
     if (ts == null || firstTs == null) return padL;
     return padL + ((ts - firstTs) / timeSpan) * innerW;
   };
-  const x = (i: number) => xAtDate(data[i].date);
   const y = (rate: number) => padT + innerH - ((rate - minR) / span) * innerH;
 
   const holdMarks = useMemo(
@@ -100,23 +106,23 @@ export function RbaChart({
   );
 
   const pathModel = useMemo(() => {
-    if (!data.length) return { pathD: '', pathLength: 1 };
+    if (!plottedData.length) return { pathD: '', pathLength: 1 };
     const xForDate = (date: string) => {
       const ts = parseYmd(date);
       if (ts == null || firstTs == null) return padL;
       return padL + ((ts - firstTs) / timeSpan) * innerW;
     };
-    const xForIndex = (index: number) => xForDate(data[index].date);
+    const xForIndex = (index: number) => xForDate(plottedData[index].date);
     const yForRate = (rate: number) => padT + innerH - ((rate - minR) / span) * innerH;
-    let d = `M ${xForIndex(0)} ${yForRate(data[0].rate)}`;
-    for (let i = 1; i < data.length; i += 1) {
-      d += ` L ${xForIndex(i)} ${yForRate(data[i - 1].rate)} L ${xForIndex(i)} ${yForRate(data[i].rate)}`;
+    let d = `M ${xForIndex(0)} ${yForRate(plottedData[0].rate)}`;
+    for (let i = 1; i < plottedData.length; i += 1) {
+      d += ` L ${xForIndex(i)} ${yForRate(plottedData[i - 1].rate)} L ${xForIndex(i)} ${yForRate(plottedData[i].rate)}`;
     }
     return {
       pathD: d,
-      pathLength: width <= 0 ? 1 : estimateStepPathLength(data, xForIndex, yForRate),
+      pathLength: width <= 0 ? 1 : estimateStepPathLength(plottedData, xForIndex, yForRate),
     };
-  }, [data, firstTs, innerH, innerW, minR, span, timeSpan, width]);
+  }, [firstTs, innerH, innerW, minR, plottedData, span, timeSpan, width]);
   const { pathD, pathLength } = pathModel;
 
   const pathAnimatedProps = useAnimatedProps(() => ({
@@ -216,9 +222,9 @@ export function RbaChart({
               />
             );
           })}
-          <Circle cx={x(data.length - 1)} cy={y(last.rate)} r={4} fill={theme.colors.rba} />
+          <Circle cx={xAtDate(chartEndDate)} cy={y(last.rate)} r={4} fill={theme.colors.rba} />
           <SvgText
-            x={x(data.length - 1)}
+            x={xAtDate(chartEndDate)}
             y={y(last.rate) - 8}
             fontSize={11}
             fontWeight="bold"

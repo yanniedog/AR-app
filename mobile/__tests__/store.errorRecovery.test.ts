@@ -1,5 +1,5 @@
 import type { CorePayload, Manifest } from '../src/types';
-import { sampleCore, sampleManifest } from '../src/data/sample';
+import { SAMPLE_MAX_AGE_DAYS, sampleCore, sampleManifest } from '../src/data/sample';
 
 const mockReadBundle = jest.fn();
 const mockReadSuitabilityIndex = jest.fn();
@@ -135,6 +135,33 @@ describe('store error recovery', () => {
     expect(state.error).toBeNull();
     expect(state.core).toEqual(remoteCore);
     expect(mockFetchManifest).toHaveBeenCalled();
+  });
+
+  it('retryDataLoad bypasses an expired cached sample and still refreshes remotely', async () => {
+    const observed = Date.parse(`${sampleManifest.run_date}T00:00:00Z`);
+    jest.useFakeTimers().setSystemTime(observed + (SAMPLE_MAX_AGE_DAYS + 1) * 86400000);
+    try {
+      mockReadBundle.mockResolvedValue({
+        meta: {
+          manifest: sampleManifest,
+          source: 'sample',
+          savedAt: `${sampleManifest.run_date}T00:00:00Z`,
+          coreSha: sampleManifest.files.core.sha256,
+          detailsSha: null,
+        },
+        core: sampleCore,
+      });
+
+      const retry = useStore.getState().retryDataLoad();
+      await jest.runAllTimersAsync();
+      await retry;
+
+      expect(mockFetchManifest).toHaveBeenCalled();
+      expect(useStore.getState().status).toBe('ready');
+      expect(useStore.getState().source).toBe('remote');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('fails closed on cached startup until the exact post-ingest suitability index is rebuilt', async () => {
