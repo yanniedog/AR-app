@@ -13,6 +13,7 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
+  isoDurationMonths,
   isNonStandard,
   toFraction,
 } from './format';
@@ -27,6 +28,7 @@ export interface OfficialReceiptSource {
   kind: keyof ProductLinks;
   label: string;
   url: string;
+  hostname: string;
 }
 
 /** A point-in-time record of one exact CDR product-rate row. */
@@ -41,6 +43,8 @@ export interface RateReceipt {
   sourceUpdatedAt: string | null;
   advertisedRate: string;
   advertisedRateFraction: number | null;
+  ratePeriodMonths: number | null;
+  ratePeriodLabel: string | null;
   comparisonRate: string | null;
   ongoingRate: string | null;
   cohort: 'standard' | 'non-standard';
@@ -67,6 +71,8 @@ export interface NegotiationIllustration {
   currentRate: string;
   selectedRate: string;
   annualDifference: number;
+  periodDifference: number;
+  periodLabel: string;
   monthlyDifference: number | null;
   direction: 'lower-cost' | 'higher-return';
   assumption: string;
@@ -90,11 +96,11 @@ export interface NegotiationBrief {
 }
 
 const SOURCE_LABELS: Record<keyof ProductLinks, string> = {
-  overview: 'Official product overview',
-  eligibility: 'Official eligibility criteria',
-  fees: 'Official fees and pricing',
-  terms: 'Official terms and conditions',
-  bundle: 'Official product bundle details',
+  overview: 'Published product overview',
+  eligibility: 'Published eligibility criteria',
+  fees: 'Published fees and pricing',
+  terms: 'Published terms and conditions',
+  bundle: 'Published product bundle details',
 };
 
 function safeHttpsUrl(value: unknown): string | null {
@@ -118,7 +124,7 @@ export function officialReceiptSources(links?: ProductLinks): OfficialReceiptSou
     const url = safeHttpsUrl(links[kind]);
     if (!url || seen.has(url)) continue;
     seen.add(url);
-    sources.push({ kind, label: SOURCE_LABELS[kind], url });
+    sources.push({ kind, label: SOURCE_LABELS[kind], url, hostname: new URL(url).hostname });
   }
   return sources;
 }
@@ -174,6 +180,11 @@ export function buildRateReceipt(input: {
   }
 
   const officialSources = officialReceiptSources(detail?.links);
+  const explicitTermMonths = Number(row.term_months);
+  const ratePeriodMonths = Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
+    ? explicitTermMonths
+    : isoDurationMonths(row.term);
+  const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || `${ratePeriodMonths} months`;
   const limitations = [
     'This receipt records what the Australian Rates dataset observed; it is not a lender quote or approval.',
     'Eligibility, balances, fees, packages and other conditions can change the rate available to an individual.',
@@ -196,6 +207,8 @@ export function buildRateReceipt(input: {
     sourceUpdatedAt: row.last_updated ?? detail?.last_updated ?? null,
     advertisedRate: formatRate(row.rate),
     advertisedRateFraction: toFraction(row.rate),
+    ratePeriodMonths,
+    ratePeriodLabel,
     comparisonRate: row.comparison_rate ? formatRate(row.comparison_rate) : null,
     ongoingRate: qualifier.ongoingRate,
     cohort: isNonStandard(row) ? 'non-standard' : 'standard',
@@ -258,7 +271,7 @@ function buildComparables(rows: RateRow[], section: SectionKey, selected: RateRe
   const seen = new Set<string>();
   const result: NegotiationComparable[] = [];
   for (const row of eligible) {
-    if (row.product_key === selected.productKey && (row.rate_index ?? null) === selected.rateIndex) continue;
+    if (row.product_key === selected.productKey) continue;
     if (seen.has(row.product_key)) continue;
     seen.add(row.product_key);
     const qualifier = rateQualifier(row, section);
@@ -295,7 +308,8 @@ export function buildNegotiationBrief(input: {
   if (
     scenarioData.balance > 0 &&
     scenarioData.currentRateFraction != null &&
-    selectedRate != null
+    selectedRate != null &&
+    (receipt.section !== 'TD' || receipt.ratePeriodMonths != null)
   ) {
     const direction = receipt.section === 'Mortgage' ? 'lower-cost' : 'higher-return';
     const delta = receipt.section === 'Mortgage'
@@ -303,19 +317,29 @@ export function buildNegotiationBrief(input: {
       : selectedRate - scenarioData.currentRateFraction;
     if (delta > 0) {
       const annualDifference = Math.round(scenarioData.balance * delta * 100) / 100;
+      const periodDifference = receipt.ratePeriodMonths == null
+        ? annualDifference
+        : Math.round((annualDifference * receipt.ratePeriodMonths / 12) * 100) / 100;
+      const periodLabel = receipt.ratePeriodMonths == null
+        ? 'per year'
+        : receipt.section === 'TD'
+          ? `at ${receipt.ratePeriodLabel ?? `${receipt.ratePeriodMonths} month`} maturity`
+          : `over the published ${receipt.ratePeriodLabel ?? `${receipt.ratePeriodMonths} month`} period`;
       illustration = {
         balance: scenarioData.balance,
         currentRate: formatRate(scenarioData.currentRateFraction),
         selectedRate: receipt.advertisedRate,
         annualDifference,
-        monthlyDifference: receipt.section === 'TD'
+        periodDifference,
+        periodLabel,
+        monthlyDifference: receipt.section === 'TD' || receipt.ratePeriodMonths != null
           ? null
           : Math.round((annualDifference / 12) * 100) / 100,
         direction,
         assumption: receipt.section === 'Mortgage'
           ? 'Simple interest-rate difference only; repayments, fees, loan structure and switching costs are excluded.'
           : receipt.section === 'TD'
-            ? 'Annualised simple-interest difference only; the actual return depends on the deposit term, compounding and maturity instructions.'
+            ? 'Simple-interest difference for the published deposit term; compounding and maturity instructions are excluded.'
             : 'Simple annual interest-rate difference only; bonus qualification, compounding, tax and balance changes are excluded.',
       };
     }

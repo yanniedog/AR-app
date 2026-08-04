@@ -36,7 +36,10 @@ export function makeSavedRateRef(
   scope: SavedRateRef['scope'] = 'rate',
   savedAt = new Date().toISOString(),
 ): SavedRateRef {
-  const exact = scope === 'rate' && row.rate_index != null;
+  if (scope === 'rate' && !Number.isInteger(row.rate_index)) {
+    throw new RangeError('An exact saved rate requires an integer rate_index');
+  }
+  const exact = scope === 'rate';
   const rateIndex = exact ? row.rate_index! : null;
   return {
     schemaVersion: 1,
@@ -68,7 +71,8 @@ export function normalizeSavedRates(raw: unknown, legacyFavorites: unknown = [])
       if (!value || typeof value !== 'object') continue;
       const item = value as Partial<SavedRateRef>;
       if (typeof item.productKey !== 'string' || !item.productKey) continue;
-      const scope = item.scope === 'rate' && Number.isInteger(item.rateIndex) ? 'rate' : 'product';
+      if (item.scope === 'rate' && !Number.isInteger(item.rateIndex)) continue;
+      const scope = item.scope === 'rate' ? 'rate' : 'product';
       const rateIndex = scope === 'rate' ? Number(item.rateIndex) : null;
       const ref: SavedRateRef = {
         schemaVersion: 1,

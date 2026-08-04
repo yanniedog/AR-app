@@ -51,7 +51,9 @@ export default function ProductDetail() {
   const theme = useTheme();
   const { key, ri } = useLocalSearchParams<{ key: string; ri?: string }>();
   const productKey = key ?? '';
-  const rateIndex = ri != null && ri !== '' ? Number(ri) : null;
+  const exactRateRequested = ri != null && ri !== '';
+  const parsedRateIndex = exactRateRequested ? Number(ri) : null;
+  const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const ensureDetails = useStore((s) => s.ensureDetails);
@@ -186,8 +188,24 @@ export default function ProductDetail() {
   }
 
   const { section, siblings } = found;
-  const row =
-    (rateIndex != null ? siblings.find((s) => s.rate_index === rateIndex) : undefined) ?? found.row;
+  const row = exactRateRequested
+    ? rateIndex == null
+      ? null
+      : siblings.find((s) => s.rate_index === rateIndex) ?? null
+    : found.row;
+  if (!row) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'Product rate unavailable' }} />
+        <EmptyState
+          icon="alert-circle-outline"
+          title="Exact rate no longer available"
+          subtitle="This rate index is not present in the current dataset. Choose a current product tier instead."
+          fill
+        />
+      </>
+    );
+  }
   const favorite = isSavedRate(savedRates, productKey, row.rate_index ?? null);
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,

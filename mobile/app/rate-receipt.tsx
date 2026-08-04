@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Alert, Linking, Pressable, View } from 'react-native';
 
 import { EmptyState } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
@@ -73,6 +73,7 @@ export default function RateReceiptScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      setScenarioLoaded(false);
       void loadUserRateScenario().then((loaded) => {
         if (!active) return;
         setScenario(loaded);
@@ -185,15 +186,22 @@ export default function RateReceiptScreen() {
           </>
         ) : null}
 
-        <SectionTitle text="Official lender evidence" icon="link-outline" />
+        <SectionTitle text="Published source links" icon="link-outline" />
         <Card style={{ marginBottom: 16 }}>
           {receipt.officialSources.length ? receipt.officialSources.map((source, index) => (
             <View key={source.url}>
               {index > 0 ? <Divider /> : null}
               <Pressable
                 accessibilityRole="link"
-                accessibilityLabel={`${source.label}, opens lender website`}
-                onPress={() => void Linking.openURL(source.url)}
+                accessibilityLabel={`${source.label} on ${source.hostname}, opens external website`}
+                onPress={() => Alert.alert(
+                  'Open published source?',
+                  `${source.hostname}\n\nConfirm this domain belongs to the lender before relying on it.`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Open', onPress: () => void Linking.openURL(source.url) },
+                  ],
+                )}
                 style={({ pressed }) => ({
                   minHeight: TOUCH_TARGET_MIN,
                   flexDirection: 'row',
@@ -203,18 +211,21 @@ export default function RateReceiptScreen() {
                 })}
               >
                 <Ionicons name="open-outline" size={17} color={theme.colors.primary} />
-                <AppText variant="small" weight="700" style={{ flex: 1, color: theme.colors.primary }}>
-                  {source.label}
-                </AppText>
+                <View style={{ flex: 1 }}>
+                  <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
+                    {source.label}
+                  </AppText>
+                  <AppText variant="tiny" color="textMuted">{source.hostname}</AppText>
+                </View>
               </Pressable>
             </View>
           )) : (
             <AppText variant="small" color="textMuted">
-              No valid official HTTPS link was published for this product.
+              No valid HTTPS source link was published for this product.
             </AppText>
           )}
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-            Opening a link leaves the app. Recheck the lender page because rates and conditions can change after {receipt.evidenceDate}.
+            Opening a link leaves the app. Confirm the displayed domain belongs to the lender; provider-to-domain identity is not cryptographically bound yet.
           </AppText>
         </Card>
 
@@ -250,7 +261,7 @@ export default function RateReceiptScreen() {
             <SectionTitle text="Illustrative difference" icon="calculator-outline" />
             <Card style={{ marginBottom: 16 }}>
               <AppText variant="h2" style={{ color: theme.colors.success }}>
-                {money(brief.illustration.annualDifference)} per year
+                {money(brief.illustration.periodDifference)} {brief.illustration.periodLabel}
               </AppText>
               {brief.illustration.monthlyDifference != null ? (
                 <AppText variant="body" weight="700" style={{ marginTop: 2 }}>

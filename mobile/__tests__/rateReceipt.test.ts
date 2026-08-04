@@ -76,7 +76,7 @@ describe('rate receipt', () => {
       fees: 'javascript:alert(1)',
       terms: 'http://bank.test/terms',
     })).toEqual([
-      { kind: 'overview', label: 'Official product overview', url: 'https://bank.test/product' },
+      { kind: 'overview', label: 'Published product overview', url: 'https://bank.test/product', hostname: 'bank.test' },
     ]);
 
     const receipt = buildRateReceipt({
@@ -115,6 +115,7 @@ describe('local negotiation brief', () => {
       scenario,
       sectionRows: [
         selected,
+        row({ rate_index: 8, rate: '0.048' }),
         row({ product_key: 'best|1', product_name: 'Best standard', provider: 'Alpha', rate: '0.049' }),
         row({ product_key: 'other|1', product_name: 'Other standard', provider: 'Beta', rate: '0.054' }),
         row({ product_key: 'restricted|1', product_name: 'Staff loan', provider: 'Gamma', rate: '0.01', account_class: 'non_standard' }),
@@ -127,6 +128,7 @@ describe('local negotiation brief', () => {
       { label: 'Current rate entered', value: '6.00%' },
     ]));
     expect(brief.comparables.map((item) => item.productKey)).toEqual(['best|1', 'other|1']);
+    expect(brief.comparables.some((item) => item.productKey === selected.product_key)).toBe(false);
     expect(brief.comparables.some((item) => item.productKey === 'restricted|1')).toBe(false);
     expect(brief.illustration).toMatchObject({
       balance: 500000,
@@ -161,10 +163,44 @@ describe('local negotiation brief', () => {
 
     expect(brief.illustration).toMatchObject({
       annualDifference: 1000,
+      periodDifference: 1000,
+      periodLabel: 'at 1 yr maturity',
       monthlyDifference: null,
       direction: 'higher-return',
     });
     expect(brief.illustration?.assumption).toMatch(/maturity instructions/i);
+  });
+
+  test('bounds TD and introductory illustrations to their published period', () => {
+    const scenario = normalizeUserRateScenario({
+      termDeposit: { balance: '100000', currentRate: '4.00' },
+      savings: { balance: '100000', currentRate: '4.00' },
+    });
+    const tdRow = row({ product_key: 'td|3m', rate: '0.05', term: 'P3M' });
+    const tdReceipt = buildRateReceipt({ row: tdRow, section: 'TD', evidenceDate: '2026-08-04' });
+    const tdBrief = buildNegotiationBrief({ receipt: tdReceipt, scenario, sectionRows: [tdRow] });
+    expect(tdBrief.illustration).toMatchObject({
+      annualDifference: 1000,
+      periodDifference: 250,
+      periodLabel: 'at 3 mo maturity',
+      monthlyDifference: null,
+    });
+
+    const introRow = row({ product_key: 'save|intro', rate: '0.05', rate_type: 'INTRODUCTORY', term: 'P3M' });
+    const introReceipt = buildRateReceipt({ row: introRow, section: 'Savings', evidenceDate: '2026-08-04' });
+    const introBrief = buildNegotiationBrief({ receipt: introReceipt, scenario, sectionRows: [introRow] });
+    expect(introBrief.illustration).toMatchObject({
+      periodDifference: 250,
+      periodLabel: 'over the published 3 mo period',
+      monthlyDifference: null,
+    });
+  });
+
+  test('suppresses TD dollars when no reliable term was published', () => {
+    const selected = row({ product_key: 'td|unknown', rate: '0.05', term: undefined, term_months: undefined });
+    const receipt = buildRateReceipt({ row: selected, section: 'TD', evidenceDate: '2026-08-04' });
+    const scenario = normalizeUserRateScenario({ termDeposit: { balance: '100000', currentRate: '4.00' } });
+    expect(buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] }).illustration).toBeNull();
   });
 
   test('does not fabricate a personal illustration without an explicit scenario', () => {

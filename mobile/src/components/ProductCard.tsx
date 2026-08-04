@@ -235,10 +235,14 @@ export function ProductCard({
 
       {!selectMode ? (
         <Pressable
-          onPress={() => toggleSavedRate(row)}
+          onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
           hitSlop={10}
           accessibilityRole="button"
-          accessibilityLabel={favorite ? 'Remove this rate from saved' : 'Save this exact rate'}
+          accessibilityLabel={favorite
+            ? 'Remove this rate from saved'
+            : Number.isInteger(row.rate_index)
+              ? 'Save this exact rate'
+              : 'Save all product variants'}
           accessibilityState={{ selected: favorite }}
           android_ripple={androidRipple(theme.colors.primaryMuted, true)}
           style={{

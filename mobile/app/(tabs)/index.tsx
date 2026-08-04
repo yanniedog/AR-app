@@ -338,7 +338,7 @@ export default function Home() {
             <AppText variant="body" weight="700">
               {loyaltyGap.gapRate > 0
                 ? section === 'TD'
-                  ? `Illustrative annualised gap: $${Math.round(loyaltyGap.annualDollars).toLocaleString()} across a full year; actual interest depends on term and maturity.`
+                  ? `Observed rate gap: ${(loyaltyGap.gapRate * 100).toFixed(2)} percentage points. Use the TD calculator for a term-specific maturity amount.`
                   : `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
                 : 'Your saved rate is at least as strong as this matched observed rate.'}
             </AppText>

@@ -47,6 +47,15 @@ describe('saved rate references', () => {
     expect(isSavedRate([ref], 'EX|HOME', 1)).toBe(false);
   });
 
+  it('fails closed for unindexed exact saves and malformed persisted exact refs', () => {
+    expect(() => makeSavedRateRef({ ...row(2, '0.06'), rate_index: undefined }, 'rate')).toThrow(
+      /integer rate_index/,
+    );
+    expect(normalizeSavedRates([
+      { scope: 'rate', productKey: 'EX|HOME', rateIndex: null, savedAt: '2026-08-04' },
+    ])).toEqual([]);
+  });
+
   it('migrates legacy favourites as explicit all-variant references', () => {
     expect(normalizeSavedRates(undefined, ['EX|HOME'])).toEqual([
       expect.objectContaining({
