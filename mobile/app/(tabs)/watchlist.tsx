@@ -22,7 +22,6 @@ export default function Saved() {
   const core = useStore((s) => s.core);
   const savedRates = useStore((s) => s.savedRates);
   const removeSavedRate = useStore((s) => s.removeSavedRate);
-  const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const { snack, showUndo, undo } = useUndoSnackbar();
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
@@ -42,12 +41,17 @@ export default function Saved() {
       removeSavedRate(id);
       setSelected((prev) => prev.filter((token) => token !== compareToken(item.row.product_key, item.row.rate_index ?? null)));
       showUndo(`Removed ${item.row.product_name}`, () => {
-        if (!useStore.getState().savedRates.some((ref) => ref.id === id)) {
-          toggleSavedRate(item.row, item.ref.scope);
-        }
+        useStore.setState((state) => {
+          if (state.savedRates.some((ref) => ref.id === id)) return state;
+          const restored = [...state.savedRates, item.ref];
+          return {
+            savedRates: restored,
+            favorites: [...new Set(restored.map((ref) => ref.productKey))],
+          };
+        });
       });
     },
-    [items, removeSavedRate, showUndo, toggleSavedRate],
+    [items, removeSavedRate, showUndo],
   );
 
   if (!core) return null;
@@ -98,9 +102,16 @@ export default function Saved() {
           ) : null}
         </Row>
         {unavailableRefs.length ? (
-          <AppText variant="small" color="textMuted" style={{ marginBottom: 12 }}>
-            {unavailableRefs.length} exact saved {unavailableRefs.length === 1 ? 'rate is' : 'rates are'} unavailable in this dataset and hidden rather than substituted.
-          </AppText>
+          <View style={{ gap: 8, marginBottom: 12 }}>
+            <AppText variant="small" color="textMuted">
+              {unavailableRefs.length} exact saved {unavailableRefs.length === 1 ? 'rate is' : 'rates are'} unavailable in this dataset and hidden rather than substituted.
+            </AppText>
+            <Button
+              title={`Remove unavailable ${unavailableRefs.length === 1 ? 'save' : 'saves'}`}
+              variant="secondary"
+              onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
+            />
+          </View>
         ) : null}
         {selectMode && selected.length >= 2 ? (
           <Button

@@ -114,6 +114,9 @@ export function toggleSavedRateRefs(
   if (scope === 'rate' && refs.some((ref) => ref.scope === 'product' && ref.productKey === row.product_key)) {
     return refs.filter((ref) => !(ref.scope === 'product' && ref.productKey === row.product_key));
   }
+  if (scope === 'product') {
+    return [...refs.filter((ref) => ref.productKey !== row.product_key), next];
+  }
   return [...refs, next];
 }
 

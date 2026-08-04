@@ -31,6 +31,7 @@ import {
 } from '../../src/data/productHistory';
 import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
+import { isSavedRate } from '../../src/data/savedRates';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
@@ -57,7 +58,7 @@ export default function ProductDetail() {
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const favorite = useStore((s) => s.isRateSaved(productKey, rateIndex));
+  const savedRates = useStore((s) => s.savedRates);
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const setPref = useStore((s) => s.setPref);
@@ -187,6 +188,10 @@ export default function ProductDetail() {
   const { section, siblings } = found;
   const row =
     (rateIndex != null ? siblings.find((s) => s.rate_index === rateIndex) : undefined) ?? found.row;
+  const favorite = isSavedRate(savedRates, productKey, row.rate_index ?? null);
+  const productWideSaved = savedRates.some(
+    (ref) => ref.scope === 'product' && ref.productKey === productKey,
+  );
   const meta = SECTIONS[section];
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
   const rateRows = sortRows(siblings, 'rate', section, depositRankMetric, mortgageRateMetric);
@@ -357,6 +362,13 @@ export default function ProductDetail() {
           variant="secondary"
           style={{ marginBottom: 16 }}
           onPress={() => openRateReceipt(productKey, row.rate_index)}
+        />
+        <Button
+          title={productWideSaved ? 'Remove all variants from Saved' : 'Save all product variants'}
+          icon={productWideSaved ? 'star' : 'star-outline'}
+          variant="secondary"
+          style={{ marginBottom: 16 }}
+          onPress={() => toggleSavedRate(row, 'product')}
         />
 
         <SectionTitle text="Rate history" icon="trending-up-outline" />

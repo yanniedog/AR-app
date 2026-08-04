@@ -71,4 +71,12 @@ describe('saved rate references', () => {
     const legacy = normalizeSavedRates(undefined, ['EX|HOME']);
     expect(toggleSavedRateRefs(legacy, row(2, '0.06'))).toEqual([]);
   });
+
+  it('replaces exact saves when the user explicitly saves all variants', () => {
+    const exact = makeSavedRateRef(row(2, '0.06'));
+    const refs = toggleSavedRateRefs([exact], row(1, '0.055'), 'product');
+    expect(refs).toEqual([
+      expect.objectContaining({ id: 'product:EX|HOME', scope: 'product' }),
+    ]);
+  });
 });

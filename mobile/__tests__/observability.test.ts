@@ -30,6 +30,8 @@ describe('observability', () => {
     expect(isSessionReplayRouteAllowed('/profile/edit')).toBe(false);
     expect(isSessionReplayRouteAllowed('/settings')).toBe(false);
     expect(isSessionReplayRouteAllowed('/auth/login')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/rate-receipt')).toBe(false);
     expect(isSessionReplayRouteAllowed('/product/abc')).toBe(true);
   });
   const originalDev = (global as { __DEV__?: boolean }).__DEV__;

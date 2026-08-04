@@ -74,7 +74,9 @@ export function isDiagnosticsEnabled(): boolean {
 }
 
 const SENSITIVE_REPLAY_ROUTES = [
+  '/',
   '/calculator',
+  '/rate-receipt',
   '/profile',
   '/onboarding',
   '/settings',

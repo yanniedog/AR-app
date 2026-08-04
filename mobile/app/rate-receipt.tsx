@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, View } from 'react-native';
 
 import { EmptyState } from '../src/components/feedback';
@@ -69,17 +70,19 @@ export default function RateReceiptScreen() {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
 
-  useEffect(() => {
-    let active = true;
-    void loadUserRateScenario().then((loaded) => {
-      if (!active) return;
-      setScenario(loaded);
-      setScenarioLoaded(true);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      void loadUserRateScenario().then((loaded) => {
+        if (!active) return;
+        setScenario(loaded);
+        setScenarioLoaded(true);
+      });
+      return () => {
+        active = false;
+      };
+    }, []),
+  );
 
   const found = core ? findByKey(core.sections, productKey) : null;
   const row = found && validRateIndex
