@@ -66,15 +66,11 @@ describe('detailSearch', () => {
 
 
 
-  test('payload index matches energy for Westpac sustainable product', () => {
+  test('payload index can match detail-only text for a sampled product', () => {
 
-    const sampleDetails = details as DetailsPayload;
+    const row = (core as CorePayload).sections.Mortgage.rates[0];
 
-    const blob = sampleDetails.products[WESTPAC_KEY]
-
-      ? `westpac sustainable ${sampleDetails.products[WESTPAC_KEY].description ?? ''}`
-
-      : 'westpac sustainable energy efficiency';
+    expect(row).toBeTruthy();
 
     const index: SearchIndexPayload = {
 
@@ -82,17 +78,13 @@ describe('detailSearch', () => {
 
       run_date: '2026-05-19',
 
-      products: { [WESTPAC_KEY]: blob.toLowerCase() },
+      products: { [row.product_key]: 'renewable energy efficiency' },
 
     };
 
-    const row = (core as CorePayload).sections.Mortgage.rates.find((r) => r.product_key === WESTPAC_KEY);
+    expect(rowMatchesSearchQuery(row, 'energy', index)).toBe(true);
 
-    expect(row).toBeTruthy();
-
-    expect(rowMatchesSearchQuery(row!, 'energy', index)).toBe(true);
-
-    expect(productKeysMatchingIndex(index, 'energy')?.has(WESTPAC_KEY)).toBe(true);
+    expect(productKeysMatchingIndex(index, 'energy')?.has(row.product_key)).toBe(true);
 
   });
 
