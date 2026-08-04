@@ -4,6 +4,7 @@ import {
   APK_SHA256_VERIFY_MAX_BYTES,
   TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
   assertApkCompatibleWithDevice,
+  apkManifestUrlsForDevice,
   assertDownloadedApkMatchesManifest,
   checkForAppUpdateAt,
   fetchApkManifest,
@@ -150,6 +151,14 @@ describe('appUpdateLogic', () => {
     expect(() => assertApkCompatibleWithDevice(armOnlyManifest, ['x86_64'])).toThrow(
       /this APK supports/i,
     );
+  });
+
+  it('routes only ARM-capable clients to the opt-in ARM channel with universal fallback', () => {
+    const arm = 'https://example.test/app-apk-arm-latest.json';
+    const universal = 'https://example.test/app-apk-latest.json';
+    expect(apkManifestUrlsForDevice(['arm64-v8a'], arm, universal)).toEqual([arm, universal]);
+    expect(apkManifestUrlsForDevice(['x86_64'], arm, universal)).toEqual([universal]);
+    expect(apkManifestUrlsForDevice(null, arm, universal)).toEqual([universal]);
   });
 
   it('reports current when installed matches remote', async () => {

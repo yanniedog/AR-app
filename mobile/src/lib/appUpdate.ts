@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
-import { APK_MANIFEST_URL } from '../config';
+import { APK_ARM_MANIFEST_URL, APK_MANIFEST_URL } from '../config';
 import { debugLog } from './debugLog';
 import {
   ensureApkBackgroundDownload,
@@ -13,6 +13,7 @@ import {
 } from './appUpdateDownload';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 import {
+  apkManifestUrlsForDevice,
   assertApkCompatibleWithDevice,
   assertTrustedApkManifest,
   checkForAppUpdateAt,
@@ -83,15 +84,23 @@ export function getInstalledAppInfo(): InstalledAppInfo {
 }
 
 export async function checkForAppUpdate(
-  url: string = APK_MANIFEST_URL,
+  url?: string,
 ): Promise<UpdateCheckResult> {
   if (Platform.OS !== 'android') {
     return { status: 'error', message: 'In-app APK updates are Android-only' };
   }
+  const urls = url
+    ? [url]
+    : apkManifestUrlsForDevice(
+        Device.supportedCpuArchitectures,
+        APK_ARM_MANIFEST_URL,
+        APK_MANIFEST_URL,
+      );
+  const cacheKey = urls.join('|');
   const now = Date.now();
   if (
     updateCheckCache &&
-    updateCheckCache.url === url &&
+    updateCheckCache.url === cacheKey &&
     now - updateCheckCache.startedAt < UPDATE_CHECK_TTL_MS
   ) {
     return updateCheckCache.promise;
@@ -99,11 +108,18 @@ export async function checkForAppUpdate(
   let promise!: Promise<UpdateCheckResult>;
   promise = (async () => {
     try {
-      const result = await checkForAppUpdateAt(
-        url,
-        getInstalledAppInfo(),
-        Device.supportedCpuArchitectures,
-      );
+      let result: UpdateCheckResult = { status: 'error', message: 'No APK update channel available' };
+      for (const candidate of urls) {
+        result = await checkForAppUpdateAt(
+          candidate,
+          getInstalledAppInfo(),
+          Device.supportedCpuArchitectures,
+        );
+        if (result.status !== 'error') break;
+        if (candidate !== urls.at(-1)) {
+          debugLog.warn('app-update', `preferred APK channel unavailable; trying universal fallback`);
+        }
+      }
       if (
         result.status === 'available' ||
         result.status === 'current' ||
@@ -124,7 +140,7 @@ export async function checkForAppUpdate(
       throw err;
     }
   })();
-  updateCheckCache = { url, startedAt: now, promise };
+  updateCheckCache = { url: cacheKey, startedAt: now, promise };
   return promise;
 }
 
