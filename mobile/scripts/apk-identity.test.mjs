@@ -28,6 +28,13 @@ test('normalizes exactly one apksigner certificate digest', () => {
     parseApksignerCertificateSha256(`Certificate SHA-256 digest: ${'bb '.repeat(32)}`),
     'bb'.repeat(32),
   );
+  assert.equal(
+    parseApksignerCertificateSha256([
+      `Signer #1 certificate SHA-256 digest: ${digest}`,
+      `Source Stamp Signer certificate SHA-256 digest: ${'cc:'.repeat(31)}cc`,
+    ].join('\n')),
+    'aa'.repeat(32),
+  );
   assert.throws(() => parseApksignerCertificateSha256('Verified'), /exactly one/i);
 });
 

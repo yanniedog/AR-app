@@ -17,7 +17,9 @@ export function parseApksignerCertificateSha256(output) {
   // "Signer #n" prefix or separate bytes with spaces). Match the semantic
   // certificate field, then normalize separators before enforcing one signer.
   const matches = [
-    ...String(output || '').matchAll(/certificate SHA-256 digest:\s*([A-Fa-f0-9: ]+)/gi),
+    ...String(output || '').matchAll(
+      /^(?:Signer #\d+\s+)?certificate SHA-256 digest:[\t ]*([A-Fa-f0-9: ]+)/gim,
+    ),
   ].map((match) => match[1].replace(/[^A-Fa-f0-9]/g, '').toLowerCase());
   const unique = [...new Set(matches)];
   if (unique.length !== 1 || !/^[a-f0-9]{64}$/.test(unique[0] || '')) {
