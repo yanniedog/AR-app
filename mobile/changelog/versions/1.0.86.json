@@ -1,0 +1,32 @@
+{
+  "version": "1.0.86",
+  "releaseTag": "app-arm-v1.0.86",
+  "date": "2026-08-05",
+  "summaryBullets": [
+    "Add private lifecycle projections (#118)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Add private lifecycle projections (#118)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.86"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.85"
+        }
+      ]
+    }
+  ]
+}
