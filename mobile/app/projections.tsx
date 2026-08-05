@@ -275,14 +275,17 @@ export default function Projections() {
     : String(Math.round(computeLvr(scenario.mortgage).loan ?? 0) || '');
   const activeSeries = dimension === 'offsets' ? result.offsetSeries : result.rateSeries;
   const inputsEditable = storageStatus === 'ready';
-  const currentRateText = section === 'Mortgage'
+  // Conditional savings has two intentionally separate rates: the conditional
+  // rate field is validated below as currentRate, while future range scenarios
+  // are centred on the ongoing rate shown in its own validated field.
+  const rangeBaseRateText = section === 'Mortgage'
     ? scenario.mortgage.currentRate
     : section === 'TD'
       ? scenario.termDeposit.currentRate
       : projectionInputs.savingsRateStructure === 'conditional-bonus'
         ? projectionInputs.ongoingRate
         : scenario.savings.currentRate;
-  const currentRateNumber = enteredNumber(currentRateText);
+  const rangeBaseRateNumber = enteredNumber(rangeBaseRateText);
   const historyValues = [projectionInputs.startDate, projectionInputs.startBalance, projectionInputs.startRate];
   const hasHistoryInput = historyValues.some((value) => value.trim().length > 0);
   const startDateValid = validPastIsoDate(projectionInputs.startDate);
@@ -332,11 +335,11 @@ export default function Projections() {
     startBalance: hasHistoryInput ? positiveAmountError(projectionInputs.startBalance, 'a starting balance', true) : undefined,
     startRate: hasHistoryInput ? rateError(projectionInputs.startRate, true) : undefined,
     lowerRate: projectionInputs.lowerRate.trim()
-      && (rateError(projectionInputs.lowerRate, false) || enteredNumber(projectionInputs.lowerRate)! > (currentRateNumber ?? -1))
+      && (rateError(projectionInputs.lowerRate, false) || enteredNumber(projectionInputs.lowerRate)! > (rangeBaseRateNumber ?? -1))
       ? 'Use a rate from 0% up to the current or ongoing rate.'
       : undefined,
     higherRate: projectionInputs.higherRate.trim()
-      && (rateError(projectionInputs.higherRate, false) || enteredNumber(projectionInputs.higherRate)! < (currentRateNumber ?? 101))
+      && (rateError(projectionInputs.higherRate, false) || enteredNumber(projectionInputs.higherRate)! < (rangeBaseRateNumber ?? 101))
       ? 'Use a rate from the current or ongoing rate up to 100%.'
       : undefined,
     periodicAmount: optionalAmountError(projectionInputs.periodicAmount),
