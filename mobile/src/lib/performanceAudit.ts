@@ -463,6 +463,16 @@ export function buildPerformanceAuditJourneys(
       navigationKind: 'stack',
     },
     {
+      id: 'projections',
+      label: 'Lifecycle projections',
+      href: {
+        pathname: '/projections',
+        params: { section: 'Mortgage' },
+      } as unknown as Href,
+      expectedPath: '/projections',
+      navigationKind: 'stack',
+    },
+    {
       id: 'lenders',
       label: 'Lenders',
       href: '/banks' as Href,

@@ -1,4 +1,4 @@
-import { useFocusEffect, useScrollToTop } from '@react-navigation/native';
+import { useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
@@ -27,7 +27,7 @@ import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
-import { EMPTY_USER_RATE_SCENARIO, loadUserRateScenario } from '../../src/data/userRateScenario';
+import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 
 export default function Home() {
   const theme = useTheme();
@@ -53,20 +53,8 @@ export default function Home() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
-  const [userScenario, setUserScenario] = useState(EMPTY_USER_RATE_SCENARIO);
+  const { scenario: userScenario } = useUserRateScenario();
   const filterPrepAttempts = useRef(0);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      void loadUserRateScenario().then((value) => {
-        if (active) setUserScenario(value);
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
 
   useEffect(() => {
     const resolved = resolveInterestSection(interests, section);
@@ -365,6 +353,23 @@ export default function Home() {
             <Button title="Add my rate" variant="secondary" onPress={() => router.push('/calculator')} />
           </>
         )}
+      </Card>
+
+      <Card style={{ gap: theme.spacing(2) }}>
+        <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <View style={{ flex: 1 }}>
+            <AppText variant="tiny" color="textFaint" weight="700">FULL LIFECYCLE</AppText>
+            <AppText variant="h3" style={{ marginTop: 3 }}>Project the journey, not just today’s rate</AppText>
+            <AppText variant="small" color="textMuted" style={{ marginTop: 4 }}>
+              Explore balances, interest, principal, repayments, offset plans and future rate scenarios through the full mortgage, savings or term-deposit lifecycle.
+            </AppText>
+          </View>
+        </Row>
+        <Button
+          title="Open my projection"
+          icon="analytics-outline"
+          onPress={() => router.push({ pathname: '/projections', params: { section } } as never)}
+        />
       </Card>
 
       {sectionOptions.length > 1 ? (

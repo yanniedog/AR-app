@@ -377,6 +377,7 @@ function RootNavigator() {
             <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
             <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
             <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
+            <Stack.Screen name="projections" options={{ title: 'Lifecycle projections' }} />
             <Stack.Screen
               name="rate-receipt"
               options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}
