@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-05T13:52:39.575Z",
+  "generated_at": "2026-08-05T22:49:58.542Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -506,6 +506,14 @@
         "Add private lifecycle projections (#118)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.86"
+    },
+    {
+      "version": "1.0.87",
+      "date": "2026-08-05",
+      "summaryBullets": [
+        "fix(mobile): harden diagnostics and smooth outlook (#120)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.87"
     }
   ]
 }
