@@ -85,7 +85,7 @@ export function parseLogLine(line: string): LogEntry | null {
   if (!match) return null;
   const level = match[2].toLowerCase() as LogLevel;
   if (!['debug', 'info', 'warn', 'error'].includes(level)) return null;
-  return { ts: match[1], level, tag: match[3].trim(), message: match[4] };
+  return { ts: match[1], level, tag: match[3].trim(), message: redactSecrets(match[4]) };
 }
 
 function parseLogFile(text: string): LogEntry[] {

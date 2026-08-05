@@ -407,6 +407,14 @@ describe('parseLogLine', () => {
     const parsed = parseLogLine(formatEntry(entry));
     expect(parsed).toEqual(entry);
   });
+
+  it('re-redacts identifiers restored from an older persisted log', () => {
+    const parsed = parseLogLine(
+      '2026-01-01T00:00:00.000Z [INFO ] auth: signed in uid=legacy-user person@example.com',
+    );
+    expect(parsed?.message).not.toContain('legacy-user');
+    expect(parsed?.message).not.toContain('person@example.com');
+  });
 });
 
 describe('persistent log file', () => {
