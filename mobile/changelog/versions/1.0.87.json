@@ -1,0 +1,32 @@
+{
+  "version": "1.0.87",
+  "releaseTag": "app-arm-v1.0.87",
+  "date": "2026-08-05",
+  "summaryBullets": [
+    "fix(mobile): harden diagnostics and smooth outlook (#120)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): harden diagnostics and smooth outlook (#120)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.87"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.86"
+        }
+      ]
+    }
+  ]
+}
