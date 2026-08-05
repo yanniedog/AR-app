@@ -1,7 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect } from '@react-navigation/native';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Alert, Linking, Pressable, View } from 'react-native';
 
 import { EmptyState } from '../src/components/feedback';
@@ -16,11 +15,7 @@ import {
 } from '../src/data/rateReceipt';
 import { findByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
-import {
-  EMPTY_USER_RATE_SCENARIO,
-  loadUserRateScenario,
-  type UserRateScenario,
-} from '../src/data/userRateScenario';
+import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function Facts({ items, empty }: { items: ReceiptFact[]; empty?: string }) {
@@ -63,27 +58,12 @@ export default function RateReceiptScreen() {
   const core = useStore((state) => state.core);
   const detail = useStore((state) => state.details?.products[productKey] ?? null);
   const ensureDetails = useStore((state) => state.ensureDetails);
-  const [scenario, setScenario] = useState<UserRateScenario>(EMPTY_USER_RATE_SCENARIO);
-  const [scenarioLoaded, setScenarioLoaded] = useState(false);
+  const { scenario, storageStatus } = useUserRateScenario();
+  const scenarioLoaded = storageStatus === 'ready';
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
-
-  useFocusEffect(
-    useCallback(() => {
-      let active = true;
-      setScenarioLoaded(false);
-      void loadUserRateScenario().then((loaded) => {
-        if (!active) return;
-        setScenario(loaded);
-        setScenarioLoaded(true);
-      });
-      return () => {
-        active = false;
-      };
-    }, []),
-  );
 
   const found = core ? findByKey(core.sections, productKey) : null;
   const row = found && validRateIndex

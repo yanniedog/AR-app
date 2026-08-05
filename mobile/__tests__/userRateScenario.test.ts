@@ -10,6 +10,9 @@ import {
 
 describe('UserRateScenario', () => {
   const originalOs = Platform.OS;
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
   afterAll(() => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   });
@@ -22,6 +25,25 @@ describe('UserRateScenario', () => {
     expect(value.mortgage.currentRate).toBe('6.1');
     expect(value.savings).toEqual({ balance: '20000', currentRate: '4.2' });
     expect(value.termDeposit).toEqual({ balance: '50000', currentRate: '4.8' });
+    expect(value.version).toBe(2);
+    expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
+  });
+
+  it('migrates optional projection inputs and rejects invalid enum values', () => {
+    const value = normalizeUserRateScenario({
+      version: 1,
+      projections: {
+        mortgage: {
+          offsetBalance: '32000',
+          offsetContributionFrequency: 'weekly',
+          periodicFrequency: 'hourly',
+        },
+      },
+    });
+    expect(value.version).toBe(2);
+    expect(value.projections.mortgage.offsetBalance).toBe('32000');
+    expect(value.projections.mortgage.offsetContributionFrequency).toBe('weekly');
+    expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
   });
 
   it('uses encrypted native storage and round-trips normalized data', async () => {
@@ -35,6 +57,13 @@ describe('UserRateScenario', () => {
     );
     jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(JSON.stringify(value));
     await expect(loadUserRateScenario()).resolves.toEqual(value);
+  });
+
+  it('surfaces encrypted read failures instead of replacing the scenario with blanks', async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+    jest.mocked(SecureStore.getItemAsync).mockRejectedValueOnce(new Error('device locked'));
+    await expect(loadUserRateScenario()).rejects.toThrow(/unable to read.*device locked/i);
+    expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
   });
 
   it('migrates legacy calculator inputs only when encrypted mortgage data is empty', async () => {

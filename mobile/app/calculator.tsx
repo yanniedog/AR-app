@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
@@ -33,12 +34,7 @@ import {
 } from '../src/data/profile';
 import { distinctValues, rankFraction } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
-import {
-  EMPTY_USER_RATE_SCENARIO,
-  loadUserRateScenario,
-  saveUserRateScenario,
-  type UserRateScenario,
-} from '../src/data/userRateScenario';
+import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
 import { hasProAccess } from '../src/lib/proAccess';
@@ -91,26 +87,18 @@ export default function Calculator() {
   const isLoan = SECTIONS[section].lowerIsBetter;
   const isMortgage = section === 'Mortgage';
 
-  const [scenario, setScenario] = useState<UserRateScenario>(EMPTY_USER_RATE_SCENARIO);
-  const [scenarioHydrated, setScenarioHydrated] = useState(false);
+  const {
+    scenario,
+    storageStatus: scenarioStorageStatus,
+    saveStatus: scenarioSaveStatus,
+    error: scenarioError,
+    update: updateScenario,
+    flush: flushScenario,
+    retryLoad: retryScenarioLoad,
+  } = useUserRateScenario();
   const inputs = scenario.mortgage;
   const upd = (patch: Partial<CalcInputs>) =>
-    setScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
-  useEffect(() => {
-    let live = true;
-    void loadUserRateScenario().then((value) => {
-      if (live) {
-        setScenario(value);
-        setScenarioHydrated(true);
-      }
-    });
-    return () => { live = false; };
-  }, []);
-  useEffect(() => {
-    if (!scenarioHydrated) return;
-    const t = setTimeout(() => void saveUserRateScenario(scenario), 400);
-    return () => clearTimeout(t);
-  }, [scenario, scenarioHydrated]);
+    updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
 
   const lvrResult = useMemo(() => computeLvr(inputs), [inputs]);
   const lvr = isMortgage ? lvrResult.lvr : null;
@@ -247,6 +235,8 @@ export default function Calculator() {
         placeholder={placeholder}
         placeholderTextColor={theme.colors.textFaint}
         keyboardType="numeric"
+        editable={scenarioStorageStatus === 'ready'}
+        maxLength={20}
         style={inputStyle}
         accessibilityLabel={a11y}
       />
@@ -345,7 +335,7 @@ export default function Calculator() {
               {field(
                 section === 'TD' ? 'Deposit amount ($)' : 'Balance ($)',
                 depositInputs.balance,
-                (balance) => setScenario((prev) => ({
+                (balance) => updateScenario((prev) => ({
                   ...prev,
                   [section === 'TD' ? 'termDeposit' : 'savings']: {
                     ...(section === 'TD' ? prev.termDeposit : prev.savings),
@@ -358,7 +348,7 @@ export default function Calculator() {
               {field(
                 'Current rate (%)',
                 depositInputs.currentRate,
-                (currentRate) => setScenario((prev) => ({
+                (currentRate) => updateScenario((prev) => ({
                   ...prev,
                   [section === 'TD' ? 'termDeposit' : 'savings']: {
                     ...(section === 'TD' ? prev.termDeposit : prev.savings),
@@ -371,6 +361,40 @@ export default function Calculator() {
             </Row>
           </>
         )}
+      </Card>
+
+      <Card style={{ marginBottom: 16, gap: 10 }}>
+        <AppText variant="h3">See the full lifecycle</AppText>
+        <AppText variant="small" color="textMuted">
+          Continue from these inputs into an interactive balance, interest, principal and offset projection through the modelled end date.
+        </AppText>
+        <Button
+          title="Open lifecycle projection"
+          icon="analytics-outline"
+          onPress={() => {
+            void flushScenario().then((saved) => {
+              if (!saved) return;
+              router.push({ pathname: '/projections', params: { section } } as never);
+            });
+          }}
+          disabled={scenarioStorageStatus !== 'ready'}
+        />
+        {scenarioStorageStatus === 'loading' || scenarioStorageStatus === 'idle' ? (
+          <AppText variant="tiny" color="textMuted">Loading encrypted scenario...</AppText>
+        ) : null}
+        {scenarioSaveStatus === 'saving' || scenarioSaveStatus === 'saved' ? (
+          <AppText variant="tiny" color="textMuted">
+            {scenarioSaveStatus === 'saving' ? 'Saving encrypted scenario...' : 'Encrypted scenario saved'}
+          </AppText>
+        ) : null}
+        {scenarioError ? (
+          <>
+            <AppText variant="tiny" color="danger">{scenarioError}</AppText>
+            {scenarioStorageStatus === 'error' ? (
+              <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryScenarioLoad()} />
+            ) : null}
+          </>
+        ) : null}
       </Card>
 
       {isMortgage ? (

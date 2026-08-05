@@ -117,7 +117,7 @@ function check(
 describe('performance audit journeys', () => {
   it('covers every steady-state destination and all three browse sections', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys).toHaveLength(18);
+    expect(journeys).toHaveLength(19);
     expect(journeys.map((journey) => journey.id)).toEqual(
       expect.arrayContaining([
         'home',
@@ -131,6 +131,7 @@ describe('performance audit journeys', () => {
         'settings',
         'search',
         'calculator',
+        'projections',
         'lenders',
         'profile',
         'product',

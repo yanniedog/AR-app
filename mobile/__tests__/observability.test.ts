@@ -32,6 +32,7 @@ describe('observability', () => {
 
   it('blocks replay on financial-input, profile, settings, and authentication routes', () => {
     expect(isSessionReplayRouteAllowed('/calculator')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/projections')).toBe(false);
     expect(isSessionReplayRouteAllowed('/profile/edit')).toBe(false);
     expect(isSessionReplayRouteAllowed('/settings')).toBe(false);
     expect(isSessionReplayRouteAllowed('/auth/login')).toBe(false);
