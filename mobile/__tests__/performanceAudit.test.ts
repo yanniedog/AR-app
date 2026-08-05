@@ -9,6 +9,7 @@ import {
   PerformanceAuditInactivityWatchdog,
   percentile,
   requestPerformanceAudit,
+  resolveAuditJourneyOptionalData,
   resetPerformanceAuditForTests,
   scoreLatency,
   summarizePerformanceAudit,
@@ -174,6 +175,34 @@ describe('performance audit journeys', () => {
     expect(pathMatches('/settings/', '/settings')).toBe(true);
     expect(pathMatches('/product/Bank%20A%7Chome', '/product/Bank A|home')).toBe(true);
     expect(pathMatches('/browse', '/search')).toBe(false);
+  });
+});
+
+describe('performance audit optional data', () => {
+  const freeBetaPrefs = {
+    rateIntelligencePro: false,
+    enableDeepSearch: true,
+    showHistoryRibbon: true,
+    includeNonStandard: false,
+  };
+
+  it('waits for free-beta insights without the deprecated Pro entitlement', () => {
+    expect(resolveAuditJourneyOptionalData('response', freeBetaPrefs, true).bankInsights).toBe(true);
+    expect(resolveAuditJourneyOptionalData('search', freeBetaPrefs, true).deepSearch).toBe(true);
+    expect(resolveAuditJourneyOptionalData('product', freeBetaPrefs, true)).toEqual(
+      expect.objectContaining({ bankInsights: true, bankHistory: true, productHistory: true }),
+    );
+  });
+
+  it('does not request unusable prebuilt bank history in Standard-only Outlook', () => {
+    expect(resolveAuditJourneyOptionalData('outlook', freeBetaPrefs, true).bankHistory).toBe(false);
+    expect(
+      resolveAuditJourneyOptionalData(
+        'outlook',
+        { ...freeBetaPrefs, includeNonStandard: true },
+        true,
+      ).bankHistory,
+    ).toBe(true);
   });
 });
 

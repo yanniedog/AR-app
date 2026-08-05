@@ -382,7 +382,10 @@ function RootNavigator() {
               name="rate-receipt"
               options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}
             />
-            <Stack.Screen name="rba" options={{ title: 'Why rates move' }} />
+            <Stack.Screen
+              name="rba"
+              options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
+            />
             <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
             <Stack.Screen
               name="performance-audit"

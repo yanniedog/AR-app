@@ -7,15 +7,23 @@ import { Alert, ScrollView, Share, View } from 'react-native';
 
 import { Screen } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
-import { debugLog, formatLogUploadBody, uploadLogsToPasteRs } from '../src/lib/debugLog';
+import {
+  debugLog,
+  deleteDebugLogUpload,
+  formatLogUploadBody,
+  uploadDebugLog,
+} from '../src/lib/debugLog';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function DebugLogScreen() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
+  const retryUploadRef = useRef<() => void>(() => {});
   const [text, setText] = useState(debugLog.getText());
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'copy' | 'share' | 'upload' | 'path' | null>(null);
+  const [uploadProvider, setUploadProvider] = useState<string | null>(null);
+  const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
+  const [busy, setBusy] = useState<'copy' | 'share' | 'upload' | 'delete' | 'path' | null>(null);
   const logPathHint = debugLog.getAndroidLogPathHint();
 
   useEffect(() => {
@@ -38,6 +46,8 @@ export default function DebugLogScreen() {
           onPress: () => {
             debugLog.clear();
             setUploadUrl(null);
+            setUploadProvider(null);
+            setUploadDeleteKey(null);
           },
         },
       ],
@@ -71,13 +81,13 @@ export default function DebugLogScreen() {
   const onShare = useCallback(async () => {
     setBusy('share');
     try {
-      await debugLog.flushToFile();
-      const path = debugLog.getLogFileUri();
-      const info = await FileSystem.getInfoAsync(path);
-      if (!info.exists) {
+      const path = FileSystem.cacheDirectory
+        ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
+        : null;
+      if (path && await Sharing.isAvailableAsync()) {
+        // Share exactly the visible, bounded buffer. The persistent log file
+        // may contain a larger history than Copy and Upload.
         await FileSystem.writeAsStringAsync(path, text);
-      }
-      if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
@@ -100,10 +110,17 @@ export default function DebugLogScreen() {
         app: Application.nativeApplicationVersion ?? 'unknown',
         lines: String(debugLog.getEntries().length),
       });
-      const { url, truncated, clientTruncated, attempts } =
-        await uploadLogsToPasteRs(body);
+      const { url, provider, deleteKey, truncated, clientTruncated, attempts } =
+        await uploadDebugLog(body);
       setUploadUrl(url);
-      await Clipboard.setStringAsync(url);
+      setUploadProvider(provider);
+      setUploadDeleteKey(deleteKey ?? null);
+      let copied = true;
+      try {
+        await Clipboard.setStringAsync(url);
+      } catch {
+        copied = false;
+      }
       Alert.alert(
         clientTruncated
           ? 'Newest log tail uploaded'
@@ -111,15 +128,17 @@ export default function DebugLogScreen() {
             ? 'Uploaded (truncated)'
             : 'Uploaded',
         clientTruncated
-          ? `The full upload failed, so the app uploaded only the newest 128 KiB on attempt ${attempts}. Link copied to clipboard.\n\n${url}`
+          ? `The full upload failed, so the app uploaded only the newest 128 KiB on attempt ${attempts}. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
           : truncated
-            ? `Link copied to clipboard. paste.rs accepted a partial upload.\n\n${url}`
-          : `Link copied to clipboard — paste it into chat or a browser.\n\n${url}`,
+            ? `${provider} accepted a partial upload. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
+            : `${provider} accepted the upload. ${provider === 'paste.c-net.org' ? 'The backup host retains inactive uploads for up to 180 days. ' : ''}${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`,
         [
           {
             text: 'Copy again',
             onPress: () => {
-              void Clipboard.setStringAsync(url);
+              void Clipboard.setStringAsync(url).catch((err) => {
+                Alert.alert('Copy failed', String((err as Error)?.message ?? err));
+              });
             },
           },
           { text: 'OK' },
@@ -131,10 +150,8 @@ export default function DebugLogScreen() {
         String((err as Error)?.message ?? err),
         [
           {
-            text: 'Copy log',
-            onPress: () => {
-              void onCopy();
-            },
+            text: 'Retry',
+            onPress: () => retryUploadRef.current(),
           },
           {
             text: 'Share',
@@ -142,18 +159,26 @@ export default function DebugLogScreen() {
               void onShare();
             },
           },
-          { text: 'OK' },
+          {
+            text: 'Copy log',
+            onPress: () => {
+              void onCopy();
+            },
+          },
         ],
       );
     } finally {
       setBusy(null);
     }
   }, [onCopy, onShare, text]);
+  retryUploadRef.current = () => {
+    void runUpload();
+  };
 
   const onUpload = useCallback(() => {
     Alert.alert(
-      'Upload to paste.rs?',
-      'Creates a public paste anyone with the link can read. Only upload if you accept that risk.',
+      'Upload public debug log?',
+      'Uploads to paste.rs, with paste.c-net.org as a backup during a temporary outage. Anyone with the link can read it. Backup uploads expire after 180 days without access, and each access resets that period. Review the log first.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Upload', style: 'destructive', onPress: () => void runUpload() },
@@ -163,15 +188,49 @@ export default function DebugLogScreen() {
 
   const onCopyUrl = useCallback(async () => {
     if (!uploadUrl) return;
-    await Clipboard.setStringAsync(uploadUrl);
-    Alert.alert('Copied', 'Paste URL copied — ready to paste.');
+    try {
+      await Clipboard.setStringAsync(uploadUrl);
+      Alert.alert('Copied', 'Paste URL copied — ready to paste.');
+    } catch (err) {
+      Alert.alert('Copy failed', String((err as Error)?.message ?? err));
+    }
   }, [uploadUrl]);
+
+  const onDeleteUpload = useCallback(() => {
+    if (!uploadUrl || !uploadDeleteKey) return;
+    Alert.alert(
+      'Delete uploaded log?',
+      'Permanently removes this public backup-host copy. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setBusy('delete');
+            void deleteDebugLogUpload(uploadUrl, uploadDeleteKey)
+              .then(() => {
+                setUploadUrl(null);
+                setUploadProvider(null);
+                setUploadDeleteKey(null);
+                Alert.alert('Uploaded log deleted');
+              })
+              .catch((err) => {
+                Alert.alert('Delete failed', String((err as Error)?.message ?? err));
+              })
+              .finally(() => setBusy(null));
+          },
+        },
+      ],
+    );
+  }, [uploadDeleteKey, uploadUrl]);
 
   return (
     <Screen style={{ flex: 1 }}>
         <View style={{ padding: 16, paddingBottom: 8, gap: 12 }}>
           <AppText variant="tiny" color="textFaint">
-            May include device/network info. Secrets are redacted; avoid sharing if sensitive.
+            May include device/network info. Known credential and account identifier patterns are
+            redacted; review before sharing.
           </AppText>
           <Card style={{ gap: 8 }}>
             <AppText variant="tiny" color="textMuted">
@@ -214,7 +273,7 @@ export default function DebugLogScreen() {
           {uploadUrl ? (
             <Card style={{ gap: 8 }}>
               <AppText variant="tiny" color="textMuted">
-                Upload link (copied — long-press to select)
+                Upload link{uploadProvider ? ` (${uploadProvider})` : ''} — long-press to select
               </AppText>
               <AppText
                 variant="small"
@@ -228,6 +287,16 @@ export default function DebugLogScreen() {
                 icon="link-outline"
                 onPress={() => void onCopyUrl()}
               />
+              {uploadDeleteKey ? (
+                <Button
+                  title="Delete uploaded log"
+                  icon="trash-outline"
+                  variant="ghost"
+                  loading={busy === 'delete'}
+                  disabled={busy === 'delete'}
+                  onPress={onDeleteUpload}
+                />
+              ) : null}
             </Card>
           ) : null}
         </View>

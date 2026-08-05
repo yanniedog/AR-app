@@ -33,6 +33,7 @@ import {
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   PerformanceAuditInactivityWatchdog,
   ResponsivenessMonitor,
+  resolveAuditJourneyOptionalData,
   roundMetric,
   scoreLatency,
   subscribePerformanceAudit,
@@ -249,18 +250,31 @@ function logAuditCheck(sessionId: string, check: AuditCheck): void {
 
 function responsivenessRecord(
   metrics: ResponsivenessMetrics,
+  prefix = '',
 ): Record<string, number> {
+  const key = (name: string) => prefix ? `${prefix}${name[0].toUpperCase()}${name.slice(1)}` : name;
   return {
-    eventLoopSamples: metrics.eventLoopSamples,
-    eventLoopP95Ms: metrics.eventLoopP95Ms,
-    maxEventLoopLagMs: metrics.maxEventLoopLagMs,
-    stallsOver100Ms: metrics.stallsOver100Ms,
-    frameSamples: metrics.frameSamples,
-    frameP95Ms: metrics.frameP95Ms,
-    maxFrameGapMs: metrics.maxFrameGapMs,
-    framesOver50Ms: metrics.framesOver50Ms,
+    [key('eventLoopSamples')]: metrics.eventLoopSamples,
+    [key('eventLoopP95Ms')]: metrics.eventLoopP95Ms,
+    [key('maxEventLoopLagMs')]: metrics.maxEventLoopLagMs,
+    [key('stallsOver100Ms')]: metrics.stallsOver100Ms,
+    [key('frameSamples')]: metrics.frameSamples,
+    [key('frameP95Ms')]: metrics.frameP95Ms,
+    [key('maxFrameGapMs')]: metrics.maxFrameGapMs,
+    [key('framesOver50Ms')]: metrics.framesOver50Ms,
   };
 }
+
+const EMPTY_RESPONSIVENESS: ResponsivenessMetrics = {
+  eventLoopSamples: 0,
+  eventLoopP95Ms: 0,
+  maxEventLoopLagMs: 0,
+  stallsOver100Ms: 0,
+  frameSamples: 0,
+  frameP95Ms: 0,
+  maxFrameGapMs: 0,
+  framesOver50Ms: 0,
+};
 
 function responsivenessStatus(metrics: ResponsivenessMetrics): AuditCheckStatus {
   return worstStatus(
@@ -716,6 +730,11 @@ function journeyDataRequirements(
 ): JourneyDataRequirement[] {
   const initial = useStore.getState();
   const { prefs, manifest, source } = initial;
+  const optionalData = resolveAuditJourneyOptionalData(
+    journey.id,
+    prefs,
+    !!manifest?.files.search_index,
+  );
   const requirements: JourneyDataRequirement[] = [];
   const add = (
     label: string,
@@ -755,7 +774,7 @@ function journeyDataRequirements(
           ? 'Product details did not load for the active rates date'
           : null,
     );
-    if (prefs.rateIntelligencePro && prefs.enableDeepSearch && manifest?.files.search_index) {
+    if (optionalData.deepSearch) {
       add(
         'Deep-search index',
         (state) => !!state.searchIndex,
@@ -785,11 +804,7 @@ function journeyDataRequirements(
     );
   }
 
-  const bankInsightsEnabled = prefs.rateIntelligencePro;
-  if (
-    bankInsightsEnabled &&
-    ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journey.id)
-  ) {
+  if (optionalData.bankInsights) {
     add(
       'Bank response analysis',
       (state) => !!state.bankInsights,
@@ -797,15 +812,14 @@ function journeyDataRequirements(
     );
   }
 
-  const historyEnabled = prefs.rateIntelligencePro && prefs.showHistoryRibbon;
-  if (historyEnabled && ['outlook', 'rba-redirect', 'product'].includes(journey.id)) {
+  if (optionalData.bankHistory) {
     add(
       'Bank history',
       (state) => !!state.historyBanks,
       (state) => state.historyBanksError,
     );
   }
-  if (historyEnabled && ['product', 'lender'].includes(journey.id)) {
+  if (optionalData.productHistory) {
     add(
       'Product history',
       (state) => !!state.productHistory,
@@ -887,12 +901,22 @@ async function runJourney(
   let backDestination: string | null = null;
   let backReturnedToAudit = false;
   let backChangedPath = false;
+  let returnNavigationKind: 'none' | 'second-back' | 'replace-recovery' = 'none';
+  let forwardResponsiveness = EMPTY_RESPONSIVENESS;
+  let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
+  let backResponsiveness = EMPTY_RESPONSIVENESS;
   let routeError: string | undefined;
 
   try {
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     let at = now();
+    const forwardResponsivenessAt = monitor.snapshot();
+    // Match production Browse navigation: select the requested section before
+    // mounting the tab so it does not render the previous section first.
+    if (journey.expectedSection) {
+      useStore.getState().setActiveSection(journey.expectedSection);
+    }
     router.push(journey.href);
     await waitForPath(
       currentPath,
@@ -904,6 +928,7 @@ async function runJourney(
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     forwardMs = now() - at;
+    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     if (
       journey.expectedSection &&
       useStore.getState().activeSection !== journey.expectedSection
@@ -912,6 +937,7 @@ async function runJourney(
         `${journey.label} rendered ${useStore.getState().activeSection} instead of ${journey.expectedSection}`,
       );
     }
+    const backgroundResponsivenessAt = monitor.snapshot();
     const background = await waitForJourneyData(
       journey,
       logCursor,
@@ -924,11 +950,13 @@ async function runJourney(
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
     await delay(ROUTE_DWELL_MS);
+    backgroundResponsiveness = monitor.metricsSince(backgroundResponsivenessAt);
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
 
     const pathBeforeBack = currentPath();
     at = now();
+    const backResponsivenessAt = monitor.snapshot();
     router.back();
     // Tabs own their own history and commonly back to Home rather than the
     // root-stack audit screen. Measure the real back transition first, then
@@ -937,11 +965,26 @@ async function runJourney(
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
     backMs = now() - at;
+    backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     backDestination = currentPath();
     backReturnedToAudit = pathMatches(backDestination, AUDIT_HOME_PATH);
     backChangedPath = !pathMatches(backDestination, pathBeforeBack);
 
+    if (
+      !backReturnedToAudit &&
+      journey.navigationKind === 'tab' &&
+      pathMatches(backDestination, '/')
+    ) {
+      returnNavigationKind = 'second-back';
+      const secondBackStarted = now();
+      router.back();
+      await settleUi();
+      backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
+      returnFallbackMs = now() - secondBackStarted;
+    }
+
     if (!backReturnedToAudit) {
+      returnNavigationKind = 'replace-recovery';
       const fallbackStarted = now();
       router.replace(AUDIT_HOME_PATH);
       await waitForPath(
@@ -997,12 +1040,16 @@ async function runJourney(
       backDestination,
       backChangedPath,
       backReturnedToAudit,
+      returnNavigationKind,
       returnFallbackMs: roundMetric(returnFallbackMs),
       runtimeErrors: errors.journey.length,
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
       ...responsivenessRecord(responsiveness),
+      ...responsivenessRecord(forwardResponsiveness, 'forward'),
+      ...responsivenessRecord(backgroundResponsiveness, 'background'),
+      ...responsivenessRecord(backResponsiveness, 'back'),
     },
     trace,
     ...(routeError ? { error: routeError } : {}),
@@ -1198,6 +1245,7 @@ export function PerformanceAuditRunner() {
           checks,
           limitations: [
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
+            'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The journey exercises every steady-state app destination plus forward/back navigation; it does not submit forms, change preferences, or mutate favourites.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             'No report is uploaded automatically. The complete structured report and tracebacks are appended to the local debug log for explicit export.',

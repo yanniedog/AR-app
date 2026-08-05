@@ -82,6 +82,8 @@ const SENSITIVE_REPLAY_ROUTES = [
   '/onboarding',
   '/settings',
   '/search',
+  '/debug-log',
+  '/performance-audit',
   '/auth',
   '/login',
 ];

@@ -33,6 +33,9 @@ const SECRET_PATTERNS: RegExp[] = [
   new RegExp(String.raw`"(?:EXPO_TOKEN|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`, "gi"),
   new RegExp(String.raw`'(?:EXPO_TOKEN|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`, "gi"),
 ];
+const PRIVATE_IDENTIFIER_PATTERN =
+  /\b(uid|user[_-]?id|subscription[_-]?id|subscriptionId)\s*[=:]\s*[^\s,;}"']+/gi;
+const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
 
 const LOG_LINE_RE = /^(\S+)\s+\[(\w+)\s*\]\s+([^:]+):\s(.*)$/;
 
@@ -45,7 +48,9 @@ export function redactSecrets(text: string): string {
       return `${key}=[REDACTED]`;
     });
   }
-  return out;
+  return out
+    .replace(PRIVATE_IDENTIFIER_PATTERN, (_match, key: string) => `${key}=[REDACTED]`)
+    .replace(EMAIL_PATTERN, '[REDACTED_EMAIL]');
 }
 
 export function formatEntry(entry: LogEntry): string {
@@ -399,14 +404,17 @@ export function formatLogUploadBody(entriesText: string, meta?: Record<string, s
   const lines = ['# AR-app mobile debug log', `generated=${new Date().toISOString()}`];
   if (meta) {
     for (const [key, value] of Object.entries(meta)) {
-      lines.push(`${key}=${value}`);
+      lines.push(redactSecrets(`${key}=${value}`));
     }
   }
-  lines.push('', entriesText);
+  // Re-redact at the export boundary so logs restored from an older app build
+  // receive the current privacy rules too.
+  lines.push('', redactSecrets(entriesText));
   return lines.join('\n');
 }
 
 export const PASTE_RS_URL = 'https://paste.rs/';
+export const PASTE_CNET_URL = 'https://paste.c-net.org/';
 export const PASTE_RS_ATTEMPT_TIMEOUT_MS = 20_000;
 export const PASTE_RS_TAIL_MAX_BYTES = 128 * 1024;
 
@@ -422,6 +430,12 @@ export interface PasteRsUploadResult {
   attempts: number;
   originalBytes: number;
   uploadedBytes: number;
+}
+
+export interface DebugLogUploadResult extends PasteRsUploadResult {
+  provider: 'paste.rs' | 'paste.c-net.org';
+  /** Present only for the backup provider and kept in memory for deletion. */
+  deleteKey?: string;
 }
 
 export interface PasteRsUploadOptions {
@@ -622,6 +636,169 @@ async function runPasteRsAttempt(
     throw new PasteRsAttemptError('network');
   } finally {
     if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+async function runPasteCnetAttempt(
+  body: string,
+  fetchImpl: typeof fetch,
+  timeoutMs: number,
+): Promise<{ url: string; deleteKey?: string }> {
+  const controller = new AbortController();
+  let timedOut = false;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      reject(new PasteRsAttemptError('timeout'));
+    }, timeoutMs);
+  });
+
+  try {
+    const request = (async () => {
+      const response = await fetchImpl(PASTE_CNET_URL, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, */*',
+          'Content-Type': 'text/plain',
+          'X-UUID': '1',
+        },
+        body,
+        signal: controller.signal,
+      });
+      const raw = (await response.text()).trim();
+      if (response.status < 200 || response.status > 299) {
+        const retryAfter = response.headers?.get?.('Retry-After');
+        if (response.status === 429) {
+          throw new PasteRsAttemptError('rate-limit', response.status, raw, retryAfter);
+        }
+        if (response.status === 0) {
+          throw new PasteRsAttemptError('network', response.status, raw, retryAfter);
+        }
+        if (response.status >= 500) {
+          throw new PasteRsAttemptError('server', response.status, raw, retryAfter);
+        }
+        throw new PasteRsAttemptError('client', response.status, raw, retryAfter);
+      }
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new PasteRsAttemptError('invalid-response', response.status);
+      }
+      const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
+      const url = typeof record?.url === 'string' ? record.url.trim() : '';
+      const deleteKey = typeof record?.delete_key === 'string' ? record.delete_key : undefined;
+      let parsedUrl: URL;
+      try {
+        parsedUrl = new URL(url);
+      } catch {
+        throw new PasteRsAttemptError('invalid-response', response.status);
+      }
+      if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'paste.c-net.org') {
+        throw new PasteRsAttemptError('invalid-response', response.status);
+      }
+      return { url, ...(deleteKey ? { deleteKey } : {}) };
+    })();
+    return await Promise.race([request, timeout]);
+  } catch (error) {
+    if (error instanceof PasteRsAttemptError) throw error;
+    if (timedOut || (error instanceof Error && error.name === 'AbortError')) {
+      throw new PasteRsAttemptError('timeout');
+    }
+    throw new PasteRsAttemptError('network');
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
+/**
+ * Upload once to paste.rs, then fail over to the explicitly disclosed backup
+ * only for a transient primary outage. Client rejections never duplicate data.
+ */
+export async function uploadDebugLog(
+  body: string,
+  fetchImpl: typeof fetch = fetch,
+  options: PasteRsUploadOptions = {},
+): Promise<DebugLogUploadResult> {
+  const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS);
+  const originalBytes = textEncoder.encode(body).length;
+  try {
+    const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
+    return {
+      ...result,
+      provider: 'paste.rs',
+      clientTruncated: false,
+      attempts: 1,
+      originalBytes,
+      uploadedBytes: originalBytes,
+    };
+  } catch (error) {
+    const primaryFailure = error as PasteRsAttemptError;
+    if (!primaryFailure.transient) {
+      throw new PasteRsUploadError(friendlyPasteRsError(primaryFailure), 1);
+    }
+  }
+
+  try {
+    const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
+    return {
+      url: result.url,
+      provider: 'paste.c-net.org',
+      ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+      truncated: false,
+      clientTruncated: false,
+      attempts: 2,
+      originalBytes,
+      uploadedBytes: originalBytes,
+    };
+  } catch (error) {
+    const detail = friendlyPasteRsError(error as PasteRsAttemptError)
+      .replaceAll('paste.rs', 'the backup upload service');
+    throw new PasteRsUploadError(
+      `Both public upload services are unavailable. ${detail}`,
+      2,
+    );
+  }
+}
+
+/** Delete a backup-host upload without persisting or exposing its delete key. */
+export async function deleteDebugLogUpload(
+  url: string,
+  deleteKey: string,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = PASTE_RS_ATTEMPT_TIMEOUT_MS,
+): Promise<void> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error('The upload link is invalid.');
+  }
+  if (parsed.protocol !== 'https:' || parsed.hostname !== 'paste.c-net.org' || !deleteKey) {
+    throw new Error('This upload cannot be deleted from the app.');
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), Math.max(1, timeoutMs));
+  try {
+    const response = await fetchImpl(url, {
+      method: 'DELETE',
+      headers: { 'X-Delete-Key': deleteKey },
+      signal: controller.signal,
+    });
+    if (response.status < 200 || response.status > 299) {
+      throw new Error(`The upload host could not delete the log (status ${response.status}).`);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('The upload host did not confirm deletion in time.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

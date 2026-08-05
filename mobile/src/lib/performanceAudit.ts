@@ -1,7 +1,9 @@
 import type { Href } from 'expo-router';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
+import type { Prefs } from '../data/storeTypes';
 import type { CorePayload, RateRow, SectionKey } from '../types';
+import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 
 export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 2;
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
@@ -121,6 +123,39 @@ export interface AuditJourney {
   expectedSection?: SectionKey;
   navigationKind: 'tab' | 'stack';
   skipReason?: string;
+}
+
+export interface AuditJourneyOptionalData {
+  deepSearch: boolean;
+  bankInsights: boolean;
+  bankHistory: boolean;
+  productHistory: boolean;
+}
+
+/** Keep audit waiting rules aligned with the same free-beta access helpers used by screens. */
+export function resolveAuditJourneyOptionalData(
+  journeyId: string,
+  prefs: Pick<
+    Prefs,
+    | 'enableDeepSearch'
+    | 'showHistoryRibbon'
+    | 'rateIntelligencePro'
+    | 'includeNonStandard'
+  >,
+  hasSearchIndex: boolean,
+): AuditJourneyOptionalData {
+  const historyEnabled = effectiveHistoryRibbon(prefs);
+  return {
+    deepSearch: journeyId === 'search' && hasSearchIndex && effectiveDeepSearch(prefs),
+    bankInsights:
+      effectiveBankInsights(prefs) &&
+      ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
+    bankHistory:
+      historyEnabled &&
+      (journeyId === 'product' ||
+        (prefs.includeNonStandard && ['outlook', 'rba-redirect'].includes(journeyId))),
+    productHistory: historyEnabled && ['product', 'lender'].includes(journeyId),
+  };
 }
 
 type Listener = () => void;

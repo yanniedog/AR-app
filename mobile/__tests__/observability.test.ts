@@ -38,6 +38,8 @@ describe('observability', () => {
     expect(isSessionReplayRouteAllowed('/auth/login')).toBe(false);
     expect(isSessionReplayRouteAllowed('/')).toBe(false);
     expect(isSessionReplayRouteAllowed('/rate-receipt')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/debug-log')).toBe(false);
+    expect(isSessionReplayRouteAllowed('/performance-audit')).toBe(false);
     expect(isSessionReplayRouteAllowed('/product/abc')).toBe(true);
   });
   const originalDev = (global as { __DEV__?: boolean }).__DEV__;

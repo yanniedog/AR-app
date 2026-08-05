@@ -3,6 +3,7 @@ import {
   buildAggregateRibbonFromHistory,
   chartModelFromBankInsights,
   selectBankHistoryChartModel,
+  shouldEnsurePrebuiltBankHistory,
 } from '../src/data/historySelectors';
 import type { BankInsightsPayload } from '../src/data/bankInsights';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
@@ -12,6 +13,12 @@ const sample = core as CorePayload;
 
 describe('historySelectors', () => {
   afterEach(() => setSuitabilityAllowed(null));
+
+  it('requests prebuilt bank history only for broad-catalogue history', () => {
+    expect(shouldEnsurePrebuiltBankHistory(true, true)).toBe(true);
+    expect(shouldEnsurePrebuiltBankHistory(true, false)).toBe(false);
+    expect(shouldEnsurePrebuiltBankHistory(false, true)).toBe(false);
+  });
 
   it('falls back to current ribbon when history cache is absent', () => {
     const model = selectBankHistoryChartModel(
