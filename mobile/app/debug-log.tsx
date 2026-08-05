@@ -11,6 +11,7 @@ import {
   debugLog,
   deleteDebugLogUpload,
   formatLogUploadBody,
+  redactSecrets,
   uploadDebugLog,
 } from '../src/lib/debugLog';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -24,6 +25,10 @@ export default function DebugLogScreen() {
   const [uploadProvider, setUploadProvider] = useState<string | null>(null);
   const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
   const [busy, setBusy] = useState<'copy' | 'share' | 'upload' | 'delete' | 'path' | null>(null);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  const uploadUrlRef = useRef(uploadUrl);
+  uploadUrlRef.current = uploadUrl;
   const logPathHint = debugLog.getAndroidLogPathHint();
 
   useEffect(() => {
@@ -69,7 +74,7 @@ export default function DebugLogScreen() {
   const onCopy = useCallback(async () => {
     setBusy('copy');
     try {
-      await Clipboard.setStringAsync(text);
+      await Clipboard.setStringAsync(redactSecrets(text));
       Alert.alert('Copied', `${debugLog.getEntries().length} lines copied.`);
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
@@ -87,14 +92,14 @@ export default function DebugLogScreen() {
       if (path && await Sharing.isAvailableAsync()) {
         // Share exactly the visible, bounded buffer. The persistent log file
         // may contain a larger history than Copy and Upload.
-        await FileSystem.writeAsStringAsync(path, text);
+        await FileSystem.writeAsStringAsync(path, redactSecrets(text));
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
           UTI: 'public.plain-text',
         });
       } else {
-        await Share.share({ message: text, title: 'ar-local.log' });
+        await Share.share({ message: redactSecrets(text), title: 'ar-local.log' });
       }
     } catch (err) {
       Alert.alert('Share failed', String((err as Error)?.message ?? err));
@@ -104,6 +109,8 @@ export default function DebugLogScreen() {
   }, [text]);
 
   const runUpload = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = 'upload';
     setBusy('upload');
     try {
       const body = formatLogUploadBody(text, {
@@ -168,6 +175,7 @@ export default function DebugLogScreen() {
         ],
       );
     } finally {
+      busyRef.current = null;
       setBusy(null);
     }
   }, [onCopy, onShare, text]);
@@ -197,7 +205,7 @@ export default function DebugLogScreen() {
   }, [uploadUrl]);
 
   const onDeleteUpload = useCallback(() => {
-    if (!uploadUrl || !uploadDeleteKey) return;
+    if (busyRef.current || !uploadUrl || !uploadDeleteKey) return;
     Alert.alert(
       'Delete uploaded log?',
       'Permanently removes this public backup-host copy. This cannot be undone.',
@@ -207,9 +215,13 @@ export default function DebugLogScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            const deletingUrl = uploadUrl;
+            if (busyRef.current) return;
+            busyRef.current = 'delete';
             setBusy('delete');
-            void deleteDebugLogUpload(uploadUrl, uploadDeleteKey)
+            void deleteDebugLogUpload(deletingUrl, uploadDeleteKey)
               .then(() => {
+                if (uploadUrlRef.current !== deletingUrl) return;
                 setUploadUrl(null);
                 setUploadProvider(null);
                 setUploadDeleteKey(null);
@@ -218,7 +230,10 @@ export default function DebugLogScreen() {
               .catch((err) => {
                 Alert.alert('Delete failed', String((err as Error)?.message ?? err));
               })
-              .finally(() => setBusy(null));
+              .finally(() => {
+                busyRef.current = null;
+                setBusy(null);
+              });
           },
         },
       ],
@@ -267,6 +282,7 @@ export default function DebugLogScreen() {
               title="Upload"
               icon="cloud-upload-outline"
               loading={busy === 'upload'}
+              disabled={busy !== null}
               onPress={onUpload}
             />
           </Row>

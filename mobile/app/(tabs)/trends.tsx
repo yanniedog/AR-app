@@ -54,6 +54,10 @@ export default function Trends() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const showHistoryRibbon = useStore((s) => effectiveHistoryRibbon(s.prefs));
+  const prebuiltHistoryEnabled = shouldEnsurePrebuiltBankHistory(
+    showHistoryRibbon,
+    includeNonStandard,
+  );
   const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
   const historyBanks = useStore((s) => s.historyBanks);
   const historyBanksError = useStore((s) => s.historyBanksError);
@@ -188,7 +192,7 @@ export default function Trends() {
   }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
-    if (!shouldEnsurePrebuiltBankHistory(showHistoryRibbon, includeNonStandard)) {
+    if (!prebuiltHistoryEnabled) {
       historyRequestKey.current = null;
       return;
     }
@@ -196,7 +200,7 @@ export default function Trends() {
     if (!key || historyRequestKey.current === key) return;
     historyRequestKey.current = key;
     void ensureHistoryBanks();
-  }, [core?.run_date, ensureHistoryBanks, includeNonStandard, showHistoryRibbon]);
+  }, [core?.run_date, ensureHistoryBanks, prebuiltHistoryEnabled]);
 
   useEffect(() => {
     if (!showBankInsights) {
@@ -480,7 +484,7 @@ export default function Trends() {
                 />
               </View>
             ) : null}
-            {historyBanksError ? (
+            {prebuiltHistoryEnabled && historyBanksError ? (
               <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                 <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
                   {historyBanksError}

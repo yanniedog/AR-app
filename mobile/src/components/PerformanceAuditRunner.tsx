@@ -901,7 +901,13 @@ async function runJourney(
   let backDestination: string | null = null;
   let backReturnedToAudit = false;
   let backChangedPath = false;
-  let returnNavigationKind: 'none' | 'second-back' | 'replace-recovery' = 'none';
+  let returnNavigationKind:
+    | 'none'
+    | 'second-back'
+    | 'replace-recovery'
+    | 'second-back+replace-recovery' = 'none';
+  let secondBackMs = 0;
+  let replaceRecoveryMs = 0;
   let forwardResponsiveness = EMPTY_RESPONSIVENESS;
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
@@ -980,11 +986,15 @@ async function runJourney(
       router.back();
       await settleUi();
       backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
-      returnFallbackMs = now() - secondBackStarted;
+      secondBackMs = now() - secondBackStarted;
+      returnFallbackMs += secondBackMs;
     }
 
     if (!backReturnedToAudit) {
-      returnNavigationKind = 'replace-recovery';
+      returnNavigationKind =
+        returnNavigationKind === 'second-back'
+          ? 'second-back+replace-recovery'
+          : 'replace-recovery';
       const fallbackStarted = now();
       router.replace(AUDIT_HOME_PATH);
       await waitForPath(
@@ -995,7 +1005,8 @@ async function runJourney(
       );
       await settleUi();
       assertSessionActive(watchdog);
-      returnFallbackMs = now() - fallbackStarted;
+      replaceRecoveryMs = now() - fallbackStarted;
+      returnFallbackMs += replaceRecoveryMs;
     }
   } catch (caught) {
     rethrowAuditControl(caught);
@@ -1041,6 +1052,8 @@ async function runJourney(
       backChangedPath,
       backReturnedToAudit,
       returnNavigationKind,
+      secondBackMs: roundMetric(secondBackMs),
+      replaceRecoveryMs: roundMetric(replaceRecoveryMs),
       returnFallbackMs: roundMetric(returnFallbackMs),
       runtimeErrors: errors.journey.length,
       runtimeErrorMessages: errors.journey.join(' | ') || null,
