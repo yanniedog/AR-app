@@ -8,8 +8,10 @@ import {
   MAX_LOG_LINES,
   PASTE_RS_ATTEMPT_TIMEOUT_MS,
   PASTE_RS_TAIL_MAX_BYTES,
+  PASTE_CNET_URL,
   RingBuffer,
   debugLog,
+  deleteDebugLogUpload,
   formatEntry,
   formatErrorTrace,
   formatLogUploadBody,
@@ -17,6 +19,7 @@ import {
   parseLogLine,
   redactSecrets,
   resetGlobalErrorHandlersForTests,
+  uploadDebugLog,
   uploadLogsToPasteRs,
 } from '../src/lib/debugLog';
 import {
@@ -45,6 +48,15 @@ describe('redactSecrets', () => {
     expect(out).not.toContain('abc123');
     expect(out).not.toContain('sk-live-xyz');
     expect(out).toContain('[REDACTED]');
+  });
+
+  it('redacts account identifiers and email addresses', () => {
+    const out = redactSecrets(
+      'auth signed in uid=firebase-123 email=person@example.com subscriptionId=sub-secret',
+    );
+    expect(out).not.toContain('firebase-123');
+    expect(out).not.toContain('person@example.com');
+    expect(out).not.toContain('sub-secret');
   });
 });
 
@@ -129,6 +141,117 @@ describe('formatLogUploadBody', () => {
     expect(body).toContain('# AR-app mobile debug log');
     expect(body).toContain('app=1.0.0');
     expect(body).toContain('[INFO] app: hi');
+  });
+
+  it('re-redacts restored legacy entries at export time', () => {
+    const body = formatLogUploadBody(
+      '2026-01-01T00:00:00.000Z [INFO] auth: signed in uid=legacy-user person@example.com',
+    );
+    expect(body).not.toContain('legacy-user');
+    expect(body).not.toContain('person@example.com');
+  });
+});
+
+describe('uploadDebugLog', () => {
+  it('uses paste.rs without contacting the backup when the primary succeeds', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 201,
+      text: async () => 'https://paste.rs/primary',
+    })) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog('hello', mockFetch);
+
+    expect(result).toEqual(expect.objectContaining({ provider: 'paste.rs', attempts: 1 }));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('fails over once to an unguessable c-net paste after a transient outage', async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 500, text: async () => 'unavailable' })
+      .mockResolvedValueOnce({
+        status: 201,
+        text: async () =>
+          JSON.stringify({
+            url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+            delete_key: 'delete-secret',
+          }),
+      }) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog('hello', mockFetch);
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        provider: 'paste.c-net.org',
+        attempts: 2,
+        deleteKey: 'delete-secret',
+      }),
+    );
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      PASTE_CNET_URL,
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Accept: 'application/json, */*',
+          'X-UUID': '1',
+        }),
+        body: 'hello',
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('does not duplicate a client-rejected upload to the backup', async () => {
+    const mockFetch = jest.fn(async () => ({
+      status: 400,
+      text: async () => 'bad request',
+    })) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
+      'paste.rs rejected the upload',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a backup response outside the exact HTTPS allowlist', async () => {
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 503, text: async () => 'unavailable' })
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ url: 'https://example.com/not-allowed' }),
+      }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
+      'Both public upload services are unavailable',
+    );
+  });
+});
+
+describe('deleteDebugLogUpload', () => {
+  it('deletes only an allowlisted backup upload with its key', async () => {
+    const mockFetch = jest.fn(async () => ({ status: 204 })) as unknown as typeof fetch;
+    const url = 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555';
+
+    await deleteDebugLogUpload(url, 'delete-secret', mockFetch);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: { 'X-Delete-Key': 'delete-secret' },
+        signal: expect.any(AbortSignal),
+      }),
+    );
+  });
+
+  it('rejects non-backup URLs before sending the delete key', async () => {
+    const mockFetch = jest.fn() as unknown as typeof fetch;
+    await expect(
+      deleteDebugLogUpload('https://example.com/not-allowed', 'delete-secret', mockFetch),
+    ).rejects.toThrow('cannot be deleted');
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 

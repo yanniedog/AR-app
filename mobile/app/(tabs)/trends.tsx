@@ -24,7 +24,10 @@ import { AppText, Button, Card, Chip, Divider, Row } from '../../src/components/
 import { SECTIONS } from '../../src/constants';
 import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
+import {
+  selectBankHistoryChartModel,
+  shouldEnsurePrebuiltBankHistory,
+} from '../../src/data/historySelectors';
 import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
@@ -73,8 +76,12 @@ export default function Trends() {
   useScrollToTop(scrollRef);
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
-  const [deferredChartRevision, setDeferredChartRevision] = useState<string | null>(null);
-  const deferredChartsReady = !!core?.run_date && deferredChartRevision === core.run_date;
+  const [deferredCharts, setDeferredCharts] = useState({ revision: null as string | null, stage: 0 });
+  const deferredChartStage =
+    core?.run_date && deferredCharts.revision === core.run_date ? deferredCharts.stage : 0;
+  const outlookReady = deferredChartStage >= 1;
+  const rbaChartReady = deferredChartStage >= 2;
+  const marketExplorerReady = deferredChartStage >= 3;
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
@@ -94,11 +101,17 @@ export default function Trends() {
     const revision = core?.run_date;
     if (!revision) return;
     let active = true;
-    // Let the tab transition and its first touch/paint complete before
-    // constructing the large SVG and historical derived models below.
-    void yieldToUiFrames(2).then(() => {
-      if (active) setDeferredChartRevision(revision);
-    });
+    // Split expensive economic/SVG surfaces across separate paint windows.
+    // Previously they all mounted in one commit and produced multi-second JS
+    // stalls on mid-range Android devices.
+    setDeferredCharts({ revision, stage: 0 });
+    void (async () => {
+      for (let stage = 1; stage <= 3; stage += 1) {
+        await yieldToUiFrames(2);
+        if (!active) return;
+        setDeferredCharts({ revision, stage });
+      }
+    })();
     return () => {
       active = false;
     };
@@ -136,17 +149,17 @@ export default function Trends() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
-    if (!deferredChartsReady) return null;
+    if (!marketExplorerReady) return null;
     return filterBankInsightsForSuitability(
       bankInsights,
       core,
       includeNonStandard,
       detailsProducts,
     );
-  }, [bankInsights, core, deferredChartsReady, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, core, detailsProducts, includeNonStandard, marketExplorerReady, suitabilityRevision]);
   const historyModel = useMemo(() => {
     void suitabilityRevision;
-    return core && deferredChartsReady
+    return core && marketExplorerReady
       ? selectBankHistoryChartModel(
           {
             core,
@@ -162,11 +175,11 @@ export default function Trends() {
   }, [
     activeSection,
     core,
-    deferredChartsReady,
     detailsProducts,
     explorerInsights,
     historyBanks,
     includeNonStandard,
+    marketExplorerReady,
     suitabilityRevision,
   ]);
   const standardFilterWarming = useMemo(() => {
@@ -175,7 +188,7 @@ export default function Trends() {
   }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
-    if (!showHistoryRibbon) {
+    if (!shouldEnsurePrebuiltBankHistory(showHistoryRibbon, includeNonStandard)) {
       historyRequestKey.current = null;
       return;
     }
@@ -183,7 +196,7 @@ export default function Trends() {
     if (!key || historyRequestKey.current === key) return;
     historyRequestKey.current = key;
     void ensureHistoryBanks();
-  }, [core?.run_date, ensureHistoryBanks, showHistoryRibbon]);
+  }, [core?.run_date, ensureHistoryBanks, includeNonStandard, showHistoryRibbon]);
 
   useEffect(() => {
     if (!showBankInsights) {
@@ -221,6 +234,29 @@ export default function Trends() {
   const trend = useMemo(() => rbaTrend(calendar), [calendar]);
   const calendarDecisions = useMemo(() => recentDecisions(calendar, 12), [calendar]);
   const useCalendarDecisions = calendarDecisions.length > 0;
+  const marketSnapshots = useMemo(() => {
+    void suitabilityRevision;
+    if (!core) return [];
+    return interestSections.flatMap((key) => {
+      const data = core.sections[key];
+      if (!data) return [];
+      const stats = resolveSectionRibbonStats(
+        data,
+        data.rates,
+        false,
+        key,
+        null,
+        depositRankMetric,
+        mortgageRateMetric,
+      );
+      if (stats.min === null) return [];
+      const best = bestRow(data.rates, key, false, depositRankMetric, null, mortgageRateMetric);
+      const rankedBest = best
+        ? rankFraction(best, key, depositRankMetric, mortgageRateMetric)
+        : null;
+      return [{ key, stats, bestLabel: rateValueLabel(key, 'best'), bestRate: formatRankedFraction(rankedBest) }];
+    });
+  }, [core, depositRankMetric, interestSections, mortgageRateMetric, suitabilityRevision]);
 
   if (!core) return null;
   const currentRba = core.rba.at(-1);
@@ -284,7 +320,7 @@ export default function Trends() {
         </Card>
       )}
 
-      {deferredChartsReady ? (
+      {outlookReady ? (
         <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
       ) : (
         <DeferredChartPlaceholder label="Preparing economic outlook" />
@@ -302,7 +338,7 @@ export default function Trends() {
             {trend.summary}
           </AppText>
         ) : null}
-        {deferredChartsReady ? (
+        {rbaChartReady ? (
           <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
         ) : (
           <DeferredChartPlaceholder label="Preparing cash-rate chart" height={190} />
@@ -386,7 +422,7 @@ export default function Trends() {
           </View>
           <Chip label="PRO" selected={showHistoryRibbon} />
         </Row>
-        {showHistoryRibbon && deferredChartsReady ? (
+        {showHistoryRibbon && marketExplorerReady ? (
           <>
             {sectionOptions.length > 1 ? (
               <SegmentedControl
@@ -477,25 +513,7 @@ export default function Trends() {
       <AppText variant="h3" style={{ marginBottom: 10 }}>
         Market snapshot
       </AppText>
-      {interestSections.map((key) => {
-        const data = core.sections[key];
-        if (!data) return null;
-        const stats = resolveSectionRibbonStats(
-          data,
-          data.rates,
-          false,
-          key,
-          null,
-          depositRankMetric,
-          mortgageRateMetric,
-        );
-        if (stats.min === null) return null;
-        const best = bestRow(data.rates, key, false, depositRankMetric, null, mortgageRateMetric);
-        const bestLabel = rateValueLabel(key, 'best');
-        const rankedBest = best
-          ? rankFraction(best, key, depositRankMetric, mortgageRateMetric)
-          : null;
-        const bestRate = formatRankedFraction(rankedBest);
+      {marketSnapshots.map(({ key, stats, bestLabel, bestRate }) => {
         return (
           <Pressable
             key={key}

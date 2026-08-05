@@ -8,6 +8,7 @@ import type {
   RateRow,
   SectionKey,
 } from '../types';
+
 import type { BankInsightsPayload } from './bankInsights';
 import { chartModelFromPrebuiltHistory, type HistoryBanksPayload } from './historyPayload';
 import {
@@ -21,6 +22,14 @@ import { debugLog } from '../lib/debugLog';
 import { toFraction, visibleAccountRows } from './format';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { rowsUnder } from './taxonomy';
+
+/** Prebuilt bank history contains all products and is only composition-safe in broad mode. */
+export function shouldEnsurePrebuiltBankHistory(
+  historyEnabled: boolean,
+  includeNonStandard: boolean,
+): boolean {
+  return historyEnabled && includeNonStandard;
+}
 
 function medianOf(values: number[]): number | null {
   if (!values.length) return null;

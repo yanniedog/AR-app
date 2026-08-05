@@ -38,7 +38,14 @@ function checkDetail(check: AuditCheck): string {
   if (check.kind === 'journey') {
     const forward = Number(check.metrics.forwardMs ?? 0);
     const back = Number(check.metrics.backMs ?? 0);
-    return `Open ${forward.toFixed(0)} ms · Back ${back.toFixed(0)} ms`;
+    const background = Number(check.metrics.backgroundSettleMs ?? 0);
+    const jsLag = Number(check.metrics.maxEventLoopLagMs ?? 0);
+    const animationGap = Number(check.metrics.maxFrameGapMs ?? 0);
+    const parts = [`Open ${forward.toFixed(0)} ms`, `Back ${back.toFixed(0)} ms`];
+    if (background > 0) parts.push(`Background ${background.toFixed(0)} ms`);
+    if (jsLag > 0) parts.push(`Max JS lag ${jsLag.toFixed(0)} ms`);
+    if (animationGap > 0) parts.push(`JS animation gap ${animationGap.toFixed(0)} ms`);
+    return parts.join(' · ');
   }
   if (check.id === 'active-data') {
     return `Parse ${Number(check.metrics.parseMs ?? 0).toFixed(0)} ms · ${Number(check.metrics.rateRows ?? 0).toLocaleString()} rate rows`;
@@ -47,7 +54,7 @@ function checkDetail(check: AuditCheck): string {
     return `${check.durationMs.toFixed(0)} ms · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
   if (check.id === 'runtime-responsiveness') {
-    return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · Max frame gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
+    return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · JS animation callback gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
   }
   return `${check.durationMs.toFixed(0)} ms`;
 }
@@ -113,9 +120,9 @@ export default function PerformanceAuditScreen() {
           comparison, terms, and the debug log.
         </AppText>
         <AppText variant="small" color="textMuted">
-          It also measures JS event-loop stalls, frame gaps, active-payload parsing,
-          preferences storage, log-file storage, and the live manifest request. Every result,
-          scheduling trace, and error stack is embedded as structured data in the debug log.
+          It also measures JS event-loop stalls, animation callback gaps, active-payload parsing,
+          preferences storage, log-file storage, and the live manifest request. Each result and
+          its runner scheduling origin are embedded as structured data in the debug log.
         </AppText>
         <View
           style={{
@@ -328,9 +335,9 @@ export default function PerformanceAuditScreen() {
               Trace boundary
             </AppText>
             <AppText variant="tiny" color="textFaint">
-              The exported log contains full JavaScript scheduling and error stacks. Native
-              CPU/GPU instruction stacks still require an Android or iOS sampling profiler;
-              the report says this explicitly so results are not overstated.
+              The exported log contains runner call-site stacks, detected lag, and any real error
+              stacks. It cannot identify the instruction blocking JavaScript. Native or JavaScript
+              sampling profiles are still required for instruction-level attribution.
             </AppText>
           </Card>
         </>
