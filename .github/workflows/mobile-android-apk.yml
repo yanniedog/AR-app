@@ -78,7 +78,7 @@ jobs:
       - name: Install dependencies
         env:
           NODE_ENV: development
-        run: npm ci --no-audit --no-fund
+        run: npm ci --omit=optional --no-audit --no-fund
 
       - name: Materialize Firebase config
         env:
@@ -119,6 +119,11 @@ jobs:
       - name: Expo prebuild (android)
         run: npx expo prebuild --platform android --no-install
 
+      - name: Set up Gradle build cache
+        uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-provider: basic
+
       - name: Gradle assembleRelease
         env:
           KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
@@ -133,7 +138,7 @@ jobs:
           if [ "$APK_CHANNEL" = "arm" ]; then
             architecture_args+=("-PreactNativeArchitectures=armeabi-v7a,arm64-v8a")
           fi
-          ./gradlew assembleRelease --no-daemon "${architecture_args[@]}" \
+          ./gradlew assembleRelease --no-daemon --build-cache "${architecture_args[@]}" \
             -Pandroid.injected.signing.store.file="$KEYSTORE_PATH" \
             -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \

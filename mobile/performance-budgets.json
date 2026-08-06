@@ -10,7 +10,7 @@
     "apkBytes": 132510218
   },
   "apkBaselineByChannel": {
-    "arm": 75000000
+    "arm": 48000000
   },
-  "notes": "Bundle, font, asset, and universal APK baselines are the canonical fresh-install artifacts. The active ARM APK publisher allows 5% growth over 75 MB, still below the 92.8 MB maximum required for a 30% reduction from v1.0.81."
+  "notes": "Bundle, font, asset, and universal APK baselines are the canonical fresh-install artifacts. The optimized two-ABI ARM APK measured 47,536,083 bytes; its 48 MB baseline preserves a 5% regression guard without dropping device support or compressing the Hermes bundle."
 }
