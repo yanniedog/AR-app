@@ -743,8 +743,12 @@ export class ResponsivenessMonitor {
 
   private scheduleFrame(): void {
     if (typeof requestAnimationFrame !== 'function') return;
-    this.frame = requestAnimationFrame((timestamp) => {
+    this.frame = requestAnimationFrame(() => {
       if (!this.running) return;
+      // RAF timestamps use the performance time origin even where this.now()
+      // must fall back to Date.now(). Sample with one clock throughout so
+      // snapshots and partial frame windows remain comparable on every host.
+      const timestamp = this.now();
       if (this.lastFrameAt > 0) {
         this.frameSamples.push({
           value: Math.max(0, timestamp - this.lastFrameAt),

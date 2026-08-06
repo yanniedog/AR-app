@@ -36,7 +36,8 @@ export function scheduleAfterInteractions(work: () => void): () => void {
   try {
     handle = InteractionManager.runAfterInteractions(finish);
   } catch {
-    finish();
+    // The timeout below still yields before running required heavy work when
+    // InteractionManager is unavailable or throws during navigation.
   }
   // Required warmup must not remain queued forever behind looping loading
   // animations, which hold an InteractionManager interaction by default.

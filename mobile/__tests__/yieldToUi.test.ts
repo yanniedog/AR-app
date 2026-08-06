@@ -70,4 +70,19 @@ describe('yieldToUi', () => {
     expect(work).toHaveBeenCalledTimes(1);
     jest.useRealTimers();
   });
+
+  it('still defers work when InteractionManager throws', () => {
+    jest.useFakeTimers();
+    runSpy.mockImplementationOnce(() => {
+      throw new Error('InteractionManager unavailable');
+    });
+    const work = jest.fn();
+
+    scheduleAfterInteractions(work);
+    expect(work).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(48);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
 });
