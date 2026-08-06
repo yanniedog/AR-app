@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-05T22:49:58.542Z",
+  "generated_at": "2026-08-06T10:26:15.360Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -514,6 +514,14 @@
         "fix(mobile): harden diagnostics and smooth outlook (#120)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.87"
+    },
+    {
+      "version": "1.0.88",
+      "date": "2026-08-06",
+      "summaryBullets": [
+        "Fix stalled updates and private diagnostics (#123)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.88"
     }
   ]
 }

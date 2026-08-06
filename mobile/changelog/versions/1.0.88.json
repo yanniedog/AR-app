@@ -1,0 +1,32 @@
+{
+  "version": "1.0.88",
+  "releaseTag": "app-arm-v1.0.88",
+  "date": "2026-08-06",
+  "summaryBullets": [
+    "Fix stalled updates and private diagnostics (#123)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix stalled updates and private diagnostics (#123)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.88"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.87"
+        }
+      ]
+    }
+  ]
+}
