@@ -42,7 +42,7 @@ export async function verifyDownloadedApk(
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
   assertDownloadedApkMatchesManifest(size, manifest);
 
-  const expectedSha = manifest.sha256!;
+  const expectedSha = manifest.sha256!.toLowerCase();
   const startedAt = Date.now();
   debugLog.info('app-update', `verification begin bytes=${size} mode=native-sha256`);
   const actual = (

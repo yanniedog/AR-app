@@ -355,7 +355,7 @@ describe('APK download integrity', () => {
     await expect(
       verifyDownloadedApk('file:///docs/app-update-42.apk', {
         ...baseManifest,
-        sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        sha256: 'E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855',
       }),
     ).resolves.toEqual({ size: baseManifest.bytes, verifiedSha256: true });
     expect(NativeFileSystem.hash).toHaveBeenCalledWith(
@@ -378,6 +378,30 @@ describe('APK download integrity', () => {
     await expect(
       verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
     ).rejects.toThrow(/sha256 mismatch/i);
+  });
+
+  it('surfaces a native sha256 timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+        exists: true,
+        isDirectory: false,
+        uri: 'file:///docs/app-update-42.apk',
+        size: baseManifest.bytes!,
+        modificationTime: 0,
+      });
+      jest.mocked(NativeFileSystem.hash).mockImplementationOnce(
+        () => new Promise<string>(() => undefined),
+      );
+
+      const verification = expect(
+        verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
+      ).rejects.toThrow(/verification timed out after 120000ms/i);
+      await jest.advanceTimersByTimeAsync(120_000);
+      await verification;
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('requests sha256 verify for small APKs', () => {
