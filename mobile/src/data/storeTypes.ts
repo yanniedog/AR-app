@@ -146,7 +146,12 @@ export interface AppState {
   loadSampleFallback: () => Promise<void>;
   /** Load core/manifest from disk cache if not already in memory (used by the headless task). */
   ensureCoreLoaded: () => Promise<void>;
-  refresh: (opts?: { manual?: boolean; repairCache?: boolean }) => Promise<boolean>;
+  refresh: (opts?: {
+    manual?: boolean;
+    repairCache?: boolean;
+    /** Keep OS-scheduled work bounded: core install + notification diff only. */
+    background?: boolean;
+  }) => Promise<boolean>;
   ensureDetails: (opts?: {
     forProductView?: boolean;
     force?: boolean;

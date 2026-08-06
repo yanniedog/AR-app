@@ -88,6 +88,8 @@ function ensureConfig(wifiOnly: boolean): void {
     progressMinBytes: 256 * 1024,
     allowsCellularAccess: !wifiOnly,
     showNotificationsEnabled: true,
+    showCancelAction: true,
+    showCompletionNotification: true,
     notificationsGrouping: {
       enabled: false,
       texts: {

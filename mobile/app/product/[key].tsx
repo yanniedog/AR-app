@@ -29,7 +29,7 @@ import {
   forwardFillSeriesRecord,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
-import { ensurePermissions, registerBackgroundRefresh } from '../../src/data/notifications';
+import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
@@ -265,7 +265,6 @@ export default function ProductDetail() {
     }
     if (!notificationsEnabled) {
       setPref('notificationsEnabled', true);
-      void registerBackgroundRefresh();
     }
     subscribeProduct(productKey, rateIndex, row);
   };

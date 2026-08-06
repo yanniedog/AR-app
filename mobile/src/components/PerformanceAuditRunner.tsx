@@ -2,11 +2,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
 import { router, usePathname } from 'expo-router';
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   BackHandler,
+  AppState,
   InteractionManager,
   Platform,
   useWindowDimensions,
@@ -61,6 +63,7 @@ const BENCHMARK_CHECKS = 5;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
+const AUDIT_KEEP_AWAKE_TAG = 'performance-audit';
 
 class AuditCancelledError extends Error {
   constructor() {
@@ -1146,6 +1149,7 @@ export function PerformanceAuditRunner() {
       };
 
       markPerformanceAuditRunning(total);
+      await activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG).catch(() => {});
       monitor.start();
 
       try {
@@ -1320,6 +1324,7 @@ export function PerformanceAuditRunner() {
           },
         }));
         monitor.stop();
+        await deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG).catch(() => {});
         runningRef.current = false;
       }
     };
@@ -1340,6 +1345,19 @@ export function PerformanceAuditRunner() {
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
       cancelPerformanceAudit();
       return true;
+    });
+    return () => subscription.remove();
+  }, [state.status]);
+
+  useEffect(() => {
+    if (state.status !== 'queued' && state.status !== 'running') return;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') return;
+      debugLog.info(
+        PERFORMANCE_AUDIT_LOG_TAG,
+        `audit cancelled safely because app state changed to ${nextState}`,
+      );
+      cancelPerformanceAudit();
     });
     return () => subscription.remove();
   }, [state.status]);

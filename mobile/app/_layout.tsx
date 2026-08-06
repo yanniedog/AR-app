@@ -6,7 +6,13 @@ import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import {
+  type GestureResponderEvent,
+  Platform,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -26,14 +32,14 @@ import {
 import { ArMarkLogo } from '../src/components/ArMarkLogo';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
-import { DiagnosticsChoiceModal } from '../src/components/DiagnosticsChoiceModal';
+import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import {
   PerformanceAuditRunner,
   usePerformanceAuditState,
 } from '../src/components/PerformanceAuditRunner';
 import { AppText } from '../src/components/ui';
-import { routeFromNotificationResponse } from '../src/data/notifications';
+import { registerBackgroundRefresh, routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
@@ -41,6 +47,7 @@ import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
+import { isDiagnosticsConsentTap } from '../src/lib/diagnosticsConsent';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import {
   isSessionReplayRouteAllowed,
@@ -229,6 +236,7 @@ function RootNavigator() {
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);
   const diagnosticsRestored = useRef(false);
+  const consentTouchStart = useRef<{ x: number; y: number } | null>(null);
   const [morphComplete, setMorphComplete] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [morphTarget, setMorphTarget] = useState<SplashMorphTarget | null>(null);
@@ -264,6 +272,53 @@ function RootNavigator() {
     [setPref],
   );
 
+  const acceptSelectedDiagnostics = useCallback(() => {
+    if (privacyChoiceCurrent) return;
+    confirmDiagnosticsChoice({
+      crashReports: crashReportsEnabled,
+      sessionReplay: sessionReplayEnabled,
+    });
+  }, [
+    confirmDiagnosticsChoice,
+    crashReportsEnabled,
+    privacyChoiceCurrent,
+    sessionReplayEnabled,
+  ]);
+
+  const declineDiagnostics = useCallback(() => {
+    confirmDiagnosticsChoice({ crashReports: false, sessionReplay: false });
+  }, [confirmDiagnosticsChoice]);
+
+  const handleConsentTouchStart = useCallback(
+    (event: GestureResponderEvent) => {
+      if (privacyChoiceCurrent) return;
+      consentTouchStart.current = {
+        x: event.nativeEvent.pageX,
+        y: event.nativeEvent.pageY,
+      };
+    },
+    [privacyChoiceCurrent],
+  );
+
+  const handleConsentTouchEnd = useCallback(
+    (event: GestureResponderEvent) => {
+      const start = consentTouchStart.current;
+      consentTouchStart.current = null;
+      if (!start || privacyChoiceCurrent) return;
+      // Observe a completed tap without becoming the responder or consuming
+      // the user's intended navigation. Scrolling does not count as consent.
+      if (
+        isDiagnosticsConsentTap(start, {
+          x: event.nativeEvent.pageX,
+          y: event.nativeEvent.pageY,
+        })
+      ) {
+        acceptSelectedDiagnostics();
+      }
+    },
+    [acceptSelectedDiagnostics, privacyChoiceCurrent],
+  );
+
   useEffect(() => {
     installGlobalErrorHandlers();
     debugLog.info('app', 'bootstrap starting');
@@ -279,6 +334,11 @@ function RootNavigator() {
       .then(() => debugLog.restoreFromStorage())
       .then(() => debugLog.info('app', 'debug history restored after first paint'))
       .catch((err) => logSwallowedError('debugLog.restore', err));
+  }, [appReady]);
+
+  useEffect(() => {
+    if (!appReady) return;
+    void registerBackgroundRefresh();
   }, [appReady]);
 
   // Refresh tier-issued content keys on app start / sign-in (Phase D; no-op
@@ -340,7 +400,14 @@ function RootNavigator() {
   if (dataUnavailable) {
     return (
       <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
-        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+        <View
+          style={{ flex: 1, backgroundColor: theme.colors.bg }}
+          onTouchStart={handleConsentTouchStart}
+          onTouchEnd={handleConsentTouchEnd}
+          onTouchCancel={() => {
+            consentTouchStart.current = null;
+          }}
+        >
           <StatusBar style={theme.dark ? 'light' : 'dark'} />
           {showUpdateBanner ? (
             <AppUpdateBanner
@@ -350,6 +417,11 @@ function RootNavigator() {
             />
           ) : null}
           <DataUnavailableScreen />
+          <DiagnosticsConsentBanner
+            visible={appReady && !privacyChoiceCurrent}
+            onAccept={acceptSelectedDiagnostics}
+            onDecline={declineDiagnostics}
+          />
         </View>
       </AppUpdateBannerLayoutProvider>
     );
@@ -362,7 +434,14 @@ function RootNavigator() {
       registerTarget={registerTarget}
     >
       <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
-        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+        <View
+          style={{ flex: 1, backgroundColor: theme.colors.bg }}
+          onTouchStart={handleConsentTouchStart}
+          onTouchEnd={handleConsentTouchEnd}
+          onTouchCancel={() => {
+            consentTouchStart.current = null;
+          }}
+        >
           {showUpdateBanner ? (
             <AppUpdateBanner
               remote={updateBanner.remote!}
@@ -427,11 +506,10 @@ function RootNavigator() {
             ) : null}
           </View>
           <PerformanceAuditRunner />
-          <DiagnosticsChoiceModal
+          <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
-            initialCrashReports={crashReportsEnabled}
-            initialSessionReplay={sessionReplayEnabled}
-            onConfirm={confirmDiagnosticsChoice}
+            onAccept={acceptSelectedDiagnostics}
+            onDecline={declineDiagnostics}
           />
         </View>
       </AppUpdateBannerLayoutProvider>

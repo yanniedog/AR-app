@@ -128,6 +128,11 @@ export default function PerformanceAuditScreen() {
           preferences storage, log-file storage, and the live manifest request. Each result and
           its runner scheduling origin are embedded as structured data in the debug log.
         </AppText>
+        <AppText variant="tiny" color="textMuted">
+          The screen stays awake for comparable UI measurements. Leaving the app safely cancels
+          this visual run; scheduled background maintenance continues to check and refresh data
+          independently with the screen off.
+        </AppText>
         <View
           style={{
             padding: 10,

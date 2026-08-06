@@ -16,7 +16,7 @@ import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import { bestRow, rankFraction } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { rowsUnder } from '../src/data/taxonomy';
-import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifications';
+import { ensurePermissions } from '../src/data/notifications';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -145,7 +145,6 @@ export default function Onboarding() {
     setPref('profileFilters', profile);
     if (notify) {
       const ok = await ensurePermissions();
-      if (ok) void registerBackgroundRefresh();
       completeOnboarding(interests, ok);
     } else {
       completeOnboarding(interests, false);

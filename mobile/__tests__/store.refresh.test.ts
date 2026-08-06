@@ -189,6 +189,54 @@ describe('store refresh lifecycle', () => {
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps OS-scheduled refresh bounded when optional asset hashes change', async () => {
+    const asset = (name: string, sha256: string) => ({
+      name,
+      bytes: 100,
+      sha256,
+      url: `https://example.com/${name}`,
+    });
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        history_banks: asset('history.json.gz', 'history-old'),
+        bank_history: asset('banks.json.gz', 'banks-old'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-old'),
+      },
+    };
+    const revisedManifest: Manifest = {
+      ...previousManifest,
+      files: {
+        ...previousManifest.files,
+        history_banks: asset('history.json.gz', 'history-new'),
+        bank_history: asset('banks.json.gz', 'banks-new'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-new'),
+      },
+    };
+    useStore.setState({
+      source: 'remote',
+      manifest: previousManifest,
+      ensureHistoryBanks: mockEnsureHistoryBanks,
+      ensureBankInsights: mockEnsureBankInsights,
+      ensureRbaCalendar: mockEnsureRbaCalendar,
+    });
+    mockFetchManifest.mockResolvedValue(revisedManifest);
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: revisedManifest.files.core.sha256,
+      detailsSha: revisedManifest.files.details.sha256,
+    });
+
+    await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
+
+    expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
+    expect(mockEnsureBankInsights).not.toHaveBeenCalled();
+    expect(mockEnsureRbaCalendar).not.toHaveBeenCalled();
+  });
+
   it('manual refresh checks the manifest but preserves an identical live core', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,

@@ -32,11 +32,7 @@ import {
   coverageProvidersSucceeded,
 } from '../../src/data/coverage';
 import { moveInterest, orderedInterestSections, toggleInterest } from '../../src/data/interests';
-import {
-  ensurePermissions,
-  registerBackgroundRefresh,
-  unregisterBackgroundRefresh,
-} from '../../src/data/notifications';
+import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../../src/data/storeTypes';
 import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
@@ -101,10 +97,8 @@ export default function Settings() {
         Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
         return;
       }
-      void registerBackgroundRefresh();
       setPref('notificationsEnabled', true);
     } else {
-      void unregisterBackgroundRefresh();
       setPref('notificationsEnabled', false);
     }
   };
