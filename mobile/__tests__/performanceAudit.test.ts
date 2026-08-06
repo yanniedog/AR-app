@@ -4,6 +4,7 @@ import {
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
+  isPerformanceAuditActive,
   parsePerformanceAuditHangTimeoutSeconds,
   pathMatches,
   PerformanceAuditInactivityWatchdog,
@@ -259,6 +260,30 @@ describe('performance audit scoring', () => {
   });
 });
 
+describe('performance audit maintenance isolation', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
+  it('blocks optional route maintenance only while an audit is queued or running', () => {
+    expect(isPerformanceAuditActive()).toBe(false);
+    requestPerformanceAudit();
+    expect(isPerformanceAuditActive()).toBe(true);
+
+    completePerformanceAudit({
+      schemaVersion: 2,
+      sessionId: 'done',
+      startedAt: '2026-08-06T00:00:00.000Z',
+      finishedAt: '2026-08-06T00:00:01.000Z',
+      durationMs: 1_000,
+      watchdog: { hangTimeoutMs: 300_000, storedCheckCount: 0, lastStoredCheckAt: null },
+      environment,
+      summary: summarizePerformanceAudit([]),
+      checks: [],
+      limitations: [],
+    });
+    expect(isPerformanceAuditActive()).toBe(false);
+  });
+});
+
 describe('performance audit lifecycle', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
@@ -280,11 +305,17 @@ describe('performance audit lifecycle', () => {
       checks: [],
       limitations: [],
     };
-    completePerformanceAudit(report);
+    completePerformanceAudit(report, {
+      url: 'https://paste.example/audit',
+      provider: 'test-provider',
+    });
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'complete',
       sessionId,
       report,
+      uploadUrl: 'https://paste.example/audit',
+      uploadProvider: 'test-provider',
+      uploadError: null,
     });
   });
 

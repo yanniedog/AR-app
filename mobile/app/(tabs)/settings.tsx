@@ -32,11 +32,7 @@ import {
   coverageProvidersSucceeded,
 } from '../../src/data/coverage';
 import { moveInterest, orderedInterestSections, toggleInterest } from '../../src/data/interests';
-import {
-  ensurePermissions,
-  registerBackgroundRefresh,
-  unregisterBackgroundRefresh,
-} from '../../src/data/notifications';
+import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../../src/data/storeTypes';
 import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
@@ -101,10 +97,8 @@ export default function Settings() {
         Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
         return;
       }
-      void registerBackgroundRefresh();
       setPref('notificationsEnabled', true);
     } else {
-      void unregisterBackgroundRefresh();
       setPref('notificationsEnabled', false);
     }
   };
@@ -404,10 +398,6 @@ export default function Settings() {
               setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
             }}
           />
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-            Both choices are preselected in the privacy setup and remain independent. Nothing is
-            collected before confirmation; disabling a choice stops new collection.
-          </AppText>
           <SettingsGap size={8} />
           <NavRow
             icon="speedometer-outline"

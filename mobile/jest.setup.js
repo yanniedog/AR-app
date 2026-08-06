@@ -13,13 +13,16 @@ jest.mock('expo-haptics', () => ({
 jest.mock('expo-task-manager', () => ({
   defineTask: jest.fn(),
   isTaskDefined: jest.fn(() => false),
+  isTaskRegisteredAsync: jest.fn(async () => true),
   unregisterTaskAsync: jest.fn(async () => {}),
 }));
 
-jest.mock('expo-background-fetch', () => ({
+jest.mock('expo-background-task', () => ({
+  getStatusAsync: jest.fn(async () => 2),
   registerTaskAsync: jest.fn(async () => {}),
   unregisterTaskAsync: jest.fn(async () => {}),
-  BackgroundFetchResult: { NoData: 1, NewData: 2, Failed: 3 },
+  BackgroundTaskStatus: { Restricted: 1, Available: 2 },
+  BackgroundTaskResult: { Success: 1, Failed: 2 },
 }));
 
 jest.mock('expo-notifications', () => ({

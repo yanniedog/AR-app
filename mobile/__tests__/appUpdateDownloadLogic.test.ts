@@ -6,6 +6,7 @@ import {
   downloadPercent,
   isCachedApkReady,
   isApkDownloadStalled,
+  isUserCancelledDownload,
   shouldEnsureBackgroundDownload,
   toFileUri,
   updateBannerCopy,
@@ -67,6 +68,12 @@ describe('appUpdateDownloadLogic', () => {
     ).toBe(true);
     expect(
       shouldEnsureBackgroundDownload(
+        { ...IDLE_APK_DOWNLOAD, phase: 'cancelled', buildNumber: '42' },
+        '42',
+      ),
+    ).toBe(false);
+    expect(
+      shouldEnsureBackgroundDownload(
         { ...IDLE_APK_DOWNLOAD, phase: 'ready', buildNumber: '41' },
         '42',
       ),
@@ -82,9 +89,20 @@ describe('appUpdateDownloadLogic', () => {
     expect(updateBannerCopy('downloading', '1.0.44', 37).title).toContain('37%');
     expect(updateBannerCopy('downloading', '1.0.44', 37).actionEnabled).toBe(false);
     expect(updateBannerCopy('error', '1.0.44', null).actionLabel).toBe('Retry');
+    expect(updateBannerCopy('cancelled', '1.0.44', null)).toEqual({
+      title: 'Update download cancelled — v1.0.44',
+      actionLabel: 'Retry',
+      actionEnabled: true,
+    });
     expect(updateBannerCopy('waiting', '1.0.44', 93).title).toContain('waiting for Wi-Fi');
     expect(updateBannerCopy('verifying', '1.0.44', 93).title).toContain('Verifying');
     expect(updateBannerCopy('retrying', '1.0.44', 93).actionEnabled).toBe(false);
+  });
+
+  it('distinguishes an explicit native cancel from a generic downloader failure', () => {
+    expect(isUserCancelledDownload('Download cancelled by user', -1)).toBe(true);
+    expect(isUserCancelledDownload('Connection failed', -1)).toBe(false);
+    expect(isUserCancelledDownload('Download cancelled by user', 500)).toBe(false);
   });
 
   it('detects genuine no-progress stalls but not waiting or verifying work', () => {

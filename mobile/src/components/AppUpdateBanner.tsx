@@ -133,7 +133,7 @@ export function AppUpdateBanner({
 
   const onUpgrade = async () => {
     if (busy) return;
-    if ((phase === 'error' || phase === 'waiting') && !wifiOnly) {
+    if ((phase === 'error' || phase === 'waiting' || phase === 'cancelled') && !wifiOnly) {
       const size = remote.bytes
         ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
         : 'an unknown size';
@@ -149,7 +149,7 @@ export function AppUpdateBanner({
     }
     setBusy(true);
     try {
-      if (phase === 'error' || phase === 'waiting') {
+      if (phase === 'error' || phase === 'waiting' || phase === 'cancelled') {
         await ensureApkBackgroundDownload(remote, { wifiOnly, force: true });
         return;
       }

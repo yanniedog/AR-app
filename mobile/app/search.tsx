@@ -21,7 +21,7 @@ import {
   type Filters,
   type SortKey,
 } from '../src/data/selectors';
-import { ensurePermissions, registerBackgroundRefresh } from '../src/data/notifications';
+import { ensurePermissions } from '../src/data/notifications';
 import { profileToFilters } from '../src/data/profile';
 import { findSearchSubscription, type SearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
@@ -200,7 +200,6 @@ export default function Search() {
     }
     if (!notificationsEnabled) {
       setPref('notificationsEnabled', true);
-      void registerBackgroundRefresh();
     }
     const added = subscribeSearch(searchSnapshot);
     if (!added) Alert.alert('Already subscribed', 'This search already has a rate alert.');

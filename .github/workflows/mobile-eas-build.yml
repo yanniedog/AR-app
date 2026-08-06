@@ -102,7 +102,6 @@ jobs:
 
       - name: Advance APK version iteration from rolling manifest
         if: >-
-          inputs.profile == 'preview' &&
           (inputs.platform == 'android' || inputs.platform == 'all')
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}

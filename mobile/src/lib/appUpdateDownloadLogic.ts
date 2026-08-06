@@ -7,6 +7,7 @@ export type ApkDownloadPhase =
   | 'retrying'
   | 'verifying'
   | 'ready'
+  | 'cancelled'
   | 'error';
 
 export interface ApkDownloadSnapshot {
@@ -90,6 +91,7 @@ export function shouldEnsureBackgroundDownload(
   if (isApkDownloadForBuild(snapshot, buildNumber)) {
     if (
       snapshot.phase === 'ready' ||
+      snapshot.phase === 'cancelled' ||
       snapshot.phase === 'waiting' ||
       snapshot.phase === 'downloading' ||
       snapshot.phase === 'retrying' ||
@@ -97,6 +99,11 @@ export function shouldEnsureBackgroundDownload(
     ) return false;
   }
   return true;
+}
+
+/** Native downloader cancellation uses errorCode -1 and an explicit message. */
+export function isUserCancelledDownload(error: string, errorCode?: number | null): boolean {
+  return errorCode === -1 && /cancel/i.test(error);
 }
 
 export function isApkDownloadStalled(
@@ -162,6 +169,13 @@ export function updateBannerCopy(
   if (phase === 'error') {
     return {
       title: `Update available — v${version}`,
+      actionLabel: 'Retry',
+      actionEnabled: true,
+    };
+  }
+  if (phase === 'cancelled') {
+    return {
+      title: `Update download cancelled — v${version}`,
       actionLabel: 'Retry',
       actionEnabled: true,
     };

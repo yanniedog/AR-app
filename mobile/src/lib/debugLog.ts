@@ -16,6 +16,7 @@ export const MAX_LOG_LINES = 2000;
 export const MAX_LOG_BYTES = 512 * 1024;
 export const PERSIST_TAIL_LINES = 100;
 export const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
+export const MAX_LOG_DISPLAY_BYTES = 16 * 1024;
 export const LOG_FILE_FLUSH_MS = 100;
 export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
@@ -116,6 +117,25 @@ function trimFileTail(content: string): string {
   return textDecoder.decode(bytes.slice(start));
 }
 
+/**
+ * Keep the interactive log screen cheap even when one structured audit report
+ * occupies hundreds of KiB. This is display-only: copy/share/upload continue
+ * to read the complete bounded in-memory log.
+ */
+export function formatLogDisplayTail(
+  content: string,
+  maxBytes = MAX_LOG_DISPLAY_BYTES,
+): string {
+  const limit = Math.max(0, Math.floor(maxBytes));
+  const bytes = textEncoder.encode(content);
+  if (bytes.length <= limit) return content;
+  if (limit === 0) return '';
+  const tail = textDecoder.decode(bytes.slice(bytes.length - limit));
+  const newline = tail.indexOf('\n');
+  const visible = newline >= 0 ? tail.slice(newline + 1) : tail;
+  return `[Showing newest ${limit} bytes of ${bytes.length}; exports include the full log]\n${visible}`;
+}
+
 async function ensureLogDir(): Promise<void> {
   if (!FileSystem.documentDirectory) return;
   const info = await FileSystem.getInfoAsync(LOG_DIR);
@@ -129,6 +149,7 @@ let fileFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let fileFlushPromise: Promise<void> | null = null;
 let fileContentCache: string | null = null;
 let fileWriteEpoch = 0;
+let coldStartResetPromise: Promise<void> | null = null;
 
 function scheduleFileFlush(): void {
   if (fileFlushTimer) return;
@@ -152,6 +173,9 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
 }
 
 async function flushPendingToFile(): Promise<void> {
+  // The UI cold-start reset owns the file until stale content is deleted.
+  // New-session entries remain queued and are written immediately afterwards.
+  if (coldStartResetPromise) await coldStartResetPromise;
   if (fileFlushPromise) {
     await fileFlushPromise;
     if (pendingFileLines.length === 0) return;
@@ -311,6 +335,32 @@ export const debugLog = {
     append('error', tag, message);
     void flushPendingToFile();
   },
+  /**
+   * Start one fresh log session for this UI process. Memory is cleared
+   * synchronously before any startup entry can be appended; disk cleanup runs
+   * ahead of the first flush. Reopening an existing backgrounded process does
+   * not reload this module, so its current session remains intact.
+   */
+  beginColdStartSession(): Promise<void> {
+    if (coldStartResetPromise) return coldStartResetPromise;
+    fileWriteEpoch += 1;
+    buffer.clear();
+    pendingFileLines = [];
+    fileContentCache = null;
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    const inFlight = fileFlushPromise;
+    fileFlushPromise = null;
+    notify();
+    coldStartResetPromise = (async () => {
+      if (inFlight) await inFlight.catch(() => {});
+      await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+      await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
+    })();
+    return coldStartResetPromise;
+  },
   async clear(): Promise<void> {
     fileWriteEpoch += 1;
     buffer.clear();
@@ -325,12 +375,16 @@ export const debugLog = {
     if (inFlight) {
       await inFlight.catch(() => {});
     }
+    if (coldStartResetPromise) await coldStartResetPromise.catch(() => {});
     notify();
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
   },
   getText(): string {
     return buffer.getText();
+  },
+  getDisplayText(maxBytes = MAX_LOG_DISPLAY_BYTES): string {
+    return formatLogDisplayTail(buffer.getText(), maxBytes);
   },
   getEntries(): LogEntry[] {
     return buffer.getEntries();
@@ -353,6 +407,17 @@ export const debugLog = {
       fileFlushTimer = null;
     }
     await flushPendingToFile();
+  },
+  /** Read the complete current-session file, falling back to the live buffer. */
+  async readCompleteText(): Promise<string> {
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    await flushPendingToFile();
+    if (!FileSystem.documentDirectory) return redactSecrets(buffer.getText());
+    const text = await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
+    return redactSecrets(text);
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);

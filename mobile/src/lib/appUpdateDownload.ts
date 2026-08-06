@@ -22,6 +22,7 @@ import {
   downloadPercent,
   isCachedApkReady,
   isApkDownloadStalled,
+  isUserCancelledDownload,
   shouldEnsureBackgroundDownload,
   toFileUri,
   type ApkDownloadSnapshot,
@@ -88,6 +89,8 @@ function ensureConfig(wifiOnly: boolean): void {
     progressMinBytes: 256 * 1024,
     allowsCellularAccess: !wifiOnly,
     showNotificationsEnabled: true,
+    showCancelAction: true,
+    showCompletionNotification: true,
     notificationsGrouping: {
       enabled: false,
       texts: {
@@ -278,8 +281,9 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       })();
     })
     .error(({ error, errorCode }) => {
+      const userCancelled = isUserCancelledDownload(error, errorCode);
       void persist({
-        phase: 'error',
+        phase: userCancelled ? 'cancelled' : 'error',
         buildNumber: manifest.build_number,
         version: manifest.version,
         downloadUrl: manifest.download_url,
@@ -291,10 +295,14 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         startedAt: snapshot.startedAt,
         lastProgressAt: snapshot.lastProgressAt,
         retryCount: snapshot.retryCount,
-        nativeState: 'FAILED',
-        error: `${error}${errorCode ? ` (${errorCode})` : ''}`,
+        nativeState: userCancelled ? 'CANCELLED' : 'FAILED',
+        error: userCancelled ? null : `${error}${errorCode ? ` (${errorCode})` : ''}`,
       });
-      debugLog.error('app-update', `background download failed: ${error} code=${errorCode}`);
+      if (userCancelled) {
+        debugLog.info('app-update', `background download cancelled by user build=${manifest.build_number}`);
+      } else {
+        debugLog.error('app-update', `background download failed: ${error} code=${errorCode}`);
+      }
       if (activeTask?.id === task.id) {
         activeTask = null;
         activeDownloadWifiOnly = null;
@@ -611,6 +619,10 @@ export async function ensureApkBackgroundDownload(
   }
 
   if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
+    // A notification action is an explicit user cancellation. Do not turn the
+    // app's periodic reconciliation into an automatic restart; only Retry
+    // calls this function with force=true.
+    if (snapshot.phase === 'cancelled') return snapshot;
     if (snapshot.phase === 'verifying') {
       const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
       if (
@@ -742,7 +754,7 @@ export async function upgradeFromBackgroundDownload(
       await installReadyApkUpdate(manifest);
       return;
     }
-    if (snapshot.phase === 'error') {
+    if (snapshot.phase === 'error' || snapshot.phase === 'cancelled') {
       await ensureApkBackgroundDownload(manifest, { ...options, force: true });
     }
 

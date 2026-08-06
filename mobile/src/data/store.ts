@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import * as TaskManager from 'expo-task-manager';
 import { create } from 'zustand';
 
@@ -7,9 +7,7 @@ import { DEFAULT_INTERESTS, normalizeInterests, resolveInterestSection } from '.
 import { normalizeProfileFilters } from './profile';
 import { normalizeCalcInputs } from './calc';
 import { migrateLegacyCalculatorInputs } from './userRateScenario';
-import { shouldWarmDetails } from './optionalPrefs';
 import { BACKGROUND_TASK } from './notifications';
-import { effectiveDeepSearch } from '../lib/proAccess';
 import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap';
 import { createRefreshActions } from './storeRefresh';
 import { createEnsureActions } from './storeEnsure';
@@ -21,6 +19,8 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
+import { debugLog } from '../lib/debugLog';
+import { setCrashReportsEnabled } from '../lib/observability';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -121,24 +121,38 @@ storeRef.current = useStore;
 try {
   if (typeof TaskManager.isTaskDefined === 'function' && !TaskManager.isTaskDefined(BACKGROUND_TASK)) {
     TaskManager.defineTask(BACKGROUND_TASK, async () => {
+      const startedAt = Date.now();
       try {
         try {
           await useStore.persist?.rehydrate?.();
         } catch {
           // proceed with defaults if rehydrate fails
         }
+        const prefs = useStore.getState().prefs;
+        await setCrashReportsEnabled(
+          prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION &&
+            prefs.crashReportsEnabled,
+        );
+        debugLog.info('background-maintenance', 'scheduled refresh started');
         await useStore.getState().ensureCoreLoaded();
-        const state = useStore.getState();
-        if (shouldWarmDetails(state.prefs, state.subscriptions)) {
-          await state.ensureDetails();
+        useStore.setState({ refreshOutcome: null });
+        const changed = await useStore.getState().refresh({ background: true });
+        if (useStore.getState().refreshOutcome === 'failure') {
+          throw new Error('Scheduled rates refresh failed');
         }
-        if (effectiveDeepSearch(state.prefs)) await state.ensureSearchIndex();
-        const changed = await useStore.getState().refresh({});
-        return changed
-          ? BackgroundFetch.BackgroundFetchResult.NewData
-          : BackgroundFetch.BackgroundFetchResult.NoData;
-      } catch {
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        debugLog.info(
+          'background-maintenance',
+          `scheduled refresh complete changed=${changed} durationMs=${Date.now() - startedAt}`,
+        );
+        await debugLog.flushToFile();
+        return BackgroundTask.BackgroundTaskResult.Success;
+      } catch (error) {
+        debugLog.error(
+          'background-maintenance',
+          `scheduled refresh failed durationMs=${Date.now() - startedAt}: ${String((error as Error)?.message ?? error)}`,
+        );
+        await debugLog.flushToFile().catch(() => {});
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
     });
   }

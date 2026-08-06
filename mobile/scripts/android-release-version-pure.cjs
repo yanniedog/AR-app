@@ -37,13 +37,26 @@ function nextReleaseVersion(currentVersion, remoteVersion) {
     : bumpPatch(publishedVersion);
 }
 
+/** Always allocate a new visible patch for a concrete APK build. */
+function nextApkBuildVersion(currentVersion, remoteVersion) {
+  parseVersion(currentVersion);
+  if (remoteVersion == null || String(remoteVersion).trim() === '') {
+    return bumpPatch(currentVersion);
+  }
+  const publishedVersion = String(remoteVersion).trim();
+  const floor = compareVersions(currentVersion, publishedVersion) > 0
+    ? currentVersion
+    : publishedVersion;
+  return bumpPatch(floor);
+}
+
 function nextVersionCode(current, remote, runFloor = 0) {
   const currentCode = Number(current) || 1;
   const remoteCode = remote == null ? null : Number(remote);
   const workflowFloor = Number(runFloor) || 0;
   return remoteCode != null && Number.isFinite(remoteCode)
-    ? Math.max(remoteCode + 1, currentCode, workflowFloor)
-    : Math.max(currentCode, workflowFloor);
+    ? Math.max(remoteCode + 1, currentCode + 1, workflowFloor)
+    : Math.max(currentCode + 1, workflowFloor);
 }
 
 /** Combine channel manifests without allowing either version or versionCode to move backwards. */
@@ -63,6 +76,7 @@ function mergeReleaseFloors(remotes) {
 module.exports = {
   compareVersions,
   mergeReleaseFloors,
+  nextApkBuildVersion,
   nextReleaseVersion,
   nextVersionCode,
 };

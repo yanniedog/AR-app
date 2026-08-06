@@ -42,6 +42,7 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBrowse } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
 import { yieldToUiFrames } from '../../src/lib/yieldToUi';
+import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Trends() {
@@ -98,7 +99,13 @@ export default function Trends() {
   }, [activeSection]);
 
   useEffect(() => {
-    if (showHistoryRibbon && explorerMode === 'pulse') void ensureProductHistory();
+    if (
+      showHistoryRibbon &&
+      explorerMode === 'pulse' &&
+      !isPerformanceAuditActive()
+    ) {
+      void ensureProductHistory();
+    }
   }, [core?.run_date, coreSha, ensureProductHistory, explorerMode, showHistoryRibbon]);
 
   useEffect(() => {

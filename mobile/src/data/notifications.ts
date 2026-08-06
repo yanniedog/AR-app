@@ -1,5 +1,6 @@
-import * as BackgroundFetch from 'expo-background-fetch';
+import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
+import * as TaskManager from 'expo-task-manager';
 import type { Href } from 'expo-router';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
@@ -460,23 +461,29 @@ export function routeFromNotificationResponse(
 // --- Background refresh ---------------------------------------------------- //
 // The OS-scheduled task is defined in store.ts (where it can rehydrate persisted
 // state and call refresh() directly, even on a headless/terminated launch).
-export async function registerBackgroundRefresh(): Promise<void> {
+export async function registerBackgroundRefresh(): Promise<boolean> {
   try {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_TASK, {
-      minimumInterval: 60 * 60 * 6, // ~ every 6h (OS decides actual cadence)
-      stopOnTerminate: false,
-      startOnBoot: true,
+    const status = await BackgroundTask.getStatusAsync();
+    if (status !== BackgroundTask.BackgroundTaskStatus.Available) {
+      debugLog.warn('notify', `background refresh unavailable status=${String(status)}`);
+      return false;
+    }
+    await BackgroundTask.registerTaskAsync(BACKGROUND_TASK, {
+      minimumInterval: 60 * 6, // minutes; OS decides the actual cadence
     });
-    debugLog.info('notify', 'background refresh registered');
+    const registered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK);
+    debugLog.info('notify', `background refresh registered=${registered}`);
+    return registered;
   } catch (err) {
     debugLog.warn('notify', `background register failed: ${String((err as Error)?.message ?? err)}`);
-    // Background fetch may be unavailable (e.g. web / simulator) — non-fatal.
+    // Background tasks may be unavailable (for example, web or a simulator).
+    return false;
   }
 }
 
 export async function unregisterBackgroundRefresh(): Promise<void> {
   try {
-    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_TASK);
+    await BackgroundTask.unregisterTaskAsync(BACKGROUND_TASK);
     debugLog.info('notify', 'background refresh unregistered');
   } catch (err) {
     debugLog.debug('notify', `background unregister failed: ${String((err as Error)?.message ?? err)}`);

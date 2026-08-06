@@ -20,7 +20,7 @@ export default function DebugLogScreen() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const retryUploadRef = useRef<() => void>(() => {});
-  const [text, setText] = useState(debugLog.getText());
+  const [text, setText] = useState(debugLog.getDisplayText());
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
   const [uploadProvider, setUploadProvider] = useState<string | null>(null);
   const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export default function DebugLogScreen() {
   const logPathHint = debugLog.getAndroidLogPathHint();
 
   useEffect(() => {
-    return debugLog.subscribe(() => setText(debugLog.getText()));
+    return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
   }, []);
 
   useEffect(() => {
@@ -74,14 +74,14 @@ export default function DebugLogScreen() {
   const onCopy = useCallback(async () => {
     setBusy('copy');
     try {
-      await Clipboard.setStringAsync(redactSecrets(text));
+      await Clipboard.setStringAsync(redactSecrets(debugLog.getText()));
       Alert.alert('Copied', `${debugLog.getEntries().length} lines copied.`);
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, [text]);
+  }, []);
 
   const onShare = useCallback(async () => {
     setBusy('share');
@@ -90,35 +90,39 @@ export default function DebugLogScreen() {
         ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
         : null;
       if (path && await Sharing.isAvailableAsync()) {
-        // Share exactly the visible, bounded buffer. The persistent log file
-        // may contain a larger history than Copy and Upload.
-        await FileSystem.writeAsStringAsync(path, redactSecrets(text));
+        // The screen renders a small tail for responsiveness; export the full
+        // bounded in-memory log on explicit user action.
+        await FileSystem.writeAsStringAsync(path, redactSecrets(debugLog.getText()));
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
           UTI: 'public.plain-text',
         });
       } else {
-        await Share.share({ message: redactSecrets(text), title: 'ar-local.log' });
+        await Share.share({ message: redactSecrets(debugLog.getText()), title: 'ar-local.log' });
       }
     } catch (err) {
       Alert.alert('Share failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, [text]);
+  }, []);
 
   const runUpload = useCallback(async () => {
     if (busyRef.current) return;
     busyRef.current = 'upload';
     setBusy('upload');
     try {
-      const body = formatLogUploadBody(text, {
+      const completeLog = await debugLog.readCompleteText();
+      const body = formatLogUploadBody(completeLog, {
         app: Application.nativeApplicationVersion ?? 'unknown',
-        lines: String(debugLog.getEntries().length),
+        build: Application.nativeBuildVersion ?? 'unknown',
       });
-      const { url, provider, deleteKey, truncated, clientTruncated, attempts } =
-        await uploadDebugLog(body);
+      const result = await uploadDebugLog(body);
+      const { url, provider, deleteKey } = result;
+      if (result.truncated || result.clientTruncated) {
+        throw new Error('The upload service did not accept the complete log.');
+      }
       setUploadUrl(url);
       setUploadProvider(provider);
       setUploadDeleteKey(deleteKey ?? null);
@@ -128,29 +132,7 @@ export default function DebugLogScreen() {
       } catch {
         copied = false;
       }
-      Alert.alert(
-        clientTruncated
-          ? 'Newest log tail uploaded'
-          : truncated
-            ? 'Uploaded (truncated)'
-            : 'Uploaded',
-        clientTruncated
-          ? `The full upload failed, so the app uploaded only the newest 128 KiB on attempt ${attempts}. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
-          : truncated
-            ? `${provider} accepted a partial upload. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
-            : `${provider} accepted the upload. ${provider === 'paste.c-net.org' ? 'The backup host retains inactive uploads for up to 180 days. ' : ''}${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`,
-        [
-          {
-            text: 'Copy again',
-            onPress: () => {
-              void Clipboard.setStringAsync(url).catch((err) => {
-                Alert.alert('Copy failed', String((err as Error)?.message ?? err));
-              });
-            },
-          },
-          { text: 'OK' },
-        ],
-      );
+      Alert.alert('Uploaded', copied ? 'Full-log link copied.' : 'Full-log link is shown below.');
     } catch (err) {
       Alert.alert(
         'Upload unavailable',
@@ -178,20 +160,13 @@ export default function DebugLogScreen() {
       busyRef.current = null;
       setBusy(null);
     }
-  }, [onCopy, onShare, text]);
+  }, [onCopy, onShare]);
   retryUploadRef.current = () => {
     void runUpload();
   };
 
   const onUpload = useCallback(() => {
-    Alert.alert(
-      'Upload public debug log?',
-      'Uploads to paste.rs, with paste.c-net.org as a backup during a temporary outage. Anyone with the link can read it. Backup uploads expire after 180 days without access, and each access resets that period. Review the log first.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upload', style: 'destructive', onPress: () => void runUpload() },
-      ],
-    );
+    void runUpload();
   }, [runUpload]);
 
   const onCopyUrl = useCallback(async () => {

@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { TextInput, View } from 'react-native';
 
@@ -18,7 +17,6 @@ import {
   type AuditCheckStatus,
 } from '../src/lib/performanceAudit';
 import { useTheme } from '../src/theme/ThemeProvider';
-import { useStore } from '../src/data/store';
 
 function usePerformanceAuditState() {
   return useSyncExternalStore(
@@ -61,12 +59,8 @@ function checkDetail(check: AuditCheck): string {
 }
 
 export default function PerformanceAuditScreen() {
-  const automaticUploadEnabled = useStore((s) =>
-    s.prefs.privacyChoiceVersion > 0 && s.prefs.crashReportsEnabled,
-  );
   const theme = useTheme();
   const state = usePerformanceAuditState();
-  const [confirming, setConfirming] = useState(false);
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
     String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
   );
@@ -103,7 +97,8 @@ export default function PerformanceAuditScreen() {
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = () => {
-    setConfirming(true);
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
+    requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
   };
 
   const summaryColor = report
@@ -119,28 +114,12 @@ export default function PerformanceAuditScreen() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">Full responsiveness diagnosis</AppText>
         <AppText variant="small" color="textMuted">
-          Runs real forward-and-back journeys through Home, every rate section, Response,
-          Outlook, Watchlist, Settings, search, calculators, lender and product details,
-          comparison, terms, and the debug log.
+          One tap tests every screen plus responsiveness, storage, payload processing and network.
+          When complete, the current-session log uploads and its link is copied automatically.
         </AppText>
-        <AppText variant="small" color="textMuted">
-          It also measures JS event-loop stalls, animation callback gaps, active-payload parsing,
-          preferences storage, log-file storage, and the live manifest request. Each result and
-          its runner scheduling origin are embedded as structured data in the debug log.
+        <AppText variant="tiny" color="textMuted">
+          The screen stays awake during visual checks; leaving the app cancels the run safely.
         </AppText>
-        <View
-          style={{
-            padding: 10,
-            borderRadius: theme.radius.md,
-            backgroundColor: theme.colors.primaryMuted,
-          }}
-        >
-          <AppText variant="tiny" color="textMuted">
-            {automaticUploadEnabled
-              ? 'A bounded, deidentified summary uploads automatically. Complete traces and the raw debug log stay local unless you explicitly share them.'
-              : 'Automatic upload is off. Complete traces and the raw debug log stay local unless you explicitly share them.'}
-          </AppText>
-        </View>
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">
             Hang prevention timeout
@@ -191,48 +170,6 @@ export default function PerformanceAuditScreen() {
           disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
           onPress={runAudit}
         />
-        {confirming && !running ? (
-          <View
-            style={{
-              gap: 10,
-              padding: 12,
-              borderRadius: theme.radius.md,
-              borderWidth: 1,
-              borderColor: theme.colors.warning,
-              backgroundColor: theme.colors.chip,
-            }}
-          >
-            <AppText variant="small" weight="700">
-              Ready for automated navigation?
-            </AppText>
-            <AppText variant="tiny" color="textMuted">
-              Usually in about a minute, the app will open every steady-state screen and go
-              back after each one. It may run longer while completed checks keep being saved,
-              and stops only after {hangTimeoutSeconds ?? 0} seconds without a saved result.
-              Do not interact while it runs. You can cancel at any time. It does not change
-              favourites, profile settings, or subscriptions.
-            </AppText>
-            <Row gap={8}>
-              <Button
-                title="Not now"
-                variant="ghost"
-                style={{ flex: 1 }}
-                onPress={() => setConfirming(false)}
-              />
-              <Button
-                title="Start audit"
-                icon="play"
-                style={{ flex: 1 }}
-                disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-                onPress={() => {
-                  if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
-                  setConfirming(false);
-                  requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
-                }}
-              />
-            </Row>
-          </View>
-        ) : null}
       </Card>
 
       {state.status === 'cancelled' ? (
@@ -291,12 +228,14 @@ export default function PerformanceAuditScreen() {
               Hang timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}
               {report.watchdog.storedCheckCount} checks
             </AppText>
-            <Button
-              title="Open logs to export"
-              icon="share-outline"
-              variant="secondary"
-              onPress={() => router.push('/debug-log')}
-            />
+            <AppText variant="small" color="textMuted">
+              App v{report.environment.appVersion} (build {report.environment.buildVersion})
+            </AppText>
+            <AppText variant="small" color={state.uploadUrl ? 'success' : 'textMuted'}>
+              {state.uploadUrl
+                ? `Full log uploaded via ${state.uploadProvider}; link copied to clipboard.`
+                : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
+            </AppText>
           </Card>
 
           <View style={{ gap: 8 }}>
@@ -334,17 +273,6 @@ export default function PerformanceAuditScreen() {
               );
             })}
           </View>
-
-          <Card style={{ gap: 6 }}>
-            <AppText variant="small" weight="700">
-              Trace boundary
-            </AppText>
-            <AppText variant="tiny" color="textFaint">
-              The exported log contains runner call-site stacks, detected lag, and any real error
-              stacks. It cannot identify the instruction blocking JavaScript. Native or JavaScript
-              sampling profiles are still required for instruction-level attribution.
-            </AppText>
-          </Card>
         </>
       ) : null}
     </ScreenScrollView>

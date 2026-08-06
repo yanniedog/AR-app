@@ -56,17 +56,21 @@ function optionalRefreshWork(
 export function createRefreshActions(set: StoreSet, get: StoreGet) {
   return {
     async refresh(
-      opts: { manual?: boolean; repairCache?: boolean } = {},
+      opts: { manual?: boolean; repairCache?: boolean; background?: boolean } = {},
     ) {
-      const { manual = false, repairCache = false } = opts;
+      const { manual = false, repairCache = false, background = false } = opts;
       const warmDetails = async () => {
         // Search/product screens request details on demand. Refresh only warms
         // the large asset when profile feature picks or notification search
         // filters need feature/eligibility fields.
         const prefs = get().prefs;
+        const notificationDetailsNeeded = needsDetailsForNotifications(
+          prefs,
+          get().subscriptions,
+        );
         if (
-          profileAccountFeaturesNeedDetails(prefs.profileFilters) ||
-          needsDetailsForNotifications(prefs, get().subscriptions)
+          notificationDetailsNeeded ||
+          (!background && profileAccountFeaturesNeedDetails(prefs.profileFilters))
         ) {
           await get().ensureDetails();
         }
@@ -81,20 +85,25 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         optionalWork: OptionalRefreshWork,
       ) => {
         try {
-          await yieldToUi();
-          await Promise.all([
-            optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
-            optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
-            optionalWork.rbaCalendar ? get().ensureRbaCalendar() : Promise.resolve(),
-          ]);
+          if (!background) {
+            await yieldToUi();
+            await Promise.all([
+              optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
+              optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
+              optionalWork.rbaCalendar ? get().ensureRbaCalendar() : Promise.resolve(),
+            ]);
+          }
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
-          while (get().detailsLoading) await yieldToUi();
+          if (!background) {
+            while (get().detailsLoading) await yieldToUi();
+          }
           await warmDetails();
           const afterWarm = get();
           const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
           const afterDetailsSha = afterWarm.manifest?.files.details.sha256 ?? '';
           if (
+            !background &&
             afterWarm.core &&
             !suitabilityIndexMatches(
               getSuitabilityIndex(),
@@ -111,7 +120,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // Suitability index is built inside ensureDetails; if details were
           // already warm (up-to-date refresh), rebuild from the live pair.
           const live = get();
-          if (live.core && live.details && !getSuitabilityIndex()) {
+          if (!background && live.core && live.details && !getSuitabilityIndex()) {
             await rebuildAndInstallSuitabilityIndex(
               live.core,
               live.details,
@@ -124,7 +133,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
           }
           if (notifyCtx && notifyCtx.previousSource === 'remote') {
-            await yieldToUi();
+            if (!background) await yieldToUi();
             const state = get();
             // Compare SHA, not object identity — an up-to-date refresh re-parses
             // the same payload into a new object and must not suppress notify.
@@ -155,6 +164,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             'store',
             `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
           );
+          // WorkManager retries only when its task reports failure. Foreground
+          // refresh remains resilient, while headless notification work must
+          // reject so the task handler can return BackgroundTaskResult.Failed.
+          if (background) throw err;
         }
       };
 
@@ -171,7 +184,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       }
       debugLog.info(
         'store',
-        `refresh start manual=${manual} repairCache=${repairCache}`,
+        `refresh start manual=${manual} repairCache=${repairCache} background=${background}`,
       );
       set({ refreshing: true });
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
@@ -195,7 +208,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           startedAt: finalizeStarted,
           phaseComplete: false,
         });
-        await yieldToUi();
+        if (!background) await yieldToUi();
         const resolution = await resolveFinalizedManifest(rolling, {
           verifiedDated: get().manifest,
         });
@@ -325,7 +338,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               startedAt: Date.now(),
               phaseComplete: false,
             });
-            await yieldToUi();
+            if (!background) await yieldToUi();
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
@@ -385,7 +398,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           startedAt: Date.now(),
           phaseComplete: false,
         });
-        await yieldToUi();
+        if (!background) await yieldToUi();
         await cache.writeBundle(
           {
             manifest: remote,

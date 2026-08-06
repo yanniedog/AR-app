@@ -97,7 +97,8 @@
         }
       ],
       "@react-native-google-signin/google-signin",
-      "@kesha-antonov/react-native-background-downloader"
+      "@kesha-antonov/react-native-background-downloader",
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true

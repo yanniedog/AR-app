@@ -12,6 +12,8 @@ const mockFetchDatesIndexJson = jest.fn();
 const mockEnsureHistoryBanks = jest.fn(async () => {});
 const mockEnsureBankInsights = jest.fn(async () => {});
 const mockEnsureRbaCalendar = jest.fn(async () => {});
+const mockEnsureDetails = jest.fn(async () => {});
+const mockYieldToUi = jest.fn(async () => {});
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -51,6 +53,10 @@ jest.mock('../src/data/historyDaily', () => {
   };
 });
 
+jest.mock('../src/lib/yieldToUi', () => ({
+  yieldToUi: () => mockYieldToUi(),
+}));
+
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability module shares the mocked cache
@@ -64,6 +70,8 @@ import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
 const originalEnsureHistoryBanks = useStore.getState().ensureHistoryBanks;
 const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
 const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
+const originalEnsureDetails = useStore.getState().ensureDetails;
+const originalPrefs = useStore.getState().prefs;
 
 const remoteManifest: Manifest = sampleManifest;
 const remoteCore: CorePayload = sampleCore;
@@ -84,11 +92,15 @@ function resetStore() {
     refreshOutcome: null,
     pendingIngestRunDate: null,
     hydrated: true,
-    prefs: useStore.getState().prefs,
+    prefs: {
+      ...originalPrefs,
+      profileFilters: { ...originalPrefs.profileFilters },
+    },
     favorites: [],
     ensureHistoryBanks: originalEnsureHistoryBanks,
     ensureBankInsights: originalEnsureBankInsights,
     ensureRbaCalendar: originalEnsureRbaCalendar,
+    ensureDetails: originalEnsureDetails,
   });
 }
 
@@ -187,6 +199,64 @@ describe('store refresh lifecycle', () => {
     expect(mockEnsureHistoryBanks).toHaveBeenCalledTimes(1);
     expect(mockEnsureBankInsights).toHaveBeenCalledTimes(1);
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps OS-scheduled refresh bounded when optional asset hashes change', async () => {
+    const asset = (name: string, sha256: string) => ({
+      name,
+      bytes: 100,
+      sha256,
+      url: `https://example.com/${name}`,
+    });
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        history_banks: asset('history.json.gz', 'history-old'),
+        bank_history: asset('banks.json.gz', 'banks-old'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-old'),
+      },
+    };
+    const revisedManifest: Manifest = {
+      ...previousManifest,
+      files: {
+        ...previousManifest.files,
+        history_banks: asset('history.json.gz', 'history-new'),
+        bank_history: asset('banks.json.gz', 'banks-new'),
+        rba_calendar: asset('calendar.json.gz', 'calendar-new'),
+      },
+    };
+    useStore.setState({
+      source: 'remote',
+      manifest: previousManifest,
+      prefs: {
+        ...useStore.getState().prefs,
+        profileFilters: {
+          ...useStore.getState().prefs.profileFilters,
+          accountFeatures: ['OFFSET'],
+        },
+      },
+      ensureHistoryBanks: mockEnsureHistoryBanks,
+      ensureBankInsights: mockEnsureBankInsights,
+      ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureDetails: mockEnsureDetails,
+    });
+    mockFetchManifest.mockResolvedValue(revisedManifest);
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: revisedManifest.files.core.sha256,
+      detailsSha: revisedManifest.files.details.sha256,
+    });
+
+    await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
+
+    expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
+    expect(mockEnsureBankInsights).not.toHaveBeenCalled();
+    expect(mockEnsureRbaCalendar).not.toHaveBeenCalled();
+    expect(mockEnsureDetails).not.toHaveBeenCalled();
+    expect(mockYieldToUi).not.toHaveBeenCalled();
   });
 
   it('manual refresh checks the manifest but preserves an identical live core', async () => {
