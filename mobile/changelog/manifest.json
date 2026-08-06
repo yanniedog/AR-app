@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-06T10:26:15.360Z",
+  "generated_at": "2026-08-06T12:20:40.326Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -522,6 +522,14 @@
         "Fix stalled updates and private diagnostics (#123)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.88"
+    },
+    {
+      "version": "1.0.89",
+      "date": "2026-08-06",
+      "summaryBullets": [
+        "Run updates and maintenance in background (#125)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.89"
     }
   ]
 }
