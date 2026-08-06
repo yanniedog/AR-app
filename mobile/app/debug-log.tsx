@@ -20,7 +20,7 @@ export default function DebugLogScreen() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const retryUploadRef = useRef<() => void>(() => {});
-  const [text, setText] = useState(debugLog.getText());
+  const [text, setText] = useState(debugLog.getDisplayText());
   const [uploadUrl, setUploadUrl] = useState<string | null>(null);
   const [uploadProvider, setUploadProvider] = useState<string | null>(null);
   const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
@@ -32,7 +32,7 @@ export default function DebugLogScreen() {
   const logPathHint = debugLog.getAndroidLogPathHint();
 
   useEffect(() => {
-    return debugLog.subscribe(() => setText(debugLog.getText()));
+    return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
   }, []);
 
   useEffect(() => {
@@ -74,14 +74,14 @@ export default function DebugLogScreen() {
   const onCopy = useCallback(async () => {
     setBusy('copy');
     try {
-      await Clipboard.setStringAsync(redactSecrets(text));
+      await Clipboard.setStringAsync(redactSecrets(debugLog.getText()));
       Alert.alert('Copied', `${debugLog.getEntries().length} lines copied.`);
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, [text]);
+  }, []);
 
   const onShare = useCallback(async () => {
     setBusy('share');
@@ -90,30 +90,30 @@ export default function DebugLogScreen() {
         ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
         : null;
       if (path && await Sharing.isAvailableAsync()) {
-        // Share exactly the visible, bounded buffer. The persistent log file
-        // may contain a larger history than Copy and Upload.
-        await FileSystem.writeAsStringAsync(path, redactSecrets(text));
+        // The screen renders a small tail for responsiveness; export the full
+        // bounded in-memory log on explicit user action.
+        await FileSystem.writeAsStringAsync(path, redactSecrets(debugLog.getText()));
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
           UTI: 'public.plain-text',
         });
       } else {
-        await Share.share({ message: redactSecrets(text), title: 'ar-local.log' });
+        await Share.share({ message: redactSecrets(debugLog.getText()), title: 'ar-local.log' });
       }
     } catch (err) {
       Alert.alert('Share failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, [text]);
+  }, []);
 
   const runUpload = useCallback(async () => {
     if (busyRef.current) return;
     busyRef.current = 'upload';
     setBusy('upload');
     try {
-      const body = formatLogUploadBody(text, {
+      const body = formatLogUploadBody(debugLog.getText(), {
         app: Application.nativeApplicationVersion ?? 'unknown',
         lines: String(debugLog.getEntries().length),
       });
@@ -178,7 +178,7 @@ export default function DebugLogScreen() {
       busyRef.current = null;
       setBusy(null);
     }
-  }, [onCopy, onShare, text]);
+  }, [onCopy, onShare]);
   retryUploadRef.current = () => {
     void runUpload();
   };

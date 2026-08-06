@@ -16,6 +16,7 @@ export const MAX_LOG_LINES = 2000;
 export const MAX_LOG_BYTES = 512 * 1024;
 export const PERSIST_TAIL_LINES = 100;
 export const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
+export const MAX_LOG_DISPLAY_BYTES = 16 * 1024;
 export const LOG_FILE_FLUSH_MS = 100;
 export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
@@ -114,6 +115,25 @@ function trimFileTail(content: string): string {
   start += 1;
   if (start >= bytes.length) return '';
   return textDecoder.decode(bytes.slice(start));
+}
+
+/**
+ * Keep the interactive log screen cheap even when one structured audit report
+ * occupies hundreds of KiB. This is display-only: copy/share/upload continue
+ * to read the complete bounded in-memory log.
+ */
+export function formatLogDisplayTail(
+  content: string,
+  maxBytes = MAX_LOG_DISPLAY_BYTES,
+): string {
+  const limit = Math.max(0, Math.floor(maxBytes));
+  const bytes = textEncoder.encode(content);
+  if (bytes.length <= limit) return content;
+  if (limit === 0) return '';
+  const tail = textDecoder.decode(bytes.slice(bytes.length - limit));
+  const newline = tail.indexOf('\n');
+  const visible = newline >= 0 ? tail.slice(newline + 1) : tail;
+  return `[Showing newest ${limit} bytes of ${bytes.length}; exports include the full log]\n${visible}`;
 }
 
 async function ensureLogDir(): Promise<void> {
@@ -362,6 +382,9 @@ export const debugLog = {
   },
   getText(): string {
     return buffer.getText();
+  },
+  getDisplayText(maxBytes = MAX_LOG_DISPLAY_BYTES): string {
+    return formatLogDisplayTail(buffer.getText(), maxBytes);
   },
   getEntries(): LogEntry[] {
     return buffer.getEntries();

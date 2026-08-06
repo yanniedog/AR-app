@@ -43,6 +43,7 @@ import {
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
+import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -101,6 +102,7 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!historyEnabled) return;
+    if (isPerformanceAuditActive()) return;
     // Product-history dated-core fan-out is expensive; wait until the product
     // screen transition finishes so navigation stays instant, then prefer the
     // disk/bootstrap cache and only sync after history banks.

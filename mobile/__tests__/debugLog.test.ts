@@ -15,6 +15,7 @@ import {
   formatEntry,
   formatErrorTrace,
   formatLogUploadBody,
+  formatLogDisplayTail,
   installGlobalErrorHandlers,
   parseLogLine,
   redactSecrets,
@@ -563,5 +564,20 @@ describe('debugLog integration', () => {
     expect(previous).toHaveBeenCalled();
     expect(flushSpy).not.toHaveBeenCalled();
     flushSpy.mockRestore();
+  });
+});
+
+describe('debug log display tail', () => {
+  it('bounds only the rendered text while preserving recent complete lines', () => {
+    const text = ['old line', 'middle line', 'new line'].join('\n');
+    const display = formatLogDisplayTail(text, 18);
+
+    expect(display).toContain('exports include the full log');
+    expect(display).not.toContain('old line');
+    expect(display).toContain('new line');
+  });
+
+  it('returns small logs unchanged', () => {
+    expect(formatLogDisplayTail('small log', 32)).toBe('small log');
   });
 });

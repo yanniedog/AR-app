@@ -34,6 +34,7 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
+import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -133,6 +134,7 @@ export default function BankDetail() {
       setProductHistoryReady(false);
       return;
     }
+    if (isPerformanceAuditActive()) return;
     const key = core?.run_date ?? null;
     if (!key) return;
     let cancelled = false;

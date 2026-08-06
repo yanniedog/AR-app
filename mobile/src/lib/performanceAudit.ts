@@ -202,6 +202,19 @@ export function getPerformanceAuditState(): PerformanceAuditState {
   return auditState;
 }
 
+/**
+ * Optional data maintenance must not start from a route that the audit opens.
+ *
+ * The audit measures route work. Starting a multi-day history rebuild from one
+ * journey lets that rebuild escape into every later journey and makes the
+ * report describe audit interference rather than the destination being tested.
+ * Existing cached history remains available to the route while the audit runs;
+ * normal maintenance resumes the next time the user opens the destination.
+ */
+export function isPerformanceAuditActive(): boolean {
+  return auditState.status === 'queued' || auditState.status === 'running';
+}
+
 export interface RequestPerformanceAuditOptions {
   hangTimeoutMs?: number;
 }
