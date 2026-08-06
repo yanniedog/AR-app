@@ -93,6 +93,7 @@ const environment: AuditEnvironment = {
   payloadProviders: 2,
   detailsLoaded: false,
   historyLoaded: false,
+  productHistoryLoaded: false,
   diagnosticsUploadEnabled: false,
   networkType: 'WIFI',
   networkConnected: true,
@@ -191,8 +192,9 @@ describe('performance audit optional data', () => {
     expect(resolveAuditJourneyOptionalData('response', freeBetaPrefs, true).bankInsights).toBe(true);
     expect(resolveAuditJourneyOptionalData('search', freeBetaPrefs, true).deepSearch).toBe(true);
     expect(resolveAuditJourneyOptionalData('product', freeBetaPrefs, true)).toEqual(
-      expect.objectContaining({ bankInsights: true, bankHistory: true, productHistory: true }),
+      expect.objectContaining({ bankInsights: true, bankHistory: false, productHistory: false }),
     );
+    expect(resolveAuditJourneyOptionalData('lender', freeBetaPrefs, true).productHistory).toBe(false);
   });
 
   it('does not request unusable prebuilt bank history in Standard-only Outlook', () => {

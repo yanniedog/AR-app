@@ -77,6 +77,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       providers: report.environment.payloadProviders,
       detailsLoaded: report.environment.detailsLoaded,
       historyLoaded: report.environment.historyLoaded,
+      productHistoryLoaded: report.environment.productHistoryLoaded,
       networkType: report.environment.networkType,
     },
     summary: { ...report.summary },

@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, View } from 'react-native';
+import { Alert, InteractionManager, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../src/components/FilterSheet';
@@ -90,11 +90,21 @@ export default function Search() {
   const coreKey = core?.run_date ?? null;
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
-    // Suitability filtering needs product details even when Pro deep-search
-    // warming is off; force bypasses shouldWarmDetails for default prefs.
-    void ensureDetails({ force: true });
-    if (!deepSearchActive) return;
-    void ensureSearchIndex();
+    // Paint the core-only search shell before installing multi-megabyte details
+    // and rebuilding suitability/search indexes. Those store updates wake many
+    // subscribers and previously landed directly on the navigation path.
+    let cancelled = false;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      if (cancelled) return;
+      // Suitability filtering needs product details even when Pro deep-search
+      // warming is off; force bypasses shouldWarmDetails for default prefs.
+      void ensureDetails({ force: true });
+      if (deepSearchActive) void ensureSearchIndex();
+    });
+    return () => {
+      cancelled = true;
+      handle.cancel?.();
+    };
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');

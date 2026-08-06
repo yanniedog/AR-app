@@ -58,6 +58,7 @@ export interface AuditEnvironment {
   payloadProviders: number;
   detailsLoaded: boolean;
   historyLoaded: boolean;
+  productHistoryLoaded: boolean;
   diagnosticsUploadEnabled: boolean;
   networkType: string | null;
   networkConnected: boolean | null;
@@ -153,11 +154,14 @@ export function resolveAuditJourneyOptionalData(
     bankInsights:
       effectiveBankInsights(prefs) &&
       ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
+    // Product and lender screens intentionally suppress their deferred history
+    // fan-out while an audit is active. Waiting for that suppressed work caused
+    // deterministic 30-second false failures on a cold product-history cache.
     bankHistory:
       historyEnabled &&
-      (journeyId === 'product' ||
-        (prefs.includeNonStandard && ['outlook', 'rba-redirect'].includes(journeyId))),
-    productHistory: historyEnabled && ['product', 'lender'].includes(journeyId),
+      prefs.includeNonStandard &&
+      ['outlook', 'rba-redirect'].includes(journeyId),
+    productHistory: false,
   };
 }
 
@@ -638,6 +642,13 @@ export function percentile(values: number[], quantile: number): number {
 export interface ResponsivenessSnapshot {
   lagIndex: number;
   frameIndex: number;
+  capturedAt: number;
+}
+
+interface TimedSample {
+  value: number;
+  startsAt: number;
+  endsAt: number;
 }
 
 export interface ResponsivenessMetrics {
@@ -658,8 +669,8 @@ export class ResponsivenessMonitor {
   private lastTimerAt = 0;
   private lastFrameAt = 0;
   private running = false;
-  private readonly lagSamples: number[] = [];
-  private readonly frameSamples: number[] = [];
+  private readonly lagSamples: TimedSample[] = [];
+  private readonly frameSamples: TimedSample[] = [];
 
   private now(): number {
     return globalThis.performance?.now?.() ?? Date.now();
@@ -688,25 +699,38 @@ export class ResponsivenessMonitor {
     return {
       lagIndex: this.lagSamples.length,
       frameIndex: this.frameSamples.length,
+      capturedAt: this.now(),
     };
   }
 
   metricsSince(snapshot: ResponsivenessSnapshot): ResponsivenessMetrics {
+    const clampToSnapshot = (sample: TimedSample): number =>
+      sample.startsAt < snapshot.capturedAt
+        ? Math.max(0, sample.endsAt - snapshot.capturedAt)
+        : sample.value;
     return summarizeResponsiveness(
-      this.lagSamples.slice(snapshot.lagIndex),
-      this.frameSamples.slice(snapshot.frameIndex),
+      this.lagSamples.slice(snapshot.lagIndex).map(clampToSnapshot),
+      this.frameSamples.slice(snapshot.frameIndex).map(clampToSnapshot),
     );
   }
 
   metrics(): ResponsivenessMetrics {
-    return summarizeResponsiveness(this.lagSamples, this.frameSamples);
+    return summarizeResponsiveness(
+      this.lagSamples.map((sample) => sample.value),
+      this.frameSamples.map((sample) => sample.value),
+    );
   }
 
   private scheduleTimer(): void {
     this.timer = setTimeout(() => {
       if (!this.running) return;
       const now = this.now();
-      this.lagSamples.push(Math.max(0, now - this.lastTimerAt - this.timerIntervalMs));
+      const deadlineAt = this.lastTimerAt + this.timerIntervalMs;
+      this.lagSamples.push({
+        value: Math.max(0, now - deadlineAt),
+        startsAt: deadlineAt,
+        endsAt: now,
+      });
       this.lastTimerAt = now;
       this.scheduleTimer();
     }, this.timerIntervalMs);
@@ -717,7 +741,11 @@ export class ResponsivenessMonitor {
     this.frame = requestAnimationFrame((timestamp) => {
       if (!this.running) return;
       if (this.lastFrameAt > 0) {
-        this.frameSamples.push(Math.max(0, timestamp - this.lastFrameAt));
+        this.frameSamples.push({
+          value: Math.max(0, timestamp - this.lastFrameAt),
+          startsAt: this.lastFrameAt,
+          endsAt: timestamp,
+        });
       }
       this.lastFrameAt = timestamp;
       this.scheduleFrame();

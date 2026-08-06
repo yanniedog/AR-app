@@ -343,6 +343,7 @@ async function collectEnvironment(
     payloadProviders: Object.keys(store.core?.brands ?? {}).length,
     detailsLoaded: store.details != null,
     historyLoaded: store.historyBanks != null,
+    productHistoryLoaded: store.productHistory != null,
     diagnosticsUploadEnabled: store.prefs.crashReportsEnabled,
     networkType: network?.type != null ? String(network.type) : null,
     networkConnected: network?.isConnected ?? null,
@@ -559,9 +560,16 @@ async function runDataCheck(
     const serialized = JSON.stringify(core);
     stringifyMs = now() - at;
     payloadChars = serialized.length;
+    // This is a capacity benchmark, not a production cache transaction. Yield
+    // between its deliberately heavy phases so the audit itself does not create
+    // one long JS-thread freeze and then attribute that freeze to the app.
+    await nextFrame();
+    assertSessionActive(watchdog);
     at = now();
     const parsed = JSON.parse(serialized) as typeof core;
     parseMs = now() - at;
+    await nextFrame();
+    assertSessionActive(watchdog);
     at = now();
     for (const section of Object.values(parsed.sections)) {
       const rates = [...(section.rates ?? [])];
@@ -572,7 +580,7 @@ async function runDataCheck(
         .slice(0, 25);
     }
     traversalMs = now() - at;
-    await delay(0);
+    await nextFrame();
     assertSessionActive(watchdog);
   } catch (caught) {
     rethrowAuditControl(caught);
@@ -923,11 +931,6 @@ async function runJourney(
     assertDatasetRevision(datasetRevision);
     let at = now();
     const forwardResponsivenessAt = monitor.snapshot();
-    // Match production Browse navigation: select the requested section before
-    // mounting the tab so it does not render the previous section first.
-    if (journey.expectedSection) {
-      useStore.getState().setActiveSection(journey.expectedSection);
-    }
     router.push(journey.href);
     await waitForPath(
       currentPath,
