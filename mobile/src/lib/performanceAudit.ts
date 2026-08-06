@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
 import type { CorePayload, RateRow, SectionKey } from '../types';
+import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 
 export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 2;
@@ -444,7 +445,7 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
     href: enabled
       ? ({
           pathname: '/browse',
-          params: { section: SECTIONS[section].slug },
+          params: buildBrowseRouteParams(section),
         } as unknown as Href)
       : undefined,
     expectedPath: '/browse',

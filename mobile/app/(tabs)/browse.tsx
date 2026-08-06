@@ -12,13 +12,7 @@ import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/in
 import { profileSectionCount } from '../../src/data/profile';
 import { useStore } from '../../src/data/store';
 import { checkDrillOutcome, logNavParamDrop } from '../../src/lib/degradationLog';
-import {
-  browseRouteRequestPending,
-  openBrowse,
-  openSearch,
-  parseBrowsePath,
-  scalarRouteParam,
-} from '../../src/lib/nav';
+import { openBrowse, openSearch, parseBrowsePath, scalarRouteParam } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Browse() {
@@ -44,12 +38,7 @@ export default function Browse() {
     const parsed = slug ? sectionFromSlug(slug) : undefined;
     return parsed ? resolveInterestSection(interests, parsed) : null;
   }, [interests, routeSectionSlug]);
-  const pendingRouteRequest = browseRouteRequestPending(
-    routeRequest,
-    consumedRouteRequest.current,
-    requestedSection,
-    resolveInterestSection(interests, storedSection),
-  );
+  const pendingRouteRequest = routeRequest != null && consumedRouteRequest.current !== routeRequest;
   // Route params are the immediate navigation contract. Rendering them directly
   // avoids changing the still-visible source tab before Browse has mounted.
   const section = pendingRouteRequest && requestedSection

@@ -1,4 +1,5 @@
-import { browseRouteRequestPending, parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
+import { buildBrowseRouteParams } from '../src/lib/browseRoute';
+import { parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
 
 describe('scalarRouteParam', () => {
   test('normalizes repeated and missing query parameters', () => {
@@ -23,22 +24,13 @@ describe('parseBrowsePath', () => {
   });
 });
 
-describe('browseRouteRequestPending', () => {
-  test('reprocesses a repeated parameter-only route after another screen changes section', () => {
-    expect(browseRouteRequestPending(
-      'section:mortgage',
-      'section:mortgage',
-      'Mortgage',
-      'Savings',
-    )).toBe(true);
-  });
+describe('buildBrowseRouteParams', () => {
+  test('gives repeated parameterized entries unique consumable identities', () => {
+    const first = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);
+    const second = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);
 
-  test('does not reprocess a consumed route when the requested section is already active', () => {
-    expect(browseRouteRequestPending(
-      'section:mortgage',
-      'section:mortgage',
-      'Mortgage',
-      'Mortgage',
-    )).toBe(false);
+    expect(first).toMatchObject({ section: 'home-loans', path: 'FIXED.OWNER' });
+    expect(second).toMatchObject({ section: 'home-loans', path: 'FIXED.OWNER' });
+    expect(second.request).not.toBe(first.request);
   });
 });
