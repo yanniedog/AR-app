@@ -113,12 +113,16 @@ export default function DebugLogScreen() {
     busyRef.current = 'upload';
     setBusy('upload');
     try {
-      const body = formatLogUploadBody(debugLog.getText(), {
+      const completeLog = await debugLog.readCompleteText();
+      const body = formatLogUploadBody(completeLog, {
         app: Application.nativeApplicationVersion ?? 'unknown',
-        lines: String(debugLog.getEntries().length),
+        build: Application.nativeBuildVersion ?? 'unknown',
       });
-      const { url, provider, deleteKey, truncated, clientTruncated, attempts } =
-        await uploadDebugLog(body);
+      const result = await uploadDebugLog(body);
+      const { url, provider, deleteKey } = result;
+      if (result.truncated || result.clientTruncated) {
+        throw new Error('The upload service did not accept the complete log.');
+      }
       setUploadUrl(url);
       setUploadProvider(provider);
       setUploadDeleteKey(deleteKey ?? null);
@@ -128,29 +132,7 @@ export default function DebugLogScreen() {
       } catch {
         copied = false;
       }
-      Alert.alert(
-        clientTruncated
-          ? 'Newest log tail uploaded'
-          : truncated
-            ? 'Uploaded (truncated)'
-            : 'Uploaded',
-        clientTruncated
-          ? `The full upload failed, so the app uploaded only the newest 128 KiB on attempt ${attempts}. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
-          : truncated
-            ? `${provider} accepted a partial upload. ${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`
-            : `${provider} accepted the upload. ${provider === 'paste.c-net.org' ? 'The backup host retains inactive uploads for up to 180 days. ' : ''}${copied ? 'Link copied to clipboard.' : 'The link could not be copied; it remains visible on this screen.'}\n\n${url}`,
-        [
-          {
-            text: 'Copy again',
-            onPress: () => {
-              void Clipboard.setStringAsync(url).catch((err) => {
-                Alert.alert('Copy failed', String((err as Error)?.message ?? err));
-              });
-            },
-          },
-          { text: 'OK' },
-        ],
-      );
+      Alert.alert('Uploaded', copied ? 'Full-log link copied.' : 'Full-log link is shown below.');
     } catch (err) {
       Alert.alert(
         'Upload unavailable',
@@ -184,14 +166,7 @@ export default function DebugLogScreen() {
   };
 
   const onUpload = useCallback(() => {
-    Alert.alert(
-      'Upload public debug log?',
-      'Uploads to paste.rs, with paste.c-net.org as a backup during a temporary outage. Anyone with the link can read it. Backup uploads expire after 180 days without access, and each access resets that period. Review the log first.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upload', style: 'destructive', onPress: () => void runUpload() },
-      ],
-    );
+    void runUpload();
   }, [runUpload]);
 
   const onCopyUrl = useCallback(async () => {

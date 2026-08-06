@@ -398,10 +398,6 @@ export default function Settings() {
               setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
             }}
           />
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-            Both choices are preselected in the privacy setup and remain independent. Nothing is
-            collected before confirmation; disabling a choice stops new collection.
-          </AppText>
           <SettingsGap size={8} />
           <NavRow
             icon="speedometer-outline"

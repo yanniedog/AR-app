@@ -452,6 +452,17 @@ describe('persistent log file', () => {
     expect(contents).not.toContain('secret');
   });
 
+  it('reads and re-redacts the complete current-session file for upload', async () => {
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(
+      '2026-01-01T00:00:00.000Z [INFO ] app: token=old-secret',
+    );
+
+    const complete = await debugLog.readCompleteText();
+
+    expect(complete).toContain('token=[REDACTED]');
+    expect(complete).not.toContain('old-secret');
+  });
+
   it('clear deletes the persistent log file', async () => {
     debugLog.info('test', 'before clear');
     await debugLog.flushToFile();
@@ -579,5 +590,30 @@ describe('debug log display tail', () => {
 
   it('returns small logs unchanged', () => {
     expect(formatLogDisplayTail('small log', 32)).toBe('small log');
+  });
+});
+
+describe('cold-start log session', () => {
+  it('clears stale entries synchronously and preserves new bootstrap entries', async () => {
+    jest.clearAllMocks();
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('stale disk log');
+    debugLog.info('old', 'previous process');
+
+    const reset = debugLog.beginColdStartSession();
+    expect(debugLog.getText()).toBe('');
+    debugLog.info('app', 'bootstrap starting version=1.2.3 build=456');
+
+    await reset;
+    await debugLog.flushToFile();
+
+    expect(debugLog.getText()).toContain('version=1.2.3 build=456');
+    expect(debugLog.getText()).not.toContain('previous process');
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      'file:///docs/logs/ar-local.log',
+      { idempotent: true },
+    );
+    const writes = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls;
+    expect(writes.at(-1)?.[1]).toContain('version=1.2.3 build=456');
   });
 });

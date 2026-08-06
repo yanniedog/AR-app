@@ -34,7 +34,7 @@ describe('Android APK release iteration', () => {
 
   it('increments versionCode above the release and workflow floors', () => {
     expect(nextVersionCode(142, 156, 25)).toBe(157);
-    expect(nextVersionCode(200, 156, 25)).toBe(200);
+    expect(nextVersionCode(200, 156, 25)).toBe(201);
     expect(nextVersionCode(142, null, 300)).toBe(300);
   });
 

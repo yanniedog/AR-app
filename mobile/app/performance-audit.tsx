@@ -273,17 +273,6 @@ export default function PerformanceAuditScreen() {
               );
             })}
           </View>
-
-          <Card style={{ gap: 6 }}>
-            <AppText variant="small" weight="700">
-              Trace boundary
-            </AppText>
-            <AppText variant="tiny" color="textFaint">
-              The exported log contains runner call-site stacks, detected lag, and any real error
-              stacks. It cannot identify the instruction blocking JavaScript. Native or JavaScript
-              sampling profiles are still required for instruction-level attribution.
-            </AppText>
-          </Card>
         </>
       ) : null}
     </ScreenScrollView>

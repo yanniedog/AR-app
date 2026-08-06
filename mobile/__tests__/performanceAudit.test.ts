@@ -305,11 +305,17 @@ describe('performance audit lifecycle', () => {
       checks: [],
       limitations: [],
     };
-    completePerformanceAudit(report);
+    completePerformanceAudit(report, {
+      url: 'https://paste.example/audit',
+      provider: 'test-provider',
+    });
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'complete',
       sessionId,
       report,
+      uploadUrl: 'https://paste.example/audit',
+      uploadProvider: 'test-provider',
+      uploadError: null,
     });
   });
 
