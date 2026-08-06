@@ -60,7 +60,7 @@ describe('showHistoryRibbon pref', () => {
     expect(useStore.getState().prefs.enableDeepSearch).toBe(true);
   });
 
-  it('does not convert the legacy default-on diagnostics flag into consent', async () => {
+  it('preselects diagnostics without converting the legacy flag into consent', async () => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
       'ar-rates',
@@ -70,12 +70,12 @@ describe('showHistoryRibbon pref', () => {
       }),
     );
     await useStore.persist.rehydrate();
-    expect(useStore.getState().prefs.crashReportsEnabled).toBe(false);
-    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(false);
+    expect(useStore.getState().prefs.crashReportsEnabled).toBe(true);
+    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(true);
     expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
   });
 
-  it('restores only current, explicit independent privacy choices', async () => {
+  it('preserves previous independent choices but requires the revised confirmation', async () => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
       'ar-rates',
@@ -96,6 +96,30 @@ describe('showHistoryRibbon pref', () => {
     await useStore.persist.rehydrate();
     expect(useStore.getState().prefs.crashReportsEnabled).toBe(true);
     expect(useStore.getState().prefs.sessionReplayEnabled).toBe(false);
-    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(1);
+    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
+  });
+
+  it('restores current, explicit independent privacy choices', async () => {
+    await useStore.persist.clearStorage();
+    await AsyncStorage.setItem(
+      'ar-rates',
+      JSON.stringify({
+        state: {
+          prefs: {
+            ...DEFAULT_PREFS,
+            privacyChoiceVersion: 2,
+            crashReportsEnabled: false,
+            sessionReplayEnabled: true,
+          },
+          favorites: [],
+          subscriptions: [],
+        },
+        version: 0,
+      }),
+    );
+    await useStore.persist.rehydrate();
+    expect(useStore.getState().prefs.crashReportsEnabled).toBe(false);
+    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(true);
+    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(2);
   });
 });

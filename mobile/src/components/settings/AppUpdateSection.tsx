@@ -146,6 +146,12 @@ export function AppUpdateSection() {
   const statusValue = updateAvailable
     ? phase === 'ready'
       ? `Ready to upgrade · ${latestLabel}`
+      : phase === 'verifying'
+        ? `Verifying download · ${latestLabel}`
+        : phase === 'retrying'
+          ? `Recovering download · ${latestLabel}`
+          : phase === 'waiting'
+            ? `Waiting for Wi-Fi · ${latestLabel}`
       : phase === 'downloading'
         ? `Downloading in background · ${latestLabel}`
         : `Update available · ${latestLabel}`
@@ -159,7 +165,12 @@ export function AppUpdateSection() {
           ? 'Check failed'
           : `${installed.version} (${installed.buildNumber})`;
 
-  const upgradeTitle = phase === 'downloading' ? 'Upgrade when ready' : 'Upgrade';
+  const upgradeTitle =
+    phase === 'downloading' || phase === 'retrying' || phase === 'verifying'
+      ? 'Upgrade when ready'
+      : phase === 'waiting' || phase === 'error'
+        ? 'Retry download'
+        : 'Upgrade';
 
   return (
     <Section title="App update">

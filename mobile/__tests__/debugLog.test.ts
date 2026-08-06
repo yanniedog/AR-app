@@ -39,6 +39,7 @@ const clarityApi: ClarityLike = {
   initialize: jest.fn(),
   pause: jest.fn(async () => true),
   resume: jest.fn(async () => true),
+  consent: jest.fn(async () => true),
 };
 
 describe('redactSecrets', () => {

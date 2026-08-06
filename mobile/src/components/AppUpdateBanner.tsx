@@ -65,11 +65,13 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   useEffect(() => {
     if (!enabled || Platform.OS !== 'android') return;
     let cancelled = false;
+    let availableManifest: ApkManifest | null = null;
     const checkAndDownload = () =>
       checkForAppUpdate()
         .then((r) => {
           if (cancelled) return;
           setResult(r);
+          availableManifest = r.status === 'available' ? r.remote : null;
           // Automatic downloads are Wi-Fi-only. Cellular downloads require an
           // explicit size-labelled confirmation in Settings.
           if (r.status === 'available' && wifiOnly) {
@@ -79,13 +81,21 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
           }
         })
         .catch(() => {});
+    const reconcileActiveDownload = () => {
+      if (!availableManifest || AppState.currentState !== 'active') return;
+      void ensureApkBackgroundDownload(availableManifest, { wifiOnly }).catch(() => {
+        // Reconciliation persists an actionable error state for Retry.
+      });
+    };
 
     void checkAndDownload();
+    const reconcileTimer = setInterval(reconcileActiveDownload, 30_000);
     const appStateSubscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') void checkAndDownload();
     });
     return () => {
       cancelled = true;
+      clearInterval(reconcileTimer);
       appStateSubscription.remove();
     };
   }, [enabled, wifiOnly]);
@@ -123,7 +133,7 @@ export function AppUpdateBanner({
 
   const onUpgrade = async () => {
     if (busy) return;
-    if (phase === 'error' && !wifiOnly) {
+    if ((phase === 'error' || phase === 'waiting') && !wifiOnly) {
       const size = remote.bytes
         ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
         : 'an unknown size';
@@ -139,7 +149,7 @@ export function AppUpdateBanner({
     }
     setBusy(true);
     try {
-      if (phase === 'error') {
+      if (phase === 'error' || phase === 'waiting') {
         await ensureApkBackgroundDownload(remote, { wifiOnly, force: true });
         return;
       }

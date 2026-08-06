@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MANIFEST_URL } from '../config';
 import { useStore } from '../data/store';
 import { debugLog } from '../lib/debugLog';
+import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildPerformanceAuditJourneys,
   cancelPerformanceAudit,
@@ -1261,10 +1262,13 @@ export function PerformanceAuditRunner() {
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The journey exercises every steady-state app destination plus forward/back navigation; it does not submit forms, change preferences, or mutate favourites.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
-            'No report is uploaded automatically. The complete structured report and tracebacks are appended to the local debug log for explicit export.',
+            environment.diagnosticsUploadEnabled
+              ? 'A bounded, deidentified summary is submitted through Crashlytics. The complete report and tracebacks remain only in the local debug log unless explicitly exported.'
+              : 'Automatic submission is disabled. The complete report and tracebacks remain in the local debug log unless explicitly exported.',
           ],
         };
         logAuditEvent({ kind: 'report', sessionId, report });
+        reportPerformanceAudit(report);
         await debugLog.flushToFile();
         completePerformanceAudit(report);
       } catch (caught) {

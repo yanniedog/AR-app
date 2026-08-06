@@ -29,6 +29,18 @@ export default function TermsScreen() {
         mark, and is not affiliated with the ACCC, OAIC, Treasury, or any data holder.
       </AppText>
 
+      <AppText variant="h3" style={{ marginTop: 24, marginBottom: 8 }}>
+        Optional diagnostics
+      </AppText>
+      <AppText variant="body" color="textMuted" style={{ lineHeight: 22 }}>
+        With your confirmation, Crashlytics may receive technical crashes, non-debug error logs,
+        and a bounded performance-audit summary. Performance summaries exclude raw traces, route
+        values, searches, saved products, profile and calculator inputs, device model, and stable
+        installation identifiers. Clarity interaction replay is limited to approved public browsing
+        screens; sensitive and diagnostic screens are excluded. These independent choices can be
+        disabled in Settings at any time.
+      </AppText>
+
       <View
         style={{
           marginTop: 24,

@@ -38,8 +38,8 @@ import {
   unregisterBackgroundRefresh,
 } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
+import { CURRENT_PRIVACY_CHOICE_VERSION } from '../../src/data/storeTypes';
 import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
-import { setCrashReportsEnabled, setSessionReplayEnabled } from '../../src/lib/observability';
 import type { Subscription } from '../../src/data/subscriptions';
 import type { ThemeMode } from '../../src/theme/theme';
 import { dataSourceLabel } from '../../src/lib/nextIngest';
@@ -390,8 +390,7 @@ export default function Settings() {
             value={prefs.crashReportsEnabled}
             onChange={(value) => {
               setPref('crashReportsEnabled', value);
-              setPref('privacyChoiceVersion', 1);
-              void setCrashReportsEnabled(value);
+              setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
             }}
           />
           <SettingsGap size={8} />
@@ -402,12 +401,12 @@ export default function Settings() {
             value={prefs.sessionReplayEnabled}
             onChange={(value) => {
               setPref('sessionReplayEnabled', value);
-              setPref('privacyChoiceVersion', 1);
-              void setSessionReplayEnabled(value);
+              setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
             }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-            Both choices are off by default and independent. Disabling a choice stops new collection.
+            Both choices are preselected in the privacy setup and remain independent. Nothing is
+            collected before confirmation; disabling a choice stops new collection.
           </AppText>
           <SettingsGap size={8} />
           <NavRow

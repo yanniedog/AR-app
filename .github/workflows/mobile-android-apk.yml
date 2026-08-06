@@ -8,6 +8,7 @@
 # Secrets (Settings - Secrets and variables - Actions):
 #   GOOGLE_SERVICES_JSON - optional; materialized via ensure-firebase-config.mjs
 #   GOOGLE_SERVICE_INFO_PLIST - optional
+#   EXPO_PUBLIC_CLARITY_PROJECT_ID - optional Clarity project id
 #   EXPO_TOKEN - optional; used to download EAS Android keystore when ANDROID_KEYSTORE_B64 unset
 #   ANDROID_KEYSTORE_B64 - optional override; base64 .jks/.keystore
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD - with B64 override
@@ -49,6 +50,7 @@ jobs:
     env:
       NODE_ENV: production
       APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
+      EXPO_PUBLIC_CLARITY_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_CLARITY_PROJECT_ID }}
     defaults:
       run:
         working-directory: mobile
