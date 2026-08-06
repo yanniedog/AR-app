@@ -1,4 +1,7 @@
-# Poll Firebase Crashlytics and open GitHub issues for new Crashlytics issue IDs.
+# Poll Firebase Crashlytics and open deidentified issues in a private repository.
+# Live sync requires DIAGNOSTICS_GITHUB_REPOSITORY (Actions variable) plus a
+# DIAGNOSTICS_GH_TOKEN secret scoped only to issues in that private repository.
+# The script refuses every non-private live destination.
 # Dedupes via <!-- crashlytics-issue-id: - --> marker in issue bodies.
 
 name: crashlytics-github-issues
@@ -55,7 +58,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -70,8 +72,9 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
           FIREBASE_USER_OAUTH_JSON: ${{ secrets.FIREBASE_USER_OAUTH_JSON }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.DIAGNOSTICS_GH_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          DIAGNOSTICS_GITHUB_REPOSITORY: ${{ vars.DIAGNOSTICS_GITHUB_REPOSITORY }}
           CRASHLYTICS_LOOKBACK_DAYS: '7'
           CRASHLYTICS_MIN_EVENTS: '1'
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
@@ -84,8 +87,8 @@ jobs:
           fi
           if [ -n "$MOCK_REPORT_INPUT" ]; then
             args+=(--mock-report "$MOCK_REPORT_INPUT")
-          elif [ -z "${FIREBASE_USER_OAUTH_JSON:-}" ]; then
-            echo "::warning::FIREBASE_USER_OAUTH_JSON not set - live Crashlytics report sync is disabled; running mock dry-run"
+          elif [ -z "${FIREBASE_USER_OAUTH_JSON:-}" ] || [ -z "${GH_TOKEN:-}" ] || [ -z "${DIAGNOSTICS_GITHUB_REPOSITORY:-}" ]; then
+            echo "::warning::Private diagnostics sync is not fully configured - running mock dry-run"
             args+=(--dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json)
           fi
           node --test scripts/lib/*.test.mjs

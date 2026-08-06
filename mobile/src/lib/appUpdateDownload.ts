@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Network from 'expo-network';
 import { Alert, AppState, Platform } from 'react-native';
 import {
   completeHandler,
@@ -14,10 +15,13 @@ import {
 import { debugLog } from './debugLog';
 import {
   IDLE_APK_DOWNLOAD,
+  APK_DOWNLOAD_STALL_MS,
   apkDestinationPath,
   apkDownloadTaskId,
+  canAutoRetryApkDownload,
   downloadPercent,
   isCachedApkReady,
+  isApkDownloadStalled,
   shouldEnsureBackgroundDownload,
   toFileUri,
   type ApkDownloadSnapshot,
@@ -32,6 +36,8 @@ import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 
 const STORAGE_KEY = 'app-update-download-v1';
 const PROMPTED_KEY = 'app-update-prompted-build';
+const EXPLICIT_WAIT_STALL_MS = 3 * 60 * 1000;
+const APK_VERIFICATION_STALL_MS = 5 * 60 * 1000;
 
 let snapshot: ApkDownloadSnapshot = { ...IDLE_APK_DOWNLOAD };
 let hydrated = false;
@@ -175,6 +181,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
   activeTask = task;
   task
     .begin(({ expectedBytes }) => {
+      const now = new Date().toISOString();
       void persist({
         ...snapshot,
         phase: 'downloading',
@@ -183,10 +190,18 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         downloadUrl: manifest.download_url,
         sha256: manifest.sha256 ?? null,
         totalBytes: expectedBytes || manifest.bytes || snapshot.totalBytes,
+        startedAt: snapshot.startedAt ?? now,
+        lastProgressAt: now,
+        nativeState: 'DOWNLOADING',
         error: null,
       });
+      debugLog.info(
+        'app-update',
+        `download begin build=${manifest.build_number} expectedBytes=${expectedBytes || manifest.bytes || 'unknown'}`,
+      );
     })
     .progress(({ bytesDownloaded, bytesTotal }) => {
+      const progressed = bytesDownloaded > snapshot.bytesWritten;
       void persist({
         ...snapshot,
         phase: 'downloading',
@@ -196,12 +211,29 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         sha256: manifest.sha256 ?? null,
         bytesWritten: bytesDownloaded,
         totalBytes: bytesTotal || manifest.bytes || snapshot.totalBytes,
+        lastProgressAt: progressed ? new Date().toISOString() : snapshot.lastProgressAt,
+        nativeState: 'DOWNLOADING',
         error: null,
       });
     })
     .done(({ location, bytesDownloaded, bytesTotal }) => {
       void (async () => {
         try {
+          await persist({
+            ...snapshot,
+            phase: 'verifying',
+            buildNumber: manifest.build_number,
+            version: manifest.version,
+            bytesWritten: bytesDownloaded,
+            totalBytes: bytesTotal || manifest.bytes || snapshot.totalBytes,
+            lastProgressAt: new Date().toISOString(),
+            nativeState: 'DONE',
+            error: null,
+          });
+          debugLog.info(
+            'app-update',
+            `download complete; verifying build=${manifest.build_number} bytes=${bytesDownloaded}`,
+          );
           await completeHandler(task.id);
           const localUri = toFileUri(location);
           await verifyDownloadedApk(localUri, manifest);
@@ -215,6 +247,10 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             bytesWritten: bytesDownloaded,
             totalBytes: bytesTotal || manifest.bytes || null,
             wifiOnly: activeDownloadWifiOnly,
+            startedAt: snapshot.startedAt,
+            lastProgressAt: new Date().toISOString(),
+            retryCount: snapshot.retryCount,
+            nativeState: 'DONE',
             error: null,
           });
           debugLog.info(
@@ -252,6 +288,10 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         bytesWritten: snapshot.bytesWritten,
         totalBytes: snapshot.totalBytes,
         wifiOnly: activeDownloadWifiOnly ?? snapshot.wifiOnly,
+        startedAt: snapshot.startedAt,
+        lastProgressAt: snapshot.lastProgressAt,
+        retryCount: snapshot.retryCount,
+        nativeState: 'FAILED',
         error: `${error}${errorCode ? ` (${errorCode})` : ''}`,
       });
       debugLog.error('app-update', `background download failed: ${error} code=${errorCode}`);
@@ -281,6 +321,10 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
   if (!match) return false;
 
   const state = String(match.state || '').toUpperCase();
+  debugLog.info(
+    'app-update',
+    `reconcile build=${manifest.build_number} nativeState=${state || 'unknown'} bytes=${match.bytesDownloaded}/${match.bytesTotal || manifest.bytes || 'unknown'}`,
+  );
   const taskWifiOnly =
     match.downloadParams?.isAllowedOverMetered === false &&
     match.downloadParams?.isAllowedOverRoaming === false;
@@ -305,6 +349,10 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           bytesWritten: match.bytesDownloaded,
           totalBytes: match.bytesTotal || manifest.bytes || null,
           wifiOnly: taskWifiOnly,
+          startedAt: snapshot.startedAt,
+          lastProgressAt: new Date().toISOString(),
+          retryCount: snapshot.retryCount,
+          nativeState: state,
           error: null,
         });
         await maybePromptUpgrade(manifest);
@@ -334,7 +382,9 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     return false;
   }
 
-  attachHandlers(match, manifest);
+  if (activeTask?.id !== match.id) {
+    attachHandlers(match, manifest);
+  }
   activeDownloadWifiOnly = taskWifiOnly;
   if (state === 'PAUSED') {
     try {
@@ -358,12 +408,23 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     bytesWritten: match.bytesDownloaded,
     totalBytes: match.bytesTotal || manifest.bytes || null,
     wifiOnly: taskWifiOnly,
+    startedAt: snapshot.startedAt ?? new Date().toISOString(),
+    lastProgressAt:
+      match.bytesDownloaded > snapshot.bytesWritten
+        ? new Date().toISOString()
+        : snapshot.lastProgressAt,
+    retryCount: snapshot.retryCount,
+    nativeState: state,
     error: null,
   });
   return true;
 }
 
-async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promise<void> {
+async function startNewDownload(
+  manifest: ApkManifest,
+  wifiOnly: boolean,
+  retryCount = 0,
+): Promise<void> {
   const destination = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
   const keepFilename = destination.split('/').pop() ?? null;
   await clearStaleFiles(keepFilename);
@@ -404,6 +465,10 @@ async function startNewDownload(manifest: ApkManifest, wifiOnly: boolean): Promi
     bytesWritten: 0,
     totalBytes: manifest.bytes ?? null,
     wifiOnly,
+    startedAt: new Date().toISOString(),
+    lastProgressAt: new Date().toISOString(),
+    retryCount,
+    nativeState: 'PENDING',
     error: null,
   });
   task.start();
@@ -428,11 +493,13 @@ export async function ensureApkBackgroundDownload(
 
   const wifiOnly = Boolean(options?.wifiOnly);
   let force = Boolean(options?.force);
+  let autoRetry = false;
   try {
     ensureConfig(wifiOnly);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await persist({
+      ...snapshot,
       phase: 'error',
       buildNumber: manifest.build_number,
       version: manifest.version,
@@ -476,6 +543,7 @@ export async function ensureApkBackgroundDownload(
         const localUri = toFileUri(dest);
         await verifyDownloadedApk(localUri, manifest);
         await persist({
+          ...snapshot,
           phase: 'ready',
           buildNumber: manifest.build_number,
           version: manifest.version,
@@ -496,13 +564,72 @@ export async function ensureApkBackgroundDownload(
         );
       }
     }
+
+    if (isApkDownloadStalled(snapshot)) {
+      const network = await Network.getNetworkStateAsync().catch(() => null);
+      const waitingForWifi =
+        wifiOnly &&
+        (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI);
+      if (waitingForWifi) {
+        debugLog.info(
+          'app-update',
+          `download waiting for Wi-Fi build=${manifest.build_number} bytes=${snapshot.bytesWritten}/${snapshot.totalBytes ?? 'unknown'}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'waiting',
+          nativeState: snapshot.nativeState ?? 'PAUSED',
+          error: null,
+        });
+        return snapshot;
+      }
+
+      if (canAutoRetryApkDownload(snapshot)) {
+        const nextRetry = snapshot.retryCount + 1;
+        debugLog.warn(
+          'app-update',
+          `download stalled for ${APK_DOWNLOAD_STALL_MS}ms; retrying build=${manifest.build_number} attempt=${nextRetry}`,
+        );
+        await persist({
+          ...snapshot,
+          phase: 'retrying',
+          retryCount: nextRetry,
+          error: null,
+        });
+        autoRetry = true;
+        force = true;
+      } else {
+        const message = 'Update download stopped making progress. Tap Retry to try again.';
+        debugLog.error(
+          'app-update',
+          `download stalled after ${snapshot.retryCount} retries build=${manifest.build_number}`,
+        );
+        await persist({ ...snapshot, phase: 'error', error: message });
+        return snapshot;
+      }
+    }
   }
 
   if (!force && !shouldEnsureBackgroundDownload(snapshot, manifest.build_number)) {
-    const taskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
-    if (activeTask?.id === taskId) return snapshot;
+    if (snapshot.phase === 'verifying') {
+      const verificationStarted = Date.parse(snapshot.lastProgressAt ?? snapshot.startedAt ?? '');
+      if (
+        Number.isFinite(verificationStarted) &&
+        Date.now() - verificationStarted < APK_VERIFICATION_STALL_MS
+      ) {
+        return snapshot;
+      }
+      await persist({
+        ...snapshot,
+        phase: 'error',
+        error: 'Downloaded update verification did not finish. Tap Retry to download it again.',
+      });
+      return snapshot;
+    }
     // Reattach handlers after process death / JS reload. If the OS no longer
     // knows the persisted task, replace it instead of returning stale state.
+    // Always query native state even when the JS object still looks active:
+    // Android can finish/fail a UIDT job without delivering the terminal event.
     if (await reattachExisting(manifest)) return snapshot;
     force = true;
   }
@@ -523,11 +650,16 @@ export async function ensureApkBackgroundDownload(
         const reattached = await reattachExisting(manifest);
         if (reattached) return;
       }
-      await startNewDownload(manifest, wifiOnly);
+      await startNewDownload(
+        manifest,
+        wifiOnly,
+        autoRetry ? snapshot.retryCount : 0,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       debugLog.error('app-update', `background download start failed: ${message}`);
       await persist({
+        ...snapshot,
         phase: 'error',
         buildNumber: manifest.build_number,
         version: manifest.version,
@@ -617,15 +749,30 @@ export async function upgradeFromBackgroundDownload(
     await new Promise<void>((resolve, reject) => {
       let settled = false;
       let unsub: (() => void) | null = null;
-      const timeout = setTimeout(() => {
+      let lastBytes = snapshot.bytesWritten;
+      let timeout: ReturnType<typeof setTimeout>;
+      const armInactivityTimeout = () => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          unsub?.();
+          reject(new Error('Update download stopped making progress. Tap Retry to try again.'));
+        }, EXPLICIT_WAIT_STALL_MS);
+      };
+      timeout = setTimeout(() => {
         if (settled) return;
         settled = true;
         unsub?.();
-        reject(new Error('Timed out waiting for update download'));
-      }, 30 * 60 * 1000);
+        reject(new Error('Update download stopped making progress. Tap Retry to try again.'));
+      }, EXPLICIT_WAIT_STALL_MS);
       unsub = subscribeApkDownload((s) => {
         if (settled) return;
         if (String(s.buildNumber) !== buildNumber) return;
+        if (s.bytesWritten > lastBytes) {
+          lastBytes = s.bytesWritten;
+          armInactivityTimeout();
+        }
         if (s.phase === 'ready') {
           settled = true;
           clearTimeout(timeout);

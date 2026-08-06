@@ -1,6 +1,11 @@
 import { Platform } from 'react-native';
 
 import type { LogLevel } from './debugLog';
+import {
+  buildDeidentifiedPerformanceAudit,
+  performanceAuditFingerprint,
+} from './diagnosticsEnvelope';
+import type { PerformanceAuditReport } from './performanceAudit';
 
 let crashReportsEnabled = false;
 let sessionReplayEnabled = false;
@@ -16,6 +21,7 @@ export type ClarityLike = {
   initialize: (projectId: string) => void;
   pause: () => Promise<boolean>;
   resume: () => Promise<boolean>;
+  consent: (adsStorage: boolean, analyticsStorage: boolean) => Promise<boolean>;
 };
 
 type ObservabilityDeps = {
@@ -73,24 +79,19 @@ export function isDiagnosticsEnabled(): boolean {
   return crashReportsEnabled;
 }
 
-const SENSITIVE_REPLAY_ROUTES = [
-  '/',
-  '/calculator',
-  '/projections',
-  '/rate-receipt',
-  '/profile',
-  '/onboarding',
-  '/settings',
-  '/search',
-  '/debug-log',
-  '/performance-audit',
-  '/auth',
-  '/login',
+const ALLOWED_REPLAY_ROUTES = [
+  '/browse',
+  '/trends',
+  '/passthrough',
+  '/banks',
+  '/bank',
+  '/product',
+  '/terms',
 ];
 
 export function isSessionReplayRouteAllowed(pathname: string): boolean {
-  const normalized = `/${pathname}`.replace(/\/+/, '/').toLowerCase();
-  return !SENSITIVE_REPLAY_ROUTES.some(
+  const normalized = `/${pathname}`.replace(/\/+/g, '/').toLowerCase();
+  return ALLOWED_REPLAY_ROUTES.some(
     (route) => normalized === route || normalized.startsWith(`${route}/`),
   );
 }
@@ -118,7 +119,8 @@ export async function setSessionReplayEnabled(enabled: boolean): Promise<void> {
   try {
     const wasInitialized = clarityInitialized;
     if (enabled && !wasInitialized) tryInitializeClarity(native);
-    if (wasInitialized) {
+    if (clarityInitialized) {
+      await native.clarity.consent(false, enabled);
       if (enabled) await native.clarity.resume();
       else await native.clarity.pause();
     }
@@ -139,6 +141,55 @@ export async function initObservability(): Promise<void> {
   }
 
   if (sessionReplayEnabled) tryInitializeClarity(native);
+  if (clarityInitialized) {
+    await native.clarity.consent(false, sessionReplayEnabled).catch(() => false);
+  }
+}
+
+function logStructuredDiagnostic(native: ObservabilityDeps, payload: unknown): void {
+  const encoded = JSON.stringify(payload);
+  const chunkSize = 900;
+  const chunks = Math.min(32, Math.ceil(encoded.length / chunkSize));
+  for (let index = 0; index < chunks; index += 1) {
+    native.crashlytics().log(
+      `[auto-diagnostic ${index + 1}/${chunks}] ${encoded.slice(index * chunkSize, (index + 1) * chunkSize)}`,
+    );
+  }
+}
+
+function redactCrashlyticsMessage(message: string): string {
+  return message
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, '[REDACTED_IP]')
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      '[REDACTED_UUID]',
+    )
+    .replace(/https?:\/\/[^\s)]+/gi, (url) => {
+      try {
+        const parsed = new URL(url);
+        return `${parsed.origin}${parsed.pathname}`;
+      } catch {
+        return '[REDACTED_URL]';
+      }
+    })
+    .replace(/\/(?:data|storage|sdcard)\/[^\s"']+/gi, '[REDACTED_PATH]');
+}
+
+/** Submit a bounded, allowlisted audit through Crashlytics for private GitHub triage. */
+export function reportPerformanceAudit(report: PerformanceAuditReport): boolean {
+  if (!crashReportsEnabled) return false;
+  const native = getDeps();
+  if (!native) return false;
+  try {
+    logStructuredDiagnostic(native, buildDeidentifiedPerformanceAudit(report));
+    native.crashlytics().recordError(
+      new Error(`performance-audit:${performanceAuditFingerprint(report)}`),
+      'AutomaticPerformanceAudit',
+    );
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Forward debugLog lines to Crashlytics when diagnostics are enabled. */
@@ -147,7 +198,7 @@ export function bridgeLogToCrashlytics(level: LogLevel, tag: string, message: st
   const native = getDeps();
   if (!native) return;
 
-  const line = `[${level.toUpperCase()}] ${tag}: ${message}`;
+  const line = redactCrashlyticsMessage(`[${level.toUpperCase()}] ${tag}: ${message}`);
   try {
     native.crashlytics().log(line);
     if (level === 'error') {

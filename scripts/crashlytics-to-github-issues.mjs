@@ -9,8 +9,9 @@
  *   GOOGLE_SERVICES_JSON          — Android Firebase client config (project + app id)
  *   FIREBASE_USER_OAUTH_JSON      — authorized_user JSON (preferred; Crashlytics reports support)
  *   FIREBASE_SERVICE_ACCOUNT_JSON — GCP service account key JSON (fallback; some projects return 404)
- *   GH_TOKEN / GITHUB_TOKEN       — GitHub API (issues:write)
- *   GITHUB_REPOSITORY             — owner/repo (default yanniedog/AR-app)
+ *   GH_TOKEN / GITHUB_TOKEN       — GitHub API (issues:write in the private destination)
+ *   DIAGNOSTICS_GITHUB_REPOSITORY — private owner/repo destination (required for live writes)
+ *   GITHUB_REPOSITORY             — source repository; dry-run fallback only
  *   CRASHLYTICS_LOOKBACK_DAYS     — default 7
  *   CRASHLYTICS_MIN_EVENTS        — default 1
  *   FIREBASE_ANDROID_APP_ID       — optional override for mobilesdk_app_id
@@ -35,6 +36,10 @@ import {
   getAuthorizedUserAccessToken,
   parseAuthorizedUserJson,
 } from './lib/google-user-oauth-auth.mjs';
+import {
+  extractDeidentifiedEventLogs,
+  redactDiagnosticText,
+} from './lib/diagnostics-privacy.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const MOBILE_UTILS = pathToFileURL(join(ROOT, 'mobile/scripts/firebase-json-utils.mjs')).href;
@@ -58,7 +63,10 @@ function parseArgs(argv) {
     mockReport: undefined,
     lookbackDays: Number(process.env.CRASHLYTICS_LOOKBACK_DAYS || 7),
     minEvents: Number(process.env.CRASHLYTICS_MIN_EVENTS || 1),
-    repo: process.env.GITHUB_REPOSITORY?.trim() || DEFAULT_REPO,
+    repo:
+      process.env.DIAGNOSTICS_GITHUB_REPOSITORY?.trim() ||
+      process.env.GITHUB_REPOSITORY?.trim() ||
+      DEFAULT_REPO,
   };
 
   for (let i = 2; i < argv.length; i += 1) {
@@ -97,6 +105,15 @@ function gh(args, { allowFail = false } = {}) {
 function ensureGh() {
   if (spawnSync('gh', ['--version'], { encoding: 'utf8' }).status !== 0) {
     throw new Error('gh CLI is required');
+  }
+}
+
+function assertPrivateDestination(repo) {
+  const visibility = gh(['repo', 'view', repo, '--json', 'visibility', '--jq', '.visibility']);
+  if (visibility !== 'PRIVATE') {
+    throw new Error(
+      `Refusing to write diagnostics to ${repo}: destination visibility is ${visibility || 'unknown'}, not PRIVATE`,
+    );
   }
 }
 
@@ -205,13 +222,27 @@ function formatStackFromEvent(event) {
   if (!event || typeof event !== 'object') return null;
   const threads = event.threads || event.stacktrace?.threads || event.exceptions;
   if (Array.isArray(threads)) {
-    return '```\n' + JSON.stringify(threads, null, 2).slice(0, 12000) + '\n```';
+    return '```\n' + redactDiagnosticText(JSON.stringify(threads, null, 2)) + '\n```';
   }
   if (event.stackTrace || event.stacktrace) {
     const trace = event.stackTrace || event.stacktrace;
-    return '```\n' + String(trace).slice(0, 12000) + '\n```';
+    return '```\n' + redactDiagnosticText(trace) + '\n```';
   }
   return null;
+}
+
+async function resolveEventDetails(accessToken, issue) {
+  const sample = issue.sampleEvent;
+  if (!sample) return { stackTrace: null, diagnosticLogs: null };
+  try {
+    const event = await fetchResource(accessToken, sample);
+    return {
+      stackTrace: formatStackFromEvent(event),
+      diagnosticLogs: extractDeidentifiedEventLogs(event),
+    };
+  } catch {
+    return { stackTrace: await resolveStackTrace(accessToken, issue), diagnosticLogs: null };
+  }
 }
 
 async function resolveStackTrace(accessToken, issue) {
@@ -237,10 +268,10 @@ async function resolveStackTrace(accessToken, issue) {
 function buildIssueTitle(issue) {
   const version = issue.lastSeenVersion || issue.firstSeenVersion || 'unknown';
   const title = issue.title || issue.subtitle || issue.id;
-  return `[Crashlytics] ${title} — v${version}`.slice(0, 240);
+  return redactDiagnosticText(`[Crashlytics] ${title} — v${version}`).slice(0, 240);
 }
 
-function buildIssueBody(issue, metrics, stackTrace, projectId, appId) {
+function buildIssueBody(issue, metrics, stackTrace, diagnosticLogs) {
   const lines = [
     markerFor(issue.id),
     '',
@@ -253,17 +284,13 @@ function buildIssueBody(issue, metrics, stackTrace, projectId, appId) {
     `| Crashlytics issue ID | \`${issue.id}\` |`,
     `| Type | ${issue.errorType || 'UNKNOWN'} |`,
     `| State | ${issue.state || 'UNKNOWN'} |`,
-    `| Title | ${issue.title || '—'} |`,
-    `| Subtitle | ${issue.subtitle || '—'} |`,
+    `| Title | ${redactDiagnosticText(issue.title || '—')} |`,
+    `| Subtitle | ${redactDiagnosticText(issue.subtitle || '—')} |`,
     `| Events (interval) | ${metrics.eventsCount ?? '—'} |`,
-    `| Impacted users | ${metrics.impactedUsersCount ?? '—'} |`,
-    `| Sessions | ${metrics.sessionsCount ?? '—'} |`,
     `| First seen version | ${issue.firstSeenVersion || '—'} |`,
     `| Last seen version | ${issue.lastSeenVersion || '—'} |`,
     `| First seen | ${issue.firstSeenTime || '—'} |`,
     `| Last seen | ${issue.lastSeenTime || '—'} |`,
-    `| Firebase project | \`${projectId}\` |`,
-    `| Android app ID | \`${appId}\` |`,
     '',
   ];
 
@@ -282,7 +309,20 @@ function buildIssueBody(issue, metrics, stackTrace, projectId, appId) {
   if (stackTrace) {
     lines.push('## Stack trace (sample event)', '', stackTrace, '');
   } else if (issue.subtitle) {
-    lines.push('## Exception message', '', '```', issue.subtitle, '```', '');
+    lines.push('## Exception message', '', '```', redactDiagnosticText(issue.subtitle), '```', '');
+  }
+
+  if (diagnosticLogs) {
+    lines.push(
+      '## Deidentified diagnostic excerpt',
+      '',
+      'Only allowlisted automatic diagnostic messages are included. Crashlytics user, installation, key and timestamp fields are discarded.',
+      '',
+      '```',
+      diagnosticLogs,
+      '```',
+      '',
+    );
   }
 
   lines.push(
@@ -341,6 +381,7 @@ async function main() {
   const opts = parseArgs(process.argv);
   const pureMockDryRun = opts.dryRun && Boolean(opts.mockReport);
   if (!pureMockDryRun) ensureGh();
+  if (!opts.dryRun) assertPrivateDestination(opts.repo);
 
   console.log(`crashlytics-to-github-issues: repo=${opts.repo} dryRun=${opts.dryRun}`);
 
@@ -418,9 +459,16 @@ async function main() {
       continue;
     }
 
-    const stackTrace = accessToken ? await resolveStackTrace(accessToken, issue) : null;
+    const details = accessToken
+      ? await resolveEventDetails(accessToken, issue)
+      : { stackTrace: null, diagnosticLogs: null };
     const title = buildIssueTitle(issue);
-    const body = buildIssueBody(issue, metrics, stackTrace, projectId, appId);
+    const body = buildIssueBody(
+      issue,
+      metrics,
+      details.stackTrace,
+      details.diagnosticLogs,
+    );
     const labels = labelsForErrorType(issue.errorType);
 
     await createGithubIssue(opts.repo, title, body, labels, opts.dryRun);

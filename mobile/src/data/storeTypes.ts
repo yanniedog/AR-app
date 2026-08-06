@@ -27,9 +27,9 @@ export interface Prefs {
   themeMode: ThemeMode;
   defaultSection: SectionKey;
   notificationsEnabled: boolean;
-  /** Firebase Crashlytics collection. Explicit opt-in; never inferred from legacy diagnostics. */
+  /** Firebase Crashlytics collection. Preselected, but dormant until the privacy choice is confirmed. */
   crashReportsEnabled: boolean;
-  /** Microsoft Clarity session replay. Explicit, independent opt-in. */
+  /** Microsoft Clarity session replay. Preselected, but dormant until the privacy choice is confirmed. */
   sessionReplayEnabled: boolean;
   /** Consent-copy version accepted by the user (0 means no current consent). */
   privacyChoiceVersion: number;
@@ -64,12 +64,14 @@ export interface Prefs {
   calc: CalcInputs;
 }
 
+export const CURRENT_PRIVACY_CHOICE_VERSION = 2;
+
 export const DEFAULT_PREFS: Prefs = {
   themeMode: 'system',
   defaultSection: 'Mortgage',
   notificationsEnabled: false,
-  crashReportsEnabled: false,
-  sessionReplayEnabled: false,
+  crashReportsEnabled: true,
+  sessionReplayEnabled: true,
   privacyChoiceVersion: 0,
   diagnosticsEnabled: false,
   wifiOnly: false,

@@ -5,7 +5,7 @@ import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, {
@@ -26,6 +26,7 @@ import {
 import { ArMarkLogo } from '../src/components/ArMarkLogo';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
+import { DiagnosticsChoiceModal } from '../src/components/DiagnosticsChoiceModal';
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import {
   PerformanceAuditRunner,
@@ -34,6 +35,7 @@ import {
 import { AppText } from '../src/components/ui';
 import { routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
+import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
@@ -216,6 +218,8 @@ function RootNavigator() {
   const dataUnavailable = hydrated && status === 'error';
   const crashReportsEnabled = useStore((s) => s.prefs.crashReportsEnabled);
   const sessionReplayEnabled = useStore((s) => s.prefs.sessionReplayEnabled);
+  const privacyChoiceVersion = useStore((s) => s.prefs.privacyChoiceVersion);
+  const setPref = useStore((s) => s.setPref);
   const pathname = usePathname();
   const bootstrap = useStore((s) => s.bootstrap);
   const performanceAudit = usePerformanceAuditState();
@@ -233,13 +237,32 @@ function RootNavigator() {
   const updateBanner = useAppUpdateBanner(appReady);
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
-  useEffect(() => {
+  const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
+
+  useLayoutEffect(() => {
     if (!hydrated) return;
-    void setCrashReportsEnabled(crashReportsEnabled);
+    void setCrashReportsEnabled(privacyChoiceCurrent && crashReportsEnabled);
     void setSessionReplayEnabled(
-      sessionReplayEnabled && isSessionReplayRouteAllowed(pathname),
+      privacyChoiceCurrent &&
+        sessionReplayEnabled &&
+        isSessionReplayRouteAllowed(pathname),
     );
-  }, [hydrated, crashReportsEnabled, sessionReplayEnabled, pathname]);
+  }, [
+    hydrated,
+    crashReportsEnabled,
+    privacyChoiceCurrent,
+    sessionReplayEnabled,
+    pathname,
+  ]);
+
+  const confirmDiagnosticsChoice = useCallback(
+    ({ crashReports, sessionReplay }: { crashReports: boolean; sessionReplay: boolean }) => {
+      setPref('crashReportsEnabled', crashReports);
+      setPref('sessionReplayEnabled', sessionReplay);
+      setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
+    },
+    [setPref],
+  );
 
   useEffect(() => {
     installGlobalErrorHandlers();
@@ -404,6 +427,12 @@ function RootNavigator() {
             ) : null}
           </View>
           <PerformanceAuditRunner />
+          <DiagnosticsChoiceModal
+            visible={appReady && !privacyChoiceCurrent}
+            initialCrashReports={crashReportsEnabled}
+            initialSessionReplay={sessionReplayEnabled}
+            onConfirm={confirmDiagnosticsChoice}
+          />
         </View>
       </AppUpdateBannerLayoutProvider>
     </SplashMorphProvider>

@@ -18,6 +18,7 @@ import {
   type AuditCheckStatus,
 } from '../src/lib/performanceAudit';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { useStore } from '../src/data/store';
 
 function usePerformanceAuditState() {
   return useSyncExternalStore(
@@ -60,6 +61,9 @@ function checkDetail(check: AuditCheck): string {
 }
 
 export default function PerformanceAuditScreen() {
+  const automaticUploadEnabled = useStore((s) =>
+    s.prefs.privacyChoiceVersion > 0 && s.prefs.crashReportsEnabled,
+  );
   const theme = useTheme();
   const state = usePerformanceAuditState();
   const [confirming, setConfirming] = useState(false);
@@ -132,8 +136,9 @@ export default function PerformanceAuditScreen() {
           }}
         >
           <AppText variant="tiny" color="textMuted">
-            Local by default. Nothing is uploaded automatically. Review and explicitly share
-            the debug log when you want performance feedback.
+            {automaticUploadEnabled
+              ? 'A bounded, deidentified summary uploads automatically. Complete traces and the raw debug log stay local unless you explicitly share them.'
+              : 'Automatic upload is off. Complete traces and the raw debug log stay local unless you explicitly share them.'}
           </AppText>
         </View>
         <View style={{ gap: 6 }}>

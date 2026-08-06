@@ -2,8 +2,10 @@ import {
   IDLE_APK_DOWNLOAD,
   apkDestinationPath,
   apkDownloadTaskId,
+  canAutoRetryApkDownload,
   downloadPercent,
   isCachedApkReady,
+  isApkDownloadStalled,
   shouldEnsureBackgroundDownload,
   toFileUri,
   updateBannerCopy,
@@ -80,6 +82,29 @@ describe('appUpdateDownloadLogic', () => {
     expect(updateBannerCopy('downloading', '1.0.44', 37).title).toContain('37%');
     expect(updateBannerCopy('downloading', '1.0.44', 37).actionEnabled).toBe(false);
     expect(updateBannerCopy('error', '1.0.44', null).actionLabel).toBe('Retry');
+    expect(updateBannerCopy('waiting', '1.0.44', 93).title).toContain('waiting for Wi-Fi');
+    expect(updateBannerCopy('verifying', '1.0.44', 93).title).toContain('Verifying');
+    expect(updateBannerCopy('retrying', '1.0.44', 93).actionEnabled).toBe(false);
+  });
+
+  it('detects genuine no-progress stalls but not waiting or verifying work', () => {
+    const downloading = {
+      ...IDLE_APK_DOWNLOAD,
+      phase: 'downloading' as const,
+      buildNumber: '42',
+      startedAt: '2026-08-06T00:00:00.000Z',
+      lastProgressAt: '2026-08-06T00:01:00.000Z',
+    };
+    expect(isApkDownloadStalled(downloading, Date.parse('2026-08-06T00:02:59.999Z'))).toBe(false);
+    expect(isApkDownloadStalled(downloading, Date.parse('2026-08-06T00:03:00.000Z'))).toBe(true);
+    expect(isApkDownloadStalled({ ...downloading, phase: 'waiting' }, Date.parse('2026-08-06T01:00:00Z'))).toBe(false);
+    expect(isApkDownloadStalled({ ...downloading, phase: 'verifying' }, Date.parse('2026-08-06T01:00:00Z'))).toBe(false);
+  });
+
+  it('bounds automatic recovery attempts per persisted build', () => {
+    expect(canAutoRetryApkDownload({ ...IDLE_APK_DOWNLOAD, retryCount: 0 })).toBe(true);
+    expect(canAutoRetryApkDownload({ ...IDLE_APK_DOWNLOAD, retryCount: 1 })).toBe(true);
+    expect(canAutoRetryApkDownload({ ...IDLE_APK_DOWNLOAD, retryCount: 2 })).toBe(false);
   });
 
   it('computes download percent', () => {

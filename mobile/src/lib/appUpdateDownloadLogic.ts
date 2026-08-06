@@ -1,6 +1,13 @@
 /** Pure helpers for background APK update downloads (unit-testable). */
 
-export type ApkDownloadPhase = 'idle' | 'downloading' | 'ready' | 'error';
+export type ApkDownloadPhase =
+  | 'idle'
+  | 'waiting'
+  | 'downloading'
+  | 'retrying'
+  | 'verifying'
+  | 'ready'
+  | 'error';
 
 export interface ApkDownloadSnapshot {
   phase: ApkDownloadPhase;
@@ -12,6 +19,10 @@ export interface ApkDownloadSnapshot {
   bytesWritten: number;
   totalBytes: number | null;
   wifiOnly: boolean | null;
+  startedAt: string | null;
+  lastProgressAt: string | null;
+  retryCount: number;
+  nativeState: string | null;
   error: string | null;
 }
 
@@ -25,8 +36,15 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   bytesWritten: 0,
   totalBytes: null,
   wifiOnly: null,
+  startedAt: null,
+  lastProgressAt: null,
+  retryCount: 0,
+  nativeState: null,
   error: null,
 };
+
+export const APK_DOWNLOAD_STALL_MS = 2 * 60 * 1000;
+export const APK_DOWNLOAD_MAX_AUTO_RETRIES = 2;
 
 export function apkDownloadTaskId(buildNumber: string, sha256?: string | null): string {
   const integrityKey = sha256?.slice(0, 12).toLowerCase();
@@ -70,9 +88,34 @@ export function shouldEnsureBackgroundDownload(
   buildNumber: string,
 ): boolean {
   if (isApkDownloadForBuild(snapshot, buildNumber)) {
-    if (snapshot.phase === 'ready' || snapshot.phase === 'downloading') return false;
+    if (
+      snapshot.phase === 'ready' ||
+      snapshot.phase === 'waiting' ||
+      snapshot.phase === 'downloading' ||
+      snapshot.phase === 'retrying' ||
+      snapshot.phase === 'verifying'
+    ) return false;
   }
   return true;
+}
+
+export function isApkDownloadStalled(
+  snapshot: ApkDownloadSnapshot,
+  nowMs = Date.now(),
+  stallMs = APK_DOWNLOAD_STALL_MS,
+): boolean {
+  if (snapshot.phase !== 'downloading') return false;
+  const activityAt = snapshot.lastProgressAt ?? snapshot.startedAt;
+  if (!activityAt) return false;
+  const activityMs = Date.parse(activityAt);
+  return Number.isFinite(activityMs) && nowMs - activityMs >= stallMs;
+}
+
+export function canAutoRetryApkDownload(
+  snapshot: ApkDownloadSnapshot,
+  maxRetries = APK_DOWNLOAD_MAX_AUTO_RETRIES,
+): boolean {
+  return Math.max(0, snapshot.retryCount) < maxRetries;
 }
 
 export function updateBannerCopy(
@@ -92,6 +135,27 @@ export function updateBannerCopy(
     return {
       title: `Downloading update — v${version}${pct}`,
       actionLabel: 'Upgrade',
+      actionEnabled: false,
+    };
+  }
+  if (phase === 'waiting') {
+    return {
+      title: `Update paused — waiting for Wi-Fi`,
+      actionLabel: 'Retry',
+      actionEnabled: true,
+    };
+  }
+  if (phase === 'retrying') {
+    return {
+      title: `Recovering update download — v${version}`,
+      actionLabel: 'Retrying',
+      actionEnabled: false,
+    };
+  }
+  if (phase === 'verifying') {
+    return {
+      title: `Verifying update — v${version}`,
+      actionLabel: 'Verifying',
       actionEnabled: false,
     };
   }

@@ -14,7 +14,11 @@ import { bootstrapInitialState, createBootstrapActions } from './storeBootstrap'
 import { createRefreshActions } from './storeRefresh';
 import { createEnsureActions } from './storeEnsure';
 import { createUserActions } from './storeUser';
-import { DEFAULT_PREFS, type AppState } from './storeTypes';
+import {
+  CURRENT_PRIVACY_CHOICE_VERSION,
+  DEFAULT_PREFS,
+  type AppState,
+} from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
 
@@ -61,18 +65,26 @@ export const useStore = create<AppState>()(
       merge: (persisted, current) => {
         const p = persisted as Partial<AppState> | undefined;
         const persistedPrefs = p?.prefs as Partial<AppState['prefs']> | undefined;
-        const hasCurrentPrivacyChoice = persistedPrefs?.privacyChoiceVersion === 1;
+        const hasCurrentPrivacyChoice =
+          persistedPrefs?.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
+        const hasPreviousPrivacyChoice = persistedPrefs?.privacyChoiceVersion === 1;
+        const hasRecordedPrivacyChoice =
+          hasCurrentPrivacyChoice || hasPreviousPrivacyChoice;
         const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
         const prefs = {
           ...DEFAULT_PREFS,
           ...persistedPrefs,
           // The old combined diagnostics flag was on by default and was not
           // informed, granular consent. Never migrate it to either collector.
-          crashReportsEnabled:
-            hasCurrentPrivacyChoice && persistedPrefs?.crashReportsEnabled === true,
-          sessionReplayEnabled:
-            hasCurrentPrivacyChoice && persistedPrefs?.sessionReplayEnabled === true,
-          privacyChoiceVersion: hasCurrentPrivacyChoice ? 1 : 0,
+          crashReportsEnabled: hasRecordedPrivacyChoice
+            ? persistedPrefs?.crashReportsEnabled === true
+            : DEFAULT_PREFS.crashReportsEnabled,
+          sessionReplayEnabled: hasRecordedPrivacyChoice
+            ? persistedPrefs?.sessionReplayEnabled === true
+            : DEFAULT_PREFS.sessionReplayEnabled,
+          privacyChoiceVersion: hasCurrentPrivacyChoice
+            ? CURRENT_PRIVACY_CHOICE_VERSION
+            : 0,
           diagnosticsEnabled: false,
           apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
