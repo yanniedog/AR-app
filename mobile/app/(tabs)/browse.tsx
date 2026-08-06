@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 
 import { HierarchyView } from '../../src/components/HierarchyView';
@@ -12,7 +12,7 @@ import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/in
 import { profileSectionCount } from '../../src/data/profile';
 import { useStore } from '../../src/data/store';
 import { checkDrillOutcome, logNavParamDrop } from '../../src/lib/degradationLog';
-import { openSearch, parseBrowsePath } from '../../src/lib/nav';
+import { openBrowse, openSearch, parseBrowsePath, scalarRouteParam } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Browse() {
@@ -20,26 +20,50 @@ export default function Browse() {
   const { width } = useWindowDimensions();
   const compactToolbar = width < 480;
   const core = useStore((s) => s.core);
-  const params = useLocalSearchParams<{ section?: string; path?: string | string[] }>();
+  const params = useLocalSearchParams<{
+    section?: string | string[];
+    path?: string | string[];
+    request?: string | string[];
+  }>();
   const drillPath = useMemo(() => parseBrowsePath(params.path), [params.path]);
   const interests = useStore((s) => s.prefs.interests);
-  const section = useStore((s) => s.activeSection);
+  const storedSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
+  const routeSectionSlug = scalarRouteParam(params.section);
+  const routeRequest = scalarRouteParam(params.request) ??
+    (routeSectionSlug ? `section:${routeSectionSlug}` : null);
+  const consumedRouteRequest = useRef<string | null>(null);
+  const requestedSection = useMemo(() => {
+    const slug = routeSectionSlug;
+    const parsed = slug ? sectionFromSlug(slug) : undefined;
+    return parsed ? resolveInterestSection(interests, parsed) : null;
+  }, [interests, routeSectionSlug]);
+  const pendingRouteRequest = routeRequest != null && consumedRouteRequest.current !== routeRequest;
+  // Route params are the immediate navigation contract. Rendering them directly
+  // avoids changing the still-visible source tab before Browse has mounted.
+  const section = pendingRouteRequest && requestedSection
+    ? requestedSection
+    : resolveInterestSection(interests, storedSection);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const profileCount = profileSectionCount(profileFilters, section);
 
   useEffect(() => {
-    const resolved = resolveInterestSection(interests, section);
-    if (resolved !== section) setActiveSection(resolved);
-  }, [interests, section, setActiveSection]);
+    if (!pendingRouteRequest) return;
+    const slug = routeSectionSlug;
+    if (slug && !sectionFromSlug(slug)) {
+      logNavParamDrop({ screen: 'browse', param: 'section', actual: slug });
+    }
+    consumedRouteRequest.current = routeRequest;
+    if (requestedSection && storedSection !== requestedSection) {
+      setActiveSection(requestedSection);
+    }
+  }, [pendingRouteRequest, requestedSection, routeRequest, routeSectionSlug, setActiveSection, storedSection]);
 
-  useEffect(() => {
-    const slug = params.section;
-    const r = slug ? sectionFromSlug(slug) : undefined;
-    if (slug && !r) logNavParamDrop({ screen: 'browse', param: 'section', actual: String(Array.isArray(slug) ? slug[0] : slug) });
-    if (r) setActiveSection(resolveInterestSection(interests, r));
-  }, [params.section, interests, setActiveSection]);
+  const changeSection = useCallback((next: typeof section) => {
+    setActiveSection(next);
+    openBrowse(next);
+  }, [setActiveSection]);
 
   useEffect(() => {
     checkDrillOutcome(section, drillPath);
@@ -58,7 +82,7 @@ export default function Browse() {
         >
           <View style={{ flex: compactToolbar ? undefined : 1, width: compactToolbar ? '100%' : undefined }}>
             {sectionOptions.length > 1 ? (
-              <SegmentedControl options={sectionOptions} value={section} onChange={setActiveSection} />
+              <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             ) : null}
           </View>
           <Row

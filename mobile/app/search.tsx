@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { FlashList } from '@shopify/flash-list';
+import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
@@ -31,6 +32,7 @@ import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
 import { canAddAlertSubscription, effectiveDeepSearch } from '../src/lib/proAccess';
+import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -45,6 +47,7 @@ const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
 
 export default function Search() {
   const theme = useTheme();
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     section: string | string[];
@@ -90,12 +93,17 @@ export default function Search() {
   const coreKey = core?.run_date ?? null;
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
-    // Suitability filtering needs product details even when Pro deep-search
-    // warming is off; force bypasses shouldWarmDetails for default prefs.
-    void ensureDetails({ force: true });
-    if (!deepSearchActive) return;
-    void ensureSearchIndex();
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey]);
+    if (!isFocused) return;
+    // Paint the core-only search shell before installing multi-megabyte details
+    // and rebuilding suitability/search indexes. Those store updates wake many
+    // subscribers and previously landed directly on the navigation path.
+    return scheduleAfterInteractions(() => {
+      // Suitability filtering needs product details even when Pro deep-search
+      // warming is off; force bypasses shouldWarmDetails for default prefs.
+      void ensureDetails({ force: true });
+      if (deepSearchActive) void ensureSearchIndex();
+    });
+  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, isFocused]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);

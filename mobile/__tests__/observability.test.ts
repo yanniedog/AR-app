@@ -157,6 +157,7 @@ describe('observability', () => {
         jsEngine: 'Hermes', developmentBuild: false, viewportWidth: 448, viewportHeight: 997,
         fontScale: 1, payloadSource: 'remote', payloadRunDate: '2026-08-06',
         payloadProducts: 2878, payloadProviders: 104, detailsLoaded: true, historyLoaded: true,
+        productHistoryLoaded: true,
         diagnosticsUploadEnabled: true, networkType: 'WIFI', networkConnected: true,
         networkInternetReachable: true,
       },

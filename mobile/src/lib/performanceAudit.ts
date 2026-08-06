@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
 import type { CorePayload, RateRow, SectionKey } from '../types';
+import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 
 export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 2;
@@ -58,6 +59,7 @@ export interface AuditEnvironment {
   payloadProviders: number;
   detailsLoaded: boolean;
   historyLoaded: boolean;
+  productHistoryLoaded: boolean;
   diagnosticsUploadEnabled: boolean;
   networkType: string | null;
   networkConnected: boolean | null;
@@ -153,11 +155,14 @@ export function resolveAuditJourneyOptionalData(
     bankInsights:
       effectiveBankInsights(prefs) &&
       ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
+    // Product and lender screens intentionally suppress their deferred history
+    // fan-out while an audit is active. Waiting for that suppressed work caused
+    // deterministic 30-second false failures on a cold product-history cache.
     bankHistory:
       historyEnabled &&
-      (journeyId === 'product' ||
-        (prefs.includeNonStandard && ['outlook', 'rba-redirect'].includes(journeyId))),
-    productHistory: historyEnabled && ['product', 'lender'].includes(journeyId),
+      prefs.includeNonStandard &&
+      ['outlook', 'rba-redirect'].includes(journeyId),
+    productHistory: false,
   };
 }
 
@@ -440,7 +445,7 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
     href: enabled
       ? ({
           pathname: '/browse',
-          params: { section: SECTIONS[section].slug },
+          params: buildBrowseRouteParams(section),
         } as unknown as Href)
       : undefined,
     expectedPath: '/browse',
@@ -638,6 +643,13 @@ export function percentile(values: number[], quantile: number): number {
 export interface ResponsivenessSnapshot {
   lagIndex: number;
   frameIndex: number;
+  capturedAt: number;
+}
+
+interface TimedSample {
+  value: number;
+  startsAt: number;
+  endsAt: number;
 }
 
 export interface ResponsivenessMetrics {
@@ -658,8 +670,8 @@ export class ResponsivenessMonitor {
   private lastTimerAt = 0;
   private lastFrameAt = 0;
   private running = false;
-  private readonly lagSamples: number[] = [];
-  private readonly frameSamples: number[] = [];
+  private readonly lagSamples: TimedSample[] = [];
+  private readonly frameSamples: TimedSample[] = [];
 
   private now(): number {
     return globalThis.performance?.now?.() ?? Date.now();
@@ -688,25 +700,43 @@ export class ResponsivenessMonitor {
     return {
       lagIndex: this.lagSamples.length,
       frameIndex: this.frameSamples.length,
+      capturedAt: this.now(),
     };
   }
 
   metricsSince(snapshot: ResponsivenessSnapshot): ResponsivenessMetrics {
+    const samplesSince = (samples: TimedSample[], index: number): number[] =>
+      samples
+        .slice(index)
+        .filter((sample) => sample.endsAt > snapshot.capturedAt)
+        .map((sample) =>
+          sample.startsAt < snapshot.capturedAt
+            ? sample.endsAt - snapshot.capturedAt
+            : sample.value,
+        );
     return summarizeResponsiveness(
-      this.lagSamples.slice(snapshot.lagIndex),
-      this.frameSamples.slice(snapshot.frameIndex),
+      samplesSince(this.lagSamples, snapshot.lagIndex),
+      samplesSince(this.frameSamples, snapshot.frameIndex),
     );
   }
 
   metrics(): ResponsivenessMetrics {
-    return summarizeResponsiveness(this.lagSamples, this.frameSamples);
+    return summarizeResponsiveness(
+      this.lagSamples.map((sample) => sample.value),
+      this.frameSamples.map((sample) => sample.value),
+    );
   }
 
   private scheduleTimer(): void {
     this.timer = setTimeout(() => {
       if (!this.running) return;
       const now = this.now();
-      this.lagSamples.push(Math.max(0, now - this.lastTimerAt - this.timerIntervalMs));
+      const deadlineAt = this.lastTimerAt + this.timerIntervalMs;
+      this.lagSamples.push({
+        value: Math.max(0, now - deadlineAt),
+        startsAt: deadlineAt,
+        endsAt: now,
+      });
       this.lastTimerAt = now;
       this.scheduleTimer();
     }, this.timerIntervalMs);
@@ -714,10 +744,18 @@ export class ResponsivenessMonitor {
 
   private scheduleFrame(): void {
     if (typeof requestAnimationFrame !== 'function') return;
-    this.frame = requestAnimationFrame((timestamp) => {
+    this.frame = requestAnimationFrame(() => {
       if (!this.running) return;
+      // RAF timestamps use the performance time origin even where this.now()
+      // must fall back to Date.now(). Sample with one clock throughout so
+      // snapshots and partial frame windows remain comparable on every host.
+      const timestamp = this.now();
       if (this.lastFrameAt > 0) {
-        this.frameSamples.push(Math.max(0, timestamp - this.lastFrameAt));
+        this.frameSamples.push({
+          value: Math.max(0, timestamp - this.lastFrameAt),
+          startsAt: this.lastFrameAt,
+          endsAt: timestamp,
+        });
       }
       this.lastFrameAt = timestamp;
       this.scheduleFrame();

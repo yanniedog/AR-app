@@ -23,6 +23,9 @@ export default function TabsLayout() {
     <Tabs
       tabBar={isAndroid ? (props) => <M3NavigationBar {...props} /> : undefined}
       screenOptions={{
+        // Mounted tabs contain expensive data models. Keep blurred tabs from
+        // reacting to shared section/data updates during another transition.
+        freezeOnBlur: true,
         // The banner owns the status-bar inset while visible.
         ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
         headerStyle: {

@@ -1,3 +1,4 @@
+import { buildBrowseRouteParams } from '../src/lib/browseRoute';
 import { parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
 
 describe('scalarRouteParam', () => {
@@ -20,5 +21,16 @@ describe('parseBrowsePath', () => {
 
   test('uses first element when expo-router returns string[]', () => {
     expect(parseBrowsePath(['FIXED.OWNER', 'OTHER'])).toEqual(['FIXED', 'OWNER']);
+  });
+});
+
+describe('buildBrowseRouteParams', () => {
+  test('gives repeated parameterized entries unique consumable identities', () => {
+    const first = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);
+    const second = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);
+
+    expect(first).toMatchObject({ section: 'home-loans', path: 'FIXED.OWNER' });
+    expect(second).toMatchObject({ section: 'home-loans', path: 'FIXED.OWNER' });
+    expect(second.request).not.toBe(first.request);
   });
 });

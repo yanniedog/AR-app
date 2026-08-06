@@ -1,9 +1,8 @@
 import { router, type Href } from 'expo-router';
 
-import { SECTIONS } from '../constants';
-import { useStore } from '../data/store';
 import type { SortKey } from '../data/selectors';
 import { logNavDrillAttempt, markDrillAttempt } from './degradationLog';
+import { buildBrowseRouteParams } from './browseRoute';
 import type { SectionKey } from '../types';
 
 /** Expo Router represents repeated query parameters as arrays; consumers use the first value. */
@@ -47,19 +46,13 @@ export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {
   return (raw ?? '').split('.').filter(Boolean);
 };
 
-const browseDrillParams = (section: SectionKey, path: string[] = []) => ({
-  section: SECTIONS[section].slug,
-  ...(path.length ? { path: path.join('.') } : {}),
-});
-
 /** Switch to Browse tab and drill to a taxonomy node (replaces stacked /node pushes). */
 export const openBrowseDrill = (section: SectionKey, path: string[] = []) => {
-  useStore.getState().setActiveSection(section);
   markDrillAttempt(section, path);
   logNavDrillAttempt({ fn: 'openBrowseDrill', section, path });
   router.navigate({
     pathname: '/browse',
-    params: browseDrillParams(section, path),
+    params: buildBrowseRouteParams(section, path),
   } as unknown as Href);
 };
 

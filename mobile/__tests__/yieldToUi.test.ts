@@ -1,6 +1,11 @@
 import { InteractionManager } from 'react-native';
 
-import { parseJsonHeavy, yieldToUi, yieldToUiFrames } from '../src/lib/yieldToUi';
+import {
+  parseJsonHeavy,
+  scheduleAfterInteractions,
+  yieldToUi,
+  yieldToUiFrames,
+} from '../src/lib/yieldToUi';
 
 describe('yieldToUi', () => {
   let runSpy: jest.SpyInstance;
@@ -33,5 +38,51 @@ describe('yieldToUi', () => {
     const value = await parseJsonHeavy<{ ok: boolean }>('{"ok":true}');
     expect(value).toEqual({ ok: true });
     expect(runSpy).toHaveBeenCalled();
+  });
+
+  it('cancels deferred work before a blurred screen callback can run', () => {
+    let callback: (() => void) | undefined;
+    const cancel = jest.fn();
+    runSpy.mockImplementationOnce(((task?: unknown) => {
+      callback = typeof task === 'function' ? task as () => void : undefined;
+      return { cancel, then: jest.fn(), done: jest.fn() };
+    }) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    const cleanup = scheduleAfterInteractions(work);
+    cleanup();
+    callback?.();
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(work).not.toHaveBeenCalled();
+  });
+
+  it('runs deferred required work when interactions never settle', () => {
+    jest.useFakeTimers();
+    runSpy.mockImplementationOnce((() => (
+      { cancel: jest.fn(), then: jest.fn(), done: jest.fn() }
+    )) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    scheduleAfterInteractions(work);
+    jest.advanceTimersByTime(48);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('still defers work when InteractionManager throws', () => {
+    jest.useFakeTimers();
+    runSpy.mockImplementationOnce(() => {
+      throw new Error('InteractionManager unavailable');
+    });
+    const work = jest.fn();
+
+    scheduleAfterInteractions(work);
+    expect(work).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(48);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
   });
 });

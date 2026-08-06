@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useScrollToTop } from '@react-navigation/native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import {
@@ -47,6 +47,7 @@ import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function Trends() {
   const theme = useTheme();
+  const isFocused = useIsFocused();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const calendar = useStore((s) => s.rbaCalendar);
@@ -82,8 +83,15 @@ export default function Trends() {
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
   const [deferredCharts, setDeferredCharts] = useState({ revision: null as string | null, stage: 0 });
+  const deferredChartsRef = useRef(deferredCharts);
+  const updateDeferredCharts = useCallback((next: { revision: string | null; stage: number }) => {
+    deferredChartsRef.current = next;
+    setDeferredCharts(next);
+  }, []);
   const deferredChartStage =
-    core?.run_date && deferredCharts.revision === core.run_date ? deferredCharts.stage : 0;
+    core?.run_date && deferredCharts.revision === core.run_date
+      ? deferredCharts.stage
+      : 0;
   const outlookReady = deferredChartStage >= 1;
   const rbaChartReady = deferredChartStage >= 2;
   const marketExplorerReady = deferredChartStage >= 3;
@@ -100,33 +108,37 @@ export default function Trends() {
 
   useEffect(() => {
     if (
+      isFocused &&
       showHistoryRibbon &&
       explorerMode === 'pulse' &&
       !isPerformanceAuditActive()
     ) {
       void ensureProductHistory();
     }
-  }, [core?.run_date, coreSha, ensureProductHistory, explorerMode, showHistoryRibbon]);
+  }, [core?.run_date, coreSha, ensureProductHistory, explorerMode, isFocused, showHistoryRibbon]);
 
   useEffect(() => {
-    const revision = core?.run_date;
+    const revision = isFocused ? core?.run_date : null;
     if (!revision) return;
     let active = true;
+    const existing = deferredChartsRef.current;
+    const firstStage = existing.revision === revision ? existing.stage + 1 : 1;
     // Split expensive economic/SVG surfaces across separate paint windows.
     // Previously they all mounted in one commit and produced multi-second JS
-    // stalls on mid-range Android devices.
-    setDeferredCharts({ revision, stage: 0 });
+    // stalls on mid-range Android devices. Preserve completed surfaces across
+    // blur/refocus so chart-local range and selection state is not discarded.
+    if (existing.revision !== revision) updateDeferredCharts({ revision, stage: 0 });
     void (async () => {
-      for (let stage = 1; stage <= 3; stage += 1) {
+      for (let stage = firstStage; stage <= 3; stage += 1) {
         await yieldToUiFrames(2);
         if (!active) return;
-        setDeferredCharts({ revision, stage });
+        updateDeferredCharts({ revision, stage });
       }
     })();
     return () => {
       active = false;
     };
-  }, [core?.run_date]);
+  }, [core?.run_date, isFocused, updateDeferredCharts]);
 
   const handleRetryInsights = async () => {
     setRetryingInsights(true);
@@ -199,6 +211,7 @@ export default function Trends() {
   }, [includeNonStandard, suitabilityRevision]);
 
   useEffect(() => {
+    if (!isFocused) return;
     if (!prebuiltHistoryEnabled) {
       historyRequestKey.current = null;
       return;
@@ -207,9 +220,10 @@ export default function Trends() {
     if (!key || historyRequestKey.current === key) return;
     historyRequestKey.current = key;
     void ensureHistoryBanks();
-  }, [core?.run_date, ensureHistoryBanks, prebuiltHistoryEnabled]);
+  }, [core?.run_date, ensureHistoryBanks, isFocused, prebuiltHistoryEnabled]);
 
   useEffect(() => {
+    if (!isFocused) return;
     if (!showBankInsights) {
       insightsRequestKey.current = null;
       return;
@@ -218,11 +232,12 @@ export default function Trends() {
     if (!key || insightsRequestKey.current === key) return;
     insightsRequestKey.current = key;
     void ensureBankInsights();
-  }, [core?.run_date, ensureBankInsights, showBankInsights]);
+  }, [core?.run_date, ensureBankInsights, isFocused, showBankInsights]);
 
   useEffect(() => {
+    if (!isFocused) return;
     void ensureRbaCalendar();
-  }, [core?.run_date, ensureRbaCalendar]);
+  }, [core?.run_date, ensureRbaCalendar, isFocused]);
 
   const payloadDecisions = useMemo(() => {
     if (!core?.rba) return [];
