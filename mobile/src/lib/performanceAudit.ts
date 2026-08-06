@@ -704,13 +704,18 @@ export class ResponsivenessMonitor {
   }
 
   metricsSince(snapshot: ResponsivenessSnapshot): ResponsivenessMetrics {
-    const clampToSnapshot = (sample: TimedSample): number =>
-      sample.startsAt < snapshot.capturedAt
-        ? Math.max(0, sample.endsAt - snapshot.capturedAt)
-        : sample.value;
+    const samplesSince = (samples: TimedSample[], index: number): number[] =>
+      samples
+        .slice(index)
+        .filter((sample) => sample.endsAt > snapshot.capturedAt)
+        .map((sample) =>
+          sample.startsAt < snapshot.capturedAt
+            ? sample.endsAt - snapshot.capturedAt
+            : sample.value,
+        );
     return summarizeResponsiveness(
-      this.lagSamples.slice(snapshot.lagIndex).map(clampToSnapshot),
-      this.frameSamples.slice(snapshot.frameIndex).map(clampToSnapshot),
+      samplesSince(this.lagSamples, snapshot.lagIndex),
+      samplesSince(this.frameSamples, snapshot.frameIndex),
     );
   }
 

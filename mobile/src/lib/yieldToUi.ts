@@ -20,6 +20,18 @@ function nextMacrotask(): Promise<void> {
   });
 }
 
+/** Schedule work after navigation/gesture interactions and return a blur-safe cancellation. */
+export function scheduleAfterInteractions(work: () => void): () => void {
+  let cancelled = false;
+  const handle = InteractionManager.runAfterInteractions(() => {
+    if (!cancelled) work();
+  });
+  return () => {
+    cancelled = true;
+    handle.cancel?.();
+  };
+}
+
 /**
  * Yield the JS thread so React can paint / handle touches before the next
  * heavy sync burst (large JSON.parse, hierarchy rebuild, file IO, etc.).

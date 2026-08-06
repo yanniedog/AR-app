@@ -194,7 +194,9 @@ describe('performance audit optional data', () => {
     expect(resolveAuditJourneyOptionalData('product', freeBetaPrefs, true)).toEqual(
       expect.objectContaining({ bankInsights: true, bankHistory: false, productHistory: false }),
     );
-    expect(resolveAuditJourneyOptionalData('lender', freeBetaPrefs, true).productHistory).toBe(false);
+    expect(resolveAuditJourneyOptionalData('lender', freeBetaPrefs, true)).toEqual(
+      expect.objectContaining({ bankHistory: false, productHistory: false }),
+    );
   });
 
   it('does not request unusable prebuilt bank history in Standard-only Outlook', () => {

@@ -1,6 +1,11 @@
 import { InteractionManager } from 'react-native';
 
-import { parseJsonHeavy, yieldToUi, yieldToUiFrames } from '../src/lib/yieldToUi';
+import {
+  parseJsonHeavy,
+  scheduleAfterInteractions,
+  yieldToUi,
+  yieldToUiFrames,
+} from '../src/lib/yieldToUi';
 
 describe('yieldToUi', () => {
   let runSpy: jest.SpyInstance;
@@ -33,5 +38,22 @@ describe('yieldToUi', () => {
     const value = await parseJsonHeavy<{ ok: boolean }>('{"ok":true}');
     expect(value).toEqual({ ok: true });
     expect(runSpy).toHaveBeenCalled();
+  });
+
+  it('cancels deferred work before a blurred screen callback can run', () => {
+    let callback: (() => void) | undefined;
+    const cancel = jest.fn();
+    runSpy.mockImplementationOnce(((task?: unknown) => {
+      callback = typeof task === 'function' ? task as () => void : undefined;
+      return { cancel, then: jest.fn(), done: jest.fn() };
+    }) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    const cleanup = scheduleAfterInteractions(work);
+    cleanup();
+    callback?.();
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(work).not.toHaveBeenCalled();
   });
 });
