@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { FileSystem as NativeFileSystem } from 'react-native-file-access';
 
 import {
   APK_SHA256_VERIFY_MAX_BYTES,
@@ -339,7 +340,7 @@ describe('APK download integrity', () => {
     expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
   });
 
-  it('streams an exact-size large APK through the hash verifier', async () => {
+  it('streams an exact-size large APK through the native hash verifier', async () => {
     jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
       exists: true,
       isDirectory: false,
@@ -348,14 +349,35 @@ describe('APK download integrity', () => {
       modificationTime: 0,
     });
 
-    jest.mocked(FileSystem.readAsStringAsync).mockResolvedValue('');
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    );
     await expect(
       verifyDownloadedApk('file:///docs/app-update-42.apk', {
         ...baseManifest,
         sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
       }),
     ).resolves.toEqual({ size: baseManifest.bytes, verifiedSha256: true });
-    expect(FileSystem.readAsStringAsync).toHaveBeenCalled();
+    expect(NativeFileSystem.hash).toHaveBeenCalledWith(
+      'file:///docs/app-update-42.apk',
+      'SHA-256',
+    );
+    expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
+  });
+
+  it('rejects a native sha256 mismatch', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce('0'.repeat(64));
+
+    await expect(
+      verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
+    ).rejects.toThrow(/sha256 mismatch/i);
   });
 
   it('requests sha256 verify for small APKs', () => {

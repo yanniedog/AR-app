@@ -201,6 +201,14 @@ jest.mock('expo-intent-launcher', () => ({
   startActivityAsync: jest.fn(async () => {}),
 }));
 
+jest.mock('react-native-file-access', () => ({
+  FileSystem: {
+    hash: jest.fn(async () =>
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    ),
+  },
+}));
+
 jest.mock('expo-file-system/legacy', () => ({
   cacheDirectory: 'file:///cache/',
   documentDirectory: 'file:///docs/',
