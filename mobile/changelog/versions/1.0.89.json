@@ -1,0 +1,32 @@
+{
+  "version": "1.0.89",
+  "releaseTag": "app-arm-v1.0.89",
+  "date": "2026-08-06",
+  "summaryBullets": [
+    "Run updates and maintenance in background (#125)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Run updates and maintenance in background (#125)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.89"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.88"
+        }
+      ]
+    }
+  ]
+}
