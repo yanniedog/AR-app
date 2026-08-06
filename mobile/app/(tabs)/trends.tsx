@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect, useIsFocused, useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
@@ -83,13 +83,13 @@ export default function Trends() {
   const [retryingInsights, setRetryingInsights] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
   const [deferredCharts, setDeferredCharts] = useState({ revision: null as string | null, stage: 0 });
-  useFocusEffect(useCallback(() => () => {
-    // Clear completed stages during blur, before a future focus render can
-    // qualify them and synchronously remount every heavy chart.
-    setDeferredCharts({ revision: null, stage: 0 });
-  }, []));
+  const deferredChartsRef = useRef(deferredCharts);
+  const updateDeferredCharts = useCallback((next: { revision: string | null; stage: number }) => {
+    deferredChartsRef.current = next;
+    setDeferredCharts(next);
+  }, []);
   const deferredChartStage =
-    isFocused && core?.run_date && deferredCharts.revision === core.run_date
+    core?.run_date && deferredCharts.revision === core.run_date
       ? deferredCharts.stage
       : 0;
   const outlookReady = deferredChartStage >= 1;
@@ -121,21 +121,24 @@ export default function Trends() {
     const revision = isFocused ? core?.run_date : null;
     if (!revision) return;
     let active = true;
+    const existing = deferredChartsRef.current;
+    const firstStage = existing.revision === revision ? existing.stage + 1 : 1;
     // Split expensive economic/SVG surfaces across separate paint windows.
     // Previously they all mounted in one commit and produced multi-second JS
-    // stalls on mid-range Android devices.
-    setDeferredCharts({ revision, stage: 0 });
+    // stalls on mid-range Android devices. Preserve completed surfaces across
+    // blur/refocus so chart-local range and selection state is not discarded.
+    if (existing.revision !== revision) updateDeferredCharts({ revision, stage: 0 });
     void (async () => {
-      for (let stage = 1; stage <= 3; stage += 1) {
+      for (let stage = firstStage; stage <= 3; stage += 1) {
         await yieldToUiFrames(2);
         if (!active) return;
-        setDeferredCharts({ revision, stage });
+        updateDeferredCharts({ revision, stage });
       }
     })();
     return () => {
       active = false;
     };
-  }, [core?.run_date, isFocused]);
+  }, [core?.run_date, isFocused, updateDeferredCharts]);
 
   const handleRetryInsights = async () => {
     setRetryingInsights(true);

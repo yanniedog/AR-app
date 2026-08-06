@@ -52,10 +52,12 @@ describe('store interests prefs', () => {
   });
 
   it('keeps defaultSection within interests when interests change', () => {
+    useStore.setState({ activeSection: 'TD' });
     useStore.getState().setPref('defaultSection', 'TD');
     useStore.getState().setPref('interests', ['Mortgage', 'Savings']);
     expect(useStore.getState().prefs.defaultSection).toBe('Mortgage');
     expect(useStore.getState().prefs.interests).toEqual(['Mortgage', 'Savings']);
+    expect(useStore.getState().activeSection).toBe('Mortgage');
   });
 
   it('rejects defaultSection outside interests', () => {

@@ -56,4 +56,18 @@ describe('yieldToUi', () => {
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(work).not.toHaveBeenCalled();
   });
+
+  it('runs deferred required work when interactions never settle', () => {
+    jest.useFakeTimers();
+    runSpy.mockImplementationOnce((() => (
+      { cancel: jest.fn(), then: jest.fn(), done: jest.fn() }
+    )) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    scheduleAfterInteractions(work);
+    jest.advanceTimersByTime(48);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
 });

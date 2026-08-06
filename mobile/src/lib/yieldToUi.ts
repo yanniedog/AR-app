@@ -23,12 +23,28 @@ function nextMacrotask(): Promise<void> {
 /** Schedule work after navigation/gesture interactions and return a blur-safe cancellation. */
 export function scheduleAfterInteractions(work: () => void): () => void {
   let cancelled = false;
-  const handle = InteractionManager.runAfterInteractions(() => {
-    if (!cancelled) work();
-  });
+  let settled = false;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let handle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+  const finish = () => {
+    if (cancelled || settled) return;
+    settled = true;
+    if (timeout) clearTimeout(timeout);
+    handle?.cancel?.();
+    work();
+  };
+  try {
+    handle = InteractionManager.runAfterInteractions(finish);
+  } catch {
+    finish();
+  }
+  // Required warmup must not remain queued forever behind looping loading
+  // animations, which hold an InteractionManager interaction by default.
+  if (!settled) timeout = armTimeout(YIELD_TIMEOUT_MS, finish);
   return () => {
     cancelled = true;
-    handle.cancel?.();
+    if (timeout) clearTimeout(timeout);
+    handle?.cancel?.();
   };
 }
 
