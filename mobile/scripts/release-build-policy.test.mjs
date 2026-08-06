@@ -9,10 +9,11 @@ async function readJson(relativePath) {
 test('production dependencies omit dev-client without changing development installs', async () => {
   const packageJson = await readJson('../package.json');
   const lock = await readJson('../package-lock.json');
+  const devClientVersion = packageJson.optionalDependencies['expo-dev-client'];
 
   assert.equal(packageJson.dependencies['expo-dev-client'], undefined);
-  assert.equal(packageJson.optionalDependencies['expo-dev-client'], '~6.0.21');
-  assert.equal(lock.packages[''].optionalDependencies['expo-dev-client'], '~6.0.21');
+  assert.match(devClientVersion, /^~?\d+\.\d+\.\d+$/);
+  assert.equal(lock.packages[''].optionalDependencies['expo-dev-client'], devClientVersion);
   assert.equal(lock.packages['node_modules/expo-dev-client'].optional, true);
   assert.equal(lock.packages['node_modules/expo-dev-launcher'].optional, true);
 });
