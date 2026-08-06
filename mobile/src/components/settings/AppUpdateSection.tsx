@@ -152,6 +152,8 @@ export function AppUpdateSection() {
           ? `Recovering download · ${latestLabel}`
           : phase === 'waiting'
             ? `Waiting for Wi-Fi · ${latestLabel}`
+          : phase === 'cancelled'
+            ? `Download cancelled · ${latestLabel}`
       : phase === 'downloading'
         ? `Downloading in background · ${latestLabel}`
         : `Update available · ${latestLabel}`
@@ -168,7 +170,7 @@ export function AppUpdateSection() {
   const upgradeTitle =
     phase === 'downloading' || phase === 'retrying' || phase === 'verifying'
       ? 'Upgrade when ready'
-      : phase === 'waiting' || phase === 'error'
+      : phase === 'waiting' || phase === 'error' || phase === 'cancelled'
         ? 'Retry download'
         : 'Upgrade';
 

@@ -72,8 +72,7 @@ export function DiagnosticsConsentBanner({
         accessibilityLiveRegion="polite"
         variant="tiny"
         color="textMuted"
-        numberOfLines={2}
-        style={{ flex: 1, lineHeight: 16 }}
+        style={{ flex: 1 }}
       >
         Crash/performance reports + limited public-screen replay
       </AppText>

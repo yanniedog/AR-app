@@ -129,6 +129,7 @@ let fileFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let fileFlushPromise: Promise<void> | null = null;
 let fileContentCache: string | null = null;
 let fileWriteEpoch = 0;
+let coldStartResetPromise: Promise<void> | null = null;
 
 function scheduleFileFlush(): void {
   if (fileFlushTimer) return;
@@ -152,6 +153,9 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
 }
 
 async function flushPendingToFile(): Promise<void> {
+  // The UI cold-start reset owns the file until stale content is deleted.
+  // New-session entries remain queued and are written immediately afterwards.
+  if (coldStartResetPromise) await coldStartResetPromise;
   if (fileFlushPromise) {
     await fileFlushPromise;
     if (pendingFileLines.length === 0) return;
@@ -311,6 +315,32 @@ export const debugLog = {
     append('error', tag, message);
     void flushPendingToFile();
   },
+  /**
+   * Start one fresh log session for this UI process. Memory is cleared
+   * synchronously before any startup entry can be appended; disk cleanup runs
+   * ahead of the first flush. Reopening an existing backgrounded process does
+   * not reload this module, so its current session remains intact.
+   */
+  beginColdStartSession(): Promise<void> {
+    if (coldStartResetPromise) return coldStartResetPromise;
+    fileWriteEpoch += 1;
+    buffer.clear();
+    pendingFileLines = [];
+    fileContentCache = null;
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    const inFlight = fileFlushPromise;
+    fileFlushPromise = null;
+    notify();
+    coldStartResetPromise = (async () => {
+      if (inFlight) await inFlight.catch(() => {});
+      await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+      await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
+    })();
+    return coldStartResetPromise;
+  },
   async clear(): Promise<void> {
     fileWriteEpoch += 1;
     buffer.clear();
@@ -325,6 +355,7 @@ export const debugLog = {
     if (inFlight) {
       await inFlight.catch(() => {});
     }
+    if (coldStartResetPromise) await coldStartResetPromise.catch(() => {});
     notify();
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
@@ -353,6 +384,17 @@ export const debugLog = {
       fileFlushTimer = null;
     }
     await flushPendingToFile();
+  },
+  /** Read the complete current-session file, falling back to the live buffer. */
+  async readCompleteText(): Promise<string> {
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    await flushPendingToFile();
+    if (!FileSystem.documentDirectory) return redactSecrets(buffer.getText());
+    const text = await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
+    return redactSecrets(text);
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);

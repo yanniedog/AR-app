@@ -112,6 +112,9 @@ export interface PerformanceAuditState {
   progress: PerformanceAuditProgress;
   cancelRequested: boolean;
   report: PerformanceAuditReport | null;
+  uploadUrl: string | null;
+  uploadProvider: string | null;
+  uploadError: string | null;
   error: string | null;
 }
 
@@ -172,6 +175,9 @@ const IDLE_STATE: PerformanceAuditState = {
   progress: { completed: 0, total: 0, label: 'Ready' },
   cancelRequested: false,
   report: null,
+  uploadUrl: null,
+  uploadProvider: null,
+  uploadError: null,
   error: null,
 };
 
@@ -283,6 +289,9 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
     cancelRequested: false,
     report: null,
+    uploadUrl: null,
+    uploadProvider: null,
+    uploadError: null,
     error: null,
   });
   return sessionId;
@@ -332,7 +341,10 @@ export function cancelPerformanceAudit(): void {
   });
 }
 
-export function completePerformanceAudit(report: PerformanceAuditReport): void {
+export function completePerformanceAudit(
+  report: PerformanceAuditReport,
+  upload: { url?: string; provider?: string; error?: string } = {},
+): void {
   emit({
     ...auditState,
     status: 'complete',
@@ -343,6 +355,9 @@ export function completePerformanceAudit(report: PerformanceAuditReport): void {
     },
     cancelRequested: false,
     report,
+    uploadUrl: upload.url ?? null,
+    uploadProvider: upload.provider ?? null,
+    uploadError: upload.error ?? null,
     error: null,
   });
 }

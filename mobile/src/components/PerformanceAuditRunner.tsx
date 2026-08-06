@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Clipboard from 'expo-clipboard';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -18,7 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MANIFEST_URL } from '../config';
 import { useStore } from '../data/store';
-import { debugLog } from '../lib/debugLog';
+import { debugLog, formatLogUploadBody, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildPerformanceAuditJourneys,
@@ -1149,10 +1150,13 @@ export function PerformanceAuditRunner() {
       };
 
       markPerformanceAuditRunning(total);
-      await activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG).catch(() => {});
-      monitor.start();
 
       try {
+        // Setup belongs inside the protected region so an unexpected native
+        // keep-awake or monitor failure cannot leave the global running flag
+        // latched forever.
+        await activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG);
+        monitor.start();
         updatePerformanceAuditProgress(
           completed,
           total,
@@ -1274,7 +1278,33 @@ export function PerformanceAuditRunner() {
         logAuditEvent({ kind: 'report', sessionId, report });
         reportPerformanceAudit(report);
         await debugLog.flushToFile();
-        completePerformanceAudit(report);
+        updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
+        let upload: { url?: string; provider?: string; error?: string } = {};
+        try {
+          const completeLog = await debugLog.readCompleteText();
+          const result = await uploadDebugLog(
+            formatLogUploadBody(completeLog, {
+              app_version: environment.appVersion,
+              build_version: environment.buildVersion,
+              audit_session: sessionId,
+            }),
+          );
+          if (result.truncated || result.clientTruncated) {
+            throw new Error('The upload service did not accept the complete log.');
+          }
+          await Clipboard.setStringAsync(result.url);
+          upload = { url: result.url, provider: result.provider };
+          debugLog.info(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `complete log uploaded provider=${result.provider} linkCopied=true`,
+          );
+        } catch (uploadCaught) {
+          const message = formatAuditError(uploadCaught);
+          upload = { error: message };
+          debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, `automatic log upload failed: ${message}`);
+        }
+        await debugLog.flushToFile();
+        completePerformanceAudit(report, upload);
       } catch (caught) {
         let recoveryError: string | null = null;
         try {
@@ -1316,15 +1346,29 @@ export function PerformanceAuditRunner() {
           failPerformanceAudit(error);
         }
       } finally {
-        useStore.setState((current) => ({
-          activeSection: originalActiveSection,
-          prefs: {
-            ...current.prefs,
-            profileFilters: originalProfileFilters,
-          },
-        }));
-        monitor.stop();
-        await deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG).catch(() => {});
+        // Each cleanup is isolated so one native/module failure cannot prevent
+        // the remaining state from being restored.
+        try {
+          useStore.setState((current) => ({
+            activeSection: originalActiveSection,
+            prefs: {
+              ...current.prefs,
+              profileFilters: originalProfileFilters,
+            },
+          }));
+        } catch {
+          // Best effort; the audit result has already been recorded.
+        }
+        try {
+          monitor.stop();
+        } catch {
+          // Best effort; always continue to native keep-awake cleanup.
+        }
+        try {
+          await deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG);
+        } catch {
+          // Best effort; always release the JS running guard below.
+        }
         runningRef.current = false;
       }
     };
@@ -1351,14 +1395,20 @@ export function PerformanceAuditRunner() {
 
   useEffect(() => {
     if (state.status !== 'queued' && state.status !== 'running') return;
-    const subscription = AppState.addEventListener('change', (nextState) => {
+    const cancelForInactiveState = (nextState: string) => {
       if (nextState === 'active') return;
       debugLog.info(
         PERFORMANCE_AUDIT_LOG_TAG,
         `audit cancelled safely because app state changed to ${nextState}`,
       );
       cancelPerformanceAudit();
+    };
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      cancelForInactiveState(nextState);
     });
+    // The app may already have backgrounded between the audit state update
+    // and this effect subscribing, in which case no future transition fires.
+    if (AppState.currentState != null) cancelForInactiveState(AppState.currentState);
     return () => subscription.remove();
   }, [state.status]);
 

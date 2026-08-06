@@ -1,5 +1,6 @@
 import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
 import { MaterialSymbolsOutlined_400Regular } from '@expo-google-fonts/material-symbols-outlined/400Regular';
+import * as Application from 'expo-application';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
@@ -55,8 +56,8 @@ import {
   setSessionReplayEnabled,
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
-import { yieldToUi } from '../src/lib/yieldToUi';
 
+let coldStartLogReset: Promise<void> | null = null;
 SplashScreen.preventAutoHideAsync().catch((err) => logSwallowedError('splash.preventAutoHide', err));
 
 const SPLASH_MARK = 88;
@@ -235,7 +236,6 @@ function RootNavigator() {
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);
-  const diagnosticsRestored = useRef(false);
   const consentTouchStart = useRef<{ x: number; y: number } | null>(null);
   const [morphComplete, setMorphComplete] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -321,20 +321,13 @@ function RootNavigator() {
 
   useEffect(() => {
     installGlobalErrorHandlers();
-    debugLog.info('app', 'bootstrap starting');
+    debugLog.info(
+      'app',
+      `bootstrap starting version=${Application.nativeApplicationVersion ?? 'unknown'} build=${Application.nativeBuildVersion ?? 'unknown'}`,
+    );
+    void coldStartLogReset?.then(() => debugLog.flushToFile());
     void bootstrap();
   }, [bootstrap]);
-
-  // Debug history is useful after startup, but reading and parsing the log
-  // file must not delay the verified cache path or first usable paint.
-  useEffect(() => {
-    if (!appReady || diagnosticsRestored.current) return;
-    diagnosticsRestored.current = true;
-    void yieldToUi()
-      .then(() => debugLog.restoreFromStorage())
-      .then(() => debugLog.info('app', 'debug history restored after first paint'))
-      .catch((err) => logSwallowedError('debugLog.restore', err));
-  }, [appReady]);
 
   useEffect(() => {
     if (!appReady) return;
@@ -518,6 +511,10 @@ function RootNavigator() {
 }
 
 export default function RootLayout() {
+  // This is the first UI-root task. It does not run merely because Android
+  // launches a headless background worker, and React does not remount it when
+  // the existing Activity is only backgrounded and reopened.
+  coldStartLogReset ??= debugLog.beginColdStartSession();
   const [fontsLoaded] = useFonts({
     MaterialSymbolsOutlined_400Regular,
     MaterialSymbols_400Regular,

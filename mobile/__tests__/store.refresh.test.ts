@@ -12,6 +12,8 @@ const mockFetchDatesIndexJson = jest.fn();
 const mockEnsureHistoryBanks = jest.fn(async () => {});
 const mockEnsureBankInsights = jest.fn(async () => {});
 const mockEnsureRbaCalendar = jest.fn(async () => {});
+const mockEnsureDetails = jest.fn(async () => {});
+const mockYieldToUi = jest.fn(async () => {});
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -51,6 +53,10 @@ jest.mock('../src/data/historyDaily', () => {
   };
 });
 
+jest.mock('../src/lib/yieldToUi', () => ({
+  yieldToUi: () => mockYieldToUi(),
+}));
+
 // eslint-disable-next-line import/first -- store import must follow jest mocks
 import { useStore } from '../src/data/store';
 // eslint-disable-next-line import/first -- suitability module shares the mocked cache
@@ -64,6 +70,8 @@ import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
 const originalEnsureHistoryBanks = useStore.getState().ensureHistoryBanks;
 const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
 const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
+const originalEnsureDetails = useStore.getState().ensureDetails;
+const originalPrefs = useStore.getState().prefs;
 
 const remoteManifest: Manifest = sampleManifest;
 const remoteCore: CorePayload = sampleCore;
@@ -84,11 +92,15 @@ function resetStore() {
     refreshOutcome: null,
     pendingIngestRunDate: null,
     hydrated: true,
-    prefs: useStore.getState().prefs,
+    prefs: {
+      ...originalPrefs,
+      profileFilters: { ...originalPrefs.profileFilters },
+    },
     favorites: [],
     ensureHistoryBanks: originalEnsureHistoryBanks,
     ensureBankInsights: originalEnsureBankInsights,
     ensureRbaCalendar: originalEnsureRbaCalendar,
+    ensureDetails: originalEnsureDetails,
   });
 }
 
@@ -217,9 +229,17 @@ describe('store refresh lifecycle', () => {
     useStore.setState({
       source: 'remote',
       manifest: previousManifest,
+      prefs: {
+        ...useStore.getState().prefs,
+        profileFilters: {
+          ...useStore.getState().prefs.profileFilters,
+          accountFeatures: ['OFFSET'],
+        },
+      },
       ensureHistoryBanks: mockEnsureHistoryBanks,
       ensureBankInsights: mockEnsureBankInsights,
       ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureDetails: mockEnsureDetails,
     });
     mockFetchManifest.mockResolvedValue(revisedManifest);
     mockReadMeta.mockResolvedValue({
@@ -235,6 +255,8 @@ describe('store refresh lifecycle', () => {
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
     expect(mockEnsureRbaCalendar).not.toHaveBeenCalled();
+    expect(mockEnsureDetails).not.toHaveBeenCalled();
+    expect(mockYieldToUi).not.toHaveBeenCalled();
   });
 
   it('manual refresh checks the manifest but preserves an identical live core', async () => {

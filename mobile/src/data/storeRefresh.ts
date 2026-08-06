@@ -64,9 +64,13 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         // the large asset when profile feature picks or notification search
         // filters need feature/eligibility fields.
         const prefs = get().prefs;
+        const notificationDetailsNeeded = needsDetailsForNotifications(
+          prefs,
+          get().subscriptions,
+        );
         if (
-          profileAccountFeaturesNeedDetails(prefs.profileFilters) ||
-          needsDetailsForNotifications(prefs, get().subscriptions)
+          notificationDetailsNeeded ||
+          (!background && profileAccountFeaturesNeedDetails(prefs.profileFilters))
         ) {
           await get().ensureDetails();
         }
@@ -91,7 +95,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
-          while (get().detailsLoading) await yieldToUi();
+          if (!background) {
+            while (get().detailsLoading) await yieldToUi();
+          }
           await warmDetails();
           const afterWarm = get();
           const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
@@ -158,6 +164,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             'store',
             `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
           );
+          // WorkManager retries only when its task reports failure. Foreground
+          // refresh remains resilient, while headless notification work must
+          // reject so the task handler can return BackgroundTaskResult.Failed.
+          if (background) throw err;
         }
       };
 
@@ -198,7 +208,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           startedAt: finalizeStarted,
           phaseComplete: false,
         });
-        await yieldToUi();
+        if (!background) await yieldToUi();
         const resolution = await resolveFinalizedManifest(rolling, {
           verifiedDated: get().manifest,
         });
@@ -328,7 +338,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               startedAt: Date.now(),
               phaseComplete: false,
             });
-            await yieldToUi();
+            if (!background) await yieldToUi();
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
@@ -388,7 +398,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           startedAt: Date.now(),
           phaseComplete: false,
         });
-        await yieldToUi();
+        if (!background) await yieldToUi();
         await cache.writeBundle(
           {
             manifest: remote,
