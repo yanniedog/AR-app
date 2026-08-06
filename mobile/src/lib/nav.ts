@@ -46,6 +46,17 @@ export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {
   return (raw ?? '').split('.').filter(Boolean);
 };
 
+export const browseRouteRequestPending = (
+  routeRequest: string | null,
+  consumedRequest: string | null,
+  requestedSection: SectionKey | null,
+  storedSection: SectionKey,
+): boolean =>
+  routeRequest != null && (
+    consumedRequest !== routeRequest ||
+    (requestedSection != null && requestedSection !== storedSection)
+  );
+
 let browseRequestSequence = 0;
 const browseRequestSession = Date.now().toString(36);
 

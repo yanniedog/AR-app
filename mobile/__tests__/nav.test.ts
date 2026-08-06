@@ -1,4 +1,4 @@
-import { parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
+import { browseRouteRequestPending, parseBrowsePath, scalarRouteParam } from '../src/lib/nav';
 
 describe('scalarRouteParam', () => {
   test('normalizes repeated and missing query parameters', () => {
@@ -20,5 +20,25 @@ describe('parseBrowsePath', () => {
 
   test('uses first element when expo-router returns string[]', () => {
     expect(parseBrowsePath(['FIXED.OWNER', 'OTHER'])).toEqual(['FIXED', 'OWNER']);
+  });
+});
+
+describe('browseRouteRequestPending', () => {
+  test('reprocesses a repeated parameter-only route after another screen changes section', () => {
+    expect(browseRouteRequestPending(
+      'section:mortgage',
+      'section:mortgage',
+      'Mortgage',
+      'Savings',
+    )).toBe(true);
+  });
+
+  test('does not reprocess a consumed route when the requested section is already active', () => {
+    expect(browseRouteRequestPending(
+      'section:mortgage',
+      'section:mortgage',
+      'Mortgage',
+      'Mortgage',
+    )).toBe(false);
   });
 });
