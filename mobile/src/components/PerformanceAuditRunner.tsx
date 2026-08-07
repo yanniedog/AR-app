@@ -68,7 +68,8 @@ const DATA_SETTLE_TIMEOUT_MS = 30_000;
 const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const RUNTIME_SAMPLE_MS = 1_250;
-const BENCHMARK_CHECKS = 10;
+// Runtime, storage, filesystem, log I/O, payload, network, and update readiness.
+const FIXED_BENCHMARK_CHECKS = 7;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -1375,7 +1376,7 @@ export function PerformanceAuditRunner() {
         originalStore.core,
         originalStore.prefs.interests,
       );
-      let total = BENCHMARK_CHECKS + journeys.length * 2;
+      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
@@ -1433,7 +1434,7 @@ export function PerformanceAuditRunner() {
           initialStore.core,
           initialStore.prefs.interests,
         );
-        total = BENCHMARK_CHECKS + journeys.length * 2;
+        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
         const datasetRevision = captureDatasetRevision();
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(

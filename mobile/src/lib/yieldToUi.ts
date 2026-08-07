@@ -53,7 +53,8 @@ export function scheduleAfterInteractions(work: () => void): () => void {
  * Schedule a state change that would trigger expensive screen derivations after
  * a navigation transition has had time to paint. Navigation animations are not
  * consistently registered with InteractionManager on every Expo/Android
- * combination, so use a longer bounded fallback than ordinary background work.
+ * combination, so wait at least 300 ms when the configured upper bound permits
+ * it. `fallbackMs` is the maximum wait, not the minimum delay.
  */
 export function scheduleAfterNavigation(
   work: () => void,
@@ -77,7 +78,7 @@ export function scheduleAfterNavigation(
   const finishWhenReady = () => {
     if (interactionsDone && minimumDelayDone) finish();
   };
-  minimumDelay = armTimeout(Math.min(180, Math.max(0, fallbackMs)), () => {
+  minimumDelay = armTimeout(Math.min(300, Math.max(0, fallbackMs)), () => {
     minimumDelayDone = true;
     finishWhenReady();
   });

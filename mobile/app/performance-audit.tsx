@@ -58,13 +58,13 @@ function checkDetail(check: AuditCheck): string {
       `Hierarchy ${Number(check.metrics.firstHierarchyMs ?? 0).toFixed(0)} ms`,
       `Stats ${Number(check.metrics.firstStatsMs ?? 0).toFixed(0)} ms`,
       `Rank ${Number(check.metrics.firstRankMs ?? 0).toFixed(0)} ms`,
-    ].join(' Â· ');
+    ].join(' · ');
   }
   if (check.id === 'debug-log-io') {
-    return `Flush ${Number(check.metrics.flushMs ?? 0).toFixed(0)} ms Â· Read ${Number(check.metrics.readMs ?? 0).toFixed(0)} ms Â· ${Number(check.metrics.bytes ?? 0).toLocaleString()} bytes`;
+    return `Flush ${Number(check.metrics.flushMs ?? 0).toFixed(0)} ms · Read ${Number(check.metrics.readMs ?? 0).toFixed(0)} ms · ${Number(check.metrics.bytes ?? 0).toLocaleString()} bytes`;
   }
   if (check.id === 'update-readiness') {
-    return `${check.metrics.checkStatus ?? 'unknown'} Â· installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) Â· cache ${check.metrics.downloadPhase ?? 'unknown'}`;
+    return `${check.metrics.checkStatus ?? 'unknown'} · installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) · cache ${check.metrics.downloadPhase ?? 'unknown'}`;
   }
   if (check.id === 'runtime-responsiveness') {
     return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · JS animation callback gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
@@ -261,8 +261,8 @@ export default function PerformanceAuditScreen() {
               <Card key={route.journeyId} style={{ gap: 4 }}>
                 <AppText variant="small" weight="700">{route.label}</AppText>
                 <AppText variant="tiny" color="textFaint">
-                  Open {route.coldForwardMs.toFixed(0)} â†’ {route.warmForwardMs.toFixed(0)} ms
-                  {' Â· '}Back {route.coldBackMs.toFixed(0)} â†’ {route.warmBackMs.toFixed(0)} ms
+                  Open {route.coldForwardMs.toFixed(0)} → {route.warmForwardMs.toFixed(0)} ms
+                  {' · '}Back {route.coldBackMs.toFixed(0)} → {route.warmBackMs.toFixed(0)} ms
                 </AppText>
               </Card>
             ))}

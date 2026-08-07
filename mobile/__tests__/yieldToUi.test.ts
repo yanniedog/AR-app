@@ -112,7 +112,7 @@ describe('yieldToUi', () => {
 
     scheduleAfterNavigation(work);
     expect(work).not.toHaveBeenCalled();
-    jest.advanceTimersByTime(179);
+    jest.advanceTimersByTime(299);
     expect(work).not.toHaveBeenCalled();
     jest.advanceTimersByTime(1);
 
