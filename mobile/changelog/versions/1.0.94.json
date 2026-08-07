@@ -1,0 +1,36 @@
+{
+  "version": "1.0.94",
+  "releaseTag": "app-arm-v1.0.94",
+  "date": "2026-08-07",
+  "summaryBullets": [
+    "Fix APK verification blocking in-app updates (#129)",
+    "Fix mobile navigation performance stalls (#130)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix APK verification blocking in-app updates (#129)"
+        },
+        {
+          "text": "Fix mobile navigation performance stalls (#130)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.94"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.93"
+        }
+      ]
+    }
+  ]
+}
