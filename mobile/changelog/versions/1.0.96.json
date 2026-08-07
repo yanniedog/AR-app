@@ -1,0 +1,32 @@
+{
+  "version": "1.0.96",
+  "releaseTag": "app-arm-v1.0.96",
+  "date": "2026-08-07",
+  "summaryBullets": [
+    "Fix app responsiveness and streamline Android updates (#132)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Fix app responsiveness and streamline Android updates (#132)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.96"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.95"
+        }
+      ]
+    }
+  ]
+}
