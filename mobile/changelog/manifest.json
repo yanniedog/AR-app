@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-07T10:49:16.599Z",
+  "generated_at": "2026-08-07T13:28:51.694Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -555,6 +555,14 @@
         "Fix app responsiveness and streamline Android updates (#132)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.96"
+    },
+    {
+      "version": "1.0.98",
+      "date": "2026-08-07",
+      "summaryBullets": [
+        "fix(mobile): deepen performance audit and readiness (#134)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.98"
     }
   ]
 }
