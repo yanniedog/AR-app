@@ -810,6 +810,13 @@ export async function upgradeFromBackgroundDownload(
 
   try {
     await ensureApkBackgroundDownload(manifest, options);
+    if (snapshot.phase === 'waiting' && String(snapshot.buildNumber) === buildNumber) {
+      debugLog.info(
+        'app-update',
+        `explicit upgrade remains queued for Wi-Fi build=${manifest.build_number}`,
+      );
+      return;
+    }
     if (snapshot.phase === 'ready' && String(snapshot.buildNumber) === buildNumber) {
       await installReadyApkUpdate(manifest);
       return;

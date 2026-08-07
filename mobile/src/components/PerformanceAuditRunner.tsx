@@ -914,18 +914,24 @@ async function runUpdateReadinessCheck(
   const durationMs = now() - started;
   const responsiveness = monitor.metricsSince(responsivenessAt);
   const remote = result && result.status !== 'error' ? result.remote : null;
+  const compatibilityStatus: AuditCheckStatus = result?.status === 'incompatible' ? 'warn' : 'pass';
   return {
     id: 'update-readiness',
     label: 'Android update manifest and local readiness',
     kind: 'update',
     status: error
       ? 'fail'
-      : worstStatus(scoreLatency(durationMs, 1_500, 5_000), responsivenessStatus(responsiveness)),
+      : worstStatus(
+          compatibilityStatus,
+          scoreLatency(durationMs, 1_500, 5_000),
+          responsivenessStatus(responsiveness),
+        ),
     durationMs: roundMetric(durationMs),
     metrics: {
       installedVersion: installed.version,
       installedBuild: installed.buildNumber,
       checkStatus: result?.status ?? 'unknown',
+      compatibilityMessage: result?.status === 'incompatible' ? result.message : null,
       remoteVersion: remote?.version ?? null,
       remoteBuild: remote?.build_number ?? null,
       manifestBytes: remote?.bytes ?? null,
@@ -1584,14 +1590,30 @@ export function PerformanceAuditRunner() {
           `slowest=${summary.slowestCheckId ?? 'none'}`,
           `slowest_ms=${summary.slowestCheckMs}`,
         ].join(' ');
-        await debugLog.storePerformanceAudit(summaryMarker, report);
+        let completeReportStored = false;
+        try {
+          await debugLog.storePerformanceAudit(summaryMarker, report);
+          completeReportStored = true;
+        } catch (storeError) {
+          const message = formatAuditError(storeError);
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `durable report snapshot unavailable; writing complete report to log: ${message}`,
+          );
+          logAuditEvent(app, {
+            kind: 'report-fallback',
+            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+            sessionId,
+            report,
+          });
+        }
         logAuditEvent(app, {
           kind: 'report',
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           summary,
           routeAggregates: report.routeAggregates,
-          completeReportStored: true,
+          completeReportStored,
         });
         debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
         reportPerformanceAudit(report);
