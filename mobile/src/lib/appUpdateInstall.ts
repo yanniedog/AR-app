@@ -1,24 +1,38 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
-import { sha256 } from '@noble/hashes/sha2.js';
 
 import { debugLog } from './debugLog';
 import { ensureInstallPermission } from './installPermission';
+import { hashFileSha256 } from './nativeFileHash';
 import {
   assertDownloadedApkMatchesManifest,
   type ApkManifest,
 } from './appUpdateLogic';
 
-function toHex(buf: Uint8Array): string {
-  return Array.from(buf)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+const APK_SHA256_TIMEOUT_MS = 2 * 60 * 1000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error(`APK sha256 verification timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 /**
- * Validate downloaded APK size (and SHA-256 when small enough).
- * Large APKs skip in-memory hashing but still must match manifest.bytes.
+ * Validate downloaded APK size and SHA-256 without copying the APK through
+ * the JavaScript runtime. On Android this runs as a streaming I/O task on a
+ * native worker thread, so a release-sized APK cannot stall Hermes or the UI.
  */
 export async function verifyDownloadedApk(
   path: string,
@@ -28,26 +42,21 @@ export async function verifyDownloadedApk(
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
   assertDownloadedApkMatchesManifest(size, manifest);
 
-  const expectedSha = manifest.sha256!;
-  const digest = sha256.create();
-  const chunkSize = 1024 * 1024;
-  for (let position = 0; position < size; position += chunkSize) {
-    const base64 = await FileSystem.readAsStringAsync(path, {
-      encoding: FileSystem.EncodingType.Base64,
-      position,
-      length: Math.min(chunkSize, size - position),
-    });
-    const binary = atob(base64);
-    const chunk = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) chunk[i] = binary.charCodeAt(i);
-    digest.update(chunk);
-  }
-  const actual = toHex(digest.digest());
+  const expectedSha = manifest.sha256!.toLowerCase();
+  const startedAt = Date.now();
+  debugLog.info('app-update', `verification begin bytes=${size} mode=native-sha256`);
+  const actual = (
+    await withTimeout(hashFileSha256(path), APK_SHA256_TIMEOUT_MS)
+  ).toLowerCase();
   if (actual !== expectedSha) {
     throw new Error(
       `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
     );
   }
+  debugLog.info(
+    'app-update',
+    `verification complete bytes=${size} ms=${Date.now() - startedAt}`,
+  );
   return { size, verifiedSha256: true };
 }
 
