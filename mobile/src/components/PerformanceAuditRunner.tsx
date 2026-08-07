@@ -5,7 +5,7 @@ import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
-import { router, usePathname } from 'expo-router';
+import { router, usePathname, type Href } from 'expo-router';
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   BackHandler,
@@ -28,7 +28,19 @@ import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
 import {
-  buildPerformanceAuditJourneys,
+  buildDeepPerformanceAuditPlan,
+  type DeepAuditStep,
+} from '../lib/performanceAuditPlan';
+import {
+  performanceAuditReadinessRegistry,
+  type PerformanceAuditReadinessKind,
+  type PerformanceAuditReadinessSnapshot,
+} from '../lib/performanceAuditReadiness';
+import {
+  beginPerformanceAuditRollback,
+  restorePerformanceAuditRollback,
+} from '../lib/performanceAuditRollback';
+import {
   aggregateRepeatedJourneys,
   cancelPerformanceAudit,
   captureAuditTrace,
@@ -36,6 +48,7 @@ import {
   failPerformanceAudit,
   formatAuditError,
   getPerformanceAuditState,
+  isPerformanceAuditActive,
   markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
   markPerformanceAuditRunning,
@@ -67,9 +80,11 @@ const ROUTE_TIMEOUT_MS = 8_000;
 const DATA_SETTLE_TIMEOUT_MS = 30_000;
 const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
+const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
-// Runtime, storage, filesystem, log I/O, payload, network, and update readiness.
-const FIXED_BENCHMARK_CHECKS = 7;
+// Runtime, storage, filesystem, log I/O, payload, network, update readiness,
+// and durable audit-state restoration.
+const FIXED_BENCHMARK_CHECKS = 8;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -153,7 +168,39 @@ async function nextFrame(): Promise<void> {
     await delay(17);
     return;
   }
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  await timeoutAfter(
+    new Promise<void>((resolve) => requestAnimationFrame(() => resolve())),
+    1_000,
+    'Animation frame',
+  );
+}
+
+async function awaitAuditWork<T>(
+  promise: Promise<T>,
+  watchdog: PerformanceAuditInactivityWatchdog,
+  label: string,
+): Promise<T> {
+  assertSessionActive(watchdog);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const control = new Promise<never>((_resolve, reject) => {
+    timer = setInterval(() => {
+      try {
+        assertSessionActive(watchdog);
+      } catch (error) {
+        if (timer) clearInterval(timer);
+        timer = null;
+        reject(error);
+      }
+    }, 50);
+  });
+  try {
+    return await Promise.race([promise, control]);
+  } catch (error) {
+    rethrowAuditControl(error);
+    throw new Error(`${label} failed: ${formatAuditError(error)}`);
+  } finally {
+    if (timer) clearInterval(timer);
+  }
 }
 
 async function settleUiUnchecked(): Promise<void> {
@@ -255,10 +302,352 @@ async function recoverAuditRoute(currentPath: () => string): Promise<void> {
   await settleUiUnchecked();
 }
 
+function stringParameter(step: DeepAuditStep, name: string): string | null {
+  const value = step.parameters[name];
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
+
+function numberParameter(step: DeepAuditStep, name: string): number | null {
+  const value = step.parameters[name];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function stringArrayParameter(step: DeepAuditStep, name: string): string[] {
+  const value = step.parameters[name];
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+}
+
+/** Resolve only route-entry and compatibility actions here. Every in-page
+ * action must be registered by the mounted UI so the audit exercises the same
+ * callback as a real press, selection, search, scroll, or chart gesture. */
+function routeEntryHref(step: DeepAuditStep): Href | null {
+  const section = stringParameter(step, 'section');
+  const productKey = stringParameter(step, 'productKey');
+  const rateIndex = numberParameter(step, 'rateIndex');
+  const selectionTokens = stringArrayParameter(step, 'selectionTokens');
+  switch (step.semanticActionId) {
+    case 'onboarding.open': return '/onboarding' as Href;
+    case 'today.open': return '/(tabs)' as Href;
+    case 'browse.open': return '/browse' as Href;
+    case 'search.open':
+      return {
+        pathname: '/search',
+        params: section ? { section } : {},
+      } as unknown as Href;
+    case 'compare.open':
+      return {
+        pathname: '/compare',
+        params: { keys: JSON.stringify(selectionTokens) },
+      } as unknown as Href;
+    case 'product.open':
+      return productKey
+        ? ({
+            pathname: '/product/[key]',
+            params: {
+              key: productKey,
+              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+            },
+          } as unknown as Href)
+        : null;
+    case 'receipt.open':
+      return productKey
+        ? ({
+            pathname: '/rate-receipt',
+            params: {
+              key: productKey,
+              ...(rateIndex == null ? {} : { ri: String(rateIndex) }),
+            },
+          } as unknown as Href)
+        : null;
+    case 'lenders.open': return '/banks' as Href;
+    case 'calculator.open': return '/calculator' as Href;
+    case 'projections.open':
+      return {
+        pathname: '/projections',
+        params: section ? { section } : {},
+      } as unknown as Href;
+    case 'moves.open': return '/passthrough' as Href;
+    case 'outlook.open': return '/trends' as Href;
+    case 'saved.open': return '/watchlist' as Href;
+    case 'profile.open': return '/profile' as Href;
+    case 'settings.open': return '/settings' as Href;
+    case 'terms.open': return '/terms' as Href;
+    case 'debug-log.open': return '/debug-log' as Href;
+    case 'not-found.open': return '/__audit-not-found__' as Href;
+    case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
+    case 'redirect.rba.verify': return '/rba' as Href;
+    case 'redirect.node.verify': {
+      const taxonomyPath = stringArrayParameter(step, 'taxonomyPath');
+      return {
+        pathname: '/node',
+        params: {
+          ...(section ? { section } : {}),
+          ...(taxonomyPath.length ? { path: taxonomyPath.join('.') } : {}),
+        },
+      } as unknown as Href;
+    }
+  }
+  return null;
+}
+
+function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<string, string | number> {
+  return {
+    readinessSurfaces: snapshot.surfaces.map((surface) => surface.id).join(', '),
+    readinessProbeCount: snapshot.totalProbes,
+    readinessRequiredProbeCount: snapshot.requiredProbes,
+    readinessPendingRequiredProbeCount: snapshot.pendingRequiredProbes,
+    readinessEvidence: snapshot.surfaces
+      .flatMap((surface) => surface.probes.map((probe) => [
+        surface.id,
+        probe.id,
+        probe.kind,
+        probe.status,
+        probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
+        probe.datasetRevision ?? '',
+        probe.renderRevision ?? '',
+      ].join(':')))
+      .join(' | '),
+    readinessActionEvidence: snapshot.surfaces
+      .map((surface) => `${surface.id}:${surface.lastCompletedAction ?? 'none'}:${surface.actionRevision}`)
+      .join(' | '),
+  };
+}
+
+function requiredProbeKinds(step: DeepAuditStep): PerformanceAuditReadinessKind[] {
+  const kinds = new Set<PerformanceAuditReadinessKind>();
+  for (const category of step.readiness) {
+    if (category === 'graphics') kinds.add('graphic');
+    else if (category === 'logos') kinds.add('logo');
+    else if (category === 'list') kinds.add('list');
+  }
+  return [...kinds];
+}
+
+async function runDeepAuditStep(
+  step: DeepAuditStep,
+  currentPath: () => string,
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+  datasetRevision: AuditDatasetRevision,
+): Promise<AuditCheck> {
+  const started = now();
+  const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
+  const label = `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`;
+  if (step.skipReason) {
+    return {
+      id: `deep-${step.id}`,
+      label,
+      kind: 'journey',
+      status: 'skipped',
+      durationMs: roundMetric(now() - started),
+      metrics: {
+        journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+        journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+        iteration,
+        passId: step.passId,
+        depth: step.depth,
+        reason: step.skipReason,
+        skipSafety: step.skipSafety.reason,
+      },
+    };
+  }
+
+  assertSessionActive(watchdog);
+  assertDatasetRevision(datasetRevision);
+  const responsivenessAt = monitor.snapshot();
+  const logCursor = debugLog.getCursor();
+  const actionStarted = now();
+  let actionSource = 'router';
+  let expectedPath = step.expectedPath;
+  const href = routeEntryHref(step);
+  if (href) {
+    if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
+      router.push(href);
+    }
+  } else if (step.semanticActionId === 'redirect.root.verify') {
+    // The preceding not-found recovery action must already have reached Home.
+    actionSource = 'route-contract';
+  } else {
+    const source = performanceAuditReadinessRegistry.snapshot().surfaces.find((surface) =>
+      surface.actions.includes(step.semanticActionId),
+    );
+    if (!source) throw new Error(
+      `${step.optional ? 'Optional' : 'Required'} mounted action is unavailable without ` +
+      `terminal availability evidence: ${step.semanticActionId}`,
+    );
+    actionSource = source.id;
+    const actionResult = await performanceAuditReadinessRegistry.invokeAction(
+      source.id,
+      step.semanticActionId,
+      step.parameters,
+    );
+    if (
+      actionResult != null &&
+      typeof actionResult === 'object' &&
+      'expectedPath' in actionResult &&
+      typeof actionResult.expectedPath === 'string' &&
+      actionResult.expectedPath.startsWith('/')
+    ) {
+      expectedPath = actionResult.expectedPath;
+    }
+    if (
+      actionResult != null &&
+      typeof actionResult === 'object' &&
+      'unavailableReason' in actionResult &&
+      typeof actionResult.unavailableReason === 'string' &&
+      actionResult.unavailableReason.trim()
+    ) {
+      if (!step.optional || !step.skipSafety.maySkip) {
+        throw new Error(
+          `Required action reported unavailable: ${step.semanticActionId}: ${actionResult.unavailableReason}`,
+        );
+      }
+      return {
+        id: `deep-${step.id}`,
+        label,
+        kind: 'journey',
+        status: 'skipped',
+        durationMs: roundMetric(now() - started),
+        metrics: {
+          journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+          journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+          iteration,
+          passId: step.passId,
+          depth: step.depth,
+          reason: actionResult.unavailableReason,
+          skipSafety: step.skipSafety.reason,
+          availabilityEvidence: 'mounted action terminal-unavailable result',
+        },
+      };
+    }
+  }
+  const actionMs = now() - actionStarted;
+
+  await waitForPath(currentPath, expectedPath, label, { watchdog });
+  assertDatasetRevision(datasetRevision);
+  const readinessStarted = now();
+  const readinessAbort = new AbortController();
+  const readinessGuard = setInterval(() => {
+    if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+      readinessAbort.abort();
+    }
+  }, 50);
+  let readiness: PerformanceAuditReadinessSnapshot;
+  try {
+    readiness = await performanceAuditReadinessRegistry.waitForReady({
+      surfaceIds: [step.expectedSurface],
+      requiredKinds: requiredProbeKinds(step),
+      quietWindowMs: READINESS_QUIET_WINDOW_MS,
+      timeoutMs: DATA_SETTLE_TIMEOUT_MS,
+      signal: readinessAbort.signal,
+    });
+  } finally {
+    clearInterval(readinessGuard);
+  }
+  assertSessionActive(watchdog);
+  const readinessMs = now() - readinessStarted;
+  if (actionSource === step.expectedSurface) {
+    const completedAction = readiness.surfaces.find((surface) => surface.id === actionSource)
+      ?.lastCompletedAction;
+    if (completedAction !== step.semanticActionId) {
+      throw new Error(
+        `Mounted action completion was not observed for ${step.semanticActionId}; ` +
+        `last completed action was ${completedAction ?? 'none'}`,
+      );
+    }
+  }
+  await settleUi();
+  assertDatasetRevision(datasetRevision);
+  const responsiveness = monitor.metricsSince(responsivenessAt);
+  const errors = routeErrorMessages(logCursor);
+  const forwardMs = now() - actionStarted;
+  const status = errors.journey.length
+    ? 'fail'
+    : worstStatus(
+        scoreLatency(actionMs, 900, 2_500),
+        scoreLatency(readinessMs, 2_000, 10_000),
+        responsivenessStatus(responsiveness),
+      );
+  return {
+    id: `deep-${step.id}`,
+    label,
+    kind: 'journey',
+    status,
+    durationMs: roundMetric(now() - started),
+    metrics: {
+      journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+      journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+      iteration,
+      passId: step.passId,
+      scenarioId: step.scenarioId,
+      semanticActionId: step.semanticActionId,
+      depth: step.depth,
+      plannedExpectedPath: step.expectedPath,
+      expectedPath,
+      expectedSurface: step.expectedSurface,
+      actionSource,
+      actionMs: roundMetric(actionMs),
+      forwardMs: roundMetric(forwardMs),
+      backgroundSettleMs: roundMetric(readinessMs),
+      backMs: 0,
+      readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
+      runtimeErrors: errors.journey.length,
+      runtimeErrorMessages: errors.journey.join(' | ') || null,
+      incidentalRuntimeErrors: errors.incidental.length,
+      incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
+      ...readinessMetrics(readiness),
+      ...responsivenessRecord(responsiveness),
+    },
+    ...(errors.journey.length
+      ? {
+          error: errors.journey.join('\n'),
+          trace: captureAuditTrace(`deep audit step ${step.id} emitted runtime errors`),
+        }
+      : {}),
+  };
+}
+
 function installedAuditIdentity(): AuditAppIdentity {
   return {
     appVersion: Application.nativeApplicationVersion ?? 'unknown',
     buildVersion: Application.nativeBuildVersion ?? 'unknown',
+  };
+}
+
+function fallbackEnvironment(
+  app: AuditAppIdentity,
+  width: number,
+  height: number,
+  fontScale: number,
+): AuditEnvironment {
+  const store = useStore.getState();
+  return {
+    appVersion: app.appVersion,
+    buildVersion: app.buildVersion,
+    platform: Platform.OS,
+    platformVersion: String(Platform.Version),
+    manufacturer: Device.manufacturer ?? null,
+    brand: Device.brand ?? null,
+    model: Device.modelName ?? null,
+    osName: Device.osName ?? null,
+    osVersion: Device.osVersion ?? null,
+    totalMemoryBytes: Device.totalMemory ?? null,
+    jsEngine: jsEngineName(),
+    developmentBuild: __DEV__,
+    viewportWidth: roundMetric(width),
+    viewportHeight: roundMetric(height),
+    fontScale: roundMetric(fontScale),
+    payloadSource: store.source,
+    payloadRunDate: store.core?.run_date ?? null,
+    payloadProducts: loadedProductCount(store.core),
+    payloadProviders: Object.keys(store.core?.brands ?? {}).length,
+    detailsLoaded: store.details != null,
+    historyLoaded: store.historyBanks != null,
+    productHistoryLoaded: store.productHistory != null,
+    diagnosticsUploadEnabled: store.prefs.crashReportsEnabled,
+    networkType: null,
+    networkConnected: null,
+    networkInternetReachable: null,
   };
 }
 
@@ -426,11 +815,11 @@ async function runStorageCheck(
     for (let index = 0; index < 3; index += 1) {
       assertSessionActive(watchdog);
       let at = now();
-      await AsyncStorage.setItem(key, payload);
+      await awaitAuditWork(AsyncStorage.setItem(key, payload), watchdog, 'AsyncStorage write');
       assertSessionActive(watchdog);
       writeTimes.push(now() - at);
       at = now();
-      const restored = await AsyncStorage.getItem(key);
+      const restored = await awaitAuditWork(AsyncStorage.getItem(key), watchdog, 'AsyncStorage read');
       assertSessionActive(watchdog);
       readTimes.push(now() - at);
       if (restored !== payload) throw new Error('AsyncStorage readback did not match the test payload');
@@ -441,7 +830,7 @@ async function runStorageCheck(
     error = formatAuditError(caught);
   } finally {
     try {
-      await AsyncStorage.removeItem(key);
+      await awaitAuditWork(AsyncStorage.removeItem(key), watchdog, 'AsyncStorage cleanup');
       temporaryKeyDeleted = true;
     } catch (caught) {
       error ??= formatAuditError(caught);
@@ -510,11 +899,11 @@ async function runFileSystemCheck(
   try {
     assertSessionActive(watchdog);
     let at = now();
-    await FileSystem.writeAsStringAsync(uri, payload);
+    await awaitAuditWork(FileSystem.writeAsStringAsync(uri, payload), watchdog, 'Filesystem write');
     assertSessionActive(watchdog);
     writeMs = now() - at;
     at = now();
-    const restored = await FileSystem.readAsStringAsync(uri);
+    const restored = await awaitAuditWork(FileSystem.readAsStringAsync(uri), watchdog, 'Filesystem read');
     assertSessionActive(watchdog);
     readMs = now() - at;
     if (restored.length !== payload.length) {
@@ -526,7 +915,11 @@ async function runFileSystemCheck(
     error = formatAuditError(caught);
   } finally {
     try {
-      await FileSystem.deleteAsync(uri, { idempotent: true });
+      await awaitAuditWork(
+        FileSystem.deleteAsync(uri, { idempotent: true }),
+        watchdog,
+        'Filesystem cleanup',
+      );
       temporaryFileDeleted = true;
     } catch (caught) {
       error ??= formatAuditError(caught);
@@ -849,11 +1242,15 @@ async function runLogIoCheck(
   try {
     assertSessionActive(watchdog);
     let at = now();
-    await debugLog.flushToFile();
+    await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Debug-log benchmark flush');
     flushMs = now() - at;
     assertSessionActive(watchdog);
     at = now();
-    const complete = await debugLog.readCompleteText();
+    const complete = await awaitAuditWork(
+      debugLog.readCompleteText(),
+      watchdog,
+      'Debug-log benchmark read',
+    );
     readMs = now() - at;
     bytes = new TextEncoder().encode(complete).length;
   } catch (caught) {
@@ -1150,7 +1547,9 @@ async function waitForJourneyData(
   }
 }
 
-async function runJourney(
+/** Retained as a compatibility test seam for schema-v3 route timing fixtures.
+ * Schema v4 runs the readiness-gated deep plan above. */
+export async function runJourney(
   journey: AuditJourney,
   iteration: JourneyIteration,
   currentPath: () => string,
@@ -1360,6 +1759,17 @@ export function usePerformanceAuditState() {
   );
 }
 
+/** Root navigation only needs the primitive active flag. Returning a stable
+ * boolean prevents every audit progress/check update from rerendering the
+ * complete root navigator while measured pages are mounted. */
+export function usePerformanceAuditActiveState(): boolean {
+  return useSyncExternalStore(
+    subscribePerformanceAudit,
+    isPerformanceAuditActive,
+    isPerformanceAuditActive,
+  );
+}
+
 export function PerformanceAuditRunner() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -1381,24 +1791,23 @@ export function PerformanceAuditRunner() {
       const app = installedAuditIdentity();
       const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
       const originalStore = useStore.getState();
-      const originalActiveSection = originalStore.activeSection;
-      const originalProfileFilters = JSON.parse(
-        JSON.stringify(originalStore.prefs.profileFilters),
-      ) as typeof originalStore.prefs.profileFilters;
-      let journeys = buildPerformanceAuditJourneys(
-        originalStore.core,
-        originalStore.prefs.interests,
-      );
-      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
+      let plan = buildDeepPerformanceAuditPlan(originalStore.core);
+      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+        plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
+      let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
+      let rollbackRestored = false;
+      let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
+      let auditEnvironment: AuditEnvironment | null = null;
+      let activeDatasetRevision: AuditDatasetRevision | null = null;
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
         let settled = false;
         let failure: unknown;
-        const flush = debugLog.flushToFile().then(
+        const flush = debugLog.flushToFile(Platform.OS !== 'web').then(
           () => {
             settled = true;
           },
@@ -1434,8 +1843,18 @@ export function PerformanceAuditRunner() {
         // Setup belongs inside the protected region so an unexpected native
         // keep-awake or monitor failure cannot leave the global running flag
         // latched forever.
-        await activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG);
+        await awaitAuditWork(
+          activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG),
+          watchdog,
+          'Keep-awake activation',
+        );
         monitor.start();
+        rollbackSnapshot = await awaitAuditWork(
+          beginPerformanceAuditRollback(useStore),
+          watchdog,
+          'Rollback journal creation',
+        );
+        readinessCapture = performanceAuditReadinessRegistry.beginCapture(sessionId);
         updatePerformanceAuditProgress(
           completed,
           total,
@@ -1443,12 +1862,11 @@ export function PerformanceAuditRunner() {
         );
         await waitForRefreshWork(watchdog);
         const initialStore = useStore.getState();
-        journeys = buildPerformanceAuditJourneys(
-          initialStore.core,
-          initialStore.prefs.interests,
-        );
-        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
+        plan = buildDeepPerformanceAuditPlan(initialStore.core);
+        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+          plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
         const datasetRevision = captureDatasetRevision();
+        activeDatasetRevision = datasetRevision;
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(
           completed,
@@ -1468,43 +1886,50 @@ export function PerformanceAuditRunner() {
           datasetRevision,
         });
         // Keep start logging outside the first measured phase.
-        await debugLog.flushToFile();
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit start log flush');
 
-        const environment = await collectEnvironment(
+        let environment = await awaitAuditWork(collectEnvironment(
           app,
           dimensions.width,
           dimensions.height,
           dimensions.fontScale,
-        );
+        ), watchdog, 'Audit environment capture');
+        auditEnvironment = environment;
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
         await record(await runRuntimeCheck(monitor, watchdog));
 
-        for (const journey of journeys) {
-          for (const iteration of ['cold', 'warm'] as const) {
+        for (const pass of plan.passes) {
+          for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
             updatePerformanceAuditProgress(
               completed,
               total,
-              `Opening ${journey.label} (${iteration}), then going back`,
+              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
             );
             logAuditEvent(app, {
-              kind: 'journey-start',
+              kind: 'deep-step-start',
               sessionId,
-              id: journey.id,
-              label: journey.label,
-              iteration,
+              planSchemaVersion: plan.schemaVersion,
+              stepId: step.id,
+              passId: step.passId,
+              scenarioId: step.scenarioId,
+              semanticActionId: step.semanticActionId,
+              depth: step.depth,
+              expectedPath: step.expectedPath,
+              expectedSurface: step.expectedSurface,
+              readiness: step.readiness,
+              parameters: step.parameters,
+              stateImpact: step.safety.stateImpact,
+              unsafeActionsExcluded: step.safety.unsafeActionsExcluded,
             });
-            // Persist the marker before timing starts so audit bookkeeping does
-            // not wake up during the measured navigation transition.
-            await debugLog.flushToFile();
+            await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
             await record(
-              await runJourney(
-                journey,
-                iteration,
+              await runDeepAuditStep(
+                step,
                 () => pathnameRef.current,
                 monitor,
                 watchdog,
@@ -1553,6 +1978,34 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
+        updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
+        const restoreStarted = now();
+        await awaitAuditWork(
+          restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+          watchdog,
+          'Audit state restoration',
+        );
+        rollbackRestored = true;
+        await record({
+          id: 'audit-state-restoration',
+          label: 'Audit state rollback and durable verification',
+          kind: 'storage',
+          status: 'pass',
+          durationMs: roundMetric(now() - restoreStarted),
+          metrics: {
+            restored: true,
+            journalClearedAfterPersistence: true,
+          },
+        });
+
+        environment = {
+          ...environment,
+          detailsLoaded: useStore.getState().details != null,
+          historyLoaded: useStore.getState().historyBanks != null,
+          productHistoryLoaded: useStore.getState().productHistory != null,
+        };
+        auditEnvironment = environment;
+
         const finishedAt = new Date().toISOString();
         const summary = summarizePerformanceAudit(checks);
         const report: PerformanceAuditReport = {
@@ -1568,13 +2021,17 @@ export function PerformanceAuditRunner() {
             lastStoredCheckAt,
           },
           environment,
+          plan,
           summary,
           checks,
           routeAggregates: aggregateRepeatedJourneys(checks),
           limitations: [
+            `This report applies exactly to app version ${app.appVersion}, build ${app.buildVersion}.`,
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
-            'Routes are repeated first-pass then warm within this audit session and exercise real mounted data, forward navigation and back navigation. "Cold" does not mean a cold app process: disk, store and module caches may already be warm. The audit does not type into forms, change preferences, install updates or mutate favourites.',
+            'The first-pass and repeat whole-app scenarios run linearly. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
+            'In-page actions invoke the same registered callbacks as product searches, filters, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input actions remain explicitly excluded for safety.',
+            'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             'Update readiness validates manifest content/compatibility and observes existing download state; it never downloads an APK or launches the Android installer. Its duration may come from the one-minute update-check cache and is not classified as network latency.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
@@ -1599,13 +2056,17 @@ export function PerformanceAuditRunner() {
         ].join(' ');
         let completeReportStored = false;
         try {
-          await debugLog.storePerformanceAudit(summaryMarker, report);
+          await awaitAuditWork(
+            debugLog.storePerformanceAudit(summaryMarker, report),
+            watchdog,
+            'Performance report persistence',
+          );
           completeReportStored = true;
         } catch (storeError) {
           const message = formatAuditError(storeError);
           debugLog.warn(
             PERFORMANCE_AUDIT_LOG_TAG,
-            `durable report snapshot unavailable; writing complete report to log: ${message}`,
+            `complete report persistence verification failed: ${message}`,
           );
           logAuditEvent(app, {
             kind: 'report-fallback',
@@ -1624,23 +2085,31 @@ export function PerformanceAuditRunner() {
         });
         debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
         reportPerformanceAudit(report);
-        await debugLog.flushToFile();
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Final audit log flush');
         updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
-          const completeLog = await debugLog.readCompleteText();
-          const result = await uploadDebugLog(
+          const completeLog = await awaitAuditWork(
+            debugLog.readCompleteText(),
+            watchdog,
+            'Complete audit log read',
+          );
+          const result = await awaitAuditWork(uploadDebugLog(
             formatVersionedLogExport(
               completeLog,
               environment.appVersion,
               environment.buildVersion,
               { audit_session: sessionId },
             ),
-          );
+          ), watchdog, 'Audit log upload');
           if (result.truncated || result.clientTruncated) {
             throw new Error('The upload service did not accept the complete log.');
           }
-          await Clipboard.setStringAsync(result.url);
+          await awaitAuditWork(
+            Clipboard.setStringAsync(result.url),
+            watchdog,
+            'Audit link clipboard write',
+          );
           upload = { url: result.url, provider: result.provider };
           debugLog.info(
             PERFORMANCE_AUDIT_LOG_TAG,
@@ -1651,7 +2120,8 @@ export function PerformanceAuditRunner() {
           upload = { error: message };
           debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, `automatic log upload failed: ${message}`);
         }
-        await debugLog.flushToFile();
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Upload-result log flush');
+        assertSessionActive(watchdog);
         completePerformanceAudit(report, upload);
       } catch (caught) {
         let recoveryError: string | null = null;
@@ -1660,7 +2130,7 @@ export function PerformanceAuditRunner() {
         } catch (recoveryCaught) {
           recoveryError = formatAuditError(recoveryCaught);
         }
-        if (caught instanceof AuditCancelledError) {
+        if (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
           logAuditEvent(app, {
             kind: 'cancelled',
             sessionId,
@@ -1672,13 +2142,35 @@ export function PerformanceAuditRunner() {
             trace: formatAuditError(caught),
             recoveryError,
           });
-          await debugLog.flushToFile();
+          await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
           markPerformanceAuditCancelled();
         } else {
           const error = [
             formatAuditError(caught),
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
           ].join('\n');
+          const failedCheck: AuditCheck = {
+            id: `fatal-${completed + 1}`,
+            label: getPerformanceAuditState().progress.label || 'Performance audit fatal error',
+            kind: 'runtime',
+            status: 'fail',
+            durationMs: 0,
+            metrics: {
+              completedBeforeFailure: completed,
+              plannedChecks: total,
+              currentPath: pathnameRef.current,
+              datasetRevision: activeDatasetRevision
+                ? datasetRevisionLabel(activeDatasetRevision)
+                : null,
+              readinessBlockers: performanceAuditReadinessRegistry.snapshot().blockers
+                .map((blocker) => blocker.message)
+                .join(' | ') || null,
+            },
+            error,
+            trace: captureAuditTrace('performance audit stopped before later steps'),
+          };
+          checks.push(failedCheck);
+          logAuditCheck(app, sessionId, failedCheck);
           debugLog.error(
             PERFORMANCE_AUDIT_LOG_TAG,
             JSON.stringify({
@@ -1691,22 +2183,87 @@ export function PerformanceAuditRunner() {
               lastStoredCheckAt,
             }),
           );
-          await debugLog.flushToFile();
-          failPerformanceAudit(error);
+          const partialSummary = summarizePerformanceAudit(checks);
+          const partialReport: PerformanceAuditReport = {
+            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+            sessionId,
+            startedAt,
+            finishedAt: new Date().toISOString(),
+            durationMs: Date.now() - startedMs,
+            app,
+            watchdog: {
+              hangTimeoutMs: watchdog.hangTimeoutMs,
+              storedCheckCount: watchdog.storedCheckCount,
+              lastStoredCheckAt,
+            },
+            environment: auditEnvironment ?? fallbackEnvironment(
+              app,
+              dimensions.width,
+              dimensions.height,
+              dimensions.fontScale,
+            ),
+            plan,
+            summary: partialSummary,
+            checks,
+            routeAggregates: aggregateRepeatedJourneys(checks),
+            limitations: [
+              'This is a structured partial schema-v4 report. The audit stopped at the first failed required step; no later result was fabricated or measured against contaminated state.',
+              `Failure occurred after ${completed} of ${total} planned durable checks.`,
+              `The report applies to app version ${app.appVersion}, build ${app.buildVersion}.`,
+            ],
+          };
+          const partialMarker = [
+            'PERFORMANCE_AUDIT_SUMMARY',
+            `schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION}`,
+            `session=${sessionId}`,
+            `app_version=${app.appVersion}`,
+            `build_version=${app.buildVersion}`,
+            'partial=true',
+            `overall=${partialSummary.overall}`,
+            `checks=${checks.length}`,
+            `pass=${partialSummary.pass}`,
+            `warn=${partialSummary.warn}`,
+            `fail=${partialSummary.fail}`,
+            `slowest=${partialSummary.slowestCheckId ?? 'none'}`,
+            `slowest_ms=${partialSummary.slowestCheckMs}`,
+          ].join(' ');
+          let partialStoreError: string | null = null;
+          try {
+            await timeoutAfter(
+              debugLog.storePerformanceAudit(partialMarker, partialReport),
+              10_000,
+              'Partial report persistence',
+            );
+            reportPerformanceAudit(partialReport);
+          } catch (partialCaught) {
+            partialStoreError = formatAuditError(partialCaught);
+            debugLog.error(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `partial report persistence failed: ${partialStoreError}`,
+            );
+          }
+          await timeoutAfter(debugLog.flushToFile(), 5_000, 'Fatal log flush').catch(() => {});
+          failPerformanceAudit([
+            error,
+            ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
+          ].join('\n'));
         }
       } finally {
-        // Each cleanup is isolated so one native/module failure cannot prevent
-        // the remaining state from being restored.
-        try {
-          useStore.setState((current) => ({
-            activeSection: originalActiveSection,
-            prefs: {
-              ...current.prefs,
-              profileFilters: originalProfileFilters,
-            },
-          }));
-        } catch {
-          // Best effort; the audit result has already been recorded.
+        if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
+        if (!rollbackRestored && rollbackSnapshot) {
+          try {
+            await timeoutAfter(
+              restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+              5_000,
+              'Final audit rollback',
+            );
+          } catch (rollbackError) {
+            debugLog.error(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `audit rollback retained for launch recovery: ${formatAuditError(rollbackError)}`,
+            );
+            await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+          }
         }
         try {
           monitor.stop();
@@ -1714,7 +2271,11 @@ export function PerformanceAuditRunner() {
           // Best effort; always continue to native keep-awake cleanup.
         }
         try {
-          await deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG);
+          await timeoutAfter(
+            deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG),
+            5_000,
+            'Keep-awake release',
+          );
         } catch {
           // Best effort; always release the JS running guard below.
         }

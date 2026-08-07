@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
@@ -36,6 +36,12 @@ export interface EconomicExplorerProps {
   rbaHolds?: string[];
   /** @deprecated Prefer tapping a mini chart; kept for callers that pin a view. */
   initialLens?: EconomicExplorerLens;
+  lens?: EconomicExplorerLens;
+  onLensChange?: (lens: EconomicExplorerLens) => void;
+  window?: EconomicWindow;
+  onWindowChange?: (window: EconomicWindow) => void;
+  selectionStep?: number;
+  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
 }
 
 function signalColor(
@@ -198,9 +204,20 @@ export function EconomicExplorer({
   rba,
   rbaHolds,
   initialLens,
+  lens: controlledLens,
+  onLensChange,
+  window: controlledWindow,
+  onWindowChange,
+  selectionStep,
+  onGraphicReady,
 }: EconomicExplorerProps) {
   const theme = useTheme();
-  const [window, setWindow] = useState<EconomicWindow>('5Y');
+  const [localWindow, setLocalWindow] = useState<EconomicWindow>('5Y');
+  const window = controlledWindow ?? localWindow;
+  const changeWindow = (next: EconomicWindow) => {
+    if (controlledWindow == null) setLocalWindow(next);
+    onWindowChange?.(next);
+  };
 
   const comparison = useMemo(
     () => inflationExpectationsModel(data, window),
@@ -208,13 +225,24 @@ export function EconomicExplorer({
   );
   const momentum = useMemo(() => economicMomentumModel(data), [data]);
   const policy = useMemo(() => policyPathModel(data, rba, window), [data, rba, window]);
-  const [expanded, setExpanded] = useState<EconomicExplorerLens>(
+  const [localExpanded, setLocalExpanded] = useState<EconomicExplorerLens>(
     initialLens ?? (policy ? 'policy' : data.indicators[0]?.id ?? 'momentum'),
   );
+  const expanded = controlledLens ?? localExpanded;
 
   const toggle = (id: EconomicExplorerLens) => {
-    setExpanded(id);
+    if (controlledLens == null) setLocalExpanded(id);
+    onLensChange?.(id);
   };
+  const pointCount = data.indicators.reduce((count, indicator) => count + indicator.points.length, 0);
+  const graphicRevision = `${data.checkedAt || data.fetchedAt}:${expanded}:${window}:${selectionStep ?? 0}`;
+  useEffect(() => {
+    if (!expanded) return;
+    const frame = requestAnimationFrame(() => {
+      onGraphicReady?.({ revision: graphicRevision, pointCount });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [expanded, graphicRevision, onGraphicReady, pointCount]);
 
   const indicatorTiles = data.indicators.map((indicator) => {
     const latest = indicator.points[indicator.points.length - 1];
@@ -301,13 +329,13 @@ export function EconomicExplorer({
       {expanded && expanded !== 'momentum' ? (
         <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 12 }}>
           {WINDOWS.map((item) => (
-            <Chip key={item} label={item} selected={window === item} onPress={() => setWindow(item)} />
+            <Chip key={item} label={item} selected={window === item} onPress={() => changeWindow(item)} />
           ))}
         </Row>
       ) : null}
 
       {expanded && data.indicators.some((item) => item.id === expanded) ? (
-        <IndicatorExpanded data={data} id={expanded as EconomicIndicatorId} window={window} />
+        <IndicatorExpanded data={data} id={expanded as EconomicIndicatorId} window={window} selectionStep={selectionStep} />
       ) : null}
 
       {expanded === 'compare' ? (
@@ -331,6 +359,7 @@ export function EconomicExplorer({
               ]}
               targetBand={comparison.targetBand}
               accessibilitySummary={comparison.summary}
+              selectionStep={selectionStep}
             />
           </ExpandedDetail>
         ) : (
@@ -378,6 +407,7 @@ export function EconomicExplorer({
               holdDates={rbaHolds}
               holdSeriesId="actual"
               accessibilitySummary={policy.summary}
+              selectionStep={selectionStep}
             />
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 5 }}>
               Solid = official cash-rate history · dashed = survey median, not a probability · hollow diamonds = held
@@ -395,10 +425,12 @@ function IndicatorExpanded({
   data,
   id,
   window,
+  selectionStep,
 }: {
   data: EconomicOutlookPayload;
   id: EconomicIndicatorId;
   window: EconomicWindow;
+  selectionStep?: number;
 }) {
   const theme = useTheme();
   const indicator = useMemo(() => indicatorHistoryModel(data, id, window), [data, id, window]);
@@ -419,6 +451,7 @@ function IndicatorExpanded({
         }]}
         targetBand={indicator.targetBand}
         accessibilitySummary={indicator.summary}
+        selectionStep={selectionStep}
       />
       <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
         {live.signal.explanation}

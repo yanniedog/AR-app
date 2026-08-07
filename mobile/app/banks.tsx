@@ -17,12 +17,18 @@ import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useStore } from '../src/data/store';
 import { openBank } from '../src/lib/nav';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
-import type { SectionKey } from '../src/types';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
+import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
+import type { LogoRenderState } from '../src/lib/logoReadiness';
+import { auditActionString } from '../src/lib/performanceAuditActionParams';
+import { SECTION_KEYS, type SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function Banks() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? null);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -123,6 +129,78 @@ export default function Banks() {
     () => groups.filter((g) => g.provider.toLowerCase().includes(query.toLowerCase())),
     [groups, query],
   );
+  const auditActions = useMemo(() => ({
+    'lenders.open': () => undefined,
+    'lenders.section.next': (...args: unknown[]) => {
+      const requested = auditActionString(args, 'section');
+      if (requested && SECTION_KEYS.includes(requested as SectionKey) &&
+        sectionOptions.some((option) => option.value === requested)) {
+        setActiveSection(requested as SectionKey);
+        return;
+      }
+      const index = sectionOptions.findIndex((option) => option.value === section);
+      const next = sectionOptions[(Math.max(0, index) + 1) % sectionOptions.length]?.value;
+      if (next) setActiveSection(next);
+    },
+    'lenders.query.provider': (...args: unknown[]) => {
+      const provider = auditActionString(args, 'query');
+      if (provider) setQuery(provider);
+    },
+    'lenders.query.clear': () => setQuery(''),
+    'lenders.provider.open': (...args: unknown[]) => {
+      const provider = auditActionString(args, 'provider');
+      if (provider && groups.some((group) => group.provider === provider)) openBank(provider);
+    },
+  }), [groups, section, sectionOptions, setActiveSection]);
+  const listRevision = JSON.stringify([
+    coreSha ?? core?.run_date ?? 'none',
+    section,
+    query,
+    depositRankMetric,
+    mortgageRateMetric,
+    includeNonStandard,
+    detailsProducts != null,
+    suitabilityRevision,
+    filterReady,
+    filtered.map((group) => group.provider),
+  ]);
+  const listReadiness = useVirtualizedListReadiness(listRevision, filtered.length);
+  const logoReadiness = useLogoReadiness(listRevision);
+  usePerformanceAuditSurface({
+    id: 'lenders.list',
+    routeKey: '/banks',
+    datasetRevision: coreSha ?? core?.run_date ?? null,
+    renderRevision: listRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'lenders.data',
+        kind: 'data',
+        status: core && filterReady ? 'ready' : 'pending',
+        datasetRevision: coreSha ?? core?.run_date ?? null,
+      },
+      {
+        id: 'lenders.list',
+        kind: 'list',
+        status: filterReady && listReadiness.visiblyCommitted ? 'ready' : 'pending',
+        expectedCount: filtered.length,
+        actualCount: listReadiness.committedItemCount,
+      },
+      {
+        id: 'lenders.layout',
+        kind: 'layout',
+        status: listReadiness.ready ? 'ready' : 'pending',
+        renderRevision: listRevision,
+      },
+      {
+        id: 'lenders.logos',
+        kind: 'logo',
+        status: filterReady && logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+    ],
+  });
 
   if (!core) return null;
 
@@ -175,12 +253,21 @@ export default function Banks() {
       ) : (
         <FlashList
           data={filtered}
+          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
+          onLoad={listReadiness.onLoad}
+          onContentSizeChange={listReadiness.onContentSizeChange}
+          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+          ListHeaderComponent={(
+            <View key={listRevision} onLayout={listReadiness.onRevisionLayout} />
+          )}
           extraData={`${section}:${depositRankMetric}:${mortgageRateMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
           keyExtractor={(g) => g.provider}
           contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
           renderItem={({ item }) => (
             <BankRow
               group={item}
+              logoRenderStateId={`lenders:${item.provider}`}
+              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
               sortSection={section}
               depositRankMetric={depositRankMetric}
               mortgageRateMetric={mortgageRateMetric}
@@ -198,11 +285,15 @@ function BankRow({
   sortSection,
   depositRankMetric,
   mortgageRateMetric,
+  logoRenderStateId,
+  onLogoRenderStateChange,
 }: {
   group: ProviderGroup;
   sortSection: SectionKey;
   depositRankMetric: RankMetric;
   mortgageRateMetric: MortgageRateMetric;
+  logoRenderStateId: string;
+  onLogoRenderStateChange: (id: string, state: LogoRenderState) => void;
 }) {
   const theme = useTheme();
   const sections = SECTION_ORDER.filter((s) => group.bestBySection[s]);
@@ -243,7 +334,11 @@ function BankRow({
         opacity: pressed ? 0.85 : 1,
       })}
     >
-      <BankAvatar provider={group.provider} />
+      <BankAvatar
+        provider={group.provider}
+        renderStateId={logoRenderStateId}
+        onRenderStateChange={onLogoRenderStateChange}
+      />
       <View style={{ flex: 1 }}>
         <AppText variant="body" weight="700" numberOfLines={1}>
           {group.provider}

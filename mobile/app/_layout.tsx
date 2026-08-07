@@ -37,7 +37,7 @@ import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBa
 import { ErrorScreen } from '../src/components/ErrorScreen';
 import {
   PerformanceAuditRunner,
-  usePerformanceAuditState,
+  usePerformanceAuditActiveState,
 } from '../src/components/PerformanceAuditRunner';
 import { AppText } from '../src/components/ui';
 import { registerBackgroundRefresh, routeFromNotificationResponse } from '../src/data/notifications';
@@ -230,9 +230,7 @@ function RootNavigator() {
   const setPref = useStore((s) => s.setPref);
   const pathname = usePathname();
   const bootstrap = useStore((s) => s.bootstrap);
-  const performanceAudit = usePerformanceAuditState();
-  const performanceAuditActive =
-    performanceAudit.status === 'queued' || performanceAudit.status === 'running';
+  const performanceAuditActive = usePerformanceAuditActiveState();
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
@@ -28,6 +28,8 @@ export function LenderRaceChart({
   brands,
   selectedDate,
   onDateSelect,
+  auditRevision,
+  onLogoReadiness,
   height = 170,
   topN = 6,
 }: {
@@ -38,6 +40,8 @@ export function LenderRaceChart({
   brands?: Record<string, Brand>;
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
+  auditRevision?: string;
+  onLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
   height?: number;
   topN?: number;
 }) {
@@ -62,6 +66,53 @@ export function LenderRaceChart({
       if (date) onDateSelect?.(date);
     },
   });
+  const selectedIndex = selectedDate && model ? model.dates.indexOf(selectedDate) : -1;
+  const activeIndex = model ? (selectedIndex >= 0 ? selectedIndex : model.dates.length - 1) : -1;
+  const ranked = useMemo(() => {
+    if (!model || activeIndex < 0) return [];
+    return model.series
+      .map((series, seriesIndex) => {
+        const rank = series.ranks[activeIndex];
+        const previousRank = series.ranks[Math.max(0, activeIndex - 1)];
+        return {
+          provider: series.provider,
+          rank,
+          rate: series.values[activeIndex],
+          moved: rank != null && previousRank != null ? previousRank - rank : 0,
+          seriesIndex,
+        };
+      })
+      .filter((entry) => entry.rank != null)
+      .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
+  }, [activeIndex, model]);
+  const [terminalLogoProviders, setTerminalLogoProviders] = useState<ReadonlySet<string>>(() => new Set());
+  const markLogoPending = useCallback((provider: string) => {
+    setTerminalLogoProviders((current) => {
+      if (!current.has(provider)) return current;
+      const next = new Set(current);
+      next.delete(provider);
+      return next;
+    });
+  }, []);
+  const markLogoTerminal = useCallback(({ provider }: { provider: string }) => {
+    setTerminalLogoProviders((current) => {
+      if (current.has(provider)) return current;
+      const next = new Set(current);
+      next.add(provider);
+      return next;
+    });
+  }, []);
+  useEffect(() => {
+    if (!auditRevision) return;
+    onLogoReadiness?.({
+      revision: auditRevision,
+      expectedCount: ranked.length,
+      terminalCount: ranked.reduce(
+        (count, entry) => count + (terminalLogoProviders.has(entry.provider) ? 1 : 0),
+        0,
+      ),
+    });
+  }, [auditRevision, onLogoReadiness, ranked, terminalLogoProviders]);
   if (!model) {
     return (
       <AppText variant="small" color="textMuted">
@@ -80,23 +131,6 @@ export function LenderRaceChart({
 
   const colorFor = (provider: string, i: number) =>
     brands?.[provider]?.color || FALLBACK_PALETTE[i % FALLBACK_PALETTE.length];
-  const selectedIndex = selectedDate ? model.dates.indexOf(selectedDate) : -1;
-  const activeIndex = selectedIndex >= 0 ? selectedIndex : model.dates.length - 1;
-  const ranked = model.series
-    .map((series, seriesIndex) => {
-      const rank = series.ranks[activeIndex];
-      const previousRank = series.ranks[Math.max(0, activeIndex - 1)];
-      return {
-        provider: series.provider,
-        rank,
-        rate: series.values[activeIndex],
-        moved: rank != null && previousRank != null ? previousRank - rank : 0,
-        seriesIndex,
-      };
-    })
-    .filter((entry) => entry.rank != null)
-    .sort((left, right) => left.rank! - right.rank! || left.provider.localeCompare(right.provider));
-
   return (
     <View>
       <View
@@ -212,7 +246,12 @@ export function LenderRaceChart({
             <AppText variant="tiny" weight="700" color="textFaint" style={{ width: 22 }}>
               #{entry.rank}
             </AppText>
-            <BankAvatar provider={entry.provider} size={22} />
+            <BankAvatar
+              provider={entry.provider}
+              size={22}
+              onAssetPending={markLogoPending}
+              onAssetTerminal={markLogoTerminal}
+            />
             <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
               {entry.provider}
             </AppText>

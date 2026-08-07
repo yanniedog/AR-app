@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,7 +20,11 @@ import { logCategoryRowPress } from '../lib/degradationLog';
 import { debugLog } from '../lib/debugLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
 import { useSuitabilityRevision } from '../hooks/useSuitabilityRevision';
-import type { ProductDetail, RateRow, SectionKey } from '../types';
+import { usePerformanceAuditSurface } from '../hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../hooks/useLogoReadiness';
+import { useVirtualizedListReadiness } from '../hooks/useVirtualizedListReadiness';
+import { auditActionString, auditActionStrings } from '../lib/performanceAuditActionParams';
+import { SECTION_KEYS, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { SectionCrossfade } from './controls';
 import { CategoryRow } from './CategoryRow';
@@ -106,6 +110,10 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   const listRef = useRef<FlashListRef<Item>>(null);
   useScrollToTop(listRef);
   const sectionData = useStore((s) => s.core?.sections[section]);
+  const datasetRevision = useStore(
+    (s) => s.manifest?.files.core.sha256 ?? s.core?.run_date ?? null,
+  );
+  const detailsRevision = useStore((s) => s.details?.run_date ?? 'none');
   const rows = sectionData?.rates;
   const rba = useStore((s) => s.core?.rba?.at(-1)?.rate ?? null);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -160,13 +168,102 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pathKey encodes path
   }, [rows, sectionData, section, pathKey, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision]);
 
+  const setActiveSection = useStore((s) => s.setActiveSection);
+  const interests = useStore((s) => s.prefs.interests);
+  const availableSections = interests;
+  const changeSection = useCallback((next: SectionKey) => {
+    setActiveSection(next);
+    openBrowseDrill(next);
+  }, [setActiveSection]);
+  const auditActions = useMemo(() => ({
+    'browse.open': () => undefined,
+    'browse.section.next': (...args: unknown[]) => {
+      const requested = auditActionString(args, 'section');
+      if (requested && SECTION_KEYS.includes(requested as SectionKey) &&
+        availableSections.includes(requested as SectionKey)) {
+        changeSection(requested as SectionKey);
+        return;
+      }
+      const current = Math.max(0, availableSections.indexOf(section));
+      const next = availableSections[(current + 1) % availableSections.length];
+      if (next) changeSection(next);
+    },
+    'browse.category.first': () => {
+      const first = children[0];
+      if (first) openBrowseDrill(section, [...path, first.seg]);
+    },
+    'browse.category.deepest': (...args: unknown[]) => {
+      const exactPath = auditActionStrings(args, 'taxonomyPath');
+      if (exactPath.length) openBrowseDrill(section, exactPath);
+    },
+    'browse.category.back': () => openBrowseDrill(section, path.slice(0, -1)),
+    'browse.products.all': () => openProductsList(section, path),
+  }), [availableSections, changeSection, children, path, section]);
+  const listRevision = [
+    datasetRevision ?? 'none',
+    detailsRevision,
+    section,
+    pathKey,
+    includeNonStandard ? 'all' : 'standard',
+    depositRankMetric,
+    mortgageRateMetric,
+    suitabilityRevision,
+    items.length,
+  ].join(':');
+  const listReadiness = useVirtualizedListReadiness(listRevision, items.length);
+  const logoReadiness = useLogoReadiness(listRevision);
+  usePerformanceAuditSurface({
+    id: 'browse.hierarchy',
+    routeKey: '/browse',
+    datasetRevision,
+    renderRevision: listRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'browse.data',
+        kind: 'data',
+        status: rows ? 'ready' : 'pending',
+        datasetRevision,
+      },
+      {
+        id: 'browse.list',
+        kind: 'list',
+        status: rows && listReadiness.visiblyCommitted ? 'ready' : 'pending',
+        datasetRevision,
+        expectedCount: items.length,
+        actualCount: listReadiness.committedItemCount,
+      },
+      {
+        id: 'browse.layout',
+        kind: 'layout',
+        status: listReadiness.ready ? 'ready' : 'pending',
+        renderRevision: listRevision,
+      },
+      {
+        id: 'browse.graphics',
+        kind: 'graphic',
+        required: false,
+        status: 'ready',
+        renderRevision: `${section}:${pathKey}:${stats.products}`,
+      },
+      {
+        id: 'browse.logos',
+        kind: 'logo',
+        required: false,
+        status: logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+    ],
+  });
+
   if (!rows) return null;
 
   const isLeaf = children.length === 0;
   const meta = SECTIONS[section];
 
   const header = (
-    <View>
+    <View key={listRevision} onLayout={listReadiness.onRevisionLayout}>
       {path.length > 0 && (
         <Pressable
           onPress={() => openBrowseDrill(section, path.slice(0, -1))}
@@ -206,10 +303,15 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   );
 
   return (
-    <FlashList
+    <View style={{ flex: 1 }}>
+      <FlashList
       ref={listRef}
       data={items}
       extraData={`${section}:${pathKey}:${includeNonStandard}`}
+      onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
+      onLoad={listReadiness.onLoad}
+      onContentSizeChange={listReadiness.onContentSizeChange}
+      onViewableItemsChanged={listReadiness.onViewableItemsChanged}
       keyExtractor={(it, i) =>
         it.kind === 'node'
           ? `${section}-n-${it.node.seg}`
@@ -235,10 +337,13 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
           <ProductCard
             row={item.row}
             section={section}
+            logoRenderStateId={`browse:${section}:${pathKey}:${item.row.rate_index ?? 'default'}#${item.row.product_key}`}
+            onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
             onPress={() => openProduct(item.row.product_key, item.row.rate_index)}
           />
         )
       }
-    />
+      />
+    </View>
   );
 }

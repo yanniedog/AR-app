@@ -12,9 +12,15 @@ import {
   normalizeSortKey,
   queryAndSort,
   rankFraction,
+  sortRankFraction,
   sortRows,
+  type MortgageRateMetric,
   type ProviderGroup,
+  type RankMetric,
+  type SortKey,
 } from '../src/data/selectors';
+import { toFraction } from '../src/data/format';
+import * as rateQualifierModule from '../src/lib/rateQualifier';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { RateRow, SectionKey } from '../src/types';
 
@@ -37,8 +43,79 @@ const savings: RateRow[] = [
   mk({ provider: 'Bank B', product_key: 'B|S', product_name: 'Bonus', rate: '0.052' }),
 ];
 
+function referenceSortRows(
+  rows: RateRow[],
+  sortKey: SortKey,
+  section: SectionKey,
+  metric: RankMetric,
+  mortgageMetric: MortgageRateMetric,
+): RateRow[] {
+  const lowerIsBetter = section === 'Mortgage';
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      if (sortKey !== 'bank') {
+        const va = sortRankFraction(a.row, sortKey, section, metric, mortgageMetric);
+        const vb = sortRankFraction(b.row, sortKey, section, metric, mortgageMetric);
+        if (va === null && vb !== null) return 1;
+        if (va !== null && vb === null) return -1;
+        if (va !== null && vb !== null) {
+          const byRate = lowerIsBetter ? va - vb : vb - va;
+          if (byRate !== 0) return byRate;
+          if (section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline') {
+            const ca = toFraction(a.row.comparison_rate);
+            const cb = toFraction(b.row.comparison_rate);
+            if (ca === null && cb !== null) return 1;
+            if (ca !== null && cb === null) return -1;
+            if (ca !== null && cb !== null && ca !== cb) return ca - cb;
+          }
+        }
+      }
+      return (
+        a.row.provider.localeCompare(b.row.provider) ||
+        a.row.product_name.localeCompare(b.row.product_name) ||
+        a.index - b.index
+      );
+    })
+    .map(({ row }) => row);
+}
+
+function seededRows(seed: number, section: SectionKey): RateRow[] {
+  let value = seed >>> 0;
+  const next = () => {
+    value = (value * 1664525 + 1013904223) >>> 0;
+    return value;
+  };
+  return Array.from({ length: 80 }, (_, index) => {
+    const headline = index % 13 === 0 ? '0' : String(0.025 + (next() % 35) / 10_000);
+    const comparison = index % 5 === 0
+      ? undefined
+      : String(0.025 + (next() % 35) / 10_000);
+    const kind = index % 4 === 0 ? 'bonus' : index % 9 === 0 ? 'introductory' : 'base';
+    const ongoing = index % 17 === 0
+      ? ''
+      : index % 19 === 0
+        ? '0'
+        : String(0.01 + (next() % 30) / 10_000);
+    return mk({
+      provider: `Bank ${next() % 8}`,
+      product_key: `${section}-${seed}-${index}`,
+      product_name: `Product ${next() % 12}`,
+      rate: headline,
+      comparison_rate: comparison,
+      ribbon_deposit_kind: section === 'Savings' ? kind : undefined,
+      ribbon_rate_structure: section === 'TD' ? kind : undefined,
+      ongoing_rate: section === 'Mortgage' ? undefined : ongoing,
+      account_class: 'standard',
+    });
+  });
+}
+
 describe('selectors', () => {
-  afterEach(() => setSuitabilityAllowed(null));
+  afterEach(() => {
+    setSuitabilityAllowed(null);
+    jest.restoreAllMocks();
+  });
 
   test('bestRow picks lowest for loans, ignoring non-standard', () => {
     const best = bestRow(mortgage, 'Mortgage');
@@ -144,6 +221,92 @@ describe('selectors', () => {
     expect(loans.map((r) => r.product_key)).toEqual(['A|1', 'B|1']);
     const deps = sortRows(savings, 'rate', 'Savings');
     expect(deps.map((r) => r.product_key)).toEqual(['B|S', 'A|S']);
+  });
+
+  test('optimized sorting and linear best selection match the reference ordering', () => {
+    const cases: {
+      section: SectionKey;
+      sortKey: SortKey;
+      metric: RankMetric;
+      mortgageMetric: MortgageRateMetric;
+    }[] = [
+      { section: 'Mortgage', sortKey: 'rate', metric: 'base', mortgageMetric: 'headline' },
+      { section: 'Mortgage', sortKey: 'rate', metric: 'base', mortgageMetric: 'comparison' },
+      { section: 'Mortgage', sortKey: 'comparison', metric: 'base', mortgageMetric: 'headline' },
+      { section: 'Mortgage', sortKey: 'bank', metric: 'base', mortgageMetric: 'headline' },
+      { section: 'Savings', sortKey: 'rate', metric: 'base', mortgageMetric: 'headline' },
+      { section: 'Savings', sortKey: 'comparison', metric: 'max', mortgageMetric: 'headline' },
+      { section: 'TD', sortKey: 'rate', metric: 'base', mortgageMetric: 'headline' },
+    ];
+
+    for (let seed = 1; seed <= 12; seed += 1) {
+      for (const testCase of cases) {
+        const rows = seededRows(seed, testCase.section);
+        const expected = referenceSortRows(
+          rows,
+          testCase.sortKey,
+          testCase.section,
+          testCase.metric,
+          testCase.mortgageMetric,
+        );
+        expect(
+          sortRows(
+            rows,
+            testCase.sortKey,
+            testCase.section,
+            testCase.metric,
+            testCase.mortgageMetric,
+          ).map((row) => row.product_key),
+        ).toEqual(expected.map((row) => row.product_key));
+
+        if (testCase.sortKey === 'rate') {
+          const rankable = excludeTokenDepositRates(rows, testCase.section).filter(
+            (row) =>
+              rankFraction(
+                row,
+                testCase.section,
+                testCase.metric,
+                testCase.mortgageMetric,
+              ) !== null,
+          );
+          const expectedBest = referenceSortRows(
+            rankable,
+            'rate',
+            testCase.section,
+            testCase.metric,
+            testCase.mortgageMetric,
+          )[0] ?? null;
+          expect(
+            bestRow(
+              rows,
+              testCase.section,
+              true,
+              testCase.metric,
+              null,
+              testCase.mortgageMetric,
+            )?.product_key ?? null,
+          ).toBe(expectedBest?.product_key ?? null);
+        }
+      }
+    }
+  });
+
+  test('extracts a deposit rank once per row and never constructs display qualifiers', () => {
+    const conditionality = jest.spyOn(rateQualifierModule, 'rateConditionality');
+    const displayQualifier = jest.spyOn(rateQualifierModule, 'rateQualifier');
+    const rows = Array.from({ length: 600 }, (_, index) => mk({
+      provider: `Bank ${index % 20}`,
+      product_key: `S-${index}`,
+      product_name: `Bonus saver ${index % 50}`,
+      rate: String(0.04 + (index % 25) / 10_000),
+      ribbon_deposit_kind: index % 3 === 0 ? 'introductory' : 'bonus',
+      ongoing_rate: index % 11 === 0 ? '0' : String(0.01 + (index % 30) / 10_000),
+    }));
+
+    sortRows(rows, 'rate', 'Savings', 'base');
+
+    expect(conditionality).toHaveBeenCalledTimes(rows.length);
+    expect(displayQualifier).not.toHaveBeenCalled();
   });
 
   test('rankFraction ranks deposit bonus/intro rows by their base ongoing rate', () => {

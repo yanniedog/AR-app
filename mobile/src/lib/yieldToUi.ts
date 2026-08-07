@@ -20,6 +20,29 @@ function nextMacrotask(): Promise<void> {
   });
 }
 
+function nextPaintFrame(fallbackMs: number): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let frame: number | null = null;
+    let fallback: ReturnType<typeof setTimeout> | null = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (fallback) clearTimeout(fallback);
+      if (frame != null && typeof cancelAnimationFrame === 'function') {
+        cancelAnimationFrame(frame);
+      }
+      resolve();
+    };
+    if (typeof requestAnimationFrame === 'function') {
+      frame = requestAnimationFrame(finish);
+    } else {
+      armTimeout(17, finish);
+    }
+    fallback = armTimeout(Math.max(17, fallbackMs), finish);
+  });
+}
+
 /** Schedule work after navigation/gesture interactions and return a blur-safe cancellation. */
 export function scheduleAfterInteractions(work: () => void): () => void {
   let cancelled = false;
@@ -137,6 +160,23 @@ export async function yieldToUiFrames(
   const n = Math.max(1, Math.floor(frames));
   for (let i = 0; i < n; i++) {
     await yieldToUi(timeoutMs);
+  }
+}
+
+/**
+ * Wait for real paint opportunities before mounting the next expensive visual
+ * surface. InteractionManager/macrotask yields are useful before CPU work but
+ * do not guarantee that React Native committed a frame between state changes.
+ * The fallback prevents a backgrounded or suspended renderer from hanging
+ * required work forever.
+ */
+export async function yieldToPaintFrames(
+  frames: number = 1,
+  fallbackMs: number = 100,
+): Promise<void> {
+  const n = Math.max(1, Math.floor(frames));
+  for (let i = 0; i < n; i += 1) {
+    await nextPaintFrame(fallbackMs);
   }
 }
 

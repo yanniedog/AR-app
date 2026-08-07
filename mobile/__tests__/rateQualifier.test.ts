@@ -1,4 +1,9 @@
-import { conditionalNote, ongoingRateCaveat, rateQualifier } from '../src/lib/rateQualifier';
+import {
+  conditionalNote,
+  ongoingRateCaveat,
+  rateConditionality,
+  rateQualifier,
+} from '../src/lib/rateQualifier';
 import type { RateRow } from '../src/types';
 
 function row(partial: Partial<RateRow>): RateRow {
@@ -12,6 +17,12 @@ function row(partial: Partial<RateRow>): RateRow {
 }
 
 describe('rateQualifier', () => {
+  it('exposes conditionality without constructing display text', () => {
+    expect(rateConditionality(row({ ribbon_deposit_kind: 'bonus' }), 'Savings')).toBe('bonus');
+    expect(rateConditionality(row({ taxonomy_path: 'SAVINGS.SAVINGS_ACCT.INTRO.FLAT' }), 'Savings')).toBe('intro');
+    expect(rateConditionality(row({ ribbon_rate_structure: 'bonus' }), 'Mortgage')).toBe('none');
+  });
+
   it('treats a base savings rate as unconditional', () => {
     const q = rateQualifier(
       row({ ribbon_deposit_kind: 'base', taxonomy_path: 'SAVINGS.SAVINGS_ACCT.BASE.FLAT' }),

@@ -1,5 +1,5 @@
-import { useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
@@ -18,6 +18,8 @@ import {
 import { rankFraction } from '../src/data/selectors';
 import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import { hasProAccess } from '../src/lib/proAccess';
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -61,6 +63,8 @@ export default function Compare() {
   const productHistoryAvailable = useStore(
     (s) => hasProAccess(s.prefs) && s.productHistory != null,
   );
+  const horizontalScrollRef = useRef<ScrollView>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   const entries = useMemo<Entry[]>(() => {
     if (!core || !keys) return [];
@@ -76,6 +80,61 @@ export default function Compare() {
   useEffect(() => {
     if (entries.length >= 2 && !details) void ensureDetails();
   }, [details, ensureDetails, entries.length]);
+
+  const logoIds = useMemo(
+    () => entries.map((entry) =>
+      `compare:${entry.row.rate_index ?? 'default'}#${entry.row.product_key}`),
+    [entries],
+  );
+  const logoReadiness = useLogoReadiness(logoIds.join('|'), logoIds);
+
+  const auditActions = useMemo(() => ({
+    'compare.open': () => undefined,
+    'compare.scroll.last-column': () => horizontalScrollRef.current?.scrollToEnd({ animated: true }),
+    'compare.dismiss': () => router.back(),
+    'saved.compare.dismiss': () => router.back(),
+  }), []);
+  usePerformanceAuditSurface({
+    id: 'compare.table',
+    routeKey: '/compare',
+    datasetRevision: core?.run_date ?? null,
+    renderRevision: `${core?.run_date ?? 'none'}:${entries.map((entry) => `${entry.row.rate_index ?? ''}#${entry.row.product_key}`).join('|')}`,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'compare.data',
+        kind: 'data',
+        status: core && entries.length >= 2 ? 'ready' : 'pending',
+        datasetRevision: core?.run_date ?? null,
+      },
+      {
+        id: 'compare.columns',
+        kind: 'list',
+        status: entries.length >= 2 ? 'ready' : 'pending',
+        expectedCount: entries.length,
+        actualCount: entries.length,
+      },
+      {
+        id: 'compare.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+      },
+      {
+        id: 'compare.logos',
+        kind: 'logo',
+        status: entries.length >= 2 && logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+      {
+        id: 'compare.history-graphics',
+        kind: 'graphic',
+        required: false,
+        status: 'ready',
+        actualCount: productHistoryAvailable ? entries.length : 0,
+      },
+    ],
+  });
 
   if (!core) return null;
   if (entries.length < 2) {
@@ -182,7 +241,7 @@ export default function Compare() {
   );
 
   return (
-    <Screen style={{ padding: 16 }}>
+    <Screen style={{ padding: 16 }} onLayout={() => setLayoutReady(true)}>
       <View style={[styles.table, { borderColor: theme.colors.border }]}>
         <View style={styles.bodyRow}>
           {/* Frozen label column */}
@@ -205,6 +264,7 @@ export default function Compare() {
 
           {/* Horizontally scrollable product columns */}
           <ScrollView
+            ref={horizontalScrollRef}
             horizontal
             showsHorizontalScrollIndicator
             style={styles.scrollArea}
@@ -232,7 +292,12 @@ export default function Compare() {
                         },
                       ]}
                     >
-                      <BankAvatar provider={e.row.provider} size={28} />
+                      <BankAvatar
+                        provider={e.row.provider}
+                        size={28}
+                        renderStateId={logoIds[idx]}
+                        onRenderStateChange={logoReadiness.onLogoRenderStateChange}
+                      />
                       <AppText variant="tiny" weight="700" numberOfLines={2} style={{ marginTop: 4 }}>
                         {e.row.product_name}
                       </AppText>

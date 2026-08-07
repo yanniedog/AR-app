@@ -13,7 +13,7 @@ import {
   toFraction,
   visibleAccountRows,
 } from './format';
-import { rateQualifier } from '../lib/rateQualifier';
+import { rateConditionality } from '../lib/rateQualifier';
 
 export type SortKey = 'rate' | 'comparison' | 'bank';
 
@@ -123,8 +123,8 @@ export function rankFraction(
     return mortgageMetric === 'headline' ? toFraction(row.rate) : effectiveFraction(row);
   }
   if (metric === 'base') {
-    const q = rateQualifier(row, section);
-    if (q.kind === 'bonus' || q.kind === 'intro') {
+    const kind = rateConditionality(row, section);
+    if (kind === 'bonus' || kind === 'intro') {
       // Some bonus/intro accounts legitimately pay 0% ongoing (see rateQualifier's
       // formatOngoingRate). toFraction rejects <= 0 as missing, so handle a published
       // 0% explicitly — rank it at 0 rather than treating it as unpublished/unrankable.
@@ -139,9 +139,7 @@ export function rankFraction(
   return effectiveFraction(row);
 }
 
-/** The "best" rate in a list, honouring lower-is-better for loans.
- *  Delegates to {@link sortRows} so mortgage headline ties use the same
- *  comparison-rate break as Browse/Search (not first-in-list). */
+/** The "best" rate in a list, honouring lower-is-better for loans. */
 export function bestRow(
   rows: RateRow[],
   section: SectionKey,
@@ -153,9 +151,37 @@ export function bestRow(
   const candidates = excludeTokenDepositRates(
     visibleAccountRows(rows, includeNonStandard, detailsProducts),
     section,
-  ).filter((row) => rankFraction(row, section, metric, mortgageMetric) !== null);
-  if (!candidates.length) return null;
-  return sortRows(candidates, 'rate', section, metric, mortgageMetric)[0] ?? null;
+  );
+  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
+  let best: PreparedSortRow | null = null;
+  for (let originalIndex = 0; originalIndex < candidates.length; originalIndex += 1) {
+    const row = candidates[originalIndex];
+    const prepared = prepareSortRow(
+      row,
+      originalIndex,
+      'rate',
+      section,
+      metric,
+      mortgageMetric,
+    );
+    // Historically bestRow removed unrankable rows before sorting. Preserve
+    // that contract rather than returning a null-ranked row when all are null.
+    if (prepared.rank === null) continue;
+    if (
+      !best ||
+      comparePreparedRows(
+        prepared,
+        best,
+        'rate',
+        section,
+        lowerIsBetter,
+        mortgageMetric,
+      ) < 0
+    ) {
+      best = prepared;
+    }
+  }
+  return best?.row ?? null;
 }
 
 /** Fraction used when ordering a product list for a given sort chip.
@@ -179,6 +205,65 @@ export function sortRankFraction(
   return rankFraction(row, section, metric, mortgageMetric);
 }
 
+interface PreparedSortRow {
+  row: RateRow;
+  originalIndex: number;
+  rank: number | null;
+  comparisonTie: number | null;
+}
+
+function prepareSortRow(
+  row: RateRow,
+  originalIndex: number,
+  sortKey: SortKey,
+  section: SectionKey,
+  metric: RankMetric,
+  mortgageMetric: MortgageRateMetric,
+): PreparedSortRow {
+  return {
+    row,
+    originalIndex,
+    rank:
+      sortKey === 'bank'
+        ? null
+        : sortRankFraction(row, sortKey, section, metric, mortgageMetric),
+    comparisonTie:
+      section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline'
+        ? toFraction(row.comparison_rate)
+        : null,
+  };
+}
+
+function comparePreparedRows(
+  a: PreparedSortRow,
+  b: PreparedSortRow,
+  sortKey: SortKey,
+  section: SectionKey,
+  lowerIsBetter: boolean,
+  mortgageMetric: MortgageRateMetric,
+): number {
+  if (sortKey !== 'bank') {
+    const va = a.rank;
+    const vb = b.rank;
+    if (va === null && vb !== null) return 1;
+    if (va !== null && vb === null) return -1;
+    if (va !== null && vb !== null) {
+      const byRate = lowerIsBetter ? va - vb : vb - va;
+      if (byRate !== 0) return byRate;
+      // Equal Mortgage headlines use the published comparison rate as their
+      // fee-aware tie-break. Missing comparison rates remain last in that tie.
+      if (section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline') {
+        const ca = a.comparisonTie;
+        const cb = b.comparisonTie;
+        if (ca === null && cb !== null) return 1;
+        if (ca !== null && cb === null) return -1;
+        if (ca !== null && cb !== null && ca !== cb) return ca - cb;
+      }
+    }
+  }
+  return compareProviderThenName(a.row, b.row) || a.originalIndex - b.originalIndex;
+}
+
 export function sortRows(
   rows: RateRow[],
   sortKey: SortKey,
@@ -187,34 +272,19 @@ export function sortRows(
   mortgageMetric: MortgageRateMetric = 'headline',
 ): RateRow[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const copy = rows.slice();
-  copy.sort((a, b) => {
-    if (sortKey === 'bank') {
-      return compareProviderThenName(a, b);
-    }
-    const va = sortRankFraction(a, sortKey, section, metric, mortgageMetric);
-    const vb = sortRankFraction(b, sortKey, section, metric, mortgageMetric);
-    if (va === null && vb === null) return compareProviderThenName(a, b);
-    if (va === null) return 1;
-    if (vb === null) return -1;
-    // "Best first": ascending for loans, descending for deposits.
-    const byRate = lowerIsBetter ? va - vb : vb - va;
-    if (byRate !== 0) return byRate;
-    // Mortgage headline ties: lower comparison rate first so equal advertised
-    // rates still form a stable, fee-aware order. Rows with no usable
-    // comparison_rate sort last among the tie (do not fall back to headline
-    // via effectiveFraction — that would hide "missing cmp" as a fake tie-break).
-    if (section === 'Mortgage' && sortKey === 'rate' && mortgageMetric === 'headline') {
-      const ca = toFraction(a.comparison_rate);
-      const cb = toFraction(b.comparison_rate);
-      if (ca === null && cb === null) return compareProviderThenName(a, b);
-      if (ca === null) return 1;
-      if (cb === null) return -1;
-      if (ca !== cb) return ca - cb;
-    }
-    return compareProviderThenName(a, b);
-  });
-  return copy;
+  return rows
+    .map((row, originalIndex) => prepareSortRow(
+      row,
+      originalIndex,
+      sortKey,
+      section,
+      metric,
+      mortgageMetric,
+    ))
+    .sort((a, b) =>
+      comparePreparedRows(a, b, sortKey, section, lowerIsBetter, mortgageMetric),
+    )
+    .map(({ row }) => row);
 }
 
 function compareProviderThenName(a: RateRow, b: RateRow): number {
@@ -372,10 +442,11 @@ export function groupByProvider(
   // for every provider, which is O(providers × rows) — the Banks screen's
   // main lag source. This is O(rows).
   interface Acc extends ProviderGroup {
-    bySection: Partial<Record<SectionKey, RateRow[]>>;
+    bestPreparedBySection: Partial<Record<SectionKey, PreparedSortRow>>;
   }
   const map = new Map<string, Acc>();
   const keys = Object.keys(sections) as SectionKey[];
+  let originalIndex = 0;
   for (const section of keys) {
     for (const row of excludeTokenDepositRates(
       visibleAccountRows(sections[section]?.rates ?? [], includeNonStandard, detailsProducts),
@@ -383,29 +454,49 @@ export function groupByProvider(
     )) {
       let group = map.get(row.provider);
       if (!group) {
-        group = { provider: row.provider, rows: [], bestBySection: {}, bySection: {} };
+        group = {
+          provider: row.provider,
+          rows: [],
+          bestBySection: {},
+          bestPreparedBySection: {},
+        };
         map.set(row.provider, group);
       }
       group.rows.push(row);
-      (group.bySection[section] ??= []).push(row);
+      const prepared = prepareSortRow(
+        row,
+        originalIndex,
+        'rate',
+        section,
+        metric,
+        mortgageMetric,
+      );
+      originalIndex += 1;
+      const currentBest = group.bestPreparedBySection[section];
+      if (
+        prepared.rank !== null &&
+        (!currentBest ||
+          comparePreparedRows(
+            prepared,
+            currentBest,
+            'rate',
+            section,
+            SECTIONS[section].lowerIsBetter,
+            mortgageMetric,
+          ) < 0)
+      ) {
+        group.bestPreparedBySection[section] = prepared;
+        group.bestBySection[section] = row;
+      }
     }
   }
   const out: ProviderGroup[] = [];
-  for (const { bySection, ...group } of map.values()) {
-    for (const section of keys) {
-      const inSection = bySection[section];
-      if (!inSection?.length) continue;
-      const best = bestRow(
-        inSection,
-        section,
-        includeNonStandard,
-        metric,
-        detailsProducts,
-        mortgageMetric,
-      );
-      if (best) group.bestBySection[section] = best;
-    }
-    out.push(group);
+  for (const group of map.values()) {
+    out.push({
+      provider: group.provider,
+      rows: group.rows,
+      bestBySection: group.bestBySection,
+    });
   }
   if (sortSection) {
     // Precompute rank once per provider (avoid O(n log n) re-ranking in the comparator).

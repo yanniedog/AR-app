@@ -176,7 +176,7 @@ async function syncLogFile(appendText: string, epoch: number): Promise<void> {
   fileContentCache = combined;
 }
 
-async function flushPendingToFile(): Promise<void> {
+async function flushPendingToFile(requirePhysical = false): Promise<void> {
   // The UI cold-start reset owns the file until stale content is deleted.
   // New-session entries remain queued and are written immediately afterwards.
   if (coldStartResetPromise) await coldStartResetPromise;
@@ -193,13 +193,15 @@ async function flushPendingToFile(): Promise<void> {
     try {
       if (!FileSystem.documentDirectory) {
         pendingFileLines.unshift(...batch);
+        if (requirePhysical) throw new Error('documentDirectory unavailable');
         return;
       }
       await syncLogFile(batch.join(''), epoch);
-    } catch {
+    } catch (error) {
       if (epoch === fileWriteEpoch) {
         pendingFileLines.unshift(...batch);
       }
+      if (requirePhysical) throw error;
     } finally {
       fileFlushPromise = null;
     }
@@ -322,6 +324,14 @@ interface StoredPerformanceAudit {
   reportJson: string;
 }
 
+const PERFORMANCE_AUDIT_REPORT_BEGIN = 'PERFORMANCE_AUDIT_REPORT_BEGIN';
+const PERFORMANCE_AUDIT_REPORT_JSON = 'PERFORMANCE_AUDIT_REPORT_JSON';
+const PERFORMANCE_AUDIT_REPORT_END = 'PERFORMANCE_AUDIT_REPORT_END';
+
+function physicalAuditMarker(summaryMarker: string): string {
+  return `${PERFORMANCE_AUDIT_REPORT_BEGIN} ${summaryMarker}`;
+}
+
 function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit | null {
   if (!raw) return null;
   try {
@@ -434,17 +444,18 @@ export const debugLog = {
   getAndroidLogPathHint(): string {
     return ANDROID_LOG_PATH_HINT;
   },
-  async flushToFile(): Promise<void> {
+  async flushToFile(requirePhysical = false): Promise<void> {
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
     }
-    await flushPendingToFile();
+    await flushPendingToFile(requirePhysical);
   },
   /**
-   * Persist the canonical complete audit separately from the rolling log. The
-   * rolling file receives only compact checkpoints, so normal logging cannot
-   * evict the latest useful diagnosis before the user exports it.
+   * Persist the canonical complete audit in both durable snapshot storage and
+   * the physical diagnostic log. Snapshot storage keeps the newest diagnosis
+   * independently recoverable if the bounded log later rolls over; explicit
+   * begin/end records make a crash-truncated physical report detectable.
    */
   async storePerformanceAudit(summaryMarker: string, report: unknown): Promise<void> {
     const stored: StoredPerformanceAudit = {
@@ -453,6 +464,22 @@ export const debugLog = {
       reportJson: redactSecrets(JSON.stringify(report)),
     };
     await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
+    append('info', 'perf-audit', physicalAuditMarker(stored.summaryMarker));
+    append('info', 'perf-audit', `${PERFORMANCE_AUDIT_REPORT_JSON} ${stored.reportJson}`);
+    append('info', 'perf-audit', `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`);
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    await flushPendingToFile(FileSystem.documentDirectory != null);
+    if (FileSystem.documentDirectory) {
+      const physical = await FileSystem.readAsStringAsync(LOG_FILE);
+      const begin = physicalAuditMarker(stored.summaryMarker);
+      const end = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
+      if (!physical.includes(begin) || !physical.includes(end) || !physical.includes(stored.reportJson)) {
+        throw new Error('Complete performance audit was not verified in the physical log file');
+      }
+    }
   },
   /** Read the flushed on-disk log plus the durable latest audit snapshot. */
   async readCompleteText(): Promise<string> {
@@ -469,6 +496,9 @@ export const debugLog = {
       await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
     );
     if (!latest) return clean;
+    const physicalBegin = physicalAuditMarker(latest.summaryMarker);
+    const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
+    if (clean.includes(physicalBegin) && clean.includes(physicalEnd)) return clean;
     return [
       clean,
       '',

@@ -3,7 +3,10 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { InteractionManager, Pressable, type ScrollView, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
-import { BankHistoryChart } from '../../src/components/BankHistoryChart';
+import {
+  BankHistoryChart,
+  type BankHistoryChartAuditActions,
+} from '../../src/components/BankHistoryChart';
 import { BankMoveRow, InsightsLockedCard } from '../../src/components/BankInsights';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState } from '../../src/components/feedback';
@@ -29,7 +32,13 @@ import {
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { openProduct } from '../../src/lib/nav';
+import {
+  auditActionInteger,
+  auditActionString,
+} from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
@@ -117,6 +126,8 @@ export default function BankDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   useEffect(() => {
     const key = showBankInsights ? core?.run_date ?? null : null;
@@ -134,9 +145,16 @@ export default function BankDetail() {
       setProductHistoryReady(false);
       return;
     }
-    if (isPerformanceAuditActive()) return;
     const key = core?.run_date ?? null;
     if (!key) return;
+    if (isPerformanceAuditActive()) {
+      setProductHistoryReady(true);
+      if (historyRequestKey.current !== key) {
+        historyRequestKey.current = key;
+        void ensureProductHistory({ purpose: 'bank_move' });
+      }
+      return;
+    }
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
       void yieldToUi().then(() => {
@@ -297,6 +315,121 @@ export default function BankDetail() {
     },
     [router],
   );
+  const auditActions = useMemo(() => {
+    const actions: Record<string, (...args: unknown[]) => unknown> = {
+      'product.lender.open': () => undefined,
+      'lender.product.first': (...args: unknown[]) => {
+      const productKey = auditActionString(args, 'productKey');
+      const rateIndex = auditActionInteger(args, 'rateIndex');
+      const exact = SECTION_ORDER
+        .flatMap((section) => core?.sections[section].rates ?? [])
+        .find((candidate) => candidate.product_key === productKey &&
+          candidate.provider === provider &&
+          (rateIndex == null || candidate.rate_index === rateIndex));
+        if (!exact) return { unavailableReason: 'The exact planned lender product is not rendered' };
+        openProduct(exact.product_key, exact.rate_index);
+        return { expectedPath: `/product/${encodeURIComponent(exact.product_key)}` };
+      },
+      'lender.chart.section.next': () => ({
+        unavailableReason: 'This lender has fewer than two rendered chart sections',
+      }),
+      'lender.history.window.next': () => ({
+        unavailableReason: 'This lender has no rendered multi-window history chart',
+      }),
+      'lender.history.date.previous': () => ({
+        unavailableReason: 'This lender has no rendered multi-date history chart',
+      }),
+      'lender.move.first': () => ({
+        unavailableReason: 'This lender has no rendered observed move',
+      }),
+    };
+    if (chartSections.length > 1) {
+      actions['lender.chart.section.next'] = () => {
+        const index = activeChartSection ? chartSections.indexOf(activeChartSection) : -1;
+        const next = chartSections[(Math.max(0, index) + 1) % chartSections.length];
+        if (next) setChartSection(next);
+      };
+    }
+    if (chartModel && activeChartSection) {
+      actions['lender.history.window.next'] = () =>
+        historyAuditActionsRef.current?.selectNextWindow();
+      actions['lender.history.date.previous'] = () =>
+        historyAuditActionsRef.current?.selectPreviousDate();
+    }
+    if (bankEvents[0]) {
+      actions['lender.move.first'] = () => {
+        handleMoveSelect(bankEvents[0]);
+        return { expectedPath: `/bank/${encodeURIComponent(provider)}` };
+      };
+    }
+    return actions;
+  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider]);
+  const lenderLogoIds = useMemo(
+    () => provider ? [`lender:header:${provider}`] : [],
+    [provider],
+  );
+  const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
+  usePerformanceAuditSurface({
+    id: 'lender.details',
+    routeKey: '/bank/[provider]',
+    datasetRevision: core?.run_date ?? null,
+    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}`,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'lender.data',
+        kind: 'data',
+        status: core ? 'ready' : 'pending',
+        datasetRevision: core?.run_date ?? null,
+      },
+      {
+        id: 'lender.products',
+        kind: 'list',
+        status: core ? 'ready' : 'pending',
+        expectedCount: productCount,
+        actualCount: productCount,
+      },
+      {
+        id: 'lender.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+      },
+      {
+        id: 'lender.logo',
+        kind: 'logo',
+        status: provider && logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+      {
+        id: 'lender.history-data',
+        kind: 'data',
+        required: false,
+        status: showBankInsights && !bankInsights ? 'pending' : 'ready',
+        actualCount: chartModel?.dates.length ?? 0,
+      },
+      {
+        id: 'lender.history-graphic',
+        kind: 'graphic',
+        required: false,
+        status: showBankInsights && bankInsights && !chartModel ? 'pending' : 'ready',
+        actualCount: chartModel?.dates.length ?? 0,
+      },
+      {
+        id: 'lender.product-history-data',
+        kind: 'data',
+        required: !!focusEvent,
+        status: !focusEvent || productHistory
+          ? 'ready'
+          : productHistoryError
+            ? 'error'
+            : 'pending',
+        error: focusEvent ? productHistoryError : null,
+        expectedCount: focusEvent ? 1 : 0,
+        actualCount: focusEvent && productHistory ? 1 : 0,
+      },
+    ],
+  });
 
   if (!core) return null;
 
@@ -305,10 +438,16 @@ export default function BankDetail() {
       <Stack.Screen options={{ title: provider }} />
       <ScreenScrollView
         ref={scrollRef}
+        onLayout={() => setLayoutReady(true)}
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       >
         <Row gap={14} style={{ marginBottom: 20 }}>
-          <BankAvatar provider={provider} size={56} />
+          <BankAvatar
+            provider={provider}
+            size={56}
+            renderStateId={lenderLogoIds[0]}
+            onRenderStateChange={logoReadiness.onLogoRenderStateChange}
+          />
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{provider}</AppText>
             <AppText variant="small" color="textMuted">
@@ -395,6 +534,7 @@ export default function BankDetail() {
               </AppText>
               <ChartErrorBoundary name="BankTrendChart">
                 <BankHistoryChart
+                  auditActionsRef={historyAuditActionsRef}
                   dates={chartModel.dates}
                   points={chartModel.points}
                   allDates={chartModel.allDates}
@@ -476,6 +616,8 @@ export default function BankDetail() {
                   key={r.product_key}
                   row={r}
                   section={section}
+                  logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
+                  onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
                   onPress={() => openProduct(r.product_key, r.rate_index)}
                 />
               ))}

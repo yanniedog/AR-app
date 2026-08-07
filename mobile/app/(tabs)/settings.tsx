@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Application from 'expo-application';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 
 import { SegmentedControl } from '../../src/components/controls';
@@ -11,7 +11,10 @@ import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SubscriptionRow } from '../../src/components/SubscriptionRow';
 import { AppText, Button, Chip, Row } from '../../src/components/ui';
 import { AccountSecurityRows } from '../../src/components/settings/AccountSecurityRows';
-import { AppUpdateSection } from '../../src/components/settings/AppUpdateSection';
+import {
+  AppUpdateSection,
+  type AppUpdateSurfaceStatus,
+} from '../../src/components/settings/AppUpdateSection';
 import {
   DisclosureGroup,
   InfoRow,
@@ -44,14 +47,19 @@ import {
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 
 const THRESHOLDS = [1, 5, 10, 25];
 
 export default function Settings() {
   const router = useRouter();
   const prefs = useStore((s) => s.prefs);
+  const hydrated = useStore((s) => s.hydrated);
   const setPref = useStore((s) => s.setPref);
   const core = useStore((s) => s.core);
+  const searchIndex = useStore((s) => s.searchIndex);
+  const historyBanks = useStore((s) => s.historyBanks);
+  const bankInsights = useStore((s) => s.bankInsights);
   const source = useStore((s) => s.source);
   const refresh = useStore((s) => s.refresh);
   const clearCache = useStore((s) => s.clearCache);
@@ -61,6 +69,17 @@ export default function Settings() {
   const restoreSubscription = useStore((s) => s.restoreSubscription);
   const { snack, showUndo, undo } = useUndoSnackbar();
   const scrollRef = useRef<ScrollView>(null);
+  const [homeSectionsOpen, setHomeSectionsOpen] = useState(false);
+  const [dataDetailsOpen, setDataDetailsOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<AppUpdateSurfaceStatus>({
+    terminal: false,
+    status: 'checking',
+    error: null,
+  });
+  const auditThemeSnapshot = useRef<ThemeMode | null>(null);
+  const auditRankSnapshot = useRef<RankMetric | null>(null);
   useScrollToTop(scrollRef);
 
   const { focus, t } = useLocalSearchParams<{ focus?: string; t?: string }>();
@@ -81,6 +100,49 @@ export default function Settings() {
   const onToggleHistoryRibbon = (value: boolean) => {
     setPref('showHistoryRibbon', value);
   };
+
+  const changeTheme = useCallback((value: ThemeMode) => setPref('themeMode', value), [setPref]);
+  const changeDepositRank = useCallback(
+    (value: RankMetric) => setPref('depositRankMetric', value),
+    [setPref],
+  );
+  const selectNextTheme = useCallback(() => {
+    auditThemeSnapshot.current ??= prefs.themeMode;
+    const order: ThemeMode[] = ['system', 'light', 'dark'];
+    changeTheme(order[(order.indexOf(prefs.themeMode) + 1) % order.length]);
+  }, [changeTheme, prefs.themeMode]);
+  const restoreTheme = useCallback(() => {
+    if (!auditThemeSnapshot.current) return;
+    changeTheme(auditThemeSnapshot.current);
+    auditThemeSnapshot.current = null;
+  }, [changeTheme]);
+  const selectNextRank = useCallback(() => {
+    auditRankSnapshot.current ??= prefs.depositRankMetric;
+    changeDepositRank(prefs.depositRankMetric === 'base' ? 'max' : 'base');
+  }, [changeDepositRank, prefs.depositRankMetric]);
+  const restoreRank = useCallback(() => {
+    if (!auditRankSnapshot.current) return;
+    changeDepositRank(auditRankSnapshot.current);
+    auditRankSnapshot.current = null;
+  }, [changeDepositRank]);
+  const changeHomeSectionsOpen = useCallback((next: boolean) => setHomeSectionsOpen(next), []);
+  const changeDataDetailsOpen = useCallback((next: boolean) => setDataDetailsOpen(next), []);
+  const changeDiagnosticsOpen = useCallback((next: boolean) => setDiagnosticsOpen(next), []);
+  const toggleHomeSections = useCallback(
+    () => changeHomeSectionsOpen(!homeSectionsOpen),
+    [changeHomeSectionsOpen, homeSectionsOpen],
+  );
+  const toggleDataDetails = useCallback(
+    () => changeDataDetailsOpen(!dataDetailsOpen),
+    [changeDataDetailsOpen, dataDetailsOpen],
+  );
+  const toggleDiagnostics = useCallback(
+    () => changeDiagnosticsOpen(!diagnosticsOpen),
+    [changeDiagnosticsOpen, diagnosticsOpen],
+  );
+  const onUpdateStatusChange = useCallback((next: AppUpdateSurfaceStatus) => {
+    setUpdateStatus(next);
+  }, []);
 
   const removeSubscriptionWithUndo = useCallback(
     (sub: Subscription) => {
@@ -107,9 +169,88 @@ export default function Settings() {
   const hiddenSections = SECTION_ORDER.filter((key) => !prefs.interests.includes(key));
   const sectionsSummary = orderedInterests.map((key) => SECTIONS[key].title).join(' · ');
 
+  const settingsRenderRevision = [
+    hydrated ? 'hydrated' : 'loading',
+    prefs.themeMode,
+    prefs.depositRankMetric,
+    homeSectionsOpen ? 'home-open' : 'home-closed',
+    dataDetailsOpen ? 'data-open' : 'data-closed',
+    diagnosticsOpen ? 'diagnostics-open' : 'diagnostics-closed',
+    updateStatus.status,
+  ].join(':');
+  const auditActions = useMemo(() => ({
+    'settings.open': () => undefined,
+    'settings.home-sections.toggle': toggleHomeSections,
+    'settings.data-details.toggle': toggleDataDetails,
+    'settings.diagnostics.toggle': toggleDiagnostics,
+    'settings.theme.next': selectNextTheme,
+    'settings.theme.restore': restoreTheme,
+    'settings.rank.next': selectNextRank,
+    'settings.rank.restore': restoreRank,
+    'settings.feature.deep-search.observe': () => searchIndex
+      ? effectiveDeepSearch(prefs)
+      : { unavailableReason: 'The trusted deep-search index is absent' },
+    'settings.feature.history-explorer.observe': () => historyBanks && bankInsights
+      ? effectiveHistoryRibbon(prefs)
+      : { unavailableReason: 'The trusted history or bank-insights asset is absent' },
+    'settings.update-status.observe': () => updateStatus.error
+      ? { unavailableReason: `Update status ended with an error: ${updateStatus.error}` }
+      : updateStatus,
+  }), [
+    prefs,
+    bankInsights,
+    historyBanks,
+    restoreRank,
+    restoreTheme,
+    selectNextRank,
+    selectNextTheme,
+    searchIndex,
+    toggleDataDetails,
+    toggleDiagnostics,
+    toggleHomeSections,
+    updateStatus,
+  ]);
+  usePerformanceAuditSurface({
+    id: 'settings.sections',
+    routeKey: '/settings',
+    datasetRevision: core?.run_date ?? null,
+    renderRevision: settingsRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'settings.preferences',
+        kind: 'data',
+        status: hydrated ? 'ready' : 'pending',
+        expectedCount: 1,
+        actualCount: hydrated ? 1 : 0,
+      },
+      {
+        id: 'settings.update-status',
+        kind: 'data',
+        required: !updateStatus.terminal || updateStatus.error == null,
+        status: !updateStatus.terminal
+          ? 'pending'
+          : updateStatus.error
+            ? 'error'
+            : 'ready',
+        error: updateStatus.error,
+      },
+      {
+        id: 'settings.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        renderRevision: settingsRenderRevision,
+      },
+    ],
+  });
+
   return (
     <Screen>
-    <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}>
+    <ScreenScrollView
+      ref={scrollRef}
+      contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}
+      onContentSizeChange={() => setLayoutReady(true)}
+    >
       <Section title="Rate insights (free beta)">
         <InfoRow label="Access" value="Included" />
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
@@ -119,7 +260,7 @@ export default function Settings() {
       </Section>
 
       <View onLayout={(e) => { updateSectionY.current = e.nativeEvent.layout.y; }}>
-        <AppUpdateSection />
+        <AppUpdateSection onStatusChange={onUpdateStatusChange} />
       </View>
 
       <Section title="Appearance">
@@ -131,7 +272,7 @@ export default function Settings() {
             { value: 'dark', label: 'Dark' },
           ]}
           value={prefs.themeMode}
-          onChange={(v) => setPref('themeMode', v)}
+          onChange={changeTheme}
         />
         <SettingsGap size={14} />
         <ToggleRow
@@ -149,7 +290,7 @@ export default function Settings() {
             { value: 'max', label: 'Headline rate' },
           ]}
           value={prefs.depositRankMetric}
-          onChange={(v) => setPref('depositRankMetric', v)}
+          onChange={changeDepositRank}
         />
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
           Base uses the ongoing rate; Headline includes bonus and introductory rates.
@@ -177,7 +318,12 @@ export default function Settings() {
           onPress={() => router.push('/profile' as Href)}
         />
         <SettingsGap size={12} />
-        <DisclosureGroup title="Home sections" summary={sectionsSummary || 'None'}>
+        <DisclosureGroup
+          title="Home sections"
+          summary={sectionsSummary || 'None'}
+          open={homeSectionsOpen}
+          onOpenChange={changeHomeSectionsOpen}
+        >
           {orderedInterests.map((key, idx, ordered) => (
             <InterestOrderRow
               key={key}
@@ -315,6 +461,8 @@ export default function Settings() {
         <SettingsGap size={8} />
         <DisclosureGroup
           title="Data details"
+          open={dataDetailsOpen}
+          onOpenChange={changeDataDetailsOpen}
           summary={
             core
               ? `${formatRunDate(core.run_date)} · ${dataSourceLabel(source)}`
@@ -371,6 +519,8 @@ export default function Settings() {
         <SettingsGap size={8} />
         <DisclosureGroup
           title="Diagnostics & debug"
+          open={diagnosticsOpen}
+          onOpenChange={changeDiagnosticsOpen}
           summary={
             prefs.crashReportsEnabled || prefs.sessionReplayEnabled
               ? 'Optional reporting on'

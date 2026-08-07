@@ -2,7 +2,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,9 +28,16 @@ import { findSearchSubscription, type SearchSubscription } from '../src/data/sub
 import { useStore } from '../src/data/store';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { useDebouncedValue } from '../src/hooks/useDebouncedValue';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
+import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
 import { breadcrumb, rowsForSearchScope } from '../src/data/taxonomy';
 import { hapticSelection } from '../src/lib/haptics';
 import { openCompare, openProduct, scalarRouteParam } from '../src/lib/nav';
+import {
+  auditActionString,
+  auditActionStrings,
+} from '../src/lib/performanceAuditActionParams';
 import { canAddAlertSubscription, effectiveDeepSearch } from '../src/lib/proAccess';
 import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 import type { SectionKey } from '../src/types';
@@ -43,7 +50,7 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 ];
 
 const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
-  `${r.rate_index ?? ''}#${r.product_key}`;
+  r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
 
 export default function Search() {
   const theme = useTheme();
@@ -67,6 +74,7 @@ export default function Search() {
   const path = useMemo(() => (pathRaw ?? '').split('.').filter(Boolean), [pathRaw]);
   const hierarchyScoped = scopeRaw === 'hierarchy';
   const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? null);
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const searchIndex = useStore((s) => s.searchIndex);
@@ -213,8 +221,102 @@ export default function Search() {
     if (!added) Alert.alert('Already subscribed', 'This search already has a rate alert.');
   };
 
-  const toggleSelect = (key: string) =>
+  const toggleSelect = useCallback((key: string) => {
     setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key].slice(-4)));
+  }, []);
+
+  const toggleCompareMode = useCallback(() => {
+    hapticSelection();
+    setSelectMode((value) => !value);
+    setSelected([]);
+  }, []);
+  const auditActions = useMemo(() => ({
+    'search.open': () => undefined,
+    'search.query.product': (...args: unknown[]) => {
+      const exactQuery = auditActionString(args, 'query');
+      if (exactQuery) setQuery(exactQuery);
+    },
+    'search.query.clear': () => setQuery(''),
+    'search.sort.next': () => setSortKey((current) => {
+      const index = SORT_OPTIONS.findIndex((option) => option.key === current);
+      return SORT_OPTIONS[(index + 1) % SORT_OPTIONS.length].key;
+    }),
+    'search.filters.open': () => setFilterOpen(true),
+    'search.filter.provider.first': (...args: unknown[]) => {
+      const provider = auditActionString(args, 'provider');
+      if (provider) setFilters((current) => ({ ...current, providers: [provider] }));
+    },
+    'search.filters.apply': () => setFilterOpen(false),
+    'search.compare.mode': toggleCompareMode,
+    'search.compare.select.0': (...args: unknown[]) => {
+      const token = auditActionString(args, 'selectionToken');
+      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
+    },
+    'search.compare.select.1': (...args: unknown[]) => {
+      const token = auditActionString(args, 'selectionToken');
+      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
+    },
+    'search.compare.open': (...args: unknown[]) => {
+      const exactTokens = auditActionStrings(args, 'selectionTokens');
+      const tokens = exactTokens.length >= 2 ? exactTokens : selected;
+      if (tokens.length >= 2) openCompare(tokens);
+    },
+  }), [baseRows, selected, toggleCompareMode, toggleSelect]);
+  const searchPending = detailFiltersPending || searchIndexLoading;
+  const listRevision = JSON.stringify([
+    coreSha ?? core?.run_date ?? 'none',
+    details?.run_date ?? 'none',
+    section,
+    path,
+    hierarchyScoped,
+    debouncedQuery,
+    sortKey,
+    effectiveFilters,
+    deepSearchActive,
+    searchIndex != null,
+    suitabilityRevision,
+    rows.length,
+  ]);
+  const listReadiness = useVirtualizedListReadiness(listRevision, rows.length);
+  const logoReadiness = useLogoReadiness(
+    `${listRevision}:${selectMode ? 'select' : 'browse'}`,
+  );
+  usePerformanceAuditSurface({
+    id: 'search.results',
+    routeKey: '/search',
+    datasetRevision: coreSha ?? core?.run_date ?? null,
+    renderRevision: listRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'search.data',
+        kind: 'data',
+        status: core ? 'ready' : 'pending',
+        datasetRevision: coreSha ?? core?.run_date ?? null,
+      },
+      {
+        id: 'search.list',
+        kind: 'list',
+        status: searchPending || !listReadiness.visiblyCommitted ? 'pending' : 'ready',
+        expectedCount: rows.length,
+        actualCount: listReadiness.committedItemCount,
+      },
+      {
+        id: 'search.layout',
+        kind: 'layout',
+        status: listReadiness.ready ? 'ready' : 'pending',
+        renderRevision: listRevision,
+      },
+      {
+        id: 'search.logos',
+        kind: 'logo',
+        required: false,
+        status: logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+    ],
+  });
 
   if (!core) return null;
   const title = path.length ? breadcrumb(section, path).at(-1)! : `${SECTIONS[section].title}`;
@@ -237,11 +339,7 @@ export default function Search() {
           <ToolbarIconButton
             icon={selectMode ? 'git-compare' : 'git-compare-outline'}
             active={selectMode}
-            onPress={() => {
-              hapticSelection();
-              setSelectMode((v) => !v);
-              setSelected([]);
-            }}
+            onPress={toggleCompareMode}
             accessibilityLabel="Select products to compare"
           />
         </Row>
@@ -272,6 +370,13 @@ export default function Search() {
       <View style={{ flex: 1 }}>
         <FlashList
           data={rows}
+          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
+          onLoad={listReadiness.onLoad}
+          onContentSizeChange={listReadiness.onContentSizeChange}
+          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+          ListHeaderComponent={(
+            <View key={listRevision} onLayout={listReadiness.onRevisionLayout} />
+          )}
           keyExtractor={(item, i) => `${item.product_key}-${item.rate_index ?? i}`}
           contentContainerStyle={{
             ...screenScrollContentStyle(theme, insets.bottom),
@@ -281,6 +386,8 @@ export default function Search() {
             <ProductCard
               row={item}
               section={section}
+              logoRenderStateId={`search:${item.rate_index ?? 'default'}#${item.product_key}`}
+              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
               selectMode={selectMode}
               selected={selected.includes(rowToken(item))}
               onPress={() =>

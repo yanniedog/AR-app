@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
@@ -29,6 +29,7 @@ export interface EconomicChartFrameProps {
   height?: number;
   holdDates?: string[];
   holdSeriesId?: string;
+  selectionStep?: number;
 }
 
 function validTime(date: string): number {
@@ -90,6 +91,7 @@ export function EconomicChartFrame({
   height = 208,
   holdDates,
   holdSeriesId,
+  selectionStep,
 }: EconomicChartFrameProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -110,6 +112,12 @@ export function EconomicChartFrame({
     ? selectedDate
     : dates.at(-1) ?? '';
   const activeIndex = Math.max(0, dates.indexOf(activeDate));
+  const lastSelectionStep = useRef(selectionStep);
+  useEffect(() => {
+    if (selectionStep == null || selectionStep === lastSelectionStep.current) return;
+    lastSelectionStep.current = selectionStep;
+    setSelectedDate(dates[Math.max(0, activeIndex - 1)] ?? null);
+  }, [activeIndex, dates, selectionStep]);
 
   const padL = 38;
   const padR = 10;

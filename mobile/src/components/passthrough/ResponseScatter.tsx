@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { memo, useEffect, useMemo, useState } from 'react';
+import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
@@ -115,24 +115,37 @@ export const ResponseScatter = memo(function ResponseScatter({
   decisions,
   selectedProvider,
   onProviderSelect,
+  zoom: controlledZoom,
+  onZoomChange,
+  onGraphicReady,
 }: {
   model: MultiSectionPassThroughModel;
   section: SectionKey;
   decisions: PassThroughSourceDecision[];
   selectedProvider: string | null;
   onProviderSelect: (provider: string | null) => void;
+  zoom?: number;
+  onZoomChange?: (zoom: number) => void;
+  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const [zoom, setZoom] = useState(1);
+  const [localZoom, setLocalZoom] = useState(1);
+  const zoom = clampScatterZoom(controlledZoom ?? localZoom);
+  const updateZoom = useCallback((next: number | ((current: number) => number)) => {
+    const value = clampScatterZoom(typeof next === 'function' ? next(zoom) : next);
+    if (controlledZoom == null) setLocalZoom(value);
+    onZoomChange?.(value);
+  }, [controlledZoom, onZoomChange, zoom]);
   /** Instant paint target — synced from parent when list/chips change selection. */
   const [paintedProvider, setPaintedProvider] = useState(selectedProvider);
   useEffect(() => {
     setPaintedProvider(selectedProvider);
   }, [selectedProvider]);
   useEffect(() => {
-    setZoom(1);
-  }, [model.decision.date, section]);
+    setLocalZoom(1);
+    onZoomChange?.(1);
+  }, [model.decision.date, onZoomChange, section]);
 
   const decisionMarkers = useMemo<ResponseScatterDecisionMarker[]>(() => {
     const markers = decisions.map((decision) => ({
@@ -174,6 +187,11 @@ export const ResponseScatter = memo(function ResponseScatter({
         : null,
     [rows, width, plotSize, model.windowDays, model.decision.bps, decisionMarkers],
   );
+  const graphicRevision = `${model.decision.date}:${section}:${zoom}:${width}`;
+  useEffect(() => {
+    if (!plot || width <= 0) return;
+    onGraphicReady?.({ revision: graphicRevision, pointCount: plot.points.length });
+  }, [graphicRevision, onGraphicReady, plot, width]);
 
   const rowStats = useMemo(() => {
     let timed = 0;
@@ -352,7 +370,7 @@ export const ResponseScatter = memo(function ResponseScatter({
           label="−"
           accessibilityLabel="Zoom out response chart"
           disabled={!canZoomOut}
-          onPress={() => setZoom((current) => nextScatterZoom(current, -1))}
+          onPress={() => updateZoom((current) => nextScatterZoom(current, -1))}
         />
         <AppText variant="tiny" color="textMuted" weight="700">
           {Math.round(clampScatterZoom(zoom) * 100)}%
@@ -361,13 +379,13 @@ export const ResponseScatter = memo(function ResponseScatter({
           label="+"
           accessibilityLabel="Zoom in response chart"
           disabled={!canZoomIn}
-          onPress={() => setZoom((current) => nextScatterZoom(current, 1))}
+          onPress={() => updateZoom((current) => nextScatterZoom(current, 1))}
         />
         <ZoomButton
           label="Reset"
           accessibilityLabel="Reset response chart zoom"
           disabled={!canZoomOut}
-          onPress={() => setZoom(1)}
+          onPress={() => updateZoom(1)}
         />
         <AppText variant="tiny" color="textFaint" style={{ flex: 1, minWidth: 120 }}>
           {zoom > 1 ? 'Scroll the chart to pan while zoomed' : 'Zoom to inspect dense clusters'}

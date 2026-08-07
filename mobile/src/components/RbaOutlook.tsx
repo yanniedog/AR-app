@@ -1,5 +1,5 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, View } from 'react-native';
 
 import {
@@ -9,14 +9,36 @@ import {
   RBA_ECONOMIC_TABLE_URL,
   type EconomicOutlookPayload,
 } from '../data/economicOutlook';
+import type { EconomicWindow } from '../data/economicModels';
 import { relativeDate } from '../data/format';
-import { yieldToUiFrames } from '../lib/yieldToUi';
+import { yieldToPaintFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
+import type { EconomicExplorerLens } from './economy/EconomicExplorer';
 import { AppText, Button, Card, Row } from './ui';
 
-function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload; rba: RbaEntry[]; rbaHolds?: string[] }) {
+function OutlookContent({
+  data,
+  rba,
+  rbaHolds,
+  lens,
+  onLensChange,
+  window,
+  onWindowChange,
+  selectionStep,
+  onGraphicReady,
+}: {
+  data: EconomicOutlookPayload;
+  rba: RbaEntry[];
+  rbaHolds?: string[];
+  lens: EconomicExplorerLens;
+  onLensChange: (lens: EconomicExplorerLens) => void;
+  window: EconomicWindow;
+  onWindowChange: (window: EconomicWindow) => void;
+  selectionStep: number;
+  onGraphicReady: (result: { revision: string; pointCount: number }) => void;
+}) {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const revision = data.checkedAt || data.fetchedAt;
@@ -25,7 +47,7 @@ function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload;
     if (!isFocused || explorerRevision === revision) return;
     let active = true;
     void (async () => {
-      await yieldToUiFrames(3);
+      await yieldToPaintFrames(3);
       if (active) setExplorerRevision(revision);
     })();
     return () => {
@@ -54,7 +76,17 @@ function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload;
       ) : null}
       <EconomicReleasesList data={data} />
       {explorerRevision === revision ? (
-        <EconomicExplorer data={data} rba={rba} rbaHolds={rbaHolds} />
+        <EconomicExplorer
+          data={data}
+          rba={rba}
+          rbaHolds={rbaHolds}
+          lens={lens}
+          onLensChange={onLensChange}
+          window={window}
+          onWindowChange={onWindowChange}
+          selectionStep={selectionStep}
+          onGraphicReady={onGraphicReady}
+        />
       ) : (
         <View
           style={{
@@ -113,13 +145,55 @@ function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload;
   );
 }
 
-export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: string[] }) {
+export interface RbaOutlookAuditHandle {
+  nextLens(): void;
+  nextWindow(): void;
+  previousDate(): void;
+}
+
+export interface RbaOutlookAuditState {
+  status: 'pending' | 'ready' | 'error';
+  revision: string | null;
+  indicatorCount: number;
+  pointCount: number;
+  layoutReady: boolean;
+  graphicReady: boolean;
+  error: string | null;
+}
+
+export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
+  rba: RbaEntry[];
+  rbaHolds?: string[];
+  onAuditStateChange?: (state: RbaOutlookAuditState) => void;
+}>(function RbaOutlook({ rba, rbaHolds, onAuditStateChange }, ref) {
   const theme = useTheme();
   const [data, setData] = useState<EconomicOutlookPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
   const dataRef = useRef<EconomicOutlookPayload | null>(null);
+  const [lens, setLens] = useState<EconomicExplorerLens>('policy');
+  const [window, setWindow] = useState<EconomicWindow>('5Y');
+  const [selectionStep, setSelectionStep] = useState(0);
+  const [layoutRevision, setLayoutRevision] = useState<string | null>(null);
+  const [graphic, setGraphic] = useState<{ revision: string; pointCount: number } | null>(null);
+
+  const availableLenses = useMemo<EconomicExplorerLens[]>(() => {
+    const indicatorLenses = data?.indicators.map((indicator) => indicator.id) ?? [];
+    return [...indicatorLenses, 'compare', 'momentum', 'policy'];
+  }, [data]);
+  useImperativeHandle(ref, () => ({
+    nextLens: () => {
+      const index = Math.max(0, availableLenses.indexOf(lens));
+      setLens(availableLenses[(index + 1) % Math.max(1, availableLenses.length)] ?? 'policy');
+    },
+    nextWindow: () => {
+      const windows: EconomicWindow[] = ['1Y', '3Y', '5Y', 'All'];
+      const index = Math.max(0, windows.indexOf(window));
+      setWindow(windows[(index + 1) % windows.length]);
+    },
+    previousDate: () => setSelectionStep((current) => current + 1),
+  }), [availableLenses, lens, window]);
 
   const load = useCallback(async (force = false) => {
     if (!dataRef.current || force) setLoading(true);
@@ -151,8 +225,31 @@ export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: stri
     };
   }, [load]));
 
+  const revision = data ? data.checkedAt || data.fetchedAt : null;
+  const expectedGraphicRevision = revision ? `${revision}:${lens}:${window}:${selectionStep}` : null;
+  const layoutReady = revision != null && layoutRevision === revision;
+  const graphicReady = expectedGraphicRevision != null && graphic?.revision === expectedGraphicRevision;
+  useEffect(() => {
+    onAuditStateChange?.({
+      status: data && !loading && layoutReady && graphicReady ? 'ready' : !data && !loading && error ? 'error' : 'pending',
+      revision,
+      indicatorCount: data?.indicators.length ?? 0,
+      pointCount: graphic?.pointCount ?? 0,
+      layoutReady,
+      graphicReady,
+      error,
+    });
+  }, [data, error, graphic?.pointCount, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
+
   return (
-    <Card style={{ marginBottom: 16, borderColor: `${theme.colors.rba}55` }}>
+    <Card
+      style={{ marginBottom: 16, borderColor: `${theme.colors.rba}55` }}
+      onLayout={(event) => {
+        if (revision && event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+          setLayoutRevision(revision);
+        }
+      }}
+    >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: 8 }}>
           <AppText variant="h2">RBA outlook</AppText>
@@ -180,7 +277,17 @@ export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: stri
         </View>
       ) : data ? (
         <>
-          <OutlookContent data={data} rba={rba} rbaHolds={rbaHolds} />
+          <OutlookContent
+            data={data}
+            rba={rba}
+            rbaHolds={rbaHolds}
+            lens={lens}
+            onLensChange={setLens}
+            window={window}
+            onWindowChange={setWindow}
+            selectionStep={selectionStep}
+            onGraphicReady={setGraphic}
+          />
           {error ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
               Could not verify the latest data: {error}
@@ -200,4 +307,4 @@ export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: stri
       )}
     </Card>
   );
-}
+});
