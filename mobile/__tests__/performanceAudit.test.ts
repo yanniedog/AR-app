@@ -293,6 +293,19 @@ describe('performance audit scoring', () => {
       backChangeMs: -100,
     }]);
   });
+
+  it('does not aggregate skipped cold or warm routes', () => {
+    const skipped = check('journey-disabled-cold', 'skipped', 0, {
+      journeyId: 'disabled', journeyLabel: 'Disabled', iteration: 'cold',
+    });
+    skipped.kind = 'journey';
+    const warm = check('journey-disabled-warm', 'pass', 100, {
+      journeyId: 'disabled', journeyLabel: 'Disabled', iteration: 'warm', forwardMs: 50, backMs: 50,
+    });
+    warm.kind = 'journey';
+
+    expect(aggregateRepeatedJourneys([skipped, warm])).toEqual([]);
+  });
 });
 
 describe('performance audit maintenance isolation', () => {

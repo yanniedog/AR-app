@@ -6,7 +6,8 @@ import type { CorePayload, RateRow, SectionKey } from '../types';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 
-export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 3;
+export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
+
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
 export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = 300_000;
 export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 30;
@@ -922,6 +923,7 @@ export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggre
   const aggregates: AuditRouteAggregate[] = [];
   for (const [journeyId, pair] of byJourney) {
     if (!pair.cold || !pair.warm) continue;
+    if (pair.cold.status === 'skipped' || pair.warm.status === 'skipped') continue;
     const coldForwardMs = number(pair.cold, 'forwardMs');
     const warmForwardMs = number(pair.warm, 'forwardMs');
     const coldBackMs = number(pair.cold, 'backMs');

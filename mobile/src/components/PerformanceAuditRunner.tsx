@@ -24,7 +24,7 @@ import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/select
 import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
-import { checkForAppUpdate, getApkDownloadSnapshot, getInstalledAppInfo } from '../lib/appUpdate';
+import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
 import {
@@ -810,7 +810,7 @@ async function runSectionModelCheck(
     kind: 'data',
     status: error
       ? 'fail'
-      : worstStatus(scoreLatency(phaseMaximum, 100, 500), responsivenessStatus(responsiveness)),
+      : scoreLatency(phaseMaximum, 100, 500),
     durationMs: roundMetric(now() - started),
     metrics: {
       section,
@@ -829,6 +829,7 @@ async function runSectionModelCheck(
       repeatHierarchyMs: roundMetric(repeat?.hierarchyMs ?? 0),
       repeatStatsMs: roundMetric(repeat?.statsMs ?? 0),
       repeatRankMs: roundMetric(repeat?.rankMs ?? 0),
+      responsivenessClassification: 'recorded-not-scored-benchmark-self-work',
       ...responsivenessRecord(responsiveness),
     },
     ...(error ? { error, trace: captureAuditTrace(`${section} section model failed`) } : {}),
@@ -883,12 +884,13 @@ async function runLogIoCheck(
 }
 
 async function runUpdateReadinessCheck(
+  app: AuditAppIdentity,
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
   const started = now();
   const responsivenessAt = monitor.snapshot();
-  const installed = getInstalledAppInfo();
+  const installed = { version: app.appVersion, buildNumber: app.buildVersion };
   const download = getApkDownloadSnapshot();
   if (Platform.OS !== 'android') {
     return {
@@ -915,17 +917,19 @@ async function runUpdateReadinessCheck(
   const responsiveness = monitor.metricsSince(responsivenessAt);
   const remote = result && result.status !== 'error' ? result.remote : null;
   const compatibilityStatus: AuditCheckStatus = result?.status === 'incompatible' ? 'warn' : 'pass';
+  const manifestContentStatus: AuditCheckStatus = remote &&
+    remote.package_name === Application.applicationId &&
+    !!remote.sha256 &&
+    (remote.bytes ?? 0) > 0
+    ? 'pass'
+    : 'fail';
   return {
     id: 'update-readiness',
     label: 'Android update manifest and local readiness',
     kind: 'update',
     status: error
       ? 'fail'
-      : worstStatus(
-          compatibilityStatus,
-          scoreLatency(durationMs, 1_500, 5_000),
-          responsivenessStatus(responsiveness),
-        ),
+      : worstStatus(compatibilityStatus, manifestContentStatus),
     durationMs: roundMetric(durationMs),
     metrics: {
       installedVersion: installed.version,
@@ -936,7 +940,10 @@ async function runUpdateReadinessCheck(
       remoteBuild: remote?.build_number ?? null,
       manifestBytes: remote?.bytes ?? null,
       manifestHasSha256: !!remote?.sha256,
-      manifestPackageMatches: remote?.package_name === 'com.eyex.australianrates',
+      installedApplicationId: Application.applicationId ?? null,
+      manifestPackageMatches: remote?.package_name === Application.applicationId,
+      durationMayUseTtlCache: true,
+      durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
       downloadedBytes: download.bytesWritten,
       downloadTotalBytes: download.totalBytes,
@@ -1542,7 +1549,7 @@ export function PerformanceAuditRunner() {
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
-        await record(await runUpdateReadinessCheck(monitor, watchdog));
+        await record(await runUpdateReadinessCheck(app, monitor, watchdog));
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
@@ -1567,9 +1574,9 @@ export function PerformanceAuditRunner() {
           limitations: [
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
-            'Routes are repeated cold then warm and exercise real mounted data, forward navigation and back navigation. The audit does not type into forms, change preferences, install updates or mutate favourites.',
-            'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. They do not provide native CPU instruction sampling or React component commit attribution.',
-            'Update readiness validates the manifest/check result and observes existing download state; it never downloads an APK or launches the Android installer.',
+            'Routes are repeated first-pass then warm within this audit session and exercise real mounted data, forward navigation and back navigation. "Cold" does not mean a cold app process: disk, store and module caches may already be warm. The audit does not type into forms, change preferences, install updates or mutate favourites.',
+            'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
+            'Update readiness validates manifest content/compatibility and observes existing download state; it never downloads an APK or launches the Android installer. Its duration may come from the one-minute update-check cache and is not classified as network latency.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             environment.diagnosticsUploadEnabled
               ? 'A bounded, deidentified summary is submitted through Crashlytics. The complete report and tracebacks remain only in the local debug log unless explicitly exported.'

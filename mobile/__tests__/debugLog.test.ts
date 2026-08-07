@@ -25,6 +25,10 @@ import {
   uploadLogsToPasteRs,
 } from '../src/lib/debugLog';
 import {
+  LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+  PERFORMANCE_AUDIT_SCHEMA_VERSION,
+} from '../src/lib/performanceAuditSchema';
+import {
   setDiagnosticsEnabled,
   setObservabilityDepsForTests,
   type CrashlyticsLike,
@@ -496,6 +500,21 @@ describe('persistent log file', () => {
     expect(complete).toContain('complete-audit-survived');
     expect(complete).toContain('"appVersion":"9.8.7"');
     expect(complete).toContain('"buildVersion":"654"');
+  });
+
+  it('rejects a durable audit stored with an older schema', async () => {
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION - 1,
+      summaryMarker: 'old-schema-marker',
+      reportJson: '{"sentinel":"old-schema-report"}',
+    }));
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
+
+    const complete = await debugLog.readCompleteText();
+
+    expect(complete).toBe('current log only');
+    expect(complete).not.toContain('old-schema-marker');
+    expect(complete).not.toContain('old-schema-report');
   });
 
   it('clear deletes the persistent log file', async () => {

@@ -253,20 +253,22 @@ export default function PerformanceAuditScreen() {
             </AppText>
           </Card>
 
-          <View style={{ gap: 8 }}>
-            <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
-              COLD VS WARM ROUTES
-            </AppText>
-            {report.routeAggregates.map((route) => (
-              <Card key={route.journeyId} style={{ gap: 4 }}>
-                <AppText variant="small" weight="700">{route.label}</AppText>
-                <AppText variant="tiny" color="textFaint">
-                  Open {route.coldForwardMs.toFixed(0)} → {route.warmForwardMs.toFixed(0)} ms
-                  {' · '}Back {route.coldBackMs.toFixed(0)} → {route.warmBackMs.toFixed(0)} ms
-                </AppText>
-              </Card>
-            ))}
-          </View>
+          {report.routeAggregates.length > 0 ? (
+            <View style={{ gap: 8 }}>
+              <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
+                COLD VS WARM ROUTES
+              </AppText>
+              {report.routeAggregates.map((route) => (
+                <Card key={route.journeyId} style={{ gap: 4 }}>
+                  <AppText variant="small" weight="700">{route.label}</AppText>
+                  <AppText variant="tiny" color="textFaint">
+                    Open {route.coldForwardMs.toFixed(0)} → {route.warmForwardMs.toFixed(0)} ms
+                    {' · '}Back {route.coldBackMs.toFixed(0)} → {route.warmBackMs.toFixed(0)} ms
+                  </AppText>
+                </Card>
+              ))}
+            </View>
+          ) : null}
 
           <View style={{ gap: 8 }}>
             <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>

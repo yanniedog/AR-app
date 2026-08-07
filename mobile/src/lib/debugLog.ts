@@ -2,6 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { bridgeLogToCrashlytics } from './observability';
+import {
+  LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+  PERFORMANCE_AUDIT_SCHEMA_VERSION,
+} from './performanceAuditSchema';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -22,7 +26,6 @@ export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
 
 const STORAGE_KEY = 'ar-debug-log-tail';
-const LATEST_PERFORMANCE_AUDIT_KEY = 'ar-performance-audit-latest-v3';
 const LOG_DIR = `${FileSystem.documentDirectory ?? ''}logs/`;
 const LOG_FILE = `${LOG_DIR}ar-local.log`;
 
@@ -314,7 +317,7 @@ function append(level: LogLevel, tag: string, message: string): void {
 }
 
 interface StoredPerformanceAudit {
-  schemaVersion: 3;
+  schemaVersion: typeof PERFORMANCE_AUDIT_SCHEMA_VERSION;
   summaryMarker: string;
   reportJson: string;
 }
@@ -324,12 +327,12 @@ function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit
   try {
     const value = JSON.parse(raw) as Partial<StoredPerformanceAudit>;
     if (
-      value.schemaVersion !== 3 ||
+      value.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION ||
       typeof value.summaryMarker !== 'string' ||
       typeof value.reportJson !== 'string'
     ) return null;
     return {
-      schemaVersion: 3,
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       summaryMarker: redactSecrets(value.summaryMarker),
       reportJson: redactSecrets(value.reportJson),
     };
@@ -407,7 +410,7 @@ export const debugLog = {
     if (coldStartResetPromise) await coldStartResetPromise.catch(() => {});
     notify();
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_KEY).catch(() => {});
+    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
   },
   getText(): string {
@@ -445,11 +448,11 @@ export const debugLog = {
    */
   async storePerformanceAudit(summaryMarker: string, report: unknown): Promise<void> {
     const stored: StoredPerformanceAudit = {
-      schemaVersion: 3,
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       summaryMarker: redactSecrets(summaryMarker),
       reportJson: redactSecrets(JSON.stringify(report)),
     };
-    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_KEY, JSON.stringify(stored));
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
   },
   /** Read the flushed on-disk log plus the durable latest audit snapshot. */
   async readCompleteText(): Promise<string> {
@@ -463,7 +466,7 @@ export const debugLog = {
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
     const latest = parseStoredPerformanceAudit(
-      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_KEY).catch(() => null),
+      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
     );
     if (!latest) return clean;
     return [

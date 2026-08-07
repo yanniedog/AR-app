@@ -1,9 +1,10 @@
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Platform } from 'react-native';
+import { AppState, Linking, Platform, type AppStateStatus } from 'react-native';
 
 import {
   INSTALL_PERMISSION_MIN_API,
+  INSTALL_SETTINGS_RETURN_TIMEOUT_MS,
   ensureInstallPermission,
   installPermissionPackageUri,
   resolveInstallPermissionState,
@@ -15,6 +16,11 @@ describe('installPermission', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
   });
 
   afterAll(() => {
@@ -81,6 +87,75 @@ describe('installPermission', () => {
     expect(IntentLauncher.startActivityAsync).toHaveBeenCalledTimes(1);
   });
 
+  it('waits for an actual app return before rechecking the fallback setting', async () => {
+    const appStateListener: {
+      current: ((state: AppStateStatus) => void) | null;
+    } = { current: null };
+    const removeListener = jest.fn();
+    const addListenerSpy = jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_type, listener) => {
+        appStateListener.current = listener as (state: AppStateStatus) => void;
+        return { remove: removeListener };
+      });
+    const openSettingsSpy = jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+    jest.mocked(IntentLauncher.startActivityAsync).mockRejectedValueOnce(
+      new Error('targeted settings unavailable'),
+    );
+    jest
+      .mocked(Device.isSideLoadingEnabledAsync)
+      .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(true);
+
+    const permission = ensureInstallPermission();
+    await flushMicrotasks();
+
+    expect(openSettingsSpy).toHaveBeenCalledTimes(1);
+    expect(addListenerSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      openSettingsSpy.mock.invocationCallOrder[0],
+    );
+    expect(Device.isSideLoadingEnabledAsync).toHaveBeenCalledTimes(1);
+
+    appStateListener.current?.('active');
+    await flushMicrotasks();
+    expect(Device.isSideLoadingEnabledAsync).toHaveBeenCalledTimes(1);
+
+    appStateListener.current?.('background');
+    appStateListener.current?.('active');
+
+    await expect(permission).resolves.toBe(true);
+    expect(Device.isSideLoadingEnabledAsync).toHaveBeenCalledTimes(2);
+    expect(removeListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('bounds the fallback wait when no active return is observed', async () => {
+    jest.useFakeTimers();
+    const appStateListener: {
+      current: ((state: AppStateStatus) => void) | null;
+    } = { current: null };
+    const removeListener = jest.fn();
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      appStateListener.current = listener as (state: AppStateStatus) => void;
+      return { remove: removeListener };
+    });
+    jest.spyOn(Linking, 'openSettings').mockResolvedValue();
+    jest.mocked(IntentLauncher.startActivityAsync).mockRejectedValueOnce(
+      new Error('targeted settings unavailable'),
+    );
+    jest.mocked(Device.isSideLoadingEnabledAsync).mockResolvedValue(false);
+
+    const permission = ensureInstallPermission();
+    await flushMicrotasks();
+    appStateListener.current?.('inactive');
+
+    expect(Device.isSideLoadingEnabledAsync).toHaveBeenCalledTimes(1);
+    await jest.advanceTimersByTimeAsync(INSTALL_SETTINGS_RETURN_TIMEOUT_MS);
+
+    await expect(permission).resolves.toBe(false);
+    expect(Device.isSideLoadingEnabledAsync).toHaveBeenCalledTimes(2);
+    expect(removeListener).toHaveBeenCalledTimes(1);
+  });
+
   it('does not open settings when the install source is already allowed', async () => {
     jest.mocked(Device.isSideLoadingEnabledAsync).mockResolvedValueOnce(true);
 
@@ -88,3 +163,9 @@ describe('installPermission', () => {
     expect(IntentLauncher.startActivityAsync).not.toHaveBeenCalled();
   });
 });
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}

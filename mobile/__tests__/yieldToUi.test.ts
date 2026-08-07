@@ -106,6 +106,24 @@ describe('yieldToUi', () => {
     jest.useRealTimers();
   });
 
+  it('runs navigation work exactly once at the fallback when interactions never settle', () => {
+    jest.useFakeTimers();
+    runSpy.mockImplementationOnce((() => (
+      { cancel: jest.fn(), then: jest.fn(), done: jest.fn() }
+    )) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    scheduleAfterNavigation(work, 500);
+    jest.advanceTimersByTime(499);
+    expect(work).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(500);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
   it('does not run navigation work immediately when interactions are already idle', () => {
     jest.useFakeTimers();
     const work = jest.fn();

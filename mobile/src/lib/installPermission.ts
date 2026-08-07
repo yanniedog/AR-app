@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Linking, Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 
 import { ANDROID_PACKAGE, debugLog } from './debugLog';
 
@@ -12,6 +12,7 @@ import { ANDROID_PACKAGE, debugLog } from './debugLog';
 
 /** Android O (API 26)+ requires per-app "Install unknown apps" before sideloading. */
 export const INSTALL_PERMISSION_MIN_API = 26;
+export const INSTALL_SETTINGS_RETURN_TIMEOUT_MS = 2 * 60_000;
 
 export type InstallPermissionState =
   | 'granted'
@@ -72,7 +73,52 @@ export async function openInstallPermissionSettings(): Promise<void> {
     debugLog.warn('install-permission', `settings intent failed: ${message}`);
   }
 
-  await Linking.openSettings();
+  await openFallbackSettingsAndWaitForReturn();
+}
+
+async function openFallbackSettingsAndWaitForReturn(): Promise<void> {
+  let sawAppLeave = false;
+  let settled = false;
+  let resolveReturn: (() => void) | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let subscription: { remove: () => void } | null = null;
+
+  const returned = new Promise<void>((resolve) => {
+    resolveReturn = resolve;
+  });
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    subscription?.remove();
+    if (timeout != null) clearTimeout(timeout);
+    resolveReturn?.();
+  };
+
+  // Linking.openSettings() only confirms that Settings was launched. Subscribe
+  // first so a fast inactive/background transition cannot be missed, and only
+  // treat a later active event as a genuine return to this app.
+  subscription = AppState.addEventListener('change', (state) => {
+    if (state === 'inactive' || state === 'background') {
+      sawAppLeave = true;
+    } else if (state === 'active' && sawAppLeave) {
+      finish();
+    }
+  });
+  timeout = setTimeout(() => {
+    debugLog.warn(
+      'install-permission',
+      'settings return was not observed before timeout',
+    );
+    finish();
+  }, INSTALL_SETTINGS_RETURN_TIMEOUT_MS);
+
+  try {
+    await Linking.openSettings();
+  } catch (err) {
+    finish();
+    throw err;
+  }
+  await returned;
 }
 
 /**

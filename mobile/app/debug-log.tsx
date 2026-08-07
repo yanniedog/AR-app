@@ -29,6 +29,14 @@ export default function DebugLogScreen() {
   const uploadUrlRef = useRef(uploadUrl);
   uploadUrlRef.current = uploadUrl;
   const logPathHint = debugLog.getAndroidLogPathHint();
+  const readVersionedExport = useCallback(async () => {
+    const completeLog = await debugLog.readCompleteText();
+    return formatVersionedLogExport(
+      completeLog,
+      Application.nativeApplicationVersion ?? 'unknown',
+      Application.nativeBuildVersion ?? 'unknown',
+    );
+  }, []);
 
   useEffect(() => {
     return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
@@ -73,12 +81,7 @@ export default function DebugLogScreen() {
   const onCopy = useCallback(async () => {
     setBusy('copy');
     try {
-      const completeLog = await debugLog.readCompleteText();
-      const body = formatVersionedLogExport(
-        completeLog,
-        Application.nativeApplicationVersion ?? 'unknown',
-        Application.nativeBuildVersion ?? 'unknown',
-      );
+      const body = await readVersionedExport();
       await Clipboard.setStringAsync(body);
       Alert.alert('Copied', 'Complete on-disk log and latest performance audit copied.');
     } catch (err) {
@@ -86,17 +89,12 @@ export default function DebugLogScreen() {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [readVersionedExport]);
 
   const onShare = useCallback(async () => {
     setBusy('share');
     try {
-      const completeLog = await debugLog.readCompleteText();
-      const body = formatVersionedLogExport(
-        completeLog,
-        Application.nativeApplicationVersion ?? 'unknown',
-        Application.nativeBuildVersion ?? 'unknown',
-      );
+      const body = await readVersionedExport();
       const path = FileSystem.cacheDirectory
         ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
         : null;
@@ -117,19 +115,14 @@ export default function DebugLogScreen() {
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [readVersionedExport]);
 
   const runUpload = useCallback(async () => {
     if (busyRef.current) return;
     busyRef.current = 'upload';
     setBusy('upload');
     try {
-      const completeLog = await debugLog.readCompleteText();
-      const body = formatVersionedLogExport(
-        completeLog,
-        Application.nativeApplicationVersion ?? 'unknown',
-        Application.nativeBuildVersion ?? 'unknown',
-      );
+      const body = await readVersionedExport();
       const result = await uploadDebugLog(body);
       const { url, provider, deleteKey } = result;
       if (result.truncated || result.clientTruncated) {
@@ -172,7 +165,7 @@ export default function DebugLogScreen() {
       busyRef.current = null;
       setBusy(null);
     }
-  }, [onCopy, onShare]);
+  }, [onCopy, onShare, readVersionedExport]);
   retryUploadRef.current = () => {
     void runUpload();
   };
@@ -249,6 +242,10 @@ export default function DebugLogScreen() {
               onPress={() => void onCopyPath()}
             />
           </Card>
+          <AppText variant="tiny" color="textMuted">
+            Copy, Share and Upload immediately export the complete flushed on-disk log plus the
+            latest complete performance audit. No extra selection step is required.
+          </AppText>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Button title="Clear" icon="trash-outline" variant="ghost" onPress={onClear} />
             <Button
