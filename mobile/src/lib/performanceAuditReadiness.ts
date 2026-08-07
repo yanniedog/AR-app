@@ -191,6 +191,13 @@ function actionsMap(
   return result;
 }
 
+function isUnavailableActionResult(result: unknown): boolean {
+  if (result == null || typeof result !== 'object') return false;
+  if (!('unavailableReason' in result)) return false;
+  const reason = (result as { unavailableReason?: unknown }).unavailableReason;
+  return typeof reason === 'string' && reason.trim().length > 0;
+}
+
 function mapsHaveSameActions(
   left: Map<string, PerformanceAuditSemanticAction>,
   right: Map<string, PerformanceAuditSemanticAction>,
@@ -455,12 +462,17 @@ export class PerformanceAuditReadinessRegistry {
   }
 
   async invokeAction(surfaceId: string, actionName: string, ...args: unknown[]): Promise<unknown> {
-    if (!this.capture) throw new Error('No readiness capture is active');
+    const capture = this.capture;
+    if (!capture) throw new Error('No readiness capture is active');
     const surface = this.surfaces.get(surfaceId);
     if (!surface) throw new Error(`Readiness surface is not registered: ${surfaceId}`);
     const action = surface.actions.get(actionName);
     if (!action) throw new Error(`Readiness action is not registered: ${surfaceId}.${actionName}`);
     const result = await action(...args);
+    // Capture can end/restart while the action awaits; never stamp a newer session.
+    if (this.capture?.generation !== capture.generation) return result;
+    // Terminal unavailability is skip evidence, not a successful semantic action.
+    if (isUnavailableActionResult(result)) return result;
     // Remounts during navigation can replace the MutableSurface instance before we
     // return. Persist completion by surface ID, then stamp whichever instance is live.
     const priorRevision = this.actionCompletions.get(surfaceId)?.actionRevision
