@@ -810,7 +810,18 @@ export async function upgradeFromBackgroundDownload(
 
   try {
     await ensureApkBackgroundDownload(manifest, options);
-    if (snapshot.phase === 'waiting' && String(snapshot.buildNumber) === buildNumber) {
+    const network = options?.wifiOnly && snapshot.phase !== 'ready'
+      ? await Network.getNetworkStateAsync().catch(() => null)
+      : null;
+    const queuedForWifi = Boolean(
+      options?.wifiOnly &&
+      snapshot.phase !== 'ready' &&
+      (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI),
+    );
+    if (
+      String(snapshot.buildNumber) === buildNumber &&
+      (snapshot.phase === 'waiting' || queuedForWifi)
+    ) {
       debugLog.info(
         'app-update',
         `explicit upgrade remains queued for Wi-Fi build=${manifest.build_number}`,
