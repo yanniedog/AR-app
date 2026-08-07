@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo } from 'react';
-import { Alert, Linking, Pressable, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking, Pressable, type ScrollView, View } from 'react-native';
 
 import { EmptyState } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
@@ -16,6 +16,7 @@ import {
 import { findByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function Facts({ items, empty }: { items: ReceiptFact[]; empty?: string }) {
@@ -60,6 +61,8 @@ export default function RateReceiptScreen() {
   const ensureDetails = useStore((state) => state.ensureDetails);
   const { scenario, storageStatus } = useUserRateScenario();
   const scenarioLoaded = storageStatus === 'ready';
+  const scrollRef = useRef<ScrollView>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
@@ -87,6 +90,54 @@ export default function RateReceiptScreen() {
       : null,
     [core, found, receipt, scenario],
   );
+  const auditActions = useMemo(() => ({
+    'receipt.open': () => undefined,
+    'receipt.scroll.evidence': () => scrollRef.current?.scrollToEnd({ animated: true }),
+    'receipt.back-to-product': () => router.back(),
+  }), []);
+  const receiptFactCount = receipt
+    ? receipt.tier.length + receipt.conditions.length + receipt.fees.length
+    : 0;
+  usePerformanceAuditSurface({
+    id: 'receipt.evidence',
+    routeKey: '/rate-receipt',
+    datasetRevision: core?.run_date ?? null,
+    renderRevision: `${productKey}:${row?.rate_index ?? 'none'}:${receiptFactCount}`,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'receipt.data',
+        kind: 'data',
+        status: receipt && brief ? 'ready' : 'pending',
+        datasetRevision: core?.run_date ?? null,
+      },
+      {
+        id: 'receipt.scenario-storage',
+        kind: 'data',
+        status: scenarioLoaded ? 'ready' : 'pending',
+      },
+      {
+        id: 'receipt.facts',
+        kind: 'list',
+        status: receipt && brief ? 'ready' : 'pending',
+        expectedCount: receiptFactCount,
+        actualCount: receiptFactCount,
+      },
+      {
+        id: 'receipt.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+      },
+      {
+        id: 'receipt.logos',
+        kind: 'logo',
+        required: false,
+        status: 'ready',
+        expectedCount: 0,
+        actualCount: 0,
+      },
+    ],
+  });
 
   if (!core) return null;
   if (!found || !row || !receipt || !brief) {
@@ -108,7 +159,11 @@ export default function RateReceiptScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'Rate receipt' }} />
-      <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 48 }}>
+      <ScreenScrollView
+        ref={scrollRef}
+        onLayout={() => setLayoutReady(true)}
+        contentContainerStyle={{ padding: 16, paddingBottom: 48 }}
+      >
         <Card
           style={{
             marginBottom: 16,

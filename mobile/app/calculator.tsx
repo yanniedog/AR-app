@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
 import { IndeterminateProgressBar } from '../src/components/feedback';
@@ -23,7 +23,7 @@ import {
   termDepositInterestDifference,
   type CalcInputs,
 } from '../src/data/calc';
-import { formatRate, humanizeEnum, isBroadlyAvailable, toFraction } from '../src/data/format';
+import { formatRate, humanizeEnum, toFraction, visibleAccountRows } from '../src/data/format';
 import { sectionSegmentOptions } from '../src/data/interests';
 import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
 import {
@@ -33,11 +33,16 @@ import {
   profileFilterRows,
 } from '../src/data/profile';
 import { distinctValues, rankFraction } from '../src/data/selectors';
+import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
 import { hasProAccess } from '../src/lib/proAccess';
+import { auditActionString } from '../src/lib/performanceAuditActionParams';
+import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -61,6 +66,9 @@ interface Candidate {
 export default function Calculator() {
   const theme = useTheme();
   const core = useStore((s) => s.core);
+  const storeStatus = useStore((s) => s.status);
+  const storeError = useStore((s) => s.error);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const productHistory = useStore((s) =>
@@ -75,13 +83,35 @@ export default function Calculator() {
   const setPref = useStore((s) => s.setPref);
   const activeSection = useStore((s) => s.activeSection);
   const [section, setSection] = useState<SectionKey>(activeSection);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [detailsTerminalError, setDetailsTerminalError] = useState(false);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+  const suitabilityRevision = useSuitabilityRevision();
+  const suitabilityReady = useMemo(() => {
+    void suitabilityRevision;
+    return isSuitabilityFilterReady(includeNonStandard);
+  }, [includeNonStandard, suitabilityRevision]);
 
   const profileFeaturesPending =
     profileFeaturesForSection(profileFilters, section).length > 0 && !details?.products;
 
   useEffect(() => {
-    if (profileFeaturesPending) void ensureDetails();
+    if (!profileFeaturesPending) {
+      setDetailsTerminalError(false);
+      return;
+    }
+    let cancelled = false;
+    setDetailsTerminalError(false);
+    void ensureDetails()
+      .then(() => {
+        if (!cancelled && !useStore.getState().details?.products) setDetailsTerminalError(true);
+      })
+      .catch(() => {
+        if (!cancelled) setDetailsTerminalError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [profileFeaturesPending, ensureDetails]);
 
   const isLoan = SECTIONS[section].lowerIsBetter;
@@ -111,23 +141,23 @@ export default function Calculator() {
   // Profile-matched comparable rows. A calculated LVR applies only to this
   // scenario and never silently rewrites the saved browsing profile.
   const rows = useMemo(() => {
+    void suitabilityRevision;
     const all = core?.sections?.[section]?.rates ?? [];
     const scenarioProfile =
       section === 'Mortgage' && lvrBand
         ? { ...profileFilters, lvrTiers: [lvrBand] }
         : profileFilters;
-    return profileFilterRows(
-      rowsUnder(all, section, []),
-      scenarioProfile,
-      section,
+    return visibleAccountRows(
+      profileFilterRows(
+        rowsUnder(all, section, []),
+        scenarioProfile,
+        section,
+        details?.products,
+      ),
+      includeNonStandard,
       details?.products,
-    ).filter(
-      (r) =>
-        !!r &&
-        (includeNonStandard ||
-          isBroadlyAvailable(r, details?.products?.[r.product_key] ?? null)),
     );
-  }, [core, section, profileFilters, includeNonStandard, details, lvrBand]);
+  }, [core, section, profileFilters, includeNonStandard, details, lvrBand, suitabilityRevision]);
 
   const median = useMemo(() => statsFor(rows, true, section).median, [rows, section]);
 
@@ -204,6 +234,110 @@ export default function Calculator() {
     return out.sort((a, b) => b.perMonth - a.perMonth).slice(0, 10);
   }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric]);
 
+  const changeSection = useCallback((next: SectionKey) => setSection(next), []);
+  const auditSelectSection = useCallback((...args: unknown[]) => {
+    const requested = auditActionString(args, 'section');
+    if (typeof requested === 'string' && requested in SECTIONS) {
+      changeSection(requested as SectionKey);
+      return;
+    }
+    const currentIndex = sectionOptions.findIndex((option) => option.value === section);
+    const next = sectionOptions[(currentIndex + 1) % Math.max(1, sectionOptions.length)]?.value;
+    if (next) changeSection(next);
+  }, [changeSection, section, sectionOptions]);
+  const openFirstCandidate = useCallback(() => {
+    const candidate = candidates[0];
+    if (!candidate) return undefined;
+    openProduct(candidate.row.product_key, candidate.row.rate_index);
+    return { expectedPath: `/product/${encodeURIComponent(candidate.row.product_key)}` };
+  }, [candidates]);
+  const openProjections = useCallback(async () => {
+    const saved = await flushScenario();
+    if (!saved) return undefined;
+    router.push({ pathname: '/projections', params: { section } } as never);
+    return { expectedPath: '/projections' };
+  }, [flushScenario, section]);
+  const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
+  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${detailsLoading ? 'details-loading' : 'details-settled'}`;
+  const calculatorLogoIds = useMemo(
+    () => candidates.map((candidate) =>
+      `calculator:${candidate.row.product_key}:${candidate.row.rate_index ?? 'none'}`),
+    [candidates],
+  );
+  const calculatorLogos = useLogoReadiness(calculatorRenderRevision, calculatorLogoIds);
+  const auditActions = useMemo(() => ({
+    'calculator.open': () => undefined,
+    'calculator.section.next': auditSelectSection,
+    'calculator.candidate.first': openFirstCandidate,
+    'calculator.projections.open': openProjections,
+  }), [auditSelectSection, openFirstCandidate, openProjections]);
+  usePerformanceAuditSurface({
+    id: 'calculator.results',
+    routeKey: '/calculator',
+    datasetRevision: coreRevision,
+    renderRevision: calculatorRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'calculator.data',
+        kind: 'data',
+        status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
+        error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        datasetRevision: coreRevision,
+      },
+      {
+        id: 'calculator.scenario-storage',
+        kind: 'data',
+        status: scenarioStorageStatus === 'ready'
+          ? 'ready'
+          : scenarioStorageStatus === 'error'
+            ? 'error'
+            : 'pending',
+        error: scenarioStorageStatus === 'error' ? scenarioError ?? 'Encrypted scenario unavailable' : null,
+      },
+      {
+        id: 'calculator.details',
+        kind: 'data',
+        status: !profileFeaturesPending || details?.products
+          ? 'ready'
+          : detailsTerminalError
+            ? 'error'
+            : 'pending',
+        error: detailsTerminalError
+          ? 'Profile-required product details are unavailable'
+          : null,
+        expectedCount: profileFeaturesPending ? 1 : 0,
+        actualCount: profileFeaturesPending && details?.products ? 1 : 0,
+      },
+      {
+        id: 'calculator.suitability',
+        kind: 'data',
+        status: suitabilityReady ? 'ready' : 'pending',
+        datasetRevision: coreRevision,
+      },
+      {
+        id: 'calculator.candidates',
+        kind: 'list',
+        status: !core || detailsLoading || !suitabilityReady ? 'pending' : 'ready',
+        expectedCount: candidates.length,
+        actualCount: candidates.length,
+      },
+      {
+        id: 'calculator.logos',
+        kind: 'logo',
+        status: calculatorLogos.ready ? 'ready' : 'pending',
+        expectedCount: calculatorLogos.expectedCount,
+        actualCount: calculatorLogos.terminalCount,
+      },
+      {
+        id: 'calculator.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        renderRevision: calculatorRenderRevision,
+      },
+    ],
+  });
+
   if (!core) return null;
 
   const inputStyle = {
@@ -244,10 +378,14 @@ export default function Calculator() {
   );
 
   return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }} keyboardShouldPersistTaps="handled">
+    <ScreenScrollView
+      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      keyboardShouldPersistTaps="handled"
+      onContentSizeChange={() => setLayoutReady(true)}
+    >
       {sectionOptions.length > 1 ? (
         <View style={{ marginBottom: 12 }}>
-          <SegmentedControl options={sectionOptions} value={section} onChange={setSection} />
+          <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
         </View>
       ) : null}
 
@@ -371,12 +509,7 @@ export default function Calculator() {
         <Button
           title="Open lifecycle projection"
           icon="analytics-outline"
-          onPress={() => {
-            void flushScenario().then((saved) => {
-              if (!saved) return;
-              router.push({ pathname: '/projections', params: { section } } as never);
-            });
-          }}
+          onPress={() => void openProjections()}
           disabled={scenarioStorageStatus !== 'ready'}
         />
         {scenarioStorageStatus === 'loading' || scenarioStorageStatus === 'idle' ? (
@@ -473,7 +606,9 @@ export default function Calculator() {
         return (
           <Pressable
             key={c.row.provider}
-            onPress={() => openProduct(c.row.product_key, c.row.rate_index)}
+            onPress={c === candidates[0]
+              ? openFirstCandidate
+              : () => openProduct(c.row.product_key, c.row.rate_index)}
             accessibilityRole="button"
             accessibilityLabel={`View ${c.row.provider} ${c.row.product_name}, ${rateDescriptor}${
               rateChangeLabel ? `, ${rateChangeLabel}` : ''
@@ -481,7 +616,12 @@ export default function Calculator() {
           >
             <Card style={{ marginBottom: 10 }}>
               <Row gap={12} style={{ alignItems: 'center' }}>
-                <BankAvatar provider={c.row.provider} size={36} />
+                <BankAvatar
+                  provider={c.row.provider}
+                  size={36}
+                  renderStateId={`calculator:${c.row.product_key}:${c.row.rate_index ?? 'none'}`}
+                  onRenderStateChange={calculatorLogos.onLogoRenderStateChange}
+                />
                 <View style={{ flex: 1 }}>
                   <AppText variant="body" weight="700" numberOfLines={1}>
                     {c.row.provider}

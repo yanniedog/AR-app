@@ -57,7 +57,12 @@ const NONE: RateQualifier = Object.freeze({
   note: '',
 });
 
-function classifyKind(row: RateRow, section: SectionKey): RateConditionality {
+/**
+ * Cheap conditionality classification for ranking and aggregation hot paths.
+ * Keep display formatting in {@link rateQualifier}; callers that only need the
+ * rate basis must not allocate labels or construct number formatters.
+ */
+export function rateConditionality(row: RateRow, section: SectionKey): RateConditionality {
   // Savings carry it on ribbon_deposit_kind (base | bonus | introductory);
   // term deposits on ribbon_rate_structure (base | bonus). For mortgages that
   // field encodes variable/fixed — a rate TYPE, not conditionality — so there is
@@ -80,7 +85,7 @@ function classifyKind(row: RateRow, section: SectionKey): RateConditionality {
 }
 
 export function rateQualifier(row: RateRow, section: SectionKey): RateQualifier {
-  const kind = classifyKind(row, section);
+  const kind = rateConditionality(row, section);
   if (kind === 'base') return { ...NONE, kind: 'base' };
   if (kind === 'none') return NONE;
 

@@ -32,6 +32,18 @@ describe('format', () => {
     expect(formatRate(0)).toBe('—');
   });
 
+  test('rate formatter digits are normalized and cached by normalized precision', () => {
+    expect(formatRate('0.045', -4)).toBe('5%');
+    expect(formatRate('0.045', Number.NaN)).toBe('4.50%');
+    const formatter = jest.spyOn(Intl, 'NumberFormat');
+    formatRate('0.045', 13.9);
+    formatRankedFraction(0.045, 13);
+    formatRateDigits('0.045', 13.1);
+
+    expect(formatter).toHaveBeenCalledTimes(1);
+    formatter.mockRestore();
+  });
+
   test('formatRateChangeDate uses local calendar days before falling back to a date', () => {
     const hobartMorning = new Date(2026, 6, 31, 0, 30);
     expect(formatRateChangeDate('2026-07-31', hobartMorning)).toBe('today');

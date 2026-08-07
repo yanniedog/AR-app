@@ -478,10 +478,51 @@ describe('persistent log file', () => {
     expect(complete).not.toContain('old-secret');
   });
 
-  it('includes the durable complete audit after the bounded ring has evicted its marker', async () => {
-    const marker = 'PERFORMANCE_AUDIT_SUMMARY schema=3 session=durable app_version=9.8.7 build_version=654';
+  it('flushes a crash-detectable complete audit into the physical log without export duplication', async () => {
+    let physicalContents = '';
+    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (_path, contents) => {
+      physicalContents = contents;
+    });
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async () => physicalContents);
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=physical app_version=9.8.7 build_version=654`;
     await debugLog.storePerformanceAudit(marker, {
-      schemaVersion: 3,
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'physical-complete-audit',
+    });
+
+    const writes = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls;
+    const [, physicalLog] = writes[writes.length - 1];
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
+    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_JSON');
+    expect(physicalLog).toContain('physical-complete-audit');
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
+
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(physicalLog);
+    const complete = await debugLog.readCompleteText();
+    expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
+    expect(complete).not.toContain('# Latest complete performance audit');
+  });
+
+  it('does not report physical audit persistence when the filesystem write fails', async () => {
+    (FileSystem.writeAsStringAsync as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=write-failure app_version=9.8.7 build_version=654`;
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+    })).rejects.toThrow('disk full');
+  });
+
+  it('includes the durable complete audit after the bounded ring has evicted its marker', async () => {
+    let physicalContents = '';
+    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (_path, contents) => {
+      physicalContents = contents;
+    });
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async () => physicalContents);
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=durable app_version=9.8.7 build_version=654`;
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       app: { appVersion: '9.8.7', buildVersion: '654' },
       sentinel: 'complete-audit-survived',
     });

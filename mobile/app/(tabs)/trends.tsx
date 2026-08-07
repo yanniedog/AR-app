@@ -15,7 +15,11 @@ import { PulseDayMovers } from '../../src/components/PulseDayMovers';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
 import { ProPaywall } from '../../src/components/ProPaywall';
 import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
-import { RbaOutlook } from '../../src/components/RbaOutlook';
+import {
+  RbaOutlook,
+  type RbaOutlookAuditHandle,
+  type RbaOutlookAuditState,
+} from '../../src/components/RbaOutlook';
 import { RbaChart } from '../../src/components/charts';
 import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
@@ -36,14 +40,18 @@ import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../sr
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
+import {
+  usePerformanceAuditProbe,
+  usePerformanceAuditSurface,
+} from '../../src/hooks/usePerformanceAuditReadiness';
 import { rateValueLabel, rbaDecisionA11yLabel } from '../../src/lib/a11ySummaries';
 import { runStoreRetry } from '../../src/lib/degradationLog';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBrowse } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
-import { yieldToUiFrames } from '../../src/lib/yieldToUi';
-import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
+import { yieldToPaintFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import type { HistoryWindow } from '../../src/types';
 
 export default function Trends() {
   const theme = useTheme();
@@ -51,6 +59,8 @@ export default function Trends() {
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const calendar = useStore((s) => s.rbaCalendar);
+  const calendarError = useStore((s) => s.rbaCalendarError);
+  const hasCalendarAsset = useStore((s) => !!s.manifest?.files.rba_calendar);
   const interests = useStore((s) => s.prefs.interests);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -100,6 +110,18 @@ export default function Trends() {
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
+  const [explorerWindow, setExplorerWindow] = useState<HistoryWindow>('90D');
+  const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
+  const [historyLayoutRevision, setHistoryLayoutRevision] = useState<string | null>(null);
+  const [rbaGraphic, setRbaGraphic] = useState<{ revision: string; pointCount: number } | null>(null);
+  const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
+  const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
+  const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
+  const [leaderLogoState, setLeaderLogoState] = useState<{
+    revision: string;
+    expectedCount: number;
+    terminalCount: number;
+  } | null>(null);
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const productHistory = useStore((s) => s.productHistory);
   const productHistoryError = useStore((s) => s.productHistoryError);
@@ -112,8 +134,7 @@ export default function Trends() {
     if (
       isFocused &&
       showHistoryRibbon &&
-      explorerMode === 'pulse' &&
-      !isPerformanceAuditActive()
+      explorerMode === 'pulse'
     ) {
       void ensureProductHistory();
     }
@@ -132,7 +153,7 @@ export default function Trends() {
     if (existing.revision !== revision) updateDeferredCharts({ revision, stage: 0 });
     void (async () => {
       for (let stage = firstStage; stage <= 5; stage += 1) {
-        await yieldToUiFrames(2);
+        await yieldToPaintFrames(2);
         if (!active) return;
         updateDeferredCharts({ revision, stage });
       }
@@ -287,11 +308,264 @@ export default function Trends() {
     });
   }, [core, depositRankMetric, interestSections, marketSnapshotsReady, mortgageRateMetric, suitabilityRevision]);
 
+  const datasetRevision = core?.run_date ?? null;
+  const historyDates = useMemo(
+    () => explorerMode === 'pulse' || explorerMode === 'race'
+      ? explorerInsights?.run_dates ?? []
+      : historyModel?.dates ?? [],
+    [explorerInsights?.run_dates, explorerMode, historyModel?.dates],
+  );
+  const renderRevision = `${datasetRevision ?? 'none'}:${activeSection}:${deferredChartStage}:${explorerMode}:${explorerWindow}:${rewindDate ?? 'latest'}`;
+  useEffect(() => {
+    if (!showHistoryRibbon || !marketExplorerReady || historyLayoutRevision == null) return;
+    const frame = requestAnimationFrame(() => setHistoryLayoutRevision(renderRevision));
+    return () => cancelAnimationFrame(frame);
+  }, [historyLayoutRevision, marketExplorerReady, renderRevision, showHistoryRibbon]);
+  const nextSection = useCallback((parameters?: unknown) => {
+    const planned = parameters && typeof parameters === 'object'
+      ? (parameters as { section?: unknown }).section
+      : null;
+    if (typeof planned === 'string' && interestSections.includes(planned as typeof activeSection)) {
+      setActiveSection(planned as typeof activeSection);
+      return;
+    }
+    const index = Math.max(0, interestSections.indexOf(activeSection));
+    const next = interestSections[(index + 1) % Math.max(1, interestSections.length)];
+    if (next) setActiveSection(next);
+  }, [activeSection, interestSections, setActiveSection]);
+  const selectPreviousHistoryDate = useCallback(() => {
+    if (!historyDates.length) return;
+    const activeIndex = rewindDate ? historyDates.indexOf(rewindDate) : historyDates.length - 1;
+    setRewindDate(historyDates[Math.max(0, activeIndex - 1)] ?? null);
+  }, [historyDates, rewindDate]);
+  const selectPreviousRbaDate = useCallback(() => {
+    const dates = core?.rba.map((entry) => entry.date) ?? [];
+    if (!dates.length) return;
+    const activeIndex = rbaSelectedDate ? dates.indexOf(rbaSelectedDate) : dates.length - 1;
+    setRbaSelectedDate(dates[Math.max(0, activeIndex - 1)] ?? null);
+  }, [core?.rba, rbaSelectedDate]);
+  const dashboardActions = useMemo(() => ({
+    'outlook.open': () => undefined,
+    'outlook.section.next': nextSection,
+    'outlook.history.mode.spread': () => showHistoryRibbon
+      ? setExplorerMode('edge')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.mode.calendar': () => showHistoryRibbon
+      ? setExplorerMode('calendar')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.mode.pulse': () => showHistoryRibbon
+      ? setExplorerMode('pulse')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.mode.leaders': () => showHistoryRibbon
+      ? setExplorerMode('race')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.window.30d': () => showHistoryRibbon
+      ? setExplorerWindow('30D')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.window.all': () => showHistoryRibbon
+      ? setExplorerWindow('All')
+      : { unavailableReason: 'The history explorer is disabled' },
+    'outlook.history.date.previous': () => historyDates.length > 1
+      ? selectPreviousHistoryDate()
+      : { unavailableReason: 'The history explorer has fewer than two dates' },
+    'outlook.rba-response.decision.previous': () => (core?.rba.length ?? 0) > 1
+      ? selectPreviousRbaDate()
+      : { unavailableReason: 'The RBA response chart has fewer than two decisions' },
+    'outlook.economy.lens.next': () => rbaOutlookRef.current
+      ? rbaOutlookRef.current.nextLens()
+      : { unavailableReason: 'The economic explorer is not rendered' },
+    'outlook.economy.window.next': () => rbaOutlookRef.current
+      ? rbaOutlookRef.current.nextWindow()
+      : { unavailableReason: 'The economic explorer is not rendered' },
+    'outlook.economy.date.previous': () => rbaOutlookRef.current
+      ? rbaOutlookRef.current.previousDate()
+      : { unavailableReason: 'The economic explorer is not rendered' },
+    'outlook.snapshot.browse.first': (parameters: unknown) => {
+      const requested = parameters && typeof parameters === 'object'
+        ? (parameters as { section?: unknown }).section
+        : null;
+      const section = typeof requested === 'string' && interestSections.includes(requested as typeof activeSection)
+        ? requested as typeof activeSection
+        : marketSnapshots[0]?.key;
+      if (section) {
+        openBrowse(section);
+        return { expectedPath: '/browse' };
+      }
+      return { unavailableReason: 'No market snapshot is rendered' };
+    },
+  }), [core?.rba.length, historyDates.length, interestSections, marketSnapshots, nextSection, selectPreviousHistoryDate, selectPreviousRbaDate, showHistoryRibbon]);
+  const dashboardSurface = usePerformanceAuditSurface({
+    id: 'outlook.dashboard',
+    routeKey: '/trends',
+    datasetRevision,
+    renderRevision,
+    actions: dashboardActions,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'core-data',
+    kind: 'data',
+    status: core ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision,
+    expectedCount: core ? Object.values(core.sections).reduce((count, section) => count + section.rates.length, 0) : 1,
+    actualCount: core ? Object.values(core.sections).reduce((count, section) => count + section.rates.length, 0) : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'market-snapshot-list',
+    kind: 'list',
+    status: marketSnapshotsReady ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision,
+    expectedCount: marketSnapshotsReady ? marketSnapshots.length : interestSections.length,
+    actualCount: marketSnapshots.length,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'rba-calendar',
+    kind: 'data',
+    status: !hasCalendarAsset || calendar ? 'ready' : calendarError ? 'error' : 'pending',
+    error: calendarError,
+    datasetRevision,
+    renderRevision,
+    expectedCount: hasCalendarAsset ? 1 : 0,
+    actualCount: calendar ? 1 : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'bank-insights',
+    kind: 'data',
+    required: showBankInsights,
+    status: !showBankInsights || bankInsights ? 'ready' : bankInsightsError ? 'error' : 'pending',
+    error: bankInsightsError,
+    datasetRevision,
+    renderRevision,
+    expectedCount: showBankInsights ? 1 : 0,
+    actualCount: bankInsights ? 1 : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'bank-history',
+    kind: 'data',
+    required: prebuiltHistoryEnabled,
+    status: !prebuiltHistoryEnabled || historyBanks ? 'ready' : historyBanksError ? 'error' : 'pending',
+    error: historyBanksError,
+    datasetRevision,
+    renderRevision,
+    expectedCount: prebuiltHistoryEnabled ? 1 : 0,
+    actualCount: historyBanks ? 1 : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'product-history',
+    kind: 'data',
+    required: showHistoryRibbon && explorerMode === 'pulse',
+    status: !showHistoryRibbon || explorerMode !== 'pulse' || productHistory ? 'ready' : productHistoryError ? 'error' : 'pending',
+    error: productHistoryError,
+    datasetRevision,
+    renderRevision,
+    expectedCount: showHistoryRibbon && explorerMode === 'pulse' ? 1 : 0,
+    actualCount: productHistory ? 1 : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'dashboard-layout',
+    kind: 'layout',
+    status: datasetRevision && dashboardLayoutRevision === datasetRevision ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'deferred-graphics',
+    kind: 'graphic',
+    status: deferredChartStage >= 5 ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision,
+    expectedCount: 5,
+    actualCount: deferredChartStage,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'economic-graphics',
+    kind: 'graphic',
+    status: economicAuditState?.status ?? 'pending',
+    error: economicAuditState?.error,
+    datasetRevision,
+    renderRevision,
+    expectedCount: economicAuditState?.indicatorCount ?? 1,
+    actualCount: economicAuditState?.graphicReady ? economicAuditState.indicatorCount : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'history-graphic',
+    kind: 'graphic',
+    required: showHistoryRibbon,
+    status: !showHistoryRibbon || (marketExplorerReady && historyLayoutRevision === renderRevision) ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision,
+    expectedCount: showHistoryRibbon ? Math.max(1, historyDates.length) : 0,
+    actualCount: showHistoryRibbon && historyLayoutRevision === renderRevision ? Math.max(1, historyDates.length) : 0,
+  });
+  usePerformanceAuditProbe(dashboardSurface, {
+    id: 'leader-logos',
+    kind: 'logo',
+    required: showHistoryRibbon && explorerMode === 'race',
+    status: explorerMode !== 'race'
+      || (leaderLogoState?.revision === renderRevision
+        && leaderLogoState.terminalCount >= leaderLogoState.expectedCount)
+      ? 'ready'
+      : 'pending',
+    datasetRevision,
+    renderRevision,
+    expectedCount: explorerMode === 'race' ? leaderLogoState?.expectedCount ?? 1 : 0,
+    actualCount: explorerMode === 'race' && leaderLogoState?.revision === renderRevision
+      ? leaderLogoState.terminalCount
+      : 0,
+  });
+  const rbaActions = useMemo(() => ({
+    'redirect.rba.verify': () => undefined,
+    'outlook.rba-response.decision.previous': selectPreviousRbaDate,
+  }), [selectPreviousRbaDate]);
+  const rbaSurface = usePerformanceAuditSurface({
+    id: 'outlook.rba-response',
+    routeKey: '/trends',
+    datasetRevision,
+    renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
+    actions: rbaActions,
+  });
+  usePerformanceAuditProbe(rbaSurface, {
+    id: 'rba-data',
+    kind: 'data',
+    status: core?.rba.length ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
+    expectedCount: core?.rba.length ?? 1,
+    actualCount: core?.rba.length ?? 0,
+  });
+  usePerformanceAuditProbe(rbaSurface, {
+    id: 'rba-layout',
+    kind: 'layout',
+    status: datasetRevision && dashboardLayoutRevision === datasetRevision ? 'ready' : 'pending',
+    datasetRevision,
+    renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
+  });
+  usePerformanceAuditProbe(rbaSurface, {
+    id: 'rba-chart',
+    kind: 'graphic',
+    status: core?.rba.length && rbaGraphic?.revision.startsWith(`${core.rba.at(-1)?.date ?? 'none'}:${core.rba_holds?.length ?? 0}:`)
+      ? 'ready'
+      : 'pending',
+    datasetRevision,
+    renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
+    expectedCount: core?.rba.length ?? 1,
+    actualCount: rbaGraphic?.pointCount ?? 0,
+  });
+
   if (!core) return null;
   const currentRba = core.rba.at(-1);
 
   return (
-    <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+    <ScreenScrollView
+      ref={scrollRef}
+      contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+      onLayout={(event) => {
+        if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+          setDashboardLayoutRevision(core.run_date);
+        }
+      }}
+    >
       {showBankInsights ? (
         <>
           {bankInsights ? (
@@ -352,7 +626,12 @@ export default function Trends() {
       )}
 
       {outlookReady ? (
-        <RbaOutlook rba={core.rba} rbaHolds={core.rba_holds} />
+        <RbaOutlook
+          ref={rbaOutlookRef}
+          rba={core.rba}
+          rbaHolds={core.rba_holds}
+          onAuditStateChange={setEconomicAuditState}
+        />
       ) : (
         <DeferredChartPlaceholder label="Preparing economic outlook" />
       )}
@@ -370,7 +649,14 @@ export default function Trends() {
           </AppText>
         ) : null}
         {rbaChartReady ? (
-          <RbaChart data={core.rba} holds={core.rba_holds} height={190} />
+          <RbaChart
+            data={core.rba}
+            holds={core.rba_holds}
+            height={190}
+            selectedDate={rbaSelectedDate}
+            onDateSelect={setRbaSelectedDate}
+            onGraphicReady={setRbaGraphic}
+          />
         ) : (
           <DeferredChartPlaceholder label="Preparing cash-rate chart" height={190} />
         )}
@@ -462,7 +748,14 @@ export default function Trends() {
                 onChange={setActiveSection}
               />
             ) : null}
-            <View style={{ marginTop: sectionOptions.length > 1 ? 8 : 0 }}>
+            <View
+              style={{ marginTop: sectionOptions.length > 1 ? 8 : 0 }}
+              onLayout={(event) => {
+                if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+                  setHistoryLayoutRevision(renderRevision);
+                }
+              }}
+            >
               <HistoryExplorer
                 section={activeSection}
                 historyModel={historyModel}
@@ -477,6 +770,10 @@ export default function Trends() {
                 onDateSelect={setRewindDate}
                 mode={explorerMode}
                 onModeChange={setExplorerMode}
+                window={explorerWindow}
+                onWindowChange={setExplorerWindow}
+                auditRevision={renderRevision}
+                onLeaderLogoReadiness={setLeaderLogoState}
               />
             </View>
             {rewindDate && explorerMode === 'pulse' ? (

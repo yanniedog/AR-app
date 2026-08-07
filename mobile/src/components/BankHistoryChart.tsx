@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { Platform, View, type GestureResponderEvent, type PointerEvent } from 'react-native';
 import Animated, {
   useAnimatedProps,
@@ -67,6 +67,14 @@ export interface BankHistoryChartProps {
   allDates?: string[];
   /** Optional emphasized line (e.g. one product's rate) drawn over the section context. */
   highlightSeries?: HighlightSeries | null;
+  /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
+  auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
+}
+
+export interface BankHistoryChartAuditActions {
+  select30DayWindow(): void;
+  selectNextWindow(): void;
+  selectPreviousDate(): void;
 }
 
 function stepPath(
@@ -107,6 +115,7 @@ export function BankHistoryChart({
   height = 180,
   allDates,
   highlightSeries,
+  auditActionsRef,
 }: BankHistoryChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -173,6 +182,35 @@ export function BankHistoryChart({
     [plotPoints, rbaSteps, highlightValues],
   );
 
+  const pinnedDate =
+    selectedDate && plotDates.includes(selectedDate) ? selectedDate : plotDates.at(-1) ?? '';
+  const activeDate =
+    hoverDate && plotDates.includes(hoverDate) ? hoverDate : pinnedDate;
+  const activeIndex = Math.max(0, plotDates.indexOf(activeDate));
+  const handleSlicePress = useCallback((date: string) => {
+    setSelectedDate(date);
+    onDateSelect?.(date);
+  }, [onDateSelect]);
+
+  useEffect(() => {
+    if (!auditActionsRef) return;
+    const actions: BankHistoryChartAuditActions = {
+      select30DayWindow: () => setWindow('30D'),
+      selectNextWindow: () => {
+        const index = WINDOW_OPTIONS.findIndex((option) => option.value === window);
+        setWindow(WINDOW_OPTIONS[(index + 1) % WINDOW_OPTIONS.length].value);
+      },
+      selectPreviousDate: () => {
+        const previous = plotDates[Math.max(0, activeIndex - 1)];
+        if (previous) handleSlicePress(previous);
+      },
+    };
+    auditActionsRef.current = actions;
+    return () => {
+      if (auditActionsRef.current === actions) auditActionsRef.current = null;
+    };
+  }, [activeIndex, auditActionsRef, handleSlicePress, plotDates, window]);
+
   if (!plotDates.length || !plotPoints.length) return null;
 
   const hasPlottableValues = plotPoints.some(
@@ -219,21 +257,11 @@ export function BankHistoryChart({
   const highlightColor = highlightSeries?.color ?? theme.colors.warning;
 
   const labelEvery = axisLabelInterval(plotDates.length);
-  const pinnedDate =
-    selectedDate && plotDates.includes(selectedDate) ? selectedDate : plotDates.at(-1) ?? '';
-  const activeDate =
-    hoverDate && plotDates.includes(hoverDate) ? hoverDate : pinnedDate;
-  const activeIndex = Math.max(0, plotDates.indexOf(activeDate));
   const activePoint = plotPoints.find((p) => p.date === activeDate);
   const activeHighlight =
     highlightValues && isFiniteNumber(highlightValues[activeIndex])
       ? highlightValues[activeIndex]
       : null;
-
-  const handleSlicePress = (date: string) => {
-    setSelectedDate(date);
-    onDateSelect?.(date);
-  };
 
   const setHoverFromPlotX = (plotLocalX: number) => {
     const idx = sliceIndexFromPlotX(plotLocalX, innerW, plotDates.length);

@@ -14,6 +14,7 @@ import { useStore } from '../data/store';
 import { assessAccess } from '../data/access';
 import { rateValueLabel } from '../lib/a11ySummaries';
 import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
+import type { LogoRenderState } from '../lib/logoReadiness';
 import type { RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
@@ -57,12 +58,16 @@ export function ProductCard({
   onPress,
   selectMode,
   selected,
+  logoRenderStateId,
+  onLogoRenderStateChange,
 }: {
   row: RateRow;
   section: SectionKey;
   onPress?: () => void;
   selectMode?: boolean;
   selected?: boolean;
+  logoRenderStateId?: string;
+  onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
   const theme = useTheme();
   const { width } = useWindowDimensions();
@@ -128,7 +133,11 @@ export function ProductCard({
               color={selected ? theme.colors.primary : theme.colors.textFaint}
             />
           ) : (
-            <BankAvatar provider={row.provider} />
+            <BankAvatar
+              provider={row.provider}
+              renderStateId={logoRenderStateId}
+              onRenderStateChange={onLogoRenderStateChange}
+            />
           )}
 
           <View style={{ flex: 1, minWidth: 0 }}>

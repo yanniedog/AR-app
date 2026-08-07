@@ -24,9 +24,14 @@ import {
   type PassThroughSort,
 } from '../../data/passThroughModels';
 import type { RbaCalendar } from '../../data/rbaCalendar';
+import {
+  usePerformanceAuditProbe,
+  usePerformanceAuditSurface,
+} from '../../hooks/usePerformanceAuditReadiness';
 import { hapticSelection } from '../../lib/haptics';
 import { moveTone } from '../../lib/moveSemantics';
 import { openBank } from '../../lib/nav';
+import { useRegisterLogosStore } from '../../lib/registerLogos';
 import type { RbaEntry, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
@@ -35,6 +40,17 @@ import { AppText, Badge, Card, Chip, Row } from '../ui';
 import { ResponseScatter } from './ResponseScatter';
 
 type LenderRow = MultiSectionPassThroughRow & { response: PassThroughRow };
+
+function actionParameter(value: unknown, key: string): string | null {
+  if (!value || typeof value !== 'object') return typeof value === 'string' ? value : null;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === 'string' ? candidate : null;
+}
+
+function actionSection(value: unknown): SectionKey | null {
+  const candidate = actionParameter(value, 'section');
+  return candidate && SECTION_ORDER.includes(candidate as SectionKey) ? candidate as SectionKey : null;
+}
 
 function MetricTile({ label, value, detail }: { label: string; value: string; detail: string }) {
   const theme = useTheme();
@@ -308,6 +324,9 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
   eligible,
   selectedProvider,
   onProviderSelect,
+  zoom,
+  onZoomChange,
+  onGraphicReady,
 }: {
   model: MultiSectionPassThroughModel;
   section: SectionKey;
@@ -315,6 +334,9 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
   eligible: number;
   selectedProvider: string | null;
   onProviderSelect: (provider: string | null) => void;
+  zoom: number;
+  onZoomChange: (zoom: number) => void;
+  onGraphicReady: (result: { revision: string; pointCount: number }) => void;
 }) {
   const theme = useTheme();
   return (
@@ -334,6 +356,9 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
         decisions={decisions}
         selectedProvider={selectedProvider}
         onProviderSelect={onProviderSelect}
+        zoom={zoom}
+        onZoomChange={onZoomChange}
+        onGraphicReady={onGraphicReady}
       />
       <View style={{ backgroundColor: theme.colors.surfaceAlt, borderRadius: theme.radius.md, padding: 10, marginTop: 8 }}>
         <AppText variant="tiny" color="textMuted">
@@ -360,6 +385,13 @@ export function PassThroughDashboard({
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PassThroughSort>('response');
+  const [chartZoom, setChartZoom] = useState(1);
+  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
+  const [chartPointCount, setChartPointCount] = useState(0);
+  const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
+  const [listMounted, setListMounted] = useState(false);
+  const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
+  const registerLogosLoaded = useRegisterLogosStore((state) => state.loaded);
   const listRef = useRef<FlashListRef<LenderRow>>(null);
   const decisions = useMemo(
     () => rbaPassThroughDecisionList(payload, rba, { calendar }),
@@ -386,6 +418,12 @@ export function PassThroughDashboard({
     () => (model ? summarizeSectionResponse(model, section).eligible : 0),
     [model, section],
   );
+  const renderRevision = `${payload.run_date}:${activeDate ?? 'none'}:${section}:${query}:${sort}:${selectedProvider ?? 'all'}:${chartZoom}`;
+  useEffect(() => {
+    if (!listMounted || !model) return;
+    const frame = requestAnimationFrame(() => setListReadyRevision(renderRevision));
+    return () => cancelAnimationFrame(frame);
+  }, [listMounted, model, renderRevision, rows]);
 
   const onSectionChange = useCallback((next: SectionKey) => {
     setSection(next);
@@ -395,6 +433,11 @@ export function PassThroughDashboard({
   const onDecisionChange = useCallback((date: string) => {
     setSelectedDate(date);
     setSelectedProvider(null);
+  }, []);
+
+  const onChartReady = useCallback((result: { revision: string; pointCount: number }) => {
+    setChartReadyRevision(result.revision);
+    setChartPointCount(result.pointCount);
   }, []);
 
   /** Chart already painted locally — defer list filter work off the tap path. */
@@ -414,6 +457,97 @@ export function PassThroughDashboard({
     setSelectedProvider(provider);
     requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
   }, []);
+
+  const actions = useMemo(() => ({
+    'moves.open': () => undefined,
+    'moves.decision.previous': () => {
+      if (decisions.length < 2) return { unavailableReason: 'Fewer than two RBA decisions are rendered' };
+      const index = Math.max(0, decisions.findIndex((decision) => decision.date === activeDate));
+      const previous = decisions[Math.min(decisions.length - 1, index + 1)];
+      if (previous) onDecisionChange(previous.date);
+    },
+    'moves.section.next': (parameters: unknown) => {
+      const planned = actionSection(parameters);
+      if (planned) {
+        onSectionChange(planned);
+        return;
+      }
+      const index = Math.max(0, SECTION_ORDER.indexOf(section));
+      onSectionChange(SECTION_ORDER[(index + 1) % SECTION_ORDER.length]);
+    },
+    'moves.response-chart.zoom-in': () => setChartZoom((current) => Math.min(3, current + 0.5)),
+    'moves.response-chart.reset': () => setChartZoom(1),
+    'moves.response-chart.provider.first': () => {
+      const provider = rows[0]?.provider ?? null;
+      if (!provider) return { unavailableReason: 'No lender point is rendered in the response chart' };
+      onChartProviderSelect(provider);
+    },
+    'moves.sort.timing': () => setSort('timing'),
+    'moves.query.provider': (value: unknown) => setQuery(actionParameter(value, 'query') ?? ''),
+    'moves.filter.provider.clear': clearProviderFilter,
+    'moves.lender.open': (value: unknown) => {
+      const provider = actionParameter(value, 'provider') ?? selectedProvider ?? rows[0]?.provider;
+      if (provider) {
+        openBank(provider);
+        return { expectedPath: `/bank/${encodeURIComponent(provider)}` };
+      }
+      return { unavailableReason: 'No lender is rendered for drill-down' };
+    },
+  }), [activeDate, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
+
+  const auditSurface = usePerformanceAuditSurface({
+    id: 'moves.response-chart',
+    routeKey: '/passthrough',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    actions,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'bank-insights',
+    kind: 'data',
+    status: model ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: 1,
+    actualCount: model ? 1 : 0,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'lender-list',
+    kind: 'list',
+    status: model && listReadyRevision === renderRevision ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: rows.length,
+    actualCount: listReadyRevision === renderRevision ? rows.length : 0,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'response-chart-layout',
+    kind: 'layout',
+    status: model && layoutReadyRevision === payload.run_date ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'response-chart-graphic',
+    kind: 'graphic',
+    status: model && layoutReadyRevision === payload.run_date && chartReadyRevision?.startsWith(`${model.decision.date}:${section}:${chartZoom}:`)
+      ? 'ready'
+      : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: sectionEligible,
+    actualCount: chartPointCount,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'visible-lender-logos',
+    kind: 'logo',
+    required: false,
+    status: registerLogosLoaded ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: rows.length ? 1 : 0,
+    actualCount: registerLogosLoaded && rows.length ? 1 : 0,
+  });
 
   const renderItem = useCallback(
     ({ item }: { item: LenderRow }) => (
@@ -489,6 +623,9 @@ export function PassThroughDashboard({
           eligible={sectionEligible}
           selectedProvider={selectedProvider}
           onProviderSelect={onChartProviderSelect}
+          zoom={chartZoom}
+          onZoomChange={setChartZoom}
+          onGraphicReady={onChartReady}
         />
         {compareControls}
       </>
@@ -501,6 +638,8 @@ export function PassThroughDashboard({
     sectionEligible,
     selectedProvider,
     onChartProviderSelect,
+    chartZoom,
+    onChartReady,
     compareControls,
   ]);
 
@@ -524,6 +663,16 @@ export function PassThroughDashboard({
       contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
       style={{ width: '100%', maxWidth: 860, alignSelf: 'center' }}
       keyboardShouldPersistTaps="handled"
+      onLayout={(event) => {
+        if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+          setLayoutReadyRevision(payload.run_date);
+        }
+      }}
+      onLoad={() => {
+        setListMounted(true);
+        setListReadyRevision(renderRevision);
+      }}
+      onContentSizeChange={() => setListReadyRevision(renderRevision)}
       ListHeaderComponent={listHeader}
       renderItem={renderItem}
       ListEmptyComponent={

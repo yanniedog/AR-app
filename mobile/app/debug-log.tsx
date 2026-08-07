@@ -2,7 +2,7 @@ import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, Share, View } from 'react-native';
 
 import { Screen } from '../src/components/Screen';
@@ -13,6 +13,7 @@ import {
   formatVersionedLogExport,
   uploadDebugLog,
 } from '../src/lib/debugLog';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function DebugLogScreen() {
@@ -24,6 +25,7 @@ export default function DebugLogScreen() {
   const [uploadProvider, setUploadProvider] = useState<string | null>(null);
   const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
   const [busy, setBusy] = useState<'copy' | 'share' | 'upload' | 'delete' | 'path' | null>(null);
+  const [logLayoutReady, setLogLayoutReady] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const uploadUrlRef = useRef(uploadUrl);
@@ -42,9 +44,41 @@ export default function DebugLogScreen() {
     return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
   }, []);
 
-  useEffect(() => {
+  const scrollToLogEnd = useCallback(() => {
     scrollRef.current?.scrollToEnd({ animated: false });
-  }, [text]);
+  }, []);
+
+  useEffect(() => {
+    scrollToLogEnd();
+  }, [scrollToLogEnd, text]);
+
+  const logEntryCount = text ? text.split('\n').length : 0;
+  const auditActions = useMemo(() => ({
+    'debug-log.open': () => undefined,
+    'debug-log.scroll.end': scrollToLogEnd,
+  }), [scrollToLogEnd]);
+  usePerformanceAuditSurface({
+    id: 'debug-log.entries',
+    routeKey: '/debug-log',
+    renderRevision: `${logEntryCount}:${text.length}`,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'debug-log.buffer',
+        kind: 'data',
+        status: 'ready',
+        expectedCount: logEntryCount,
+        actualCount: logEntryCount,
+      },
+      {
+        id: 'debug-log.list',
+        kind: 'list',
+        status: logLayoutReady ? 'ready' : 'pending',
+        expectedCount: logEntryCount,
+        actualCount: logEntryCount,
+      },
+    ],
+  });
 
   const onClear = useCallback(() => {
     Alert.alert(
@@ -302,6 +336,7 @@ export default function DebugLogScreen() {
         </View>
         <ScrollView
           ref={scrollRef}
+          onContentSizeChange={() => setLogLayoutReady(true)}
           style={{ flex: 1 }}
           contentContainerStyle={{
             paddingHorizontal: 16,

@@ -18,7 +18,17 @@ import {
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 
-export function AppUpdateSection() {
+export interface AppUpdateSurfaceStatus {
+  terminal: boolean;
+  status: string;
+  error: string | null;
+}
+
+export function AppUpdateSection({
+  onStatusChange,
+}: {
+  onStatusChange?: (status: AppUpdateSurfaceStatus) => void;
+} = {}) {
   const installed = getInstalledAppInfo();
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const setPref = useStore((s) => s.setPref);
@@ -88,10 +98,6 @@ export function AppUpdateSection() {
     void performUpgrade();
   }, [performUpgrade]);
 
-  if (Platform.OS !== 'android') {
-    return null;
-  }
-
   const updateAvailable = checkResult?.status === 'available';
   const isCurrent = checkResult?.status === 'current';
   const isIncompatible = checkResult?.status === 'incompatible';
@@ -138,6 +144,18 @@ export function AppUpdateSection() {
         : phase === 'ready'
           ? 'Install update'
           : 'Download & install';
+
+  useEffect(() => {
+    onStatusChange?.({
+      terminal: Platform.OS !== 'android' || (!checking && (checkResult != null || error != null)),
+      status: Platform.OS !== 'android' ? 'not-android' : statusValue,
+      error,
+    });
+  }, [checkResult, checking, error, onStatusChange, statusValue]);
+
+  if (Platform.OS !== 'android') {
+    return null;
+  }
 
   return (
     <Section title="App update">

@@ -31,21 +31,31 @@ export function DisclosureGroup({
   title,
   summary,
   defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
   children,
 }: {
   title: string;
   summary?: string;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
   const theme = useTheme();
-  const [open, setOpen] = useState(defaultOpen);
+  const [internalOpen, setInternalOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? internalOpen;
+  const toggleOpen = () => {
+    const next = !open;
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
 
   return (
     <View>
       <TouchTarget
         fill
-        onPress={() => setOpen((value) => !value)}
+        onPress={toggleOpen}
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
         accessibilityHint={open ? `Hide ${title}` : `Show ${title}`}

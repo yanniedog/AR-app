@@ -41,6 +41,10 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   onDateSelect,
   mode: controlledMode,
   onModeChange,
+  window: controlledWindow,
+  onWindowChange,
+  auditRevision,
+  onLeaderLogoReadiness,
 }: {
   section: SectionKey;
   historyModel: BankHistoryChartModel | null;
@@ -59,9 +63,18 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   onDateSelect?: (date: string | null) => void;
   mode?: HistoryViewMode;
   onModeChange?: (mode: HistoryViewMode) => void;
+  window?: HistoryWindow;
+  onWindowChange?: (window: HistoryWindow) => void;
+  auditRevision?: string;
+  onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
 }) {
   const [localMode, setLocalMode] = useState<HistoryViewMode>(controlledMode ?? 'edge');
-  const [window, setWindow] = useState<HistoryWindow>('90D');
+  const [localWindow, setLocalWindow] = useState<HistoryWindow>('90D');
+  const window = controlledWindow ?? localWindow;
+  const changeWindow = (next: HistoryWindow) => {
+    if (controlledWindow == null) setLocalWindow(next);
+    onWindowChange?.(next);
+  };
 
   useEffect(() => {
     if (controlledMode) setLocalMode(controlledMode);
@@ -119,7 +132,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       {showWindowChips ? (
         <Row gap={6} style={{ marginBottom: 8, flexWrap: 'wrap' }}>
           {WINDOW_OPTIONS.map((w) => (
-            <Chip key={w} label={w} selected={window === w} onPress={() => setWindow(w)} />
+            <Chip key={w} label={w} selected={window === w} onPress={() => changeWindow(w)} />
           ))}
         </Row>
       ) : null}
@@ -159,6 +172,8 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
                 brands={brands}
                 selectedDate={selectedDate}
                 onDateSelect={onDateSelect}
+                auditRevision={auditRevision}
+                onLogoReadiness={onLeaderLogoReadiness}
               />
             </ChartErrorBoundary>
           ) : null}

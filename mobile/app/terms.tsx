@@ -1,15 +1,49 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText } from '../src/components/ui';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function TermsScreen() {
   const theme = useTheme();
+  const scrollRef = useRef<ScrollView>(null);
+  const [contentReady, setContentReady] = useState(false);
+  const scrollToEnd = useCallback(() => {
+    scrollRef.current?.scrollToEnd({ animated: false });
+  }, []);
+  const auditActions = useMemo(() => ({
+    'terms.open': () => undefined,
+    'terms.scroll.end': scrollToEnd,
+  }), [scrollToEnd]);
+  usePerformanceAuditSurface({
+    id: 'terms.notices',
+    routeKey: '/terms',
+    renderRevision: 'terms-v1',
+    actions: auditActions,
+    probes: [
+      {
+        id: 'terms.local-content',
+        kind: 'data',
+        status: 'ready',
+        expectedCount: 1,
+        actualCount: 1,
+      },
+      {
+        id: 'terms.layout',
+        kind: 'layout',
+        status: contentReady ? 'ready' : 'pending',
+      },
+    ],
+  });
 
   return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+    <ScreenScrollView
+      ref={scrollRef}
+      contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      onContentSizeChange={() => setContentReady(true)}
+    >
       <AppText variant="body" style={{ lineHeight: 22 }}>
         General information only. Rate and product figures are indicative; confirm all terms with the lender
         before applying. Nothing in this app is financial advice.

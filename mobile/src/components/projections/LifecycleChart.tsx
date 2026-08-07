@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
@@ -73,18 +73,27 @@ function nearestPoint(points: ProjectionPoint[], target: number): ProjectionPoin
   return Math.abs(dateMs(before.date) - target) <= Math.abs(dateMs(after.date) - target) ? before : after;
 }
 
+export interface LifecycleChartController {
+  previous(): void;
+  next(): void;
+}
+
 export function LifecycleChart({
   section,
   history,
   series,
   metric,
   asAt,
+  controllerRef,
+  onRenderReady,
 }: {
   section: SectionKey;
   history: ProjectionPoint[];
   series: ProjectionSeries[];
   metric: ProjectionMetric;
   asAt: string;
+  controllerRef?: MutableRefObject<LifecycleChartController | null>;
+  onRenderReady?: () => void;
 }) {
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
@@ -99,6 +108,20 @@ export function LifecycleChart({
   const todayIndex = Math.max(0, dates.indexOf(asAt));
   const [activeIndex, setActiveIndex] = useState(todayIndex);
   useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric, series]);
+  const selectPrevious = useCallback(() => {
+    setActiveIndex((current) => Math.max(0, current - 1));
+  }, []);
+  const selectNext = useCallback(() => {
+    setActiveIndex((current) => Math.min(Math.max(0, dates.length - 1), current + 1));
+  }, [dates.length]);
+  useEffect(() => {
+    if (!controllerRef) return;
+    const controller = { previous: selectPrevious, next: selectNext };
+    controllerRef.current = controller;
+    return () => {
+      if (controllerRef.current === controller) controllerRef.current = null;
+    };
+  }, [controllerRef, selectNext, selectPrevious]);
 
   const values = useMemo(
     () => [
@@ -154,6 +177,9 @@ export function LifecycleChart({
     ...activeValues
     .map(({ series: item, point: selected }) => `${item.label} ${formatValue(selected ? metricValue(selected, metric) : null, metric)}`)
   ].join(', ');
+  useEffect(() => {
+    if (width > 0 && dates.length > 0) onRenderReady?.();
+  }, [dates.length, onRenderReady, width]);
 
   return (
     <View style={{ gap: 10 }}>
@@ -180,9 +206,9 @@ export function LifecycleChart({
         ]}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === 'increment') {
-            setActiveIndex((current) => Math.min(dates.length - 1, current + 1));
+            selectNext();
           } else if (event.nativeEvent.actionName === 'decrement') {
-            setActiveIndex((current) => Math.max(0, current - 1));
+            selectPrevious();
           }
         }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}

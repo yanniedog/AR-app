@@ -39,20 +39,31 @@ export const RbaChart = React.memo(function RbaChart({
   data,
   holds,
   height = 160,
+  selectedDate: controlledSelectedDate,
+  onDateSelect,
+  onGraphicReady,
 }: {
   data: RbaEntry[];
   holds?: string[];
   height?: number;
+  selectedDate?: string | null;
+  onDateSelect?: (date: string | null) => void;
+  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const reducedMotion = useReducedMotion();
   const drawProgress = useFirstMountDrawIn(reducedMotion, DRAW_MS);
   const timeline = useMemo(() => rbaTimelineDates(data, holds), [data, holds]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [localSelectedDate, setLocalSelectedDate] = useState<string | null>(null);
+  const selectedDate = controlledSelectedDate === undefined ? localSelectedDate : controlledSelectedDate;
+  const setSelectedDate = (date: string | null) => {
+    if (controlledSelectedDate === undefined) setLocalSelectedDate(date);
+    onDateSelect?.(date);
+  };
 
   useEffect(() => {
-    setSelectedDate(null);
+    setLocalSelectedDate(null);
   }, [data, holds]);
 
   const padL = 8;
@@ -104,6 +115,14 @@ export const RbaChart = React.memo(function RbaChart({
     };
   }, [firstTs, innerH, innerW, minR, plottedData, span, timeSpan, width]);
   const { pathD, pathLength } = pathModel;
+  const graphicRevision = `${data.at(-1)?.date ?? 'none'}:${holds?.length ?? 0}:${width}`;
+  useEffect(() => {
+    if (width <= 0 || reducedMotion == null || !pathD) return;
+    const timer = setTimeout(() => {
+      onGraphicReady?.({ revision: graphicRevision, pointCount: plottedData.length });
+    }, reducedMotion ? 0 : DRAW_MS);
+    return () => clearTimeout(timer);
+  }, [graphicRevision, onGraphicReady, pathD, plottedData.length, reducedMotion, width]);
 
   const pathAnimatedProps = useAnimatedProps(() => ({
     strokeDashoffset: pathLength * (1 - drawProgress.value),

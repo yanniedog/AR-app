@@ -26,7 +26,10 @@ import { useStore } from '../../src/data/store';
 import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { scheduleAfterNavigation } from '../../src/lib/yieldToUi';
+import { auditActionString } from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 
@@ -34,6 +37,8 @@ export default function Home() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const core = useStore((s) => s.core);
+  const storeStatus = useStore((s) => s.status);
+  const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
@@ -55,6 +60,7 @@ export default function Home() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
+  const [heroLayoutRevision, setHeroLayoutRevision] = useState<string | null>(null);
   const { scenario: userScenario } = useUserRateScenario();
   const filterPrepAttempts = useRef(0);
   // Browse shares the preferred section with Home. Keep the last rendered Home
@@ -225,7 +231,7 @@ export default function Home() {
   const best = useMemo(
     () => {
       void suitabilityRevision;
-      return bestRow(
+      const scoped = bestRow(
         profileFilterRows(hierRows, decisionProfileFilters, section, detailsProducts),
         section,
         includeNonStandard,
@@ -233,12 +239,10 @@ export default function Home() {
         detailsProducts,
         mortgageRateMetric,
       );
-    },
-    [hierRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
-  );
-  const fallbackBest = useMemo(
-    () => {
-      void suitabilityRevision;
+      if (scoped) return scoped;
+      // Root hierarchy and flat-section scopes usually contain the same
+      // products. Only pay for the broader fallback when the hierarchy scope
+      // genuinely produced no eligible winner.
       return bestRow(
         profileFilterRows(sectionRows ?? [], decisionProfileFilters, section, detailsProducts),
         section,
@@ -248,11 +252,11 @@ export default function Home() {
         mortgageRateMetric,
       );
     },
-    [sectionRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
+    [hierRows, sectionRows, decisionProfileFilters, section, includeNonStandard, depositRankMetric, mortgageRateMetric, detailsProducts, suitabilityRevision],
   );
 
   const meta = SECTIONS[section];
-  const activeBest = ratesReady ? best ?? fallbackBest : null;
+  const activeBest = ratesReady ? best : null;
   // Show the ranked best product's own rate (base ongoing by default) so the
   // headline can't overstate what the winner actually pays; with a profile active,
   // show nothing (not the market extreme) when nothing matches.
@@ -298,11 +302,99 @@ export default function Home() {
   }, [core, meta, heroRate]);
   const shareToday = useCallback(() => setShareOpen(true), []);
 
+  const auditSelectSection = useCallback((...args: unknown[]) => {
+    const requested = auditActionString(args, 'section');
+    const planned = sectionOptions.find((option) => option.value === requested)?.value;
+    if (planned) {
+      changeSection(planned);
+      return;
+    }
+    const currentIndex = sectionOptions.findIndex((option) => option.value === section);
+    const next = sectionOptions[(currentIndex + 1) % Math.max(1, sectionOptions.length)]?.value;
+    if (next) changeSection(next);
+  }, [changeSection, section, sectionOptions]);
+  const openBestProduct = useCallback(() => {
+    if (!activeBest) return undefined;
+    openProduct(activeBest.product_key, activeBest.rate_index);
+    return { expectedPath: `/product/${encodeURIComponent(activeBest.product_key)}` };
+  }, [activeBest]);
+  const todayRenderRevision = core
+    ? `${core.run_date}:${section}:${ratesReady ? heroRate ?? 'na' : 'warming'}`
+    : `none:${section}`;
+  const todayLogoIds = useMemo(
+    () => activeBest ? [`today-best:${activeBest.product_key}:${activeBest.rate_index ?? 'none'}`] : [],
+    [activeBest],
+  );
+  const todayLogos = useLogoReadiness(todayRenderRevision, todayLogoIds);
+  const auditActions = useMemo(() => ({
+    'today.open': () => undefined,
+    'today.section.next': auditSelectSection,
+    'today.best.open': openBestProduct,
+    'redirect.root.verify': () => undefined,
+  }), [auditSelectSection, openBestProduct]);
+  usePerformanceAuditSurface({
+    id: 'today.hero',
+    routeKey: '/',
+    datasetRevision: coreRevision || null,
+    renderRevision: todayRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'today.data',
+        kind: 'data',
+        status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
+        error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        datasetRevision: coreRevision || null,
+      },
+      {
+        id: 'today.suitability',
+        kind: 'data',
+        status: ratesReady ? 'ready' : filterPrepFailed ? 'error' : 'pending',
+        error: filterPrepFailed ? 'Filtered rates did not become ready' : null,
+        datasetRevision: coreRevision || null,
+      },
+      {
+        id: 'today.details',
+        kind: 'data',
+        status: !profileFeaturesPending || detailsProducts
+          ? 'ready'
+          : filterPrepFailed
+            ? 'error'
+            : 'pending',
+        error: profileFeaturesPending && filterPrepFailed
+          ? 'Profile-required product details did not become ready'
+          : null,
+        expectedCount: profileFeaturesPending ? 1 : 0,
+        actualCount: profileFeaturesPending && detailsProducts ? 1 : 0,
+      },
+      {
+        id: 'today.best-card',
+        kind: 'list',
+        status: ratesReady ? 'ready' : 'pending',
+        expectedCount: activeBest ? 1 : 0,
+        actualCount: activeBest ? 1 : 0,
+      },
+      {
+        id: 'today.logo',
+        kind: 'logo',
+        status: todayLogos.ready ? 'ready' : 'pending',
+        expectedCount: todayLogos.expectedCount,
+        actualCount: todayLogos.terminalCount,
+      },
+      {
+        id: 'today.hero-layout',
+        kind: 'graphic',
+        status: heroLayoutRevision === todayRenderRevision ? 'ready' : 'pending',
+        renderRevision: todayRenderRevision,
+      },
+    ],
+  });
+
   if (!core) return null;
   const sectionAccent = meta.accentColor;
   const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const bestNote = conditionalNote(activeBest, section);
-  const heroDataKey = `${core.run_date}:${section}:${ratesReady ? heroRate ?? 'na' : 'warming'}`;
+  const heroDataKey = todayRenderRevision;
 
   return (
     <ScreenScrollView
@@ -311,6 +403,10 @@ export default function Home() {
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
       }
     >
+      <View
+        key={`today-hero-${todayRenderRevision}`}
+        onLayout={() => setHeroLayoutRevision(todayRenderRevision)}
+      >
       <HomeHero
         dataKey={core.run_date}
         runDateLabel={formatRunDate(core.run_date)}
@@ -321,6 +417,7 @@ export default function Home() {
         onShare={shareToday}
         coverageLabel={`${Object.keys(core.brands ?? {}).length} brands · ${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0)} products · ${Object.values(core.sections).reduce((sum, value) => sum + (value.rates?.length ?? 0), 0)} published rates${coverageFailures(core.coverage).length ? ` · ${coverageFailures(core.coverage).length} provider failure groups` : ''}`}
       />
+      </View>
 
       <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
         <AppText variant="tiny" color="textFaint" weight="700">
@@ -359,7 +456,7 @@ export default function Home() {
               <Button
                 title="View supporting rate"
                 variant="secondary"
-                onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+                onPress={openBestProduct}
               />
             ) : null}
           </>
@@ -464,7 +561,9 @@ export default function Home() {
                 <ProductCard
                   row={activeBest}
                   section={section}
-                  onPress={() => openProduct(activeBest.product_key, activeBest.rate_index)}
+                  onPress={openBestProduct}
+                  logoRenderStateId={todayLogoIds[0]}
+                  onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
                 />
               </Pressable>
             ) : null}

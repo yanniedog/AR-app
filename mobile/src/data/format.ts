@@ -32,11 +32,26 @@ export function effectiveFraction(
   return toFraction(effectiveRate(row));
 }
 
+const RATE_PERCENT_FORMATTERS = new Map<number, Intl.NumberFormat>();
+
+function normalizedFractionDigits(digits: number): number {
+  if (!Number.isFinite(digits)) return 2;
+  // Intl.NumberFormat's integer option coercion floors fractional values.
+  // Preserve that behaviour while avoiding RangeErrors for out-of-range input.
+  return Math.max(0, Math.min(20, Math.floor(digits)));
+}
+
 function ratePercentFormatter(digits: number): Intl.NumberFormat {
-  return new Intl.NumberFormat('en-AU', {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  const normalized = normalizedFractionDigits(digits);
+  let formatter = RATE_PERCENT_FORMATTERS.get(normalized);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat('en-AU', {
+      minimumFractionDigits: normalized,
+      maximumFractionDigits: normalized,
+    });
+    RATE_PERCENT_FORMATTERS.set(normalized, formatter);
+  }
+  return formatter;
 }
 
 /** Format a fraction (0.0634) or percent (6.34) as an en-AU percentage string ("6.34%"). */

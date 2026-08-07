@@ -5,6 +5,7 @@ import type { Prefs } from '../data/storeTypes';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
+import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
 
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
@@ -95,6 +96,7 @@ export interface PerformanceAuditReport {
   app: AuditAppIdentity;
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
+  plan?: DeepPerformanceAuditPlan;
   summary: PerformanceAuditSummary;
   checks: AuditCheck[];
   routeAggregates: AuditRouteAggregate[];

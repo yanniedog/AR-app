@@ -1,9 +1,12 @@
-import { Stack, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useRef } from 'react';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Share, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
-import { BankHistoryChart } from '../../src/components/BankHistoryChart';
+import {
+  BankHistoryChart,
+  type BankHistoryChartAuditActions,
+} from '../../src/components/BankHistoryChart';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState } from '../../src/components/feedback';
 import { ProPaywall } from '../../src/components/ProPaywall';
@@ -33,6 +36,8 @@ import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
 import { useProPaywall } from '../../src/hooks/useProPaywall';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
@@ -84,6 +89,8 @@ export default function ProductDetail() {
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
+  const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
+  const [layoutReady, setLayoutReady] = useState(false);
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
@@ -102,7 +109,18 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!historyEnabled) return;
-    if (isPerformanceAuditActive()) return;
+    if (isPerformanceAuditActive()) {
+      let cancelled = false;
+      void ensureHistoryBanks().then(async () => {
+        if (cancelled) return;
+        if (showBankInsights) await ensureBankInsights();
+        if (cancelled) return;
+        await ensureProductHistory();
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
     // Product-history dated-core fan-out is expensive; wait until the product
     // screen transition finishes so navigation stays instant, then prefer the
     // disk/bootstrap cache and only sync after history banks.
@@ -133,6 +151,13 @@ export default function ProductDetail() {
   ]);
 
   const found = core ? findByKey(core.sections, productKey) : null;
+  const row = found
+    ? exactRateRequested
+      ? rateIndex == null
+        ? null
+        : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
+      : found.row
+    : null;
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
@@ -179,6 +204,92 @@ export default function ProductDetail() {
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
+  const auditActions = useMemo(() => {
+    const actions: Record<string, (...args: unknown[]) => unknown> = {
+      'product.open': () => undefined,
+      'product.receipt.open': () => {
+        if (row) openRateReceipt(productKey, row.rate_index);
+      },
+      'product.lender.open': () => {
+        if (row) openBank(row.provider);
+      },
+      'calculator.candidate.back': () => router.back(),
+      'product.history.window.30d': () => historyAuditActionsRef.current
+        ? historyAuditActionsRef.current.select30DayWindow()
+        : { unavailableReason: 'The mounted product has no rendered history window control' },
+      'product.history.date.previous': () => historyAuditActionsRef.current
+        ? historyAuditActionsRef.current.selectPreviousDate()
+        : { unavailableReason: 'The mounted product has no multi-date history chart' },
+    };
+    return actions;
+  }, [productKey, row]);
+  const productLogoIds = useMemo(
+    () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
+    [row],
+  );
+  const logoReadiness = useLogoReadiness(productLogoIds.join('|'), productLogoIds);
+  const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyModel?.dates.length ?? 0}`;
+  usePerformanceAuditSurface({
+    id: 'product.details',
+    routeKey: '/product/[key]',
+    datasetRevision: core?.run_date ?? null,
+    renderRevision: productRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'product.data',
+        kind: 'data',
+        status: core && row ? 'ready' : 'pending',
+        datasetRevision: core?.run_date ?? null,
+      },
+      {
+        id: 'product.details-data',
+        kind: 'data',
+        status: detailsProducts && !detailsLoading ? 'ready' : 'pending',
+        datasetRevision: core?.run_date ?? null,
+      },
+      {
+        id: 'product.rate-tiers',
+        kind: 'list',
+        status: found ? 'ready' : 'pending',
+        expectedCount: found?.siblings.length ?? 0,
+        actualCount: found?.siblings.length ?? 0,
+      },
+      {
+        id: 'product.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        renderRevision: productRenderRevision,
+      },
+      {
+        id: 'product.logo',
+        kind: 'logo',
+        status: row && logoReadiness.ready ? 'ready' : 'pending',
+        expectedCount: logoReadiness.expectedCount,
+        actualCount: logoReadiness.terminalCount,
+      },
+      {
+        id: 'product.history-graphic',
+        kind: 'graphic',
+        required: false,
+        status: historyWaitingForInsights ? 'pending' : 'ready',
+        actualCount: historyModel?.dates.length ?? 0,
+      },
+      {
+        id: 'product.history-data',
+        kind: 'data',
+        required: historyEnabled,
+        status: !historyEnabled || productHistory
+          ? 'ready'
+          : productHistoryError
+            ? 'error'
+            : 'pending',
+        error: historyEnabled ? productHistoryError : null,
+        expectedCount: historyEnabled ? 1 : 0,
+        actualCount: historyEnabled && productHistory ? 1 : 0,
+      },
+    ],
+  });
 
   if (!found) {
     return (
@@ -190,11 +301,6 @@ export default function ProductDetail() {
   }
 
   const { section, siblings } = found;
-  const row = exactRateRequested
-    ? rateIndex == null
-      ? null
-      : siblings.find((s) => s.rate_index === rateIndex) ?? null
-    : found.row;
   if (!row) {
     return (
       <>
@@ -295,9 +401,17 @@ export default function ProductDetail() {
           ),
         }}
       />
-      <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+      <ScreenScrollView
+        onLayout={() => setLayoutReady(true)}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+      >
         <Row gap={14} style={{ marginBottom: 16 }}>
-          <BankAvatar provider={row.provider} size={56} />
+          <BankAvatar
+            provider={row.provider}
+            size={56}
+            renderStateId={productLogoIds[0]}
+            onRenderStateChange={logoReadiness.onLogoRenderStateChange}
+          />
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{row.product_name}</AppText>
             <AppText variant="small" color="textMuted">
@@ -404,6 +518,7 @@ export default function ProductDetail() {
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
+                    auditActionsRef={historyAuditActionsRef}
                     dates={historyModel.dates}
                     points={historyModel.points}
                     allDates={historyModel.allDates}

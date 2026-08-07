@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
@@ -16,6 +16,7 @@ import {
   type AuditCheck,
   type AuditCheckStatus,
 } from '../src/lib/performanceAudit';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function usePerformanceAuditState() {
@@ -79,9 +80,42 @@ export default function PerformanceAuditScreen() {
     String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
   );
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
   const report = state.report;
   const running = state.status === 'queued' || state.status === 'running';
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
+  const auditActions = useMemo(() => ({
+    'audit.pass.complete': () => ({
+      status: state.status,
+      storedCheckCount: state.storedCheckCount,
+      lastStoredCheckAt: state.lastStoredCheckAt,
+    }),
+  }), [state.lastStoredCheckAt, state.status, state.storedCheckCount]);
+  usePerformanceAuditSurface({
+    id: 'audit.progress',
+    routeKey: '/performance-audit',
+    renderRevision: `${state.status}:${state.storedCheckCount}:${state.lastStoredCheckAt ?? ''}`,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'audit.state',
+        kind: 'data',
+        status: state.status === 'queued' ? 'pending' : 'ready',
+      },
+      {
+        id: 'audit.log-buffer',
+        kind: 'list',
+        status: 'ready',
+        expectedCount: state.storedCheckCount,
+        actualCount: state.storedCheckCount,
+      },
+      {
+        id: 'audit.layout',
+        kind: 'layout',
+        status: layoutReady && hangTimeoutLoaded ? 'ready' : 'pending',
+      },
+    ],
+  });
 
   useEffect(() => {
     let active = true;
@@ -124,7 +158,10 @@ export default function PerformanceAuditScreen() {
     : theme.colors.textMuted;
 
   return (
-    <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}>
+    <ScreenScrollView
+      contentContainerStyle={{ padding: 16, paddingBottom: 40, gap: 16 }}
+      onLayout={() => setLayoutReady(true)}
+    >
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">Full responsiveness diagnosis</AppText>
         <AppText variant="small" color="textMuted">

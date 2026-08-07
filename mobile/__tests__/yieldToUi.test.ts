@@ -4,6 +4,7 @@ import {
   parseJsonHeavy,
   scheduleAfterInteractions,
   scheduleAfterNavigation,
+  yieldToPaintFrames,
   yieldToUi,
   yieldToUiFrames,
 } from '../src/lib/yieldToUi';
@@ -33,6 +34,55 @@ describe('yieldToUi', () => {
   it('yieldToUiFrames awaits multiple yields', async () => {
     await yieldToUiFrames(2, 5);
     expect(runSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('yieldToPaintFrames requires a real animation callback for every requested frame', async () => {
+    const originalRaf = globalThis.requestAnimationFrame;
+    const originalCancel = globalThis.cancelAnimationFrame;
+    const callbacks: FrameRequestCallback[] = [];
+    globalThis.requestAnimationFrame = jest.fn((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    });
+    globalThis.cancelAnimationFrame = jest.fn();
+
+    try {
+      const pending = yieldToPaintFrames(2, 1_000);
+      expect(callbacks).toHaveLength(1);
+      callbacks.shift()?.(16);
+      await Promise.resolve();
+      expect(callbacks).toHaveLength(1);
+      callbacks.shift()?.(32);
+      await expect(pending).resolves.toBeUndefined();
+      expect(globalThis.requestAnimationFrame).toHaveBeenCalledTimes(2);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+    }
+  });
+
+  it('yieldToPaintFrames has a bounded fallback when rendering is suspended', async () => {
+    jest.useFakeTimers();
+    const originalRaf = globalThis.requestAnimationFrame;
+    const originalCancel = globalThis.cancelAnimationFrame;
+    globalThis.requestAnimationFrame = jest.fn(() => 17);
+    globalThis.cancelAnimationFrame = jest.fn();
+
+    try {
+      const pending = yieldToPaintFrames(1, 100);
+      jest.advanceTimersByTime(99);
+      let finished = false;
+      void pending.then(() => { finished = true; });
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      jest.advanceTimersByTime(1);
+      await expect(pending).resolves.toBeUndefined();
+      expect(globalThis.cancelAnimationFrame).toHaveBeenCalledWith(17);
+    } finally {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+      jest.useRealTimers();
+    }
   });
 
   it('parseJsonHeavy yields then parses', async () => {

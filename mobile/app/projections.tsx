@@ -1,9 +1,12 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
-import { LifecycleChart } from '../src/components/projections/LifecycleChart';
+import {
+  LifecycleChart,
+  type LifecycleChartController,
+} from '../src/components/projections/LifecycleChart';
 import { ScreenScrollView } from '../src/components/Screen';
 import { CompactToggle, SegmentedControl } from '../src/components/controls';
 import { AppText, Badge, Button, Card, Chip, Row } from '../src/components/ui';
@@ -17,9 +20,12 @@ import {
   type ProjectionMetric,
 } from '../src/data/projections';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useStore } from '../src/data/store';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { openBrowse } from '../src/lib/nav';
+import { auditActionString } from '../src/lib/performanceAuditActionParams';
 
 const SECTION_OPTIONS: { label: string; value: SectionKey }[] = [
   { label: 'Mortgage', value: 'Mortgage' },
@@ -226,6 +232,10 @@ function ProjectionSummary({
 export default function Projections() {
   const theme = useTheme();
   const params = useLocalSearchParams<{ section?: string }>();
+  const core = useStore((s) => s.core);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
+  const storeStatus = useStore((s) => s.status);
+  const storeError = useStore((s) => s.error);
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 860 && fontScale < 1.5;
   const [section, setSection] = useState<SectionKey>(() => requestedSection(params.section));
@@ -241,8 +251,16 @@ export default function Projections() {
   const [advanced, setAdvanced] = useState(false);
   const [metric, setMetric] = useState<ProjectionMetric>('balance');
   const [dimension, setDimension] = useState<ProjectionDimension>('rates');
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
+  const chartControllerRef = useRef<LifecycleChartController | null>(null);
 
-  useEffect(() => setSection(requestedSection(params.section)), [params.section]);
+  const changeSection = useCallback((next: SectionKey) => setSection(next), []);
+  const toggleAdvanced = useCallback(() => setAdvanced((value) => !value), []);
+  const changeDimension = useCallback((next: ProjectionDimension) => setDimension(next), []);
+  const changeMetric = useCallback((next: ProjectionMetric) => setMetric(next), []);
+
+  useEffect(() => changeSection(requestedSection(params.section)), [changeSection, params.section]);
 
   const projectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const projectionInputs = scenario.projections[projectionKey];
@@ -350,6 +368,142 @@ export default function Projections() {
     offsetBoostAmount: optionalAmountError(projectionInputs.offsetBoostAmount),
     extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount),
   };
+  const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
+  const projectionRenderRevision = [
+    coreRevision ?? 'none',
+    section,
+    storageStatus,
+    result.asAt,
+    result.ready ? 'ready' : `missing:${result.missing.join(',')}`,
+    dimension,
+    metric,
+    result.history.length,
+    activeSeries.reduce((sum, item) => sum + item.points.length, 0),
+  ].join(':');
+  const auditSelectSection = useCallback((...args: unknown[]) => {
+    const requested = auditActionString(args, 'section');
+    if (typeof requested === 'string' && SECTION_OPTIONS.some((item) => item.value === requested)) {
+      changeSection(requested as SectionKey);
+      return;
+    }
+    const currentIndex = SECTION_OPTIONS.findIndex((item) => item.value === section);
+    changeSection(SECTION_OPTIONS[(currentIndex + 1) % SECTION_OPTIONS.length].value);
+  }, [changeSection, section]);
+  const selectNextDimension = useCallback(() => {
+    changeDimension(dimension === 'rates' ? 'offsets' : 'rates');
+  }, [changeDimension, dimension]);
+  const selectNextMetric = useCallback(() => {
+    const currentIndex = result.availableMetrics.indexOf(metric);
+    const next = result.availableMetrics[(currentIndex + 1) % Math.max(1, result.availableMetrics.length)];
+    if (next) changeMetric(next);
+  }, [changeMetric, metric, result.availableMetrics]);
+  const chartPrevious = useCallback(() => chartControllerRef.current?.previous(), []);
+  const chartNext = useCallback(() => chartControllerRef.current?.next(), []);
+  const auditActions = useMemo(() => ({
+    'projections.open': () => undefined,
+    'projections.advanced.toggle': toggleAdvanced,
+    'projections.metric.next': result.ready
+      ? selectNextMetric
+      : () => ({ unavailableReason: `Incomplete existing scenario: ${result.missing.join(', ')}` }),
+    'projections.chart.previous': result.ready
+      ? chartPrevious
+      : () => ({ unavailableReason: `Incomplete existing scenario: ${result.missing.join(', ')}` }),
+    'projections.chart.next': result.ready
+      ? chartNext
+      : () => ({ unavailableReason: `Incomplete existing scenario: ${result.missing.join(', ')}` }),
+    'projections.section.next': result.ready
+      ? auditSelectSection
+      : () => ({ unavailableReason: `Incomplete existing scenario: ${result.missing.join(', ')}` }),
+    'projections.dimension.next': result.ready && section === 'Mortgage'
+      ? selectNextDimension
+      : () => ({
+          unavailableReason: result.ready
+            ? 'The rates-versus-offset dimension control only renders for mortgages'
+            : `Incomplete existing scenario: ${result.missing.join(', ')}`,
+        }),
+  }), [
+    auditSelectSection,
+    chartNext,
+    chartPrevious,
+    result.missing,
+    result.ready,
+    section,
+    selectNextDimension,
+    selectNextMetric,
+    toggleAdvanced,
+  ]);
+  usePerformanceAuditSurface({
+    id: 'projections.lifecycle-chart',
+    routeKey: '/projections',
+    datasetRevision: coreRevision,
+    renderRevision: projectionRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'projections.data',
+        kind: 'data',
+        status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
+        error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        datasetRevision: coreRevision,
+      },
+      {
+        id: 'projections.scenario-storage',
+        kind: 'data',
+        status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
+        error: storageStatus === 'error' ? storageError ?? 'Encrypted scenario unavailable' : null,
+      },
+      {
+        id: 'projections.model',
+        kind: 'data',
+        required: false,
+        status: result.ready ? 'ready' : 'error',
+        error: result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
+      },
+      {
+        id: 'projections.chart',
+        kind: 'graphic',
+        required: result.ready,
+        status: !result.ready || chartReadyRevision === projectionRenderRevision ? 'ready' : 'pending',
+        expectedCount: result.ready ? 1 : 0,
+        actualCount: result.ready && chartReadyRevision === projectionRenderRevision ? 1 : 0,
+        renderRevision: projectionRenderRevision,
+      },
+      {
+        id: 'projections.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        renderRevision: projectionRenderRevision,
+      },
+    ],
+  });
+  usePerformanceAuditSurface({
+    id: 'projections.inputs',
+    routeKey: '/projections',
+    datasetRevision: coreRevision,
+    renderRevision: projectionRenderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'projections-inputs.data',
+        kind: 'data',
+        status: core ? 'ready' : storeStatus === 'error' ? 'error' : 'pending',
+        error: !core && storeStatus === 'error' ? storeError ?? 'Core data unavailable' : null,
+        datasetRevision: coreRevision,
+      },
+      {
+        id: 'projections-inputs.scenario-storage',
+        kind: 'data',
+        status: storageStatus === 'ready' ? 'ready' : storageStatus === 'error' ? 'error' : 'pending',
+        error: storageStatus === 'error' ? storageError ?? 'Encrypted scenario unavailable' : null,
+      },
+      {
+        id: 'projections-inputs.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        renderRevision: projectionRenderRevision,
+      },
+    ],
+  });
 
   const basicFields = (
     <Card style={{ gap: 14 }}>
@@ -465,7 +619,7 @@ export default function Projections() {
         </>
       )}
       <Pressable
-        onPress={() => setAdvanced((value) => !value)}
+        onPress={toggleAdvanced}
         accessibilityRole="button"
         accessibilityLabel={advanced ? 'Hide optional projection assumptions' : 'Show optional projection assumptions'}
         style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
@@ -581,18 +735,26 @@ export default function Projections() {
                 { label: 'Offset scenarios', value: 'offsets' },
               ]}
               value={dimension}
-              onChange={setDimension}
+              onChange={changeDimension}
             />
           ) : null}
           <View>
             <AppText variant="tiny" color="textFaint" weight="700" style={{ marginBottom: 8 }}>Y-AXIS</AppText>
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 7 }}>
               {result.availableMetrics.map((item) => (
-                <Chip key={item} label={projectionMetricLabel(section, item)} selected={metric === item} onPress={() => setMetric(item)} />
+                <Chip key={item} label={projectionMetricLabel(section, item)} selected={metric === item} onPress={() => changeMetric(item)} />
               ))}
             </View>
           </View>
-          <LifecycleChart section={section} history={result.history} series={activeSeries} metric={metric} asAt={result.asAt} />
+          <LifecycleChart
+            section={section}
+            history={result.history}
+            series={activeSeries}
+            metric={metric}
+            asAt={result.asAt}
+            controllerRef={chartControllerRef}
+            onRenderReady={() => setChartReadyRevision(projectionRenderRevision)}
+          />
           <ProjectionSummary section={section} result={result} />
         </>
       )}
@@ -600,7 +762,10 @@ export default function Projections() {
   );
 
   return (
-    <ScreenScrollView keyboardShouldPersistTaps="handled">
+    <ScreenScrollView
+      keyboardShouldPersistTaps="handled"
+      onContentSizeChange={() => setLayoutReady(true)}
+    >
       <Card style={{ gap: 8, borderColor: `${theme.colors.primary}55` }}>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 220 }}>
@@ -634,7 +799,7 @@ export default function Projections() {
           ) : null}
         </Card>
       ) : null}
-      <SegmentedControl options={SECTION_OPTIONS} value={section} onChange={setSection} />
+      <SegmentedControl options={SECTION_OPTIONS} value={section} onChange={changeSection} />
       {wide ? (
         <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 16 }}>
           <View style={{ flex: 0.9, gap: 12 }}>{basicFields}{advancedFields}</View>

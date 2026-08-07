@@ -21,6 +21,7 @@ import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
+import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -108,9 +109,21 @@ export const useStore = create<AppState>()(
         };
       },
       onRehydrateStorage: () => () => {
-        const legacyCalc = useStore.getState().prefs.calc;
-        void migrateLegacyCalculatorInputs(legacyCalc);
-        useStore.setState({ hydrated: true });
+        // A deep audit journals every reversible user-state mutation before it
+        // starts. Recover that snapshot before declaring hydration complete so
+        // process death cannot strand temporary settings or saved products.
+        void recoverInterruptedPerformanceAudit(useStore)
+          .catch((error) => {
+            debugLog.error(
+              'perf-audit',
+              `interrupted state restoration failed: ${String((error as Error)?.message ?? error)}`,
+            );
+          })
+          .finally(() => {
+            const legacyCalc = useStore.getState().prefs.calc;
+            void migrateLegacyCalculatorInputs(legacyCalc);
+            useStore.setState({ hydrated: true });
+          });
       },
     },
   ),

@@ -5,6 +5,7 @@ import { SvgUri } from 'react-native-svg';
 import { resolveBankLogoSources, resolveBrandShort } from '../data/bankBrand';
 import { useStore } from '../data/store';
 import { isSvgUri, logoUriFor, useRegisterLogosStore } from '../lib/registerLogos';
+import type { LogoRenderState } from '../lib/logoReadiness';
 import { useTheme } from '../theme/ThemeProvider';
 
 function contrastText(hex: string): string {
@@ -17,7 +18,21 @@ function contrastText(hex: string): string {
   return luminance > 0.6 ? '#0b1220' : '#ffffff';
 }
 
-export function BankAvatar({ provider, size = 42 }: { provider: string; size?: number }) {
+export function BankAvatar({
+  provider,
+  size = 42,
+  onAssetPending,
+  onAssetTerminal,
+  renderStateId,
+  onRenderStateChange,
+}: {
+  provider: string;
+  size?: number;
+  onAssetPending?: (provider: string) => void;
+  onAssetTerminal?: (result: { provider: string; status: 'loaded' | 'fallback' }) => void;
+  renderStateId?: string;
+  onRenderStateChange?: (id: string, state: LogoRenderState) => void;
+}) {
   const theme = useTheme();
   const brand = useStore((s) => s.core?.brands?.[provider]);
   const registerLogos = useRegisterLogosStore((s) => s.logos);
@@ -35,20 +50,45 @@ export function BankAvatar({ provider, size = 42 }: { provider: string; size?: n
   const [prevSources, setPrevSources] = useState(sources);
   const [sourceIdx, setSourceIdx] = useState(0);
   const [exhausted, setExhausted] = useState(false);
+  const [decoded, setDecoded] = useState(false);
 
   if (sources !== prevSources) {
     setPrevSources(sources);
     setSourceIdx(0);
     setExhausted(false);
+    setDecoded(false);
   }
 
   const color = brand?.color ?? theme.colors.chipText;
   const short = resolveBrandShort(provider, brand?.short).toUpperCase().slice(0, 5);
   const fontSize = short.length <= 3 ? size * 0.34 : size * 0.26;
   const activeSource = sources[sourceIdx];
+  const terminalState = decoded
+    ? 'decoded' as const
+    : activeSource == null || exhausted
+      ? 'initials' as const
+      : null;
+  const stateId = renderStateId ?? provider;
+
+  useEffect(() => {
+    if (activeSource == null || exhausted) {
+      onAssetTerminal?.({ provider, status: 'fallback' });
+    } else {
+      onAssetPending?.(provider);
+    }
+  }, [activeSource, exhausted, onAssetPending, onAssetTerminal, provider]);
+
+  useEffect(() => {
+    onRenderStateChange?.(stateId, terminalState ?? 'pending');
+  }, [onRenderStateChange, stateId, terminalState]);
+
+  useEffect(() => () => {
+    onRenderStateChange?.(stateId, 'unmounted');
+  }, [onRenderStateChange, stateId]);
 
   if (activeSource != null && !exhausted) {
     const advanceSource = () => {
+      setDecoded(false);
       if (sourceIdx + 1 < sources.length) setSourceIdx((idx) => idx + 1);
       else setExhausted(true);
     };
@@ -68,6 +108,10 @@ export function BankAvatar({ provider, size = 42 }: { provider: string; size?: n
             uri={activeSource as string}
             width={size * 0.88}
             height={size * 0.88}
+            onLoad={() => {
+              setDecoded(true);
+              onAssetTerminal?.({ provider, status: 'loaded' });
+            }}
             onError={advanceSource}
           />
         ) : (
@@ -76,6 +120,10 @@ export function BankAvatar({ provider, size = 42 }: { provider: string; size?: n
             source={typeof activeSource === 'number' ? activeSource : { uri: activeSource }}
             resizeMode="contain"
             style={{ width: size * 0.88, height: size * 0.88 }}
+            onLoad={() => {
+              setDecoded(true);
+              onAssetTerminal?.({ provider, status: 'loaded' });
+            }}
             onError={advanceSource}
           />
         )}
