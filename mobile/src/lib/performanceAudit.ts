@@ -6,7 +6,8 @@ import type { CorePayload, RateRow, SectionKey } from '../types';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 
-export const PERFORMANCE_AUDIT_SCHEMA_VERSION = 2;
+export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
+
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
 export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = 300_000;
 export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 30;
@@ -29,12 +30,18 @@ export type AuditMetricValue = string | number | boolean | null;
 export interface AuditCheck {
   id: string;
   label: string;
-  kind: 'journey' | 'runtime' | 'storage' | 'network' | 'data';
+  kind: 'journey' | 'runtime' | 'storage' | 'network' | 'data' | 'update';
   status: AuditCheckStatus;
   durationMs: number;
   metrics: Record<string, AuditMetricValue>;
-  trace: string;
+  /** Full stacks are retained only for errors so the audit does not profile its own logging. */
+  trace?: string;
   error?: string;
+}
+
+export interface AuditAppIdentity {
+  appVersion: string;
+  buildVersion: string;
 }
 
 export interface AuditEnvironment {
@@ -85,11 +92,26 @@ export interface PerformanceAuditReport {
   startedAt: string;
   finishedAt: string;
   durationMs: number;
+  app: AuditAppIdentity;
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
   summary: PerformanceAuditSummary;
   checks: AuditCheck[];
+  routeAggregates: AuditRouteAggregate[];
   limitations: string[];
+}
+
+export interface AuditRouteAggregate {
+  journeyId: string;
+  label: string;
+  coldStatus: AuditCheckStatus;
+  warmStatus: AuditCheckStatus;
+  coldForwardMs: number;
+  warmForwardMs: number;
+  coldBackMs: number;
+  warmBackMs: number;
+  forwardChangeMs: number;
+  backChangeMs: number;
 }
 
 export interface PerformanceAuditWatchdogDiagnostics {
@@ -571,6 +593,22 @@ export function buildPerformanceAuditJourneys(
       skipReason: first ? undefined : 'No product is loaded',
     },
     {
+      id: 'rate-receipt',
+      label: 'Rate receipt',
+      href: first
+        ? ({
+            pathname: '/rate-receipt',
+            params: {
+              key: first.product_key,
+              ...(first.rate_index != null ? { ri: String(first.rate_index) } : {}),
+            },
+          } as unknown as Href)
+        : undefined,
+      expectedPath: '/rate-receipt',
+      navigationKind: 'stack',
+      skipReason: first ? undefined : 'No product is loaded',
+    },
+    {
       id: 'lender',
       label: 'Lender details',
       href: provider
@@ -867,4 +905,41 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     maxEventLoopLagMs: roundMetric(maxEventLoopLagMs),
     maxFrameGapMs: roundMetric(maxFrameGapMs),
   };
+}
+
+/** Pair cold/warm route checks into a compact comparison for the result UI and export. */
+export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggregate[] {
+  const byJourney = new Map<string, Partial<Record<'cold' | 'warm', AuditCheck>>>();
+  for (const check of checks) {
+    if (check.kind !== 'journey') continue;
+    const iteration = check.metrics.iteration;
+    const journeyId = check.metrics.journeyId;
+    if ((iteration !== 'cold' && iteration !== 'warm') || typeof journeyId !== 'string') continue;
+    const pair = byJourney.get(journeyId) ?? {};
+    pair[iteration] = check;
+    byJourney.set(journeyId, pair);
+  }
+  const number = (check: AuditCheck, key: string) => Number(check.metrics[key] ?? 0);
+  const aggregates: AuditRouteAggregate[] = [];
+  for (const [journeyId, pair] of byJourney) {
+    if (!pair.cold || !pair.warm) continue;
+    if (pair.cold.status === 'skipped' || pair.warm.status === 'skipped') continue;
+    const coldForwardMs = number(pair.cold, 'forwardMs');
+    const warmForwardMs = number(pair.warm, 'forwardMs');
+    const coldBackMs = number(pair.cold, 'backMs');
+    const warmBackMs = number(pair.warm, 'backMs');
+    aggregates.push({
+      journeyId,
+      label: String(pair.cold.metrics.journeyLabel ?? journeyId),
+      coldStatus: pair.cold.status,
+      warmStatus: pair.warm.status,
+      coldForwardMs,
+      warmForwardMs,
+      coldBackMs,
+      warmBackMs,
+      forwardChangeMs: roundMetric(warmForwardMs - coldForwardMs),
+      backChangeMs: roundMetric(warmBackMs - coldBackMs),
+    });
+  }
+  return aggregates;
 }

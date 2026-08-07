@@ -20,6 +20,7 @@ import {
   apkDownloadTaskId,
   canAutoRetryApkDownload,
   downloadPercent,
+  hasTrustedReadyApkReceipt,
   isCachedApkReady,
   isApkDownloadStalled,
   isUserCancelledDownload,
@@ -29,6 +30,7 @@ import {
 } from './appUpdateDownloadLogic';
 import {
   assertApkCompatibleWithDevice,
+  assertDownloadedApkMatchesManifest,
   assertTrustedApkManifest,
   preferImmutableApkDownloadUrl,
   type ApkManifest,
@@ -36,7 +38,6 @@ import {
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
 
 const STORAGE_KEY = 'app-update-download-v1';
-const PROMPTED_KEY = 'app-update-prompted-build';
 const EXPLICIT_WAIT_STALL_MS = 3 * 60 * 1000;
 const APK_VERIFICATION_STALL_MS = 5 * 60 * 1000;
 
@@ -51,6 +52,7 @@ let configReady = false;
 let appStateHooked = false;
 let appStateSub: { remove: () => void } | null = null;
 let pendingPromptManifest: ApkManifest | null = null;
+let promptedBuildThisSession: string | null = null;
 const explicitUpgradeWaiters = new Map<string, number>();
 const listeners = new Set<(s: ApkDownloadSnapshot) => void>();
 
@@ -239,7 +241,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
           );
           await completeHandler(task.id);
           const localUri = toFileUri(location);
-          await verifyDownloadedApk(localUri, manifest);
+          const verification = await verifyDownloadedApk(localUri, manifest);
           await persist({
             phase: 'ready',
             buildNumber: manifest.build_number,
@@ -255,6 +257,9 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             retryCount: snapshot.retryCount,
             nativeState: 'DONE',
             error: null,
+            verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
+            verifiedBytes: verification.size,
+            verifiedAt: new Date().toISOString(),
           });
           debugLog.info(
             'app-update',
@@ -297,6 +302,9 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         retryCount: snapshot.retryCount,
         nativeState: userCancelled ? 'CANCELLED' : 'FAILED',
         error: userCancelled ? null : `${error}${errorCode ? ` (${errorCode})` : ''}`,
+        verifiedSha256: null,
+        verifiedBytes: null,
+        verifiedAt: null,
       });
       if (userCancelled) {
         debugLog.info('app-update', `background download cancelled by user build=${manifest.build_number}`);
@@ -346,7 +354,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
-        await verifyDownloadedApk(localUri, manifest);
+        const verification = await verifyDownloadedApk(localUri, manifest);
         await persist({
           phase: 'ready',
           buildNumber: manifest.build_number,
@@ -362,6 +370,9 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           retryCount: snapshot.retryCount,
           nativeState: state,
           error: null,
+          verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
+          verifiedBytes: verification.size,
+          verifiedAt: new Date().toISOString(),
         });
         await maybePromptUpgrade(manifest);
         return true;
@@ -424,6 +435,9 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     retryCount: snapshot.retryCount,
     nativeState: state,
     error: null,
+    verifiedSha256: null,
+    verifiedBytes: null,
+    verifiedAt: null,
   });
   return true;
 }
@@ -478,6 +492,9 @@ async function startNewDownload(
     retryCount,
     nativeState: 'PENDING',
     error: null,
+    verifiedSha256: null,
+    verifiedBytes: null,
+    verifiedAt: null,
   });
   task.start();
   debugLog.info(
@@ -528,7 +545,7 @@ export async function ensureApkBackgroundDownload(
   if (
     !force &&
     String(snapshot.buildNumber) === String(manifest.build_number) &&
-    snapshot.phase === 'downloading' &&
+    (snapshot.phase === 'downloading' || snapshot.phase === 'waiting') &&
     currentWifiOnly != null &&
     currentWifiOnly !== wifiOnly
   ) {
@@ -549,7 +566,7 @@ export async function ensureApkBackgroundDownload(
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
-        await verifyDownloadedApk(localUri, manifest);
+        const verification = await verifyDownloadedApk(localUri, manifest);
         await persist({
           ...snapshot,
           phase: 'ready',
@@ -562,6 +579,9 @@ export async function ensureApkBackgroundDownload(
           totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
           wifiOnly: snapshot.wifiOnly,
           error: null,
+          verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
+          verifiedBytes: verification.size,
+          verifiedAt: new Date().toISOString(),
         });
         await maybePromptUpgrade(manifest);
         return snapshot;
@@ -727,7 +747,47 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
   if (!localUri) {
     throw new Error('Update download is not ready yet');
   }
-  await verifyDownloadedApk(localUri, manifest);
+  assertTrustedApkManifest(manifest);
+  const info = await FileSystem.getInfoAsync(localUri);
+  const currentBytes = info.exists && 'size' in info ? Number(info.size ?? 0) : 0;
+  assertDownloadedApkMatchesManifest(currentBytes, manifest);
+  if (
+    hasTrustedReadyApkReceipt(
+      snapshot,
+      manifest,
+      localUri,
+      currentBytes,
+      FileSystem.documentDirectory,
+    )
+  ) {
+    debugLog.info(
+      'app-update',
+      `ready integrity receipt reused build=${manifest.build_number} bytes=${currentBytes}`,
+    );
+  } else {
+    debugLog.info(
+      'app-update',
+      `ready integrity receipt unavailable; revalidating build=${manifest.build_number}`,
+    );
+    const verification = await verifyDownloadedApk(localUri, manifest);
+    await persist({
+      ...snapshot,
+      phase: 'ready',
+      buildNumber: manifest.build_number,
+      version: manifest.version,
+      downloadUrl: manifest.download_url,
+      sha256: manifest.sha256 ?? null,
+      localUri,
+      bytesWritten: verification.size,
+      totalBytes: manifest.bytes ?? verification.size,
+      lastProgressAt: new Date().toISOString(),
+      error: null,
+      verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
+      verifiedBytes: verification.size,
+      verifiedAt: new Date().toISOString(),
+    });
+  }
+  debugLog.info('app-update', `install requested build=${manifest.build_number}`);
   await installDownloadedApk(localUri);
 }
 
@@ -750,6 +810,24 @@ export async function upgradeFromBackgroundDownload(
 
   try {
     await ensureApkBackgroundDownload(manifest, options);
+    const network = options?.wifiOnly && snapshot.phase !== 'ready'
+      ? await Network.getNetworkStateAsync().catch(() => null)
+      : null;
+    const queuedForWifi = Boolean(
+      options?.wifiOnly &&
+      snapshot.phase !== 'ready' &&
+      (!network?.isConnected || network.type !== Network.NetworkStateType.WIFI),
+    );
+    if (
+      String(snapshot.buildNumber) === buildNumber &&
+      (snapshot.phase === 'waiting' || queuedForWifi)
+    ) {
+      debugLog.info(
+        'app-update',
+        `explicit upgrade remains queued for Wi-Fi build=${manifest.build_number}`,
+      );
+      return;
+    }
     if (snapshot.phase === 'ready' && String(snapshot.buildNumber) === buildNumber) {
       await installReadyApkUpdate(manifest);
       return;
@@ -826,32 +904,24 @@ async function maybePromptUpgrade(manifest: ApkManifest): Promise<void> {
     return;
   }
 
-  let already: string | null = null;
-  try {
-    already = await AsyncStorage.getItem(PROMPTED_KEY);
-  } catch {
-    already = null;
-  }
-  if (already === String(manifest.build_number)) return;
+  const buildNumber = String(manifest.build_number);
+  if (promptedBuildThisSession === buildNumber) return;
 
   promptInFlight = true;
-  try {
-    await AsyncStorage.setItem(PROMPTED_KEY, String(manifest.build_number));
-  } catch {
-    // still show the prompt
-  }
+  promptedBuildThisSession = buildNumber;
 
   Alert.alert(
-    'Upgrade available',
-    `Version ${manifest.version} has finished downloading. Upgrade now?`,
+    'Update ready to install',
+    `Version ${manifest.version} has been downloaded and verified. Install it now?`,
     [
       { text: 'Later', style: 'cancel', onPress: () => { promptInFlight = false; } },
       {
-        text: 'Upgrade',
+        text: 'Install',
         onPress: () => {
           promptInFlight = false;
           void installReadyApkUpdate(manifest).catch((err) => {
             const message = err instanceof Error ? err.message : String(err);
+            promptedBuildThisSession = null;
             debugLog.error('app-update', `upgrade prompt install failed: ${message}`);
             Alert.alert('Update failed', message);
           });
@@ -876,6 +946,7 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   configReady = false;
   listeners.clear();
   promptInFlight = false;
+  promptedBuildThisSession = null;
   pendingPromptManifest = null;
   explicitUpgradeWaiters.clear();
 }

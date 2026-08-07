@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Alert, Linking, Platform } from 'react-native';
+import { AppState, Linking, Platform } from 'react-native';
 
 import { ANDROID_PACKAGE, debugLog } from './debugLog';
 
@@ -12,6 +12,7 @@ import { ANDROID_PACKAGE, debugLog } from './debugLog';
 
 /** Android O (API 26)+ requires per-app "Install unknown apps" before sideloading. */
 export const INSTALL_PERMISSION_MIN_API = 26;
+export const INSTALL_SETTINGS_RETURN_TIMEOUT_MS = 2 * 60_000;
 
 export type InstallPermissionState =
   | 'granted'
@@ -72,41 +73,73 @@ export async function openInstallPermissionSettings(): Promise<void> {
     debugLog.warn('install-permission', `settings intent failed: ${message}`);
   }
 
-  await Linking.openSettings();
+  await openFallbackSettingsAndWaitForReturn();
 }
 
-export function promptInstallPermissionSettings(
-  onOpenSettings?: () => void,
-): void {
-  Alert.alert(
-    'Allow app updates',
-    'Required to install updates from the app.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      {
-        text: 'Open settings',
-        onPress: () => {
-          onOpenSettings?.();
-          void openInstallPermissionSettings();
-        },
-      },
-    ],
-  );
+async function openFallbackSettingsAndWaitForReturn(): Promise<void> {
+  let sawAppLeave = false;
+  let settled = false;
+  let resolveReturn: (() => void) | null = null;
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  let subscription: { remove: () => void } | null = null;
+
+  const returned = new Promise<void>((resolve) => {
+    resolveReturn = resolve;
+  });
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    subscription?.remove();
+    if (timeout != null) clearTimeout(timeout);
+    resolveReturn?.();
+  };
+
+  // Linking.openSettings() only confirms that Settings was launched. Subscribe
+  // first so a fast inactive/background transition cannot be missed, and only
+  // treat a later active event as a genuine return to this app.
+  subscription = AppState.addEventListener('change', (state) => {
+    if (state === 'inactive' || state === 'background') {
+      sawAppLeave = true;
+    } else if (state === 'active' && sawAppLeave) {
+      finish();
+    }
+  });
+  timeout = setTimeout(() => {
+    debugLog.warn(
+      'install-permission',
+      'settings return was not observed before timeout',
+    );
+    finish();
+  }, INSTALL_SETTINGS_RETURN_TIMEOUT_MS);
+
+  try {
+    await Linking.openSettings();
+  } catch (err) {
+    finish();
+    throw err;
+  }
+  await returned;
 }
 
 /**
- * Returns true when sideload install is allowed. When false, shows a one-shot prompt
- * and opens system settings (Android 8+ only). Not used during onboarding — Settings
- * App update section and the download flow call this before install.
+ * Returns true when sideload install is allowed. An explicit install request goes
+ * straight to Android's per-app setting, waits for the user to return, then checks
+ * again so installation can continue without another app tap.
  */
 export async function ensureInstallPermission(options?: {
-  prompt?: boolean;
+  openSettings?: boolean;
 }): Promise<boolean> {
   const state = await getInstallPermissionState();
   if (state !== 'required') return state === 'granted';
 
-  if (options?.prompt !== false) {
-    promptInstallPermissionSettings();
-  }
-  return false;
+  if (options?.openSettings === false) return false;
+
+  debugLog.info('install-permission', 'opening Android install-source settings');
+  await openInstallPermissionSettings();
+  const allowed = await canInstallApkUpdates();
+  debugLog.info(
+    'install-permission',
+    allowed ? 'install-source permission granted' : 'install-source permission not granted',
+  );
+  return allowed;
 }

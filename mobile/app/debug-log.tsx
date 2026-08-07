@@ -10,8 +10,7 @@ import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   debugLog,
   deleteDebugLogUpload,
-  formatLogUploadBody,
-  redactSecrets,
+  formatVersionedLogExport,
   uploadDebugLog,
 } from '../src/lib/debugLog';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -30,6 +29,14 @@ export default function DebugLogScreen() {
   const uploadUrlRef = useRef(uploadUrl);
   uploadUrlRef.current = uploadUrl;
   const logPathHint = debugLog.getAndroidLogPathHint();
+  const readVersionedExport = useCallback(async () => {
+    const completeLog = await debugLog.readCompleteText();
+    return formatVersionedLogExport(
+      completeLog,
+      Application.nativeApplicationVersion ?? 'unknown',
+      Application.nativeBuildVersion ?? 'unknown',
+    );
+  }, []);
 
   useEffect(() => {
     return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
@@ -74,50 +81,48 @@ export default function DebugLogScreen() {
   const onCopy = useCallback(async () => {
     setBusy('copy');
     try {
-      await Clipboard.setStringAsync(redactSecrets(debugLog.getText()));
-      Alert.alert('Copied', `${debugLog.getEntries().length} lines copied.`);
+      const body = await readVersionedExport();
+      await Clipboard.setStringAsync(body);
+      Alert.alert('Copied', 'Complete on-disk log and latest performance audit copied.');
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [readVersionedExport]);
 
   const onShare = useCallback(async () => {
     setBusy('share');
     try {
+      const body = await readVersionedExport();
       const path = FileSystem.cacheDirectory
         ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
         : null;
       if (path && await Sharing.isAvailableAsync()) {
-        // The screen renders a small tail for responsiveness; export the full
-        // bounded in-memory log on explicit user action.
-        await FileSystem.writeAsStringAsync(path, redactSecrets(debugLog.getText()));
+        // The screen renders a small tail for responsiveness; explicit export
+        // reads the complete flushed file and durable latest audit instead.
+        await FileSystem.writeAsStringAsync(path, body);
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
           UTI: 'public.plain-text',
         });
       } else {
-        await Share.share({ message: redactSecrets(debugLog.getText()), title: 'ar-local.log' });
+        await Share.share({ message: body, title: 'ar-local.log' });
       }
     } catch (err) {
       Alert.alert('Share failed', String((err as Error)?.message ?? err));
     } finally {
       setBusy(null);
     }
-  }, []);
+  }, [readVersionedExport]);
 
   const runUpload = useCallback(async () => {
     if (busyRef.current) return;
     busyRef.current = 'upload';
     setBusy('upload');
     try {
-      const completeLog = await debugLog.readCompleteText();
-      const body = formatLogUploadBody(completeLog, {
-        app: Application.nativeApplicationVersion ?? 'unknown',
-        build: Application.nativeBuildVersion ?? 'unknown',
-      });
+      const body = await readVersionedExport();
       const result = await uploadDebugLog(body);
       const { url, provider, deleteKey } = result;
       if (result.truncated || result.clientTruncated) {
@@ -160,7 +165,7 @@ export default function DebugLogScreen() {
       busyRef.current = null;
       setBusy(null);
     }
-  }, [onCopy, onShare]);
+  }, [onCopy, onShare, readVersionedExport]);
   retryUploadRef.current = () => {
     void runUpload();
   };
@@ -237,6 +242,10 @@ export default function DebugLogScreen() {
               onPress={() => void onCopyPath()}
             />
           </Card>
+          <AppText variant="tiny" color="textMuted">
+            Copy, Share and Upload immediately export the complete flushed on-disk log plus the
+            latest complete performance audit. No extra selection step is required.
+          </AppText>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Button title="Clear" icon="trash-outline" variant="ghost" onPress={onClear} />
             <Button

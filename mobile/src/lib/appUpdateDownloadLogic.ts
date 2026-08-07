@@ -25,6 +25,10 @@ export interface ApkDownloadSnapshot {
   retryCount: number;
   nativeState: string | null;
   error: string | null;
+  /** Receipt for the full SHA-256 verification completed after download. */
+  verifiedSha256: string | null;
+  verifiedBytes: number | null;
+  verifiedAt: string | null;
 }
 
 export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
@@ -42,6 +46,9 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   retryCount: 0,
   nativeState: null,
   error: null,
+  verifiedSha256: null,
+  verifiedBytes: null,
+  verifiedAt: null,
 };
 
 export const APK_DOWNLOAD_STALL_MS = 2 * 60 * 1000;
@@ -80,6 +87,36 @@ export function isCachedApkReady(
     snapshot.phase === 'ready' &&
     Boolean(snapshot.localUri) &&
     fileExists
+  );
+}
+
+/**
+ * A ready APK may skip a second full-file hash only when its persisted receipt,
+ * manifest identity, private path, and current byte length still agree.
+ */
+export function hasTrustedReadyApkReceipt(
+  snapshot: ApkDownloadSnapshot,
+  manifest: { build_number: string; bytes?: number; sha256?: string },
+  localUri: string,
+  currentBytes: number,
+  privateDirectory: string | null | undefined,
+): boolean {
+  const expectedSha = manifest.sha256?.toLowerCase();
+  const privatePrefix = privateDirectory
+    ? (privateDirectory.endsWith('/') ? privateDirectory : `${privateDirectory}/`)
+    : null;
+  return (
+    snapshot.phase === 'ready' &&
+    isApkDownloadForBuild(snapshot, manifest.build_number) &&
+    snapshot.localUri === localUri &&
+    Boolean(expectedSha) &&
+    snapshot.sha256?.toLowerCase() === expectedSha &&
+    snapshot.verifiedSha256?.toLowerCase() === expectedSha &&
+    snapshot.verifiedBytes === currentBytes &&
+    Boolean(snapshot.verifiedAt && Number.isFinite(Date.parse(snapshot.verifiedAt))) &&
+    manifest.bytes === currentBytes &&
+    privatePrefix != null &&
+    localUri.startsWith(privatePrefix)
   );
 }
 
@@ -132,8 +169,8 @@ export function updateBannerCopy(
 ): { title: string; actionLabel: string; actionEnabled: boolean } {
   if (phase === 'ready') {
     return {
-      title: `Update ready — v${version}`,
-      actionLabel: 'Upgrade',
+      title: `Update verified and ready — v${version}`,
+      actionLabel: 'Install',
       actionEnabled: true,
     };
   }
@@ -161,8 +198,8 @@ export function updateBannerCopy(
   }
   if (phase === 'verifying') {
     return {
-      title: `Verifying update — v${version}`,
-      actionLabel: 'Verifying',
+      title: `Checking update integrity — v${version}`,
+      actionLabel: 'Checking',
       actionEnabled: false,
     };
   }
@@ -182,8 +219,8 @@ export function updateBannerCopy(
   }
   return {
     title: `Update available — v${version}`,
-    actionLabel: 'Upgrade',
-    actionEnabled: false,
+    actionLabel: 'Download & install',
+    actionEnabled: true,
   };
 }
 

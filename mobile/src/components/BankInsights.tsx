@@ -136,7 +136,7 @@ export const BankMoveRow = React.memo(function BankMoveRow({
 });
 
 /** Headline pulse strip: "4 banks moved this week · 6 loan cuts · 2 savings/TD increases". */
-export function MarketPulseStrip({ payload }: { payload: BankInsightsPayload | null }) {
+export const MarketPulseStrip = React.memo(function MarketPulseStrip({ payload }: { payload: BankInsightsPayload | null }) {
   const pulse = useMemo(() => marketPulse(payload, 7), [payload]);
   const loanPulse = useMemo(() => marketPulse(payload, 7, LOAN_SECTIONS), [payload]);
   const depositPulse = useMemo(() => marketPulse(payload, 7, DEPOSIT_SECTIONS), [payload]);
@@ -172,9 +172,9 @@ export function MarketPulseStrip({ payload }: { payload: BankInsightsPayload | n
       ) : null}
     </Row>
   );
-}
+});
 
-export function BankMovesFeed({
+export const BankMovesFeed = React.memo(function BankMovesFeed({
   payload,
   error,
   sections,
@@ -222,9 +222,9 @@ export function BankMovesFeed({
       ))}
     </View>
   );
-}
+});
 
-export function MoversLeaderboard({
+export const MoversLeaderboard = React.memo(function MoversLeaderboard({
   payload,
   section,
   windowDays = 30,
@@ -313,7 +313,7 @@ export function MoversLeaderboard({
       )}
     </View>
   );
-}
+});
 
 /** Free-tier teaser: sells the historical moat without downloading anything. */
 export function InsightsLockedCard({ onUnlock }: { onUnlock: () => void }) {

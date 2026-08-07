@@ -35,7 +35,7 @@ function estimateStepPathLength(data: RbaEntry[], x: (i: number) => number, y: (
 }
 
 /** Cash-rate step chart with hold meetings and keyboard/screen-reader slice navigation. */
-export function RbaChart({
+export const RbaChart = React.memo(function RbaChart({
   data,
   holds,
   height = 160,
@@ -228,4 +228,4 @@ export function RbaChart({
       />
     </View>
   );
-}
+});

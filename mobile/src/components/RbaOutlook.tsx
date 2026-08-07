@@ -1,5 +1,5 @@
-import { useFocusEffect } from '@react-navigation/native';
-import React, { useCallback, useRef, useState } from 'react';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, Linking, Pressable, View } from 'react-native';
 
 import {
@@ -10,12 +10,28 @@ import {
   type EconomicOutlookPayload,
 } from '../data/economicOutlook';
 import { relativeDate } from '../data/format';
+import { yieldToUiFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
 import { AppText, Button, Card, Row } from './ui';
 
 function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload; rba: RbaEntry[]; rbaHolds?: string[] }) {
+  const theme = useTheme();
+  const isFocused = useIsFocused();
+  const revision = data.checkedAt || data.fetchedAt;
+  const [explorerRevision, setExplorerRevision] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isFocused || explorerRevision === revision) return;
+    let active = true;
+    void (async () => {
+      await yieldToUiFrames(3);
+      if (active) setExplorerRevision(revision);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [explorerRevision, isFocused, revision]);
   const counts = data.indicators.reduce(
     (acc, indicator) => ({ ...acc, [indicator.signal.direction]: acc[indicator.signal.direction] + 1 }),
     { higher: 0, lower: 0, balanced: 0 },
@@ -37,7 +53,24 @@ function OutlookContent({ data, rba, rbaHolds }: { data: EconomicOutlookPayload;
         </AppText>
       ) : null}
       <EconomicReleasesList data={data} />
-      <EconomicExplorer data={data} rba={rba} rbaHolds={rbaHolds} />
+      {explorerRevision === revision ? (
+        <EconomicExplorer data={data} rba={rba} rbaHolds={rbaHolds} />
+      ) : (
+        <View
+          style={{
+            minHeight: 180,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.surfaceAlt,
+          }}
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Preparing economic charts"
+        >
+          <AppText variant="tiny" color="textFaint">Preparing economic charts…</AppText>
+        </View>
+      )}
       <Row gap={4} style={{ marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         <AppText variant="tiny" color="textFaint">
           Checked {relativeDate(data.checkedAt)}
@@ -86,13 +119,17 @@ export function RbaOutlook({ rba, rbaHolds }: { rba: RbaEntry[]; rbaHolds?: stri
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
+  const dataRef = useRef<EconomicOutlookPayload | null>(null);
 
   const load = useCallback(async (force = false) => {
-    setLoading(true);
+    if (!dataRef.current || force) setLoading(true);
     setError(null);
     try {
       const value = await loadEconomicOutlook(force);
-      if (mounted.current) setData(value);
+      if (mounted.current && dataRef.current !== value) {
+        dataRef.current = value;
+        setData(value);
+      }
     } catch (err) {
       if (mounted.current) setError(String((err as Error)?.message ?? err));
     } finally {

@@ -149,6 +149,14 @@ let latestSuccessful: {
 } | null = null;
 let commitQueue: Promise<void> = Promise.resolve();
 
+/** Reset module-level request/cache state between deterministic unit tests. */
+export function resetEconomicOutlookRuntimeCacheForTests(): void {
+  inFlight = null;
+  requestSequence = 0;
+  latestSuccessful = null;
+  commitQueue = Promise.resolve();
+}
+
 async function commitEconomicResult(
   sequence: number,
   payload: EconomicOutlookPayload,
@@ -170,6 +178,18 @@ async function commitEconomicResult(
 
 export async function loadEconomicOutlook(force = false): Promise<EconomicOutlookPayload> {
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
+  if (!force && latestSuccessful) {
+    const checkedAt = latestSuccessful.payload.checkedAt || latestSuccessful.payload.fetchedAt;
+    const age = Date.now() - Date.parse(checkedAt);
+    if (
+      latestSuccessful.payload.refreshStatus === 'current' &&
+      Number.isFinite(age) &&
+      age >= 0 &&
+      age < ECONOMIC_RECHECK_MS
+    ) {
+      return latestSuccessful.payload;
+    }
+  }
   const sequence = ++requestSequence;
   const run = (async () => {
     const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
@@ -360,5 +380,3 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
   inFlight = { promise: tracked, force };
   return tracked;
 }
-
-

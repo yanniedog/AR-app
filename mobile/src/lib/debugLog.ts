@@ -2,6 +2,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { bridgeLogToCrashlytics } from './observability';
+import {
+  LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+  PERFORMANCE_AUDIT_SCHEMA_VERSION,
+} from './performanceAuditSchema';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -305,8 +309,36 @@ function append(level: LogLevel, tag: string, message: string): void {
     bridgeLogToCrashlytics(level, tag, messageRedacted);
   }
   notify();
-  schedulePersist();
+  // Audit checkpoints are explicitly flushed by the runner. Avoid scheduling
+  // a large AsyncStorage tail serialization in the middle of the next measured
+  // navigation phase.
+  if (tag !== 'perf-audit') schedulePersist();
   scheduleFileFlush();
+}
+
+interface StoredPerformanceAudit {
+  schemaVersion: typeof PERFORMANCE_AUDIT_SCHEMA_VERSION;
+  summaryMarker: string;
+  reportJson: string;
+}
+
+function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<StoredPerformanceAudit>;
+    if (
+      value.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION ||
+      typeof value.summaryMarker !== 'string' ||
+      typeof value.reportJson !== 'string'
+    ) return null;
+    return {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: redactSecrets(value.summaryMarker),
+      reportJson: redactSecrets(value.reportJson),
+    };
+  } catch {
+    return null;
+  }
 }
 
 const VALID_LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
@@ -378,6 +410,7 @@ export const debugLog = {
     if (coldStartResetPromise) await coldStartResetPromise.catch(() => {});
     notify();
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
   },
   getText(): string {
@@ -408,16 +441,41 @@ export const debugLog = {
     }
     await flushPendingToFile();
   },
-  /** Read the complete current-session file, falling back to the live buffer. */
+  /**
+   * Persist the canonical complete audit separately from the rolling log. The
+   * rolling file receives only compact checkpoints, so normal logging cannot
+   * evict the latest useful diagnosis before the user exports it.
+   */
+  async storePerformanceAudit(summaryMarker: string, report: unknown): Promise<void> {
+    const stored: StoredPerformanceAudit = {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: redactSecrets(summaryMarker),
+      reportJson: redactSecrets(JSON.stringify(report)),
+    };
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
+  },
+  /** Read the flushed on-disk log plus the durable latest audit snapshot. */
   async readCompleteText(): Promise<string> {
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
     }
     await flushPendingToFile();
-    if (!FileSystem.documentDirectory) return redactSecrets(buffer.getText());
-    const text = await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
-    return redactSecrets(text);
+    const text = !FileSystem.documentDirectory
+      ? buffer.getText()
+      : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
+    const clean = redactSecrets(text);
+    const latest = parseStoredPerformanceAudit(
+      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
+    );
+    if (!latest) return clean;
+    return [
+      clean,
+      '',
+      '# Latest complete performance audit',
+      latest.summaryMarker,
+      latest.reportJson,
+    ].join('\n');
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
@@ -476,6 +534,20 @@ export function formatLogUploadBody(entriesText: string, meta?: Record<string, s
   // receive the current privacy rules too.
   lines.push('', redactSecrets(entriesText));
   return lines.join('\n');
+}
+
+/** Canonical export wrapper: every exported artifact identifies its installed build. */
+export function formatVersionedLogExport(
+  entriesText: string,
+  appVersion: string,
+  buildVersion: string,
+  meta: Record<string, string> = {},
+): string {
+  return formatLogUploadBody(entriesText, {
+    ...meta,
+    app_version: appVersion,
+    build_version: buildVersion,
+  });
 }
 
 export const PASTE_RS_URL = 'https://paste.rs/';

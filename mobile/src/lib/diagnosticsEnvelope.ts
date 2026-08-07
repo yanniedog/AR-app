@@ -64,8 +64,8 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
     schemaVersion: 1,
     kind: 'performance-audit',
     app: {
-      version: report.environment.appVersion,
-      build: report.environment.buildVersion,
+      version: report.app.appVersion,
+      build: report.app.buildVersion,
       platform: report.environment.platform,
       osMajor: coarseOsVersion(report.environment.osVersion),
       jsEngine: report.environment.jsEngine,

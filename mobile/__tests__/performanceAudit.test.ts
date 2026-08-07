@@ -1,5 +1,6 @@
 import type { CorePayload } from '../src/types';
 import {
+  aggregateRepeatedJourneys,
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -9,6 +10,7 @@ import {
   pathMatches,
   PerformanceAuditInactivityWatchdog,
   percentile,
+  PERFORMANCE_AUDIT_SCHEMA_VERSION,
   requestPerformanceAudit,
   resolveAuditJourneyOptionalData,
   resetPerformanceAuditForTests,
@@ -120,7 +122,7 @@ function check(
 describe('performance audit journeys', () => {
   it('covers every steady-state destination and all three browse sections', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys).toHaveLength(19);
+    expect(journeys).toHaveLength(20);
     expect(journeys.map((journey) => journey.id)).toEqual(
       expect.arrayContaining([
         'home',
@@ -138,6 +140,7 @@ describe('performance audit journeys', () => {
         'lenders',
         'profile',
         'product',
+        'rate-receipt',
         'lender',
         'compare',
         'terms',
@@ -145,12 +148,17 @@ describe('performance audit journeys', () => {
       ]),
     );
     expect(journeys.find((journey) => journey.id === 'product')?.href).toBeDefined();
+    expect(journeys.find((journey) => journey.id === 'rate-receipt')?.href).toBeDefined();
     expect(journeys.find((journey) => journey.id === 'compare')?.href).toBeDefined();
   });
 
   it('keeps data-dependent journeys visible but skipped when no payload exists', () => {
     const journeys = buildPerformanceAuditJourneys(null);
     expect(journeys.find((journey) => journey.id === 'product')).toMatchObject({
+      href: undefined,
+      skipReason: 'No product is loaded',
+    });
+    expect(journeys.find((journey) => journey.id === 'rate-receipt')).toMatchObject({
       href: undefined,
       skipReason: 'No product is loaded',
     });
@@ -262,6 +270,42 @@ describe('performance audit scoring', () => {
       maxFrameGapMs: 80,
     });
   });
+
+  it('aggregates paired cold and warm route timings', () => {
+    const cold = check('journey-home-cold', 'fail', 1_000, {
+      journeyId: 'home', journeyLabel: 'Home', iteration: 'cold', forwardMs: 700, backMs: 200,
+    });
+    cold.kind = 'journey';
+    const warm = check('journey-home-warm', 'pass', 500, {
+      journeyId: 'home', journeyLabel: 'Home', iteration: 'warm', forwardMs: 300, backMs: 100,
+    });
+    warm.kind = 'journey';
+    expect(aggregateRepeatedJourneys([cold, warm])).toEqual([{
+      journeyId: 'home',
+      label: 'Home',
+      coldStatus: 'fail',
+      warmStatus: 'pass',
+      coldForwardMs: 700,
+      warmForwardMs: 300,
+      coldBackMs: 200,
+      warmBackMs: 100,
+      forwardChangeMs: -400,
+      backChangeMs: -100,
+    }]);
+  });
+
+  it('does not aggregate skipped cold or warm routes', () => {
+    const skipped = check('journey-disabled-cold', 'skipped', 0, {
+      journeyId: 'disabled', journeyLabel: 'Disabled', iteration: 'cold',
+    });
+    skipped.kind = 'journey';
+    const warm = check('journey-disabled-warm', 'pass', 100, {
+      journeyId: 'disabled', journeyLabel: 'Disabled', iteration: 'warm', forwardMs: 50, backMs: 50,
+    });
+    warm.kind = 'journey';
+
+    expect(aggregateRepeatedJourneys([skipped, warm])).toEqual([]);
+  });
 });
 
 describe('performance audit maintenance isolation', () => {
@@ -273,15 +317,17 @@ describe('performance audit maintenance isolation', () => {
     expect(isPerformanceAuditActive()).toBe(true);
 
     completePerformanceAudit({
-      schemaVersion: 2,
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       sessionId: 'done',
       startedAt: '2026-08-06T00:00:00.000Z',
       finishedAt: '2026-08-06T00:00:01.000Z',
       durationMs: 1_000,
+      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
       watchdog: { hangTimeoutMs: 300_000, storedCheckCount: 0, lastStoredCheckAt: null },
       environment,
       summary: summarizePerformanceAudit([]),
       checks: [],
+      routeAggregates: [],
       limitations: [],
     });
     expect(isPerformanceAuditActive()).toBe(false);
@@ -294,11 +340,12 @@ describe('performance audit lifecycle', () => {
   it('retains the completed report for the settings result screen', () => {
     const sessionId = requestPerformanceAudit();
     const report = {
-      schemaVersion: 2,
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       sessionId,
       startedAt: '2026-07-31T00:00:00.000Z',
       finishedAt: '2026-07-31T00:01:00.000Z',
       durationMs: 60_000,
+      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
       watchdog: {
         hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
         storedCheckCount: 0,
@@ -307,6 +354,7 @@ describe('performance audit lifecycle', () => {
       environment,
       summary: summarizePerformanceAudit([]),
       checks: [],
+      routeAggregates: [],
       limitations: [],
     };
     completePerformanceAudit(report, {

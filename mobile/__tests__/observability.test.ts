@@ -144,11 +144,12 @@ describe('observability', () => {
     const { crashlytics, crashlyticsApi, clarityApi } = makeMocks();
     setObservabilityDepsForTests({ crashlytics, clarity: clarityApi });
     const sent = reportPerformanceAudit({
-      schemaVersion: 2,
+      schemaVersion: 3,
       sessionId: 'private-session-id',
       startedAt: '2026-08-06T00:00:00Z',
       finishedAt: '2026-08-06T00:01:00Z',
       durationMs: 60_000,
+      app: { appVersion: '9.9.9', buildVersion: '999' },
       watchdog: { hangTimeoutMs: 30_000, storedCheckCount: 1, lastStoredCheckAt: null },
       environment: {
         appVersion: '1.0.88', buildVersion: '201', platform: 'android', platformVersion: '37',
@@ -170,12 +171,16 @@ describe('observability', () => {
         id: 'manifest-network', label: 'Private label', kind: 'network', status: 'fail', durationMs: 7000,
         metrics: { headersMs: 6999, expectedPath: '/product/private-id' }, trace: 'private trace',
       }],
+      routeAggregates: [],
       limitations: ['private limitation'],
     });
 
     expect(sent).toBe(true);
     const uploaded = (crashlyticsApi.log as jest.Mock).mock.calls.flat().join('\n');
     expect(uploaded).toContain('manifest-network');
+    expect(uploaded).toContain('9.9.9');
+    expect(uploaded).toContain('999');
+    expect(uploaded).not.toContain('1.0.88');
     expect(uploaded).not.toContain('private-session-id');
     expect(uploaded).not.toContain('Private Model');
     expect(uploaded).not.toContain('/product/private-id');

@@ -18,11 +18,18 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { MANIFEST_URL } from '../config';
+import { visibleAccountRows } from '../data/format';
+import { resolveSectionRibbonStats } from '../data/ribbonStats';
+import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
 import { useStore } from '../data/store';
-import { debugLog, formatLogUploadBody, uploadDebugLog } from '../lib/debugLog';
+import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
+import { SECTION_ORDER } from '../constants';
+import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
+import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildPerformanceAuditJourneys,
+  aggregateRepeatedJourneys,
   cancelPerformanceAudit,
   captureAuditTrace,
   completePerformanceAudit,
@@ -48,6 +55,7 @@ import {
   type AuditCheckStatus,
   type AuditEnvironment,
   type AuditJourney,
+  type AuditAppIdentity,
   type PerformanceAuditReport,
   type ResponsivenessMetrics,
 } from '../lib/performanceAudit';
@@ -60,11 +68,13 @@ const DATA_SETTLE_TIMEOUT_MS = 30_000;
 const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const RUNTIME_SAMPLE_MS = 1_250;
-const BENCHMARK_CHECKS = 5;
+// Runtime, storage, filesystem, log I/O, payload, network, and update readiness.
+const FIXED_BENCHMARK_CHECKS = 7;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
 const AUDIT_KEEP_AWAKE_TAG = 'performance-audit';
+type JourneyIteration = 'cold' | 'warm';
 
 class AuditCancelledError extends Error {
   constructor() {
@@ -245,12 +255,36 @@ async function recoverAuditRoute(currentPath: () => string): Promise<void> {
   await settleUiUnchecked();
 }
 
-function logAuditEvent(event: Record<string, unknown>): void {
-  debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, JSON.stringify(event));
+function installedAuditIdentity(): AuditAppIdentity {
+  return {
+    appVersion: Application.nativeApplicationVersion ?? 'unknown',
+    buildVersion: Application.nativeBuildVersion ?? 'unknown',
+  };
 }
 
-function logAuditCheck(sessionId: string, check: AuditCheck): void {
-  logAuditEvent({ kind: 'check', sessionId, check });
+function logAuditEvent(app: AuditAppIdentity, event: Record<string, unknown>): void {
+  debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, JSON.stringify({ ...event, app }));
+}
+
+function compactCheck(check: AuditCheck): Record<string, unknown> {
+  return {
+    id: check.id,
+    label: check.label,
+    kind: check.kind,
+    status: check.status,
+    durationMs: check.durationMs,
+    phase: check.metrics.iteration ?? null,
+    forwardMs: check.metrics.forwardMs ?? null,
+    backMs: check.metrics.backMs ?? null,
+    maxEventLoopLagMs: check.metrics.maxEventLoopLagMs ?? null,
+    maxFrameGapMs: check.metrics.maxFrameGapMs ?? null,
+    error: check.error ?? null,
+    ...(check.trace ? { trace: check.trace } : {}),
+  };
+}
+
+function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
+  logAuditEvent(app, { kind: 'check', sessionId, check: compactCheck(check) });
 }
 
 function responsivenessRecord(
@@ -311,6 +345,7 @@ function jsEngineName(): string {
 }
 
 async function collectEnvironment(
+  app: AuditAppIdentity,
   width: number,
   height: number,
   fontScale: number,
@@ -322,8 +357,8 @@ async function collectEnvironment(
     'Network state',
   ).catch(() => null);
   return {
-    appVersion: Application.nativeApplicationVersion ?? 'unknown',
-    buildVersion: Application.nativeBuildVersion ?? 'unknown',
+    appVersion: app.appVersion,
+    buildVersion: app.buildVersion,
     platform: Platform.OS,
     platformVersion: String(Platform.Version),
     manufacturer: Device.manufacturer ?? null,
@@ -355,7 +390,6 @@ async function runRuntimeCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace('runtime responsiveness baseline');
   const started = now();
   const snapshot = monitor.snapshot();
   await delay(RUNTIME_SAMPLE_MS);
@@ -368,7 +402,6 @@ async function runRuntimeCheck(
     status: responsivenessStatus(metrics),
     durationMs: roundMetric(now() - started),
     metrics: responsivenessRecord(metrics),
-    trace,
   };
 }
 
@@ -377,7 +410,6 @@ async function runStorageCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace('AsyncStorage write read remove');
   const key = `${STORAGE_KEY_PREFIX}${sessionId}`;
   const payload = JSON.stringify({
     schema: 1,
@@ -444,8 +476,7 @@ async function runStorageCheck(
       temporaryKeyDeleted,
       ...responsivenessRecord(responsiveness),
     },
-    trace,
-    ...(error ? { error } : {}),
+    ...(error ? { error, trace: captureAuditTrace('AsyncStorage write read remove failed') } : {}),
   };
 }
 
@@ -454,7 +485,6 @@ async function runFileSystemCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace('filesystem write read remove');
   const started = now();
   const responsiveAt = monitor.snapshot();
   if (!FileSystem.documentDirectory) {
@@ -469,7 +499,6 @@ async function runFileSystemCheck(
         reason: 'documentDirectory unavailable',
         ...responsivenessRecord(responsiveness),
       },
-      trace,
     };
   }
   const uri = `${FileSystem.documentDirectory}performance-audit-${sessionId}.tmp`;
@@ -523,8 +552,7 @@ async function runFileSystemCheck(
       temporaryFileDeleted,
       ...responsivenessRecord(responsiveness),
     },
-    trace,
-    ...(error ? { error } : {}),
+    ...(error ? { error, trace: captureAuditTrace('filesystem write read remove failed') } : {}),
   };
 }
 
@@ -532,7 +560,6 @@ async function runDataCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace('active payload serialize parse filter sort');
   const core = useStore.getState().core;
   const started = now();
   if (!core) {
@@ -543,7 +570,6 @@ async function runDataCheck(
       status: 'skipped',
       durationMs: roundMetric(now() - started),
       metrics: { reason: 'No active payload is loaded' },
-      trace,
     };
   }
 
@@ -606,8 +632,7 @@ async function runDataCheck(
       traversalMs: roundMetric(traversalMs),
       ...responsivenessRecord(responsiveness),
     },
-    trace,
-    ...(error ? { error } : {}),
+    ...(error ? { error, trace: captureAuditTrace('active payload processing failed') } : {}),
   };
 }
 
@@ -615,7 +640,6 @@ async function runNetworkCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace('manifest network request and JSON parse');
   const started = now();
   const responsiveAt = monitor.snapshot();
   assertSessionActive(watchdog);
@@ -683,8 +707,251 @@ async function runNetworkCheck(
       timeoutMs,
       ...responsivenessRecord(responsiveness),
     },
-    trace,
-    ...(error ? { error } : {}),
+    ...(error ? { error, trace: captureAuditTrace('manifest network request failed') } : {}),
+  };
+}
+
+async function runSectionModelCheck(
+  section: (typeof SECTION_ORDER)[number],
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+): Promise<AuditCheck> {
+  const state = useStore.getState();
+  const sectionData = state.core?.sections[section];
+  const rows = sectionData?.rates;
+  const started = now();
+  if (!sectionData || !rows) {
+    return {
+      id: `section-model-${section.toLowerCase()}`,
+      label: `${section} section model`,
+      kind: 'data',
+      status: 'skipped',
+      durationMs: roundMetric(now() - started),
+      metrics: { reason: 'Section data is unavailable', section },
+    };
+  }
+
+  const responsivenessAt = monitor.snapshot();
+  const details = state.details?.products ?? null;
+  const { includeNonStandard, depositRankMetric, mortgageRateMetric } = state.prefs;
+  const runModel = () => {
+    let at = now();
+    const scoped = rowsUnder(rows, section, []);
+    const scopeMs = now() - at;
+    at = now();
+    const visible = excludeTokenDepositRates(
+      visibleAccountRows(scoped, includeNonStandard, details),
+      section,
+    );
+    const filterMs = now() - at;
+    const fractionOf = (row: (typeof visible)[number]) =>
+      rankFraction(row, section, depositRankMetric, mortgageRateMetric);
+    at = now();
+    const children = childrenFromScoped(visible, section, [], fractionOf);
+    const hierarchyMs = now() - at;
+    at = now();
+    const stats = resolveSectionRibbonStats(
+      sectionData,
+      scoped,
+      includeNonStandard,
+      section,
+      details,
+      depositRankMetric,
+      mortgageRateMetric,
+    );
+    const statsMs = now() - at;
+    at = now();
+    const ranked = sortRows(
+      visible,
+      'rate',
+      section,
+      depositRankMetric,
+      mortgageRateMetric,
+    ).slice(0, 25);
+    const rankMs = now() - at;
+    return {
+      scopeMs,
+      filterMs,
+      hierarchyMs,
+      statsMs,
+      rankMs,
+      rows: rows.length,
+      visibleRows: visible.length,
+      childNodes: children.length,
+      rankedRows: ranked.length,
+      statsCount: stats.count,
+    };
+  };
+
+  let error: string | undefined;
+  let first: ReturnType<typeof runModel> | null = null;
+  let repeat: ReturnType<typeof runModel> | null = null;
+  try {
+    assertSessionActive(watchdog);
+    first = runModel();
+    await nextFrame();
+    assertSessionActive(watchdog);
+    repeat = runModel();
+    await nextFrame();
+  } catch (caught) {
+    rethrowAuditControl(caught);
+    error = formatAuditError(caught);
+  }
+  const responsiveness = monitor.metricsSince(responsivenessAt);
+  const phaseMaximum = Math.max(
+    0,
+    ...[first, repeat].flatMap((sample) => sample
+      ? [sample.scopeMs, sample.filterMs, sample.hierarchyMs, sample.statsMs, sample.rankMs]
+      : []),
+  );
+  return {
+    id: `section-model-${section.toLowerCase()}`,
+    label: `${section} selector and hierarchy model`,
+    kind: 'data',
+    status: error
+      ? 'fail'
+      : scoreLatency(phaseMaximum, 100, 500),
+    durationMs: roundMetric(now() - started),
+    metrics: {
+      section,
+      rows: first?.rows ?? 0,
+      visibleRows: first?.visibleRows ?? 0,
+      childNodes: first?.childNodes ?? 0,
+      rankedRows: first?.rankedRows ?? 0,
+      statsCount: first?.statsCount ?? 0,
+      firstScopeMs: roundMetric(first?.scopeMs ?? 0),
+      firstFilterMs: roundMetric(first?.filterMs ?? 0),
+      firstHierarchyMs: roundMetric(first?.hierarchyMs ?? 0),
+      firstStatsMs: roundMetric(first?.statsMs ?? 0),
+      firstRankMs: roundMetric(first?.rankMs ?? 0),
+      repeatScopeMs: roundMetric(repeat?.scopeMs ?? 0),
+      repeatFilterMs: roundMetric(repeat?.filterMs ?? 0),
+      repeatHierarchyMs: roundMetric(repeat?.hierarchyMs ?? 0),
+      repeatStatsMs: roundMetric(repeat?.statsMs ?? 0),
+      repeatRankMs: roundMetric(repeat?.rankMs ?? 0),
+      responsivenessClassification: 'recorded-not-scored-benchmark-self-work',
+      ...responsivenessRecord(responsiveness),
+    },
+    ...(error ? { error, trace: captureAuditTrace(`${section} section model failed`) } : {}),
+  };
+}
+
+async function runLogIoCheck(
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+): Promise<AuditCheck> {
+  const started = now();
+  const responsivenessAt = monitor.snapshot();
+  let flushMs = 0;
+  let readMs = 0;
+  let bytes = 0;
+  let error: string | undefined;
+  try {
+    assertSessionActive(watchdog);
+    let at = now();
+    await debugLog.flushToFile();
+    flushMs = now() - at;
+    assertSessionActive(watchdog);
+    at = now();
+    const complete = await debugLog.readCompleteText();
+    readMs = now() - at;
+    bytes = new TextEncoder().encode(complete).length;
+  } catch (caught) {
+    rethrowAuditControl(caught);
+    error = formatAuditError(caught);
+  }
+  const responsiveness = monitor.metricsSince(responsivenessAt);
+  return {
+    id: 'debug-log-io',
+    label: 'Complete debug-log persistence',
+    kind: 'storage',
+    status: error
+      ? 'fail'
+      : worstStatus(
+          scoreLatency(flushMs, 100, 500),
+          scoreLatency(readMs, 100, 500),
+          responsivenessStatus(responsiveness),
+        ),
+    durationMs: roundMetric(now() - started),
+    metrics: {
+      bytes,
+      flushMs: roundMetric(flushMs),
+      readMs: roundMetric(readMs),
+      ...responsivenessRecord(responsiveness),
+    },
+    ...(error ? { error, trace: captureAuditTrace('debug log persistence failed') } : {}),
+  };
+}
+
+async function runUpdateReadinessCheck(
+  app: AuditAppIdentity,
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+): Promise<AuditCheck> {
+  const started = now();
+  const responsivenessAt = monitor.snapshot();
+  const installed = { version: app.appVersion, buildNumber: app.buildVersion };
+  const download = getApkDownloadSnapshot();
+  if (Platform.OS !== 'android') {
+    return {
+      id: 'update-readiness',
+      label: 'Android update readiness',
+      kind: 'update',
+      status: 'skipped',
+      durationMs: roundMetric(now() - started),
+      metrics: { reason: 'Android-only', installedVersion: installed.version, installedBuild: installed.buildNumber },
+    };
+  }
+  let result: Awaited<ReturnType<typeof checkForAppUpdate>> | null = null;
+  let error: string | undefined;
+  try {
+    assertSessionActive(watchdog);
+    result = await timeoutAfter(checkForAppUpdate(), NETWORK_TIMEOUT_MS, 'Update manifest check');
+    assertSessionActive(watchdog);
+    if (result.status === 'error') error = result.message;
+  } catch (caught) {
+    rethrowAuditControl(caught);
+    error = formatAuditError(caught);
+  }
+  const durationMs = now() - started;
+  const responsiveness = monitor.metricsSince(responsivenessAt);
+  const remote = result && result.status !== 'error' ? result.remote : null;
+  const compatibilityStatus: AuditCheckStatus = result?.status === 'incompatible' ? 'warn' : 'pass';
+  const manifestContentStatus: AuditCheckStatus = remote &&
+    remote.package_name === Application.applicationId &&
+    !!remote.sha256 &&
+    (remote.bytes ?? 0) > 0
+    ? 'pass'
+    : 'fail';
+  return {
+    id: 'update-readiness',
+    label: 'Android update manifest and local readiness',
+    kind: 'update',
+    status: error
+      ? 'fail'
+      : worstStatus(compatibilityStatus, manifestContentStatus),
+    durationMs: roundMetric(durationMs),
+    metrics: {
+      installedVersion: installed.version,
+      installedBuild: installed.buildNumber,
+      checkStatus: result?.status ?? 'unknown',
+      compatibilityMessage: result?.status === 'incompatible' ? result.message : null,
+      remoteVersion: remote?.version ?? null,
+      remoteBuild: remote?.build_number ?? null,
+      manifestBytes: remote?.bytes ?? null,
+      manifestHasSha256: !!remote?.sha256,
+      installedApplicationId: Application.applicationId ?? null,
+      manifestPackageMatches: remote?.package_name === Application.applicationId,
+      durationMayUseTtlCache: true,
+      durationScoredAsNetworkLatency: false,
+      downloadPhase: download.phase,
+      downloadedBytes: download.bytesWritten,
+      downloadTotalBytes: download.totalBytes,
+      cachedBuild: download.buildNumber,
+      cachedReady: download.phase === 'ready' && !!download.localUri,
+      ...responsivenessRecord(responsiveness),
+    },
+    ...(error ? { error, trace: captureAuditTrace('Android update readiness failed') } : {}),
   };
 }
 
@@ -885,22 +1152,26 @@ async function waitForJourneyData(
 
 async function runJourney(
   journey: AuditJourney,
+  iteration: JourneyIteration,
   currentPath: () => string,
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   datasetRevision: AuditDatasetRevision,
 ): Promise<AuditCheck> {
-  const trace = captureAuditTrace(`route journey ${journey.id}`);
   const started = now();
   if (!journey.href) {
     return {
-      id: `journey-${journey.id}`,
-      label: journey.label,
+      id: `journey-${journey.id}-${iteration}`,
+      label: `${journey.label} (${iteration})`,
       kind: 'journey',
       status: 'skipped',
       durationMs: roundMetric(now() - started),
-      metrics: { reason: journey.skipReason ?? 'Route unavailable' },
-      trace,
+      metrics: {
+        reason: journey.skipReason ?? 'Route unavailable',
+        journeyId: journey.id,
+        journeyLabel: journey.label,
+        iteration,
+      },
     };
   }
 
@@ -1044,12 +1315,15 @@ async function runJourney(
         backContractStatus,
       );
   return {
-    id: `journey-${journey.id}`,
-    label: journey.label,
+    id: `journey-${journey.id}-${iteration}`,
+    label: `${journey.label} (${iteration})`,
     kind: 'journey',
     status,
     durationMs: roundMetric(now() - started),
     metrics: {
+      journeyId: journey.id,
+      journeyLabel: journey.label,
+      iteration,
       expectedPath: journey.expectedPath,
       navigationKind: journey.navigationKind,
       forwardMs: roundMetric(forwardMs),
@@ -1072,8 +1346,9 @@ async function runJourney(
       ...responsivenessRecord(backgroundResponsiveness, 'background'),
       ...responsivenessRecord(backResponsiveness, 'back'),
     },
-    trace,
-    ...(routeError ? { error: routeError } : {}),
+    ...(routeError
+      ? { error: routeError, trace: captureAuditTrace(`route journey ${journey.id} ${iteration} failed`) }
+      : {}),
   };
 }
 
@@ -1103,6 +1378,7 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
+      const app = installedAuditIdentity();
       const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
       const originalStore = useStore.getState();
       const originalActiveSection = originalStore.activeSection;
@@ -1113,7 +1389,7 @@ export function PerformanceAuditRunner() {
         originalStore.core,
         originalStore.prefs.interests,
       );
-      let total = BENCHMARK_CHECKS + journeys.length;
+      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
@@ -1143,7 +1419,7 @@ export function PerformanceAuditRunner() {
       const record = async (check: AuditCheck) => {
         assertSessionActive(watchdog);
         checks.push(check);
-        logAuditCheck(sessionId, check);
+        logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
         await awaitStoredCheckFlush();
         watchdog.recordStoredCheck();
@@ -1171,7 +1447,7 @@ export function PerformanceAuditRunner() {
           initialStore.core,
           initialStore.prefs.interests,
         );
-        total = BENCHMARK_CHECKS + journeys.length;
+        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length + journeys.length * 2;
         const datasetRevision = captureDatasetRevision();
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(
@@ -1179,7 +1455,7 @@ export function PerformanceAuditRunner() {
           total,
           'Capturing device and app state',
         );
-        logAuditEvent({
+        logAuditEvent(app, {
           kind: 'start',
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
@@ -1190,10 +1466,12 @@ export function PerformanceAuditRunner() {
           storedCheckCount: watchdog.storedCheckCount,
           lastStoredCheckAt,
           datasetRevision,
-          trace: captureAuditTrace('performance audit start'),
         });
+        // Keep start logging outside the first measured phase.
+        await debugLog.flushToFile();
 
         const environment = await collectEnvironment(
+          app,
           dimensions.width,
           dimensions.height,
           dimensions.fontScale,
@@ -1205,29 +1483,42 @@ export function PerformanceAuditRunner() {
         await record(await runRuntimeCheck(monitor, watchdog));
 
         for (const journey of journeys) {
+          for (const iteration of ['cold', 'warm'] as const) {
+            assertSessionActive(watchdog);
+            assertDatasetRevision(datasetRevision);
+            updatePerformanceAuditProgress(
+              completed,
+              total,
+              `Opening ${journey.label} (${iteration}), then going back`,
+            );
+            logAuditEvent(app, {
+              kind: 'journey-start',
+              sessionId,
+              id: journey.id,
+              label: journey.label,
+              iteration,
+            });
+            // Persist the marker before timing starts so audit bookkeeping does
+            // not wake up during the measured navigation transition.
+            await debugLog.flushToFile();
+            await record(
+              await runJourney(
+                journey,
+                iteration,
+                () => pathnameRef.current,
+                monitor,
+                watchdog,
+                datasetRevision,
+              ),
+            );
+          }
+        }
+
+        for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
-          updatePerformanceAuditProgress(
-            completed,
-            total,
-            `Opening ${journey.label}, then going back`,
-          );
-          logAuditEvent({
-            kind: 'journey-start',
-            sessionId,
-            id: journey.id,
-            label: journey.label,
-            trace: captureAuditTrace(`journey start ${journey.id}`),
-          });
-          await record(
-            await runJourney(
-              journey,
-              () => pathnameRef.current,
-              monitor,
-              watchdog,
-              datasetRevision,
-            ),
-          );
+          updatePerformanceAuditProgress(completed, total, `Benchmarking ${section} data models`);
+          await record(await runSectionModelCheck(section, monitor, watchdog));
         }
 
         assertSessionActive(watchdog);
@@ -1239,6 +1530,10 @@ export function PerformanceAuditRunner() {
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing log file storage');
         await record(await runFileSystemCheck(sessionId, monitor, watchdog));
+
+        assertSessionActive(watchdog);
+        updatePerformanceAuditProgress(completed, total, 'Reading the complete diagnostic log');
+        await record(await runLogIoCheck(monitor, watchdog));
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
@@ -1253,32 +1548,81 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
+        updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
+        await record(await runUpdateReadinessCheck(app, monitor, watchdog));
+        assertSessionActive(watchdog);
+        assertDatasetRevision(datasetRevision);
+
         const finishedAt = new Date().toISOString();
+        const summary = summarizePerformanceAudit(checks);
         const report: PerformanceAuditReport = {
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
           finishedAt,
           durationMs: Date.now() - startedMs,
+          app,
           watchdog: {
             hangTimeoutMs: watchdog.hangTimeoutMs,
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
           },
           environment,
-          summary: summarizePerformanceAudit(checks),
+          summary,
           checks,
+          routeAggregates: aggregateRepeatedJourneys(checks),
           limitations: [
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
-            'The journey exercises every steady-state app destination plus forward/back navigation; it does not submit forms, change preferences, or mutate favourites.',
+            'Routes are repeated first-pass then warm within this audit session and exercise real mounted data, forward navigation and back navigation. "Cold" does not mean a cold app process: disk, store and module caches may already be warm. The audit does not type into forms, change preferences, install updates or mutate favourites.',
+            'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
+            'Update readiness validates manifest content/compatibility and observes existing download state; it never downloads an APK or launches the Android installer. Its duration may come from the one-minute update-check cache and is not classified as network latency.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             environment.diagnosticsUploadEnabled
               ? 'A bounded, deidentified summary is submitted through Crashlytics. The complete report and tracebacks remain only in the local debug log unless explicitly exported.'
               : 'Automatic submission is disabled. The complete report and tracebacks remain in the local debug log unless explicitly exported.',
           ],
         };
-        logAuditEvent({ kind: 'report', sessionId, report });
+        const summaryMarker = [
+          'PERFORMANCE_AUDIT_SUMMARY',
+          `schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION}`,
+          `session=${sessionId}`,
+          `app_version=${app.appVersion}`,
+          `build_version=${app.buildVersion}`,
+          `overall=${summary.overall}`,
+          `checks=${checks.length}`,
+          `pass=${summary.pass}`,
+          `warn=${summary.warn}`,
+          `fail=${summary.fail}`,
+          `slowest=${summary.slowestCheckId ?? 'none'}`,
+          `slowest_ms=${summary.slowestCheckMs}`,
+        ].join(' ');
+        let completeReportStored = false;
+        try {
+          await debugLog.storePerformanceAudit(summaryMarker, report);
+          completeReportStored = true;
+        } catch (storeError) {
+          const message = formatAuditError(storeError);
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `durable report snapshot unavailable; writing complete report to log: ${message}`,
+          );
+          logAuditEvent(app, {
+            kind: 'report-fallback',
+            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+            sessionId,
+            report,
+          });
+        }
+        logAuditEvent(app, {
+          kind: 'report',
+          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+          sessionId,
+          summary,
+          routeAggregates: report.routeAggregates,
+          completeReportStored,
+        });
+        debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
         reportPerformanceAudit(report);
         await debugLog.flushToFile();
         updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
@@ -1286,11 +1630,12 @@ export function PerformanceAuditRunner() {
         try {
           const completeLog = await debugLog.readCompleteText();
           const result = await uploadDebugLog(
-            formatLogUploadBody(completeLog, {
-              app_version: environment.appVersion,
-              build_version: environment.buildVersion,
-              audit_session: sessionId,
-            }),
+            formatVersionedLogExport(
+              completeLog,
+              environment.appVersion,
+              environment.buildVersion,
+              { audit_session: sessionId },
+            ),
           );
           if (result.truncated || result.clientTruncated) {
             throw new Error('The upload service did not accept the complete log.');
@@ -1316,7 +1661,7 @@ export function PerformanceAuditRunner() {
           recoveryError = formatAuditError(recoveryCaught);
         }
         if (caught instanceof AuditCancelledError) {
-          logAuditEvent({
+          logAuditEvent(app, {
             kind: 'cancelled',
             sessionId,
             completed,
@@ -1339,6 +1684,7 @@ export function PerformanceAuditRunner() {
             JSON.stringify({
               kind: 'fatal',
               sessionId,
+              app,
               error,
               hangTimeoutMs: watchdog.hangTimeoutMs,
               storedCheckCount: watchdog.storedCheckCount,
