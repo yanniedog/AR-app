@@ -195,6 +195,51 @@ describe('PerformanceAuditReadinessRegistry', () => {
     );
   });
 
+  it('preserves completed action evidence across same-id remounts', async () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-remount-action');
+    let midActionRemount: ReturnType<typeof registry.registerSurface> = null;
+    const first = registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: {
+        'browse.category.first': () => {
+          // Simulate navigation that unmounts then remounts the same surface id
+          // before invokeAction can stamp the original MutableSurface.
+          registry.unregisterSurface(first!);
+          midActionRemount = registry.registerSurface({
+            id: 'browse.hierarchy',
+            probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+            actions: { 'browse.category.first': () => undefined },
+          });
+        },
+      },
+    });
+    expect(first).not.toBeNull();
+
+    await expect(registry.invokeAction('browse.hierarchy', 'browse.category.first'))
+      .resolves.toBeUndefined();
+    expect(midActionRemount).not.toBeNull();
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      id: 'browse.hierarchy',
+      actionRevision: 1,
+      lastCompletedAction: 'browse.category.first',
+    });
+
+    // Remount after completion must also keep the durable action proof.
+    expect(registry.unregisterSurface(midActionRemount!)).toBe(true);
+    const afterCompletion = registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: { 'browse.category.first': () => undefined },
+    });
+    expect(afterCompletion).not.toBeNull();
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      actionRevision: 1,
+      lastCompletedAction: 'browse.category.first',
+    });
+  });
+
   it('waits for the exact requested destination surface', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
