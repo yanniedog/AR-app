@@ -74,17 +74,20 @@ export async function installDownloadedApk(localUri: string): Promise<void> {
     throw new Error('APK install is Android-only');
   }
 
+  debugLog.info('app-update', 'install permission check begin');
   const allowed = await ensureInstallPermission();
   if (!allowed) {
-    throw new Error('Allow app updates in system settings, then try again');
+    debugLog.warn('app-update', 'install paused: Android install-source permission not granted');
+    throw new Error('Android did not allow this app to install the update. Tap Install to try again.');
   }
 
   const contentUri = await FileSystem.getContentUriAsync(localUri);
-  debugLog.info('app-update', 'launching package installer');
+  debugLog.info('app-update', 'install permission ready; launching Android package installer');
 
   await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
     data: contentUri,
     flags: 1,
     type: 'application/vnd.android.package-archive',
   });
+  debugLog.info('app-update', 'Android package installer returned to app');
 }

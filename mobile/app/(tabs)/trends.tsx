@@ -92,9 +92,11 @@ export default function Trends() {
     core?.run_date && deferredCharts.revision === core.run_date
       ? deferredCharts.stage
       : 0;
-  const outlookReady = deferredChartStage >= 1;
-  const rbaChartReady = deferredChartStage >= 2;
-  const marketExplorerReady = deferredChartStage >= 3;
+  const moversReady = deferredChartStage >= 1;
+  const outlookReady = deferredChartStage >= 2;
+  const rbaChartReady = deferredChartStage >= 3;
+  const marketExplorerReady = deferredChartStage >= 4;
+  const marketSnapshotsReady = deferredChartStage >= 5;
   // Scrubbed/pinned history date — rewinds the lender list below the chart.
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [explorerMode, setExplorerMode] = useState<HistoryViewMode>('edge');
@@ -129,7 +131,7 @@ export default function Trends() {
     // blur/refocus so chart-local range and selection state is not discarded.
     if (existing.revision !== revision) updateDeferredCharts({ revision, stage: 0 });
     void (async () => {
-      for (let stage = firstStage; stage <= 3; stage += 1) {
+      for (let stage = firstStage; stage <= 5; stage += 1) {
         await yieldToUiFrames(2);
         if (!active) return;
         updateDeferredCharts({ revision, stage });
@@ -170,6 +172,7 @@ export default function Trends() {
 
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+  const bankMoveSections = useMemo(() => [activeSection], [activeSection]);
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
     if (!marketExplorerReady) return null;
@@ -262,7 +265,7 @@ export default function Trends() {
   const useCalendarDecisions = calendarDecisions.length > 0;
   const marketSnapshots = useMemo(() => {
     void suitabilityRevision;
-    if (!core) return [];
+    if (!core || !marketSnapshotsReady) return [];
     return interestSections.flatMap((key) => {
       const data = core.sections[key];
       if (!data) return [];
@@ -282,7 +285,7 @@ export default function Trends() {
         : null;
       return [{ key, stats, bestLabel: rateValueLabel(key, 'best'), bestRate: formatRankedFraction(rankedBest) }];
     });
-  }, [core, depositRankMetric, interestSections, mortgageRateMetric, suitabilityRevision]);
+  }, [core, depositRankMetric, interestSections, marketSnapshotsReady, mortgageRateMetric, suitabilityRevision]);
 
   if (!core) return null;
   const currentRba = core.rba.at(-1);
@@ -313,7 +316,7 @@ export default function Trends() {
             <BankMovesFeed
               payload={bankInsights}
               error={bankInsightsError}
-              sections={[activeSection]}
+              sections={bankMoveSections}
               limit={8}
             />
             {bankInsightsError && !bankInsights ? (
@@ -331,13 +334,15 @@ export default function Trends() {
               </Row>
             ) : null}
           </Card>
-          {bankInsights ? (
+          {bankInsights && moversReady ? (
             <Card style={{ marginBottom: 16 }}>
               <AppText variant="h3" style={{ marginBottom: 10 }}>
                 Movers
               </AppText>
               <MoversLeaderboard payload={bankInsights} section={activeSection} />
             </Card>
+          ) : bankInsights ? (
+            <DeferredChartPlaceholder label="Preparing lender movers" />
           ) : null}
         </>
       ) : (
@@ -539,7 +544,9 @@ export default function Trends() {
       <AppText variant="h3" style={{ marginBottom: 10 }}>
         Market snapshot
       </AppText>
-      {marketSnapshots.map(({ key, stats, bestLabel, bestRate }) => {
+      {!marketSnapshotsReady ? (
+        <DeferredChartPlaceholder label="Preparing market snapshot" />
+      ) : marketSnapshots.map(({ key, stats, bestLabel, bestRate }) => {
         return (
           <Pressable
             key={key}

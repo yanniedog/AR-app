@@ -73,7 +73,7 @@ function Insight({
  * It contrasts the best rate with the median advertised rate row. The latter is
  * not provider-weighted, so the UI deliberately calls this a spread, not savings.
  */
-export function Ribbon({
+export const Ribbon = React.memo(function Ribbon({
   stats,
   section,
   rbaRate,
@@ -124,4 +124,4 @@ export function Ribbon({
       ) : null}
     </View>
   );
-}
+});

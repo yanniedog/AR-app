@@ -8,8 +8,8 @@ import {
   checkForAppUpdate,
   ensureApkBackgroundDownload,
   getApkDownloadPercent,
-  installReadyApkUpdate,
   subscribeApkDownload,
+  upgradeFromBackgroundDownload,
   type ApkDownloadSnapshot,
   type ApkManifest,
   type UpdateCheckResult,
@@ -72,9 +72,9 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
           if (cancelled) return;
           setResult(r);
           availableManifest = r.status === 'available' ? r.remote : null;
-          // Automatic downloads are Wi-Fi-only. Cellular downloads require an
-          // explicit size-labelled confirmation in Settings.
-          if (r.status === 'available' && wifiOnly) {
+          // The saved network preference is the user's standing consent. Keep
+          // the update moving without another per-release confirmation.
+          if (r.status === 'available') {
             void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
               // ensureApkBackgroundDownload persists phase=error for Retry.
             });
@@ -133,27 +133,9 @@ export function AppUpdateBanner({
 
   const onUpgrade = async () => {
     if (busy) return;
-    if ((phase === 'error' || phase === 'waiting' || phase === 'cancelled') && !wifiOnly) {
-      const size = remote.bytes
-        ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
-        : 'an unknown size';
-      Alert.alert('Download over cellular?', `This verified APK is ${size}. Carrier data charges may apply.`, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Download',
-          onPress: () => void ensureApkBackgroundDownload(remote, { wifiOnly: false, force: true })
-            .catch((error) => Alert.alert('Update failed', error instanceof Error ? error.message : String(error))),
-        },
-      ]);
-      return;
-    }
     setBusy(true);
     try {
-      if (phase === 'error' || phase === 'waiting' || phase === 'cancelled') {
-        await ensureApkBackgroundDownload(remote, { wifiOnly, force: true });
-        return;
-      }
-      await installReadyApkUpdate(remote);
+      await upgradeFromBackgroundDownload(remote, { wifiOnly });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       Alert.alert('Update failed', message);
@@ -173,16 +155,19 @@ export function AppUpdateBanner({
         paddingTop: insets.top + 6,
         paddingBottom: 8,
       }}
-      accessible
-      accessibilityRole="alert"
-      accessibilityLabel={copy.title}
     >
       <Ionicons
         name={phase === 'ready' ? 'checkmark-circle-outline' : 'cloud-download-outline'}
         size={16}
         color={theme.colors.primary}
       />
-      <AppText variant="small" weight="600" numberOfLines={1} style={{ flex: 1 }}>
+      <AppText
+        variant="small"
+        weight="600"
+        numberOfLines={1}
+        accessibilityLiveRegion="polite"
+        style={{ flex: 1 }}
+      >
         {copy.title}
       </AppText>
       <Pressable
@@ -190,10 +175,11 @@ export function AppUpdateBanner({
         disabled={!copy.actionEnabled || busy}
         accessibilityRole="button"
         accessibilityLabel={
-          phase === 'ready' ? 'Upgrade from downloaded update' : copy.actionLabel
+          phase === 'ready' ? 'Install verified update' : copy.actionLabel
         }
         accessibilityState={{ disabled: !copy.actionEnabled || busy }}
         hitSlop={8}
+        style={{ minHeight: 44, justifyContent: 'center' }}
       >
         <AppText
           variant="small"

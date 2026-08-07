@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, AppState, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { AppText, Button, Row } from '../ui';
 import { useStore } from '../../data/store';
@@ -15,11 +15,6 @@ import {
   type UpdateCheckResult,
   type VersionChangelogSummary,
 } from '../../lib/appUpdate';
-import {
-  canInstallApkUpdates,
-  ensureInstallPermission,
-  openInstallPermissionSettings,
-} from '../../lib/installPermission';
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 
@@ -33,24 +28,11 @@ export function AppUpdateSection() {
   const [checking, setChecking] = useState(true);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [installAllowed, setInstallAllowed] = useState<boolean | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
     ...IDLE_APK_DOWNLOAD,
   }));
 
   useEffect(() => subscribeApkDownload(setDownload), []);
-
-  const refreshInstallPermission = useCallback(async () => {
-    setInstallAllowed(await canInstallApkUpdates());
-  }, []);
-
-  useEffect(() => {
-    void refreshInstallPermission();
-    const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void refreshInstallPermission();
-    });
-    return () => sub.remove();
-  }, [refreshInstallPermission]);
 
   const onCheck = useCallback(async () => {
     setChecking(true);
@@ -69,11 +51,9 @@ export function AppUpdateSection() {
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
-        if (wifiOnly) {
-          void ensureApkBackgroundDownload(result.remote, { wifiOnly: true }).catch((err) => {
-            setError(err instanceof Error ? err.message : String(err));
-          });
-        }
+        void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
+          setError(err instanceof Error ? err.message : String(err));
+        });
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -91,8 +71,6 @@ export function AppUpdateSection() {
 
   const performUpgrade = useCallback(async () => {
     if (!remote) return;
-    const allowed = await ensureInstallPermission();
-    if (!allowed) return;
     setUpgrading(true);
     setError(null);
     try {
@@ -107,23 +85,8 @@ export function AppUpdateSection() {
   }, [remote, wifiOnly]);
 
   const onUpgrade = useCallback(() => {
-    if (!remote) return;
-    if (wifiOnly || download.phase === 'ready') {
-      void performUpgrade();
-      return;
-    }
-    const size = remote.bytes
-      ? `${(remote.bytes / (1024 * 1024)).toFixed(1)} MB`
-      : 'an unknown size';
-    Alert.alert(
-      'Download over cellular?',
-      `This verified APK is ${size}. Carrier data charges may apply.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Download', onPress: () => void performUpgrade() },
-      ],
-    );
-  }, [download.phase, performUpgrade, remote, wifiOnly]);
+    void performUpgrade();
+  }, [performUpgrade]);
 
   if (Platform.OS !== 'android') {
     return null;
@@ -144,8 +107,8 @@ export function AppUpdateSection() {
       ? `${installed.version} (${installed.buildNumber})`
       : '—';
   const statusValue = updateAvailable
-    ? phase === 'ready'
-      ? `Ready to upgrade · ${latestLabel}`
+      ? phase === 'ready'
+      ? `Verified and ready to install · ${latestLabel}`
       : phase === 'verifying'
         ? `Verifying download · ${latestLabel}`
         : phase === 'retrying'
@@ -169,10 +132,12 @@ export function AppUpdateSection() {
 
   const upgradeTitle =
     phase === 'downloading' || phase === 'retrying' || phase === 'verifying'
-      ? 'Upgrade when ready'
+        ? 'Install when ready'
       : phase === 'waiting' || phase === 'error' || phase === 'cancelled'
-        ? 'Retry download'
-        : 'Upgrade';
+        ? 'Resume update'
+        : phase === 'ready'
+          ? 'Install update'
+          : 'Download & install';
 
   return (
     <Section title="App update">
@@ -202,23 +167,9 @@ export function AppUpdateSection() {
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
           {wifiOnly
             ? 'The verified APK downloads automatically on Wi-Fi, including in the background.'
-            : 'Cellular download starts only after you confirm the displayed APK size.'}
+            : 'Your saved preference allows this verified APK to download automatically on Wi-Fi or mobile data.'}
+          {' '}When it is ready, Install opens any one-time Android permission and resumes automatically when you return.
         </AppText>
-      ) : null}
-
-      {installAllowed === false ? (
-        <>
-          <SettingsGap size={8} />
-          <Button
-            title="Allow app updates"
-            icon="settings-outline"
-            variant="secondary"
-            onPress={() => void openInstallPermissionSettings()}
-          />
-          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-            Android needs permission once to install updates from this app.
-          </AppText>
-        </>
       ) : null}
 
       {updateAvailable ? (

@@ -50,6 +50,55 @@ export function scheduleAfterInteractions(work: () => void): () => void {
 }
 
 /**
+ * Schedule a state change that would trigger expensive screen derivations after
+ * a navigation transition has had time to paint. Navigation animations are not
+ * consistently registered with InteractionManager on every Expo/Android
+ * combination, so use a longer bounded fallback than ordinary background work.
+ */
+export function scheduleAfterNavigation(
+  work: () => void,
+  fallbackMs: number = 500,
+): () => void {
+  let cancelled = false;
+  let settled = false;
+  let interactionsDone = false;
+  let minimumDelayDone = false;
+  let minimumDelay: ReturnType<typeof setTimeout> | null = null;
+  let fallback: ReturnType<typeof setTimeout> | null = null;
+  let handle: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
+  const finish = () => {
+    if (cancelled || settled) return;
+    settled = true;
+    if (minimumDelay) clearTimeout(minimumDelay);
+    if (fallback) clearTimeout(fallback);
+    handle?.cancel?.();
+    work();
+  };
+  const finishWhenReady = () => {
+    if (interactionsDone && minimumDelayDone) finish();
+  };
+  minimumDelay = armTimeout(Math.min(180, Math.max(0, fallbackMs)), () => {
+    minimumDelayDone = true;
+    finishWhenReady();
+  });
+  try {
+    handle = InteractionManager.runAfterInteractions(() => {
+      interactionsDone = true;
+      finishWhenReady();
+    });
+  } catch {
+    // The timeout still guarantees the state eventually catches up.
+  }
+  if (!settled) fallback = armTimeout(Math.max(0, fallbackMs), finish);
+  return () => {
+    cancelled = true;
+    if (minimumDelay) clearTimeout(minimumDelay);
+    if (fallback) clearTimeout(fallback);
+    handle?.cancel?.();
+  };
+}
+
+/**
  * Yield the JS thread so React can paint / handle touches before the next
  * heavy sync burst (large JSON.parse, hierarchy rebuild, file IO, etc.).
  *

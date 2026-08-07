@@ -3,6 +3,7 @@ import { InteractionManager } from 'react-native';
 import {
   parseJsonHeavy,
   scheduleAfterInteractions,
+  scheduleAfterNavigation,
   yieldToUi,
   yieldToUiFrames,
 } from '../src/lib/yieldToUi';
@@ -81,6 +82,39 @@ describe('yieldToUi', () => {
     scheduleAfterInteractions(work);
     expect(work).not.toHaveBeenCalled();
     jest.advanceTimersByTime(48);
+
+    expect(work).toHaveBeenCalledTimes(1);
+    jest.useRealTimers();
+  });
+
+  it('uses a navigation-sized fallback without running cancelled work', () => {
+    jest.useFakeTimers();
+    const cancel = jest.fn();
+    runSpy.mockImplementationOnce((() => (
+      { cancel, then: jest.fn(), done: jest.fn() }
+    )) as typeof InteractionManager.runAfterInteractions);
+    const work = jest.fn();
+
+    const cleanup = scheduleAfterNavigation(work, 500);
+    jest.advanceTimersByTime(499);
+    expect(work).not.toHaveBeenCalled();
+    cleanup();
+    jest.advanceTimersByTime(1);
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(work).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
+  it('does not run navigation work immediately when interactions are already idle', () => {
+    jest.useFakeTimers();
+    const work = jest.fn();
+
+    scheduleAfterNavigation(work);
+    expect(work).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(179);
+    expect(work).not.toHaveBeenCalled();
+    jest.advanceTimersByTime(1);
 
     expect(work).toHaveBeenCalledTimes(1);
     jest.useRealTimers();

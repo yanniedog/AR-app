@@ -1,4 +1,4 @@
-import { useScrollToTop } from '@react-navigation/native';
+import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
@@ -25,12 +25,14 @@ import { rowsUnder } from '../../src/data/taxonomy';
 import { useStore } from '../../src/data/store';
 import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { openBank, openProduct } from '../../src/lib/nav';
+import { scheduleAfterNavigation } from '../../src/lib/yieldToUi';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 
 export default function Home() {
   const theme = useTheme();
+  const isFocused = useIsFocused();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const refreshing = useStore((s) => s.refreshing);
@@ -41,7 +43,7 @@ export default function Home() {
   const offline = useStore((s) => s.offline);
   const pendingIngestRunDate = useStore((s) => s.pendingIngestRunDate);
   const interests = useStore((s) => s.prefs.interests);
-  const section = useStore((s) => s.activeSection);
+  const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -55,11 +57,27 @@ export default function Home() {
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
   const { scenario: userScenario } = useUserRateScenario();
   const filterPrepAttempts = useRef(0);
+  // Browse shares the preferred section with Home. Keep the last rendered Home
+  // model during a tab/back transition, then derive the new section after the
+  // navigation animation. This prevents thousands of rows of synchronous
+  // filtering/ranking from competing with the transition itself.
+  const [section, setRenderedSection] = useState(() =>
+    resolveInterestSection(interests, activeSection),
+  );
 
   useEffect(() => {
-    const resolved = resolveInterestSection(interests, section);
-    if (resolved !== section) setActiveSection(resolved);
-  }, [interests, section, setActiveSection]);
+    const resolved = resolveInterestSection(interests, activeSection);
+    if (resolved !== activeSection) setActiveSection(resolved);
+    if (!isFocused || resolved === section) return;
+    return scheduleAfterNavigation(() => setRenderedSection(resolved));
+  }, [activeSection, interests, isFocused, section, setActiveSection]);
+
+  const changeSection = useCallback((next: typeof section) => {
+    // A direct Home interaction should remain immediate; only cross-tab catch-up
+    // is deferred until navigation is idle.
+    setRenderedSection(next);
+    setActiveSection(next);
+  }, [setActiveSection]);
 
   const coreRevision = core ? `${core.run_date}:${coreSha}` : '';
   const filterReady = useMemo(() => {
@@ -373,7 +391,7 @@ export default function Home() {
       </Card>
 
       {sectionOptions.length > 1 ? (
-        <SegmentedControl options={sectionOptions} value={section} onChange={setActiveSection} />
+        <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
       ) : null}
 
       <SectionCrossfade section={section}>

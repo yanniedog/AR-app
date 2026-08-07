@@ -52,6 +52,20 @@ function checkDetail(check: AuditCheck): string {
   if (check.id === 'manifest-network') {
     return `${check.durationMs.toFixed(0)} ms · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
+  if (check.id.startsWith('section-model-')) {
+    return [
+      `Rows ${Number(check.metrics.rows ?? 0).toLocaleString()}`,
+      `Hierarchy ${Number(check.metrics.firstHierarchyMs ?? 0).toFixed(0)} ms`,
+      `Stats ${Number(check.metrics.firstStatsMs ?? 0).toFixed(0)} ms`,
+      `Rank ${Number(check.metrics.firstRankMs ?? 0).toFixed(0)} ms`,
+    ].join(' Â· ');
+  }
+  if (check.id === 'debug-log-io') {
+    return `Flush ${Number(check.metrics.flushMs ?? 0).toFixed(0)} ms Â· Read ${Number(check.metrics.readMs ?? 0).toFixed(0)} ms Â· ${Number(check.metrics.bytes ?? 0).toLocaleString()} bytes`;
+  }
+  if (check.id === 'update-readiness') {
+    return `${check.metrics.checkStatus ?? 'unknown'} Â· installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) Â· cache ${check.metrics.downloadPhase ?? 'unknown'}`;
+  }
   if (check.id === 'runtime-responsiveness') {
     return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · JS animation callback gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
   }
@@ -114,8 +128,9 @@ export default function PerformanceAuditScreen() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">Full responsiveness diagnosis</AppText>
         <AppText variant="small" color="textMuted">
-          One tap tests every screen plus responsiveness, storage, payload processing and network.
-          When complete, the current-session log uploads and its link is copied automatically.
+          One tap repeats every screen cold and warm, then tests section models, responsiveness,
+          storage, payload processing, network and Android update readiness. When complete, the
+          full on-disk log uploads and its link is copied automatically.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           The screen stays awake during visual checks; leaving the app cancels the run safely.
@@ -237,6 +252,21 @@ export default function PerformanceAuditScreen() {
                 : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
             </AppText>
           </Card>
+
+          <View style={{ gap: 8 }}>
+            <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
+              COLD VS WARM ROUTES
+            </AppText>
+            {report.routeAggregates.map((route) => (
+              <Card key={route.journeyId} style={{ gap: 4 }}>
+                <AppText variant="small" weight="700">{route.label}</AppText>
+                <AppText variant="tiny" color="textFaint">
+                  Open {route.coldForwardMs.toFixed(0)} â†’ {route.warmForwardMs.toFixed(0)} ms
+                  {' Â· '}Back {route.coldBackMs.toFixed(0)} â†’ {route.warmBackMs.toFixed(0)} ms
+                </AppText>
+              </Card>
+            ))}
+          </View>
 
           <View style={{ gap: 8 }}>
             <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>

@@ -4,6 +4,7 @@ import {
   apkDownloadTaskId,
   canAutoRetryApkDownload,
   downloadPercent,
+  hasTrustedReadyApkReceipt,
   isCachedApkReady,
   isApkDownloadStalled,
   isUserCancelledDownload,
@@ -82,8 +83,8 @@ describe('appUpdateDownloadLogic', () => {
 
   it('formats banner copy for download phases', () => {
     expect(updateBannerCopy('ready', '1.0.44', null)).toEqual({
-      title: 'Update ready — v1.0.44',
-      actionLabel: 'Upgrade',
+      title: 'Update verified and ready — v1.0.44',
+      actionLabel: 'Install',
       actionEnabled: true,
     });
     expect(updateBannerCopy('downloading', '1.0.44', 37).title).toContain('37%');
@@ -95,8 +96,62 @@ describe('appUpdateDownloadLogic', () => {
       actionEnabled: true,
     });
     expect(updateBannerCopy('waiting', '1.0.44', 93).title).toContain('waiting for Wi-Fi');
-    expect(updateBannerCopy('verifying', '1.0.44', 93).title).toContain('Verifying');
+    expect(updateBannerCopy('verifying', '1.0.44', 93).title).toContain('integrity');
     expect(updateBannerCopy('retrying', '1.0.44', 93).actionEnabled).toBe(false);
+    expect(updateBannerCopy('idle', '1.0.44', null)).toEqual({
+      title: 'Update available — v1.0.44',
+      actionLabel: 'Download & install',
+      actionEnabled: true,
+    });
+  });
+
+  it('reuses a full verification receipt only for the same ready private APK', () => {
+    const sha256 = 'a'.repeat(64);
+    const ready = {
+      ...IDLE_APK_DOWNLOAD,
+      phase: 'ready' as const,
+      buildNumber: '42',
+      sha256,
+      localUri: 'file:///docs/app-update-42.apk',
+      verifiedSha256: sha256,
+      verifiedBytes: 1234,
+      verifiedAt: '2026-08-07T00:00:00.000Z',
+    };
+    const manifest = { build_number: '42', sha256, bytes: 1234 };
+
+    expect(
+      hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1234, 'file:///docs/'),
+    ).toBe(true);
+    expect(
+      hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1233, 'file:///docs/'),
+    ).toBe(false);
+    expect(
+      hasTrustedReadyApkReceipt(
+        { ...ready, verifiedSha256: 'b'.repeat(64) },
+        manifest,
+        ready.localUri,
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
+    expect(
+      hasTrustedReadyApkReceipt(
+        ready,
+        manifest,
+        'content://downloads/app.apk',
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
+    expect(
+      hasTrustedReadyApkReceipt(
+        ready,
+        manifest,
+        'file:///cache/app-update-42.apk',
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
   });
 
   it('distinguishes an explicit native cancel from a generic downloader failure', () => {

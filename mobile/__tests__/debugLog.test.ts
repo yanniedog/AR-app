@@ -15,6 +15,7 @@ import {
   formatEntry,
   formatErrorTrace,
   formatLogUploadBody,
+  formatVersionedLogExport,
   formatLogDisplayTail,
   installGlobalErrorHandlers,
   parseLogLine,
@@ -151,6 +152,16 @@ describe('formatLogUploadBody', () => {
     );
     expect(body).not.toContain('legacy-user');
     expect(body).not.toContain('person@example.com');
+  });
+
+  it('puts the exact installed app version and build in every canonical export', () => {
+    const body = formatVersionedLogExport('log body', '1.2.3', '456', {
+      app_version: 'stale',
+      build_version: 'stale',
+    });
+    expect(body).toContain('app_version=1.2.3');
+    expect(body).toContain('build_version=456');
+    expect(body).not.toContain('stale');
   });
 });
 
@@ -461,6 +472,30 @@ describe('persistent log file', () => {
 
     expect(complete).toContain('token=[REDACTED]');
     expect(complete).not.toContain('old-secret');
+  });
+
+  it('includes the durable complete audit after the bounded ring has evicted its marker', async () => {
+    const marker = 'PERFORMANCE_AUDIT_SUMMARY schema=3 session=durable app_version=9.8.7 build_version=654';
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: 3,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'complete-audit-survived',
+    });
+    debugLog.info('perf-audit', marker);
+    const chunk = 'x'.repeat(8 * 1024);
+    for (let index = 0; index < Math.ceil(MAX_LOG_BYTES / chunk.length) + 10; index += 1) {
+      debugLog.info('noise', `${index}:${chunk}`);
+    }
+    expect(debugLog.getText()).not.toContain(marker);
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('newest bounded on-disk log');
+
+    const complete = await debugLog.readCompleteText();
+
+    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain(marker);
+    expect(complete).toContain('complete-audit-survived');
+    expect(complete).toContain('"appVersion":"9.8.7"');
+    expect(complete).toContain('"buildVersion":"654"');
   });
 
   it('clear deletes the persistent log file', async () => {

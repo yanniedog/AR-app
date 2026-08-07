@@ -9,6 +9,7 @@ import {
   parseCashRateTargetCsv,
   parseRbaSeriesCsv,
   preferNewerSeries,
+  resetEconomicOutlookRuntimeCacheForTests,
 } from '../src/data/economicOutlook';
 import { cache } from '../src/data/cache';
 
@@ -176,6 +177,7 @@ function fullOutlookCsv(fetchedAt = '2026-07-16T00:00:00.000Z') {
 }
 
 describe('economic outlook', () => {
+  beforeEach(() => resetEconomicOutlookRuntimeCacheForTests());
   afterEach(() => jest.restoreAllMocks());
 
   it('parses a named sparse RBA CSV series and publication date', () => {
@@ -266,6 +268,23 @@ describe('economic outlook', () => {
     expect(outlook.refreshErrors).toEqual(
       expect.arrayContaining([expect.stringContaining('ABS headline CPI')]),
     );
+  });
+
+  it('reuses a recent current model in memory on rapid screen refocus', async () => {
+    const readSpy = jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input) =>
+      mockCsvResponse(String(input)),
+    );
+
+    const first = await loadEconomicOutlook(true);
+    readSpy.mockClear();
+    fetchSpy.mockClear();
+    const second = await loadEconomicOutlook(false);
+
+    expect(second).toBe(first);
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('keeps cached ABS headline when refresh falls back to RBA on the same observation', async () => {

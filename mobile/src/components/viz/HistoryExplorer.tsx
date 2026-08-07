@@ -27,7 +27,7 @@ const WINDOW_OPTIONS: HistoryWindow[] = ['30D', '90D', '1Y', 'All'];
  * History explorer: four focused lenses over aggregate and per-bank history.
  * Calendar / spread read section aggregates; leaders / pulse read bank history.
  */
-export function HistoryExplorer({
+export const HistoryExplorer = React.memo(function HistoryExplorer({
   section,
   historyModel,
   insights,
@@ -196,4 +196,4 @@ export function HistoryExplorer({
       )}
     </View>
   );
-}
+});

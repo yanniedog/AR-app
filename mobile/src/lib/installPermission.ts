@@ -1,7 +1,7 @@
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as IntentLauncher from 'expo-intent-launcher';
-import { Alert, Linking, Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import { ANDROID_PACKAGE, debugLog } from './debugLog';
 
@@ -75,38 +75,25 @@ export async function openInstallPermissionSettings(): Promise<void> {
   await Linking.openSettings();
 }
 
-export function promptInstallPermissionSettings(
-  onOpenSettings?: () => void,
-): void {
-  Alert.alert(
-    'Allow app updates',
-    'Required to install updates from the app.',
-    [
-      { text: 'Not now', style: 'cancel' },
-      {
-        text: 'Open settings',
-        onPress: () => {
-          onOpenSettings?.();
-          void openInstallPermissionSettings();
-        },
-      },
-    ],
-  );
-}
-
 /**
- * Returns true when sideload install is allowed. When false, shows a one-shot prompt
- * and opens system settings (Android 8+ only). Not used during onboarding — Settings
- * App update section and the download flow call this before install.
+ * Returns true when sideload install is allowed. An explicit install request goes
+ * straight to Android's per-app setting, waits for the user to return, then checks
+ * again so installation can continue without another app tap.
  */
 export async function ensureInstallPermission(options?: {
-  prompt?: boolean;
+  openSettings?: boolean;
 }): Promise<boolean> {
   const state = await getInstallPermissionState();
   if (state !== 'required') return state === 'granted';
 
-  if (options?.prompt !== false) {
-    promptInstallPermissionSettings();
-  }
-  return false;
+  if (options?.openSettings === false) return false;
+
+  debugLog.info('install-permission', 'opening Android install-source settings');
+  await openInstallPermissionSettings();
+  const allowed = await canInstallApkUpdates();
+  debugLog.info(
+    'install-permission',
+    allowed ? 'install-source permission granted' : 'install-source permission not granted',
+  );
+  return allowed;
 }
