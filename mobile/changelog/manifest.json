@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-06T13:49:22.864Z",
+  "generated_at": "2026-08-07T08:58:50.606Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -538,6 +538,15 @@
         "Optimize Android release size and build speed (#127)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.91"
+    },
+    {
+      "version": "1.0.94",
+      "date": "2026-08-07",
+      "summaryBullets": [
+        "Fix APK verification blocking in-app updates (#129)",
+        "Fix mobile navigation performance stalls (#130)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.94"
     }
   ]
 }
