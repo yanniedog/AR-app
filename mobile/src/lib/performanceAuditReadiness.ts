@@ -153,6 +153,12 @@ interface MutableSurface {
 
 type Listener = () => void;
 
+/** Survives remounts of the same surface ID within one capture session. */
+interface DurableActionCompletion {
+  actionName: string;
+  actionRevision: number;
+}
+
 const systemClock: PerformanceAuditReadinessClock = {
   now: () => globalThis.performance?.now?.() ?? Date.now(),
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),
@@ -183,6 +189,13 @@ function actionsMap(
     if (name && typeof action === 'function') result.set(name, action);
   }
   return result;
+}
+
+function isUnavailableActionResult(result: unknown): boolean {
+  if (result == null || typeof result !== 'object') return false;
+  if (!('unavailableReason' in result)) return false;
+  const reason = (result as { unavailableReason?: unknown }).unavailableReason;
+  return typeof reason === 'string' && reason.trim().length > 0;
 }
 
 function mapsHaveSameActions(
@@ -272,6 +285,8 @@ export class PerformanceAuditReadinessRegistry {
   private generation = 0;
   private nextInstance = 1;
   private readonly surfaces = new Map<string, MutableSurface>();
+  /** Action proof keyed by surface ID; remounts must not erase completed-step evidence. */
+  private readonly actionCompletions = new Map<string, DurableActionCompletion>();
   private readonly listeners = new Set<Listener>();
   private readonly captureListeners = new Set<Listener>();
 
@@ -299,6 +314,7 @@ export class PerformanceAuditReadinessRegistry {
     this.generation += 1;
     this.capture = Object.freeze({ sessionId: normalizedSessionId, generation: this.generation });
     this.surfaces.clear();
+    this.actionCompletions.clear();
     this.emit(true);
     return this.capture;
   }
@@ -308,6 +324,7 @@ export class PerformanceAuditReadinessRegistry {
     if (handle && handle.generation !== this.capture.generation) return;
     this.capture = null;
     this.surfaces.clear();
+    this.actionCompletions.clear();
     this.generation += 1;
     this.emit(true);
   }
@@ -318,6 +335,7 @@ export class PerformanceAuditReadinessRegistry {
     if (!id) throw new Error('A readiness surface requires an ID');
     const at = this.clock.now();
     const instance = this.nextInstance++;
+    const priorCompletion = this.actionCompletions.get(id);
     const surface: MutableSurface = {
       id,
       routeKey: nullable(definition.routeKey),
@@ -328,8 +346,8 @@ export class PerformanceAuditReadinessRegistry {
       instance,
       probes: new Map(),
       actions: actionsMap(definition.actions),
-      actionRevision: 0,
-      lastCompletedAction: null,
+      actionRevision: priorCompletion?.actionRevision ?? 0,
+      lastCompletedAction: priorCompletion?.actionName ?? null,
     };
     for (const probe of definition.probes ?? []) {
       surface.probes.set(probe.id, this.makeProbe(probe, at));
@@ -444,15 +462,30 @@ export class PerformanceAuditReadinessRegistry {
   }
 
   async invokeAction(surfaceId: string, actionName: string, ...args: unknown[]): Promise<unknown> {
-    if (!this.capture) throw new Error('No readiness capture is active');
+    const capture = this.capture;
+    if (!capture) throw new Error('No readiness capture is active');
     const surface = this.surfaces.get(surfaceId);
     if (!surface) throw new Error(`Readiness surface is not registered: ${surfaceId}`);
     const action = surface.actions.get(actionName);
     if (!action) throw new Error(`Readiness action is not registered: ${surfaceId}.${actionName}`);
     const result = await action(...args);
-    surface.actionRevision += 1;
-    surface.lastCompletedAction = actionName;
-    surface.updatedAtMs = this.clock.now();
+    // Capture can end/restart while the action awaits; never stamp a newer session.
+    if (this.capture?.generation !== capture.generation) return result;
+    // Terminal unavailability is skip evidence, not a successful semantic action.
+    if (isUnavailableActionResult(result)) return result;
+    // Remounts during navigation can replace the MutableSurface instance before we
+    // return. Persist completion by surface ID, then stamp whichever instance is live.
+    const priorRevision = this.actionCompletions.get(surfaceId)?.actionRevision
+      ?? surface.actionRevision;
+    const completion: DurableActionCompletion = {
+      actionName,
+      actionRevision: priorRevision + 1,
+    };
+    this.actionCompletions.set(surfaceId, completion);
+    const live = this.surfaces.get(surfaceId) ?? surface;
+    live.actionRevision = completion.actionRevision;
+    live.lastCompletedAction = completion.actionName;
+    live.updatedAtMs = this.clock.now();
     this.emit();
     return result;
   }

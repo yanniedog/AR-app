@@ -190,11 +190,21 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     },
     'browse.category.first': () => {
       const first = children[0];
-      if (first) openBrowseDrill(section, [...path, first.seg]);
+      if (!first) {
+        return {
+          unavailableReason: 'No category children are available on the current browse node',
+        };
+      }
+      openBrowseDrill(section, [...path, first.seg]);
     },
     'browse.category.deepest': (...args: unknown[]) => {
       const exactPath = auditActionStrings(args, 'taxonomyPath');
-      if (exactPath.length) openBrowseDrill(section, exactPath);
+      if (!exactPath.length) {
+        return {
+          unavailableReason: 'No taxonomy path is available for deepest category drill',
+        };
+      }
+      openBrowseDrill(section, exactPath);
     },
     'browse.category.back': () => openBrowseDrill(section, path.slice(0, -1)),
     'browse.products.all': () => openProductsList(section, path),

@@ -195,6 +195,107 @@ describe('PerformanceAuditReadinessRegistry', () => {
     );
   });
 
+  it('preserves completed action evidence across same-id remounts', async () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-remount-action');
+    let midActionRemount: ReturnType<typeof registry.registerSurface> = null;
+    const first = registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: {
+        'browse.category.first': () => {
+          // Simulate navigation that unmounts then remounts the same surface id
+          // before invokeAction can stamp the original MutableSurface.
+          registry.unregisterSurface(first!);
+          midActionRemount = registry.registerSurface({
+            id: 'browse.hierarchy',
+            probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+            actions: { 'browse.category.first': () => undefined },
+          });
+        },
+      },
+    });
+    expect(first).not.toBeNull();
+
+    await expect(registry.invokeAction('browse.hierarchy', 'browse.category.first'))
+      .resolves.toBeUndefined();
+    expect(midActionRemount).not.toBeNull();
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      id: 'browse.hierarchy',
+      actionRevision: 1,
+      lastCompletedAction: 'browse.category.first',
+    });
+
+    // Remount after completion must also keep the durable action proof.
+    expect(registry.unregisterSurface(midActionRemount!)).toBe(true);
+    const afterCompletion = registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: { 'browse.category.first': () => undefined },
+    });
+    expect(afterCompletion).not.toBeNull();
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      actionRevision: 1,
+      lastCompletedAction: 'browse.category.first',
+    });
+  });
+
+  it('does not stamp completion for unavailable action results', async () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-unavailable');
+    registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: {
+        'browse.category.first': () => ({
+          unavailableReason: 'No category children are available on the current browse node',
+        }),
+      },
+    });
+
+    await expect(registry.invokeAction('browse.hierarchy', 'browse.category.first'))
+      .resolves.toEqual({
+        unavailableReason: 'No category children are available on the current browse node',
+      });
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      actionRevision: 0,
+      lastCompletedAction: null,
+    });
+  });
+
+  it('ignores late action completion after capture restarts', async () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    const firstCapture = registry.beginCapture('pa-stale-1');
+    let releaseAction: (() => void) | undefined;
+    const pending = new Promise<void>((resolve) => {
+      releaseAction = resolve;
+    });
+    registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: {
+        'browse.category.first': async () => {
+          await pending;
+        },
+      },
+    });
+
+    const invoke = registry.invokeAction('browse.hierarchy', 'browse.category.first');
+    registry.endCapture(firstCapture);
+    registry.beginCapture('pa-stale-2');
+    registry.registerSurface({
+      id: 'browse.hierarchy',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+      actions: { 'browse.category.first': () => undefined },
+    });
+    releaseAction?.();
+    await expect(invoke).resolves.toBeUndefined();
+    expect(registry.snapshot().surfaces[0]).toMatchObject({
+      actionRevision: 0,
+      lastCompletedAction: null,
+    });
+  });
+
   it('waits for the exact requested destination surface', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);

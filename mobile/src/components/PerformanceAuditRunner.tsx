@@ -476,6 +476,25 @@ async function runDeepAuditStep(
       `terminal availability evidence: ${step.semanticActionId}`,
     );
     actionSource = source.id;
+    // Settle the mounted surface (including data probes) before invoking so
+    // optional actions do not report unavailable simply because rows are still loading.
+    const preActionAbort = new AbortController();
+    const preActionGuard = setInterval(() => {
+      if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+        preActionAbort.abort();
+      }
+    }, 50);
+    try {
+      await performanceAuditReadinessRegistry.waitForReady({
+        surfaceIds: [source.id],
+        quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        timeoutMs: DATA_SETTLE_TIMEOUT_MS,
+        signal: preActionAbort.signal,
+      });
+    } finally {
+      clearInterval(preActionGuard);
+    }
+    assertSessionActive(watchdog);
     const actionResult = await performanceAuditReadinessRegistry.invokeAction(
       source.id,
       step.semanticActionId,
