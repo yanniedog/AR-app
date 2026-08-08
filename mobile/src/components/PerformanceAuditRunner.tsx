@@ -46,7 +46,9 @@ import {
   captureAuditTrace,
   completePerformanceAudit,
   failPerformanceAudit,
+  flattenAuditLogText,
   formatAuditError,
+  formatAuditErrorForLog,
   getPerformanceAuditState,
   isPerformanceAuditActive,
   markPerformanceAuditCheckStored,
@@ -670,8 +672,21 @@ function fallbackEnvironment(
   };
 }
 
-function logAuditEvent(app: AuditAppIdentity, event: Record<string, unknown>): void {
-  debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, JSON.stringify({ ...event, app }));
+function auditLogJson(value: unknown): string {
+  return JSON.stringify(value, (_key, nested) => (
+    typeof nested === 'string' ? flattenAuditLogText(nested) : nested
+  ));
+}
+
+function logAuditEvent(
+  app: AuditAppIdentity,
+  event: Record<string, unknown>,
+  level: 'info' | 'warn' | 'error' = 'info',
+): void {
+  const line = auditLogJson({ ...event, app });
+  if (level === 'error') debugLog.error(PERFORMANCE_AUDIT_LOG_TAG, line);
+  else if (level === 'warn') debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, line);
+  else debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, line);
 }
 
 function compactCheck(check: AuditCheck): Record<string, unknown> {
@@ -691,8 +706,37 @@ function compactCheck(check: AuditCheck): Record<string, unknown> {
   };
 }
 
+function detailedCheck(check: AuditCheck): Record<string, unknown> {
+  return {
+    ...compactCheck(check),
+    metrics: check.metrics,
+    error: check.error ? flattenAuditLogText(check.error) : null,
+    trace: check.trace ? flattenAuditLogText(check.trace) : null,
+  };
+}
+
 function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
-  logAuditEvent(app, { kind: 'check', sessionId, check: compactCheck(check) });
+  const level = check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warn' : 'info';
+  logAuditEvent(app, {
+    kind: 'check',
+    sessionId,
+    check: level === 'info' ? compactCheck(check) : detailedCheck(check),
+  }, level);
+  if (check.status !== 'fail' && check.status !== 'warn') return;
+  // Explicit human-scannable failure line with full traceback retained on one logfile row.
+  debugLog[level](
+    PERFORMANCE_AUDIT_LOG_TAG,
+    [
+      `check-${check.status}`,
+      `id=${check.id}`,
+      `label=${flattenAuditLogText(check.label)}`,
+      `kind=${check.kind}`,
+      `durationMs=${check.durationMs}`,
+      `error=${flattenAuditLogText(check.error ?? '')}`,
+      `trace=${flattenAuditLogText(check.trace ?? '')}`,
+      `metrics=${auditLogJson(check.metrics)}`,
+    ].join(' '),
+  );
 }
 
 function responsivenessRecord(
@@ -2082,7 +2126,7 @@ export function PerformanceAuditRunner() {
           );
           completeReportStored = true;
         } catch (storeError) {
-          const message = formatAuditError(storeError);
+          const message = formatAuditErrorForLog(storeError);
           debugLog.warn(
             PERFORMANCE_AUDIT_LOG_TAG,
             `complete report persistence verification failed: ${message}`,
@@ -2092,7 +2136,8 @@ export function PerformanceAuditRunner() {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             report,
-          });
+            storeError: message,
+          }, 'warn');
         }
         logAuditEvent(app, {
           kind: 'report',
@@ -2137,7 +2182,10 @@ export function PerformanceAuditRunner() {
         } catch (uploadCaught) {
           const message = formatAuditError(uploadCaught);
           upload = { error: message };
-          debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, `automatic log upload failed: ${message}`);
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
+          );
         }
         await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Upload-result log flush');
         assertSessionActive(watchdog);
@@ -2158,9 +2206,9 @@ export function PerformanceAuditRunner() {
             hangTimeoutMs: watchdog.hangTimeoutMs,
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
-            trace: formatAuditError(caught),
-            recoveryError,
-          });
+            trace: formatAuditErrorForLog(caught),
+            recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
+          }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
           markPerformanceAuditCancelled();
         } else {
@@ -2168,6 +2216,7 @@ export function PerformanceAuditRunner() {
             formatAuditError(caught),
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
           ].join('\n');
+          const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
           const failedCheck: AuditCheck = {
             id: `fatal-${completed + 1}`,
             label: getPerformanceAuditState().progress.label || 'Performance audit fatal error',
@@ -2181,7 +2230,7 @@ export function PerformanceAuditRunner() {
               datasetRevision: activeDatasetRevision
                 ? datasetRevisionLabel(activeDatasetRevision)
                 : null,
-              readinessBlockers: performanceAuditReadinessRegistry.snapshot().blockers
+              readinessBlockers: readinessSnapshot.blockers
                 .map((blocker) => blocker.message)
                 .join(' | ') || null,
             },
@@ -2192,16 +2241,41 @@ export function PerformanceAuditRunner() {
           logAuditCheck(app, sessionId, failedCheck);
           debugLog.error(
             PERFORMANCE_AUDIT_LOG_TAG,
-            JSON.stringify({
-              kind: 'fatal',
-              sessionId,
-              app,
-              error,
-              hangTimeoutMs: watchdog.hangTimeoutMs,
-              storedCheckCount: watchdog.storedCheckCount,
-              lastStoredCheckAt,
-            }),
+            [
+              'PERFORMANCE_AUDIT_FAILURE',
+              `session=${sessionId}`,
+              `completed=${completed}`,
+              `planned=${total}`,
+              `path=${flattenAuditLogText(pathnameRef.current)}`,
+              `error=${formatAuditErrorForLog(caught)}`,
+              `recoveryError=${recoveryError ? flattenAuditLogText(recoveryError) : ''}`,
+              `captureTrace=${flattenAuditLogText(failedCheck.trace ?? '')}`,
+            ].join(' '),
           );
+          logAuditEvent(app, {
+            kind: 'fatal',
+            sessionId,
+            hangTimeoutMs: watchdog.hangTimeoutMs,
+            storedCheckCount: watchdog.storedCheckCount,
+            lastStoredCheckAt,
+            error: flattenAuditLogText(error),
+            failedCheck: detailedCheck(failedCheck),
+            readiness: {
+              ready: readinessSnapshot.ready,
+              blockers: readinessSnapshot.blockers,
+              surfaces: readinessSnapshot.surfaces.map((surface) => ({
+                id: surface.id,
+                routeKey: surface.routeKey,
+                lastCompletedAction: surface.lastCompletedAction,
+                actionRevision: surface.actionRevision,
+                actions: surface.actions,
+                probes: surface.probes,
+              })),
+            },
+            priorFailures: checks
+              .filter((entry) => entry.status === 'fail' || entry.status === 'warn')
+              .map((entry) => detailedCheck(entry)),
+          }, 'error');
           const partialSummary = summarizePerformanceAudit(checks);
           const partialReport: PerformanceAuditReport = {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
@@ -2258,7 +2332,7 @@ export function PerformanceAuditRunner() {
             partialStoreError = formatAuditError(partialCaught);
             debugLog.error(
               PERFORMANCE_AUDIT_LOG_TAG,
-              `partial report persistence failed: ${partialStoreError}`,
+              `partial report persistence failed: ${formatAuditErrorForLog(partialCaught)}`,
             );
           }
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Fatal log flush').catch(() => {});
@@ -2279,7 +2353,7 @@ export function PerformanceAuditRunner() {
           } catch (rollbackError) {
             debugLog.error(
               PERFORMANCE_AUDIT_LOG_TAG,
-              `audit rollback retained for launch recovery: ${formatAuditError(rollbackError)}`,
+              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
             );
             await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
           }

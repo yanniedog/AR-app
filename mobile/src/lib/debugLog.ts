@@ -295,7 +295,11 @@ async function persistTail(): Promise<void> {
 }
 
 function append(level: LogLevel, tag: string, message: string): void {
-  const messageRedacted = redactSecrets(String(message));
+  // Collapse real newlines so stack traces and audit dumps stay one parseable
+  // physical line (callers may also pre-escape via formatErrorTrace).
+  const messageRedacted = redactSecrets(
+    String(message).replace(/\r/g, '').replace(/\n/g, String.raw`\n`),
+  );
   const entry: LogEntry = {
     ts: new Date().toISOString(),
     level,

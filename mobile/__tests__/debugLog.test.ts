@@ -646,6 +646,24 @@ describe('debugLog integration', () => {
     expect(crashlyticsApi.recordError).not.toHaveBeenCalled();
   });
 
+  it('collapses multi-line audit failures into one parseable logfile row', () => {
+    debugLog.clear();
+    const stack = [
+      'Error: Mounted action completion was not observed for browse.category.first',
+      '    at runDeepAuditStep (PerformanceAuditRunner.tsx:552:13)',
+      '    at async runAudit (PerformanceAuditRunner.tsx:1950:15)',
+    ].join('\n');
+
+    debugLog.error('perf-audit', `PERFORMANCE_AUDIT_FAILURE session=pa-test error=${stack}`);
+
+    const lines = debugLog.getText().split('\n').filter(Boolean);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('[ERROR] perf-audit: PERFORMANCE_AUDIT_FAILURE');
+    expect(lines[0]).toContain('Mounted action completion was not observed');
+    expect(lines[0]).toContain('runDeepAuditStep');
+    expect(lines[0]).toContain(String.raw`\n`);
+  });
+
   it('installGlobalErrorHandlers forwards fatal errors to debugLog', () => {
     debugLog.clear();
     resetGlobalErrorHandlersForTests();

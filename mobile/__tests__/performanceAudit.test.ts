@@ -4,6 +4,9 @@ import {
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+  flattenAuditLogText,
+  formatAuditError,
+  formatAuditErrorForLog,
   getPerformanceAuditState,
   isPerformanceAuditActive,
   parsePerformanceAuditHangTimeoutSeconds,
@@ -439,5 +442,20 @@ describe('performance audit inactivity watchdog', () => {
     elapsedMs = 300_000;
     expect(watchdog.isExpired()).toBe(true);
     expect(watchdog.remainingMs()).toBe(0);
+  });
+});
+
+describe('audit logfile error formatting', () => {
+  it('keeps UI-facing stacks multi-line and logfile stacks on one physical line', () => {
+    const error = new Error('Mounted action completion was not observed');
+    const ui = formatAuditError(error);
+    const log = formatAuditErrorForLog(error);
+
+    expect(ui).toContain('Mounted action completion was not observed');
+    expect(ui).toContain('\n');
+    expect(log).toContain('Mounted action completion was not observed');
+    expect(log).toContain(String.raw`\n`);
+    expect(log).not.toContain('\n');
+    expect(flattenAuditLogText('a\r\nb\nc')).toBe(String.raw`a\nb\nc`);
   });
 });
