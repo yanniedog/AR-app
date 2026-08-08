@@ -317,7 +317,8 @@ export default function BankDetail() {
   );
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
-      'product.lender.open': () => undefined,
+      // Do not claim product.lender.open here — a stale mounted lender surface
+      // would no-op the product-page action and abort the deep audit.
       'lender.product.first': (...args: unknown[]) => {
       const productKey = auditActionString(args, 'productKey');
       const rateIndex = auditActionInteger(args, 'rateIndex');

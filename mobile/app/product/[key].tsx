@@ -48,7 +48,9 @@ import {
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
-import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
+import {
+  auditActionString,
+} from '../../src/lib/performanceAuditActionParams';
 import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
@@ -109,21 +111,9 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (!historyEnabled) return;
-    if (isPerformanceAuditActive()) {
-      let cancelled = false;
-      void ensureHistoryBanks().then(async () => {
-        if (cancelled) return;
-        if (showBankInsights) await ensureBankInsights();
-        if (cancelled) return;
-        await ensureProductHistory();
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
     // Product-history dated-core fan-out is expensive; wait until the product
-    // screen transition finishes so navigation stays instant, then prefer the
-    // disk/bootstrap cache and only sync after history banks.
+    // screen transition finishes so navigation stays instant (including during
+    // performance audit — eager sync was starving browse/search journeys).
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
       void yieldToUi().then(() => {
@@ -210,8 +200,13 @@ export default function ProductDetail() {
       'product.receipt.open': () => {
         if (row) openRateReceipt(productKey, row.rate_index);
       },
-      'product.lender.open': () => {
-        if (row) openBank(row.provider);
+      'product.lender.open': (...args: unknown[]) => {
+        const provider = auditActionString(args, 'provider') || row?.provider || null;
+        if (!provider) {
+          return { unavailableReason: 'The mounted product has no lender provider to open' };
+        }
+        openBank(provider);
+        return { expectedPath: `/bank/${encodeURIComponent(provider)}` };
       },
       'calculator.candidate.back': () => router.back(),
       'product.history.window.30d': () => historyAuditActionsRef.current

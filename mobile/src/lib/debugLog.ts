@@ -3,6 +3,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { bridgeLogToCrashlytics } from './observability';
 import {
+  compactPerformanceAuditReportForLog,
+} from './performanceAuditLog';
+import {
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from './performanceAuditSchema';
@@ -560,7 +563,15 @@ export const debugLog = {
     }
 
     const beginMessage = physicalAuditMarker(stored.summaryMarker);
-    const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${stored.reportJson}`;
+    let compactReportJson = stored.reportJson;
+    try {
+      compactReportJson = redactSecrets(
+        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(stored.reportJson))),
+      );
+    } catch {
+      // Keep the original body if compaction cannot parse a custom fixture.
+    }
+    const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${compactReportJson}`;
     const endMessage = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
     const sidecarMessage = `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE}`;
     const blockEntries: LogEntry[] = [beginMessage, jsonMessage, sidecarMessage, endMessage].map(
@@ -599,18 +610,18 @@ export const debugLog = {
       const sidecar = await readPerformanceAuditSidecar();
       const beginOk = physical.includes(beginMessage);
       const endOk = physical.includes(endMessage);
-      const jsonInLog = physical.includes(stored.reportJson);
+      const jsonInLog = physical.includes(compactReportJson);
       const sidecarOk =
         sidecar?.summaryMarker === stored.summaryMarker &&
         sidecar.reportJson === stored.reportJson;
-      // Reserved-tail write keeps begin/end intact; full JSON lives in the log
-      // when it fits, otherwise the sidecar is the durable body.
+      // Reserved-tail write keeps begin/end intact; compact JSON lives in the log
+      // when it fits, otherwise the sidecar is the durable full body.
       if (!beginOk || !endOk || (!jsonInLog && !sidecarOk)) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }
   },
-  /** Read the flushed on-disk log plus the durable latest audit snapshot. */
+  /** Read the flushed on-disk log plus a paste-sized audit snapshot. */
   async readCompleteText(): Promise<string> {
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
@@ -630,10 +641,18 @@ export const debugLog = {
     if (!latest) return clean;
     const physicalBegin = physicalAuditMarker(latest.summaryMarker);
     const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
+    let compactJson: string;
+    try {
+      compactJson = redactSecrets(
+        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
+      );
+    } catch {
+      compactJson = latest.reportJson;
+    }
     if (
       clean.includes(physicalBegin) &&
       clean.includes(physicalEnd) &&
-      clean.includes(latest.reportJson)
+      (clean.includes(compactJson) || clean.includes(latest.reportJson))
     ) {
       return clean;
     }
@@ -642,7 +661,7 @@ export const debugLog = {
       '',
       '# Latest complete performance audit',
       latest.summaryMarker,
-      latest.reportJson,
+      compactJson,
     ].join('\n');
   },
   subscribe(fn: Listener): () => void {

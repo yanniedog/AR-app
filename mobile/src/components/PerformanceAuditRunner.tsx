@@ -75,6 +75,11 @@ import {
   type PerformanceAuditReport,
   type ResponsivenessMetrics,
 } from '../lib/performanceAudit';
+import {
+  compactAuditCheckForLog,
+  compactAuditLogJson,
+  omitNullishDeep,
+} from '../lib/performanceAuditLog';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -409,8 +414,13 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
         probe.kind,
         probe.status,
         probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
-        probe.datasetRevision ?? '',
-        probe.renderRevision ?? '',
+        // Keep revision identity without dumping full sha256 blobs into every row.
+        typeof probe.datasetRevision === 'string' && probe.datasetRevision.length > 16
+          ? `${probe.datasetRevision.slice(0, 12)}…`
+          : probe.datasetRevision ?? '',
+        typeof probe.renderRevision === 'string' && probe.renderRevision.length > 80
+          ? `${probe.renderRevision.slice(0, 80)}…`
+          : probe.renderRevision ?? '',
       ].join(':')))
       .join(' | '),
     readinessActionEvidence: snapshot.surfaces
@@ -543,8 +553,10 @@ async function runDeepAuditStepBody(
     // The preceding not-found recovery action must already have reached Home.
     actionSource = 'route-contract';
   } else {
-    const source = performanceAuditReadinessRegistry.snapshot().surfaces.find((surface) =>
-      surface.actions.includes(step.semanticActionId),
+    const source = resolveMountedActionSurface(
+      step.semanticActionId,
+      step.expectedSurface,
+      currentPath(),
     );
     if (!source) throw new Error(
       `${step.optional ? 'Optional' : 'Required'} mounted action is unavailable without ` +
@@ -760,70 +772,69 @@ function fallbackEnvironment(
 }
 
 function auditLogJson(value: unknown): string {
-  return JSON.stringify(value, (_key, nested) => (
-    typeof nested === 'string' ? flattenAuditLogText(nested) : nested
-  ));
+  return compactAuditLogJson(value);
 }
 
 function logAuditEvent(
   app: AuditAppIdentity,
   event: Record<string, unknown>,
   level: 'info' | 'warn' | 'error' = 'info',
+  options: { includeApp?: boolean } = {},
 ): void {
-  const line = auditLogJson({ ...event, app });
+  const includeApp = options.includeApp === true || event.kind === 'start';
+  const line = auditLogJson(includeApp ? { ...event, app } : event);
   if (level === 'error') debugLog.error(PERFORMANCE_AUDIT_LOG_TAG, line);
   else if (level === 'warn') debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, line);
   else debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, line);
 }
 
 function compactCheck(check: AuditCheck): Record<string, unknown> {
-  return {
-    id: check.id,
-    label: check.label,
-    kind: check.kind,
-    status: check.status,
-    durationMs: check.durationMs,
-    phase: check.metrics.iteration ?? null,
-    forwardMs: check.metrics.forwardMs ?? null,
-    backMs: check.metrics.backMs ?? null,
-    maxEventLoopLagMs: check.metrics.maxEventLoopLagMs ?? null,
-    maxFrameGapMs: check.metrics.maxFrameGapMs ?? null,
-    error: check.error ?? null,
-    ...(check.trace ? { trace: check.trace } : {}),
-  };
+  return compactAuditCheckForLog(check);
 }
 
 function detailedCheck(check: AuditCheck): Record<string, unknown> {
-  return {
-    ...compactCheck(check),
-    metrics: check.metrics,
+  return compactAuditCheckForLog({
+    ...check,
     error: check.error ? flattenAuditLogText(check.error) : null,
     trace: check.trace ? flattenAuditLogText(check.trace) : null,
-  };
+  });
 }
 
 function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
   const level = check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warn' : 'info';
+  // Single JSON line per check — avoid duplicating the full metrics blob in a
+  // second check-fail/check-warn text row (that doubled paste upload size).
   logAuditEvent(app, {
     kind: 'check',
     sessionId,
     check: level === 'info' ? compactCheck(check) : detailedCheck(check),
   }, level);
-  if (check.status !== 'fail' && check.status !== 'warn') return;
-  // Explicit human-scannable failure line with full traceback retained on one logfile row.
-  debugLog[level](
-    PERFORMANCE_AUDIT_LOG_TAG,
-    [
-      `check-${check.status}`,
-      `id=${check.id}`,
-      `label=${flattenAuditLogText(check.label)}`,
-      `kind=${check.kind}`,
-      `durationMs=${check.durationMs}`,
-      `error=${flattenAuditLogText(check.error ?? '')}`,
-      `trace=${flattenAuditLogText(check.trace ?? '')}`,
-      `metrics=${auditLogJson(check.metrics)}`,
-    ].join(' '),
-  );
+}
+
+/** Prefer the live source surface over a stale destination that no-ops the same action id. */
+function resolveMountedActionSurface(
+  semanticActionId: string,
+  expectedSurface: string,
+  currentPath: string,
+): { id: string; routeKey: string | null } | null {
+  const matches = performanceAuditReadinessRegistry.snapshot().surfaces
+    .filter((surface) => surface.actions.includes(semanticActionId));
+  if (matches.length === 0) return null;
+  const routeMatched = matches.filter((surface) => {
+    const routeKey = surface.routeKey;
+    if (!routeKey) return false;
+    if (routeKey.includes('[')) {
+      // Dynamic routes: product/bank/etc. Match by first static segment.
+      const staticPrefix = `/${routeKey.split('/').filter(Boolean)[0] ?? ''}`;
+      return currentPath === staticPrefix || currentPath.startsWith(`${staticPrefix}/`);
+    }
+    return pathMatches(currentPath, routeKey);
+  });
+  const preferred = routeMatched.find((surface) => surface.id !== expectedSurface)
+    ?? matches.find((surface) => surface.id !== expectedSurface)
+    ?? routeMatched[0]
+    ?? matches[0];
+  return preferred ?? null;
 }
 
 function responsivenessRecord(
@@ -2063,7 +2074,6 @@ export function PerformanceAuditRunner() {
             logAuditEvent(app, {
               kind: 'deep-step-start',
               sessionId,
-              planSchemaVersion: plan.schemaVersion,
               stepId: step.id,
               passId: step.passId,
               scenarioId: step.scenarioId,
@@ -2071,10 +2081,6 @@ export function PerformanceAuditRunner() {
               depth: step.depth,
               expectedPath: step.expectedPath,
               expectedSurface: step.expectedSurface,
-              readiness: step.readiness,
-              parameters: step.parameters,
-              stateImpact: step.safety.stateImpact,
-              unsafeActionsExcluded: step.safety.unsafeActionsExcluded,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
             await record(
@@ -2349,22 +2355,36 @@ export function PerformanceAuditRunner() {
             failedCheck: detailedCheck(failedCheck),
             readiness: {
               ready: readinessSnapshot.ready,
-              blockers: readinessSnapshot.blockers,
+              blockers: readinessSnapshot.blockers.map((blocker) => omitNullishDeep({
+                code: blocker.code,
+                surfaceId: blocker.surfaceId,
+                probeId: blocker.probeId,
+                message: blocker.message,
+              })),
               surfaces: readinessSnapshot.surfaces.map((surface) => ({
                 id: surface.id,
                 routeKey: surface.routeKey,
                 lastCompletedAction: surface.lastCompletedAction,
                 actionRevision: surface.actionRevision,
                 actions: surface.actions,
-                probes: surface.probes,
+                pendingProbes: surface.probes
+                  .filter((probe) => probe.status !== 'ready')
+                  .map((probe) => `${probe.id}:${probe.status}`),
               })),
             },
+            // Ids + timing only — full metrics already logged per check line.
             priorFailures: checks
               .filter((entry) => (
                 entry !== failedCheck &&
                 (entry.status === 'fail' || entry.status === 'warn')
               ))
-              .map((entry) => detailedCheck(entry)),
+              .map((entry) => ({
+                id: entry.id,
+                status: entry.status,
+                durationMs: entry.durationMs,
+                maxEventLoopLagMs: entry.metrics.maxEventLoopLagMs ?? undefined,
+                maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
+              })),
           }, 'error');
           const partialSummary = summarizePerformanceAudit(checks);
           const partialReport: PerformanceAuditReport = {

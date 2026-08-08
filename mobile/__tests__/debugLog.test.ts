@@ -561,15 +561,19 @@ describe('persistent log file', () => {
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
     expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_SIDECAR');
-    expect(physicalLog).not.toContain('PERFORMANCE_AUDIT_REPORT_JSON');
-    expect(physicalLog).not.toContain('oversized-audit-body');
+    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_JSON');
+    expect(physicalLog).toContain('oversized-audit-body');
+    // Compact log JSON drops the giant blob; full fidelity remains in the sidecar.
+    expect(physicalLog).not.toContain(report.blob.slice(0, 64));
     expect(new TextEncoder().encode(physicalLog).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
     expect(files[AUDIT_SIDECAR_PATH]).toContain('oversized-audit-body');
+    expect(files[AUDIT_SIDECAR_PATH]).toContain(report.blob.slice(0, 64));
 
     files[LOG_PATH] = physicalLog;
     const complete = await debugLog.readCompleteText();
-    expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain('oversized-audit-body');
+    expect(complete).not.toContain(report.blob.slice(0, 64));
+    expect(complete).not.toContain('# Latest complete performance audit');
   });
 
   it('restores the latest audit from the sidecar when AsyncStorage persistence fails', async () => {
