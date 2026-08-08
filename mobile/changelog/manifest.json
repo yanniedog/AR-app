@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-08T00:11:02.186Z",
+  "generated_at": "2026-08-08T01:08:53.351Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -579,6 +579,14 @@
         "fix(mobile): put full audit failures and stacks in the logfile (#138)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.102"
+    },
+    {
+      "version": "1.0.105",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): persist audit reports and stop false graphic readiness waits (#141)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.105"
     }
   ]
 }
