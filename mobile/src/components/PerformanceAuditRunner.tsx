@@ -771,10 +771,6 @@ function fallbackEnvironment(
   };
 }
 
-function auditLogJson(value: unknown): string {
-  return compactAuditLogJson(value);
-}
-
 function logAuditEvent(
   app: AuditAppIdentity,
   event: Record<string, unknown>,
@@ -782,59 +778,44 @@ function logAuditEvent(
   options: { includeApp?: boolean } = {},
 ): void {
   const includeApp = options.includeApp === true || event.kind === 'start';
-  const line = auditLogJson(includeApp ? { ...event, app } : event);
+  const line = compactAuditLogJson(includeApp ? { ...event, app } : event);
   if (level === 'error') debugLog.error(PERFORMANCE_AUDIT_LOG_TAG, line);
   else if (level === 'warn') debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, line);
   else debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, line);
 }
 
-function compactCheck(check: AuditCheck): Record<string, unknown> {
-  return compactAuditCheckForLog(check);
-}
-
-function detailedCheck(check: AuditCheck): Record<string, unknown> {
-  return compactAuditCheckForLog({
-    ...check,
-    error: check.error ? flattenAuditLogText(check.error) : null,
-    trace: check.trace ? flattenAuditLogText(check.trace) : null,
-  });
-}
-
 function logAuditCheck(app: AuditAppIdentity, sessionId: string, check: AuditCheck): void {
   const level = check.status === 'fail' ? 'error' : check.status === 'warn' ? 'warn' : 'info';
-  // Single JSON line per check — avoid duplicating the full metrics blob in a
-  // second check-fail/check-warn text row (that doubled paste upload size).
-  logAuditEvent(app, {
-    kind: 'check',
-    sessionId,
-    check: level === 'info' ? compactCheck(check) : detailedCheck(check),
-  }, level);
+  const payload = level === 'info'
+    ? compactAuditCheckForLog(check)
+    : compactAuditCheckForLog({
+      ...check,
+      error: check.error ? flattenAuditLogText(check.error) : null,
+      trace: check.trace ? flattenAuditLogText(check.trace) : null,
+    });
+  logAuditEvent(app, { kind: 'check', sessionId, check: payload }, level);
 }
 
-/** Prefer the live source surface over a stale destination that no-ops the same action id. */
 function resolveMountedActionSurface(
   semanticActionId: string,
   expectedSurface: string,
   currentPath: string,
-): { id: string; routeKey: string | null } | null {
+): { id: string } | null {
   const matches = performanceAuditReadinessRegistry.snapshot().surfaces
     .filter((surface) => surface.actions.includes(semanticActionId));
-  if (matches.length === 0) return null;
-  const routeMatched = matches.filter((surface) => {
+  if (!matches.length) return null;
+  const onRoute = matches.filter((surface) => {
     const routeKey = surface.routeKey;
     if (!routeKey) return false;
-    if (routeKey.includes('[')) {
-      // Dynamic routes: product/bank/etc. Match by first static segment.
-      const staticPrefix = `/${routeKey.split('/').filter(Boolean)[0] ?? ''}`;
-      return currentPath === staticPrefix || currentPath.startsWith(`${staticPrefix}/`);
-    }
-    return pathMatches(currentPath, routeKey);
+    if (!routeKey.includes('[')) return pathMatches(currentPath, routeKey);
+    const root = `/${routeKey.split('/').filter(Boolean)[0] ?? ''}`;
+    return currentPath === root || currentPath.startsWith(`${root}/`);
   });
-  const preferred = routeMatched.find((surface) => surface.id !== expectedSurface)
-    ?? matches.find((surface) => surface.id !== expectedSurface)
-    ?? routeMatched[0]
-    ?? matches[0];
-  return preferred ?? null;
+  return onRoute.find((s) => s.id !== expectedSurface)
+    ?? matches.find((s) => s.id !== expectedSurface)
+    ?? onRoute[0]
+    ?? matches[0]
+    ?? null;
 }
 
 function responsivenessRecord(
@@ -2352,7 +2333,11 @@ export function PerformanceAuditRunner() {
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
             error: flattenAuditLogText(error),
-            failedCheck: detailedCheck(failedCheck),
+            failedCheck: compactAuditCheckForLog({
+              ...failedCheck,
+              error: failedCheck.error ? flattenAuditLogText(failedCheck.error) : null,
+              trace: failedCheck.trace ? flattenAuditLogText(failedCheck.trace) : null,
+            }),
             readiness: {
               ready: readinessSnapshot.ready,
               blockers: readinessSnapshot.blockers.map((blocker) => omitNullishDeep({
