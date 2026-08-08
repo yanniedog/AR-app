@@ -1,0 +1,32 @@
+{
+  "version": "1.0.117",
+  "releaseTag": "app-arm-v1.0.117",
+  "date": "2026-08-08",
+  "summaryBullets": [
+    "fix(mobile): finish perf audit after progress hits 100% (#154)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): finish perf audit after progress hits 100% (#154)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.117"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.116"
+        }
+      ]
+    }
+  ]
+}
