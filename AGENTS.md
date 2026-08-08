@@ -28,7 +28,9 @@ Do not stop after opening a PR. Always monitor each owned open PR (and any still
 
 ## Bot feedback (mandatory — every finding, every session)
 
-Always respond to **all** substantive bot (and human) review feedback. Green CI does not replace thread closure. Bots in scope include Sourcery, Cursor Auto Review / Codex, Gemini, Copilot, CodeRabbit, Greptile, and similar.
+**babysit skill etc must always address PR bot feedback where appropriate.**
+
+Babysit and PR-fix workers must follow the per-finding disposition rules below for every substantive PR bot finding, including advisory findings. Always respond to **all** substantive bot (and human) review feedback. Green CI does not replace thread closure. Bots in scope include Sourcery, Cursor Auto Review / Codex, Gemini, Copilot, CodeRabbit, Greptile, and similar.
 
 ### After `wait-for-bots` exit 0 — synthesize first (global step 5b)
 
