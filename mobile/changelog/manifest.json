@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-08T04:24:33.514Z",
+  "generated_at": "2026-08-08T05:02:04.277Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -612,6 +612,14 @@
         "fix(mobile): continue perf audit after step failures (#149)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.112"
+    },
+    {
+      "version": "1.0.114",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): finish perf audit after calculator logo stalls (#151)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.114"
     }
   ]
 }
