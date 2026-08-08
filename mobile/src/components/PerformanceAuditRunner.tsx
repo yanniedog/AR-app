@@ -2059,14 +2059,12 @@ export function PerformanceAuditRunner() {
               );
             }
           };
+          let check: AuditCheck;
           try {
-            const check = await run();
-            await record(check);
-            if (check.status === 'fail') await recoverAfterFailure();
+            check = await run();
           } catch (caught) {
             rethrowAuditControl(caught);
-            const error = formatAuditError(caught);
-            await record({
+            check = {
               id: `continued-failure-${completed + 1}`,
               label,
               kind: 'runtime',
@@ -2077,11 +2075,14 @@ export function PerformanceAuditRunner() {
                 currentPath: pathnameRef.current,
                 datasetRevision: datasetRevisionLabel(datasetRevision),
               },
-              error,
+              error: formatAuditError(caught),
               trace: captureAuditTrace(`${label} failed; audit continues`),
-            });
-            await recoverAfterFailure();
+            };
           }
+          // Durable check storage/logging failures remain fatal — only the step
+          // body itself is continuable after a recorded fail.
+          await record(check);
+          if (check.status === 'fail') await recoverAfterFailure();
         };
 
         for (const pass of plan.passes) {

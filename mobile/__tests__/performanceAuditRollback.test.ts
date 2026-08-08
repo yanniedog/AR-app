@@ -146,4 +146,18 @@ describe('performance audit rollback journal', () => {
     await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
     jest.useRealTimers();
   });
+
+  it('retains rollback artifacts when a captured SecureStore scenario companion is missing', async () => {
+    const store = makeStore();
+    await ensureUserRateScenarioLoaded();
+    expect(updateUserRateScenario((value) => ({
+      ...value,
+      mortgage: { ...value.mortgage, currentRate: '5.50', propertyValue: '400000' },
+    }))).toBe(true);
+    await beginPerformanceAuditRollback(store);
+    secureStore.delete(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
+
+    await expect(restorePerformanceAuditRollback(store)).rejects.toThrow(/missing from SecureStore/);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
+  });
 });

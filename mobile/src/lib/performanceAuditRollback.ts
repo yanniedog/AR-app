@@ -175,6 +175,11 @@ async function readRollbackJournal(): Promise<PerformanceAuditRollbackJournal | 
   if (!parsed) return null;
   const secureScenario = await loadRollbackScenario();
   const userRateScenario = secureScenario ?? parsed.legacyScenario ?? null;
+  if (parsed.captured && !userRateScenario) {
+    throw new Error(
+      'Performance audit rollback scenario is missing from SecureStore; journal retained for recovery',
+    );
+  }
   return {
     ...parsed.journal,
     snapshot: {
