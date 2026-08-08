@@ -284,6 +284,8 @@ export class PerformanceAuditInactivityWatchdog {
   readonly hangTimeoutMs: number;
   private lastStoredProgressMs: number;
   private storedChecks = 0;
+  /** Report persistence/upload no longer stores checks; hang prevention must not abort teardown. */
+  private finalizing = false;
 
   constructor(
     hangTimeoutMs = DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -306,7 +308,18 @@ export class PerformanceAuditInactivityWatchdog {
   }
 
   isExpired(): boolean {
+    if (this.finalizing) return false;
     return this.remainingMs() <= 0;
+  }
+
+  /** Suspend stored-check inactivity once planned checks finish; teardown may exceed one hang window. */
+  beginFinalization(): void {
+    this.finalizing = true;
+    this.touchProgress();
+  }
+
+  get isFinalizing(): boolean {
+    return this.finalizing;
   }
 
   /** Reset the hang timer without counting a durable check (readiness progress). */
