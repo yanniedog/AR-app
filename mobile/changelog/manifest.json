@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-08T01:08:53.351Z",
+  "generated_at": "2026-08-08T02:33:34.512Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -587,6 +587,15 @@
         "fix(mobile): persist audit reports and stop false graphic readiness waits (#141)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.105"
+    },
+    {
+      "version": "1.0.108",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): unblock lenders query readiness during perf audit (#144)",
+        "feat(mobile): put Settings in always-visible bottom tabs (#145)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.108"
     }
   ]
 }
