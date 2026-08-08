@@ -251,30 +251,33 @@ export default function Banks() {
           )}
         </View>
       ) : (
-        <FlashList
-          data={filtered}
-          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
-          onLoad={listReadiness.onLoad}
-          onContentSizeChange={listReadiness.onContentSizeChange}
-          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
-          ListHeaderComponent={(
-            <View key={listRevision} onLayout={listReadiness.onRevisionLayout} />
-          )}
-          extraData={`${section}:${depositRankMetric}:${mortgageRateMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
-          keyExtractor={(g) => g.provider}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
-          renderItem={({ item }) => (
-            <BankRow
-              group={item}
-              logoRenderStateId={`lenders:${item.provider}`}
-              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-              sortSection={section}
-              depositRankMetric={depositRankMetric}
-              mortgageRateMetric={mortgageRateMetric}
-            />
-          )}
-          ListEmptyComponent={<EmptyState title="No lenders found" />}
-        />
+        <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
+          <FlashList
+            // Remount when the search filter changes so FlashList re-emits load /
+            // viewability after an in-place data shrink (audit readiness hangs otherwise).
+            key={`lenders:${listRevision}`}
+            data={filtered}
+            onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
+            onLoad={listReadiness.onLoad}
+            onContentSizeChange={listReadiness.onContentSizeChange}
+            onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+            viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+            extraData={`${section}:${query}:${depositRankMetric}:${mortgageRateMetric}:${includeNonStandard ? 1 : 0}:${suitabilityRevision}`}
+            keyExtractor={(g) => g.provider}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+            renderItem={({ item }) => (
+              <BankRow
+                group={item}
+                logoRenderStateId={`lenders:${item.provider}`}
+                onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+                sortSection={section}
+                depositRankMetric={depositRankMetric}
+                mortgageRateMetric={mortgageRateMetric}
+              />
+            )}
+            ListEmptyComponent={<EmptyState title="No lenders found" />}
+          />
+        </View>
       )}
     </Screen>
   );

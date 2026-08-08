@@ -367,16 +367,18 @@ export default function Search() {
         ) : null}
       </View>
 
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
+          // Remount when the user-facing result identity changes so readiness
+          // cannot stall after FlashList recycles without a fresh viewability pass.
+          key={`search:${listRevision}`}
           data={rows}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
           onLoad={listReadiness.onLoad}
           onContentSizeChange={listReadiness.onContentSizeChange}
           onViewableItemsChanged={listReadiness.onViewableItemsChanged}
-          ListHeaderComponent={(
-            <View key={listRevision} onLayout={listReadiness.onRevisionLayout} />
-          )}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+          extraData={listRevision}
           keyExtractor={(item, i) => `${item.product_key}-${item.rate_index ?? i}`}
           contentContainerStyle={{
             ...screenScrollContentStyle(theme, insets.bottom),

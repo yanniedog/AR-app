@@ -1,3 +1,7 @@
+import React, { useEffect } from 'react';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+
+import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
 import {
   commitVirtualizedListRevision,
   initialVirtualizedListCommitState,
@@ -58,5 +62,85 @@ describe('virtualized list readiness', () => {
       0,
     );
     expect(isVirtualizedListVisiblyCommitted(empty, 'empty', 0)).toBe(true);
+  });
+
+  test('onRevisionLayout through the hook seeds visibility for filtered non-empty lists', () => {
+    type Api = ReturnType<typeof useVirtualizedListReadiness>;
+    const latest: { current: Api | null } = { current: null };
+
+    function Probe({ revision, itemCount }: { revision: string; itemCount: number }) {
+      const api = useVirtualizedListReadiness(revision, itemCount);
+      useEffect(() => {
+        latest.current = api;
+      });
+      return null;
+    }
+
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        React.createElement(Probe, { revision: 'query:afg', itemCount: 1 }),
+      );
+    });
+    expect(latest.current?.ready).toBe(false);
+    expect(latest.current?.visiblyCommitted).toBe(false);
+
+    act(() => {
+      latest.current?.onRevisionLayout();
+    });
+
+    expect(latest.current?.ready).toBe(true);
+    expect(latest.current?.visiblyCommitted).toBe(true);
+    expect(latest.current?.committedItemCount).toBe(1);
+    expect(latest.current?.visibleCount).toBe(1);
+
+    act(() => {
+      tree!.update(React.createElement(Probe, { revision: 'query:afg:next', itemCount: 2 }));
+    });
+    expect(latest.current?.ready).toBe(false);
+    expect(latest.current?.visiblyCommitted).toBe(false);
+
+    act(() => {
+      tree!.unmount();
+    });
+  });
+
+  test('onViewableItemsChanged counts only explicitly viewable items', () => {
+    type Api = ReturnType<typeof useVirtualizedListReadiness>;
+    const latest: { current: Api | null } = { current: null };
+
+    function Probe({ revision, itemCount }: { revision: string; itemCount: number }) {
+      const api = useVirtualizedListReadiness(revision, itemCount);
+      useEffect(() => {
+        latest.current = api;
+      });
+      return null;
+    }
+
+    let tree: ReactTestRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        React.createElement(Probe, { revision: 'viewable', itemCount: 2 }),
+      );
+    });
+
+    act(() => {
+      latest.current?.onViewableItemsChanged({
+        viewableItems: [
+          { isViewable: true },
+          { isViewable: undefined },
+          { isViewable: null },
+          { isViewable: false },
+        ],
+      });
+    });
+
+    expect(latest.current?.ready).toBe(true);
+    expect(latest.current?.visiblyCommitted).toBe(true);
+    expect(latest.current?.visibleCount).toBe(1);
+
+    act(() => {
+      tree!.unmount();
+    });
   });
 });

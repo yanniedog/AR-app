@@ -313,15 +313,17 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   );
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
       <FlashList
       ref={listRef}
+      key={`browse:${listRevision}`}
       data={items}
-      extraData={`${section}:${pathKey}:${includeNonStandard}`}
+      extraData={listRevision}
       onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
       onLoad={listReadiness.onLoad}
       onContentSizeChange={listReadiness.onContentSizeChange}
       onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+      viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
       keyExtractor={(it, i) =>
         it.kind === 'node'
           ? `${section}-n-${it.node.seg}`
