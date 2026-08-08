@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-08T03:11:57.820Z",
+  "generated_at": "2026-08-08T04:24:33.514Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -604,6 +604,14 @@
         "fix(mobile): paste audit lender fatal and compact logs (#147)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.110"
+    },
+    {
+      "version": "1.0.112",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): continue perf audit after step failures (#149)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.112"
     }
   ]
 }
