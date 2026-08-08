@@ -1,0 +1,36 @@
+{
+  "version": "1.0.108",
+  "releaseTag": "app-arm-v1.0.108",
+  "date": "2026-08-08",
+  "summaryBullets": [
+    "fix(mobile): unblock lenders query readiness during perf audit (#144)",
+    "feat(mobile): put Settings in always-visible bottom tabs (#145)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): unblock lenders query readiness during perf audit (#144)"
+        },
+        {
+          "text": "feat(mobile): put Settings in always-visible bottom tabs (#145)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.108"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.107"
+        }
+      ]
+    }
+  ]
+}
