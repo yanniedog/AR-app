@@ -1,0 +1,32 @@
+{
+  "version": "1.0.121",
+  "releaseTag": "app-arm-v1.0.121",
+  "date": "2026-08-08",
+  "summaryBullets": [
+    "perf(mobile): append log writes and stop duplicating the audit report (#158)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "perf(mobile): append log writes and stop duplicating the audit report (#158)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.121"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.120"
+        }
+      ]
+    }
+  ]
+}
