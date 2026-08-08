@@ -349,6 +349,28 @@ describe('PerformanceAuditReadinessRegistry', () => {
     });
   });
 
+  it('fails immediately when a required readiness kind is never registered', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-missing-kind');
+    registry.registerSurface({
+      id: 'search.results',
+      probes: [{ id: 'results', kind: 'list', status: 'ready', expectedCount: 1, actualCount: 1 }],
+    });
+
+    const wait = registry.waitForReady({
+      surfaceIds: ['search.results'],
+      requiredKinds: ['graphic'],
+      quietWindowMs: 10,
+      timeoutMs: 30_000,
+    });
+    clock.advanceBy(1);
+    await expect(wait).rejects.toMatchObject({
+      name: 'PerformanceAuditReadinessError',
+      message: expect.stringContaining('Required readiness kind is unavailable'),
+    });
+  });
+
   it('provides lifecycle tokens for logos, graphics, and counted lists', () => {
     const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
     registry.beginCapture('pa-assets');

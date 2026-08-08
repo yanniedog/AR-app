@@ -443,6 +443,19 @@ describe('performance audit inactivity watchdog', () => {
     expect(watchdog.isExpired()).toBe(true);
     expect(watchdog.remainingMs()).toBe(0);
   });
+
+  it('touchProgress resets the hang timer without counting a stored check', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(300_000, () => elapsedMs);
+
+    elapsedMs = 290_000;
+    watchdog.touchProgress();
+    elapsedMs = 580_000;
+    expect(watchdog.storedCheckCount).toBe(0);
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 590_001;
+    expect(watchdog.isExpired()).toBe(true);
+  });
 });
 
 describe('audit logfile error formatting', () => {

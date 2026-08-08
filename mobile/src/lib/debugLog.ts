@@ -28,6 +28,8 @@ export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs
 const STORAGE_KEY = 'ar-debug-log-tail';
 const LOG_DIR = `${FileSystem.documentDirectory ?? ''}logs/`;
 const LOG_FILE = `${LOG_DIR}ar-local.log`;
+/** Full audit JSON kept beside the bounded ring so trim cannot drop the diagnosis. */
+const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
 
 const SECRET_VALUE = String.raw`[^\s,;}"']+`;
 const SECRET_PATTERNS: RegExp[] = [
@@ -111,14 +113,20 @@ function entryBytes(entry: LogEntry): number {
 
 const textDecoder = new TextDecoder();
 
-function trimFileTail(content: string): string {
+function trimToBudget(content: string, maxBytes: number): string {
+  const limit = Math.max(0, Math.floor(maxBytes));
   const bytes = textEncoder.encode(content);
-  if (bytes.length <= MAX_LOG_FILE_BYTES) return content;
-  let start = bytes.length - MAX_LOG_FILE_BYTES;
+  if (bytes.length <= limit) return content;
+  if (limit === 0) return '';
+  let start = bytes.length - limit;
   while (start < bytes.length && bytes[start] !== 0x0a) start += 1;
   start += 1;
   if (start >= bytes.length) return '';
   return textDecoder.decode(bytes.slice(start));
+}
+
+function trimFileTail(content: string): string {
+  return trimToBudget(content, MAX_LOG_FILE_BYTES);
 }
 
 /**
@@ -331,9 +339,82 @@ interface StoredPerformanceAudit {
 const PERFORMANCE_AUDIT_REPORT_BEGIN = 'PERFORMANCE_AUDIT_REPORT_BEGIN';
 const PERFORMANCE_AUDIT_REPORT_JSON = 'PERFORMANCE_AUDIT_REPORT_JSON';
 const PERFORMANCE_AUDIT_REPORT_END = 'PERFORMANCE_AUDIT_REPORT_END';
+const PERFORMANCE_AUDIT_REPORT_SIDECAR = 'PERFORMANCE_AUDIT_REPORT_SIDECAR';
 
 function physicalAuditMarker(summaryMarker: string): string {
   return `${PERFORMANCE_AUDIT_REPORT_BEGIN} ${summaryMarker}`;
+}
+
+function isPerformanceAuditReportLine(line: string): boolean {
+  return (
+    line.includes(PERFORMANCE_AUDIT_REPORT_BEGIN) ||
+    line.includes(PERFORMANCE_AUDIT_REPORT_JSON) ||
+    line.includes(PERFORMANCE_AUDIT_REPORT_END) ||
+    line.includes(PERFORMANCE_AUDIT_REPORT_SIDECAR)
+  );
+}
+
+/** Drop prior audit dump lines so a new reserved-tail write does not stack multi-MB JSON. */
+function stripPerformanceAuditReportLines(content: string): string {
+  if (!content) return '';
+  const hadTrailingNewline = content.endsWith('\n');
+  const kept = content
+    .split('\n')
+    .filter((line) => line.length > 0 && !isPerformanceAuditReportLine(line));
+  if (kept.length === 0) return '';
+  return kept.join('\n') + (hadTrailingNewline ? '\n' : '');
+}
+
+function ensureTrailingNewline(content: string): string {
+  if (!content) return '';
+  return content.endsWith('\n') ? content : `${content}\n`;
+}
+
+async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<void> {
+  if (!FileSystem.documentDirectory) return;
+  await ensureLogDir();
+  await FileSystem.writeAsStringAsync(
+    PERFORMANCE_AUDIT_SIDECAR_FILE,
+    JSON.stringify(stored),
+  );
+}
+
+async function readPerformanceAuditSidecar(): Promise<StoredPerformanceAudit | null> {
+  if (!FileSystem.documentDirectory) return null;
+  try {
+    const raw = await FileSystem.readAsStringAsync(PERFORMANCE_AUDIT_SIDECAR_FILE);
+    return parseStoredPerformanceAudit(raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Persist the complete audit block at the end of the physical log, reserving
+ * enough budget so begin/json/end cannot be sliced mid-line by the 2MB trim.
+ */
+async function writeReservedPerformanceAuditBlock(
+  blockText: string,
+  epoch: number,
+): Promise<void> {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('documentDirectory unavailable');
+  }
+  await ensureLogDir();
+  const existing = fileContentCache ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
+  if (epoch !== fileWriteEpoch) return;
+  const cleaned = ensureTrailingNewline(stripPerformanceAuditReportLines(existing));
+  const blockBytes = textEncoder.encode(blockText).length;
+  if (blockBytes > MAX_LOG_FILE_BYTES) {
+    throw new Error(
+      `Performance audit block (${blockBytes} bytes) exceeds the ${MAX_LOG_FILE_BYTES}-byte physical log budget`,
+    );
+  }
+  const head = trimToBudget(cleaned, MAX_LOG_FILE_BYTES - blockBytes);
+  const combined = ensureTrailingNewline(head) + blockText;
+  await FileSystem.writeAsStringAsync(LOG_FILE, combined);
+  if (epoch !== fileWriteEpoch) return;
+  fileContentCache = combined;
 }
 
 function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit | null {
@@ -404,6 +485,7 @@ export const debugLog = {
       if (inFlight) await inFlight.catch(() => {});
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
       await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
+      await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
     })();
     return coldStartResetPromise;
   },
@@ -426,6 +508,7 @@ export const debugLog = {
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
     await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
+    await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
   },
   getText(): string {
     return buffer.getText();
@@ -468,19 +551,55 @@ export const debugLog = {
       reportJson: redactSecrets(JSON.stringify(report)),
     };
     await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
-    append('info', 'perf-audit', physicalAuditMarker(stored.summaryMarker));
-    append('info', 'perf-audit', `${PERFORMANCE_AUDIT_REPORT_JSON} ${stored.reportJson}`);
-    append('info', 'perf-audit', `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`);
+    await writePerformanceAuditSidecar(stored);
+
+    const beginMessage = physicalAuditMarker(stored.summaryMarker);
+    const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${stored.reportJson}`;
+    const endMessage = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
+    const sidecarMessage = `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE}`;
+    const blockEntries: LogEntry[] = [beginMessage, jsonMessage, sidecarMessage, endMessage].map(
+      (message) => ({
+        ts: new Date().toISOString(),
+        level: 'info' as const,
+        tag: 'perf-audit',
+        message,
+      }),
+    );
+    for (const entry of blockEntries) {
+      buffer.append(entry);
+    }
+    notify();
+
+    // Flush ordinary pending lines first so the reserved audit write sees a
+    // coherent head, then pin the complete block at the file tail.
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
     }
     await flushPendingToFile(FileSystem.documentDirectory != null);
     if (FileSystem.documentDirectory) {
+      const epoch = fileWriteEpoch;
+      const fullBlockText = blockEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
+      const compactEntries = blockEntries.filter(
+        (entry) => !entry.message.startsWith(`${PERFORMANCE_AUDIT_REPORT_JSON} `),
+      );
+      const compactBlockText = compactEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
+      const blockText =
+        textEncoder.encode(fullBlockText).length <= MAX_LOG_FILE_BYTES
+          ? fullBlockText
+          : compactBlockText;
+      await writeReservedPerformanceAuditBlock(blockText, epoch);
       const physical = await FileSystem.readAsStringAsync(LOG_FILE);
-      const begin = physicalAuditMarker(stored.summaryMarker);
-      const end = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
-      if (!physical.includes(begin) || !physical.includes(end) || !physical.includes(stored.reportJson)) {
+      const sidecar = await readPerformanceAuditSidecar();
+      const beginOk = physical.includes(beginMessage);
+      const endOk = physical.includes(endMessage);
+      const jsonInLog = physical.includes(stored.reportJson);
+      const sidecarOk =
+        sidecar?.summaryMarker === stored.summaryMarker &&
+        sidecar.reportJson === stored.reportJson;
+      // Reserved-tail write keeps begin/end intact; full JSON lives in the log
+      // when it fits, otherwise the sidecar is the durable body.
+      if (!beginOk || !endOk || (!jsonInLog && !sidecarOk)) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }
@@ -496,13 +615,20 @@ export const debugLog = {
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
-    const latest = parseStoredPerformanceAudit(
-      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
-    );
+    const latest =
+      parseStoredPerformanceAudit(
+        await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
+      ) ?? (await readPerformanceAuditSidecar());
     if (!latest) return clean;
     const physicalBegin = physicalAuditMarker(latest.summaryMarker);
     const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
-    if (clean.includes(physicalBegin) && clean.includes(physicalEnd)) return clean;
+    if (
+      clean.includes(physicalBegin) &&
+      clean.includes(physicalEnd) &&
+      clean.includes(latest.reportJson)
+    ) {
+      return clean;
+    }
     return [
       clean,
       '',

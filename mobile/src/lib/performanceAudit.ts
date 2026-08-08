@@ -309,6 +309,11 @@ export class PerformanceAuditInactivityWatchdog {
     return this.remainingMs() <= 0;
   }
 
+  /** Reset the hang timer without counting a durable check (readiness progress). */
+  touchProgress(): void {
+    this.lastStoredProgressMs = this.clock();
+  }
+
   recordStoredCheck(): void {
     this.lastStoredProgressMs = this.clock();
     this.storedChecks += 1;

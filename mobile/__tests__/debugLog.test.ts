@@ -5,6 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import {
   ANDROID_LOG_PATH_HINT,
   MAX_LOG_BYTES,
+  MAX_LOG_FILE_BYTES,
   MAX_LOG_LINES,
   PASTE_RS_ATTEMPT_TIMEOUT_MS,
   PASTE_RS_TAIL_MAX_BYTES,
@@ -435,6 +436,24 @@ describe('parseLogLine', () => {
 });
 
 describe('persistent log file', () => {
+  const LOG_PATH = 'file:///docs/logs/ar-local.log';
+  const AUDIT_SIDECAR_PATH = 'file:///docs/logs/ar-performance-audit-latest.json';
+
+  function installPathAwareFiles(seed: Record<string, string> = {}): Record<string, string> {
+    const files = { ...seed };
+    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (path: string, contents: string) => {
+      files[path] = contents;
+    });
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async (path: string) => {
+      if (!(path in files)) throw new Error(`missing file ${path}`);
+      return files[path];
+    });
+    (FileSystem.deleteAsync as jest.Mock).mockImplementation(async (path: string) => {
+      delete files[path];
+    });
+    return files;
+  }
+
   beforeEach(async () => {
     jest.clearAllMocks();
     setObservabilityDepsForTests({
@@ -462,7 +481,7 @@ describe('persistent log file', () => {
     );
     expect(FileSystem.writeAsStringAsync).toHaveBeenCalled();
     const [path, contents] = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls[0];
-    expect(path).toBe('file:///docs/logs/ar-local.log');
+    expect(path).toBe(LOG_PATH);
     expect(contents).toContain('file persist');
     expect(contents).not.toContain('secret');
   });
@@ -479,11 +498,7 @@ describe('persistent log file', () => {
   });
 
   it('flushes a crash-detectable complete audit into the physical log without export duplication', async () => {
-    let physicalContents = '';
-    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (_path, contents) => {
-      physicalContents = contents;
-    });
-    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async () => physicalContents);
+    const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=physical app_version=9.8.7 build_version=654`;
     await debugLog.storePerformanceAudit(marker, {
       schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
@@ -491,17 +506,43 @@ describe('persistent log file', () => {
       sentinel: 'physical-complete-audit',
     });
 
-    const writes = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls;
-    const [, physicalLog] = writes[writes.length - 1];
+    const physicalLog = files[LOG_PATH];
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
     expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_JSON');
     expect(physicalLog).toContain('physical-complete-audit');
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
+    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_SIDECAR');
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('physical-complete-audit');
 
-    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(physicalLog);
     const complete = await debugLog.readCompleteText();
     expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
     expect(complete).not.toContain('# Latest complete performance audit');
+  });
+
+  it('keeps a complete audit block when the physical log is already near capacity', async () => {
+    const noiseLine = `${'n'.repeat(8_000)}\n`;
+    const nearlyFull = noiseLine.repeat(Math.ceil(MAX_LOG_FILE_BYTES / noiseLine.length));
+    const files = installPathAwareFiles({ [LOG_PATH]: nearlyFull });
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=near-full app_version=9.8.7 build_version=654`;
+    const report = {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'near-full-audit-body',
+      checks: Array.from({ length: 40 }, (_, index) => ({
+        id: `check-${index}`,
+        label: `verbose check ${index}`,
+        detail: 'x'.repeat(2_000),
+      })),
+    };
+
+    await debugLog.storePerformanceAudit(marker, report);
+
+    const physicalLog = files[LOG_PATH];
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
+    expect(physicalLog).toContain('near-full-audit-body');
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
+    expect(new TextEncoder().encode(physicalLog).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('near-full-audit-body');
   });
 
   it('does not report physical audit persistence when the filesystem write fails', async () => {
@@ -515,11 +556,7 @@ describe('persistent log file', () => {
   });
 
   it('includes the durable complete audit after the bounded ring has evicted its marker', async () => {
-    let physicalContents = '';
-    (FileSystem.writeAsStringAsync as jest.Mock).mockImplementation(async (_path, contents) => {
-      physicalContents = contents;
-    });
-    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(async () => physicalContents);
+    const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=durable app_version=9.8.7 build_version=654`;
     await debugLog.storePerformanceAudit(marker, {
       schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
@@ -532,7 +569,9 @@ describe('persistent log file', () => {
       debugLog.info('noise', `${index}:${chunk}`);
     }
     expect(debugLog.getText()).not.toContain(marker);
-    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('newest bounded on-disk log');
+    await debugLog.flushToFile();
+    // Simulate a later bounded-file rollover that dropped the reserved audit block.
+    files[LOG_PATH] = 'newest bounded on-disk log';
 
     const complete = await debugLog.readCompleteText();
 
@@ -564,7 +603,11 @@ describe('persistent log file', () => {
     debugLog.clear();
 
     expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
-      'file:///docs/logs/ar-local.log',
+      LOG_PATH,
+      { idempotent: true },
+    );
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      AUDIT_SIDECAR_PATH,
       { idempotent: true },
     );
   });
