@@ -4,6 +4,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 // eslint-disable-next-line import/first -- imports after jest mocks
 import {
   ANDROID_LOG_PATH_HINT,
+  MAX_AUDIT_EXPORT_REPORT_CHARS,
+  MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
   MAX_LOG_BYTES,
   MAX_LOG_FILE_BYTES,
   MAX_LOG_LINES,
@@ -595,6 +597,55 @@ describe('persistent log file', () => {
     const complete = await debugLog.readCompleteText();
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain('sidecar-after-asyncstorage-failure');
+  });
+
+  it('keeps an oversized report out of AsyncStorage and drops the stale snapshot', async () => {
+    const files = installPathAwareFiles();
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: 'stale-marker',
+      reportJson: '{"sentinel":"stale-small-audit"}',
+    }));
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    setItem.mockClear();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=oversized-snapshot app_version=9.8.7 build_version=654`;
+
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'oversized-snapshot-body',
+      blob: 'B'.repeat(MAX_AUDIT_SNAPSHOT_STORAGE_CHARS + 1),
+    });
+
+    // A multi-megabyte SQLite row is what makes later AsyncStorage reads throw.
+    expect(setItem).not.toHaveBeenCalledWith(
+      LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+      expect.anything(),
+    );
+    await expect(AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY)).resolves.toBeNull();
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('oversized-snapshot-body');
+  });
+
+  it('omits an oversized compact report from the export instead of building it', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=huge-export app_version=9.8.7 build_version=654`;
+    const detail = 'D'.repeat(2_048);
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      // Kept verbatim by log compaction, so the compact body stays oversized.
+      checks: Array.from({ length: 400 }, (_, index) => ({ id: `c${index}`, detail })),
+    });
+    // Force the sidecar path by dropping the reserved block from the log.
+    files[LOG_PATH] = 'log without reserved audit markers';
+
+    const complete = await debugLog.readCompleteText();
+
+    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain(marker);
+    expect(complete).toContain('compact report omitted from this export');
+    expect(complete).not.toContain(detail);
+    expect(complete.length).toBeLessThan(MAX_AUDIT_EXPORT_REPORT_CHARS);
   });
 
   it('does not report physical audit persistence when the filesystem write fails', async () => {

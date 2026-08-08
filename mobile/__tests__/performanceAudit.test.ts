@@ -17,7 +17,10 @@ import {
   requestPerformanceAudit,
   resolveAuditJourneyOptionalData,
   resetPerformanceAuditForTests,
+  MAX_REPORTED_AUDIT_CHECKS,
   scoreLatency,
+  selectReportedAuditChecks,
+  setPerformanceAuditUploadResult,
   summarizePerformanceAudit,
   summarizeResponsiveness,
   worstStatus,
@@ -337,6 +340,42 @@ describe('performance audit maintenance isolation', () => {
   });
 });
 
+describe('reported audit check selection', () => {
+  function check(id: string, status: AuditCheck['status'], durationMs: number): AuditCheck {
+    return { id, label: id, kind: 'journey', status, durationMs, metrics: {} };
+  }
+
+  it('renders every check for a short report', () => {
+    const checks = [check('a', 'pass', 1), check('b', 'fail', 2)];
+    expect(selectReportedAuditChecks(checks)).toBe(checks);
+  });
+
+  it('keeps all non-pass checks and the slowest passes in run order', () => {
+    const checks = [
+      ...Array.from({ length: 300 }, (_, index) => check(`p${index}`, 'pass', index)),
+      check('f1', 'fail', 5),
+      check('w1', 'warn', 6),
+      check('s1', 'skipped', 0),
+    ];
+
+    const selected = selectReportedAuditChecks(checks);
+
+    expect(selected).toHaveLength(MAX_REPORTED_AUDIT_CHECKS);
+    expect(selected.map((entry) => entry.id)).toEqual(
+      expect.arrayContaining(['f1', 'w1', 's1', 'p299']),
+    );
+    // The fastest passes are the ones dropped.
+    expect(selected.map((entry) => entry.id)).not.toContain('p0');
+    const order = selected.map((entry) => checks.indexOf(entry));
+    expect(order).toEqual([...order].sort((a, b) => a - b));
+  });
+
+  it('caps a report that is entirely failures', () => {
+    const checks = Array.from({ length: 300 }, (_, index) => check(`f${index}`, 'fail', index));
+    expect(selectReportedAuditChecks(checks)).toHaveLength(MAX_REPORTED_AUDIT_CHECKS);
+  });
+});
+
 describe('performance audit lifecycle', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
@@ -371,6 +410,55 @@ describe('performance audit lifecycle', () => {
       uploadUrl: 'https://paste.example/audit',
       uploadProvider: 'test-provider',
       uploadError: null,
+    });
+  });
+
+  it('publishes the report before the upload finishes and attaches its result later', () => {
+    const sessionId = requestPerformanceAudit();
+    const report = {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sessionId,
+      startedAt: '2026-08-08T00:00:00.000Z',
+      finishedAt: '2026-08-08T00:01:00.000Z',
+      durationMs: 60_000,
+      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
+      watchdog: {
+        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+        storedCheckCount: 0,
+        lastStoredCheckAt: null,
+      },
+      environment,
+      summary: summarizePerformanceAudit([]),
+      checks: [],
+      routeAggregates: [],
+      limitations: [],
+    };
+
+    completePerformanceAudit(report, 'pending');
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'complete',
+      report,
+      uploadPending: true,
+      uploadUrl: null,
+      uploadError: null,
+    });
+
+    setPerformanceAuditUploadResult({ error: 'paste.rs did not respond in time.' });
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'complete',
+      report,
+      uploadPending: false,
+      uploadUrl: null,
+      uploadError: 'paste.rs did not respond in time.',
+    });
+  });
+
+  it('ignores a late upload result once the audit is no longer complete', () => {
+    requestPerformanceAudit();
+    setPerformanceAuditUploadResult({ url: 'https://paste.example/late' });
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'queued',
+      uploadUrl: null,
     });
   });
 

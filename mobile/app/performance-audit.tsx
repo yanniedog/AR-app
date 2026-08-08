@@ -12,6 +12,7 @@ import {
   parsePerformanceAuditHangTimeoutSeconds,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
+  selectReportedAuditChecks,
   subscribePerformanceAudit,
   type AuditCheck,
   type AuditCheckStatus,
@@ -82,6 +83,10 @@ export default function PerformanceAuditScreen() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const report = state.report;
+  const reportedChecks = useMemo(
+    () => (report ? selectReportedAuditChecks(report.checks) : []),
+    [report],
+  );
   const running = state.status === 'queued' || state.status === 'running';
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
   const auditActions = useMemo(() => ({
@@ -286,7 +291,9 @@ export default function PerformanceAuditScreen() {
             <AppText variant="small" color={state.uploadUrl ? 'success' : 'textMuted'}>
               {state.uploadUrl
                 ? `Full log uploaded via ${state.uploadProvider}; link copied to clipboard.`
-                : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
+                : state.uploadPending
+                  ? 'Uploading the full log and copying its link...'
+                  : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
             </AppText>
           </Card>
 
@@ -311,7 +318,14 @@ export default function PerformanceAuditScreen() {
             <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
               CHECK RESULTS
             </AppText>
-            {report.checks.map((check) => {
+            {reportedChecks.length < report.checks.length ? (
+              <AppText variant="tiny" color="textFaint" style={{ marginLeft: 4 }}>
+                Showing every failure, warning and skip plus the slowest passes (
+                {reportedChecks.length} of {report.checks.length}). The uploaded log holds
+                the complete report.
+              </AppText>
+            ) : null}
+            {reportedChecks.map((check) => {
               const color =
                 check.status === 'pass'
                   ? theme.colors.success

@@ -2,6 +2,64 @@
 
 const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
 
+/**
+ * A deep audit records ~260 checks. Hermes stacks, readiness dumps and joined
+ * runtime-error lists are individually unbounded, so a run with many failed
+ * steps produced multi-megabyte reports; teardown then serialized, redacted,
+ * compacted and uploaded several copies of that body at once and exhausted the
+ * JS heap right after progress reached 100%. Evidence is capped per check so
+ * the report stays diagnosable without being unbounded.
+ */
+export const MAX_AUDIT_EVIDENCE_CHARS = 2_000;
+export const MAX_AUDIT_METRIC_TEXT_CHARS = 512;
+
+export function truncateAuditText(value: string, maxChars: number): string {
+  if (value.length <= maxChars) return value;
+  return `${value.slice(0, maxChars)}…[truncated ${value.length - maxChars} chars]`;
+}
+
+interface BoundableAuditCheck {
+  metrics: Record<string, unknown>;
+  trace?: string;
+  error?: string;
+}
+
+/**
+ * Cap a single check's evidence text. The same object is returned when nothing
+ * exceeds its budget so a healthy run allocates no replacement checks.
+ */
+export function boundAuditCheckEvidence<T extends BoundableAuditCheck>(check: T): T {
+  const boundedError = typeof check.error === 'string'
+    ? truncateAuditText(check.error, MAX_AUDIT_EVIDENCE_CHARS)
+    : check.error;
+  const boundedTrace = typeof check.trace === 'string'
+    ? truncateAuditText(check.trace, MAX_AUDIT_EVIDENCE_CHARS)
+    : check.trace;
+  let metrics = check.metrics;
+  let metricsChanged = false;
+  for (const [key, value] of Object.entries(check.metrics ?? {})) {
+    if (typeof value !== 'string' || value.length <= MAX_AUDIT_METRIC_TEXT_CHARS) continue;
+    if (!metricsChanged) {
+      metrics = { ...check.metrics };
+      metricsChanged = true;
+    }
+    metrics[key] = truncateAuditText(value, MAX_AUDIT_METRIC_TEXT_CHARS);
+  }
+  if (
+    !metricsChanged &&
+    boundedError === check.error &&
+    boundedTrace === check.trace
+  ) {
+    return check;
+  }
+  return {
+    ...check,
+    metrics,
+    ...(boundedError === undefined ? {} : { error: boundedError }),
+    ...(boundedTrace === undefined ? {} : { trace: boundedTrace }),
+  };
+}
+
 export function omitNullishDeep<T>(value: T): T {
   if (value == null || typeof value !== 'object') return value;
   if (Array.isArray(value)) return value.map((entry) => omitNullishDeep(entry)) as T;
