@@ -338,7 +338,7 @@ export default function Calculator() {
     return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
   }, [inputs.mode, scenarioStorageStatus, section, updateScenario]);
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
-  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${detailsLoading ? 'details-loading' : 'details-settled'}:${inputs.mode}:${inputs.propertyValue}:${inputs.currentRate}:${depositInputs.balance}`;
+  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${inputs.mode}:${inputs.propertyValue}:${inputs.currentRate}:${depositInputs.balance}`;
   const calculatorLogoIds = useMemo(
     () => candidates.map((candidate) =>
       `calculator:${candidate.row.product_key}:${candidate.row.rate_index ?? 'none'}`),
@@ -412,6 +412,7 @@ export default function Calculator() {
       {
         id: 'calculator.logos',
         kind: 'logo',
+        required: false,
         status: calculatorLogos.ready ? 'ready' : 'pending',
         expectedCount: calculatorLogos.expectedCount,
         actualCount: calculatorLogos.terminalCount,

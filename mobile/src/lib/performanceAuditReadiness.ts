@@ -133,6 +133,10 @@ export interface WaitForPerformanceAuditReadinessOptions {
   /** Optional asset families become mandatory when the active step explicitly
    * exercises them (for example a history chart or lender-logo view). */
   requiredKinds?: readonly PerformanceAuditReadinessKind[];
+  /** When set, only these probe kinds gate readiness. Required probes outside
+   * this set are ignored — used before invoking mounted actions so logo/list
+   * decoration cannot block unrelated navigation taps. */
+  onlyKinds?: readonly PerformanceAuditReadinessKind[];
 }
 
 type MutableProbe = PerformanceAuditProbeSnapshot;
@@ -493,9 +497,11 @@ export class PerformanceAuditReadinessRegistry {
   snapshot(
     surfaceIds?: readonly string[],
     requiredKinds?: readonly PerformanceAuditReadinessKind[],
+    onlyKinds?: readonly PerformanceAuditReadinessKind[],
   ): PerformanceAuditReadinessSnapshot {
     const selectedIds = surfaceIds ? new Set(surfaceIds) : null;
     const selectedKinds = requiredKinds ? new Set(requiredKinds) : null;
+    const limitedKinds = onlyKinds?.length ? new Set(onlyKinds) : null;
     const surfaces = [...this.surfaces.values()]
       .filter((surface) => selectedIds == null || selectedIds.has(surface.id))
       .sort((left, right) => left.id.localeCompare(right.id))
@@ -528,7 +534,8 @@ export class PerformanceAuditReadinessRegistry {
         });
       }
       for (const probe of surface.probes) {
-        if (!probe.required && !selectedKinds?.has(probe.kind)) continue;
+        if (limitedKinds && !limitedKinds.has(probe.kind)) continue;
+        if (!limitedKinds && !probe.required && !selectedKinds?.has(probe.kind)) continue;
         if (probe.status === 'error') {
           blockers.push({
             code: 'probe-error',
@@ -591,7 +598,10 @@ export class PerformanceAuditReadinessRegistry {
       });
     }
     const probes = surfaces.flatMap((surface) => surface.probes);
-    const required = probes.filter((probe) => probe.required || selectedKinds?.has(probe.kind));
+    const required = probes.filter((probe) => {
+      if (limitedKinds) return limitedKinds.has(probe.kind);
+      return probe.required || selectedKinds?.has(probe.kind);
+    });
     return {
       capturing: this.capture != null,
       sessionId: this.capture?.sessionId ?? null,
@@ -649,7 +659,11 @@ export class PerformanceAuditReadinessRegistry {
       const evaluate = () => {
         if (settled) return;
         quietTimer = null;
-        const snapshot = this.snapshot(options.surfaceIds, options.requiredKinds);
+        const snapshot = this.snapshot(
+          options.surfaceIds,
+          options.requiredKinds,
+          options.onlyKinds,
+        );
         if (expectedGeneration == null || !snapshot.capturing || snapshot.generation !== expectedGeneration) {
           fail(new PerformanceAuditReadinessCaptureEndedError(snapshot));
           return;
@@ -688,14 +702,14 @@ export class PerformanceAuditReadinessRegistry {
       const abort = () => {
         fail(new PerformanceAuditReadinessError(
           'Readiness wait was aborted',
-          this.snapshot(options.surfaceIds, options.requiredKinds),
+          this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds),
         ));
       };
       const unsubscribe = this.subscribe(evaluate);
       timeoutTimer = this.clock.setTimeout(() => {
         fail(new PerformanceAuditReadinessTimeoutError(
           timeoutMs,
-          this.snapshot(options.surfaceIds, options.requiredKinds),
+          this.snapshot(options.surfaceIds, options.requiredKinds, options.onlyKinds),
         ));
       }, timeoutMs);
       options.signal?.addEventListener('abort', abort, { once: true });
