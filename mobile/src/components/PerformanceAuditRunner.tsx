@@ -812,8 +812,8 @@ function resolveMountedActionSurface(
     return currentPath === root || currentPath.startsWith(`${root}/`);
   });
   return onRoute.find((s) => s.id !== expectedSurface)
-    ?? matches.find((s) => s.id !== expectedSurface)
     ?? onRoute[0]
+    ?? matches.find((s) => s.id !== expectedSurface)
     ?? matches[0]
     ?? null;
 }

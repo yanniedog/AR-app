@@ -273,7 +273,8 @@ export default function ProductDetail() {
       {
         id: 'product.history-data',
         kind: 'data',
-        required: historyEnabled,
+        // History sync is deferred after paint; do not block product readiness on it.
+        required: false,
         status: !historyEnabled || productHistory
           ? 'ready'
           : productHistoryError
