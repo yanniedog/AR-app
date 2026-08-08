@@ -1,10 +1,72 @@
 import {
+  boundAuditCheckEvidence,
   compactAuditCheckForLog,
   compactAuditLogJson,
   compactPerformanceAuditReportForLog,
+  MAX_AUDIT_EVIDENCE_CHARS,
+  MAX_AUDIT_METRIC_TEXT_CHARS,
   omitNullishDeep,
   shortenAuditEvidenceText,
+  truncateAuditText,
 } from '../src/lib/performanceAuditLog';
+
+describe('bounded audit evidence', () => {
+  it('leaves a check within budget untouched', () => {
+    const check = {
+      id: 'c1',
+      metrics: { readinessProbes: 'browse.data:ready' },
+      error: 'short failure',
+      trace: 'short trace',
+    };
+
+    expect(boundAuditCheckEvidence(check)).toBe(check);
+  });
+
+  it('caps stacks, traces and long string metrics', () => {
+    const bounded = boundAuditCheckEvidence({
+      id: 'c2',
+      metrics: {
+        readinessProbes: 'p'.repeat(MAX_AUDIT_METRIC_TEXT_CHARS + 500),
+        forwardMs: 12,
+        reason: null,
+      },
+      error: 'e'.repeat(MAX_AUDIT_EVIDENCE_CHARS + 5_000),
+      trace: 't'.repeat(MAX_AUDIT_EVIDENCE_CHARS + 5_000),
+    });
+
+    expect(bounded.error?.length).toBeLessThan(MAX_AUDIT_EVIDENCE_CHARS + 64);
+    expect(bounded.trace?.length).toBeLessThan(MAX_AUDIT_EVIDENCE_CHARS + 64);
+    expect(bounded.error).toContain('truncated 5000 chars');
+    expect(String(bounded.metrics.readinessProbes).length)
+      .toBeLessThan(MAX_AUDIT_METRIC_TEXT_CHARS + 64);
+    // Non-string and short metrics survive unchanged.
+    expect(bounded.metrics.forwardMs).toBe(12);
+    expect(bounded.metrics.reason).toBeNull();
+  });
+
+  it('keeps a whole deep-audit report inside a bounded serialized budget', () => {
+    const stack = `${'stack frame line\n'.repeat(400)}`;
+    const checks = Array.from({ length: 260 }, (_, index) => boundAuditCheckEvidence({
+      id: `deep-step-${index}`,
+      metrics: { readinessProbes: 'p'.repeat(4_000) },
+      error: stack,
+      trace: stack,
+    }));
+
+    const unbounded = JSON.stringify(
+      Array.from({ length: 260 }, () => ({ error: stack, trace: stack })),
+    );
+    const encoded = JSON.stringify(checks);
+
+    expect(unbounded.length).toBeGreaterThan(3_000_000);
+    expect(encoded.length).toBeLessThan(1_500_000);
+  });
+
+  it('reports how much evidence was dropped', () => {
+    expect(truncateAuditText('abcdef', 3)).toBe('abc…[truncated 3 chars]');
+    expect(truncateAuditText('abc', 3)).toBe('abc');
+  });
+});
 
 describe('performanceAuditLog compaction', () => {
   it('omits nullish fields deeply', () => {

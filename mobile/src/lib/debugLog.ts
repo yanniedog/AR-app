@@ -373,6 +373,36 @@ function ensureTrailingNewline(content: string): string {
   return content.endsWith('\n') ? content : `${content}\n`;
 }
 
+/**
+ * AsyncStorage is SQLite-backed on Android and a multi-megabyte row is exactly
+ * what makes later reads blow the cursor window. The sidecar file already holds
+ * the full body, so oversized snapshots are skipped instead of stored, and any
+ * previous snapshot is dropped so a stale smaller audit cannot look like the
+ * newest one.
+ */
+export const MAX_AUDIT_SNAPSHOT_STORAGE_CHARS = 128 * 1024;
+/**
+ * Bounds only the recovery copy this module *appends* to an export when the
+ * physical log no longer carries the audit block. The log itself is already
+ * capped at MAX_LOG_FILE_BYTES, so a block the log did keep is returned as-is:
+ * re-splitting a 2MB log to strip it would cost exactly the extra full copies
+ * this path exists to avoid.
+ */
+export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
+
+async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise<void> {
+  const payload = JSON.stringify(stored);
+  if (payload.length > MAX_AUDIT_SNAPSHOT_STORAGE_CHARS) {
+    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
+    return;
+  }
+  try {
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, payload);
+  } catch {
+    // non-fatal once the sidecar exists
+  }
+}
+
 async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<void> {
   if (!FileSystem.documentDirectory) return;
   await ensureLogDir();
@@ -556,20 +586,19 @@ export const debugLog = {
     // Sidecar first: AsyncStorage can fail after a durable disk write; reverse order
     // would leave neither physical artifact when setItem throws.
     await writePerformanceAuditSidecar(stored);
-    try {
-      await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
-    } catch {
-      // non-fatal once the sidecar exists
-    }
+    await storeLatestAuditSnapshot(stored);
 
     const beginMessage = physicalAuditMarker(stored.summaryMarker);
+    // Compact from the live report object. Re-parsing the serialized body held a
+    // second full object graph plus a second full string alive at once, which is
+    // the peak allocation of audit teardown.
     let compactReportJson = stored.reportJson;
     try {
       compactReportJson = redactSecrets(
-        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(stored.reportJson))),
+        JSON.stringify(compactPerformanceAuditReportForLog(report)),
       );
     } catch {
-      // Keep the original body if compaction cannot parse a custom fixture.
+      // Keep the original body if compaction cannot encode a custom fixture.
     }
     const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${compactReportJson}`;
     const endMessage = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
@@ -607,15 +636,23 @@ export const debugLog = {
           : compactBlockText;
       await writeReservedPerformanceAuditBlock(blockText, epoch);
       const physical = await FileSystem.readAsStringAsync(LOG_FILE);
-      const sidecar = await readPerformanceAuditSidecar();
       const beginOk = physical.includes(beginMessage);
       const endOk = physical.includes(endMessage);
-      const jsonInLog = physical.includes(compactReportJson);
-      const sidecarOk =
-        sidecar?.summaryMarker === stored.summaryMarker &&
-        sidecar.reportJson === stored.reportJson;
+      // Search for the short line marker instead of the megabyte-scale report
+      // body; the reserved write emits begin/json/sidecar/end as one atomic
+      // block, so the marker's presence identifies this session's JSON line.
+      const jsonInLog =
+        blockText === fullBlockText && physical.includes(`${PERFORMANCE_AUDIT_REPORT_JSON} `);
+      let sidecarOk = false;
       // Reserved-tail write keeps begin/end intact; compact JSON lives in the log
-      // when it fits, otherwise the sidecar is the durable full body.
+      // when it fits, otherwise the sidecar is the durable full body — and only
+      // then is it worth reading and re-parsing that full body back.
+      if (!jsonInLog) {
+        const sidecar = await readPerformanceAuditSidecar();
+        sidecarOk =
+          sidecar?.summaryMarker === stored.summaryMarker &&
+          sidecar.reportJson === stored.reportJson;
+      }
       if (!beginOk || !endOk || (!jsonInLog && !sidecarOk)) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
@@ -641,6 +678,16 @@ export const debugLog = {
     if (!latest) return clean;
     const physicalBegin = physicalAuditMarker(latest.summaryMarker);
     const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
+    // Match this session's short begin/end markers plus the JSON line marker
+    // rather than scanning the whole log for a megabyte-scale needle, and skip
+    // recompacting the report entirely when the log already carries it.
+    if (
+      clean.includes(physicalBegin) &&
+      clean.includes(physicalEnd) &&
+      clean.includes(`${PERFORMANCE_AUDIT_REPORT_JSON} `)
+    ) {
+      return clean;
+    }
     let compactJson: string;
     try {
       compactJson = redactSecrets(
@@ -649,19 +696,17 @@ export const debugLog = {
     } catch {
       compactJson = latest.reportJson;
     }
-    if (
-      clean.includes(physicalBegin) &&
-      clean.includes(physicalEnd) &&
-      (clean.includes(compactJson) || clean.includes(latest.reportJson))
-    ) {
-      return clean;
-    }
     return [
       clean,
       '',
       '# Latest complete performance audit',
       latest.summaryMarker,
-      compactJson,
+      compactJson.length > MAX_APPENDED_AUDIT_REPORT_CHARS
+        // An export that carries a body this large is rejected by the paste
+        // service anyway, and building it costs several full copies of the log.
+        ? `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE} ` +
+          `(compact report omitted from this export: ${compactJson.length} chars)`
+        : compactJson,
     ].join('\n');
   },
   subscribe(fn: Listener): () => void {

@@ -24,6 +24,7 @@ import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/select
 import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
+import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
@@ -63,6 +64,7 @@ import {
   resolveAuditJourneyOptionalData,
   roundMetric,
   scoreLatency,
+  setPerformanceAuditUploadResult,
   subscribePerformanceAudit,
   summarizePerformanceAudit,
   updatePerformanceAuditProgress,
@@ -76,6 +78,7 @@ import {
   type ResponsivenessMetrics,
 } from '../lib/performanceAudit';
 import {
+  boundAuditCheckEvidence,
   compactAuditCheckForLog,
   compactAuditLogJson,
   omitNullishDeep,
@@ -2001,13 +2004,16 @@ export function PerformanceAuditRunner() {
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const state = usePerformanceAuditState();
-  const runningRef = useRef(false);
+  const runGate = usePerformanceAuditRunGate();
+  const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
   useEffect(() => {
-    if (state.status !== 'queued' || runningRef.current || !state.sessionId || !state.startedAt) return;
-    runningRef.current = true;
+    if (state.status !== 'queued' || !state.sessionId || !state.startedAt) return;
+    // Teardown outlives the previous audit's terminal state; releaseCount
+    // re-runs this effect once that run lets go of the gate.
+    if (!claimRun(state.sessionId)) return;
 
     const execute = async () => {
       const sessionId = state.sessionId!;
@@ -2050,8 +2056,12 @@ export function PerformanceAuditRunner() {
         if (failure) throw failure;
       };
 
-      const record = async (check: AuditCheck) => {
+      const record = async (rawCheck: AuditCheck) => {
         assertSessionActive(watchdog);
+        // Bound evidence at the one place every check enters the report. ~260
+        // unbounded stacks and readiness dumps are what pushed the finished
+        // report past the megabyte range and exhausted the heap in teardown.
+        const check = boundAuditCheckEvidence(rawCheck);
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -2385,24 +2395,45 @@ export function PerformanceAuditRunner() {
           'Final audit log flush',
           FINALIZATION_FLUSH_TIMEOUT_MS,
         );
-        updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
+        updatePerformanceAuditProgress(completed, total, 'Returning to the audit screen');
+        try {
+          await timeoutAfter(
+            recoverAuditRoute(() => pathnameRef.current),
+            ROUTE_TIMEOUT_MS,
+            'Audit home route recovery',
+          );
+        } catch (recoveryCaught) {
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `post-complete route recovery failed: ${formatAuditErrorForLog(recoveryCaught)}`,
+          );
+        }
+        assertSessionActive(watchdog);
+        // Publish the diagnosis before the upload stage. Reading, re-redacting
+        // and posting the whole on-disk log is the heaviest work of the run, and
+        // a failure there must not discard a report that is already complete.
+        completePerformanceAudit(report, 'pending');
+
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
-          const completeLog = await awaitAuditWorkWithTimeout(
-            debugLog.readCompleteText(),
-            watchdog,
-            'Complete audit log read',
-            FINALIZATION_READ_TIMEOUT_MS,
-          );
+          // Build the export in its own scope so the raw log text is collectable
+          // while the upload body — a second full copy of it — is in flight.
+          const exportBody = await (async () => {
+            const completeLog = await awaitAuditWorkWithTimeout(
+              debugLog.readCompleteText(),
+              watchdog,
+              'Complete audit log read',
+              FINALIZATION_READ_TIMEOUT_MS,
+            );
+            return formatVersionedLogExport(
+              completeLog,
+              environment.appVersion,
+              environment.buildVersion,
+              { audit_session: sessionId },
+            );
+          })();
           const result = await awaitAuditWorkWithTimeout(
-            uploadDebugLog(
-              formatVersionedLogExport(
-                completeLog,
-                environment.appVersion,
-                environment.buildVersion,
-                { audit_session: sessionId },
-              ),
-            ),
+            uploadDebugLog(exportBody),
             watchdog,
             'Audit log upload',
             FINALIZATION_UPLOAD_TIMEOUT_MS,
@@ -2429,26 +2460,19 @@ export function PerformanceAuditRunner() {
             `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
           );
         }
-        await awaitAuditWorkWithTimeout(
-          debugLog.flushToFile(),
-          watchdog,
-          'Upload-result log flush',
-          FINALIZATION_FLUSH_TIMEOUT_MS,
-        ).catch(() => {});
+        setPerformanceAuditUploadResult(sessionId, upload);
+        // The report is already published; nothing after this point may fall
+        // through to the fatal handler and replace it with a failure state.
         try {
-          await timeoutAfter(
-            recoverAuditRoute(() => pathnameRef.current),
-            ROUTE_TIMEOUT_MS,
-            'Audit home route recovery',
+          await awaitAuditWorkWithTimeout(
+            debugLog.flushToFile(),
+            watchdog,
+            'Upload-result log flush',
+            FINALIZATION_FLUSH_TIMEOUT_MS,
           );
-        } catch (recoveryCaught) {
-          debugLog.warn(
-            PERFORMANCE_AUDIT_LOG_TAG,
-            `post-complete route recovery failed: ${formatAuditErrorForLog(recoveryCaught)}`,
-          );
+        } catch {
+          // Best effort; the durable report and sidecar are already written.
         }
-        assertSessionActive(watchdog);
-        completePerformanceAudit(report, upload);
       } catch (caught) {
         let recoveryError: string | null = null;
         try {
@@ -2476,7 +2500,7 @@ export function PerformanceAuditRunner() {
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
           ].join('\n');
           const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
-          const failedCheck: AuditCheck = {
+          const failedCheck: AuditCheck = boundAuditCheckEvidence({
             id: `fatal-${completed + 1}`,
             label: getPerformanceAuditState().progress.label || 'Performance audit fatal error',
             kind: 'runtime',
@@ -2495,7 +2519,7 @@ export function PerformanceAuditRunner() {
             },
             error,
             trace: captureAuditTrace('performance audit stopped before later steps'),
-          };
+          });
           checks.push(failedCheck);
           logAuditCheck(app, sessionId, failedCheck);
           debugLog.error(
@@ -2652,15 +2676,18 @@ export function PerformanceAuditRunner() {
         } catch {
           // Best effort; always release the JS running guard below.
         }
-        runningRef.current = false;
+        releaseRun();
       }
     };
 
     void execute();
   }, [
+    claimRun,
     dimensions.fontScale,
     dimensions.height,
     dimensions.width,
+    releaseCount,
+    releaseRun,
     state.hangTimeoutMs,
     state.sessionId,
     state.startedAt,
