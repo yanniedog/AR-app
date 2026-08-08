@@ -71,10 +71,10 @@ describe('performance audit rollback journal', () => {
       favorites: ['changed'],
       activeSection: 'Savings',
     });
-    updateUserRateScenario((value) => ({
+    expect(updateUserRateScenario((value) => ({
       ...value,
       mortgage: { ...value.mortgage, currentRate: '9.99', propertyValue: '1' },
-    }));
+    }))).toBe(true);
 
     await expect(restorePerformanceAuditRollback(store, before)).resolves.toBe(true);
     expect(performanceAuditSnapshotFingerprint(capturePerformanceAuditUserSnapshot(store.getState())))

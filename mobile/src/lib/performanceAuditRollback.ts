@@ -169,15 +169,11 @@ async function restoreSnapshot(
     store.getState(),
     restored.userRateScenario ? captureUserRateScenarioForAudit() : null,
   );
-  const expectedForCompare = {
-    ...restored,
-    userRateScenario: restored.userRateScenario,
-  };
   if (
     performanceAuditSnapshotFingerprint({
       ...actual,
       userRateScenario: restored.userRateScenario ? actual.userRateScenario : null,
-    }) !== performanceAuditSnapshotFingerprint(expectedForCompare)
+    }) !== performanceAuditSnapshotFingerprint(restored)
   ) {
     throw new Error('Performance audit state restoration did not match the captured snapshot');
   }

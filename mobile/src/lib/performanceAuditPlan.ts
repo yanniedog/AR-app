@@ -627,7 +627,12 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     unsafeActionsExcluded: ['financial-input.edit'],
   }, [
     { depth: 0, semanticActionId: 'calculator.open' },
-    { depth: 1, semanticActionId: 'calculator.section.next', parameters: { section: section ?? 'Mortgage' }, stateImpact: 'local-only' },
+    {
+      depth: 1,
+      semanticActionId: 'calculator.section.mortgage',
+      parameters: { section: 'Mortgage' },
+      stateImpact: 'local-only',
+    },
     {
       depth: 1,
       semanticActionId: 'calculator.scenario.apply-buy',
@@ -671,7 +676,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     },
     {
       depth: 1,
-      semanticActionId: 'calculator.section.mortgage',
+      semanticActionId: 'calculator.section.return-mortgage',
       parameters: { section: 'Mortgage' },
       stateImpact: 'local-only',
     },

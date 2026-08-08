@@ -249,6 +249,11 @@ describe('deep performance audit plan', () => {
       currentRate: '7.25',
     });
     expect(buy?.safety.stateImpact).toBe('restorable');
+    const calculatorActions = allSteps()
+      .filter((step) => step.passId === 'first-pass' && step.scenarioId === 'route.calculator')
+      .map((step) => step.semanticActionId);
+    expect(calculatorActions.indexOf('calculator.section.mortgage'))
+      .toBeLessThan(calculatorActions.indexOf('calculator.scenario.apply-buy'));
   });
 
   test('marks unavailable data-dependent work as safely optional without changing the pass shape', () => {

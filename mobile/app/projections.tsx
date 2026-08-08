@@ -418,6 +418,24 @@ export default function Projections() {
     const termMonths = auditActionString(args, 'termMonths');
     const modeRaw = auditActionString(args, 'mode');
     if (section === 'Mortgage') {
+      const hasMortgageParams = Boolean(
+        modeRaw
+        || propertyValue
+        || loanBalance
+        || currentRate
+        || years
+        || lowerRate
+        || higherRate
+        || offsetBalance
+        || extraRepaymentAmount
+        || mortgageRateStructure
+        || fixedPeriodMonths,
+      );
+      if (!hasMortgageParams) {
+        return {
+          unavailableReason: 'Mortgage projection apply requires mortgage and/or projection input parameters',
+        };
+      }
       updateScenario((current) => ({
         ...current,
         mortgage: {
@@ -445,13 +463,17 @@ export default function Projections() {
       }));
       return { applied: 'mortgage', currentRate: currentRate ?? null, years: years ?? null };
     }
+    if (!balance && !currentRate && !horizonYears && !lowerRate && !higherRate && !termMonths) {
+      return {
+        unavailableReason: 'Deposit projection apply requires balance, rate, horizon, and/or term parameters',
+      };
+    }
     updateScenario((current) => {
       const key = section === 'TD' ? 'termDeposit' : 'savings';
-      const depositKey = section === 'TD' ? 'termDeposit' : 'savings';
       return {
         ...current,
-        [depositKey]: {
-          ...current[depositKey],
+        [key]: {
+          ...current[key],
           ...(balance ? { balance } : {}),
           ...(currentRate ? { currentRate } : {}),
         },

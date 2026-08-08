@@ -296,6 +296,11 @@ export default function Calculator() {
     const years = auditActionString(args, 'years');
     const balance = auditActionString(args, 'balance');
     if (section === 'Mortgage') {
+      if (!mode && !propertyValue && !deposit && !costs && !loanBalance && !currentRate && !years) {
+        return {
+          unavailableReason: 'Mortgage calculator apply requires mode and/or mortgage input parameters',
+        };
+      }
       updateScenario((prev) => ({
         ...prev,
         mortgage: {
@@ -345,6 +350,7 @@ export default function Calculator() {
     'calculator.section.next': auditSelectSection,
     'calculator.section.savings': auditSelectSection,
     'calculator.section.mortgage': auditSelectSection,
+    'calculator.section.return-mortgage': auditSelectSection,
     'calculator.mode.next': auditToggleMode,
     'calculator.scenario.apply-buy': auditApplyScenario,
     'calculator.scenario.apply-refi': auditApplyScenario,

@@ -2049,19 +2049,20 @@ export function PerformanceAuditRunner() {
           label: string,
           run: () => Promise<AuditCheck>,
         ): Promise<void> => {
+          const recoverAfterFailure = async () => {
+            try {
+              await recoverAuditRoute(() => pathnameRef.current);
+            } catch (recoveryCaught) {
+              debugLog.warn(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `post-failure route recovery failed after ${label}: ${formatAuditErrorForLog(recoveryCaught)}`,
+              );
+            }
+          };
           try {
             const check = await run();
             await record(check);
-            if (check.status === 'fail') {
-              try {
-                await recoverAuditRoute(() => pathnameRef.current);
-              } catch (recoveryCaught) {
-                debugLog.warn(
-                  PERFORMANCE_AUDIT_LOG_TAG,
-                  `post-failure route recovery failed after ${label}: ${formatAuditErrorForLog(recoveryCaught)}`,
-                );
-              }
-            }
+            if (check.status === 'fail') await recoverAfterFailure();
           } catch (caught) {
             rethrowAuditControl(caught);
             const error = formatAuditError(caught);
@@ -2079,14 +2080,7 @@ export function PerformanceAuditRunner() {
               error,
               trace: captureAuditTrace(`${label} failed; audit continues`),
             });
-            try {
-              await recoverAuditRoute(() => pathnameRef.current);
-            } catch (recoveryCaught) {
-              debugLog.warn(
-                PERFORMANCE_AUDIT_LOG_TAG,
-                `post-failure route recovery failed after ${label}: ${formatAuditErrorForLog(recoveryCaught)}`,
-              );
-            }
+            await recoverAfterFailure();
           }
         };
 
