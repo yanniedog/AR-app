@@ -489,14 +489,19 @@ async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Pro
   return textEncoder.encode(payload).length;
 }
 
-async function fileByteSize(path: string): Promise<number | null> {
+/**
+ * Existence and size must stay distinguishable: a platform that does not report
+ * a size is fine to skip comparing, but a file that is not there at all is a
+ * failed write, and the sidecar is the only copy of the report body.
+ */
+async function statFile(path: string): Promise<{ exists: boolean; size: number | null }> {
   try {
     const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return null;
+    if (!info.exists) return { exists: false, size: null };
     const size = (info as { size?: number }).size;
-    return typeof size === 'number' ? size : null;
+    return { exists: true, size: typeof size === 'number' ? size : null };
   } catch {
-    return null;
+    return { exists: false, size: null };
   }
 }
 
@@ -726,13 +731,18 @@ export const debugLog = {
       // long enough for Android to raise its "isn't responding" dialog. Both
       // writes throw on failure, so what is left to prove is that the bytes
       // landed whole, and a stat answers that in constant time.
-      const [logBytes, sidecarOnDisk] = await Promise.all([
-        fileByteSize(LOG_FILE),
-        fileByteSize(PERFORMANCE_AUDIT_SIDECAR_FILE),
+      const [logStat, sidecarStat] = await Promise.all([
+        statFile(LOG_FILE),
+        statFile(PERFORMANCE_AUDIT_SIDECAR_FILE),
       ]);
-      const logOk = logBytes == null || fileByteLength == null || logBytes === fileByteLength;
-      const sidecarOk = sidecarOnDisk == null || sidecarOnDisk === sidecarBytes;
-      if (logBytes == null || !logOk || !sidecarOk) {
+      // Both files must be present. Sizes are compared only when the platform
+      // reports them, so a stat without a size degrades to an existence check
+      // rather than silently passing a truncated write.
+      const logOk = logStat.exists
+        && (logStat.size == null || fileByteLength == null || logStat.size === fileByteLength);
+      const sidecarOk = sidecarStat.exists
+        && (sidecarStat.size == null || sidecarStat.size === sidecarBytes);
+      if (!logOk || !sidecarOk) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }

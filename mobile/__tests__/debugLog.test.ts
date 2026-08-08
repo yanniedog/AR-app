@@ -686,6 +686,37 @@ describe('persistent log file', () => {
     })).rejects.toThrow('was not verified');
   });
 
+  it('fails persistence when the sidecar is missing entirely', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=missing app_version=9.8.7 build_version=654`;
+    // The sidecar is the only copy of the report body, so an absent file must
+    // never read as "size unavailable, assume fine".
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => (
+      path in files && path !== AUDIT_SIDECAR_PATH
+        ? { exists: true, uri: path, size: new TextEncoder().encode(files[path]).length }
+        : { exists: false, uri: path }
+    ));
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'missing-sidecar',
+    })).rejects.toThrow('was not verified');
+  });
+
+  it('accepts a platform that reports no size, on existence alone', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=nosize app_version=9.8.7 build_version=654`;
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => (
+      path in files ? { exists: true, uri: path } : { exists: false, uri: path }
+    ));
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'no-size-reported',
+    })).resolves.toBeUndefined();
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('no-size-reported');
+  });
+
   it('reports each persistence stage so a stall names the step responsible', async () => {
     installPathAwareFiles();
     const stages: string[] = [];
