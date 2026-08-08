@@ -466,6 +466,7 @@ describe('performance audit inactivity watchdog', () => {
     expect(watchdog.isExpired()).toBe(true);
 
     watchdog.beginFinalization();
+    expect(watchdog.remainingMs()).toBe(30_000);
     elapsedMs = 600_000;
     expect(watchdog.isFinalizing).toBe(true);
     expect(watchdog.isExpired()).toBe(false);

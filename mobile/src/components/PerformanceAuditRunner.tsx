@@ -27,7 +27,6 @@ import { SECTION_ORDER } from '../constants';
 import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
-import { compactPerformanceAuditReportForLog } from '../lib/performanceAuditLog';
 import {
   buildDeepPerformanceAuditPlan,
   type DeepAuditStep,
@@ -2227,7 +2226,6 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
-        watchdog.beginFinalization();
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         const restoreStarted = now();
         await timeoutAfter(
@@ -2240,17 +2238,22 @@ export function PerformanceAuditRunner() {
           'Audit state restoration',
         );
         rollbackRestored = true;
-        await record({
-          id: 'audit-state-restoration',
-          label: 'Audit state rollback and durable verification',
-          kind: 'storage',
-          status: 'pass',
-          durationMs: roundMetric(now() - restoreStarted),
-          metrics: {
-            restored: true,
-            journalClearedAfterPersistence: true,
-          },
-        });
+        await timeoutAfter(
+          record({
+            id: 'audit-state-restoration',
+            label: 'Audit state rollback and durable verification',
+            kind: 'storage',
+            status: 'pass',
+            durationMs: roundMetric(now() - restoreStarted),
+            metrics: {
+              restored: true,
+              journalClearedAfterPersistence: true,
+            },
+          }),
+          FINALIZATION_FLUSH_TIMEOUT_MS,
+          'Audit state restoration record',
+        );
+        watchdog.beginFinalization();
 
         environment = {
           ...environment,
@@ -2422,10 +2425,7 @@ export function PerformanceAuditRunner() {
           );
         }
         assertSessionActive(watchdog);
-        completePerformanceAudit(
-          compactPerformanceAuditReportForLog(report) as PerformanceAuditReport,
-          upload,
-        );
+        completePerformanceAudit(report, upload);
       } catch (caught) {
         let recoveryError: string | null = null;
         try {
