@@ -264,13 +264,13 @@ export default function Projections() {
 
   const projectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const projectionInputs = scenario.projections[projectionKey];
-  const updateProjection = (patch: Partial<ProjectionInputs>) => updateScenario((current) => ({
+  const updateProjection = useCallback((patch: Partial<ProjectionInputs>) => updateScenario((current) => ({
     ...current,
     projections: {
       ...current.projections,
       [projectionKey]: { ...current.projections[projectionKey], ...patch },
     },
-  }));
+  })), [projectionKey, updateScenario]);
   const updateMortgage = (patch: Partial<CalcInputs>) => updateScenario((current) => ({
     ...current,
     mortgage: { ...current.mortgage, ...patch },
@@ -399,8 +399,119 @@ export default function Projections() {
   }, [changeMetric, metric, result.availableMetrics]);
   const chartPrevious = useCallback(() => chartControllerRef.current?.previous(), []);
   const chartNext = useCallback(() => chartControllerRef.current?.next(), []);
+  const auditApplyInputs = useCallback((...args: unknown[]) => {
+    if (storageStatus !== 'ready') {
+      return { unavailableReason: 'Encrypted projection scenario is not ready' };
+    }
+    const currentRate = auditActionString(args, 'currentRate');
+    const years = auditActionString(args, 'years');
+    const loanBalance = auditActionString(args, 'loanBalance');
+    const propertyValue = auditActionString(args, 'propertyValue');
+    const balance = auditActionString(args, 'balance');
+    const horizonYears = auditActionString(args, 'horizonYears');
+    const lowerRate = auditActionString(args, 'lowerRate');
+    const higherRate = auditActionString(args, 'higherRate');
+    const offsetBalance = auditActionString(args, 'offsetBalance');
+    const extraRepaymentAmount = auditActionString(args, 'extraRepaymentAmount');
+    const mortgageRateStructure = auditActionString(args, 'mortgageRateStructure');
+    const fixedPeriodMonths = auditActionString(args, 'fixedPeriodMonths');
+    const termMonths = auditActionString(args, 'termMonths');
+    const modeRaw = auditActionString(args, 'mode');
+    if (section === 'Mortgage') {
+      const hasMortgageParams = Boolean(
+        modeRaw
+        || propertyValue
+        || loanBalance
+        || currentRate
+        || years
+        || lowerRate
+        || higherRate
+        || offsetBalance
+        || extraRepaymentAmount
+        || mortgageRateStructure
+        || fixedPeriodMonths,
+      );
+      if (!hasMortgageParams) {
+        return {
+          unavailableReason: 'Mortgage projection apply requires mortgage and/or projection input parameters',
+        };
+      }
+      updateScenario((current) => ({
+        ...current,
+        mortgage: {
+          ...current.mortgage,
+          ...(modeRaw === 'buy' || modeRaw === 'refi' ? { mode: modeRaw } : {}),
+          ...(propertyValue ? { propertyValue } : {}),
+          ...(loanBalance ? { loanBalance } : {}),
+          ...(currentRate ? { currentRate } : {}),
+          ...(years ? { years } : {}),
+        },
+        projections: {
+          ...current.projections,
+          mortgage: {
+            ...current.projections.mortgage,
+            ...(lowerRate ? { lowerRate } : {}),
+            ...(higherRate ? { higherRate } : {}),
+            ...(offsetBalance ? { offsetBalance } : {}),
+            ...(extraRepaymentAmount ? { extraRepaymentAmount } : {}),
+            ...(mortgageRateStructure === 'fixed' || mortgageRateStructure === 'variable'
+              ? { mortgageRateStructure }
+              : {}),
+            ...(fixedPeriodMonths ? { fixedPeriodMonths } : {}),
+          },
+        },
+      }));
+      return { applied: 'mortgage', currentRate: currentRate ?? null, years: years ?? null };
+    }
+    if (!balance && !currentRate && !horizonYears && !lowerRate && !higherRate && !termMonths) {
+      return {
+        unavailableReason: 'Deposit projection apply requires balance, rate, horizon, and/or term parameters',
+      };
+    }
+    updateScenario((current) => {
+      const key = section === 'TD' ? 'termDeposit' : 'savings';
+      return {
+        ...current,
+        [key]: {
+          ...current[key],
+          ...(balance ? { balance } : {}),
+          ...(currentRate ? { currentRate } : {}),
+        },
+        projections: {
+          ...current.projections,
+          [key]: {
+            ...current.projections[key],
+            ...(horizonYears ? { horizonYears } : {}),
+            ...(lowerRate ? { lowerRate } : {}),
+            ...(higherRate ? { higherRate } : {}),
+            ...(termMonths ? { termMonths } : {}),
+          },
+        },
+      };
+    });
+    return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
+  }, [section, storageStatus, updateScenario]);
+  const auditRateStructureNext = useCallback(() => {
+    if (storageStatus !== 'ready') {
+      return { unavailableReason: 'Encrypted projection scenario is not ready' };
+    }
+    if (section !== 'Mortgage') {
+      return { unavailableReason: 'Mortgage rate-structure selection only applies on Mortgage projections' };
+    }
+    const next = projectionInputs.mortgageRateStructure === 'fixed' ? 'variable' : 'fixed';
+    updateProjection({
+      mortgageRateStructure: next,
+      ...(next === 'fixed' && !projectionInputs.fixedPeriodMonths.trim()
+        ? { fixedPeriodMonths: '24' }
+        : {}),
+    });
+    return { mortgageRateStructure: next };
+  }, [projectionInputs.fixedPeriodMonths, projectionInputs.mortgageRateStructure, section, storageStatus, updateProjection]);
   const auditActions = useMemo(() => ({
     'projections.open': () => undefined,
+    'projections.inputs.apply-primary': auditApplyInputs,
+    'projections.inputs.apply-alternate': auditApplyInputs,
+    'projections.rate-structure.next': auditRateStructureNext,
     'projections.advanced.toggle': toggleAdvanced,
     'projections.metric.next': result.ready
       ? selectNextMetric
@@ -422,6 +533,8 @@ export default function Projections() {
             : `Incomplete existing scenario: ${result.missing.join(', ')}`,
         }),
   }), [
+    auditApplyInputs,
+    auditRateStructureNext,
     auditSelectSection,
     chartNext,
     chartPrevious,

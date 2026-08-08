@@ -161,3 +161,29 @@ export function resetUserRateScenarioStoreForTests(): void {
 export function getUserRateScenarioSnapshotForTests(): UserRateScenarioSnapshot {
   return snapshot;
 }
+
+/** Snapshot encrypted calculator/projection inputs for audit rollback. */
+export function captureUserRateScenarioForAudit(): UserRateScenario | null {
+  if (snapshot.storageStatus !== 'ready') return null;
+  return normalizeUserRateScenario(snapshot.scenario);
+}
+
+/** Restore encrypted calculator/projection inputs after an audit mutation. */
+export async function restoreUserRateScenarioForAudit(
+  scenario: UserRateScenario,
+): Promise<void> {
+  await ensureUserRateScenarioLoaded();
+  if (snapshot.storageStatus !== 'ready') {
+    throw new Error('Encrypted rate scenario is unavailable for audit restore');
+  }
+  revision += 1;
+  emit({
+    scenario: normalizeUserRateScenario(scenario),
+    saveStatus: 'idle',
+    error: null,
+  });
+  const persisted = await flushUserRateScenario();
+  if (!persisted) {
+    throw new Error('Encrypted rate scenario restore did not persist');
+  }
+}

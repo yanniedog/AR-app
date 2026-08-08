@@ -247,18 +247,98 @@ export default function Calculator() {
   }, [changeSection, section, sectionOptions]);
   const openFirstCandidate = useCallback(() => {
     const candidate = candidates[0];
-    if (!candidate) return undefined;
+    if (!candidate) {
+      return {
+        unavailableReason:
+          'No better comparable calculator candidates are available for the current scenario inputs',
+      };
+    }
     openProduct(candidate.row.product_key, candidate.row.rate_index);
     return { expectedPath: `/product/${encodeURIComponent(candidate.row.product_key)}` };
   }, [candidates]);
   const openProjections = useCallback(async () => {
     const saved = await flushScenario();
-    if (!saved) return undefined;
+    if (!saved) {
+      return { unavailableReason: 'Encrypted calculator scenario could not be flushed before projections' };
+    }
     router.push({ pathname: '/projections', params: { section } } as never);
     return { expectedPath: '/projections' };
   }, [flushScenario, section]);
+  const auditToggleMode = useCallback((...args: unknown[]) => {
+    if (scenarioStorageStatus !== 'ready') {
+      return { unavailableReason: 'Encrypted calculator scenario is not ready' };
+    }
+    if (!isMortgage) {
+      return { unavailableReason: 'Buy/refi mode only applies on the mortgage calculator' };
+    }
+    const requested = auditActionString(args, 'mode');
+    const mode: CalcInputs['mode'] =
+      requested === 'buy' || requested === 'refi'
+        ? requested
+        : inputs.mode === 'buy'
+          ? 'refi'
+          : 'buy';
+    updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, mode } }));
+    return { mode };
+  }, [inputs.mode, isMortgage, scenarioStorageStatus, updateScenario]);
+  const auditApplyScenario = useCallback((...args: unknown[]) => {
+    if (scenarioStorageStatus !== 'ready') {
+      return { unavailableReason: 'Encrypted calculator scenario is not ready' };
+    }
+    const modeRaw = auditActionString(args, 'mode');
+    const mode: CalcInputs['mode'] | null =
+      modeRaw === 'buy' || modeRaw === 'refi' ? modeRaw : null;
+    const propertyValue = auditActionString(args, 'propertyValue');
+    const deposit = auditActionString(args, 'deposit');
+    const costs = auditActionString(args, 'costs');
+    const loanBalance = auditActionString(args, 'loanBalance');
+    const currentRate = auditActionString(args, 'currentRate');
+    const years = auditActionString(args, 'years');
+    const balance = auditActionString(args, 'balance');
+    if (section === 'Mortgage') {
+      if (!mode && !propertyValue && !deposit && !costs && !loanBalance && !currentRate && !years) {
+        return {
+          unavailableReason: 'Mortgage calculator apply requires mode and/or mortgage input parameters',
+        };
+      }
+      updateScenario((prev) => ({
+        ...prev,
+        mortgage: {
+          ...prev.mortgage,
+          ...(mode ? { mode } : {}),
+          ...(propertyValue ? { propertyValue } : {}),
+          ...(deposit ? { deposit } : {}),
+          ...(costs ? { costs } : {}),
+          ...(loanBalance ? { loanBalance } : {}),
+          ...(currentRate ? { currentRate } : {}),
+          ...(years ? { years } : {}),
+        },
+      }));
+      return {
+        applied: 'mortgage',
+        mode: mode ?? inputs.mode,
+        propertyValue: propertyValue ?? null,
+        currentRate: currentRate ?? null,
+      };
+    }
+    if (!balance && !currentRate) {
+      return { unavailableReason: 'Deposit calculator apply requires balance and/or currentRate parameters' };
+    }
+    updateScenario((prev) => {
+      const key = section === 'TD' ? 'termDeposit' : 'savings';
+      return {
+        ...prev,
+        [key]: {
+          ...prev[key],
+          ...(balance ? { balance } : {}),
+          ...(currentRate ? { currentRate } : {}),
+        },
+      };
+    });
+    return { applied: section === 'TD' ? 'termDeposit' : 'savings', balance: balance ?? null, currentRate: currentRate ?? null };
+  }, [inputs.mode, scenarioStorageStatus, section, updateScenario]);
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
-  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${detailsLoading ? 'details-loading' : 'details-settled'}`;
+  const calculatorRenderRevision = `${coreRevision ?? 'none'}:${section}:${scenarioStorageStatus}:${candidates.length}:${detailsLoading ? 'details-loading' : 'details-settled'}:${inputs.mode}:${inputs.propertyValue}:${inputs.currentRate}:${depositInputs.balance}`;
   const calculatorLogoIds = useMemo(
     () => candidates.map((candidate) =>
       `calculator:${candidate.row.product_key}:${candidate.row.rate_index ?? 'none'}`),
@@ -268,9 +348,16 @@ export default function Calculator() {
   const auditActions = useMemo(() => ({
     'calculator.open': () => undefined,
     'calculator.section.next': auditSelectSection,
+    'calculator.section.savings': auditSelectSection,
+    'calculator.section.mortgage': auditSelectSection,
+    'calculator.section.return-mortgage': auditSelectSection,
+    'calculator.mode.next': auditToggleMode,
+    'calculator.scenario.apply-buy': auditApplyScenario,
+    'calculator.scenario.apply-refi': auditApplyScenario,
+    'calculator.scenario.apply-deposit': auditApplyScenario,
     'calculator.candidate.first': openFirstCandidate,
     'calculator.projections.open': openProjections,
-  }), [auditSelectSection, openFirstCandidate, openProjections]);
+  }), [auditApplyScenario, auditSelectSection, auditToggleMode, openFirstCandidate, openProjections]);
   usePerformanceAuditSurface({
     id: 'calculator.results',
     routeKey: '/calculator',
