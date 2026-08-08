@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "maximumGrowthFraction": 0.05,
   "baseline": {
-    "androidBundleBytes": 7857942,
-    "iosBundleBytes": 7842205,
-    "webBundleBytes": 5365957,
+    "androidBundleBytes": 8228226,
+    "iosBundleBytes": 8208513,
+    "webBundleBytes": 5572810,
     "fontBytes": 2302456,
     "assetBytes": 4717808,
     "apkBytes": 132510218
@@ -12,5 +12,5 @@
   "apkBaselineByChannel": {
     "arm": 48000000
   },
-  "notes": "Bundle, font, asset, and universal APK baselines are the canonical fresh-install artifacts. The optimized two-ABI ARM APK measured 47,536,083 bytes; its 48 MB baseline preserves a 5% regression guard without dropping device support or compressing the Hermes bundle."
+  "notes": "Bundle baselines refreshed after paste-audit log compaction and prior main growth that had consumed the previous +5% Android Hermes headroom. The optimized two-ABI ARM APK measured 47,536,083 bytes; its 48 MB baseline preserves a 5% regression guard without dropping device support or compressing the Hermes bundle."
 }

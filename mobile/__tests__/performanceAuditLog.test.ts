@@ -1,0 +1,120 @@
+import {
+  compactAuditCheckForLog,
+  compactAuditLogJson,
+  compactPerformanceAuditReportForLog,
+  omitNullishDeep,
+  shortenAuditEvidenceText,
+} from '../src/lib/performanceAuditLog';
+
+describe('performanceAuditLog compaction', () => {
+  it('omits nullish fields deeply', () => {
+    expect(omitNullishDeep({ a: 1, b: null, c: { d: undefined, e: 2 } })).toEqual({
+      a: 1,
+      c: { e: 2 },
+    });
+  });
+
+  it('shortens long content hashes while preserving probe text', () => {
+    const sha = 'e5ed9d7c0831dba30dace233f4f9c7a6d943331e3811733b3d495795e4cabe6b';
+    expect(shortenAuditEvidenceText(`browse.data:data:ready::${sha}:`)).toBe(
+      'browse.data:data:ready::e5ed9d7c0831…:',
+    );
+  });
+
+  it('keeps fail metrics but skinnies pass rows', () => {
+    const pass = compactAuditCheckForLog({
+      id: 'p1',
+      label: 'pass row',
+      kind: 'journey',
+      status: 'pass',
+      durationMs: 10,
+      metrics: {
+        iteration: 'cold',
+        maxEventLoopLagMs: 12,
+        maxFrameGapMs: 14,
+        readinessEvidence: 'x',
+      },
+    });
+    expect(pass).toEqual({
+      id: 'p1',
+      label: 'pass row',
+      kind: 'journey',
+      status: 'pass',
+      durationMs: 10,
+      phase: 'cold',
+      maxEventLoopLagMs: 12,
+      maxFrameGapMs: 14,
+    });
+
+    const fail = compactAuditCheckForLog({
+      id: 'f1',
+      label: 'fail row',
+      kind: 'journey',
+      status: 'fail',
+      durationMs: 20,
+      metrics: {
+        maxEventLoopLagMs: 400,
+        readinessEvidence: null,
+        note: 'kept',
+      },
+      error: 'boom',
+      trace: null,
+    });
+    expect(fail.error).toBe('boom');
+    expect(fail.metrics).toEqual({ maxEventLoopLagMs: 400, note: 'kept' });
+    expect(fail).not.toHaveProperty('trace');
+  });
+
+  it('compacts full reports for paste upload without dropping fail signal', () => {
+    const sha = 'e5ed9d7c0831dba30dace233f4f9c7a6d943331e3811733b3d495795e4cabe6b';
+    const compact = compactPerformanceAuditReportForLog({
+      schemaVersion: 4,
+      sessionId: 's1',
+      app: { appVersion: '1.0.0', buildVersion: '1' },
+      summary: { overall: 'bottleneck', pass: 1, warn: 0, fail: 1 },
+      plan: {
+        schemaVersion: 1,
+        inputs: { provider: 'AFG' },
+        passes: [{ steps: [{}, {}] }, { steps: [{}] }],
+      },
+      checks: [
+        {
+          id: 'ok',
+          label: 'ok',
+          kind: 'journey',
+          status: 'pass',
+          durationMs: 1,
+          metrics: { maxEventLoopLagMs: 1, readinessEvidence: `x:${sha}` },
+        },
+        {
+          id: 'bad',
+          label: 'bad',
+          kind: 'journey',
+          status: 'fail',
+          durationMs: 2,
+          metrics: { maxEventLoopLagMs: 500, readinessEvidence: `y:${sha}` },
+          error: 'nope',
+        },
+      ],
+      limitations: ['a', 'b', 'c', 'd', 'e'],
+      blob: 'O'.repeat(100_000),
+    }) as Record<string, unknown>;
+
+    expect(compact.blob).toBeUndefined();
+    expect(compact.limitations).toEqual(['a', 'b', 'c', 'd']);
+    expect(compact.plan).toEqual({
+      schemaVersion: 1,
+      inputs: { provider: 'AFG' },
+      passCount: 2,
+      stepCount: 3,
+    });
+    const checks = compact.checks as Record<string, unknown>[];
+    expect(checks[0]).not.toHaveProperty('metrics');
+    expect((checks[1].metrics as Record<string, unknown>).readinessEvidence).toContain('e5ed9d7c0831…');
+    expect(checks[1].error).toBe('nope');
+
+    const encoded = compactAuditLogJson(compact);
+    expect(encoded.length).toBeLessThan(2_000);
+    expect(encoded).not.toContain(sha);
+  });
+});
