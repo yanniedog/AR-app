@@ -499,7 +499,7 @@ describe('persistent log file', () => {
     expect(complete).not.toContain('old-secret');
   });
 
-  it('flushes a crash-detectable complete audit into the physical log without export duplication', async () => {
+  it('keeps the report body out of the physical log and exports exactly one copy', async () => {
     const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=physical app_version=9.8.7 build_version=654`;
     await debugLog.storePerformanceAudit(marker, {
@@ -508,20 +508,23 @@ describe('persistent log file', () => {
       sentinel: 'physical-complete-audit',
     });
 
+    // The log records a crash-detectable, recoverable pointer — not the body.
+    // A second copy meant compacting, re-serializing and re-redacting the whole
+    // report on the JS thread while the audit screen sat frozen at 100%.
     const physicalLog = files[LOG_PATH];
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
-    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_JSON');
-    expect(physicalLog).toContain('physical-complete-audit');
-    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
     expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_SIDECAR');
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
+    expect(physicalLog).not.toContain('PERFORMANCE_AUDIT_REPORT_JSON');
+    expect(physicalLog).not.toContain('physical-complete-audit');
     expect(files[AUDIT_SIDECAR_PATH]).toContain('physical-complete-audit');
 
     const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('# Latest complete performance audit');
     expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
-    expect(complete).not.toContain('# Latest complete performance audit');
   });
 
-  it('keeps a complete audit block when the physical log is already near capacity', async () => {
+  it('keeps the audit block when the physical log is already near capacity', async () => {
     const noiseLine = `${'n'.repeat(8_000)}\n`;
     const nearlyFull = noiseLine.repeat(Math.ceil(MAX_LOG_FILE_BYTES / noiseLine.length));
     const files = installPathAwareFiles({ [LOG_PATH]: nearlyFull });
@@ -541,13 +544,12 @@ describe('persistent log file', () => {
 
     const physicalLog = files[LOG_PATH];
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
-    expect(physicalLog).toContain('near-full-audit-body');
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
     expect(new TextEncoder().encode(physicalLog).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
     expect(files[AUDIT_SIDECAR_PATH]).toContain('near-full-audit-body');
   });
 
-  it('keeps begin/end markers and restores an oversized report from the sidecar', async () => {
+  it('keeps a report far larger than the log budget recoverable from the sidecar', async () => {
     const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=oversized app_version=9.8.7 build_version=654`;
     const report = {
@@ -559,23 +561,97 @@ describe('persistent log file', () => {
 
     await debugLog.storePerformanceAudit(marker, report);
 
+    // A body this size no longer influences the log write at all: the block is
+    // three short marker lines whatever the report weighs.
     const physicalLog = files[LOG_PATH];
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
     expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
     expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_SIDECAR');
-    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_JSON');
-    expect(physicalLog).toContain('oversized-audit-body');
-    // Compact log JSON drops the giant blob; full fidelity remains in the sidecar.
     expect(physicalLog).not.toContain(report.blob.slice(0, 64));
     expect(new TextEncoder().encode(physicalLog).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
     expect(files[AUDIT_SIDECAR_PATH]).toContain('oversized-audit-body');
     expect(files[AUDIT_SIDECAR_PATH]).toContain(report.blob.slice(0, 64));
 
-    files[LOG_PATH] = physicalLog;
     const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain('oversized-audit-body');
+    // Log compaction still drops the giant blob from the export.
     expect(complete).not.toContain(report.blob.slice(0, 64));
-    expect(complete).not.toContain('# Latest complete performance audit');
+  });
+
+  it('appends ordinary flushes instead of rewriting the whole log', async () => {
+    const files = installPathAwareFiles();
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- toggle the native append
+    const fileAccess = require('react-native-file-access') as {
+      FileSystem: { appendFile?: (path: string, data: string) => Promise<void> };
+    };
+    const appendFile = jest.fn(async (path: string, data: string) => {
+      files[path] = (files[path] ?? '') + data;
+    });
+    fileAccess.FileSystem.appendFile = appendFile;
+    const rewrites = FileSystem.writeAsStringAsync as jest.Mock;
+
+    try {
+      debugLog.info('append', 'first line');
+      await debugLog.flushToFile();
+      debugLog.info('append', 'second line');
+      await debugLog.flushToFile();
+
+      // The audit forces a physical flush after every one of ~260 checks. Each
+      // rewrite would concat and TextEncoder-scan the whole file on the JS
+      // thread, so ordinary flushes must never touch the existing bytes.
+      expect(appendFile).toHaveBeenCalledTimes(2);
+      expect(rewrites.mock.calls.filter(([path]) => path === LOG_PATH)).toHaveLength(0);
+      expect(files[LOG_PATH]).toContain('first line');
+      expect(files[LOG_PATH]).toContain('second line');
+    } finally {
+      delete fileAccess.FileSystem.appendFile;
+    }
+  });
+
+  it('falls back to one bounded rewrite when an append would exceed the log budget', async () => {
+    const noiseLine = `${'n'.repeat(8_000)}\n`;
+    const nearlyFull = noiseLine.repeat(Math.ceil(MAX_LOG_FILE_BYTES / noiseLine.length));
+    const files = installPathAwareFiles({ [LOG_PATH]: nearlyFull });
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- toggle the native append
+    const fileAccess = require('react-native-file-access') as {
+      FileSystem: { appendFile?: (path: string, data: string) => Promise<void> };
+    };
+    const appendFile = jest.fn(async (path: string, data: string) => {
+      files[path] = (files[path] ?? '') + data;
+    });
+    fileAccess.FileSystem.appendFile = appendFile;
+
+    try {
+      debugLog.info('rollover', 'line past the cap');
+      await debugLog.flushToFile();
+
+      expect(appendFile).not.toHaveBeenCalled();
+      expect(files[LOG_PATH]).toContain('line past the cap');
+      expect(new TextEncoder().encode(files[LOG_PATH]).length)
+        .toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+    } finally {
+      delete fileAccess.FileSystem.appendFile;
+    }
+  });
+
+  it('reports each persistence stage so a stall names the step responsible', async () => {
+    installPathAwareFiles();
+    const stages: string[] = [];
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=stages app_version=9.8.7 build_version=654`;
+
+    await debugLog.storePerformanceAudit(
+      marker,
+      { schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION, sentinel: 'staged' },
+      (stage) => { stages.push(stage); },
+    );
+
+    expect(stages).toEqual([
+      'Serializing the report',
+      'Saving the complete report',
+      'Recording the report in the log',
+      'Verifying the saved report',
+    ]);
   });
 
   it('restores the latest audit from the sidecar when AsyncStorage persistence fails', async () => {

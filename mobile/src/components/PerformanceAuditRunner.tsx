@@ -83,6 +83,7 @@ import {
   compactAuditLogJson,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -2359,7 +2360,15 @@ export function PerformanceAuditRunner() {
         let completeReportStored = false;
         try {
           await awaitAuditWorkWithTimeout(
-            debugLog.storePerformanceAudit(summaryMarker, report),
+            // Surface each persistence stage and yield the JS thread between
+            // them. Serializing and writing a report this size is several
+            // hundred milliseconds of synchronous work per step; running them
+            // back to back left the progress bar frozen at 100% with no way to
+            // tell which step was responsible.
+            debugLog.storePerformanceAudit(summaryMarker, report, async (stage) => {
+              updatePerformanceAuditProgress(completed, total, stage);
+              await yieldToUi();
+            }),
             watchdog,
             'Performance report persistence',
             FINALIZATION_STORE_TIMEOUT_MS,
@@ -2379,22 +2388,6 @@ export function PerformanceAuditRunner() {
             storeError: message,
           }, 'warn');
         }
-        logAuditEvent(app, {
-          kind: 'report',
-          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-          sessionId,
-          summary,
-          routeAggregates: report.routeAggregates,
-          completeReportStored,
-        });
-        debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
-        reportPerformanceAudit(report);
-        await awaitAuditWorkWithTimeout(
-          debugLog.flushToFile(),
-          watchdog,
-          'Final audit log flush',
-          FINALIZATION_FLUSH_TIMEOUT_MS,
-        );
         updatePerformanceAuditProgress(completed, total, 'Returning to the audit screen');
         try {
           await timeoutAfter(
@@ -2409,10 +2402,36 @@ export function PerformanceAuditRunner() {
           );
         }
         assertSessionActive(watchdog);
-        // Publish the diagnosis before the upload stage. Reading, re-redacting
-        // and posting the whole on-disk log is the heaviest work of the run, and
-        // a failure there must not discard a report that is already complete.
+        // Publish as soon as the report is durable. Everything below — the
+        // Crashlytics envelope, the log flush, and reading/redacting/posting the
+        // whole on-disk log — is heavy work the user should never wait behind,
+        // and no failure in it may discard a report that is already complete.
         completePerformanceAudit(report, 'pending');
+        await yieldToUi();
+
+        try {
+          logAuditEvent(app, {
+            kind: 'report',
+            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+            sessionId,
+            summary,
+            routeAggregates: report.routeAggregates,
+            completeReportStored,
+          });
+          debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
+          reportPerformanceAudit(report);
+          await awaitAuditWorkWithTimeout(
+            debugLog.flushToFile(),
+            watchdog,
+            'Final audit log flush',
+            FINALIZATION_FLUSH_TIMEOUT_MS,
+          );
+        } catch (postPublishCaught) {
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `post-publish report logging failed: ${formatAuditErrorForLog(postPublishCaught)}`,
+          );
+        }
 
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
