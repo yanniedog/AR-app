@@ -24,6 +24,7 @@ import {
   type CalcInputs,
 } from '../src/data/calc';
 import { formatRate, humanizeEnum, toFraction, visibleAccountRows } from '../src/data/format';
+import { MAX_PROJECTION_YEARS } from '../src/data/projections';
 import { sectionSegmentOptions } from '../src/data/interests';
 import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
 import {
@@ -183,7 +184,9 @@ export default function Calculator() {
     if (isFinite(pct) && pct > 0) return pct / 100;
     return null;
   })();
-  const years = Math.min(40, Math.max(1, num(inputs.years) || 25));
+  const enteredYears = num(inputs.years) || 25;
+  const years = Math.min(MAX_PROJECTION_YEARS, Math.max(1, enteredYears));
+  const yearsClamped = enteredYears > MAX_PROJECTION_YEARS;
   const months = Math.round(years * 12);
 
   const candidates = useMemo<Candidate[]>(() => {
@@ -551,6 +554,11 @@ export default function Calculator() {
               {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', 'Current interest rate percent')}
               {field('Years left', inputs.years, (t) => upd({ years: t }), '25', 'Years remaining on loan', 86)}
             </Row>
+            {yearsClamped ? (
+              <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
+                Comparisons use a maximum of {MAX_PROJECTION_YEARS} years to match lifecycle projections.
+              </AppText>
+            ) : null}
           </>
         ) : (
           <>
