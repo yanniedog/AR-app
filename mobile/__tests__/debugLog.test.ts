@@ -545,6 +545,54 @@ describe('persistent log file', () => {
     expect(files[AUDIT_SIDECAR_PATH]).toContain('near-full-audit-body');
   });
 
+  it('keeps begin/end markers and restores an oversized report from the sidecar', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=oversized app_version=9.8.7 build_version=654`;
+    const report = {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'oversized-audit-body',
+      blob: 'O'.repeat(MAX_LOG_FILE_BYTES + 64 * 1024),
+    };
+
+    await debugLog.storePerformanceAudit(marker, report);
+
+    const physicalLog = files[LOG_PATH];
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_BEGIN ${marker}`);
+    expect(physicalLog).toContain(`PERFORMANCE_AUDIT_REPORT_END ${marker}`);
+    expect(physicalLog).toContain('PERFORMANCE_AUDIT_REPORT_SIDECAR');
+    expect(physicalLog).not.toContain('PERFORMANCE_AUDIT_REPORT_JSON');
+    expect(physicalLog).not.toContain('oversized-audit-body');
+    expect(new TextEncoder().encode(physicalLog).length).toBeLessThanOrEqual(MAX_LOG_FILE_BYTES);
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('oversized-audit-body');
+
+    files[LOG_PATH] = physicalLog;
+    const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('oversized-audit-body');
+  });
+
+  it('restores the latest audit from the sidecar when AsyncStorage persistence fails', async () => {
+    const files = installPathAwareFiles();
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    setItem.mockRejectedValueOnce(new Error('asyncstorage full'));
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=sidecar-only app_version=9.8.7 build_version=654`;
+
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      app: { appVersion: '9.8.7', buildVersion: '654' },
+      sentinel: 'sidecar-after-asyncstorage-failure',
+    });
+
+    await expect(AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY)).resolves.toBeNull();
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('sidecar-after-asyncstorage-failure');
+    files[LOG_PATH] = 'log without reserved audit markers';
+
+    const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('# Latest complete performance audit');
+    expect(complete).toContain('sidecar-after-asyncstorage-failure');
+  });
+
   it('does not report physical audit persistence when the filesystem write fails', async () => {
     (FileSystem.writeAsStringAsync as jest.Mock).mockRejectedValueOnce(new Error('disk full'));
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=write-failure app_version=9.8.7 build_version=654`;
