@@ -24,7 +24,7 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
         paddingTop: 8,
       }}
     >
-      {state.routes.filter((route) => route.name !== 'settings').map((route) => {
+      {state.routes.map((route) => {
         const focused = state.routes[state.index]?.key === route.key;
         const { options } = descriptors[route.key];
         const label = getTabLabel(route.name, options.title);
