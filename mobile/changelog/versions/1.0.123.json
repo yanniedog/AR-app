@@ -1,0 +1,32 @@
+{
+  "version": "1.0.123",
+  "releaseTag": "app-arm-v1.0.123",
+  "date": "2026-08-08",
+  "summaryBullets": [
+    "fix(mobile): verify audit persistence by size, not by re-reading it (#160)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): verify audit persistence by size, not by re-reading it (#160)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.123"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.122"
+        }
+      ]
+    }
+  ]
+}
