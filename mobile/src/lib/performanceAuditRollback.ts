@@ -1,7 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import type { AppState } from '../data/storeTypes';
-import type { UserRateScenario } from '../data/userRateScenario';
+import {
+  normalizeUserRateScenario,
+  type UserRateScenario,
+} from '../data/userRateScenario';
 import {
   captureUserRateScenarioForAudit,
   ensureUserRateScenarioLoaded,
@@ -9,6 +14,8 @@ import {
 } from '../hooks/useUserRateScenario';
 
 export const PERFORMANCE_AUDIT_ROLLBACK_KEY = '@ar/performance-audit/rollback-v1';
+/** Encrypted companion for calculator/projection inputs; never written to AsyncStorage. */
+export const PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY = 'performance-audit-rollback-scenario-v1';
 const PERSISTED_STORE_KEY = 'ar-rates';
 const ROLLBACK_SCHEMA_VERSION = 1 as const;
 const PERSISTENCE_TIMEOUT_MS = 3_000;
@@ -19,7 +26,7 @@ export interface PerformanceAuditUserSnapshot {
   favorites: AppState['favorites'];
   subscriptions: AppState['subscriptions'];
   activeSection: AppState['activeSection'];
-  /** Encrypted calculator/projection scenario; null when unavailable at capture. */
+  /** Calculator/projection scenario held in memory / SecureStore; never persisted in AsyncStorage. */
   userRateScenario: UserRateScenario | null;
 }
 
@@ -27,6 +34,16 @@ interface PerformanceAuditRollbackJournal {
   schemaVersion: typeof ROLLBACK_SCHEMA_VERSION;
   startedAt: string;
   snapshot: PerformanceAuditUserSnapshot;
+}
+
+/** AsyncStorage shape: scenario payload is omitted; only a capture flag remains. */
+interface PersistedRollbackJournal {
+  schemaVersion: typeof ROLLBACK_SCHEMA_VERSION;
+  startedAt: string;
+  snapshot: Omit<PerformanceAuditUserSnapshot, 'userRateScenario'> & {
+    userRateScenario: null;
+    userRateScenarioCaptured: boolean;
+  };
 }
 
 export interface PerformanceAuditRollbackStore {
@@ -58,11 +75,67 @@ export function performanceAuditSnapshotFingerprint(
   return JSON.stringify(snapshot);
 }
 
-function parseJournal(raw: string | null): PerformanceAuditRollbackJournal | null {
+function toPersistedJournal(journal: PerformanceAuditRollbackJournal): PersistedRollbackJournal {
+  return {
+    schemaVersion: journal.schemaVersion,
+    startedAt: journal.startedAt,
+    snapshot: {
+      prefs: journal.snapshot.prefs,
+      savedRates: journal.snapshot.savedRates,
+      favorites: journal.snapshot.favorites,
+      subscriptions: journal.snapshot.subscriptions,
+      activeSection: journal.snapshot.activeSection,
+      userRateScenario: null,
+      userRateScenarioCaptured: journal.snapshot.userRateScenario != null,
+    },
+  };
+}
+
+async function persistRollbackScenario(scenario: UserRateScenario | null): Promise<void> {
+  if (Platform.OS === 'web') return;
+  if (!scenario) {
+    try {
+      await SecureStore.deleteItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
+    } catch {
+      // Missing key is fine during cleanup.
+    }
+    return;
+  }
+  await SecureStore.setItemAsync(
+    PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
+    JSON.stringify(normalizeUserRateScenario(scenario)),
+    { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
+  );
+}
+
+async function loadRollbackScenario(): Promise<UserRateScenario | null> {
+  if (Platform.OS === 'web') return null;
+  try {
+    const raw = await SecureStore.getItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
+    return raw ? normalizeUserRateScenario(JSON.parse(raw)) : null;
+  } catch {
+    return null;
+  }
+}
+
+async function clearRollbackArtifacts(): Promise<void> {
+  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
+  await persistRollbackScenario(null);
+}
+
+function parseJournal(raw: string | null): {
+  journal: PerformanceAuditRollbackJournal;
+  legacyScenario: UserRateScenario | null;
+  captured: boolean;
+} | null {
   if (!raw) return null;
   try {
-    const journal = JSON.parse(raw) as Partial<PerformanceAuditRollbackJournal>;
-    const snapshot = journal.snapshot as Partial<PerformanceAuditUserSnapshot> | undefined;
+    const journal = JSON.parse(raw) as Partial<PersistedRollbackJournal> & {
+      snapshot?: Partial<PerformanceAuditUserSnapshot> & {
+        userRateScenarioCaptured?: boolean;
+      };
+    };
+    const snapshot = journal.snapshot;
     if (
       journal.schemaVersion !== ROLLBACK_SCHEMA_VERSION ||
       typeof journal.startedAt !== 'string' ||
@@ -75,27 +148,46 @@ function parseJournal(raw: string | null): PerformanceAuditRollbackJournal | nul
     ) {
       return null;
     }
+    const legacyScenario = snapshot.userRateScenario ?? null;
     return {
-      schemaVersion: ROLLBACK_SCHEMA_VERSION,
-      startedAt: journal.startedAt,
-      snapshot: {
-        prefs: snapshot.prefs,
-        savedRates: snapshot.savedRates,
-        favorites: snapshot.favorites,
-        subscriptions: snapshot.subscriptions,
-        activeSection: snapshot.activeSection,
-        userRateScenario: snapshot.userRateScenario ?? null,
+      journal: {
+        schemaVersion: ROLLBACK_SCHEMA_VERSION,
+        startedAt: journal.startedAt,
+        snapshot: {
+          prefs: snapshot.prefs,
+          savedRates: snapshot.savedRates,
+          favorites: snapshot.favorites,
+          subscriptions: snapshot.subscriptions,
+          activeSection: snapshot.activeSection,
+          userRateScenario: null,
+        },
       },
+      legacyScenario,
+      captured: snapshot.userRateScenarioCaptured === true || legacyScenario != null,
     };
   } catch {
     return null;
   }
 }
 
+async function readRollbackJournal(): Promise<PerformanceAuditRollbackJournal | null> {
+  const parsed = parseJournal(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY));
+  if (!parsed) return null;
+  const secureScenario = await loadRollbackScenario();
+  const userRateScenario = secureScenario ?? parsed.legacyScenario ?? null;
+  return {
+    ...parsed.journal,
+    snapshot: {
+      ...parsed.journal.snapshot,
+      userRateScenario,
+    },
+  };
+}
+
 export async function beginPerformanceAuditRollback(
   store: PerformanceAuditRollbackStore,
 ): Promise<PerformanceAuditUserSnapshot> {
-  const stale = parseJournal(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY));
+  const stale = await readRollbackJournal();
   if (stale) {
     await restoreSnapshot(store, stale.snapshot);
   }
@@ -106,7 +198,11 @@ export async function beginPerformanceAuditRollback(
     startedAt: new Date().toISOString(),
     snapshot,
   };
-  await AsyncStorage.setItem(PERFORMANCE_AUDIT_ROLLBACK_KEY, JSON.stringify(journal));
+  await persistRollbackScenario(snapshot.userRateScenario);
+  await AsyncStorage.setItem(
+    PERFORMANCE_AUDIT_ROLLBACK_KEY,
+    JSON.stringify(toPersistedJournal(journal)),
+  );
   return snapshot;
 }
 
@@ -184,11 +280,19 @@ export async function restorePerformanceAuditRollback(
   store: PerformanceAuditRollbackStore,
   fallback?: PerformanceAuditUserSnapshot,
 ): Promise<boolean> {
-  const journal = parseJournal(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY));
-  const snapshot = journal?.snapshot ?? fallback ?? null;
-  if (!snapshot) return false;
+  const journal = await readRollbackJournal();
+  if (!journal && !fallback) return false;
+  // Prefer SecureStore/journal scenario, then the in-memory begin() snapshot
+  // (required on web where SecureStore persistence is a no-op).
+  const snapshot: PerformanceAuditUserSnapshot = {
+    ...(journal?.snapshot ?? fallback!),
+    userRateScenario:
+      journal?.snapshot.userRateScenario
+      ?? fallback?.userRateScenario
+      ?? null,
+  };
   await restoreSnapshot(store, snapshot);
-  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
+  await clearRollbackArtifacts();
   return true;
 }
 
