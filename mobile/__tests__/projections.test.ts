@@ -1,5 +1,6 @@
 import {
   buildLifecycleProjection,
+  MAX_PROJECTION_YEARS,
   metricValue,
   projectionMetricLabel,
 } from '../src/data/projections';
@@ -213,7 +214,93 @@ describe('lifecycle projections', () => {
     expect(result.missing).toEqual([
       'current loan balance up to $1 trillion',
       'current interest rate from 0% to 100%',
-      'remaining term from 1 month to 50 years',
+      `remaining term from 1 month to ${MAX_PROJECTION_YEARS} years`,
     ]);
+  });
+
+  it('uses LVR-derived loan balance in buy mode', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: {
+        mode: 'buy',
+        propertyValue: '800000',
+        deposit: '160000',
+        costs: '10000',
+        currentRate: '6',
+        years: '25',
+      },
+      projections: { mortgage: {} },
+    });
+    const result = buildLifecycleProjection('Mortgage', scenario, NOW);
+    expect(result.ready).toBe(true);
+    expect(result.rateSeries[1].points[0].balance).toBe(650000);
+  });
+
+  it('accepts remaining terms up to the shared maximum and rejects above it', () => {
+    const atMax = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '300000', currentRate: '5', years: String(MAX_PROJECTION_YEARS) },
+      projections: { mortgage: {} },
+    });
+    const aboveMax = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '300000', currentRate: '5', years: String(MAX_PROJECTION_YEARS + 1) },
+      projections: { mortgage: {} },
+    });
+    expect(buildLifecycleProjection('Mortgage', atMax, NOW).ready).toBe(true);
+    const blocked = buildLifecycleProjection('Mortgage', aboveMax, NOW);
+    expect(blocked.ready).toBe(false);
+    expect(blocked.missing).toContain(`remaining term from 1 month to ${MAX_PROJECTION_YEARS} years`);
+  });
+
+  it('carries historical offset into forward scenarios and warns on mismatch', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '460000', currentRate: '6.2', years: '22' },
+      projections: {
+        mortgage: {
+          startDate: '2021-08-04',
+          startBalance: '600000',
+          startRate: '2.8',
+          offsetBalance: '50000',
+          startOffsetBalance: '10000',
+          offsetContributionAmount: '500',
+          offsetContributionFrequency: 'monthly',
+          periodicAmount: '2800',
+          periodicFrequency: 'monthly',
+        },
+      },
+    });
+    const result = buildLifecycleProjection('Mortgage', scenario, NOW);
+    const historicalLastOffset = result.history.at(-1)!.offsetBalance;
+    expect(historicalLastOffset).toBeGreaterThan(10000);
+    expect(result.rateSeries[1].points[0].offsetBalance).toBe(historicalLastOffset);
+    expect(result.warnings.join(' ')).toMatch(/simulated offset/i);
+  });
+
+  it('labels conditional savings ongoing rate distinctly during the bonus period', () => {
+    const scenario = normalizeUserRateScenario({
+      savings: { balance: '5000', currentRate: '5' },
+      projections: {
+        savings: {
+          horizonYears: '1',
+          savingsRateStructure: 'conditional-bonus',
+          ongoingRate: '2',
+          bonusMonthsRemaining: '3',
+          bonusConditionsMet: true,
+        },
+      },
+    });
+    const result = buildLifecycleProjection('Savings', scenario, NOW);
+    expect(result.rateSeries[1].label).toBe('Ongoing rate');
+    expect(result.rateSeries[1].detail).toMatch(/5\.00% conditional for 3 months, then 2\.00% ongoing/);
+    expect(result.rateSeries[0].detail).toMatch(/5\.00% conditional for 3 months, then 1\.00% ongoing/);
+  });
+
+  it('parses fraction-form rate strings consistently with toFraction', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '100000', currentRate: '0.064', years: '10' },
+      projections: { mortgage: {} },
+    });
+    const result = buildLifecycleProjection('Mortgage', scenario, NOW);
+    expect(result.ready).toBe(true);
+    expect(result.rateSeries[1].annualRate).toBeCloseTo(0.064, 6);
+    expect(result.rateSeries[1].points[1].periodInterest).toBeCloseTo(100000 * 0.064 / 12, 6);
   });
 });

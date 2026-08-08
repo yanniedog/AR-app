@@ -14,6 +14,7 @@ import { computeLvr, type CalcInputs } from '../src/data/calc';
 import type { ProjectionFrequency, ProjectionInputs } from '../src/data/projectionScenario';
 import {
   buildLifecycleProjection,
+  MAX_PROJECTION_YEARS,
   projectionMetricLabel,
   projectionCurrency,
   type ProjectionDimension,
@@ -73,12 +74,16 @@ function optionalAmountError(value: string): string | undefined {
   return undefined;
 }
 
-function validPastIsoDate(value: string): boolean {
+function utcTodayMs(now = new Date()): number {
+  return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+}
+
+function validPastIsoDate(value: string, now = new Date()): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00Z`);
   return Number.isFinite(parsed.getTime())
     && parsed.toISOString().slice(0, 10) === value
-    && parsed.getTime() < Date.now();
+    && parsed.getTime() < utcTodayMs(now);
 }
 
 function NumericField({
@@ -316,8 +321,8 @@ export default function Projections() {
       false,
     ),
     years: section === 'Mortgage' && scenario.mortgage.years.trim()
-      && (!(enteredNumber(scenario.mortgage.years)! > 0) || enteredNumber(scenario.mortgage.years)! > 50)
-      ? 'Use a remaining term above 0 and up to 50 years.'
+      && (!(enteredNumber(scenario.mortgage.years)! > 0) || enteredNumber(scenario.mortgage.years)! > MAX_PROJECTION_YEARS)
+      ? `Use a remaining term above 0 and up to ${MAX_PROJECTION_YEARS} years.`
       : undefined,
     fixedPeriod: projectionInputs.mortgageRateStructure === 'fixed'
       && (!(enteredNumber(projectionInputs.fixedPeriodMonths)! > 0)
@@ -325,8 +330,8 @@ export default function Projections() {
       ? 'Use a fixed period above 0 and no longer than the remaining loan term.'
       : undefined,
     horizon: section === 'Savings' && projectionInputs.horizonYears.trim()
-      && (!(enteredNumber(projectionInputs.horizonYears)! > 0) || enteredNumber(projectionInputs.horizonYears)! > 50)
-      ? 'Use a horizon above 0 and up to 50 years.'
+      && (!(enteredNumber(projectionInputs.horizonYears)! > 0) || enteredNumber(projectionInputs.horizonYears)! > MAX_PROJECTION_YEARS)
+      ? `Use a horizon above 0 and up to ${MAX_PROJECTION_YEARS} years.`
       : undefined,
     ongoingRate: projectionInputs.savingsRateStructure === 'conditional-bonus'
       ? rateError(projectionInputs.ongoingRate, true)

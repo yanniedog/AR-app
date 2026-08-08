@@ -1,4 +1,5 @@
 import { computeLvr, num } from './calc';
+import { toFraction } from './format';
 import type { ProjectionFrequency, ProjectionInputs } from './projectionScenario';
 import type { UserRateScenario } from './userRateScenario';
 import type { SectionKey } from '../types';
@@ -56,7 +57,8 @@ export interface LifecycleProjection {
   projectionScope: 'full-term' | 'fixed-period' | 'savings-horizon' | 'term-deposit-maturity';
 }
 
-const MAX_MONTHS = 50 * 12;
+export const MAX_PROJECTION_YEARS = 50;
+const MAX_MONTHS = MAX_PROJECTION_YEARS * 12;
 const MAX_AMOUNT = 1_000_000_000_000;
 
 function cleanNumber(value: string): number {
@@ -70,10 +72,13 @@ function rawNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/** Parse user-entered rates as percent or fraction, aligned with {@link toFraction}. Allows 0%. */
 function percentageFraction(value: string): number | null {
   if (!value.trim()) return null;
-  const parsed = Number(value.replace(/[,%\s]/g, ''));
-  return Number.isFinite(parsed) && parsed >= 0 && parsed <= 100 ? parsed / 100 : null;
+  const cleaned = value.replace(/[,%\s]/g, '');
+  if (cleaned === '0' || cleaned === '0.0' || cleaned === '0.00') return 0;
+  const fraction = toFraction(cleaned);
+  return fraction != null && fraction <= 1 ? fraction : null;
 }
 
 function isoDate(value: Date): string {
@@ -440,7 +445,9 @@ export function buildLifecycleProjection(
     const missing = [
       ...(balance > 0 && balance <= MAX_AMOUNT ? [] : ['current loan balance up to $1 trillion']),
       ...(annualRate != null ? [] : ['current interest rate from 0% to 100%']),
-      ...(remainingMonths > 0 && enteredYears <= 50 ? [] : ['remaining term from 1 month to 50 years']),
+      ...(remainingMonths > 0 && enteredYears <= MAX_PROJECTION_YEARS
+        ? []
+        : [`remaining term from 1 month to ${MAX_PROJECTION_YEARS} years`]),
       ...(fixedRate && (fixedPeriodMonths <= 0 || fixedPeriodMonths > remainingMonths)
         ? ['fixed period no longer than the remaining term']
         : []),
@@ -466,6 +473,7 @@ export function buildLifecycleProjection(
     }
 
     const anchor = historyAnchor(inputs, today);
+    let forwardOpeningOffset = offsetBalance;
     if (anchor) {
       const historicalPayment = enteredRepayment || repaymentFor(anchor.balance, anchor.rate, Math.max(anchor.months, months + anchor.months));
       history = simulateMortgage({
@@ -482,9 +490,14 @@ export function buildLifecycleProjection(
       const historicalLast = history.at(-1)!;
       historySeed.cumulativeInterest = historicalLast.cumulativeInterest;
       historySeed.cumulativePrincipal = historicalLast.cumulativePrincipal;
+      forwardOpeningOffset = historicalLast.offsetBalance;
       const mismatch = Math.abs(historicalLast.balance - balance);
       if (mismatch > Math.max(100, balance * 0.01)) {
         warnings.push(`Approximate history ends $${Math.round(mismatch).toLocaleString('en-AU')} from the current balance because past rate, repayment and offset changes are not known.`);
+      }
+      const offsetMismatch = Math.abs(forwardOpeningOffset - offsetBalance);
+      if (offsetMismatch > Math.max(100, balance * 0.01)) {
+        warnings.push(`Approximate history ends with $${Math.round(forwardOpeningOffset).toLocaleString('en-AU')} offset, $${Math.round(offsetMismatch).toLocaleString('en-AU')} from today's entered offset; forward scenarios continue from the simulated offset.`);
       }
       assumptions.push('History is an approximation from the optional starting inputs; the future is re-anchored to today\'s entered balance.');
     }
@@ -518,15 +531,15 @@ export function buildLifecycleProjection(
       return toSeries(id, label, detail, rate, simulated.points);
     };
     const rateSeries = [
-      mortgageSeries('rate-lower', 'Lower rate', `${(lowerRate * 100).toFixed(2)}% with your offset plan`, lowerRate, offsetBalance, offsetGrowth),
-      mortgageSeries('rate-base', 'Current rate', `${(baseRate * 100).toFixed(2)}% with your offset plan`, baseRate, offsetBalance, offsetGrowth),
-      mortgageSeries('rate-higher', 'Higher rate', `${(higherRate * 100).toFixed(2)}% with your offset plan`, higherRate, offsetBalance, offsetGrowth),
+      mortgageSeries('rate-lower', 'Lower rate', `${(lowerRate * 100).toFixed(2)}% with your offset plan`, lowerRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('rate-base', 'Current rate', `${(baseRate * 100).toFixed(2)}% with your offset plan`, baseRate, forwardOpeningOffset, offsetGrowth),
+      mortgageSeries('rate-higher', 'Higher rate', `${(higherRate * 100).toFixed(2)}% with your offset plan`, higherRate, forwardOpeningOffset, offsetGrowth),
     ];
     const offsetSeries = [
-      mortgageSeries('offset-steady', 'Offset stays level', `$${Math.round(offsetBalance).toLocaleString('en-AU')} offset with no added savings`, baseRate, offsetBalance, 0),
-      mortgageSeries('offset-plan', 'Your offset plan', `$${Math.round(offsetGrowth).toLocaleString('en-AU')} added per month on average`, baseRate, offsetBalance, offsetGrowth),
+      mortgageSeries('offset-steady', 'Offset stays level', `$${Math.round(forwardOpeningOffset).toLocaleString('en-AU')} offset with no added savings`, baseRate, forwardOpeningOffset, 0),
+      mortgageSeries('offset-plan', 'Your offset plan', `$${Math.round(offsetGrowth).toLocaleString('en-AU')} added per month on average`, baseRate, forwardOpeningOffset, offsetGrowth),
       ...(offsetBoost > 0
-        ? [mortgageSeries('offset-boost', 'Boosted offset', `$${Math.round(offsetGrowth + offsetBoost).toLocaleString('en-AU')} added per month on average`, baseRate, offsetBalance, offsetGrowth + offsetBoost)]
+        ? [mortgageSeries('offset-boost', 'Boosted offset', `$${Math.round(offsetGrowth + offsetBoost).toLocaleString('en-AU')} added per month on average`, baseRate, forwardOpeningOffset, offsetGrowth + offsetBoost)]
         : []),
     ];
     return {
@@ -572,8 +585,8 @@ export function buildLifecycleProjection(
   if (section === 'TD' && (!Number.isInteger(enteredRollovers) || enteredRollovers < 0 || enteredRollovers > 10)) {
     missing.push('whole-number rollovers from 0 to 10');
   }
-  if (section === 'Savings' && (!(enteredHorizonYears > 0) || enteredHorizonYears > 50)) {
-    missing.push('projection horizon above 0 and up to 50 years');
+  if (section === 'Savings' && (!(enteredHorizonYears > 0) || enteredHorizonYears > MAX_PROJECTION_YEARS)) {
+    missing.push(`projection horizon above 0 and up to ${MAX_PROJECTION_YEARS} years`);
   }
   if (bonusSavings && ongoingRate == null) missing.push('ongoing savings rate from 0% to 100%');
   if (bonusSavings && (!Number.isInteger(bonusMonths) || bonusMonths < 0 || bonusMonths > 60)) {
@@ -617,9 +630,10 @@ export function buildLifecycleProjection(
   }
 
   const [lowerRate, baseRate, higherRate] = rateRange(ongoingRate!, inputs);
+  const ongoingBaseLabel = bonusSavings && inputs.bonusConditionsMet ? 'Ongoing rate' : 'Current rate';
   const rates: [string, string, number][] = [
     ['rate-lower', 'Lower rate', lowerRate],
-    ['rate-base', 'Current rate', baseRate],
+    ['rate-base', ongoingBaseLabel, baseRate],
     ['rate-higher', 'Higher rate', higherRate],
   ];
   let rateSeries: ProjectionSeries[];
@@ -656,10 +670,16 @@ export function buildLifecycleProjection(
     );
   } else {
     const months = Math.round(enteredHorizonYears * 12);
+    const netCashFlow = Math.round(contribution - withdrawal);
+    const savingsDetail = (rate: number) => (
+      bonusSavings && inputs.bonusConditionsMet && bonusMonths > 0
+        ? `${(annualRate! * 100).toFixed(2)}% conditional for ${bonusMonths} month${bonusMonths === 1 ? '' : 's'}, then ${(rate * 100).toFixed(2)}% ongoing; net monthly cash flow $${netCashFlow.toLocaleString('en-AU')}`
+        : `${(rate * 100).toFixed(2)}% with net monthly cash flow of $${netCashFlow.toLocaleString('en-AU')}`
+    );
     rateSeries = rates.map(([id, label, rate]) => toSeries(
       id,
       label,
-      `${(rate * 100).toFixed(2)}% with net monthly cash flow of $${Math.round(contribution - withdrawal).toLocaleString('en-AU')}`,
+      savingsDetail(rate),
       rate,
       simulateSavings({
         date: today,
