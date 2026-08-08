@@ -452,6 +452,8 @@ function ensureTrailingNewline(content: string): string {
  * newest one.
  */
 export const MAX_AUDIT_SNAPSHOT_STORAGE_CHARS = 128 * 1024;
+/** Body budget leaving room for JSON escaping to expand the stored record. */
+export const MAX_AUDIT_SNAPSHOT_BODY_CHARS = Math.floor(MAX_AUDIT_SNAPSHOT_STORAGE_CHARS / 2);
 /**
  * Bounds only the recovery copy this module *appends* to an export when the
  * physical log no longer carries the audit block. The log itself is already
@@ -463,8 +465,11 @@ export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
 
 async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise<void> {
   // Measure the body directly: serializing an oversized record only to discard
-  // it allocated another full copy of the report on the blocking path.
-  if (stored.reportJson.length > MAX_AUDIT_SNAPSHOT_STORAGE_CHARS) {
+  // it allocated another full copy of the report on the blocking path. The
+  // record that actually lands is JSON.stringify(stored), which escapes every
+  // quote in a quote-dense report body and carries summaryMarker too, so budget
+  // the body at half the record limit rather than against it.
+  if (stored.reportJson.length > MAX_AUDIT_SNAPSHOT_BODY_CHARS) {
     await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
     return;
   }

@@ -5,6 +5,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import {
   ANDROID_LOG_PATH_HINT,
   MAX_APPENDED_AUDIT_REPORT_CHARS,
+  MAX_AUDIT_SNAPSHOT_BODY_CHARS,
   MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
   MAX_LOG_BYTES,
   MAX_LOG_FILE_BYTES,
@@ -602,6 +603,15 @@ describe('persistent log file', () => {
       // thread, so ordinary flushes must never touch the existing bytes.
       expect(appendFile).toHaveBeenCalledTimes(2);
       expect(rewrites.mock.calls.filter(([path]) => path === LOG_PATH)).toHaveLength(0);
+      // Call counts alone would still pass if a flush concatenated the existing
+      // file and handed the whole thing to appendFile, which is the very cost
+      // this change exists to remove. Assert each payload carries only its own
+      // bytes.
+      const [, firstPayload] = appendFile.mock.calls[0];
+      const [, secondPayload] = appendFile.mock.calls[1];
+      expect(firstPayload).toContain('first line');
+      expect(secondPayload).toContain('second line');
+      expect(secondPayload).not.toContain('first line');
       expect(files[LOG_PATH]).toContain('first line');
       expect(files[LOG_PATH]).toContain('second line');
     } finally {
@@ -700,6 +710,32 @@ describe('persistent log file', () => {
     );
     await expect(AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY)).resolves.toBeNull();
     expect(files[AUDIT_SIDECAR_PATH]).toContain('oversized-snapshot-body');
+  });
+
+  it('leaves escaping headroom so a quote-dense body cannot overflow the snapshot', async () => {
+    const files = installPathAwareFiles();
+    const setItem = AsyncStorage.setItem as jest.Mock;
+    setItem.mockClear();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=escaping app_version=9.8.7 build_version=654`;
+    // Quote-dense metrics between the body budget and the record limit: measured
+    // raw this fits, but JSON.stringify escapes every quote and pushes the stored
+    // record past the limit the constant exists to respect.
+    const denseValue = '"quoted"'.repeat(9_000);
+
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'escaping-headroom',
+      dense: denseValue,
+    });
+
+    const body = JSON.parse(files[AUDIT_SIDECAR_PATH]).reportJson as string;
+    expect(body.length).toBeGreaterThan(MAX_AUDIT_SNAPSHOT_BODY_CHARS);
+    expect(body.length).toBeLessThan(MAX_AUDIT_SNAPSHOT_STORAGE_CHARS);
+    expect(setItem).not.toHaveBeenCalledWith(
+      LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+      expect.anything(),
+    );
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('escaping-headroom');
   });
 
   it('omits an oversized compact report from the export instead of building it', async () => {
