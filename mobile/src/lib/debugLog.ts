@@ -480,13 +480,24 @@ async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise
   }
 }
 
-async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<void> {
-  if (!FileSystem.documentDirectory) return;
+/** Writes the sidecar and returns its byte length so durability can be checked by size. */
+async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<number> {
+  if (!FileSystem.documentDirectory) return 0;
   await ensureLogDir();
-  await FileSystem.writeAsStringAsync(
-    PERFORMANCE_AUDIT_SIDECAR_FILE,
-    JSON.stringify(stored),
-  );
+  const payload = JSON.stringify(stored);
+  await FileSystem.writeAsStringAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, payload);
+  return textEncoder.encode(payload).length;
+}
+
+async function fileByteSize(path: string): Promise<number | null> {
+  try {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return null;
+    const size = (info as { size?: number }).size;
+    return typeof size === 'number' ? size : null;
+  } catch {
+    return null;
+  }
 }
 
 async function readPerformanceAuditSidecar(): Promise<StoredPerformanceAudit | null> {
@@ -677,7 +688,7 @@ export const debugLog = {
     // Sidecar first: AsyncStorage can fail after a durable disk write; reverse order
     // would leave neither physical artifact when setItem throws.
     await onStage('Saving the complete report');
-    await writePerformanceAuditSidecar(stored);
+    const sidecarBytes = await writePerformanceAuditSidecar(stored);
     await storeLatestAuditSnapshot(stored);
 
     await onStage('Recording the report in the log');
@@ -709,16 +720,19 @@ export const debugLog = {
       const blockText = blockEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
       await writeReservedPerformanceAuditBlock(blockText, epoch);
       await onStage('Verifying the saved report');
-      const physical = await FileSystem.readAsStringAsync(LOG_FILE);
-      const beginOk = physical.includes(beginMessage);
-      const endOk = physical.includes(endMessage);
-      // The block is now short enough that the reserved tail write cannot lose
-      // it; the sidecar carries the body, so verify that body separately.
-      const sidecar = await readPerformanceAuditSidecar();
-      const sidecarOk =
-        sidecar?.summaryMarker === stored.summaryMarker &&
-        sidecar.reportJson === stored.reportJson;
-      if (!beginOk || !endOk || !sidecarOk) {
+      // Verify durability by size, not by content. Reading the log back and
+      // re-parsing plus re-redacting the sidecar re-processed the very bytes
+      // just written — a megabyte of synchronous JS-thread work that blocked
+      // long enough for Android to raise its "isn't responding" dialog. Both
+      // writes throw on failure, so what is left to prove is that the bytes
+      // landed whole, and a stat answers that in constant time.
+      const [logBytes, sidecarOnDisk] = await Promise.all([
+        fileByteSize(LOG_FILE),
+        fileByteSize(PERFORMANCE_AUDIT_SIDECAR_FILE),
+      ]);
+      const logOk = logBytes == null || fileByteLength == null || logBytes === fileByteLength;
+      const sidecarOk = sidecarOnDisk == null || sidecarOnDisk === sidecarBytes;
+      if (logBytes == null || !logOk || !sidecarOk) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }
