@@ -219,6 +219,46 @@ async function awaitAuditWork<T>(
   }
 }
 
+async function awaitAuditWorkWithTimeout<T>(
+  promise: Promise<T>,
+  watchdog: PerformanceAuditInactivityWatchdog,
+  label: string,
+  timeoutMs: number,
+): Promise<T> {
+  assertSessionActive(watchdog);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const control = new Promise<never>((_resolve, reject) => {
+    timer = setInterval(() => {
+      try {
+        assertSessionActive(watchdog);
+      } catch (error) {
+        if (timer) clearInterval(timer);
+        timer = null;
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = null;
+        reject(error);
+      }
+    }, 50);
+    timeoutId = setTimeout(() => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      timeoutId = null;
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, control]);
+  } catch (error) {
+    rethrowAuditControl(error);
+    if (error instanceof Error && error.message.includes('timed out after')) throw error;
+    throw new Error(`${label} failed: ${formatAuditError(error)}`);
+  } finally {
+    if (timer) clearInterval(timer);
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
+
 async function settleUiUnchecked(): Promise<void> {
   await timeoutAfter(
     new Promise<void>((resolve) => {
@@ -2228,31 +2268,24 @@ export function PerformanceAuditRunner() {
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         const restoreStarted = now();
-        await timeoutAfter(
-          awaitAuditWork(
-            restorePerformanceAuditRollback(useStore, rollbackSnapshot),
-            watchdog,
-            'Audit state restoration',
-          ),
-          FINALIZATION_STORE_TIMEOUT_MS,
+        await awaitAuditWorkWithTimeout(
+          restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+          watchdog,
           'Audit state restoration',
+          FINALIZATION_STORE_TIMEOUT_MS,
         );
         rollbackRestored = true;
-        await timeoutAfter(
-          record({
-            id: 'audit-state-restoration',
-            label: 'Audit state rollback and durable verification',
-            kind: 'storage',
-            status: 'pass',
-            durationMs: roundMetric(now() - restoreStarted),
-            metrics: {
-              restored: true,
-              journalClearedAfterPersistence: true,
-            },
-          }),
-          FINALIZATION_FLUSH_TIMEOUT_MS,
-          'Audit state restoration record',
-        );
+        await record({
+          id: 'audit-state-restoration',
+          label: 'Audit state rollback and durable verification',
+          kind: 'storage',
+          status: 'pass',
+          durationMs: roundMetric(now() - restoreStarted),
+          metrics: {
+            restored: true,
+            journalClearedAfterPersistence: true,
+          },
+        });
         watchdog.beginFinalization();
 
         environment = {
@@ -2315,14 +2348,11 @@ export function PerformanceAuditRunner() {
         ].join(' ');
         let completeReportStored = false;
         try {
-          await timeoutAfter(
-            awaitAuditWork(
-              debugLog.storePerformanceAudit(summaryMarker, report),
-              watchdog,
-              'Performance report persistence',
-            ),
-            FINALIZATION_STORE_TIMEOUT_MS,
+          await awaitAuditWorkWithTimeout(
+            debugLog.storePerformanceAudit(summaryMarker, report),
+            watchdog,
             'Performance report persistence',
+            FINALIZATION_STORE_TIMEOUT_MS,
           );
           completeReportStored = true;
         } catch (storeError) {
@@ -2349,50 +2379,42 @@ export function PerformanceAuditRunner() {
         });
         debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
         reportPerformanceAudit(report);
-        await timeoutAfter(
-          awaitAuditWork(debugLog.flushToFile(), watchdog, 'Final audit log flush'),
-          FINALIZATION_FLUSH_TIMEOUT_MS,
+        await awaitAuditWorkWithTimeout(
+          debugLog.flushToFile(),
+          watchdog,
           'Final audit log flush',
+          FINALIZATION_FLUSH_TIMEOUT_MS,
         );
         updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
-          const completeLog = await timeoutAfter(
-            awaitAuditWork(
-              debugLog.readCompleteText(),
-              watchdog,
-              'Complete audit log read',
-            ),
-            FINALIZATION_READ_TIMEOUT_MS,
+          const completeLog = await awaitAuditWorkWithTimeout(
+            debugLog.readCompleteText(),
+            watchdog,
             'Complete audit log read',
+            FINALIZATION_READ_TIMEOUT_MS,
           );
-          const result = await timeoutAfter(
-            awaitAuditWork(
-              uploadDebugLog(
-                formatVersionedLogExport(
-                  completeLog,
-                  environment.appVersion,
-                  environment.buildVersion,
-                  { audit_session: sessionId },
-                ),
+          const result = await awaitAuditWorkWithTimeout(
+            uploadDebugLog(
+              formatVersionedLogExport(
+                completeLog,
+                environment.appVersion,
+                environment.buildVersion,
+                { audit_session: sessionId },
               ),
-              watchdog,
-              'Audit log upload',
             ),
-            FINALIZATION_UPLOAD_TIMEOUT_MS,
+            watchdog,
             'Audit log upload',
+            FINALIZATION_UPLOAD_TIMEOUT_MS,
           );
           if (result.truncated || result.clientTruncated) {
             throw new Error('The upload service did not accept the complete log.');
           }
-          await timeoutAfter(
-            awaitAuditWork(
-              Clipboard.setStringAsync(result.url),
-              watchdog,
-              'Audit link clipboard write',
-            ),
-            5_000,
+          await awaitAuditWorkWithTimeout(
+            Clipboard.setStringAsync(result.url),
+            watchdog,
             'Audit link clipboard write',
+            5_000,
           );
           upload = { url: result.url, provider: result.provider };
           debugLog.info(
@@ -2407,10 +2429,11 @@ export function PerformanceAuditRunner() {
             `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
           );
         }
-        await timeoutAfter(
-          awaitAuditWork(debugLog.flushToFile(), watchdog, 'Upload-result log flush'),
-          FINALIZATION_FLUSH_TIMEOUT_MS,
+        await awaitAuditWorkWithTimeout(
+          debugLog.flushToFile(),
+          watchdog,
           'Upload-result log flush',
+          FINALIZATION_FLUSH_TIMEOUT_MS,
         ).catch(() => {});
         try {
           await timeoutAfter(
