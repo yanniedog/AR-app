@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { AppState } from '../data/storeTypes';
+import type { UserRateScenario } from '../data/userRateScenario';
+import {
+  captureUserRateScenarioForAudit,
+  ensureUserRateScenarioLoaded,
+  restoreUserRateScenarioForAudit,
+} from '../hooks/useUserRateScenario';
 
 export const PERFORMANCE_AUDIT_ROLLBACK_KEY = '@ar/performance-audit/rollback-v1';
 const PERSISTED_STORE_KEY = 'ar-rates';
@@ -13,6 +19,8 @@ export interface PerformanceAuditUserSnapshot {
   favorites: AppState['favorites'];
   subscriptions: AppState['subscriptions'];
   activeSection: AppState['activeSection'];
+  /** Encrypted calculator/projection scenario; null when unavailable at capture. */
+  userRateScenario: UserRateScenario | null;
 }
 
 interface PerformanceAuditRollbackJournal {
@@ -32,6 +40,7 @@ function clone<T>(value: T): T {
 
 export function capturePerformanceAuditUserSnapshot(
   state: Pick<AppState, 'prefs' | 'savedRates' | 'favorites' | 'subscriptions' | 'activeSection'>,
+  userRateScenario: UserRateScenario | null = captureUserRateScenarioForAudit(),
 ): PerformanceAuditUserSnapshot {
   return clone({
     prefs: state.prefs,
@@ -39,6 +48,7 @@ export function capturePerformanceAuditUserSnapshot(
     favorites: state.favorites,
     subscriptions: state.subscriptions,
     activeSection: state.activeSection,
+    userRateScenario,
   });
 }
 
@@ -65,7 +75,18 @@ function parseJournal(raw: string | null): PerformanceAuditRollbackJournal | nul
     ) {
       return null;
     }
-    return journal as PerformanceAuditRollbackJournal;
+    return {
+      schemaVersion: ROLLBACK_SCHEMA_VERSION,
+      startedAt: journal.startedAt,
+      snapshot: {
+        prefs: snapshot.prefs,
+        savedRates: snapshot.savedRates,
+        favorites: snapshot.favorites,
+        subscriptions: snapshot.subscriptions,
+        activeSection: snapshot.activeSection,
+        userRateScenario: snapshot.userRateScenario ?? null,
+      },
+    };
   } catch {
     return null;
   }
@@ -78,6 +99,7 @@ export async function beginPerformanceAuditRollback(
   if (stale) {
     await restoreSnapshot(store, stale.snapshot);
   }
+  await ensureUserRateScenarioLoaded().catch(() => undefined);
   const snapshot = capturePerformanceAuditUserSnapshot(store.getState());
   const journal: PerformanceAuditRollbackJournal = {
     schemaVersion: ROLLBACK_SCHEMA_VERSION,
@@ -100,7 +122,7 @@ function persistedSnapshot(raw: string | null): PerformanceAuditUserSnapshot | n
       favorites: state.favorites ?? [],
       subscriptions: state.subscriptions ?? [],
       activeSection: state.activeSection ?? state.prefs.defaultSection,
-    });
+    }, null);
   } catch {
     return null;
   }
@@ -133,9 +155,30 @@ async function restoreSnapshot(
   snapshot: PerformanceAuditUserSnapshot,
 ): Promise<void> {
   const restored = clone(snapshot);
-  store.setState(restored);
-  const actual = capturePerformanceAuditUserSnapshot(store.getState());
-  if (performanceAuditSnapshotFingerprint(actual) !== performanceAuditSnapshotFingerprint(restored)) {
+  store.setState({
+    prefs: restored.prefs,
+    savedRates: restored.savedRates,
+    favorites: restored.favorites,
+    subscriptions: restored.subscriptions,
+    activeSection: restored.activeSection,
+  });
+  if (restored.userRateScenario) {
+    await restoreUserRateScenarioForAudit(restored.userRateScenario);
+  }
+  const actual = capturePerformanceAuditUserSnapshot(
+    store.getState(),
+    restored.userRateScenario ? captureUserRateScenarioForAudit() : null,
+  );
+  const expectedForCompare = {
+    ...restored,
+    userRateScenario: restored.userRateScenario,
+  };
+  if (
+    performanceAuditSnapshotFingerprint({
+      ...actual,
+      userRateScenario: restored.userRateScenario ? actual.userRateScenario : null,
+    }) !== performanceAuditSnapshotFingerprint(expectedForCompare)
+  ) {
     throw new Error('Performance audit state restoration did not match the captured snapshot');
   }
   await waitForPersistence(restored);

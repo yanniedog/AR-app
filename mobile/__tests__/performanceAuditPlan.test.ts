@@ -221,14 +221,34 @@ describe('deep performance audit plan', () => {
     expect(dismiss?.readiness).not.toContain('logos');
   });
 
-  test('never schedules unsafe or fabricated financial actions', () => {
+  test('never schedules unsafe financial-input.edit while still exercising calculator field actions', () => {
     const plan = buildDeepPerformanceAuditPlan(corePayload());
     const actions = allSteps().map((step) => step.semanticActionId);
     for (const excluded of DEEP_AUDIT_EXCLUDED_ACTION_IDS) {
       expect(actions).not.toContain(excluded);
       expect(plan.excludedUnsafeActions).toContain(excluded);
     }
-    expect(actions.join(' ')).not.toMatch(/(financial-input|balance\.edit|amount\.edit|rate\.edit|term\.edit)/);
+    expect(actions.join(' ')).not.toMatch(/(financial-input\.edit|balance\.edit|amount\.edit|rate\.edit|term\.edit)/);
+    expect(actions).toEqual(expect.arrayContaining([
+      'calculator.scenario.apply-buy',
+      'calculator.mode.next',
+      'calculator.scenario.apply-refi',
+      'calculator.section.savings',
+      'calculator.scenario.apply-deposit',
+      'calculator.section.mortgage',
+      'projections.inputs.apply-primary',
+      'projections.rate-structure.next',
+      'projections.inputs.apply-alternate',
+    ]));
+    const buy = allSteps().find((step) =>
+      step.passId === 'first-pass' && step.semanticActionId === 'calculator.scenario.apply-buy',
+    );
+    expect(buy?.parameters).toMatchObject({
+      mode: 'buy',
+      propertyValue: '750000',
+      currentRate: '7.25',
+    });
+    expect(buy?.safety.stateImpact).toBe('restorable');
   });
 
   test('marks unavailable data-dependent work as safely optional without changing the pass shape', () => {

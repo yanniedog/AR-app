@@ -1,6 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 import { DEFAULT_PREFS, type AppState } from '../src/data/storeTypes';
+import {
+  resetUserRateScenarioStoreForTests,
+  updateUserRateScenario,
+} from '../src/hooks/useUserRateScenario';
 import {
   beginPerformanceAuditRollback,
   capturePerformanceAuditUserSnapshot,
@@ -10,6 +16,8 @@ import {
   restorePerformanceAuditRollback,
   type PerformanceAuditRollbackStore,
 } from '../src/lib/performanceAuditRollback';
+
+const originalOs = Platform.OS;
 
 function makeState(): AppState {
   return {
@@ -44,7 +52,15 @@ function makeStore(initial = makeState()): PerformanceAuditRollbackStore {
 
 describe('performance audit rollback journal', () => {
   beforeEach(async () => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     await AsyncStorage.clear();
+    resetUserRateScenarioStoreForTests();
+    jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
+    jest.mocked(SecureStore.setItemAsync).mockResolvedValue(undefined);
+  });
+
+  afterAll(() => {
+    Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   });
 
   it('captures user state before mutations and restores exact values and ordering', async () => {
@@ -55,6 +71,10 @@ describe('performance audit rollback journal', () => {
       favorites: ['changed'],
       activeSection: 'Savings',
     });
+    updateUserRateScenario((value) => ({
+      ...value,
+      mortgage: { ...value.mortgage, currentRate: '9.99', propertyValue: '1' },
+    }));
 
     await expect(restorePerformanceAuditRollback(store, before)).resolves.toBe(true);
     expect(performanceAuditSnapshotFingerprint(capturePerformanceAuditUserSnapshot(store.getState())))

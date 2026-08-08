@@ -490,40 +490,42 @@ async function runDeepAuditStep(
       label,
     );
   } catch (caught) {
-    // Optional local probes must not abort the whole-app pass — record the
-    // failure with readiness evidence and continue the remaining plan.
-    if (
-      step.optional &&
-      step.skipSafety.maySkip &&
-      caught instanceof PerformanceAuditReadinessTimeoutError
-    ) {
-      const readiness = caught.snapshot;
-      return {
-        id: `deep-${step.id}`,
-        label,
-        kind: 'journey',
-        status: 'fail',
-        durationMs: roundMetric(now() - started),
-        metrics: {
-          journeyId: `${step.scenarioId}.${step.semanticActionId}`,
-          journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
-          iteration,
-          passId: step.passId,
-          scenarioId: step.scenarioId,
-          semanticActionId: step.semanticActionId,
-          depth: step.depth,
-          plannedExpectedPath: step.expectedPath,
-          expectedPath: step.expectedPath,
-          expectedSurface: step.expectedSurface,
-          optionalReadinessTimeout: true,
-          skipSafety: step.skipSafety.reason,
-          ...readinessMetrics(readiness),
-        },
-        error: formatAuditError(caught),
-        trace: captureAuditTrace(`optional deep step ${step.id} readiness timeout`),
-      };
-    }
-    throw caught;
+    // Cancel / hang / dataset-revision changes remain unrecoverable. Every other
+    // step failure is recorded so the remaining plan can still run.
+    rethrowAuditControl(caught);
+    const readiness = caught instanceof PerformanceAuditReadinessTimeoutError
+      ? caught.snapshot
+      : performanceAuditReadinessRegistry.snapshot(
+        [step.expectedSurface],
+        requiredProbeKinds(step),
+      );
+    return {
+      id: `deep-${step.id}`,
+      label,
+      kind: 'journey',
+      status: 'fail',
+      durationMs: roundMetric(now() - started),
+      metrics: {
+        journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+        journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+        iteration,
+        passId: step.passId,
+        scenarioId: step.scenarioId,
+        semanticActionId: step.semanticActionId,
+        depth: step.depth,
+        plannedExpectedPath: step.expectedPath,
+        expectedPath: step.expectedPath,
+        expectedSurface: step.expectedSurface,
+        continuedAfterFailure: true,
+        optional: step.optional,
+        optionalReadinessTimeout:
+          step.optional && caught instanceof PerformanceAuditReadinessTimeoutError,
+        skipSafety: step.skipSafety.reason,
+        ...readinessMetrics(readiness),
+      },
+      error: formatAuditError(caught),
+      trace: captureAuditTrace(`deep step ${step.id} failed; audit continues`),
+    };
   }
 }
 
@@ -2043,6 +2045,51 @@ export function PerformanceAuditRunner() {
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
         await record(await runRuntimeCheck(monitor, watchdog));
 
+        const recordContinuable = async (
+          label: string,
+          run: () => Promise<AuditCheck>,
+        ): Promise<void> => {
+          try {
+            const check = await run();
+            await record(check);
+            if (check.status === 'fail') {
+              try {
+                await recoverAuditRoute(() => pathnameRef.current);
+              } catch (recoveryCaught) {
+                debugLog.warn(
+                  PERFORMANCE_AUDIT_LOG_TAG,
+                  `post-failure route recovery failed after ${label}: ${formatAuditErrorForLog(recoveryCaught)}`,
+                );
+              }
+            }
+          } catch (caught) {
+            rethrowAuditControl(caught);
+            const error = formatAuditError(caught);
+            await record({
+              id: `continued-failure-${completed + 1}`,
+              label,
+              kind: 'runtime',
+              status: 'fail',
+              durationMs: 0,
+              metrics: {
+                continuedAfterFailure: true,
+                currentPath: pathnameRef.current,
+                datasetRevision: datasetRevisionLabel(datasetRevision),
+              },
+              error,
+              trace: captureAuditTrace(`${label} failed; audit continues`),
+            });
+            try {
+              await recoverAuditRoute(() => pathnameRef.current);
+            } catch (recoveryCaught) {
+              debugLog.warn(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `post-failure route recovery failed after ${label}: ${formatAuditErrorForLog(recoveryCaught)}`,
+              );
+            }
+          }
+        };
+
         for (const pass of plan.passes) {
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
@@ -2064,8 +2111,9 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
-            await record(
-              await runDeepAuditStep(
+            await recordContinuable(
+              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
+              () => runDeepAuditStep(
                 step,
                 () => pathnameRef.current,
                 monitor,
@@ -2080,38 +2128,59 @@ export function PerformanceAuditRunner() {
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
           updatePerformanceAuditProgress(completed, total, `Benchmarking ${section} data models`);
-          await record(await runSectionModelCheck(section, monitor, watchdog));
+          await recordContinuable(
+            `Benchmarking ${section} data models`,
+            () => runSectionModelCheck(section, monitor, watchdog),
+          );
         }
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing preferences storage');
-        await record(await runStorageCheck(sessionId, monitor, watchdog));
+        await recordContinuable(
+          'Testing preferences storage',
+          () => runStorageCheck(sessionId, monitor, watchdog),
+        );
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Testing log file storage');
-        await record(await runFileSystemCheck(sessionId, monitor, watchdog));
+        await recordContinuable(
+          'Testing log file storage',
+          () => runFileSystemCheck(sessionId, monitor, watchdog),
+        );
 
         assertSessionActive(watchdog);
         updatePerformanceAuditProgress(completed, total, 'Reading the complete diagnostic log');
-        await record(await runLogIoCheck(monitor, watchdog));
+        await recordContinuable(
+          'Reading the complete diagnostic log',
+          () => runLogIoCheck(monitor, watchdog),
+        );
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Processing the active rates payload');
         await nextFrame();
-        await record(await runDataCheck(monitor, watchdog));
+        await recordContinuable(
+          'Processing the active rates payload',
+          () => runDataCheck(monitor, watchdog),
+        );
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
-        await record(await runNetworkCheck(monitor, watchdog));
+        await recordContinuable(
+          'Timing the live manifest request',
+          () => runNetworkCheck(monitor, watchdog),
+        );
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
-        await record(await runUpdateReadinessCheck(app, monitor, watchdog));
+        await recordContinuable(
+          'Inspecting Android update readiness',
+          () => runUpdateReadinessCheck(app, monitor, watchdog),
+        );
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
@@ -2167,7 +2236,9 @@ export function PerformanceAuditRunner() {
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The first-pass and repeat whole-app scenarios run linearly. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
-            'In-page actions invoke the same registered callbacks as product searches, filters, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input actions remain explicitly excluded for safety.',
+            'Failed journey or benchmark steps are recorded with error evidence; the runner recovers route/state when needed and continues the remaining plan. Cancel requests, hang-watchdog expiry, and mid-run dataset revision changes remain unrecoverable stops.',
+            'In-page actions invoke the same registered callbacks as product searches, filters, calculator/projection field updates, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input.edit actions remain explicitly excluded for safety.',
+            'Calculator and projection scenarios apply restorable canned parameter sets through registered UI callbacks; encrypted scenario values are restored with the audit rollback journal.',
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             'Update readiness validates manifest content/compatibility and observes existing download state; it never downloads an APK or launches the Android installer. Its duration may come from the one-minute update-check cache and is not classified as network latency.',
@@ -2395,8 +2466,8 @@ export function PerformanceAuditRunner() {
             checks,
             routeAggregates: aggregateRepeatedJourneys(checks),
             limitations: [
-              'This is a structured partial schema-v4 report. The audit stopped at the first failed required step; no later result was fabricated or measured against contaminated state.',
-              `Failure occurred after ${completed} of ${total} planned durable checks.`,
+              'This is a structured partial schema-v4 report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.',
+              `Unrecoverable failure occurred after ${completed} of ${total} planned durable checks.`,
               `The report applies to app version ${app.appVersion}, build ${app.buildVersion}.`,
             ],
           };
