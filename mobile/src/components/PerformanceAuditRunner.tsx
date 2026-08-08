@@ -27,6 +27,7 @@ import { SECTION_ORDER } from '../constants';
 import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
+import { compactPerformanceAuditReportForLog } from '../lib/performanceAuditLog';
 import {
   buildDeepPerformanceAuditPlan,
   type DeepAuditStep,
@@ -100,6 +101,11 @@ const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
 const AUDIT_KEEP_AWAKE_TAG = 'performance-audit';
+/** Teardown may read/write a full 2MB log and compact a large report off the JS thread budget. */
+const FINALIZATION_STORE_TIMEOUT_MS = 120_000;
+const FINALIZATION_FLUSH_TIMEOUT_MS = 30_000;
+const FINALIZATION_READ_TIMEOUT_MS = 60_000;
+const FINALIZATION_UPLOAD_TIMEOUT_MS = 90_000;
 type JourneyIteration = 'cold' | 'warm';
 
 class AuditCancelledError extends Error {
@@ -2221,11 +2227,16 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
+        watchdog.beginFinalization();
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         const restoreStarted = now();
-        await awaitAuditWork(
-          restorePerformanceAuditRollback(useStore, rollbackSnapshot),
-          watchdog,
+        await timeoutAfter(
+          awaitAuditWork(
+            restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+            watchdog,
+            'Audit state restoration',
+          ),
+          FINALIZATION_STORE_TIMEOUT_MS,
           'Audit state restoration',
         );
         rollbackRestored = true;
@@ -2301,9 +2312,13 @@ export function PerformanceAuditRunner() {
         ].join(' ');
         let completeReportStored = false;
         try {
-          await awaitAuditWork(
-            debugLog.storePerformanceAudit(summaryMarker, report),
-            watchdog,
+          await timeoutAfter(
+            awaitAuditWork(
+              debugLog.storePerformanceAudit(summaryMarker, report),
+              watchdog,
+              'Performance report persistence',
+            ),
+            FINALIZATION_STORE_TIMEOUT_MS,
             'Performance report persistence',
           );
           completeReportStored = true;
@@ -2331,29 +2346,49 @@ export function PerformanceAuditRunner() {
         });
         debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
         reportPerformanceAudit(report);
-        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Final audit log flush');
+        await timeoutAfter(
+          awaitAuditWork(debugLog.flushToFile(), watchdog, 'Final audit log flush'),
+          FINALIZATION_FLUSH_TIMEOUT_MS,
+          'Final audit log flush',
+        );
         updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
-          const completeLog = await awaitAuditWork(
-            debugLog.readCompleteText(),
-            watchdog,
+          const completeLog = await timeoutAfter(
+            awaitAuditWork(
+              debugLog.readCompleteText(),
+              watchdog,
+              'Complete audit log read',
+            ),
+            FINALIZATION_READ_TIMEOUT_MS,
             'Complete audit log read',
           );
-          const result = await awaitAuditWork(uploadDebugLog(
-            formatVersionedLogExport(
-              completeLog,
-              environment.appVersion,
-              environment.buildVersion,
-              { audit_session: sessionId },
+          const result = await timeoutAfter(
+            awaitAuditWork(
+              uploadDebugLog(
+                formatVersionedLogExport(
+                  completeLog,
+                  environment.appVersion,
+                  environment.buildVersion,
+                  { audit_session: sessionId },
+                ),
+              ),
+              watchdog,
+              'Audit log upload',
             ),
-          ), watchdog, 'Audit log upload');
+            FINALIZATION_UPLOAD_TIMEOUT_MS,
+            'Audit log upload',
+          );
           if (result.truncated || result.clientTruncated) {
             throw new Error('The upload service did not accept the complete log.');
           }
-          await awaitAuditWork(
-            Clipboard.setStringAsync(result.url),
-            watchdog,
+          await timeoutAfter(
+            awaitAuditWork(
+              Clipboard.setStringAsync(result.url),
+              watchdog,
+              'Audit link clipboard write',
+            ),
+            5_000,
             'Audit link clipboard write',
           );
           upload = { url: result.url, provider: result.provider };
@@ -2369,9 +2404,28 @@ export function PerformanceAuditRunner() {
             `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
           );
         }
-        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Upload-result log flush');
+        await timeoutAfter(
+          awaitAuditWork(debugLog.flushToFile(), watchdog, 'Upload-result log flush'),
+          FINALIZATION_FLUSH_TIMEOUT_MS,
+          'Upload-result log flush',
+        ).catch(() => {});
+        try {
+          await timeoutAfter(
+            recoverAuditRoute(() => pathnameRef.current),
+            ROUTE_TIMEOUT_MS,
+            'Audit home route recovery',
+          );
+        } catch (recoveryCaught) {
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `post-complete route recovery failed: ${formatAuditErrorForLog(recoveryCaught)}`,
+          );
+        }
         assertSessionActive(watchdog);
-        completePerformanceAudit(report, upload);
+        completePerformanceAudit(
+          compactPerformanceAuditReportForLog(report) as PerformanceAuditReport,
+          upload,
+        );
       } catch (caught) {
         let recoveryError: string | null = null;
         try {

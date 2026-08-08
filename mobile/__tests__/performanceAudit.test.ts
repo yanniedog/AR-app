@@ -456,6 +456,20 @@ describe('performance audit inactivity watchdog', () => {
     elapsedMs = 590_001;
     expect(watchdog.isExpired()).toBe(true);
   });
+
+  it('beginFinalization suspends hang expiry for report persistence and upload', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
+
+    watchdog.recordStoredCheck();
+    elapsedMs = 60_000;
+    expect(watchdog.isExpired()).toBe(true);
+
+    watchdog.beginFinalization();
+    elapsedMs = 600_000;
+    expect(watchdog.isFinalizing).toBe(true);
+    expect(watchdog.isExpired()).toBe(false);
+  });
 });
 
 describe('audit logfile error formatting', () => {
