@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import TestRenderer, { act } from 'react-test-renderer';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import { useVirtualizedListReadiness } from '../src/hooks/useVirtualizedListReadiness';
 import {
@@ -76,7 +76,7 @@ describe('virtualized list readiness', () => {
       return null;
     }
 
-    let tree: TestRenderer.ReactTestRenderer;
+    let tree: ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         React.createElement(Probe, { revision: 'query:afg', itemCount: 1 }),
@@ -117,7 +117,7 @@ describe('virtualized list readiness', () => {
       return null;
     }
 
-    let tree: TestRenderer.ReactTestRenderer;
+    let tree: ReactTestRenderer;
     act(() => {
       tree = TestRenderer.create(
         React.createElement(Probe, { revision: 'viewable', itemCount: 2 }),
