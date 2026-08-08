@@ -24,7 +24,7 @@ export const openRateReceipt = (productKey: string, rateIndex?: number) =>
   router.push({
     pathname: '/rate-receipt',
     params: { key: productKey, ...(rateIndex != null ? { ri: String(rateIndex) } : {}) },
-  });
+  } as unknown as Href);
 
 /** Open a lender page; optional date/section focus a specific bank-move drill-down. */
 export const openBank = (

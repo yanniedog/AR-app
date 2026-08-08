@@ -33,6 +33,7 @@ import {
 } from '../lib/performanceAuditPlan';
 import {
   performanceAuditReadinessRegistry,
+  PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessKind,
   type PerformanceAuditReadinessSnapshot,
 } from '../lib/performanceAuditReadiness';
@@ -300,7 +301,7 @@ async function waitForPath(
 
 async function recoverAuditRoute(currentPath: () => string): Promise<void> {
   if (pathMatches(currentPath(), AUDIT_HOME_PATH)) return;
-  router.replace(AUDIT_HOME_PATH);
+  router.replace(AUDIT_HOME_PATH as Href);
   await waitForPath(currentPath, AUDIT_HOME_PATH, 'Performance audit route recovery', {
     checkAuditState: false,
   });
@@ -467,6 +468,65 @@ async function runDeepAuditStep(
     };
   }
 
+  try {
+    return await runDeepAuditStepBody(
+      step,
+      currentPath,
+      monitor,
+      watchdog,
+      datasetRevision,
+      started,
+      iteration,
+      label,
+    );
+  } catch (caught) {
+    // Optional local probes must not abort the whole-app pass — record the
+    // failure with readiness evidence and continue the remaining plan.
+    if (
+      step.optional &&
+      step.skipSafety.maySkip &&
+      caught instanceof PerformanceAuditReadinessTimeoutError
+    ) {
+      const readiness = caught.snapshot;
+      return {
+        id: `deep-${step.id}`,
+        label,
+        kind: 'journey',
+        status: 'fail',
+        durationMs: roundMetric(now() - started),
+        metrics: {
+          journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+          journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+          iteration,
+          passId: step.passId,
+          scenarioId: step.scenarioId,
+          semanticActionId: step.semanticActionId,
+          depth: step.depth,
+          plannedExpectedPath: step.expectedPath,
+          expectedPath: step.expectedPath,
+          expectedSurface: step.expectedSurface,
+          optionalReadinessTimeout: true,
+          skipSafety: step.skipSafety.reason,
+          ...readinessMetrics(readiness),
+        },
+        error: formatAuditError(caught),
+        trace: captureAuditTrace(`optional deep step ${step.id} readiness timeout`),
+      };
+    }
+    throw caught;
+  }
+}
+
+async function runDeepAuditStepBody(
+  step: DeepAuditStep,
+  currentPath: () => string,
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+  datasetRevision: AuditDatasetRevision,
+  started: number,
+  iteration: JourneyIteration,
+  label: string,
+): Promise<AuditCheck> {
   assertSessionActive(watchdog);
   assertDatasetRevision(datasetRevision);
   const responsivenessAt = monitor.snapshot();
@@ -1764,7 +1824,7 @@ export async function runJourney(
           ? 'second-back+replace-recovery'
           : 'replace-recovery';
       const fallbackStarted = now();
-      router.replace(AUDIT_HOME_PATH);
+      router.replace(AUDIT_HOME_PATH as Href);
       await waitForPath(
         currentPath,
         AUDIT_HOME_PATH,

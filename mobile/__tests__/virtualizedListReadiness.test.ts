@@ -59,4 +59,18 @@ describe('virtualized list readiness', () => {
     );
     expect(isVirtualizedListVisiblyCommitted(empty, 'empty', 0)).toBe(true);
   });
+
+  test('layout-seeded visibility (visibleCount >= 1) settles filtered non-empty lists', () => {
+    // Mirrors useVirtualizedListReadiness markLayoutCommitted after a query filter
+    // when FlashList skips a fresh onViewableItemsChanged callback.
+    const filtered = commitVirtualizedListRevision(
+      initialVirtualizedListCommitState('query:afg'),
+      'query:afg',
+      'query:afg',
+      1,
+      1,
+    );
+    expect(isVirtualizedListRevisionReady(filtered, 'query:afg', 1)).toBe(true);
+    expect(isVirtualizedListVisiblyCommitted(filtered, 'query:afg', 1)).toBe(true);
+  });
 });
