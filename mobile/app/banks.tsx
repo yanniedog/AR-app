@@ -255,7 +255,7 @@ export default function Banks() {
           <FlashList
             // Remount when the search filter changes so FlashList re-emits load /
             // viewability after an in-place data shrink (audit readiness hangs otherwise).
-            key={`lenders:${section}:${query}`}
+            key={`lenders:${listRevision}`}
             data={filtered}
             onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
             onLoad={listReadiness.onLoad}

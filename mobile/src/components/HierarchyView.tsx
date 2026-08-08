@@ -316,9 +316,9 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
       <FlashList
       ref={listRef}
-      key={`browse:${section}:${pathKey}`}
+      key={`browse:${listRevision}`}
       data={items}
-      extraData={`${section}:${pathKey}:${includeNonStandard}`}
+      extraData={listRevision}
       onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
       onLoad={listReadiness.onLoad}
       onContentSizeChange={listReadiness.onContentSizeChange}

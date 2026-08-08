@@ -371,7 +371,7 @@ export default function Search() {
         <FlashList
           // Remount when the user-facing result identity changes so readiness
           // cannot stall after FlashList recycles without a fresh viewability pass.
-          key={`search:${section}:${path.join('.')}:${debouncedQuery}:${sortKey}:${filterCount}`}
+          key={`search:${listRevision}`}
           data={rows}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
           onLoad={listReadiness.onLoad}

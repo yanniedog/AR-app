@@ -18,6 +18,9 @@ type ViewableItemsChangedInfo = {
  * viewability updates when `onViewableItemsChanged` is replaced. Layout/load
  * signals seed visibility for non-empty lists so query/filter revisions cannot
  * hang readiness when viewability is not re-emitted after an in-place data swap.
+ *
+ * Callers should remount the list on the full readiness revision so recycled
+ * FlashList instances cannot deliver layout/viewability for a prior identity.
  */
 export function useVirtualizedListReadiness(revision: string, itemCount: number) {
   const revisionRef = useRef(revision);
@@ -36,13 +39,16 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
   }, [revision]);
 
   const markCommitted = useCallback((visibleCount?: number) => {
-    const activeRevision = revisionRef.current;
-    const activeCount = itemCountRef.current;
+    // Capture the revision/count the signal was for. setState may flush later,
+    // after a newer revision is active — commitVirtualizedListRevision rejects
+    // when callbackRevision !== activeRevision at apply time.
+    const callbackRevision = revisionRef.current;
+    const callbackCount = itemCountRef.current;
     setCommit((current) => commitVirtualizedListRevision(
       current,
-      activeRevision,
-      activeRevision,
-      activeCount,
+      callbackRevision,
+      revisionRef.current,
+      callbackCount,
       visibleCount,
     ));
   }, []);
@@ -77,7 +83,7 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
 
   const onViewableItemsChanged = useCallback((info: ViewableItemsChangedInfo) => {
     markCommittedRef.current(
-      info.viewableItems.filter((item) => item.isViewable !== false).length,
+      info.viewableItems.filter((item) => item.isViewable === true).length,
     );
   }, []);
 
