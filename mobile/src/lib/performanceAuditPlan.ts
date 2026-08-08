@@ -161,6 +161,34 @@ function uniqueReadiness(
   return [...new Set(groups.flat())];
 }
 
+/** Asset families that are surface-specific and must not leak across destinations. */
+const DESTINATION_ASSET_READINESS = new Set<DeepAuditReadinessCategory>([
+  'graphics',
+  'logos',
+  'list',
+]);
+
+/**
+ * Merge scenario defaults with per-action readiness. When the action changes
+ * expected surface/path and supplies its own readiness, drop inherited
+ * graphics/logos/list requirements so e.g. compare.dismiss → search.results
+ * does not demand a graphic probe the search surface never registers.
+ */
+function resolveStepReadiness(
+  defaults: ScenarioDefaults,
+  action: Partial<ActionTemplate> & Pick<ActionTemplate, 'semanticActionId' | 'depth'>,
+): DeepAuditReadinessCategory[] {
+  const expectedSurface = action.expectedSurface ?? defaults.expectedSurface;
+  const expectedPath = action.expectedPath ?? defaults.expectedPath;
+  const destinationChanged =
+    expectedSurface !== defaults.expectedSurface || expectedPath !== defaults.expectedPath;
+  if (destinationChanged && action.readiness) {
+    const kept = defaults.readiness.filter((entry) => !DESTINATION_ASSET_READINESS.has(entry));
+    return uniqueReadiness(kept, action.readiness);
+  }
+  return uniqueReadiness(defaults.readiness, action.readiness ?? []);
+}
+
 function exactRateIndex(row: RateRow): number | null {
   return Number.isInteger(row.rate_index) ? row.rate_index! : null;
 }
@@ -283,7 +311,7 @@ function scenario(
       semanticActionId: action.semanticActionId,
       expectedPath: action.expectedPath ?? defaults.expectedPath,
       expectedSurface: action.expectedSurface ?? defaults.expectedSurface,
-      readiness: uniqueReadiness(defaults.readiness, action.readiness ?? []),
+      readiness: resolveStepReadiness(defaults, action),
       optional: action.optional ?? defaults.optional ?? false,
       skipReason: action.skipReason ?? defaults.skipReason ?? null,
       skipWhen: action.skipWhen ?? defaults.skipWhen ?? [],

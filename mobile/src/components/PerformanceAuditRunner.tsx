@@ -79,7 +79,10 @@ import { AppText, Button, Card, Row } from './ui';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
+/** Floor for surface settle waits; hang prevention can extend this further. */
 const DATA_SETTLE_TIMEOUT_MS = 30_000;
+/** Graphic/list-heavy destinations may need longer than the historical 30s floor. */
+const DATA_SETTLE_TIMEOUT_MAX_MS = 180_000;
 const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
@@ -425,6 +428,16 @@ function requiredProbeKinds(step: DeepAuditStep): PerformanceAuditReadinessKind[
   return [...kinds];
 }
 
+/** Bound readiness waits by hang remaining so long audits outlive slow chart settles. */
+function readinessTimeoutMs(watchdog: PerformanceAuditInactivityWatchdog): number {
+  const hangBudget = Math.max(0, watchdog.remainingMs() - 5_000);
+  const desired = Math.max(
+    DATA_SETTLE_TIMEOUT_MS,
+    Math.min(DATA_SETTLE_TIMEOUT_MAX_MS, Math.floor(watchdog.hangTimeoutMs / 10)),
+  );
+  return Math.max(1_000, Math.min(desired, hangBudget || desired));
+}
+
 async function runDeepAuditStep(
   step: DeepAuditStep,
   currentPath: () => string,
@@ -490,9 +503,10 @@ async function runDeepAuditStep(
       await performanceAuditReadinessRegistry.waitForReady({
         surfaceIds: [source.id],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
-        timeoutMs: DATA_SETTLE_TIMEOUT_MS,
+        timeoutMs: readinessTimeoutMs(watchdog),
         signal: preActionAbort.signal,
       });
+      watchdog.touchProgress();
     } finally {
       clearInterval(preActionGuard);
     }
@@ -548,20 +562,33 @@ async function runDeepAuditStep(
   assertDatasetRevision(datasetRevision);
   const readinessStarted = now();
   const readinessAbort = new AbortController();
+  let lastReadinessFingerprint: string | null = null;
   const readinessGuard = setInterval(() => {
     if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
       readinessAbort.abort();
+      return;
     }
-  }, 50);
+    // Keep hang prevention alive while readiness is still progressing so a
+    // long chart settle cannot look like a hung audit mid-check.
+    const snapshot = performanceAuditReadinessRegistry.snapshot(
+      [step.expectedSurface],
+      requiredProbeKinds(step),
+    );
+    if (snapshot.fingerprint !== lastReadinessFingerprint) {
+      lastReadinessFingerprint = snapshot.fingerprint;
+      watchdog.touchProgress();
+    }
+  }, 250);
   let readiness: PerformanceAuditReadinessSnapshot;
   try {
     readiness = await performanceAuditReadinessRegistry.waitForReady({
       surfaceIds: [step.expectedSurface],
       requiredKinds: requiredProbeKinds(step),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
-      timeoutMs: DATA_SETTLE_TIMEOUT_MS,
+      timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
     });
+    watchdog.touchProgress();
   } finally {
     clearInterval(readinessGuard);
   }

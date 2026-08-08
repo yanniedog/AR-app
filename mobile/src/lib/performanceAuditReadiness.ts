@@ -658,6 +658,18 @@ export class PerformanceAuditReadinessRegistry {
           fail(new PerformanceAuditReadinessProbeError(snapshot));
           return;
         }
+        // Structural gaps never recover by waiting — fail immediately with evidence.
+        if (snapshot.blockers.some((blocker) => blocker.code === 'required-kind-missing')) {
+          const missing = snapshot.blockers
+            .filter((blocker) => blocker.code === 'required-kind-missing')
+            .map((blocker) => blocker.message)
+            .join('; ');
+          fail(new PerformanceAuditReadinessError(
+            `Required readiness kind is unavailable on the requested surface: ${missing}`,
+            snapshot,
+          ));
+          return;
+        }
         if (!snapshot.ready) {
           stableFingerprint = null;
           return;

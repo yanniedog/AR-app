@@ -208,6 +208,19 @@ describe('deep performance audit plan', () => {
     });
   });
 
+  test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {
+    const dismiss = allSteps().find(
+      (step) => step.passId === 'first-pass' && step.semanticActionId === 'compare.dismiss',
+    );
+    expect(dismiss).toMatchObject({
+      expectedPath: '/search',
+      expectedSurface: 'search.results',
+    });
+    expect(dismiss?.readiness).toEqual(expect.arrayContaining(['list']));
+    expect(dismiss?.readiness).not.toContain('graphics');
+    expect(dismiss?.readiness).not.toContain('logos');
+  });
+
   test('never schedules unsafe or fabricated financial actions', () => {
     const plan = buildDeepPerformanceAuditPlan(corePayload());
     const actions = allSteps().map((step) => step.semanticActionId);
