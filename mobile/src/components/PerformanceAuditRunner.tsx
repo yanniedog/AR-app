@@ -2273,7 +2273,10 @@ export function PerformanceAuditRunner() {
               })),
             },
             priorFailures: checks
-              .filter((entry) => entry.status === 'fail' || entry.status === 'warn')
+              .filter((entry) => (
+                entry !== failedCheck &&
+                (entry.status === 'fail' || entry.status === 'warn')
+              ))
               .map((entry) => detailedCheck(entry)),
           }, 'error');
           const partialSummary = summarizePerformanceAudit(checks);
