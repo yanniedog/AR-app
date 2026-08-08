@@ -446,6 +446,19 @@ export function formatAuditError(error: unknown): string {
   }
 }
 
+/**
+ * Keep multi-line audit errors/stacks on one physical debug-log line so file
+ * parsers and exports retain every frame instead of orphaning traceback text.
+ */
+export function flattenAuditLogText(text: string): string {
+  return text.replace(/\r/g, '').replace(/\n/g, String.raw`\n`);
+}
+
+/** Same detail as formatAuditError, encoded for a single logfile line. */
+export function formatAuditErrorForLog(error: unknown): string {
+  return flattenAuditLogText(formatAuditError(error));
+}
+
 function firstRows(core: CorePayload | null): RateRow[] {
   if (!core) return [];
   const seen = new Set<string>();
