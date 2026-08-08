@@ -1056,7 +1056,26 @@ describe('cold-start log session', () => {
       'file:///docs/logs/ar-local.log',
       { idempotent: true },
     );
+    // The audit sidecar deliberately survives a cold start. A run that crashes
+    // the app is exactly when its report matters, and deleting it on the next
+    // launch destroyed the only copy before anyone could read it.
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalledWith(
+      'file:///docs/logs/ar-performance-audit-latest.json',
+      expect.anything(),
+    );
     const writes = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls;
     expect(writes.at(-1)?.[1]).toContain('version=1.2.3 build=456');
+  });
+
+  it('clear still removes the audit sidecar as an explicit user action', async () => {
+    jest.clearAllMocks();
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+
+    await debugLog.clear();
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      'file:///docs/logs/ar-performance-audit-latest.json',
+      { idempotent: true },
+    );
   });
 });

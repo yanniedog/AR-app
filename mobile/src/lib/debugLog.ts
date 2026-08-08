@@ -613,7 +613,12 @@ export const debugLog = {
       if (inFlight) await inFlight.catch(() => {});
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
       await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
-      await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
+      // The audit sidecar deliberately survives. A run that crashes the app is
+      // precisely when its report matters, and deleting the sidecar on the next
+      // launch destroyed the only copy before anyone could read it — which is
+      // how a crashed 259-check audit left no trace at all. The AsyncStorage
+      // snapshot already persists across launches; this matches it. An explicit
+      // `clear()` still removes both.
     })();
     return coldStartResetPromise;
   },
