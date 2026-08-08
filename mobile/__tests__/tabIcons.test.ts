@@ -31,6 +31,19 @@ describe('tabIcons', () => {
     expect(getTabLabel('browse')).toBe('Products');
     expect(getTabLabel('passthrough')).toBe('Moves');
     expect(getTabLabel('watchlist')).toBe('Saved');
+    expect(getTabLabel('settings')).toBe('Settings');
+  });
+
+  it('lists Settings as the final primary tab', () => {
+    expect(TAB_ROUTES.at(-1)).toBe('settings');
+    expect(TAB_ROUTES).toEqual([
+      'index',
+      'browse',
+      'passthrough',
+      'trends',
+      'watchlist',
+      'settings',
+    ]);
   });
 });
 

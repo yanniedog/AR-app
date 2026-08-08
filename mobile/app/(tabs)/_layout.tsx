@@ -1,15 +1,13 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, Tabs } from 'expo-router';
+import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
 import { BrandLockup } from '../../src/components/BrandLockup';
 import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
-import { M3NavigationBar } from '../../src/components/M3NavigationBar';
-import { IconButton } from '../../src/components/ui';
-import { logTabNoOp } from '../../src/lib/degradationLog';
 import { getTabIonicon } from '../../src/lib/tabIcons';
+import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 export default function TabsLayout() {
@@ -21,7 +19,9 @@ export default function TabsLayout() {
   return (
     <>
     <Tabs
-      tabBar={isAndroid ? (props) => <M3NavigationBar {...props} /> : undefined}
+      // Root AppTabBar owns chrome so stack screens outside this navigator
+      // keep the same always-visible bottom tabs.
+      tabBar={() => null}
       screenOptions={{
         // Mounted tabs contain expensive data models. Keep blurred tabs from
         // reacting to shared section/data updates during another transition.
@@ -40,28 +40,7 @@ export default function TabsLayout() {
         },
         headerTitleAlign: isAndroid ? 'center' : 'left',
         headerShadowVisible: false,
-        headerRight: () => (
-          <IconButton
-            icon="settings-outline"
-            accessibilityLabel="Open settings"
-            onPress={() => router.push('/(tabs)/settings')}
-            style={{ marginRight: 4 }}
-          />
-        ),
         sceneStyle: { backgroundColor: theme.colors.bg },
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: theme.colors.textMuted,
-        tabBarStyle: isAndroid
-          ? {
-              backgroundColor: theme.colors.surfaceAlt,
-              borderTopWidth: 0,
-              elevation: 0,
-            }
-          : {
-              backgroundColor: theme.colors.surface,
-              borderTopColor: theme.colors.border,
-            },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
       }}
     >
       <Tabs.Screen
@@ -70,9 +49,9 @@ export default function TabsLayout() {
         options={{
           title: 'Today',
           headerTitle: () => <BrandLockup markSize={28} />,
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('index')!} size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('index')!} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -80,9 +59,9 @@ export default function TabsLayout() {
         listeners={tabPressListener}
         options={{
           title: 'Products',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('browse')!} size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('browse')!} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -90,9 +69,9 @@ export default function TabsLayout() {
         listeners={tabPressListener}
         options={{
           title: 'Moves',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -100,9 +79,9 @@ export default function TabsLayout() {
         listeners={tabPressListener}
         options={{
           title: 'Outlook',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -110,9 +89,9 @@ export default function TabsLayout() {
         listeners={tabPressListener}
         options={{
           title: 'Saved',
-          tabBarIcon: isAndroid
-            ? () => null
-            : ({ color, size }) => <Ionicons name={getTabIonicon('watchlist')!} size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('watchlist')!} size={size} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
@@ -120,15 +99,8 @@ export default function TabsLayout() {
         listeners={tabPressListener}
         options={{
           title: 'Settings',
-          href: null,
-          headerRight: () => null,
-          headerLeft: () => (
-            <IconButton
-              icon="arrow-back"
-              accessibilityLabel="Back"
-              onPress={() => router.back()}
-              style={{ marginLeft: 4 }}
-            />
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name={getTabIonicon('settings')!} size={size} color={color} />
           ),
         }}
       />

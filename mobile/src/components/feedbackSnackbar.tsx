@@ -2,10 +2,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated as RNAnimated, Pressable } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { formatRunDate } from '../data/format';
 import { useStore } from '../data/store';
-import { getTabBarContentHeight } from '../lib/androidChrome';
 import { logRetry } from '../lib/degradationLog';
 import { useTheme } from '../theme/ThemeProvider';
 import { resolveRefreshOutcomeSnackbar } from './bannerState';
@@ -20,8 +18,6 @@ const SNACKBAR_DISMISS_MS: Record<'success' | 'failure' | 'wifi-skip', number> =
 /** Bottom snackbar for refresh success, failure, or Wi-Fi-only skip. Mount once per tab layout. */
 export function RefreshOutcomeSnackbar() {
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
-  const tabBarHeight = getTabBarContentHeight();
   const outcome = useStore((s) => s.refreshOutcome);
   const core = useStore((s) => s.core);
   const clearRefreshOutcome = useStore((s) => s.clearRefreshOutcome);
@@ -81,7 +77,9 @@ export function RefreshOutcomeSnackbar() {
         position: 'absolute',
         left: 16,
         right: 16,
-        bottom: insets.bottom + tabBarHeight + 8,
+        // Root AppTabBar sits below the navigator; overlay only needs a small inset
+        // inside the content pane (do not re-add the tab bar height).
+        bottom: 8,
         opacity,
         transform: [{ translateY }],
         zIndex: 100,
