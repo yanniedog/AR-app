@@ -4,7 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 // eslint-disable-next-line import/first -- imports after jest mocks
 import {
   ANDROID_LOG_PATH_HINT,
-  MAX_AUDIT_EXPORT_REPORT_CHARS,
+  MAX_APPENDED_AUDIT_REPORT_CHARS,
   MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
   MAX_LOG_BYTES,
   MAX_LOG_FILE_BYTES,
@@ -645,7 +645,7 @@ describe('persistent log file', () => {
     expect(complete).toContain(marker);
     expect(complete).toContain('compact report omitted from this export');
     expect(complete).not.toContain(detail);
-    expect(complete.length).toBeLessThan(MAX_AUDIT_EXPORT_REPORT_CHARS);
+    expect(complete.length).toBeLessThan(MAX_APPENDED_AUDIT_REPORT_CHARS);
   });
 
   it('does not report physical audit persistence when the filesystem write fails', async () => {

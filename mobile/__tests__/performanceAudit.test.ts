@@ -443,7 +443,7 @@ describe('performance audit lifecycle', () => {
       uploadError: null,
     });
 
-    setPerformanceAuditUploadResult({ error: 'paste.rs did not respond in time.' });
+    setPerformanceAuditUploadResult(sessionId, { error: 'paste.rs did not respond in time.' });
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'complete',
       report,
@@ -454,11 +454,51 @@ describe('performance audit lifecycle', () => {
   });
 
   it('ignores a late upload result once the audit is no longer complete', () => {
-    requestPerformanceAudit();
-    setPerformanceAuditUploadResult({ url: 'https://paste.example/late' });
+    const sessionId = requestPerformanceAudit();
+    setPerformanceAuditUploadResult(sessionId, { url: 'https://paste.example/late' });
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'queued',
       uploadUrl: null,
+    });
+  });
+
+  it('drops an upload result belonging to a superseded session', () => {
+    const reportFor = (sessionId: string) => ({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sessionId,
+      startedAt: '2026-08-08T00:02:00.000Z',
+      finishedAt: '2026-08-08T00:03:00.000Z',
+      durationMs: 60_000,
+      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
+      watchdog: {
+        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+        storedCheckCount: 0,
+        lastStoredCheckAt: null,
+      },
+      environment,
+      summary: summarizePerformanceAudit([]),
+      checks: [],
+      routeAggregates: [],
+      limitations: [],
+    });
+
+    const supersededSessionId = requestPerformanceAudit();
+    completePerformanceAudit(reportFor(supersededSessionId), 'pending');
+    // The user starts and finishes another audit while the first upload is
+    // still in flight.
+    const latestSessionId = requestPerformanceAudit();
+    const latestReport = reportFor(latestSessionId);
+    completePerformanceAudit(latestReport, 'pending');
+
+    setPerformanceAuditUploadResult(supersededSessionId, {
+      url: 'https://paste.example/superseded',
+    });
+
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'complete',
+      report: latestReport,
+      uploadUrl: null,
+      uploadPending: true,
     });
   });
 

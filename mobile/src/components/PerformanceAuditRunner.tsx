@@ -24,6 +24,7 @@ import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/select
 import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
+import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
@@ -2003,13 +2004,16 @@ export function PerformanceAuditRunner() {
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const state = usePerformanceAuditState();
-  const runningRef = useRef(false);
+  const runGate = usePerformanceAuditRunGate();
+  const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
   useEffect(() => {
-    if (state.status !== 'queued' || runningRef.current || !state.sessionId || !state.startedAt) return;
-    runningRef.current = true;
+    if (state.status !== 'queued' || !state.sessionId || !state.startedAt) return;
+    // Teardown outlives the previous audit's terminal state; releaseCount
+    // re-runs this effect once that run lets go of the gate.
+    if (!claimRun(state.sessionId)) return;
 
     const execute = async () => {
       const sessionId = state.sessionId!;
@@ -2456,7 +2460,7 @@ export function PerformanceAuditRunner() {
             `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
           );
         }
-        setPerformanceAuditUploadResult(upload);
+        setPerformanceAuditUploadResult(sessionId, upload);
         // The report is already published; nothing after this point may fall
         // through to the fatal handler and replace it with a failure state.
         try {
@@ -2672,15 +2676,18 @@ export function PerformanceAuditRunner() {
         } catch {
           // Best effort; always release the JS running guard below.
         }
-        runningRef.current = false;
+        releaseRun();
       }
     };
 
     void execute();
   }, [
+    claimRun,
     dimensions.fontScale,
     dimensions.height,
     dimensions.width,
+    releaseCount,
+    releaseRun,
     state.hangTimeoutMs,
     state.sessionId,
     state.startedAt,

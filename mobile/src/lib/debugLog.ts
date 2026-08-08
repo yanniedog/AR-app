@@ -381,8 +381,14 @@ function ensureTrailingNewline(content: string): string {
  * newest one.
  */
 export const MAX_AUDIT_SNAPSHOT_STORAGE_CHARS = 128 * 1024;
-/** Bound the compact report appended to an export; paste services reject more. */
-export const MAX_AUDIT_EXPORT_REPORT_CHARS = 512 * 1024;
+/**
+ * Bounds only the recovery copy this module *appends* to an export when the
+ * physical log no longer carries the audit block. The log itself is already
+ * capped at MAX_LOG_FILE_BYTES, so a block the log did keep is returned as-is:
+ * re-splitting a 2MB log to strip it would cost exactly the extra full copies
+ * this path exists to avoid.
+ */
+export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
 
 async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise<void> {
   const payload = JSON.stringify(stored);
@@ -695,7 +701,7 @@ export const debugLog = {
       '',
       '# Latest complete performance audit',
       latest.summaryMarker,
-      compactJson.length > MAX_AUDIT_EXPORT_REPORT_CHARS
+      compactJson.length > MAX_APPENDED_AUDIT_REPORT_CHARS
         // An export that carries a body this large is rejected by the paste
         // service anyway, and building it costs several full copies of the log.
         ? `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE} ` +

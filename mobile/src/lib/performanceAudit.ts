@@ -435,11 +435,16 @@ export function completePerformanceAudit(
   });
 }
 
-/** Attach the log-upload outcome to an already-published complete report. */
+/**
+ * Attach the log-upload outcome to an already-published complete report. The
+ * upload outlives the run's terminal state, so a result is keyed to its own
+ * session and dropped once a later audit owns the state.
+ */
 export function setPerformanceAuditUploadResult(
+  sessionId: string,
   upload: { url?: string; provider?: string; error?: string },
 ): void {
-  if (auditState.status !== 'complete') return;
+  if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
   emit({
     ...auditState,
     uploadUrl: upload.url ?? null,

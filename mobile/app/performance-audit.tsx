@@ -320,9 +320,9 @@ export default function PerformanceAuditScreen() {
             </AppText>
             {reportedChecks.length < report.checks.length ? (
               <AppText variant="tiny" color="textFaint" style={{ marginLeft: 4 }}>
-                Showing every failure, warning and skip plus the slowest passes (
-                {reportedChecks.length} of {report.checks.length}). The uploaded log holds
-                the complete report.
+                Showing {reportedChecks.length} of {report.checks.length} checks, selecting
+                bottlenecks, warnings and skips before the slowest passes. The uploaded log
+                holds the complete report.
               </AppText>
             ) : null}
             {reportedChecks.map((check) => {
