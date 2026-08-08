@@ -454,6 +454,13 @@ describe('persistent log file', () => {
     (FileSystem.deleteAsync as jest.Mock).mockImplementation(async (path: string) => {
       delete files[path];
     });
+    // Audit persistence verifies durability by size rather than by re-reading
+    // and re-parsing what it just wrote, so the fake filesystem must report it.
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => (
+      path in files
+        ? { exists: true, uri: path, size: new TextEncoder().encode(files[path]).length }
+        : { exists: false, uri: path }
+    ));
     return files;
   }
 
@@ -643,6 +650,71 @@ describe('persistent log file', () => {
     } finally {
       delete fileAccess.FileSystem.appendFile;
     }
+  });
+
+  it('verifies durability by size without re-reading the report it just wrote', async () => {
+    const files = installPathAwareFiles();
+    const reads = FileSystem.readAsStringAsync as jest.Mock;
+    reads.mockClear();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=verify app_version=9.8.7 build_version=654`;
+
+    await debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'verify-by-size',
+      checks: Array.from({ length: 200 }, (_, index) => ({ id: `c${index}`, detail: 'd'.repeat(500) })),
+    });
+
+    // Re-reading the log and re-parsing plus re-redacting the sidecar was a
+    // megabyte of synchronous JS-thread work that raised Android's ANR dialog.
+    expect(reads.mock.calls.map(([path]) => path)).not.toContain(AUDIT_SIDECAR_PATH);
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('verify-by-size');
+  });
+
+  it('fails persistence when the sidecar lands truncated', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=truncated app_version=9.8.7 build_version=654`;
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => {
+      if (!(path in files)) return { exists: false, uri: path };
+      const size = new TextEncoder().encode(files[path]).length;
+      // Simulate a short write of the sidecar only.
+      return { exists: true, uri: path, size: path === AUDIT_SIDECAR_PATH ? size - 1 : size };
+    });
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'truncated-body',
+    })).rejects.toThrow('was not verified');
+  });
+
+  it('fails persistence when the sidecar is missing entirely', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=missing app_version=9.8.7 build_version=654`;
+    // The sidecar is the only copy of the report body, so an absent file must
+    // never read as "size unavailable, assume fine".
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => (
+      path in files && path !== AUDIT_SIDECAR_PATH
+        ? { exists: true, uri: path, size: new TextEncoder().encode(files[path]).length }
+        : { exists: false, uri: path }
+    ));
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'missing-sidecar',
+    })).rejects.toThrow('was not verified');
+  });
+
+  it('accepts a platform that reports no size, on existence alone', async () => {
+    const files = installPathAwareFiles();
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=nosize app_version=9.8.7 build_version=654`;
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => (
+      path in files ? { exists: true, uri: path } : { exists: false, uri: path }
+    ));
+
+    await expect(debugLog.storePerformanceAudit(marker, {
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sentinel: 'no-size-reported',
+    })).resolves.toBeUndefined();
+    expect(files[AUDIT_SIDECAR_PATH]).toContain('no-size-reported');
   });
 
   it('reports each persistence stage so a stall names the step responsible', async () => {
@@ -984,7 +1056,26 @@ describe('cold-start log session', () => {
       'file:///docs/logs/ar-local.log',
       { idempotent: true },
     );
+    // The audit sidecar deliberately survives a cold start. A run that crashes
+    // the app is exactly when its report matters, and deleting it on the next
+    // launch destroyed the only copy before anyone could read it.
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalledWith(
+      'file:///docs/logs/ar-performance-audit-latest.json',
+      expect.anything(),
+    );
     const writes = (FileSystem.writeAsStringAsync as jest.Mock).mock.calls;
     expect(writes.at(-1)?.[1]).toContain('version=1.2.3 build=456');
+  });
+
+  it('clear still removes the audit sidecar as an explicit user action', async () => {
+    jest.clearAllMocks();
+    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
+
+    await debugLog.clear();
+
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
+      'file:///docs/logs/ar-performance-audit-latest.json',
+      { idempotent: true },
+    );
   });
 });

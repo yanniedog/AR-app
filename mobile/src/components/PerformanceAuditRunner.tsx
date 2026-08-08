@@ -2438,6 +2438,11 @@ export function PerformanceAuditRunner() {
           // Build the export in its own scope so the raw log text is collectable
           // while the upload body — a second full copy of it — is in flight.
           const exportBody = await (async () => {
+            // Reading, redacting and compacting the export is the last heavy
+            // burst of the run. It happens after the report is published, but
+            // an unyielded burst here would still stall the thread long enough
+            // for Android to offer to kill the app.
+            await yieldToUi();
             const completeLog = await awaitAuditWorkWithTimeout(
               debugLog.readCompleteText(),
               watchdog,

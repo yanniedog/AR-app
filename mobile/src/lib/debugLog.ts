@@ -480,13 +480,29 @@ async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise
   }
 }
 
-async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<void> {
-  if (!FileSystem.documentDirectory) return;
+/** Writes the sidecar and returns its byte length so durability can be checked by size. */
+async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<number> {
+  if (!FileSystem.documentDirectory) return 0;
   await ensureLogDir();
-  await FileSystem.writeAsStringAsync(
-    PERFORMANCE_AUDIT_SIDECAR_FILE,
-    JSON.stringify(stored),
-  );
+  const payload = JSON.stringify(stored);
+  await FileSystem.writeAsStringAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, payload);
+  return textEncoder.encode(payload).length;
+}
+
+/**
+ * Existence and size must stay distinguishable: a platform that does not report
+ * a size is fine to skip comparing, but a file that is not there at all is a
+ * failed write, and the sidecar is the only copy of the report body.
+ */
+async function statFile(path: string): Promise<{ exists: boolean; size: number | null }> {
+  try {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return { exists: false, size: null };
+    const size = (info as { size?: number }).size;
+    return { exists: true, size: typeof size === 'number' ? size : null };
+  } catch {
+    return { exists: false, size: null };
+  }
 }
 
 async function readPerformanceAuditSidecar(): Promise<StoredPerformanceAudit | null> {
@@ -597,7 +613,12 @@ export const debugLog = {
       if (inFlight) await inFlight.catch(() => {});
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
       await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
-      await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
+      // The audit sidecar deliberately survives. A run that crashes the app is
+      // precisely when its report matters, and deleting the sidecar on the next
+      // launch destroyed the only copy before anyone could read it — which is
+      // how a crashed 259-check audit left no trace at all. The AsyncStorage
+      // snapshot already persists across launches; this matches it. An explicit
+      // `clear()` still removes both.
     })();
     return coldStartResetPromise;
   },
@@ -677,7 +698,7 @@ export const debugLog = {
     // Sidecar first: AsyncStorage can fail after a durable disk write; reverse order
     // would leave neither physical artifact when setItem throws.
     await onStage('Saving the complete report');
-    await writePerformanceAuditSidecar(stored);
+    const sidecarBytes = await writePerformanceAuditSidecar(stored);
     await storeLatestAuditSnapshot(stored);
 
     await onStage('Recording the report in the log');
@@ -709,16 +730,24 @@ export const debugLog = {
       const blockText = blockEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
       await writeReservedPerformanceAuditBlock(blockText, epoch);
       await onStage('Verifying the saved report');
-      const physical = await FileSystem.readAsStringAsync(LOG_FILE);
-      const beginOk = physical.includes(beginMessage);
-      const endOk = physical.includes(endMessage);
-      // The block is now short enough that the reserved tail write cannot lose
-      // it; the sidecar carries the body, so verify that body separately.
-      const sidecar = await readPerformanceAuditSidecar();
-      const sidecarOk =
-        sidecar?.summaryMarker === stored.summaryMarker &&
-        sidecar.reportJson === stored.reportJson;
-      if (!beginOk || !endOk || !sidecarOk) {
+      // Verify durability by size, not by content. Reading the log back and
+      // re-parsing plus re-redacting the sidecar re-processed the very bytes
+      // just written — a megabyte of synchronous JS-thread work that blocked
+      // long enough for Android to raise its "isn't responding" dialog. Both
+      // writes throw on failure, so what is left to prove is that the bytes
+      // landed whole, and a stat answers that in constant time.
+      const [logStat, sidecarStat] = await Promise.all([
+        statFile(LOG_FILE),
+        statFile(PERFORMANCE_AUDIT_SIDECAR_FILE),
+      ]);
+      // Both files must be present. Sizes are compared only when the platform
+      // reports them, so a stat without a size degrades to an existence check
+      // rather than silently passing a truncated write.
+      const logOk = logStat.exists
+        && (logStat.size == null || fileByteLength == null || logStat.size === fileByteLength);
+      const sidecarOk = sidecarStat.exists
+        && (sidecarStat.size == null || sidecarStat.size === sidecarBytes);
+      if (!logOk || !sidecarOk) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }
