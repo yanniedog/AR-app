@@ -550,8 +550,14 @@ export const debugLog = {
       summaryMarker: redactSecrets(summaryMarker),
       reportJson: redactSecrets(JSON.stringify(report)),
     };
-    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
+    // Sidecar first: AsyncStorage can fail after a durable disk write; reverse order
+    // would leave neither physical artifact when setItem throws.
     await writePerformanceAuditSidecar(stored);
+    try {
+      await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
+    } catch {
+      // non-fatal once the sidecar exists
+    }
 
     const beginMessage = physicalAuditMarker(stored.summaryMarker);
     const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${stored.reportJson}`;
@@ -615,10 +621,12 @@ export const debugLog = {
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
+    // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
     const latest =
+      (await readPerformanceAuditSidecar()) ??
       parseStoredPerformanceAudit(
         await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
-      ) ?? (await readPerformanceAuditSidecar());
+      );
     if (!latest) return clean;
     const physicalBegin = physicalAuditMarker(latest.summaryMarker);
     const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
