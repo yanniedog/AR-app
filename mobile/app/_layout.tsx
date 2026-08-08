@@ -25,6 +25,7 @@ import Animated, {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import { AppTabBar } from '../src/components/AppTabBar';
 import {
   AppUpdateBanner,
   AppUpdateBannerLayoutProvider,
@@ -449,52 +450,55 @@ function RootNavigator() {
             }
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: theme.colors.surface },
-                headerTitleStyle: { color: theme.colors.text },
-                headerTintColor: theme.colors.primary,
-                headerShadowVisible: false,
-                contentStyle: { backgroundColor: theme.colors.bg },
-                ...androidHeader,
-                ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
-              }}
-            >
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="node" options={{ title: 'Browse' }} />
-            <Stack.Screen name="search" options={{ title: 'Search' }} />
-            <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
-            <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
-            <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
-            <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
-            <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
-            <Stack.Screen name="projections" options={{ title: 'Lifecycle projections' }} />
-            <Stack.Screen
-              name="rate-receipt"
-              options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}
-            />
-            <Stack.Screen
-              name="rba"
-              options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
-            />
-            <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
-            <Stack.Screen
-              name="performance-audit"
-              options={{ title: 'Performance audit', headerBackTitle: 'Settings' }}
-            />
-            <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
-            <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
-            </Stack>
-            {appReady ? (
-              <BrandedSplashOverlay
-                visible={overlayVisible}
-                morphTarget={morphTarget}
-                onboarded={onboarded}
-                onMorphComplete={handleMorphComplete}
+            <View style={{ flex: 1 }}>
+              <Stack
+                screenOptions={{
+                  headerStyle: { backgroundColor: theme.colors.surface },
+                  headerTitleStyle: { color: theme.colors.text },
+                  headerTintColor: theme.colors.primary,
+                  headerShadowVisible: false,
+                  contentStyle: { backgroundColor: theme.colors.bg },
+                  ...androidHeader,
+                  ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+                }}
+              >
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="node" options={{ title: 'Browse' }} />
+              <Stack.Screen name="search" options={{ title: 'Search' }} />
+              <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
+              <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
+              <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
+              <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
+              <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
+              <Stack.Screen name="projections" options={{ title: 'Lifecycle projections' }} />
+              <Stack.Screen
+                name="rate-receipt"
+                options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}
               />
-            ) : null}
+              <Stack.Screen
+                name="rba"
+                options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
+              />
+              <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+              <Stack.Screen
+                name="performance-audit"
+                options={{ title: 'Performance audit', headerBackTitle: 'Settings' }}
+              />
+              <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
+              <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
+              </Stack>
+              {appReady ? (
+                <BrandedSplashOverlay
+                  visible={overlayVisible}
+                  morphTarget={morphTarget}
+                  onboarded={onboarded}
+                  onMorphComplete={handleMorphComplete}
+                />
+              ) : null}
+            </View>
+            <AppTabBar />
           </View>
           <PerformanceAuditRunner />
           <DiagnosticsConsentBanner

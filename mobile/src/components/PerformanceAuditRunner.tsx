@@ -300,7 +300,7 @@ async function waitForPath(
 
 async function recoverAuditRoute(currentPath: () => string): Promise<void> {
   if (pathMatches(currentPath(), AUDIT_HOME_PATH)) return;
-  router.replace(AUDIT_HOME_PATH);
+  router.replace(AUDIT_HOME_PATH as Href);
   await waitForPath(currentPath, AUDIT_HOME_PATH, 'Performance audit route recovery', {
     checkAuditState: false,
   });
@@ -1764,7 +1764,7 @@ export async function runJourney(
           ? 'second-back+replace-recovery'
           : 'replace-recovery';
       const fallbackStarted = now();
-      router.replace(AUDIT_HOME_PATH);
+      router.replace(AUDIT_HOME_PATH as Href);
       await waitForPath(
         currentPath,
         AUDIT_HOME_PATH,

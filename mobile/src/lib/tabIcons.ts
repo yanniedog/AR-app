@@ -1,5 +1,5 @@
-/** expo-router tab route names under `app/(tabs)/`. */
-export const TAB_ROUTES = ['index', 'browse', 'watchlist', 'trends', 'passthrough', 'settings'] as const;
+/** expo-router tab route names under `app/(tabs)/` (display order). */
+export const TAB_ROUTES = ['index', 'browse', 'passthrough', 'trends', 'watchlist', 'settings'] as const;
 
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 
