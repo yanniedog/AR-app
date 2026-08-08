@@ -430,7 +430,7 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
 }
 
 function requiredProbeKinds(step: DeepAuditStep): PerformanceAuditReadinessKind[] {
-  const kinds = new Set<PerformanceAuditReadinessKind>(['data', 'layout']);
+  const kinds = new Set<PerformanceAuditReadinessKind>();
   for (const category of step.readiness) {
     if (category === 'graphics') kinds.add('graphic');
     else if (category === 'logos') kinds.add('logo');
@@ -682,7 +682,7 @@ async function runDeepAuditStepBody(
   try {
     readiness = await performanceAuditReadinessRegistry.waitForReady({
       surfaceIds: [step.expectedSurface],
-      onlyKinds: requiredProbeKinds(step),
+      requiredKinds: requiredProbeKinds(step),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
