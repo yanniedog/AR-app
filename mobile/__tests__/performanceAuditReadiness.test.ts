@@ -392,6 +392,34 @@ describe('PerformanceAuditReadinessRegistry', () => {
     expect(registry.snapshot().ready).toBe(true);
   });
 
+  it('honors onlyKinds so logo decoration cannot block mounted-action readiness', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-only-kinds');
+    registry.registerSurface({
+      id: 'calculator.results',
+      probes: [
+        { id: 'calculator.data', kind: 'data', status: 'ready' },
+        { id: 'calculator.layout', kind: 'layout', status: 'ready' },
+        {
+          id: 'calculator.logos',
+          kind: 'logo',
+          status: 'pending',
+          expectedCount: 10,
+          actualCount: 0,
+        },
+      ],
+    });
+
+    const wait = registry.waitForReady({
+      onlyKinds: ['data', 'layout'],
+      quietWindowMs: 10,
+      timeoutMs: 1_000,
+    });
+    clock.advanceBy(10);
+    await expect(wait).resolves.toMatchObject({ ready: true });
+  });
+
   it('ignores stale surface and asset tokens from an earlier capture generation', () => {
     const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
     const firstCapture = registry.beginCapture('pa-first');

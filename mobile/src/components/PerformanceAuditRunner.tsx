@@ -430,13 +430,31 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
 }
 
 function requiredProbeKinds(step: DeepAuditStep): PerformanceAuditReadinessKind[] {
-  const kinds = new Set<PerformanceAuditReadinessKind>();
+  const kinds = new Set<PerformanceAuditReadinessKind>(['data', 'layout']);
   for (const category of step.readiness) {
     if (category === 'graphics') kinds.add('graphic');
     else if (category === 'logos') kinds.add('logo');
     else if (category === 'list') kinds.add('list');
   }
   return [...kinds];
+}
+
+const PRE_ACTION_READINESS_KINDS: PerformanceAuditReadinessKind[] = ['data', 'layout'];
+
+function inferMountedActionEntryRoute(semanticActionId: string): string | null {
+  const root = semanticActionId.split('.')[0];
+  switch (root) {
+    case 'calculator': return '/calculator';
+    case 'search': return '/search';
+    case 'browse': return '/browse';
+    case 'projections': return '/projections';
+    case 'lenders': return '/banks';
+    case 'saved': return '/watchlist';
+    case 'settings': return '/settings';
+    case 'onboarding': return '/onboarding';
+    case 'today': return '/';
+    default: return null;
+  }
 }
 
 /** Bound readiness waits by hang remaining so long audits outlive slow chart settles. */
@@ -555,6 +573,12 @@ async function runDeepAuditStepBody(
     // The preceding not-found recovery action must already have reached Home.
     actionSource = 'route-contract';
   } else {
+    await ensureMountedActionRoute(
+      step.semanticActionId,
+      currentPath,
+      watchdog,
+      label,
+    );
     const source = resolveMountedActionSurface(
       step.semanticActionId,
       step.expectedSurface,
@@ -565,8 +589,8 @@ async function runDeepAuditStepBody(
       `terminal availability evidence: ${step.semanticActionId}`,
     );
     actionSource = source.id;
-    // Settle the mounted surface (including data probes) before invoking so
-    // optional actions do not report unavailable simply because rows are still loading.
+    // Settle interactable readiness before invoking — exclude logo/list/graphic
+    // decoration so stale off-screen asset probes cannot block unrelated taps.
     const preActionAbort = new AbortController();
     const preActionGuard = setInterval(() => {
       if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
@@ -576,6 +600,7 @@ async function runDeepAuditStepBody(
     try {
       await performanceAuditReadinessRegistry.waitForReady({
         surfaceIds: [source.id],
+        onlyKinds: PRE_ACTION_READINESS_KINDS,
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: preActionAbort.signal,
@@ -657,7 +682,7 @@ async function runDeepAuditStepBody(
   try {
     readiness = await performanceAuditReadinessRegistry.waitForReady({
       surfaceIds: [step.expectedSurface],
-      requiredKinds: requiredProbeKinds(step),
+      onlyKinds: requiredProbeKinds(step),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
@@ -815,9 +840,20 @@ function resolveMountedActionSurface(
   });
   return onRoute.find((s) => s.id !== expectedSurface)
     ?? onRoute[0]
-    ?? matches.find((s) => s.id !== expectedSurface)
-    ?? matches[0]
     ?? null;
+}
+
+async function ensureMountedActionRoute(
+  semanticActionId: string,
+  currentPath: () => string,
+  watchdog: PerformanceAuditInactivityWatchdog,
+  label: string,
+): Promise<void> {
+  if (resolveMountedActionSurface(semanticActionId, '', currentPath())) return;
+  const entryRoute = inferMountedActionEntryRoute(semanticActionId);
+  if (!entryRoute || pathMatches(currentPath(), entryRoute)) return;
+  router.push(entryRoute as Href);
+  await waitForPath(currentPath, entryRoute, label, { watchdog });
 }
 
 function responsivenessRecord(
@@ -2059,29 +2095,35 @@ export function PerformanceAuditRunner() {
               );
             }
           };
+          const continuedFailureCheck = (caught: unknown): AuditCheck => ({
+            id: `continued-failure-${completed + 1}`,
+            label,
+            kind: 'runtime',
+            status: 'fail',
+            durationMs: 0,
+            metrics: {
+              continuedAfterFailure: true,
+              currentPath: pathnameRef.current,
+              datasetRevision: datasetRevisionLabel(datasetRevision),
+            },
+            error: formatAuditError(caught),
+            trace: captureAuditTrace(`${label} failed; audit continues`),
+          });
           let check: AuditCheck;
           try {
             check = await run();
           } catch (caught) {
             rethrowAuditControl(caught);
-            check = {
-              id: `continued-failure-${completed + 1}`,
-              label,
-              kind: 'runtime',
-              status: 'fail',
-              durationMs: 0,
-              metrics: {
-                continuedAfterFailure: true,
-                currentPath: pathnameRef.current,
-                datasetRevision: datasetRevisionLabel(datasetRevision),
-              },
-              error: formatAuditError(caught),
-              trace: captureAuditTrace(`${label} failed; audit continues`),
-            };
+            check = continuedFailureCheck(caught);
           }
-          // Durable check storage/logging failures remain fatal — only the step
-          // body itself is continuable after a recorded fail.
-          await record(check);
+          try {
+            // Durable check storage/logging failures remain fatal — only the step
+            // body itself is continuable after a recorded fail.
+            await record(check);
+          } catch (caught) {
+            rethrowAuditControl(caught);
+            throw caught;
+          }
           if (check.status === 'fail') await recoverAfterFailure();
         };
 
