@@ -1,0 +1,32 @@
+{
+  "version": "1.0.102",
+  "releaseTag": "app-arm-v1.0.102",
+  "date": "2026-08-08",
+  "summaryBullets": [
+    "fix(mobile): put full audit failures and stacks in the logfile (#138)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): put full audit failures and stacks in the logfile (#138)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.102"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.101"
+        }
+      ]
+    }
+  ]
+}
