@@ -1,22 +1,26 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
+  claimPerformanceAuditUploadDeletion,
+  markPerformanceAuditUploadDeleted,
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   parsePerformanceAuditHangTimeoutSeconds,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
+  releasePerformanceAuditUploadDeletion,
   selectReportedAuditChecks,
   subscribePerformanceAudit,
   type AuditCheck,
   type AuditCheckStatus,
 } from '../src/lib/performanceAudit';
+import { deleteDebugLogUpload } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -82,6 +86,8 @@ export default function PerformanceAuditScreen() {
   );
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [deletingUpload, setDeletingUpload] = useState(false);
+  const deletingUploadRef = useRef(false);
   const report = state.report;
   const reportedChecks = useMemo(
     () => (report ? selectReportedAuditChecks(report.checks) : []),
@@ -153,6 +159,49 @@ export default function PerformanceAuditScreen() {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
     requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
   };
+  const confirmRunAudit = () => {
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
+    Alert.alert(
+      'Run and publicly upload the full log?',
+      'After the audit, the complete redacted debug log is uploaded to paste.rs, or to paste.c-net.org when needed. Anyone with the link can read it. C-net uploads expire after 180 inactive days; access resets that period. Review or clear the debug log first if needed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Run and upload', style: 'destructive', onPress: runAudit },
+      ],
+    );
+  };
+  const deleteUpload = () => {
+    if (!state.sessionId || !state.uploadUrl || deletingUpload) return;
+    const sessionId = state.sessionId;
+    const url = state.uploadUrl;
+    Alert.alert(
+      'Delete uploaded log?',
+      'Permanently removes this public copy. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (!claimPerformanceAuditUploadDeletion(deletingUploadRef)) return;
+            setDeletingUpload(true);
+            void deleteDebugLogUpload(url, state.uploadDeleteKey ?? undefined)
+              .then(() => markPerformanceAuditUploadDeleted(sessionId))
+              .catch((error) => {
+                Alert.alert(
+                  'Could not delete upload',
+                  error instanceof Error ? error.message : String(error),
+                );
+              })
+              .finally(() => {
+                releasePerformanceAuditUploadDeletion(deletingUploadRef);
+                setDeletingUpload(false);
+              });
+          },
+        },
+      ],
+    );
+  };
 
   const summaryColor = report
     ? report.summary.overall === 'healthy'
@@ -172,7 +221,11 @@ export default function PerformanceAuditScreen() {
         <AppText variant="small" color="textMuted">
           One tap repeats every screen cold and warm, then tests section models, responsiveness,
           storage, payload processing, network and Android update readiness. When complete, the
-          full on-disk log uploads and its link is copied automatically.
+          full on-disk log is publicly hosted; the app then tries to copy its link.
+        </AppText>
+        <AppText variant="tiny" color="warning">
+          Anyone with the link can read the uploaded full log. You will be asked to confirm before
+          the audit starts, and can delete a successful upload below.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           The screen stays awake during visual checks. Leaving the app pauses the run and it
@@ -227,7 +280,7 @@ export default function PerformanceAuditScreen() {
           icon="pulse-outline"
           loading={running}
           disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={runAudit}
+          onPress={confirmRunAudit}
         />
       </Card>
 
@@ -295,11 +348,30 @@ export default function PerformanceAuditScreen() {
             </AppText>
             <AppText variant="small" color={state.uploadUrl ? 'success' : 'textMuted'}>
               {state.uploadUrl
-                ? `Full log uploaded via ${state.uploadProvider}; link copied to clipboard.`
+                ? `Full log publicly hosted via ${state.uploadProvider}. ${
+                  state.uploadLinkCopied ? 'Link copied to clipboard.' : 'Clipboard copy failed; use the link below.'
+                } Anyone with the link can read it.`
                 : state.uploadPending
-                  ? 'Uploading the full log and copying its link...'
-                  : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
+                  ? 'Uploading the full log to a public host...'
+                  : state.uploadDeleted
+                    ? 'Public log upload deleted.'
+                    : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
             </AppText>
+            {state.uploadUrl ? (
+              <>
+                <AppText variant="tiny" selectable style={{ fontFamily: 'monospace' }}>
+                  {state.uploadUrl}
+                </AppText>
+                <Button
+                  title="Delete uploaded log"
+                  icon="trash-outline"
+                  variant="ghost"
+                  loading={deletingUpload}
+                  disabled={deletingUpload}
+                  onPress={deleteUpload}
+                />
+              </>
+            ) : null}
           </Card>
 
           {report.routeAggregates.length > 0 ? (

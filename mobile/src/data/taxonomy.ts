@@ -96,8 +96,20 @@ export function segLabel(seg: string): string {
   return seg.charAt(0) + seg.slice(1).toLowerCase().replace(/_/g, ' ');
 }
 
+// A daily core contains thousands of rows but only a small taxonomy vocabulary.
+// Browse used to split the same dot path again in rowsUnder, child grouping and
+// leaf checks, which made the first root render a visible JS-thread burst.
+const PATH_SEGMENTS_CACHE_LIMIT = 4_096;
+const pathSegmentsCache = new Map<string, string[]>();
+
 function pathSegs(tp: string | undefined): string[] {
-  return (tp ?? '').split('.').filter(Boolean);
+  const key = tp ?? '';
+  const cached = pathSegmentsCache.get(key);
+  if (cached) return cached;
+  const parsed = key.split('.').filter(Boolean);
+  if (pathSegmentsCache.size >= PATH_SEGMENTS_CACHE_LIMIT) pathSegmentsCache.clear();
+  pathSegmentsCache.set(key, parsed);
+  return parsed;
 }
 
 export interface RateStats {

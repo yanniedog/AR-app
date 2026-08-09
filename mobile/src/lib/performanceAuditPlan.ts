@@ -389,13 +389,15 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Today requires a pinned core revision and an honest suitability result.',
   }, [
     { depth: 0, semanticActionId: 'today.open' },
-    { depth: 1, semanticActionId: 'today.section.next', parameters: { section: section ?? null }, stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'today.section.next', stateImpact: 'restorable' },
     {
       depth: 2,
       semanticActionId: 'today.best.open',
-      expectedPath: productPath,
+      // The best card depends on current suitability/profile/ranking settings,
+      // not the plan's deterministic fixture product. Its mounted action
+      // returns the exact runtime product path before navigation is awaited.
+      expectedPath: '/product',
       expectedSurface: 'product.details',
-      parameters: exactProductParameters,
       optional: true,
       skipReason: missingPrimary,
     },
@@ -410,7 +412,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Hierarchy actions use only paths present on an exact source row.',
   }, [
     { depth: 0, semanticActionId: 'browse.open' },
-    { depth: 1, semanticActionId: 'browse.section.next', parameters: { section: section ?? null }, stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'browse.section.next', stateImpact: 'restorable' },
     {
       depth: 2,
       semanticActionId: 'browse.category.first',

@@ -171,7 +171,12 @@ export default function DebugLogScreen() {
       } catch {
         copied = false;
       }
-      Alert.alert('Uploaded', copied ? 'Full-log link copied.' : 'Full-log link is shown below.');
+      Alert.alert(
+        'Uploaded',
+        `${provider} accepted the complete log. ` +
+        `${copied ? 'The link was copied.' : 'The link is shown below.'} ` +
+        'You can delete the public copy from this screen.',
+      );
     } catch (err) {
       Alert.alert(
         'Upload unavailable',
@@ -205,7 +210,14 @@ export default function DebugLogScreen() {
   };
 
   const onUpload = useCallback(() => {
-    void runUpload();
+    Alert.alert(
+      'Upload public debug log?',
+      'Uploads the complete log to paste.rs, or to paste.c-net.org when it is too large or paste.rs is temporarily unavailable. Anyone with the link can read it. C-net uploads expire after 180 inactive days; access resets that period. Review the log before continuing.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upload', style: 'destructive', onPress: () => void runUpload() },
+      ],
+    );
   }, [runUpload]);
 
   const onCopyUrl = useCallback(async () => {
@@ -219,10 +231,10 @@ export default function DebugLogScreen() {
   }, [uploadUrl]);
 
   const onDeleteUpload = useCallback(() => {
-    if (busyRef.current || !uploadUrl || !uploadDeleteKey) return;
+    if (busyRef.current || !uploadUrl) return;
     Alert.alert(
       'Delete uploaded log?',
-      'Permanently removes this public backup-host copy. This cannot be undone.',
+      'Permanently removes this public host copy. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -233,7 +245,7 @@ export default function DebugLogScreen() {
             if (busyRef.current) return;
             busyRef.current = 'delete';
             setBusy('delete');
-            void deleteDebugLogUpload(deletingUrl, uploadDeleteKey)
+            void deleteDebugLogUpload(deletingUrl, uploadDeleteKey ?? undefined)
               .then(() => {
                 if (uploadUrlRef.current !== deletingUrl) return;
                 setUploadUrl(null);
@@ -259,7 +271,7 @@ export default function DebugLogScreen() {
         <View style={{ padding: 16, paddingBottom: 8, gap: 12 }}>
           <AppText variant="tiny" color="textFaint">
             May include device/network info. Known credential and account identifier patterns are
-            redacted; review before sharing.
+            redacted; review before sharing or creating a public upload.
           </AppText>
           <Card style={{ gap: 8 }}>
             <AppText variant="tiny" color="textMuted">
@@ -277,8 +289,9 @@ export default function DebugLogScreen() {
             />
           </Card>
           <AppText variant="tiny" color="textMuted">
-            Copy, Share and Upload immediately export the complete flushed on-disk log plus the
-            latest complete performance audit. No extra selection step is required.
+            Copy and Share immediately export the complete flushed on-disk log plus the latest
+            complete performance audit. Upload asks for confirmation, then uses paste.rs or
+            the 180-day inactive-expiry paste.c-net.org service when a full-capacity host is needed.
           </AppText>
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
             <Button title="Clear" icon="trash-outline" variant="ghost" onPress={onClear} />
@@ -321,16 +334,14 @@ export default function DebugLogScreen() {
                 icon="link-outline"
                 onPress={() => void onCopyUrl()}
               />
-              {uploadDeleteKey ? (
-                <Button
-                  title="Delete uploaded log"
-                  icon="trash-outline"
-                  variant="ghost"
-                  loading={busy === 'delete'}
-                  disabled={busy === 'delete'}
-                  onPress={onDeleteUpload}
-                />
-              ) : null}
+              <Button
+                title="Delete uploaded log"
+                icon="trash-outline"
+                variant="ghost"
+                loading={busy === 'delete'}
+                disabled={busy === 'delete'}
+                onPress={onDeleteUpload}
+              />
             </Card>
           ) : null}
         </View>

@@ -617,12 +617,38 @@ describe('optional feature prefs', () => {
       manifest: remoteManifest,
       core: remoteCore,
       productHistory: cached,
+      productHistoryError: 'stale sync failure',
     });
     mockSyncProductHistoryFromDailyPayloads.mockResolvedValue(cached);
 
     await store.getState().ensureProductHistory();
 
     expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not rewrite an unchanged exact product-history ledger', async () => {
+    const cached = {
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      core_sha: remoteManifest.files.core.sha256,
+      run_dates: [remoteCore.run_date],
+      products: { product: [0.05] },
+    };
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      productHistory: cached,
+    });
+    mockSyncProductHistoryFromDailyPayloads.mockResolvedValue(cached);
+
+    await store.getState().ensureProductHistory();
+
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
+    expect(mockWriteProductHistory).not.toHaveBeenCalled();
+    expect(store.getState().productHistory).toBe(cached);
+    expect(store.getState().productHistoryError).toBeNull();
   });
 
   it('ensureProductHistory coalesces concurrent calls into one sync', async () => {

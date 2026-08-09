@@ -41,6 +41,7 @@ import {
 } from '../lib/performanceAuditReadiness';
 import {
   beginPerformanceAuditRollback,
+  retryPerformanceAuditRollback,
   tryRestorePerformanceAuditRollback,
 } from '../lib/performanceAuditRollback';
 import {
@@ -60,6 +61,7 @@ import {
   markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
   markPerformanceAuditRunning,
+  measureAuditAction,
   pausePerformanceAudit,
   pathMatches,
   PERFORMANCE_AUDIT_LOG_TAG,
@@ -666,20 +668,37 @@ async function runDeepAuditStepBody(
 ): Promise<AuditCheck> {
   assertSessionActive(watchdog);
   assertDatasetRevision(datasetRevision);
-  const responsivenessAt = monitor.snapshot();
   const logCursor = debugLog.getCursor();
-  const actionStarted = now();
   let actionSource = 'router';
   let expectedPath = step.expectedPath;
+  let preActionWaitMs = 0;
+  let measuredAction: {
+    result: unknown;
+    startedAt: number;
+    durationMs: number;
+    responsivenessAt: ReturnType<ResponsivenessMonitor['snapshot']>;
+  };
   const href = routeEntryHref(step);
   if (href) {
-    if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
-      router.push(href);
-    }
+    measuredAction = await measureAuditAction(
+      () => {
+        if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
+          router.push(href);
+        }
+      },
+      () => monitor.snapshot(),
+      now,
+    );
   } else if (step.semanticActionId === 'redirect.root.verify') {
     // The preceding not-found recovery action must already have reached Home.
     actionSource = 'route-contract';
+    measuredAction = await measureAuditAction(
+      () => undefined,
+      () => monitor.snapshot(),
+      now,
+    );
   } else {
+    const preActionStarted = now();
     await ensureMountedActionRoute(
       step.semanticActionId,
       currentPath,
@@ -717,11 +736,17 @@ async function runDeepAuditStepBody(
       clearInterval(preActionGuard);
     }
     assertSessionActive(watchdog);
-    const actionResult = await performanceAuditReadinessRegistry.invokeAction(
-      source.id,
-      step.semanticActionId,
-      step.parameters,
+    preActionWaitMs = now() - preActionStarted;
+    measuredAction = await measureAuditAction(
+      () => performanceAuditReadinessRegistry.invokeAction(
+        source.id,
+        step.semanticActionId,
+        step.parameters,
+      ),
+      () => monitor.snapshot(),
+      now,
     );
+    const actionResult = measuredAction.result;
     if (
       actionResult != null &&
       typeof actionResult === 'object' &&
@@ -762,7 +787,9 @@ async function runDeepAuditStepBody(
       };
     }
   }
-  const actionMs = now() - actionStarted;
+  const actionMs = measuredAction.durationMs;
+  const actionStarted = measuredAction.startedAt;
+  const responsivenessAt = measuredAction.responsivenessAt;
 
   await waitForPath(currentPath, expectedPath, label, { watchdog });
   assertDatasetRevision(datasetRevision);
@@ -841,6 +868,7 @@ async function runDeepAuditStepBody(
       expectedSurface: step.expectedSurface,
       actionSource,
       actionMs: roundMetric(actionMs),
+      preActionWaitMs: roundMetric(preActionWaitMs),
       forwardMs: roundMetric(forwardMs),
       backgroundSettleMs: roundMetric(readinessMs),
       backMs: 0,
@@ -2122,6 +2150,7 @@ export function PerformanceAuditRunner() {
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
       let rollbackRestored = false;
+      let rollbackAttempts = 0;
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
@@ -2467,35 +2496,32 @@ export function PerformanceAuditRunner() {
         await waitWhilePaused(watchdog);
         const restoreStarted = now();
         const restoreStartedPaused = getPerformanceAuditPauseCount();
-        const initialRollbackResult = await awaitAuditWorkWithTimeout(
-          tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
-          watchdog,
-          'Audit state restoration',
-          FINALIZATION_STORE_TIMEOUT_MS,
+        const rollbackResult = await retryPerformanceAuditRollback(
+          async (attemptNumber) => {
+            rollbackAttempts = attemptNumber;
+            return await awaitAuditWorkWithTimeout(
+              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined),
+              watchdog,
+              attemptNumber === 1
+                ? 'Audit state restoration'
+                : `Audit state restoration attempt ${attemptNumber}`,
+              FINALIZATION_STORE_TIMEOUT_MS,
+            );
+          },
+          3,
+          async (attemptNumber) => {
+            updatePerformanceAuditProgress(
+              completed,
+              total,
+              attemptNumber === 2
+                ? 'Retrying settings and saved data restoration'
+                : 'Making a final settings and saved data restoration attempt',
+            );
+            await waitWhilePaused(watchdog);
+            await yieldToUi();
+          },
         );
-        let rollbackResult = initialRollbackResult;
-        let rollbackAttempts = 1;
-        if (!rollbackResult.restored) {
-          updatePerformanceAuditProgress(completed, total, 'Retrying settings and saved data restoration');
-          await waitWhilePaused(watchdog);
-          await yieldToUi();
-          const retryResult = await awaitAuditWorkWithTimeout(
-            tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
-            watchdog,
-            'Audit state restoration retry',
-            FINALIZATION_STORE_TIMEOUT_MS,
-          );
-          rollbackAttempts = 2;
-          rollbackResult = retryResult.restored
-            ? retryResult
-            : {
-              ...retryResult,
-              error: [initialRollbackResult.error, retryResult.error]
-                .filter(Boolean)
-                .join('\nRetry: '),
-              cause: retryResult.cause ?? initialRollbackResult.cause,
-            };
-        }
+        rollbackAttempts = rollbackResult.attempts;
         rollbackRestored = rollbackResult.restored;
         // The outcome is reported either way — the state either was restored or
         // was not — but a duration spanning a pause must not become the
@@ -2522,6 +2548,14 @@ export function PerformanceAuditRunner() {
             trace: captureAuditTrace('audit state restoration failed'),
           } : {}),
         });
+        if (!rollbackRestored) {
+          throw rollbackResult.cause instanceof Error
+            ? rollbackResult.cause
+            : new Error(
+              rollbackResult.error ||
+              'Performance audit state was not durably restored after three attempts',
+            );
+        }
         watchdog.beginFinalization();
         // Publish the terminal state in the foreground. A terminal run cannot be
         // resumed, so completing while paused would leave the pause set with no
@@ -2669,7 +2703,13 @@ export function PerformanceAuditRunner() {
           );
         }
 
-        let upload: { url?: string; provider?: string; error?: string } = {};
+        let upload: {
+          url?: string;
+          provider?: string;
+          deleteKey?: string;
+          linkCopied?: boolean;
+          error?: string;
+        } = {};
         try {
           // Build the export in its own scope so the raw log text is collectable
           // while the upload body — a second full copy of it — is in flight.
@@ -2701,16 +2741,30 @@ export function PerformanceAuditRunner() {
           if (result.truncated || result.clientTruncated) {
             throw new Error('The upload service did not accept the complete log.');
           }
-          await awaitAuditWorkWithTimeout(
-            Clipboard.setStringAsync(result.url),
-            watchdog,
-            'Audit link clipboard write',
-            5_000,
-          );
-          upload = { url: result.url, provider: result.provider };
+          let linkCopied = false;
+          try {
+            await awaitAuditWorkWithTimeout(
+              Clipboard.setStringAsync(result.url),
+              watchdog,
+              'Audit link clipboard write',
+              5_000,
+            );
+            linkCopied = true;
+          } catch (clipboardCaught) {
+            debugLog.warn(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `complete log uploaded but link copy failed: ${formatAuditErrorForLog(clipboardCaught)}`,
+            );
+          }
+          upload = {
+            url: result.url,
+            provider: result.provider,
+            ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+            linkCopied,
+          };
           debugLog.info(
             PERFORMANCE_AUDIT_LOG_TAG,
-            `complete log uploaded provider=${result.provider} linkCopied=true`,
+            `complete log uploaded provider=${result.provider} linkCopied=${linkCopied}`,
           );
         } catch (uploadCaught) {
           const message = formatAuditError(uploadCaught);
@@ -2743,8 +2797,9 @@ export function PerformanceAuditRunner() {
         // Finish the last rollback attempt before publishing any terminal UI
         // state. A retry from finally could otherwise overwrite edits made
         // after the audit overlay disappears.
-        if (!rollbackRestored && rollbackSnapshot) {
+        if (!rollbackRestored && rollbackSnapshot && rollbackAttempts < 3) {
           try {
+            rollbackAttempts += 1;
             const rollbackRetry = await timeoutAfter(
               tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
               5_000,

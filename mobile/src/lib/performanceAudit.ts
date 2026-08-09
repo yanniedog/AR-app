@@ -145,6 +145,9 @@ export interface PerformanceAuditState {
   report: PerformanceAuditReport | null;
   uploadUrl: string | null;
   uploadProvider: string | null;
+  uploadDeleteKey: string | null;
+  uploadLinkCopied: boolean;
+  uploadDeleted: boolean;
   uploadError: string | null;
   /** The report is complete and readable while its log upload is still running. */
   uploadPending: boolean;
@@ -214,6 +217,9 @@ const IDLE_STATE: PerformanceAuditState = {
   report: null,
   uploadUrl: null,
   uploadProvider: null,
+  uploadDeleteKey: null,
+  uploadLinkCopied: false,
+  uploadDeleted: false,
   uploadError: null,
   uploadPending: false,
   error: null,
@@ -413,6 +419,9 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     report: null,
     uploadUrl: null,
     uploadProvider: null,
+    uploadDeleteKey: null,
+    uploadLinkCopied: false,
+    uploadDeleted: false,
     uploadError: null,
     uploadPending: false,
     error: null,
@@ -510,7 +519,13 @@ export function cancelPerformanceAudit(): void {
  */
 export function completePerformanceAudit(
   report: PerformanceAuditReport,
-  upload: { url?: string; provider?: string; error?: string } | 'pending' = {},
+  upload: {
+    url?: string;
+    provider?: string;
+    deleteKey?: string;
+    linkCopied?: boolean;
+    error?: string;
+  } | 'pending' = {},
 ): void {
   const pending = upload === 'pending';
   const result = pending ? {} : upload;
@@ -527,6 +542,9 @@ export function completePerformanceAudit(
     report,
     uploadUrl: result.url ?? null,
     uploadProvider: result.provider ?? null,
+    uploadDeleteKey: result.deleteKey ?? null,
+    uploadLinkCopied: result.linkCopied === true,
+    uploadDeleted: false,
     uploadError: result.error ?? null,
     uploadPending: pending,
     error: null,
@@ -540,18 +558,59 @@ export function completePerformanceAudit(
  */
 export function setPerformanceAuditUploadResult(
   sessionId: string,
-  upload: { url?: string; provider?: string; error?: string },
+  upload: {
+    url?: string;
+    provider?: string;
+    deleteKey?: string;
+    linkCopied?: boolean;
+    error?: string;
+  },
 ): void {
   if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
   emit({
     ...auditState,
     uploadUrl: upload.url ?? null,
     uploadProvider: upload.provider ?? null,
+    uploadDeleteKey: upload.deleteKey ?? null,
+    uploadLinkCopied: upload.linkCopied === true,
+    uploadDeleted: false,
     uploadError: upload.error ?? null,
     uploadPending: false,
     // Pause tracking ends with the upload; nothing remains to clear it.
     paused: false,
   });
+}
+
+export function markPerformanceAuditUploadDeleted(sessionId: string): void {
+  if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
+  emit({
+    ...auditState,
+    uploadUrl: null,
+    uploadProvider: null,
+    uploadDeleteKey: null,
+    uploadLinkCopied: false,
+    uploadDeleted: true,
+    uploadError: null,
+  });
+}
+
+export interface PerformanceAuditUploadDeletionGuard {
+  current: boolean;
+}
+
+/** Claim deletion synchronously so two confirmation callbacks cannot issue duplicate requests. */
+export function claimPerformanceAuditUploadDeletion(
+  guard: PerformanceAuditUploadDeletionGuard,
+): boolean {
+  if (guard.current) return false;
+  guard.current = true;
+  return true;
+}
+
+export function releasePerformanceAuditUploadDeletion(
+  guard: PerformanceAuditUploadDeletionGuard,
+): void {
+  guard.current = false;
 }
 
 export function markPerformanceAuditCancelled(): void {
@@ -996,6 +1055,34 @@ export class ResponsivenessMonitor {
       this.scheduleFrame();
     });
   }
+}
+
+export interface MeasuredAuditAction<T, TSnapshot> {
+  result: T;
+  startedAt: number;
+  durationMs: number;
+  responsivenessAt: TSnapshot;
+}
+
+/**
+ * Measure only the user-equivalent action. Callers deliberately finish route
+ * recovery and readiness guards before invoking this helper so audit-only
+ * preflight work cannot be reported as tap latency or responsiveness.
+ */
+export async function measureAuditAction<T, TSnapshot>(
+  action: () => T | Promise<T>,
+  snapshotResponsiveness: () => TSnapshot,
+  clock: () => number = () => globalThis.performance?.now?.() ?? Date.now(),
+): Promise<MeasuredAuditAction<T, TSnapshot>> {
+  const responsivenessAt = snapshotResponsiveness();
+  const startedAt = clock();
+  const result = await action();
+  return {
+    result,
+    startedAt,
+    durationMs: clock() - startedAt,
+    responsivenessAt,
+  };
 }
 
 export function summarizeResponsiveness(

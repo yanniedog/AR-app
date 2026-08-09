@@ -11,6 +11,7 @@ import {
   MAX_LOG_FILE_BYTES,
   MAX_LOG_LINES,
   PASTE_RS_ATTEMPT_TIMEOUT_MS,
+  PASTE_RS_MAX_FULL_UPLOAD_BYTES,
   PASTE_RS_TAIL_MAX_BYTES,
   PASTE_CNET_URL,
   RingBuffer,
@@ -223,6 +224,138 @@ describe('uploadDebugLog', () => {
     );
   });
 
+  it('routes a known-oversized canonical log directly to the full-capacity provider', async () => {
+    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+    const mockFetch = jest.fn(async () => ({
+      status: 200,
+      text: async () => JSON.stringify({
+        url: 'https://paste.c-net.org/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+        delete_key: 'delete-large',
+      }),
+    })) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog(body, mockFetch);
+    const exactBytes = new TextEncoder().encode(body).length;
+
+    expect(result).toEqual(expect.objectContaining({
+      provider: 'paste.c-net.org',
+      attempts: 1,
+      originalBytes: exactBytes,
+      uploadedBytes: exactBytes,
+      truncated: false,
+      clientTruncated: false,
+    }));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledWith(
+      PASTE_CNET_URL,
+      expect.objectContaining({ body }),
+    );
+  });
+
+  it('deletes an unexpected paste.rs partial before uploading the complete body to c-net', async () => {
+    const body = 'complete-log-body';
+    const partialUrl = 'https://paste.rs/partial';
+    const backupUrl = 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555';
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
+      .mockResolvedValueOnce({ status: 200 })
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({ url: backupUrl, delete_key: 'delete-secret' }),
+      }) as unknown as typeof fetch;
+
+    const result = await uploadDebugLog(body, mockFetch);
+
+    expect(result).toEqual(expect.objectContaining({
+      url: backupUrl,
+      provider: 'paste.c-net.org',
+      attempts: 2,
+      originalBytes: new TextEncoder().encode(body).length,
+      uploadedBytes: new TextEncoder().encode(body).length,
+    }));
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      partialUrl,
+      expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) }),
+    );
+    expect((mockFetch as jest.Mock).mock.calls[1][1]).not.toHaveProperty('headers');
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      3,
+      PASTE_CNET_URL,
+      expect.objectContaining({ method: 'POST', body }),
+    );
+  });
+
+  it('cleans up a paste.rs partial even when the complete backup upload fails', async () => {
+    const partialUrl = 'https://paste.rs/partial-failed-backup';
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
+      .mockResolvedValueOnce({ status: 200 })
+      .mockResolvedValueOnce({ status: 503, text: async () => 'down' }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('complete-log-body', mockFetch)).rejects.toMatchObject({
+      attempts: 2,
+    });
+
+    expect(mockFetch).toHaveBeenNthCalledWith(
+      2,
+      partialUrl,
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('does not create a second public copy when partial cleanup fails', async () => {
+    const sleep = jest.fn(async () => {});
+    const partialUrl = 'https://paste.rs/partial-not-deleted';
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
+      .mockResolvedValueOnce({ status: 500 })
+      .mockResolvedValueOnce({ status: 500 }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('complete-log-body', mockFetch, { sleep })).rejects.toThrow(
+      `could not remove the partial public copy at ${partialUrl}`,
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledWith(1_000);
+    expect((mockFetch as jest.Mock).mock.calls.every(([url]) => url !== PASTE_CNET_URL)).toBe(true);
+  });
+
+  it('does not retry the full-capacity POST after a failed response', async () => {
+    const sleep = jest.fn(async () => {});
+    const mockFetch = jest
+      .fn()
+      .mockResolvedValueOnce({ status: 503, text: async () => 'primary down' })
+      .mockResolvedValueOnce({ status: 503, text: async () => 'backup down' }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('hello', mockFetch, { sleep })).rejects.toMatchObject({
+      attempts: 2,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an ambiguous full-capacity network failure', async () => {
+    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+    const mockFetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('response lost after submission'))
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({
+          url: 'https://paste.c-net.org/orphaned-second-copy',
+          delete_key: 'unreachable-delete-key',
+        }),
+      }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('does not duplicate a client-rejected upload to the backup', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
@@ -245,7 +378,7 @@ describe('uploadDebugLog', () => {
       }) as unknown as typeof fetch;
 
     await expect(uploadDebugLog('hello', mockFetch)).rejects.toThrow(
-      'Both public upload services are unavailable',
+      'The complete debug-log upload failed',
     );
   });
 });
@@ -265,6 +398,19 @@ describe('deleteDebugLogUpload', () => {
         signal: expect.any(AbortSignal),
       }),
     );
+  });
+
+  it('deletes an allowlisted paste.rs upload without sending a deletion key', async () => {
+    const mockFetch = jest.fn(async () => ({ status: 200 })) as unknown as typeof fetch;
+    const url = 'https://paste.rs/abc123';
+
+    await deleteDebugLogUpload(url, undefined, mockFetch);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      url,
+      expect.objectContaining({ method: 'DELETE', signal: expect.any(AbortSignal) }),
+    );
+    expect((mockFetch as jest.Mock).mock.calls[0][1]).not.toHaveProperty('headers');
   });
 
   it('rejects non-backup URLs before sending the delete key', async () => {
