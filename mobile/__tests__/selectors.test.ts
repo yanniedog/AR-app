@@ -216,6 +216,22 @@ describe('selectors', () => {
     expect(bestRow(mortgage, 'Mortgage', true)?.product_key).toBe('C|1');
   });
 
+  test('filterRows preserves the relative order of its input', () => {
+    const ordered = [
+      mk({ provider: 'Bank C', product_key: 'C|stable' }),
+      mk({ provider: 'Bank A', product_key: 'A|filtered' }),
+      mk({ provider: 'Bank B', product_key: 'B|stable' }),
+    ];
+
+    expect(filterRows(
+      ordered,
+      { ...EMPTY_FILTERS, providers: ['Bank B', 'Bank C'] },
+      null,
+      null,
+      'Mortgage',
+    )).toEqual([ordered[0], ordered[2]]);
+  });
+
   test('sortRows best-first by section direction', () => {
     const loans = sortRows(mortgage.filter((r) => r.account_class !== 'non_standard'), 'rate', 'Mortgage');
     expect(loans.map((r) => r.product_key)).toEqual(['A|1', 'B|1']);

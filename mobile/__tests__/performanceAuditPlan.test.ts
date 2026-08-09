@@ -107,9 +107,20 @@ describe('deep performance audit plan', () => {
       skipSafety: step.skipSafety,
       mutatesRestorableState: step.mutatesRestorableState,
       safety: step.safety,
-      parameters: step.parameters,
+      parameters: step.semanticActionId === 'calculator.scenario.apply-deposit'
+        ? {}
+        : step.parameters,
     });
     expect(plan.passes[1].steps.map(shape)).toEqual(plan.passes[0].steps.map(shape));
+
+    const firstDeposit = plan.passes[0].steps.find(
+      (step) => step.semanticActionId === 'calculator.scenario.apply-deposit',
+    );
+    const repeatDeposit = plan.passes[1].steps.find(
+      (step) => step.semanticActionId === 'calculator.scenario.apply-deposit',
+    );
+    expect(firstDeposit?.parameters).toEqual({ balance: '50000', currentRate: '2.50' });
+    expect(repeatDeposit?.parameters).toEqual({ balance: '51000', currentRate: '2.60' });
   });
 
   test('returns to the audit route only once at the end of each pass', () => {
@@ -258,6 +269,41 @@ describe('deep performance audit plan', () => {
       (step) => step.passId === 'first-pass' && step.semanticActionId === 'today.best.open',
     );
     expect(todayBest).toMatchObject({ expectedPath: '/product', parameters: {} });
+  });
+
+  test('prefers a primary provider represented across multiple sections', () => {
+    const core = corePayload();
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Alpha Bank',
+      productKey: 'mortgage-alpha',
+    });
+    core.sections.Savings.rates.push(rate({
+      provider: 'Zed Bank',
+      product_key: 'savings-zed',
+      taxonomy_path: 'SAVINGS.STANDARD',
+    }));
+
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Zed Bank',
+      productKey: 'mortgage-zed',
+    });
+  });
+
+  test('ignores provider coverage from rows without a product key', () => {
+    const core = corePayload();
+    core.sections.Savings.rates.push(rate({
+      provider: 'Zed Bank',
+      product_key: '',
+      taxonomy_path: 'SAVINGS.STANDARD',
+    }));
+
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Alpha Bank',
+      productKey: 'mortgage-alpha',
+    });
   });
 
   test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {

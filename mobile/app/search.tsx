@@ -17,8 +17,9 @@ import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import {
   activeFilterCount,
   EMPTY_FILTERS,
+  filterRows,
   normalizeSortKey,
-  queryAndSort,
+  sortRows,
   type Filters,
   type SortKey,
 } from '../src/data/selectors';
@@ -149,23 +150,26 @@ export default function Search() {
     [filters, includeNonStandard, restoredSub],
   );
 
+  // Filtering preserves order, so sort the full section once instead of
+  // sorting thousands of rows again on every query and filter change.
+  const sortedBaseRows = useMemo(
+    () => sortRows(baseRows, sortKey, section, depositRankMetric, mortgageRateMetric),
+    [baseRows, sortKey, section, depositRankMetric, mortgageRateMetric],
+  );
   const rows = useMemo(
     () => (
       void suitabilityRevision,
-      queryAndSort(
-        baseRows,
+      filterRows(
+        sortedBaseRows,
         { ...effectiveFilters, query: debouncedQuery },
-        sortKey,
-        section,
         // Always pass loaded details for suitability (standard-only) filtering —
         // not only when Pro deep-search is on. Search indexing still requires Pro.
         details?.products ?? null,
         deepSearchActive ? searchIndex : null,
-        depositRankMetric,
-        mortgageRateMetric,
+        section,
       )
     ),
-    [baseRows, effectiveFilters, debouncedQuery, sortKey, section, deepSearchActive, details?.products, searchIndex, depositRankMetric, mortgageRateMetric, suitabilityRevision],
+    [sortedBaseRows, effectiveFilters, debouncedQuery, section, deepSearchActive, details?.products, searchIndex, suitabilityRevision],
   );
 
   const showDeepSearchHint =

@@ -22,6 +22,59 @@ import {
   toggleSavedRateRefs,
 } from './savedRates';
 
+function setPreferences(
+  set: StoreSet,
+  get: StoreGet,
+  values: Partial<Prefs>,
+): void {
+  const current = get().prefs;
+  const changed = new Set(
+    (Object.keys(values) as (keyof Prefs)[]).filter(
+      (key) => !Object.is(current[key], values[key]),
+    ),
+  );
+  if (changed.size === 0) return;
+
+  const interests = values.interests === undefined
+    ? current.interests
+    : normalizeInterests(values.interests);
+  const requestedDefault = values.defaultSection ?? current.defaultSection;
+  const prefs: Prefs = {
+    ...current,
+    ...values,
+    interests,
+    defaultSection: interests.includes(requestedDefault) ? requestedDefault : interests[0],
+  };
+  const partial: Partial<AppState> = { prefs };
+  if (changed.has('interests')) {
+    partial.activeSection = resolveInterestSection(interests, get().activeSection);
+  }
+  if (changed.has('enableDeepSearch') && !prefs.enableDeepSearch) {
+    partial.searchIndex = null;
+  }
+  if (changed.has('showHistoryRibbon')) {
+    partial.historyBanksError = null;
+  }
+  set(partial);
+
+  if (changed.has('enableDeepSearch') && prefs.enableDeepSearch) {
+    void get().ensureSearchIndex();
+    void get().ensureDetails();
+  }
+  if (
+    changed.has('profileFilters') &&
+    prefs.profileFilters.accountFeatures.length > 0
+  ) {
+    void get().ensureDetails();
+  }
+  if (changed.has('showHistoryRibbon') && prefs.showHistoryRibbon) {
+    // Trends + product history screens expect assets immediately after the
+    // toggle; do not wait for the next manual refresh.
+    void get().ensureHistoryBanks();
+    void get().ensureBankInsights();
+  }
+}
+
 export function createUserActions(set: StoreSet, get: StoreGet) {
   return {
     getDetail(productKey: string) {
@@ -117,51 +170,11 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     },
 
     setPref<K extends keyof Prefs>(key: K, value: Prefs[K]) {
-      if (key === 'interests') {
-        const interests = normalizeInterests(value as SectionKey[]);
-        const prefs = { ...get().prefs, interests };
-        if (!interests.includes(prefs.defaultSection)) {
-          prefs.defaultSection = interests[0];
-        }
-        set({
-          prefs,
-          activeSection: resolveInterestSection(interests, get().activeSection),
-        });
-      } else if (key === 'defaultSection') {
-        const section = value as SectionKey;
-        const interests = normalizeInterests(get().prefs.interests);
-        set({
-          prefs: {
-            ...get().prefs,
-            defaultSection: interests.includes(section) ? section : interests[0],
-          },
-        });
-      } else {
-        set({ prefs: { ...get().prefs, [key]: value } });
-      }
-      if (key === 'enableDeepSearch') {
-        if (value) {
-          void get().ensureSearchIndex();
-          void get().ensureDetails();
-        } else {
-          set({ searchIndex: null });
-        }
-      }
-      if (key === 'profileFilters') {
-        const features = (value as Prefs['profileFilters'])?.accountFeatures;
-        if (Array.isArray(features) && features.length > 0) {
-          void get().ensureDetails();
-        }
-      }
-      if (key === 'showHistoryRibbon') {
-        set({ historyBanksError: null });
-        if (value) {
-          // Trends + product history screens expect assets immediately after the
-          // toggle; do not wait for the next manual refresh.
-          void get().ensureHistoryBanks();
-          void get().ensureBankInsights();
-        }
-      }
+      setPreferences(set, get, { [key]: value } as Partial<Prefs>);
+    },
+
+    setPrefs(values: Partial<Prefs>) {
+      setPreferences(set, get, values);
     },
 
     completeOnboarding(interests: SectionKey[], notifications: boolean) {
@@ -221,6 +234,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'isProductSubscribed'
     | 'findSearchSubscription'
     | 'setPref'
+    | 'setPrefs'
     | 'setActiveSection'
     | 'completeOnboarding'
     | 'clearCache'

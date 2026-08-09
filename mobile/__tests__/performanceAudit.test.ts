@@ -1,4 +1,5 @@
 import type { CorePayload } from '../src/types';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import {
   aggregateRepeatedJourneys,
   AUDIT_LATENCY_METRIC_KEYS,
@@ -27,6 +28,7 @@ import {
   requestPerformanceAudit,
   releasePerformanceAuditUploadDeletion,
   resolveAuditJourneyOptionalData,
+  restorePerformanceAuditPreferences,
   requiresPerformanceAuditRouteRecovery,
   resumePerformanceAudit,
   resetPerformanceAuditForTests,
@@ -41,6 +43,39 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+
+describe('performance audit preference restoration', () => {
+  it('writes once and awaits enabled optional assets concurrently', async () => {
+    const pending: (() => void)[] = [];
+    const wait = () => new Promise<void>((resolve) => pending.push(resolve));
+    const setPrefs = jest.fn();
+    const ensureSearchIndex = jest.fn(wait);
+    const ensureHistoryBanks = jest.fn(wait);
+    const ensureBankInsights = jest.fn(wait);
+    const restoration = restorePerformanceAuditPreferences(
+      {
+        ...DEFAULT_PREFS,
+        enableDeepSearch: true,
+        showHistoryRibbon: true,
+      },
+      { setPrefs, ensureSearchIndex, ensureHistoryBanks, ensureBankInsights },
+    );
+
+    expect(setPrefs).toHaveBeenCalledTimes(1);
+    expect(ensureSearchIndex).toHaveBeenCalledTimes(1);
+    expect(ensureHistoryBanks).toHaveBeenCalledTimes(1);
+    expect(ensureBankInsights).toHaveBeenCalledTimes(1);
+    expect(pending).toHaveLength(3);
+    let settled = false;
+    void restoration.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    pending.forEach((resolve) => resolve());
+    await restoration;
+    expect(settled).toBe(true);
+  });
+});
 
 describe('background interruption failure evidence', () => {
   const check = (metrics: AuditCheck['metrics'], error?: string): AuditCheck => ({
@@ -421,6 +456,23 @@ describe('performance audit scoring', () => {
     });
   });
 
+  it('counts journey coverage only with complete execution proof', () => {
+    const missingProof = check('missing-proof', 'fail', 10, { executionAttempted: true });
+    missingProof.kind = 'journey';
+    const completedWithLatencyFailure = check('timing-fail', 'fail', 900, {
+      executionAttempted: true,
+      actionInvoked: true,
+      actionCompleted: true,
+      maxEventLoopLagMs: 400,
+    });
+    completedWithLatencyFailure.kind = 'journey';
+
+    expect(summarizePerformanceAudit([missingProof, completedWithLatencyFailure])).toMatchObject({
+      executed: 1,
+      coveragePercent: 50,
+    });
+  });
+
   it('recovers only when a journey invalidated route state, never for latency alone', () => {
     const slow = check('slow-route', 'fail', 1_000, {
       nonTimingFailure: false,
@@ -445,6 +497,14 @@ describe('performance audit scoring', () => {
     errored.kind = 'journey';
     errored.error = 'route action failed';
     expect(requiresPerformanceAuditRouteRecovery(errored)).toBe(true);
+
+    const terminalUnavailable = check('terminal-unavailable', 'fail', 10, {
+      availabilityFailure: true,
+      routeStateInvalidated: false,
+    });
+    terminalUnavailable.kind = 'journey';
+    terminalUnavailable.error = 'optional action unavailable';
+    expect(requiresPerformanceAuditRouteRecovery(terminalUnavailable)).toBe(false);
 
     const interrupted = check('interrupted-route', 'skipped', 0, {
       interruptedByBackground: true,

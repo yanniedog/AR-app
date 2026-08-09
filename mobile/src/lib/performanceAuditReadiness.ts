@@ -158,9 +158,27 @@ interface MutableSurface {
 type Listener = () => void;
 
 /** Survives remounts of the same surface ID within one capture session. */
-interface DurableActionCompletion {
-  actionName: string;
-  actionRevision: number;
+export interface PerformanceAuditActionCompletion {
+  readonly actionName: string;
+  readonly actionRevision: number;
+}
+
+/**
+ * Converts potentially sensitive render state into a capture-local monotonic
+ * token. Only the opaque token is exposed to audit reports and diagnostic logs.
+ */
+export class OpaquePerformanceAuditRenderRevision {
+  private stateKey: string | null = null;
+  private revision = 0;
+
+  update(state: readonly unknown[]): string {
+    const nextKey = JSON.stringify(state);
+    if (nextKey !== this.stateKey) {
+      this.stateKey = nextKey;
+      this.revision += 1;
+    }
+    return `state-${this.revision}`;
+  }
 }
 
 const systemClock: PerformanceAuditReadinessClock = {
@@ -290,7 +308,7 @@ export class PerformanceAuditReadinessRegistry {
   private nextInstance = 1;
   private readonly surfaces = new Map<string, MutableSurface>();
   /** Action proof keyed by surface ID; remounts must not erase completed-step evidence. */
-  private readonly actionCompletions = new Map<string, DurableActionCompletion>();
+  private readonly actionCompletions = new Map<string, PerformanceAuditActionCompletion>();
   private readonly listeners = new Set<Listener>();
   private readonly captureListeners = new Set<Listener>();
 
@@ -481,7 +499,7 @@ export class PerformanceAuditReadinessRegistry {
     // return. Persist completion by surface ID, then stamp whichever instance is live.
     const priorRevision = this.actionCompletions.get(surfaceId)?.actionRevision
       ?? surface.actionRevision;
-    const completion: DurableActionCompletion = {
+    const completion: PerformanceAuditActionCompletion = {
       actionName,
       actionRevision: priorRevision + 1,
     };
@@ -492,6 +510,17 @@ export class PerformanceAuditReadinessRegistry {
     live.updatedAtMs = this.clock.now();
     this.emit();
     return result;
+  }
+
+  /**
+   * Return action proof even when navigation unmounted the source surface.
+   * Navigation callbacks commonly replace their own screen before the runner
+   * can inspect it; the capture-scoped completion ledger is the durable source
+   * of truth for those actions.
+   */
+  actionCompletion(surfaceId: string): PerformanceAuditActionCompletion | null {
+    const completion = this.actionCompletions.get(surfaceId);
+    return completion ? { ...completion } : null;
   }
 
   snapshot(

@@ -211,7 +211,14 @@ export default function Onboarding() {
     id: 'onboarding.step',
     routeKey: '/onboarding',
     datasetRevision: snapshot?.runDate ?? null,
-    renderRevision: `${snapshot?.runDate ?? 'none'}:${step}:${section}:${notify ? 'notify' : 'quiet'}`,
+    renderRevision: JSON.stringify([
+      snapshot?.runDate ?? 'none',
+      step,
+      section,
+      notify ? 'notify' : 'quiet',
+      interests,
+      profile,
+    ]),
     actions: auditActions,
     probes: [
       {
