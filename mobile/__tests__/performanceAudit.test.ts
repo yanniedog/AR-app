@@ -6,6 +6,7 @@ import {
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   flattenAuditLogText,
+  ForegroundElapsed,
   formatAuditError,
   formatAuditErrorForLog,
   getPerformanceAuditPauseCount,
@@ -22,6 +23,7 @@ import {
   resolveAuditJourneyOptionalData,
   resumePerformanceAudit,
   resetPerformanceAuditForTests,
+  subscribePerformanceAudit,
   MAX_REPORTED_AUDIT_CHECKS,
   scoreLatency,
   selectReportedAuditChecks,
@@ -557,7 +559,70 @@ describe('performance audit lifecycle', () => {
   });
 });
 
+describe('foreground elapsed budget', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
+  it('charges only time the audit spent on screen', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+
+    nowMs = 1_000;
+    elapsed.accrue();
+    expect(elapsed.foregroundMs).toBe(1_000);
+
+    pausePerformanceAudit();
+    elapsed.accrue();
+    nowMs = 301_000;
+    resumePerformanceAudit();
+    elapsed.accrue();
+
+    // Five minutes off screen must not reach a two-minute budget.
+    expect(elapsed.foregroundMs).toBe(1_000);
+  });
+
+  it('does not charge a suspended poll for the span it slept through', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+    // The runner accrues on every store emission as well as on its poll, which
+    // is what closes the span at the transition.
+    const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
+    try {
+      nowMs = 1_000;
+      elapsed.accrue();
+
+      // Android suspends the JS thread: no poll ticks fire for the whole pause,
+      // and the first one to run does so after `resume` cleared the flag.
+      pausePerformanceAudit();
+      nowMs = 301_000;
+      resumePerformanceAudit();
+      nowMs = 301_050;
+      elapsed.accrue();
+
+      expect(elapsed.foregroundMs).toBe(1_050);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('still charges a foreground stall, which is a real hang', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+
+    nowMs = 130_000;
+    elapsed.accrue();
+    expect(elapsed.foregroundMs).toBe(130_000);
+  });
+});
+
 describe('performance audit inactivity watchdog', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
   it('uses the five-minute default and accepts a custom timeout', () => {
     let elapsedMs = 0;
     const clock = () => elapsedMs;
@@ -648,6 +713,36 @@ describe('performance audit inactivity watchdog', () => {
     expect(watchdog.isExpired()).toBe(false);
     elapsedMs = 150_001;
     expect(watchdog.isExpired()).toBe(true);
+  });
+
+  it('adopts a pause that began before the watchdog existed', () => {
+    // The run gate can hold a queued audit past a pause, so the runner seeds the
+    // watchdog from current state before subscribing. Without the seed the
+    // watchdog never learns it was paused, and the resume that follows resets
+    // nothing.
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    pausePerformanceAudit();
+
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
+    const mirror = () => watchdog.setPaused(getPerformanceAuditState().paused);
+    mirror();
+    const unsubscribe = subscribePerformanceAudit(mirror);
+    try {
+      expect(watchdog.isPaused).toBe(true);
+      elapsedMs = 120_000;
+      expect(watchdog.isExpired()).toBe(false);
+
+      resumePerformanceAudit();
+      expect(watchdog.isPaused).toBe(false);
+      elapsedMs = 149_000;
+      expect(watchdog.isExpired()).toBe(false);
+      elapsedMs = 150_001;
+      expect(watchdog.isExpired()).toBe(true);
+    } finally {
+      unsubscribe();
+    }
   });
 
   it('beginFinalization suspends hang expiry for report persistence and upload', () => {

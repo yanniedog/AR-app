@@ -30,6 +30,7 @@ import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debug
 import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildDeepPerformanceAuditPlan,
+  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
@@ -49,6 +50,7 @@ import {
   completePerformanceAudit,
   failPerformanceAudit,
   flattenAuditLogText,
+  ForegroundElapsed,
   formatAuditError,
   formatAuditErrorForLog,
   getPerformanceAuditPauseCount,
@@ -267,17 +269,17 @@ async function awaitAuditWorkWithTimeout<T>(
 ): Promise<T> {
   assertSessionActive(watchdog);
   let timer: ReturnType<typeof setInterval> | null = null;
+  // Spend only foreground time against the budget. A wall-clock timeout would
+  // fire while the app sat in the background, failing the run for work the user
+  // simply stepped away from — the same mistake the hang watchdog makes if it
+  // is not suspended. Accruing on the pause and resume emissions as well as on
+  // the poll keeps a JS thread suspended mid-interval from charging the
+  // off-screen span once it resumes.
+  const elapsed = new ForegroundElapsed();
+  const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
   const control = new Promise<never>((_resolve, reject) => {
-    // Count only foreground time against the budget. A wall-clock timeout would
-    // fire while the app sat in the background, failing the run for work the
-    // user simply stepped away from — the same mistake the hang watchdog makes
-    // if it is not suspended.
-    let foregroundMs = 0;
-    let lastTickAt = Date.now();
     timer = setInterval(() => {
-      const now = Date.now();
-      if (!getPerformanceAuditState().paused) foregroundMs += now - lastTickAt;
-      lastTickAt = now;
+      elapsed.accrue();
       const stop = (error: unknown) => {
         if (timer) clearInterval(timer);
         timer = null;
@@ -289,7 +291,7 @@ async function awaitAuditWorkWithTimeout<T>(
         stop(error);
         return;
       }
-      if (foregroundMs >= timeoutMs) {
+      if (elapsed.foregroundMs >= timeoutMs) {
         stop(new Error(`${label} timed out after ${timeoutMs}ms`));
       }
     }, 50);
@@ -302,6 +304,7 @@ async function awaitAuditWorkWithTimeout<T>(
     throw new Error(`${label} failed: ${formatAuditError(error)}`);
   } finally {
     if (timer) clearInterval(timer);
+    unsubscribe();
   }
 }
 
@@ -2068,9 +2071,15 @@ export function PerformanceAuditRunner() {
       // loop next reaches a step boundary. A step already in flight when the
       // app backgrounds keeps polling isExpired() every 50ms, so a short hang
       // timeout plus a phone call would otherwise abort the run as hung.
-      const unsubscribePause = subscribePerformanceAudit(() => {
+      const mirrorPauseToWatchdog = () => {
         watchdog.setPaused(getPerformanceAuditState().paused);
-      });
+      };
+      // Seed from current state before subscribing: the run gate can hold a
+      // queued audit until after it has already been paused, and a subscription
+      // only sees later emissions. A watchdog that never learned it was paused
+      // does not reset its deadline when the resume arrives.
+      mirrorPauseToWatchdog();
+      const unsubscribePause = subscribePerformanceAudit(mirrorPauseToWatchdog);
       const originalStore = useStore.getState();
       let plan = buildDeepPerformanceAuditPlan(originalStore.core);
       let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
@@ -2188,10 +2197,12 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
+        // Resolves true when route recovery ran, so a caller can tell that the
+        // screen was replaced under it.
         const recordContinuable = async (
           label: string,
           run: () => Promise<AuditCheck>,
-        ): Promise<void> => {
+        ): Promise<boolean> => {
           const recoverAfterFailure = async () => {
             try {
               await recoverAuditRoute(() => pathnameRef.current);
@@ -2266,7 +2277,9 @@ export function PerformanceAuditRunner() {
           // An interrupted step may have left the app mid-navigation.
           if (check.status === 'fail' || check.metrics.interruptedByBackground === true) {
             await recoverAfterFailure();
+            return true;
           }
+          return false;
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2279,15 +2292,38 @@ export function PerformanceAuditRunner() {
           () => runRuntimeCheck(monitor, watchdog),
         );
 
+        const reentryGate = new ScenarioReentryGate();
+
         for (const pass of plan.passes) {
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
-            updatePerformanceAuditProgress(
-              completed,
-              total,
-              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
-            );
+            const label = `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`;
+            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
+              // Route recovery unmounted the screen this step acts on, so the
+              // reading it would take is of a screen no user would be looking at.
+              updatePerformanceAuditProgress(completed, total, label);
+              await record({
+                id: `deep-${step.id}`,
+                label,
+                kind: 'journey',
+                status: 'skipped',
+                durationMs: 0,
+                metrics: {
+                  journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+                  journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+                  iteration: step.passId === 'first-pass' ? 'cold' : 'warm',
+                  passId: step.passId,
+                  depth: step.depth,
+                  dependsOnRecoveredScenario: true,
+                  reason:
+                    'An earlier step in this scenario was interrupted and the screen ' +
+                    'this step depends on was unmounted by route recovery',
+                },
+              });
+              continue;
+            }
+            updatePerformanceAuditProgress(completed, total, label);
             logAuditEvent(app, {
               kind: 'deep-step-start',
               sessionId,
@@ -2300,8 +2336,8 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
-            await recordContinuable(
-              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
+            const recovered = await recordContinuable(
+              label,
               () => runDeepAuditStep(
                 step,
                 () => pathnameRef.current,
@@ -2310,6 +2346,7 @@ export function PerformanceAuditRunner() {
                 datasetRevision,
               ),
             );
+            if (recovered) reentryGate.markRecovered(step);
           }
         }
 

@@ -287,6 +287,39 @@ function monotonicNow(): number {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
+/**
+ * Accumulates only the time the audit spent in the foreground, for budgets that
+ * must not be spent by an app the user simply stepped away from.
+ *
+ * Each interval is classified by the state that held *during* it rather than the
+ * state at its end. Android suspends the JS thread in the background, so a
+ * poller can miss every tick of a pause and then run for the first time once
+ * `paused` is already false — charging the whole off-screen span. Calling
+ * `accrue` on the pause and resume transitions themselves closes the span at the
+ * transition, so no interval can straddle one.
+ */
+export class ForegroundElapsed {
+  private elapsedMs = 0;
+  private lastAccrualAt: number;
+  private paused: boolean;
+
+  constructor(private readonly clock: MonotonicClock = () => Date.now()) {
+    this.lastAccrualAt = clock();
+    this.paused = getPerformanceAuditState().paused;
+  }
+
+  accrue(): void {
+    const at = this.clock();
+    if (!this.paused) this.elapsedMs += at - this.lastAccrualAt;
+    this.lastAccrualAt = at;
+    this.paused = getPerformanceAuditState().paused;
+  }
+
+  get foregroundMs(): number {
+    return this.elapsedMs;
+  }
+}
+
 export class PerformanceAuditInactivityWatchdog {
   readonly hangTimeoutMs: number;
   private lastStoredProgressMs: number;
