@@ -15,6 +15,7 @@ import {
   PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
   performanceAuditSnapshotFingerprint,
   recoverInterruptedPerformanceAudit,
+  retryPerformanceAuditRollback,
   restorePerformanceAuditRollback,
   tryRestorePerformanceAuditRollback,
   type PerformanceAuditRollbackStore,
@@ -189,5 +190,33 @@ describe('performance audit rollback journal', () => {
     await expect(
       SecureStore.getItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY),
     ).resolves.not.toBeNull();
+  });
+
+  it('uses a bounded third restoration attempt and reports the successful attempt count', async () => {
+    const attempt = jest.fn()
+      .mockResolvedValueOnce({ restored: false, error: 'first' })
+      .mockResolvedValueOnce({ restored: false, error: 'second' })
+      .mockResolvedValueOnce({ restored: true });
+    const beforeRetry = jest.fn();
+
+    await expect(
+      retryPerformanceAuditRollback(attempt, 3, beforeRetry),
+    ).resolves.toEqual({ restored: true, attempts: 3 });
+    expect(attempt).toHaveBeenCalledTimes(3);
+    expect(beforeRetry.mock.calls.map(([attemptNumber]) => attemptNumber)).toEqual([2, 3]);
+  });
+
+  it('retains all failure evidence when the bounded restoration attempts are exhausted', async () => {
+    const attempt = jest.fn(async (attemptNumber: number) => ({
+      restored: false,
+      error: `failure-${attemptNumber}`,
+    }));
+
+    await expect(retryPerformanceAuditRollback(attempt, 3)).resolves.toMatchObject({
+      restored: false,
+      attempts: 3,
+      error: 'failure-1\nRetry: failure-2\nRetry: failure-3',
+    });
+    expect(attempt).toHaveBeenCalledTimes(3);
   });
 });

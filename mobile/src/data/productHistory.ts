@@ -572,6 +572,22 @@ export async function syncProductHistoryFromDailyPayloads(
   const toFetch = wantedDates
     .filter((d) => d !== targetRunDate && !reusableDates.has(d))
     .sort((a, b) => b.localeCompare(a));
+
+  // Matching immutable core identity and date axis prove today's point and all
+  // retained history are already exact. Avoid rebuilding thousands of
+  // product/date cells merely to return and persist the same ledger.
+  if (
+    opts.existing &&
+    !!opts.coreSha &&
+    opts.existing.core_sha === opts.coreSha &&
+    opts.existing.run_date === targetRunDate &&
+    toFetch.length === 0 &&
+    wantedDates.length === opts.existing.run_dates.length &&
+    wantedDates.every((date, index) => date === opts.existing!.run_dates[index]) &&
+    (opts.isCurrent?.() ?? true)
+  ) {
+    return opts.existing;
+  }
   const bestByDate = new Map<string, Map<string, number>>([
     [targetRunDate, bestRatesForCore(opts.currentCore, keys)],
   ]);

@@ -631,6 +631,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             logSuffix: string,
           ): Promise<boolean> => {
             if (!revisionIsCurrent()) return false;
+            // An identity-equal result is the immutable current cache. Do not
+            // stringify and atomically rewrite it on product-screen entry.
+            if (checkpoint === cached) {
+              if (productHistory !== checkpoint) {
+                set({ productHistory: checkpoint, productHistoryError: null });
+              }
+              lastPublished = checkpoint;
+              return true;
+            }
             // ~2.7k products × dozens of dates — stringify can stall the JS
             // thread, so every durable checkpoint yields around the work.
             await yieldToUi();

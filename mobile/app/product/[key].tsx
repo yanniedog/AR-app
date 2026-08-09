@@ -140,7 +140,10 @@ export default function ProductDetail() {
     productKey,
   ]);
 
-  const found = core ? findByKey(core.sections, productKey) : null;
+  const found = useMemo(
+    () => core ? findByKey(core.sections, productKey) : null,
+    [core, productKey],
+  );
   const row = found
     ? exactRateRequested
       ? rateIndex == null

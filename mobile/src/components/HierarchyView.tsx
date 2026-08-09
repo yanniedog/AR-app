@@ -177,18 +177,23 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   }, [setActiveSection]);
   const auditActions = useMemo(() => ({
     'browse.open': () => undefined,
-    'browse.section.next': (...args: unknown[]) => {
-      const requested = auditActionString(args, 'section');
-      if (requested && SECTION_KEYS.includes(requested as SectionKey) &&
-        availableSections.includes(requested as SectionKey)) {
-        changeSection(requested as SectionKey);
-        return;
-      }
+    'browse.section.next': () => {
       const current = Math.max(0, availableSections.indexOf(section));
       const next = availableSections[(current + 1) % availableSections.length];
       if (next) changeSection(next);
     },
-    'browse.category.first': () => {
+    'browse.category.first': (...args: unknown[]) => {
+      const requested = auditActionString(args, 'section');
+      const exactPath = auditActionStrings(args, 'taxonomyPath');
+      if (
+        requested &&
+        SECTION_KEYS.includes(requested as SectionKey) &&
+        availableSections.includes(requested as SectionKey) &&
+        exactPath.length
+      ) {
+        openBrowseDrill(requested as SectionKey, [exactPath[0]]);
+        return;
+      }
       const first = children[0];
       if (!first) {
         return {
@@ -198,13 +203,17 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
       openBrowseDrill(section, [...path, first.seg]);
     },
     'browse.category.deepest': (...args: unknown[]) => {
+      const requested = auditActionString(args, 'section');
       const exactPath = auditActionStrings(args, 'taxonomyPath');
       if (!exactPath.length) {
         return {
           unavailableReason: 'No taxonomy path is available for deepest category drill',
         };
       }
-      openBrowseDrill(section, exactPath);
+      const targetSection = requested && SECTION_KEYS.includes(requested as SectionKey)
+        ? requested as SectionKey
+        : section;
+      openBrowseDrill(targetSection, exactPath);
     },
     'browse.category.back': () => openBrowseDrill(section, path.slice(0, -1)),
     'browse.products.all': () => openProductsList(section, path),

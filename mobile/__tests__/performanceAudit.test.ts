@@ -15,6 +15,8 @@ import {
   hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
   markPerformanceAuditRunning,
+  markPerformanceAuditUploadDeleted,
+  measureAuditAction,
   parsePerformanceAuditHangTimeoutSeconds,
   pausePerformanceAudit,
   pathMatches,
@@ -304,6 +306,31 @@ describe('performance audit scoring', () => {
     });
   });
 
+  it('excludes audit-only preflight time from action timing and responsiveness', async () => {
+    let elapsedMs = 650;
+    const snapshots: number[] = [];
+
+    const measured = await measureAuditAction(
+      async () => {
+        elapsedMs += 7;
+        return 'opened';
+      },
+      () => {
+        snapshots.push(elapsedMs);
+        return elapsedMs;
+      },
+      () => elapsedMs,
+    );
+
+    expect(measured).toMatchObject({
+      result: 'opened',
+      startedAt: 650,
+      durationMs: 7,
+      responsivenessAt: 650,
+    });
+    expect(snapshots).toEqual([650]);
+  });
+
   it('summarizes a long responsiveness session without spreading the sample array', () => {
     const lagSamples = Array.from({ length: 200_000 }, (_, index) => index);
     expect(summarizeResponsiveness(lagSamples, [])).toMatchObject({
@@ -485,6 +512,8 @@ describe('performance audit lifecycle', () => {
     completePerformanceAudit(report, {
       url: 'https://paste.example/audit',
       provider: 'test-provider',
+      deleteKey: 'delete-key',
+      linkCopied: false,
     });
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'complete',
@@ -492,7 +521,17 @@ describe('performance audit lifecycle', () => {
       report,
       uploadUrl: 'https://paste.example/audit',
       uploadProvider: 'test-provider',
+      uploadDeleteKey: 'delete-key',
+      uploadLinkCopied: false,
+      uploadDeleted: false,
       uploadError: null,
+    });
+
+    markPerformanceAuditUploadDeleted(sessionId);
+    expect(getPerformanceAuditState()).toMatchObject({
+      uploadUrl: null,
+      uploadDeleteKey: null,
+      uploadDeleted: true,
     });
   });
 

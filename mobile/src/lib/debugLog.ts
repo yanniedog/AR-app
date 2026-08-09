@@ -171,9 +171,18 @@ let fileContentCache: string | null = null;
 let fileByteLength: number | null = null;
 let fileWriteEpoch = 0;
 let coldStartResetPromise: Promise<void> | null = null;
+type NativeFileAccessModule = {
+  FileSystem?: { appendFile?: (path: string, data: string, encoding?: string) => Promise<void> };
+};
+let nativeFileAccessModule: NativeFileAccessModule | null | undefined;
 
 function scheduleFileFlush(): void {
   if (fileFlushTimer) return;
+  // Resolve the optional native bridge while the caller's module environment
+  // is still alive. Deferring the first lazy require into the timer lets a
+  // short-lived consumer (notably Jest, but also a fast native teardown) begin
+  // shutdown before the append implementation is loaded.
+  nativeAppendFile();
   fileFlushTimer = setTimeout(() => {
     fileFlushTimer = null;
     void flushPendingToFile();
@@ -188,17 +197,17 @@ function scheduleFileFlush(): void {
  * thread saturated before the final report was even serialized.
  */
 function nativeAppendFile(): ((path: string, data: string) => Promise<void>) | null {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy native bridge
-    const mod = require('react-native-file-access') as {
-      FileSystem?: { appendFile?: (path: string, data: string, encoding?: string) => Promise<void> };
-    };
-    const append = mod?.FileSystem?.appendFile;
-    if (typeof append !== 'function') return null;
-    return (path, data) => append(path, data, 'utf8');
-  } catch {
-    return null;
+  if (nativeFileAccessModule === undefined) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- optional native bridge
+      nativeFileAccessModule = require('react-native-file-access') as NativeFileAccessModule;
+    } catch {
+      nativeFileAccessModule = null;
+    }
   }
+  const append = nativeFileAccessModule?.FileSystem?.appendFile;
+  if (typeof append !== 'function') return null;
+  return (path, data) => append(path, data, 'utf8');
 }
 
 async function rewriteLogFile(appendText: string, epoch: number): Promise<void> {
@@ -873,6 +882,8 @@ export const PASTE_RS_URL = 'https://paste.rs/';
 export const PASTE_CNET_URL = 'https://paste.c-net.org/';
 export const PASTE_RS_ATTEMPT_TIMEOUT_MS = 20_000;
 export const PASTE_RS_TAIL_MAX_BYTES = 128 * 1024;
+/** Live paste.rs accepts only this many bytes without returning a partial paste. */
+export const PASTE_RS_MAX_FULL_UPLOAD_BYTES = 384 * 1024;
 
 const PASTE_RS_RETRY_BACKOFF_MS = 1_000;
 const PASTE_RS_MAX_RETRY_DELAY_MS = 5_000;
@@ -890,7 +901,7 @@ export interface PasteRsUploadResult {
 
 export interface DebugLogUploadResult extends PasteRsUploadResult {
   provider: 'paste.rs' | 'paste.c-net.org';
-  /** Present only for the backup provider and kept in memory for deletion. */
+  /** Present only for paste.c-net.org and kept in memory for deletion. */
   deleteKey?: string;
 }
 
@@ -1170,60 +1181,104 @@ async function runPasteCnetAttempt(
   }
 }
 
-/**
- * Upload once to paste.rs, then fail over to the explicitly disclosed backup
- * only for a transient primary outage. Client rejections never duplicate data.
- */
+/** Upload the complete log, using c-net directly when paste.rs cannot hold it whole. */
 export async function uploadDebugLog(
   body: string,
   fetchImpl: typeof fetch = fetch,
   options: PasteRsUploadOptions = {},
 ): Promise<DebugLogUploadResult> {
   const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS);
+  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
   const originalBytes = textEncoder.encode(body).length;
-  try {
-    const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
-    return {
-      ...result,
-      provider: 'paste.rs',
-      clientTruncated: false,
-      attempts: 1,
-      originalBytes,
-      uploadedBytes: originalBytes,
-    };
-  } catch (error) {
-    const primaryFailure = error as PasteRsAttemptError;
-    if (!primaryFailure.transient) {
-      throw new PasteRsUploadError(friendlyPasteRsError(primaryFailure), 1);
+  let attempts = 0;
+  let triedPrimary = false;
+
+  // A maximum-size app export is much larger than paste.rs' live full-paste
+  // limit. Sending it there creates a public 206 paste that contains only the
+  // beginning of the log, so route known-oversized bodies straight to c-net.
+  if (originalBytes <= PASTE_RS_MAX_FULL_UPLOAD_BYTES) {
+    triedPrimary = true;
+    attempts += 1;
+    try {
+      const result = await runPasteRsAttempt(body, fetchImpl, timeoutMs);
+      if (!result.truncated) {
+        return {
+          ...result,
+          provider: 'paste.rs',
+          clientTruncated: false,
+          attempts,
+          originalBytes,
+          uploadedBytes: originalBytes,
+        };
+      }
+
+      // paste.rs has already made the partial body public. Remove it before
+      // creating the complete backup copy; otherwise a failed upload silently
+      // leaves an inaccessible public paste behind.
+      let cleanupError: unknown = null;
+      for (let cleanupAttempt = 0; cleanupAttempt < 2; cleanupAttempt += 1) {
+        try {
+          await deleteDebugLogUpload(result.url, undefined, fetchImpl, timeoutMs);
+          cleanupError = null;
+          break;
+        } catch (error) {
+          cleanupError = error;
+          if (cleanupAttempt === 0) await sleep(PASTE_RS_RETRY_BACKOFF_MS);
+        }
+      }
+      if (cleanupError) {
+        throw new PasteRsUploadError(
+          `paste.rs accepted only part of the log, and the app could not remove ` +
+          `the partial public copy at ${result.url}. No second copy was created.`,
+          attempts,
+        );
+      }
+    } catch (error) {
+      if (error instanceof PasteRsUploadError) throw error;
+      const primaryFailure = error as PasteRsAttemptError;
+      if (!primaryFailure.transient) {
+        throw new PasteRsUploadError(friendlyPasteRsError(primaryFailure), attempts);
+      }
     }
   }
 
-  try {
-    const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
-    return {
-      url: result.url,
-      provider: 'paste.c-net.org',
-      ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
-      truncated: false,
-      clientTruncated: false,
-      attempts: 2,
-      originalBytes,
-      uploadedBytes: originalBytes,
-    };
-  } catch (error) {
-    const detail = friendlyPasteRsError(error as PasteRsAttemptError)
-      .replaceAll('paste.rs', 'the backup upload service');
-    throw new PasteRsUploadError(
-      `Both public upload services are unavailable. ${detail}`,
-      2,
-    );
+  let backupFailure: PasteRsAttemptError | null = null;
+  for (let backupAttempt = 0; backupAttempt < 2; backupAttempt += 1) {
+    attempts += 1;
+    try {
+      const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
+      return {
+        url: result.url,
+        provider: 'paste.c-net.org',
+        ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+        truncated: false,
+        clientTruncated: false,
+        attempts,
+        originalBytes,
+        // c-net returned success for the exact original body; never report a
+        // tail or a provider-side partial as the completed full-log upload.
+        uploadedBytes: originalBytes,
+      };
+    } catch (error) {
+      backupFailure = error as PasteRsAttemptError;
+      if (!backupFailure.transient || backupAttempt === 1) break;
+      await sleep(retryDelayMs(backupFailure.retryAfter, now()));
+    }
   }
+
+  const detail = friendlyPasteRsError(backupFailure as PasteRsAttemptError)
+    .replaceAll('paste.rs', 'the full-capacity upload service');
+  throw new PasteRsUploadError(
+    `${triedPrimary ? 'The complete debug-log upload failed.' : 'The log was too large for paste.rs.'} ${detail}`,
+    attempts,
+  );
 }
 
-/** Delete a backup-host upload without persisting or exposing its delete key. */
+/** Delete an allowlisted public upload without sending a deletion key to another host. */
 export async function deleteDebugLogUpload(
   url: string,
-  deleteKey: string,
+  deleteKey?: string,
   fetchImpl: typeof fetch = fetch,
   timeoutMs = PASTE_RS_ATTEMPT_TIMEOUT_MS,
 ): Promise<void> {
@@ -1233,7 +1288,17 @@ export async function deleteDebugLogUpload(
   } catch {
     throw new Error('The upload link is invalid.');
   }
-  if (parsed.protocol !== 'https:' || parsed.hostname !== 'paste.c-net.org' || !deleteKey) {
+  const pasteRsOrigin = new URL(PASTE_RS_URL).origin;
+  const pasteCnetOrigin = new URL(PASTE_CNET_URL).origin;
+  const isPasteRs = parsed.origin === pasteRsOrigin;
+  const isPasteCnet = parsed.origin === pasteCnetOrigin;
+  if (
+    parsed.protocol !== 'https:' ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    (!isPasteRs && !isPasteCnet) ||
+    (isPasteCnet && !deleteKey)
+  ) {
     throw new Error('This upload cannot be deleted from the app.');
   }
 
@@ -1242,7 +1307,7 @@ export async function deleteDebugLogUpload(
   try {
     const response = await fetchImpl(url, {
       method: 'DELETE',
-      headers: { 'X-Delete-Key': deleteKey },
+      ...(isPasteCnet ? { headers: { 'X-Delete-Key': deleteKey as string } } : {}),
       signal: controller.signal,
     });
     if (response.status < 200 || response.status > 299) {

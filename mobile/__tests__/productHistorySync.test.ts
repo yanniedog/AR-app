@@ -59,6 +59,30 @@ test('always includes the current core date and records its revision', async () 
   expect(result.core_sha).toBe('sha-new');
 });
 
+test('returns an exact immutable cached ledger without rebuilding or checkpointing it', async () => {
+  mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
+  const existing: ProductHistoryPayload = {
+    schema_version: 2,
+    run_date: '2026-06-11',
+    core_sha: 'sha-current',
+    run_dates: ['2026-06-10', '2026-06-11'],
+    products: { 'P|1': [0.06, 0.055] },
+  };
+  const onCheckpoint = jest.fn();
+
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    coreSha: 'sha-current',
+    existing,
+    onCheckpoint,
+  });
+
+  expect(result).toBe(existing);
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(onCheckpoint).not.toHaveBeenCalled();
+});
+
 test('does not cache a failed date and retries it on the next sync', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   mockedDownload.mockRejectedValueOnce(new Error('temporary'));

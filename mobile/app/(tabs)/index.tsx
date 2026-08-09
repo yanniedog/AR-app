@@ -26,7 +26,6 @@ import { useStore } from '../../src/data/store';
 import { shouldWarmDetails } from '../../src/data/optionalPrefs';
 import { openBank, openProduct } from '../../src/lib/nav';
 import { scheduleAfterNavigation } from '../../src/lib/yieldToUi';
-import { auditActionString } from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -303,18 +302,15 @@ export default function Home() {
   const shareToday = useCallback(() => setShareOpen(true), []);
 
   const auditSelectSection = useCallback((...args: unknown[]) => {
-    const requested = auditActionString(args, 'section');
-    const planned = sectionOptions.find((option) => option.value === requested)?.value;
-    if (planned) {
-      changeSection(planned);
-      return;
-    }
+    void args;
     const currentIndex = sectionOptions.findIndex((option) => option.value === section);
     const next = sectionOptions[(currentIndex + 1) % Math.max(1, sectionOptions.length)]?.value;
     if (next) changeSection(next);
   }, [changeSection, section, sectionOptions]);
   const openBestProduct = useCallback(() => {
-    if (!activeBest) return undefined;
+    if (!activeBest) {
+      return { unavailableReason: 'No ranked best product is available on the mounted Today card' };
+    }
     openProduct(activeBest.product_key, activeBest.rate_index);
     return { expectedPath: `/product/${encodeURIComponent(activeBest.product_key)}` };
   }, [activeBest]);

@@ -207,6 +207,22 @@ describe('deep performance audit plan', () => {
       primaryRateIndex: 7,
       secondaryRateIndex: 19,
     });
+
+    const browseNext = allSteps().find(
+      (step) => step.passId === 'first-pass' && step.semanticActionId === 'browse.section.next',
+    );
+    const browseFirst = allSteps().find(
+      (step) => step.passId === 'first-pass' && step.semanticActionId === 'browse.category.first',
+    );
+    expect(browseNext?.parameters).toEqual({});
+    expect(browseFirst?.parameters).toMatchObject({
+      section: 'Mortgage',
+      taxonomyPath: ['OO', 'PI', 'VARIABLE', 'LVR_60_70'],
+    });
+    const todayBest = allSteps().find(
+      (step) => step.passId === 'first-pass' && step.semanticActionId === 'today.best.open',
+    );
+    expect(todayBest).toMatchObject({ expectedPath: '/product', parameters: {} });
   });
 
   test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {

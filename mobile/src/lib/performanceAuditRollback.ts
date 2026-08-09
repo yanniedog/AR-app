@@ -308,6 +308,34 @@ export interface PerformanceAuditRollbackRestoreResult {
   cause?: unknown;
 }
 
+export interface PerformanceAuditRollbackAttemptsResult
+  extends PerformanceAuditRollbackRestoreResult {
+  attempts: number;
+}
+
+/** Retry soft restoration failures while retaining every failure for the report. */
+export async function retryPerformanceAuditRollback(
+  attempt: (attemptNumber: number) => Promise<PerformanceAuditRollbackRestoreResult>,
+  maxAttempts = 3,
+  beforeRetry?: (attemptNumber: number) => void | Promise<void>,
+): Promise<PerformanceAuditRollbackAttemptsResult> {
+  const limit = Math.max(1, Math.floor(maxAttempts));
+  const errors: string[] = [];
+  let latest: PerformanceAuditRollbackRestoreResult = { restored: false };
+  for (let attemptNumber = 1; attemptNumber <= limit; attemptNumber += 1) {
+    if (attemptNumber > 1) await beforeRetry?.(attemptNumber);
+    latest = await attempt(attemptNumber);
+    if (latest.error) errors.push(latest.error);
+    if (latest.restored) return { ...latest, attempts: attemptNumber };
+  }
+  return {
+    ...latest,
+    restored: false,
+    attempts: limit,
+    ...(errors.length ? { error: errors.join('\nRetry: ') } : {}),
+  };
+}
+
 export async function restorePerformanceAuditRollback(
   store: PerformanceAuditRollbackStore,
   fallback?: PerformanceAuditUserSnapshot,
