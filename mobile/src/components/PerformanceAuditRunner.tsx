@@ -848,6 +848,9 @@ async function runDeepAuditStepBody(
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
+      // Errors the app itself logged. Unlike a latency score or a timeout,
+      // these cannot be produced by the clock, so they survive an interruption.
+      nonTimingFailure: errors.journey.length > 0,
       ...readinessMetrics(readiness),
       ...responsivenessRecord(responsiveness),
     },
@@ -1627,7 +1630,9 @@ async function runUpdateReadinessCheck(
       manifestPackageMatches: remote?.package_name === Application.applicationId,
       // The only failure in the audit derived from content rather than an error
       // or a clock, so an interruption must not discard it as a stale timing.
-      nonTimingFailure: manifestContentStatus === 'fail',
+      // A null manifest is excluded: that means the fetch did not return, which
+      // a background pause can cause on its own.
+      nonTimingFailure: remote != null && manifestContentStatus === 'fail',
       durationMayUseTtlCache: true,
       durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
@@ -2029,6 +2034,9 @@ export async function runJourney(
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
+      // routeError covers navigation timeouts, which a pause can manufacture;
+      // only the app's own logged errors count as clock-independent evidence.
+      nonTimingFailure: errors.journey.length > 0,
       ...responsivenessRecord(responsiveness),
       ...responsivenessRecord(forwardResponsiveness, 'forward'),
       ...responsivenessRecord(backgroundResponsiveness, 'background'),
@@ -2280,13 +2288,16 @@ export function PerformanceAuditRunner() {
             // the timings are unusable; downgrading the status would hide a
             // genuine fault behind an interruption and could report the run
             // healthy.
-            // Only a failure the check observed independently of the clock
-            // survives. Most `fail` statuses come from scoreLatency thresholds,
-            // and a reading that spans a pause times a process Android had
-            // stopped drawing — preserving those would report "Bottleneck
-            // found" after an ordinary switch to another app.
+            // Only a failure the check positively identified as clock-
+            // independent survives. Latency scores are the obvious hazard, but
+            // a recorded `error` is not evidence either: readiness waits, route
+            // navigation and the manifest fetch all raise errors on wall-clock
+            // timeouts a pause can trigger by itself. Anything short of an
+            // explicit signal is recorded as skipped — with its error text
+            // intact, so the evidence stays in the report even when it does not
+            // count toward the diagnosis.
             const observedFailure = check.status === 'fail' &&
-              (check.error != null || check.metrics.nonTimingFailure === true);
+              check.metrics.nonTimingFailure === true;
             debugLog.info(
               PERFORMANCE_AUDIT_LOG_TAG,
               `${label} was interrupted by the app leaving the foreground; recorded as ` +
