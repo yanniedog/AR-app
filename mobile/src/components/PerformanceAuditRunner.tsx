@@ -41,7 +41,7 @@ import {
 } from '../lib/performanceAuditReadiness';
 import {
   beginPerformanceAuditRollback,
-  restorePerformanceAuditRollback,
+  tryRestorePerformanceAuditRollback,
 } from '../lib/performanceAuditRollback';
 import {
   aggregateRepeatedJourneys,
@@ -55,6 +55,7 @@ import {
   formatAuditErrorForLog,
   getPerformanceAuditPauseCount,
   getPerformanceAuditState,
+  hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
   markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
@@ -1627,7 +1628,8 @@ async function runUpdateReadinessCheck(
       manifestPackageMatches: remote?.package_name === Application.applicationId,
       // The only failure in the audit derived from content rather than an error
       // or a clock, so an interruption must not discard it as a stale timing.
-      nonTimingFailure: manifestContentStatus === 'fail',
+      nonTimingFailure:
+        error == null && result != null && result.status !== 'error' && manifestContentStatus === 'fail',
       durationMayUseTtlCache: true,
       durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
@@ -2285,8 +2287,7 @@ export function PerformanceAuditRunner() {
             // and a reading that spans a pause times a process Android had
             // stopped drawing — preserving those would report "Bottleneck
             // found" after an ordinary switch to another app.
-            const observedFailure = check.status === 'fail' &&
-              (check.error != null || check.metrics.nonTimingFailure === true);
+            const observedFailure = hasExplicitNonTimingFailure(check);
             debugLog.info(
               PERFORMANCE_AUDIT_LOG_TAG,
               `${label} was interrupted by the app leaving the foreground; recorded as ` +
@@ -2457,26 +2458,48 @@ export function PerformanceAuditRunner() {
         await waitWhilePaused(watchdog);
         const restoreStarted = now();
         const restoreStartedPaused = getPerformanceAuditPauseCount();
-        await awaitAuditWorkWithTimeout(
-          restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+        const initialRollbackResult = await awaitAuditWorkWithTimeout(
+          tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
           watchdog,
           'Audit state restoration',
           FINALIZATION_STORE_TIMEOUT_MS,
         );
-        rollbackRestored = true;
-        // Restoration itself must still be reported as done — the state really
-        // was restored — but a duration spanning a pause must not become the
-        // report's slowest check.
+        let rollbackResult = initialRollbackResult;
+        let rollbackAttempts = 1;
+        if (!rollbackResult.restored) {
+          updatePerformanceAuditProgress(completed, total, 'Retrying settings and saved data restoration');
+          await waitWhilePaused(watchdog);
+          await yieldToUi();
+          const retryResult = await awaitAuditWorkWithTimeout(
+            tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
+            watchdog,
+            'Audit state restoration retry',
+            FINALIZATION_STORE_TIMEOUT_MS,
+          );
+          rollbackAttempts = 2;
+          rollbackResult = retryResult.restored
+            ? retryResult
+            : {
+              ...retryResult,
+              error: [initialRollbackResult.error, retryResult.error]
+                .filter(Boolean)
+                .join('\nRetry: '),
+              cause: retryResult.cause ?? initialRollbackResult.cause,
+            };
+        }
+        rollbackRestored = rollbackResult.restored;
+        // Restoration itself must still be reported as done when successful,
+        // but a duration spanning a pause must not become the report's slowest check.
         const restoreInterrupted = getPerformanceAuditPauseCount() !== restoreStartedPaused;
         await record({
           id: 'audit-state-restoration',
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
-          status: 'pass',
+          status: rollbackResult.restored ? 'pass' : 'fail',
           durationMs: restoreInterrupted ? 0 : roundMetric(now() - restoreStarted),
           metrics: {
-            restored: true,
-            journalClearedAfterPersistence: true,
+            restored: rollbackResult.restored,
+            attempts: rollbackAttempts,
             ...(restoreInterrupted
               ? {
                 interruptedByBackground: true,
@@ -2484,6 +2507,10 @@ export function PerformanceAuditRunner() {
               }
               : {}),
           },
+          ...(rollbackResult.error ? {
+            error: rollbackResult.error,
+            trace: captureAuditTrace('audit state restoration failed'),
+          } : {}),
         });
         watchdog.beginFinalization();
         // Publish the terminal state in the foreground. A terminal run cannot be
@@ -2703,6 +2730,32 @@ export function PerformanceAuditRunner() {
         } catch (recoveryCaught) {
           recoveryError = formatAuditError(recoveryCaught);
         }
+        // Finish the last rollback attempt before publishing any terminal UI
+        // state. A retry from finally could otherwise overwrite edits made
+        // after the audit overlay disappears.
+        if (!rollbackRestored && rollbackSnapshot) {
+          try {
+            const rollbackRetry = await timeoutAfter(
+              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
+              5_000,
+              'Pre-terminal audit rollback',
+            );
+            rollbackRestored = rollbackRetry.restored;
+            if (rollbackRetry.error) {
+              debugLog.error(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `audit rollback retained for launch recovery: ${flattenAuditLogText(rollbackRetry.error)}`,
+              );
+              await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+            }
+          } catch (rollbackError) {
+            debugLog.error(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
+            );
+            await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+          }
+        }
         if (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
           logAuditEvent(app, {
             kind: 'cancelled',
@@ -2873,21 +2926,6 @@ export function PerformanceAuditRunner() {
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
-        if (!rollbackRestored && rollbackSnapshot) {
-          try {
-            await timeoutAfter(
-              restorePerformanceAuditRollback(useStore, rollbackSnapshot),
-              5_000,
-              'Final audit rollback',
-            );
-          } catch (rollbackError) {
-            debugLog.error(
-              PERFORMANCE_AUDIT_LOG_TAG,
-              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
-            );
-            await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
-          }
-        }
         try {
           monitor.stop();
         } catch {

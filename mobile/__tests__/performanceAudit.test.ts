@@ -12,6 +12,7 @@ import {
   formatAuditErrorForLog,
   getPerformanceAuditPauseCount,
   getPerformanceAuditState,
+  hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
   markPerformanceAuditRunning,
   parsePerformanceAuditHangTimeoutSeconds,
@@ -35,6 +36,26 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+
+describe('background interruption failure evidence', () => {
+  const check = (metrics: AuditCheck['metrics'], error?: string): AuditCheck => ({
+    id: 'interrupted',
+    label: 'Interrupted check',
+    kind: 'runtime',
+    status: 'fail',
+    durationMs: 0,
+    metrics,
+    ...(error ? { error } : {}),
+  });
+
+  it('does not preserve a generic error that may have come from a paused timeout', () => {
+    expect(hasExplicitNonTimingFailure(check({}, 'Update manifest check timed out'))).toBe(false);
+  });
+
+  it('preserves only an explicitly identified non-timing failure', () => {
+    expect(hasExplicitNonTimingFailure(check({ nonTimingFailure: true }))).toBe(true);
+  });
+});
 
 const core: CorePayload = {
   schema_version: 1,

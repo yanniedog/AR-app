@@ -1049,6 +1049,16 @@ export function worstStatus(...statuses: AuditCheckStatus[]): AuditCheckStatus {
 }
 
 /**
+ * A check interrupted by Android backgrounding may keep a failure only when
+ * the check explicitly recorded evidence that does not depend on elapsed time
+ * or a timeout. Generic errors are not sufficient: inner wall-clock guards can
+ * expire while the JavaScript thread is suspended.
+ */
+export function hasExplicitNonTimingFailure(check: AuditCheck): boolean {
+  return check.status === 'fail' && check.metrics.nonTimingFailure === true;
+}
+
+/**
  * Every metric `summarizePerformanceAudit` can read as a check's representative
  * latency, plus the two report-wide maxima.
  *
