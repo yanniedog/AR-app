@@ -22,7 +22,7 @@ import { RbaChart } from '../../src/components/charts';
 import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
-import { AppText, Button, Card, Chip, Divider, Row } from '../../src/components/ui';
+import { AppText, Button, Card, Divider, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
@@ -573,7 +573,6 @@ export default function Trends() {
           <Card style={{ marginBottom: 16 }}>
             <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <AppText variant="h3">Bank moves</AppText>
-              <Chip label="PRO" selected />
             </Row>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
               Detected from tracked lenders&apos; advertised {SECTIONS[activeSection].title.toLowerCase()}{' '}
@@ -730,7 +729,6 @@ export default function Trends() {
               Four useful lenses on daily rate movement
             </AppText>
           </View>
-          <Chip label="PRO" selected={showHistoryRibbon} />
         </Row>
         {showHistoryRibbon && marketExplorerReady ? (
           <>

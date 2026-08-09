@@ -433,6 +433,20 @@ export default function Home() {
   });
 
   if (!core) return <ScreenSkeleton />;
+  // `ribbon.counts` is optional in the payload and core JSON is not runtime
+  // schema-validated, so fall back to the loaded rows rather than claiming
+  // "0 products", and drop the count entirely if neither source has one.
+  const lenderCount = Object.keys(core.brands ?? {}).length;
+  const productCount =
+    Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0) ||
+    new Set(
+      Object.values(core.sections).flatMap((value) =>
+        (value.rates ?? []).map((rateRow) => rateRow.product_key),
+      ),
+    ).size;
+  const coverageLabel = productCount
+    ? `${productCount.toLocaleString()} products from ${lenderCount} lenders`
+    : `${lenderCount} lenders`;
   const sectionAccent = meta.accentColor;
   const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const bestNote = conditionalNote(activeBest, section);
@@ -457,7 +471,7 @@ export default function Home() {
         offline={offline}
         pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
-        coverageLabel={`${Object.values(core.sections).reduce((sum, value) => sum + (value.ribbon?.counts?.products ?? 0), 0).toLocaleString()} products from ${Object.keys(core.brands ?? {}).length} lenders`}
+        coverageLabel={coverageLabel}
       />
       </View>
 

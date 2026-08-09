@@ -462,7 +462,6 @@ export default function BankDetail() {
           >
             <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <AppText variant="h3">Move detail</AppText>
-              <Chip label="PRO" selected />
             </Row>
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
               {moveVerb(focusSection, focusEvent.dir)} {SECTIONS[focusSection].title.toLowerCase()} on{' '}
@@ -518,7 +517,6 @@ export default function BankDetail() {
             <Card style={{ marginBottom: 16 }}>
               <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
                 <AppText variant="h3">Rate history</AppText>
-                <Chip label="PRO" selected />
               </Row>
               {chartSections.length > 1 ? (
                 <SegmentedControl

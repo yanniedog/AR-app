@@ -82,7 +82,8 @@ export function DiagnosticsConsentBanner({
         Send anonymous crash reports to help fix bugs?
       </AppText>
       <AppText variant="tiny" color="textFaint">
-        No personal or financial details are included. Change this any time in Settings.
+        Sends crash traces and device details. We strip what we can identify, but
+        traces are generated automatically. Change this any time in Settings.
       </AppText>
       <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
         {action('Not now', 'Decline diagnostics', onDecline)}

@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Redirect } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, TextInput, View } from 'react-native';
 
@@ -23,6 +24,7 @@ import {
 } from '../src/lib/performanceAudit';
 import { deleteDebugLogUpload } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useDeveloperToolsEnabled } from '../src/lib/developerTools';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function usePerformanceAuditState() {
@@ -114,7 +116,7 @@ function checkDetail(check: AuditCheck): string {
   return measuredMs('Duration', check.durationMs);
 }
 
-export default function PerformanceAuditScreen() {
+function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
@@ -514,4 +516,14 @@ export default function PerformanceAuditScreen() {
       ) : null}
     </ScreenScrollView>
   );
+}
+
+/**
+ * Route guard: direct navigation to this maintainer screen must not bypass the
+ * seven-tap unlock in Settings.
+ */
+export default function PerformanceAuditScreen() {
+  const developerTools = useDeveloperToolsEnabled();
+  if (!developerTools) return <Redirect href="/settings" />;
+  return <PerformanceAuditScreenInner />;
 }

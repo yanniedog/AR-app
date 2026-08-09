@@ -2,6 +2,7 @@ import * as Application from 'expo-application';
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import { Redirect } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, Share, View } from 'react-native';
 
@@ -14,9 +15,10 @@ import {
   uploadDebugLog,
 } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useDeveloperToolsEnabled } from '../src/lib/developerTools';
 import { useTheme } from '../src/theme/ThemeProvider';
 
-export default function DebugLogScreen() {
+function DebugLogScreenInner() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
   const retryUploadRef = useRef<() => void>(() => {});
@@ -379,4 +381,14 @@ export default function DebugLogScreen() {
         </ScrollView>
       </Screen>
   );
+}
+
+/**
+ * Route guard: direct navigation to this maintainer screen must not bypass the
+ * seven-tap unlock in Settings.
+ */
+export default function DebugLogScreen() {
+  const developerTools = useDeveloperToolsEnabled();
+  if (!developerTools) return <Redirect href="/settings" />;
+  return <DebugLogScreenInner />;
 }

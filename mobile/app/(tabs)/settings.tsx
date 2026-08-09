@@ -9,6 +9,7 @@ import { SegmentedControl } from '../../src/components/controls';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SubscriptionRow } from '../../src/components/SubscriptionRow';
+import { TOUCH_TARGET_MIN } from '../../src/components/TouchTarget';
 import { AppText, Button, Chip, Row } from '../../src/components/ui';
 import { AccountSecurityRows } from '../../src/components/settings/AccountSecurityRows';
 import {
@@ -653,7 +654,13 @@ export default function Settings() {
       </Section>
 
       <Section title="About">
-        <Pressable onPress={tapVersion} accessibilityRole="button" accessibilityLabel="App version">
+        <Pressable
+          onPress={tapVersion}
+          accessibilityRole="button"
+          accessibilityLabel="App version"
+          // InfoRow is 36pt; the shared minimum for a tappable row is 48.
+          style={{ minHeight: TOUCH_TARGET_MIN, justifyContent: 'center' }}
+        >
           <InfoRow
             label="Version"
             value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '0'})`}
