@@ -110,9 +110,14 @@ describe('performance audit rollback journal', () => {
 
     const journalRaw = await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
     expect(journalRaw).not.toBeNull();
-    expect(journalRaw).not.toMatch(/6\.25|750000/);
-    expect(JSON.parse(journalRaw as string).snapshot.userRateScenarioCaptured).toBe(true);
-    expect(JSON.parse(journalRaw as string).snapshot.userRateScenario).toBeNull();
+    const journal = JSON.parse(journalRaw as string);
+    // Scan the snapshot rather than the whole record: the journal's own
+    // `startedAt` timestamp contains a seconds/milliseconds pair such as
+    // "06.256Z" roughly one run in a hundred, which matches /6\.25/ and fails
+    // this assertion for a leak that never happened.
+    expect(JSON.stringify(journal.snapshot)).not.toMatch(/6\.25|750000/);
+    expect(journal.snapshot.userRateScenarioCaptured).toBe(true);
+    expect(journal.snapshot.userRateScenario).toBeNull();
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
       expect.stringMatching(/6\.25/),
