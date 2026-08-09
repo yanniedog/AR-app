@@ -24,6 +24,7 @@ import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/select
 import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
+import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
 import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
 import { reportPerformanceAudit } from '../lib/observability';
@@ -41,13 +42,6 @@ import {
   beginPerformanceAuditRollback,
   tryRestorePerformanceAuditRollback,
 } from '../lib/performanceAuditRollback';
-import {
-  assertPerformanceAuditSessionActive,
-  awaitPerformanceAuditWork,
-  awaitPerformanceAuditWorkWithTimeout,
-  PerformanceAuditCancelledError as AuditCancelledError,
-  PerformanceAuditInactivityError as AuditInactivityError,
-} from '../lib/performanceAuditControl';
 import {
   aggregateRepeatedJourneys,
   cancelPerformanceAudit,
@@ -70,6 +64,7 @@ import {
   resolveAuditJourneyOptionalData,
   roundMetric,
   scoreLatency,
+  setPerformanceAuditUploadResult,
   subscribePerformanceAudit,
   summarizePerformanceAudit,
   updatePerformanceAuditProgress,
@@ -83,10 +78,12 @@ import {
   type ResponsivenessMetrics,
 } from '../lib/performanceAudit';
 import {
+  boundAuditCheckEvidence,
   compactAuditCheckForLog,
   compactAuditLogJson,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
+import { yieldToUi } from '../lib/yieldToUi';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -113,6 +110,23 @@ const FINALIZATION_FLUSH_TIMEOUT_MS = 30_000;
 const FINALIZATION_READ_TIMEOUT_MS = 60_000;
 const FINALIZATION_UPLOAD_TIMEOUT_MS = 90_000;
 type JourneyIteration = 'cold' | 'warm';
+
+class AuditCancelledError extends Error {
+  constructor() {
+    super('Performance audit cancelled');
+    this.name = 'AuditCancelledError';
+  }
+}
+
+class AuditInactivityError extends Error {
+  constructor(watchdog: PerformanceAuditInactivityWatchdog) {
+    super(
+      `Performance audit stored no completed check for ${watchdog.hangTimeoutMs}ms ` +
+        `(stored checks: ${watchdog.storedCheckCount})`,
+    );
+    this.name = 'AuditInactivityError';
+  }
+}
 
 class AuditDatasetChangedError extends Error {
   constructor(message: string) {
@@ -141,10 +155,8 @@ function assertAuditActive(): void {
 }
 
 function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void {
-  assertPerformanceAuditSessionActive(
-    watchdog,
-    getPerformanceAuditState().cancelRequested,
-  );
+  assertAuditActive();
+  if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
 }
 
 function rethrowAuditControl(error: unknown): void {
@@ -188,12 +200,27 @@ async function awaitAuditWork<T>(
   watchdog: PerformanceAuditInactivityWatchdog,
   label: string,
 ): Promise<T> {
-  return awaitPerformanceAuditWork(
-    promise,
-    watchdog,
-    () => getPerformanceAuditState().cancelRequested,
-    label,
-  );
+  assertSessionActive(watchdog);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  const control = new Promise<never>((_resolve, reject) => {
+    timer = setInterval(() => {
+      try {
+        assertSessionActive(watchdog);
+      } catch (error) {
+        if (timer) clearInterval(timer);
+        timer = null;
+        reject(error);
+      }
+    }, 50);
+  });
+  try {
+    return await Promise.race([promise, control]);
+  } catch (error) {
+    rethrowAuditControl(error);
+    throw new Error(`${label} failed: ${formatAuditError(error)}`);
+  } finally {
+    if (timer) clearInterval(timer);
+  }
 }
 
 async function awaitAuditWorkWithTimeout<T>(
@@ -202,13 +229,38 @@ async function awaitAuditWorkWithTimeout<T>(
   label: string,
   timeoutMs: number,
 ): Promise<T> {
-  return awaitPerformanceAuditWorkWithTimeout(
-    promise,
-    watchdog,
-    () => getPerformanceAuditState().cancelRequested,
-    label,
-    timeoutMs,
-  );
+  assertSessionActive(watchdog);
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const control = new Promise<never>((_resolve, reject) => {
+    timer = setInterval(() => {
+      try {
+        assertSessionActive(watchdog);
+      } catch (error) {
+        if (timer) clearInterval(timer);
+        timer = null;
+        if (timeoutId) clearTimeout(timeoutId);
+        timeoutId = null;
+        reject(error);
+      }
+    }, 50);
+    timeoutId = setTimeout(() => {
+      if (timer) clearInterval(timer);
+      timer = null;
+      timeoutId = null;
+      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, control]);
+  } catch (error) {
+    rethrowAuditControl(error);
+    if (error instanceof Error && error.message.includes('timed out after')) throw error;
+    throw new Error(`${label} failed: ${formatAuditError(error)}`);
+  } finally {
+    if (timer) clearInterval(timer);
+    if (timeoutId) clearTimeout(timeoutId);
+  }
 }
 
 async function settleUiUnchecked(): Promise<void> {
@@ -1953,13 +2005,16 @@ export function PerformanceAuditRunner() {
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const state = usePerformanceAuditState();
-  const runningRef = useRef(false);
+  const runGate = usePerformanceAuditRunGate();
+  const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
   const pathnameRef = useRef(pathname);
   pathnameRef.current = pathname;
 
   useEffect(() => {
-    if (state.status !== 'queued' || runningRef.current || !state.sessionId || !state.startedAt) return;
-    runningRef.current = true;
+    if (state.status !== 'queued' || !state.sessionId || !state.startedAt) return;
+    // Teardown outlives the previous audit's terminal state; releaseCount
+    // re-runs this effect once that run lets go of the gate.
+    if (!claimRun(state.sessionId)) return;
 
     const execute = async () => {
       const sessionId = state.sessionId!;
@@ -2002,8 +2057,12 @@ export function PerformanceAuditRunner() {
         if (failure) throw failure;
       };
 
-      const record = async (check: AuditCheck) => {
+      const record = async (rawCheck: AuditCheck) => {
         assertSessionActive(watchdog);
+        // Bound evidence at the one place every check enters the report. ~260
+        // unbounded stacks and readiness dumps are what pushed the finished
+        // report past the megabyte range and exhausted the heap in teardown.
+        const check = boundAuditCheckEvidence(rawCheck);
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -2305,7 +2364,15 @@ export function PerformanceAuditRunner() {
         let completeReportStored = false;
         try {
           await awaitAuditWorkWithTimeout(
-            debugLog.storePerformanceAudit(summaryMarker, report),
+            // Surface each persistence stage and yield the JS thread between
+            // them. Serializing and writing a report this size is several
+            // hundred milliseconds of synchronous work per step; running them
+            // back to back left the progress bar frozen at 100% with no way to
+            // tell which step was responsible.
+            debugLog.storePerformanceAudit(summaryMarker, report, async (stage) => {
+              updatePerformanceAuditProgress(completed, total, stage);
+              await yieldToUi();
+            }),
             watchdog,
             'Performance report persistence',
             FINALIZATION_STORE_TIMEOUT_MS,
@@ -2325,40 +2392,76 @@ export function PerformanceAuditRunner() {
             storeError: message,
           }, 'warn');
         }
-        logAuditEvent(app, {
-          kind: 'report',
-          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-          sessionId,
-          summary,
-          routeAggregates: report.routeAggregates,
-          completeReportStored,
-        });
-        debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
-        reportPerformanceAudit(report);
-        await awaitAuditWorkWithTimeout(
-          debugLog.flushToFile(),
-          watchdog,
-          'Final audit log flush',
-          FINALIZATION_FLUSH_TIMEOUT_MS,
-        );
-        updatePerformanceAuditProgress(completed, total, 'Uploading log and copying link');
+        updatePerformanceAuditProgress(completed, total, 'Returning to the audit screen');
+        try {
+          await timeoutAfter(
+            recoverAuditRoute(() => pathnameRef.current),
+            ROUTE_TIMEOUT_MS,
+            'Audit home route recovery',
+          );
+        } catch (recoveryCaught) {
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `post-complete route recovery failed: ${formatAuditErrorForLog(recoveryCaught)}`,
+          );
+        }
+        assertSessionActive(watchdog);
+        // Publish as soon as the report is durable. Everything below — the
+        // Crashlytics envelope, the log flush, and reading/redacting/posting the
+        // whole on-disk log — is heavy work the user should never wait behind,
+        // and no failure in it may discard a report that is already complete.
+        completePerformanceAudit(report, 'pending');
+        await yieldToUi();
+
+        try {
+          logAuditEvent(app, {
+            kind: 'report',
+            schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+            sessionId,
+            summary,
+            routeAggregates: report.routeAggregates,
+            completeReportStored,
+          });
+          debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
+          reportPerformanceAudit(report);
+          await awaitAuditWorkWithTimeout(
+            debugLog.flushToFile(),
+            watchdog,
+            'Final audit log flush',
+            FINALIZATION_FLUSH_TIMEOUT_MS,
+          );
+        } catch (postPublishCaught) {
+          debugLog.warn(
+            PERFORMANCE_AUDIT_LOG_TAG,
+            `post-publish report logging failed: ${formatAuditErrorForLog(postPublishCaught)}`,
+          );
+        }
+
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
-          const completeLog = await awaitAuditWorkWithTimeout(
-            debugLog.readAuditUploadText(),
-            watchdog,
-            'Complete audit log read',
-            FINALIZATION_READ_TIMEOUT_MS,
-          );
+          // Build the export in its own scope so the raw log text is collectable
+          // while the upload body — a second full copy of it — is in flight.
+          const exportBody = await (async () => {
+            // Reading, redacting and compacting the export is the last heavy
+            // burst of the run. It happens after the report is published, but
+            // an unyielded burst here would still stall the thread long enough
+            // for Android to offer to kill the app.
+            await yieldToUi();
+            const completeLog = await awaitAuditWorkWithTimeout(
+              debugLog.readCompleteText(),
+              watchdog,
+              'Complete audit log read',
+              FINALIZATION_READ_TIMEOUT_MS,
+            );
+            return formatVersionedLogExport(
+              completeLog,
+              environment.appVersion,
+              environment.buildVersion,
+              { audit_session: sessionId },
+            );
+          })();
           const result = await awaitAuditWorkWithTimeout(
-            uploadDebugLog(
-              formatVersionedLogExport(
-                completeLog,
-                environment.appVersion,
-                environment.buildVersion,
-                { audit_session: sessionId },
-              ),
-            ),
+            uploadDebugLog(exportBody),
             watchdog,
             'Audit log upload',
             FINALIZATION_UPLOAD_TIMEOUT_MS,
@@ -2385,26 +2488,19 @@ export function PerformanceAuditRunner() {
             `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
           );
         }
-        await awaitAuditWorkWithTimeout(
-          debugLog.flushToFile(),
-          watchdog,
-          'Upload-result log flush',
-          FINALIZATION_FLUSH_TIMEOUT_MS,
-        ).catch(() => {});
+        setPerformanceAuditUploadResult(sessionId, upload);
+        // The report is already published; nothing after this point may fall
+        // through to the fatal handler and replace it with a failure state.
         try {
-          await timeoutAfter(
-            recoverAuditRoute(() => pathnameRef.current),
-            ROUTE_TIMEOUT_MS,
-            'Audit home route recovery',
+          await awaitAuditWorkWithTimeout(
+            debugLog.flushToFile(),
+            watchdog,
+            'Upload-result log flush',
+            FINALIZATION_FLUSH_TIMEOUT_MS,
           );
-        } catch (recoveryCaught) {
-          debugLog.warn(
-            PERFORMANCE_AUDIT_LOG_TAG,
-            `post-complete route recovery failed: ${formatAuditErrorForLog(recoveryCaught)}`,
-          );
+        } catch {
+          // Best effort; the durable report and sidecar are already written.
         }
-        assertSessionActive(watchdog);
-        completePerformanceAudit(report, upload);
       } catch (caught) {
         let recoveryError: string | null = null;
         try {
@@ -2432,7 +2528,7 @@ export function PerformanceAuditRunner() {
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
           ].join('\n');
           const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
-          const failedCheck: AuditCheck = {
+          const failedCheck: AuditCheck = boundAuditCheckEvidence({
             id: `fatal-${completed + 1}`,
             label: getPerformanceAuditState().progress.label || 'Performance audit fatal error',
             kind: 'runtime',
@@ -2451,7 +2547,7 @@ export function PerformanceAuditRunner() {
             },
             error,
             trace: captureAuditTrace('performance audit stopped before later steps'),
-          };
+          });
           checks.push(failedCheck);
           logAuditCheck(app, sessionId, failedCheck);
           debugLog.error(
@@ -2616,15 +2712,18 @@ export function PerformanceAuditRunner() {
         } catch {
           // Best effort; always release the JS running guard below.
         }
-        runningRef.current = false;
+        releaseRun();
       }
     };
 
     void execute();
   }, [
+    claimRun,
     dimensions.fontScale,
     dimensions.height,
     dimensions.width,
+    releaseCount,
+    releaseRun,
     state.hangTimeoutMs,
     state.sessionId,
     state.startedAt,

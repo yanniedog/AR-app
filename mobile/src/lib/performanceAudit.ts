@@ -141,6 +141,8 @@ export interface PerformanceAuditState {
   uploadUrl: string | null;
   uploadProvider: string | null;
   uploadError: string | null;
+  /** The report is complete and readable while its log upload is still running. */
+  uploadPending: boolean;
   error: string | null;
 }
 
@@ -207,6 +209,7 @@ const IDLE_STATE: PerformanceAuditState = {
   uploadUrl: null,
   uploadProvider: null,
   uploadError: null,
+  uploadPending: false,
   error: null,
 };
 
@@ -352,6 +355,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     uploadUrl: null,
     uploadProvider: null,
     uploadError: null,
+    uploadPending: false,
     error: null,
   });
   return sessionId;
@@ -401,10 +405,18 @@ export function cancelPerformanceAudit(): void {
   });
 }
 
+/**
+ * Publish the finished report before the log upload runs. Teardown reads,
+ * redacts and posts the whole on-disk log; holding the diagnosis back until
+ * that succeeded meant any failure — or a low-memory process kill — left the
+ * user with nothing after progress reached 100%.
+ */
 export function completePerformanceAudit(
   report: PerformanceAuditReport,
-  upload: { url?: string; provider?: string; error?: string } = {},
+  upload: { url?: string; provider?: string; error?: string } | 'pending' = {},
 ): void {
+  const pending = upload === 'pending';
+  const result = pending ? {} : upload;
   emit({
     ...auditState,
     status: 'complete',
@@ -415,10 +427,30 @@ export function completePerformanceAudit(
     },
     cancelRequested: false,
     report,
+    uploadUrl: result.url ?? null,
+    uploadProvider: result.provider ?? null,
+    uploadError: result.error ?? null,
+    uploadPending: pending,
+    error: null,
+  });
+}
+
+/**
+ * Attach the log-upload outcome to an already-published complete report. The
+ * upload outlives the run's terminal state, so a result is keyed to its own
+ * session and dropped once a later audit owns the state.
+ */
+export function setPerformanceAuditUploadResult(
+  sessionId: string,
+  upload: { url?: string; provider?: string; error?: string },
+): void {
+  if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
+  emit({
+    ...auditState,
     uploadUrl: upload.url ?? null,
     uploadProvider: upload.provider ?? null,
     uploadError: upload.error ?? null,
-    error: null,
+    uploadPending: false,
   });
 }
 
@@ -439,6 +471,33 @@ export function failPerformanceAudit(error: string): void {
     progress: { ...auditState.progress, label: 'Audit failed' },
     error,
   });
+}
+
+/**
+ * A deep audit records ~260 checks. Mounting a card for every one of them the
+ * instant the run finishes competes for memory with the teardown that is still
+ * persisting and uploading the report, so the screen shows the checks that carry
+ * the diagnosis — every failure, warning and skip, then the slowest passes.
+ */
+export const MAX_REPORTED_AUDIT_CHECKS = 80;
+
+export function selectReportedAuditChecks(checks: AuditCheck[]): AuditCheck[] {
+  if (checks.length <= MAX_REPORTED_AUDIT_CHECKS) return checks;
+  const notable = checks.filter((check) => check.status !== 'pass');
+  if (notable.length >= MAX_REPORTED_AUDIT_CHECKS) {
+    return notable.slice(0, MAX_REPORTED_AUDIT_CHECKS);
+  }
+  const slowestPassIds = new Set(
+    checks
+      .filter((check) => check.status === 'pass')
+      .sort((a, b) => b.durationMs - a.durationMs)
+      .slice(0, MAX_REPORTED_AUDIT_CHECKS - notable.length)
+      .map((check) => check.id),
+  );
+  // Keep the original run order so the list still reads as a timeline.
+  return checks.filter(
+    (check) => check.status !== 'pass' || slowestPassIds.has(check.id),
+  );
 }
 
 export function resetPerformanceAuditForTests(): void {

@@ -24,9 +24,6 @@ export const MAX_LOG_BYTES = 512 * 1024;
 export const PERSIST_TAIL_LINES = 100;
 export const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_LOG_DISPLAY_BYTES = 16 * 1024;
-/** Upper bound for automatic audit upload bodies — avoids holding multi-MiB strings. */
-export const LOG_UPLOAD_MAX_BODY_BYTES = 768 * 1024;
-export const LOG_UPLOAD_READ_CHUNK_BYTES = 256 * 1024;
 export const LOG_FILE_FLUSH_MS = 100;
 export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
@@ -38,14 +35,21 @@ const LOG_FILE = `${LOG_DIR}ar-local.log`;
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
 
 const SECRET_VALUE = String.raw`[^\s,;}"']+`;
-const SECRET_PATTERNS: RegExp[] = [
-  new RegExp(String.raw`EXPO_TOKEN[=:\s]${SECRET_VALUE}`, "gi"),
-  new RegExp(String.raw`Bearer\s+${SECRET_VALUE}`, "gi"),
-  new RegExp(String.raw`Authorization:\s*${SECRET_VALUE}`, "gi"),
-  new RegExp(String.raw`(?:api[_-]?key|secret|password|token)[=:\s]${SECRET_VALUE}`, "gi"),
-  new RegExp(String.raw`"(?:EXPO_TOKEN|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`, "gi"),
-  new RegExp(String.raw`'(?:EXPO_TOKEN|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`, "gi"),
+const SECRET_SOURCES: string[] = [
+  String.raw`EXPO_TOKEN[=:\s]${SECRET_VALUE}`,
+  String.raw`Bearer\s+${SECRET_VALUE}`,
+  String.raw`Authorization:\s*${SECRET_VALUE}`,
+  String.raw`(?:api[_-]?key|secret|password|token)[=:\s]${SECRET_VALUE}`,
+  String.raw`"(?:EXPO_TOKEN|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`,
+  String.raw`'(?:EXPO_TOKEN|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`,
 ];
+/**
+ * One alternation rather than six sequential passes. Redaction runs over the
+ * whole megabyte-scale audit report and the whole 2MB log on the JS thread, so
+ * each avoided pass is a full scan and a full string copy the UI thread no
+ * longer waits on.
+ */
+const SECRET_PATTERN = new RegExp(SECRET_SOURCES.map((source) => `(?:${source})`).join('|'), 'gi');
 const PRIVATE_IDENTIFIER_PATTERN =
   /\b(uid|user[_-]?id|subscription[_-]?id|subscriptionId)\s*[=:]\s*[^\s,;}"']+/gi;
 const EMAIL_PATTERN = /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi;
@@ -54,14 +58,11 @@ const LOG_LINE_RE = /^(\S+)\s+\[(\w+)\s*\]\s+([^:]+):\s(.*)$/;
 
 /** Strip likely secrets before lines are stored or uploaded. */
 export function redactSecrets(text: string): string {
-  let out = text;
-  for (const pattern of SECRET_PATTERNS) {
-    out = out.replace(pattern, (match) => {
+  return text
+    .replace(SECRET_PATTERN, (match) => {
       const key = match.split(/[=:\s]/)[0] ?? 'secret';
       return `${key}=[REDACTED]`;
-    });
-  }
-  return out
+    })
     .replace(PRIVATE_IDENTIFIER_PATTERN, (_match, key: string) => `${key}=[REDACTED]`)
     .replace(EMAIL_PATTERN, '[REDACTED_EMAIL]');
 }
@@ -166,6 +167,8 @@ let pendingFileLines: string[] = [];
 let fileFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let fileFlushPromise: Promise<void> | null = null;
 let fileContentCache: string | null = null;
+/** Byte size of the on-disk log, so appends never need to read it back. */
+let fileByteLength: number | null = null;
 let fileWriteEpoch = 0;
 let coldStartResetPromise: Promise<void> | null = null;
 
@@ -177,17 +180,72 @@ function scheduleFileFlush(): void {
   }, LOG_FILE_FLUSH_MS);
 }
 
-async function syncLogFile(appendText: string, epoch: number): Promise<void> {
-  if (!FileSystem.documentDirectory) {
-    throw new Error('documentDirectory unavailable');
+/**
+ * Native append, when the platform provides one. Rewriting the whole file per
+ * flush cost a full concat plus a full TextEncoder pass on the JS thread every
+ * time — and the performance audit forces a physical flush after each of its
+ * ~260 checks, so that quadratic cost dominated the entire run and left the JS
+ * thread saturated before the final report was even serialized.
+ */
+function nativeAppendFile(): ((path: string, data: string) => Promise<void>) | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy native bridge
+    const mod = require('react-native-file-access') as {
+      FileSystem?: { appendFile?: (path: string, data: string, encoding?: string) => Promise<void> };
+    };
+    const append = mod?.FileSystem?.appendFile;
+    if (typeof append !== 'function') return null;
+    return (path, data) => append(path, data, 'utf8');
+  } catch {
+    return null;
   }
-  await ensureLogDir();
+}
+
+async function rewriteLogFile(appendText: string, epoch: number): Promise<void> {
   const existing = fileContentCache ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
   if (epoch !== fileWriteEpoch) return;
   const combined = trimFileTail(existing + appendText);
   await FileSystem.writeAsStringAsync(LOG_FILE, combined);
   if (epoch !== fileWriteEpoch) return;
   fileContentCache = combined;
+  fileByteLength = textEncoder.encode(combined).length;
+}
+
+async function syncLogFile(appendText: string, epoch: number): Promise<void> {
+  if (!FileSystem.documentDirectory) {
+    throw new Error('documentDirectory unavailable');
+  }
+  await ensureLogDir();
+  const append = nativeAppendFile();
+  if (!append) {
+    await rewriteLogFile(appendText, epoch);
+    return;
+  }
+  if (fileByteLength == null) {
+    const existing = fileContentCache
+      ?? (await FileSystem.readAsStringAsync(LOG_FILE).catch(() => ''));
+    if (epoch !== fileWriteEpoch) return;
+    fileByteLength = textEncoder.encode(existing).length;
+  }
+  const appendBytes = textEncoder.encode(appendText).length;
+  // Only a rollover needs the whole file in memory; ordinary flushes touch
+  // nothing but the bytes they add.
+  if (fileByteLength + appendBytes > MAX_LOG_FILE_BYTES) {
+    await rewriteLogFile(appendText, epoch);
+    return;
+  }
+  try {
+    await append(LOG_FILE, appendText);
+  } catch {
+    // A missing/rotated file or an unavailable native module must still land
+    // this batch; the rewrite path creates the file from scratch.
+    await rewriteLogFile(appendText, epoch);
+    return;
+  }
+  if (epoch !== fileWriteEpoch) return;
+  fileByteLength += appendBytes;
+  // The cache would need a full concat to stay correct; readers re-read instead.
+  fileContentCache = null;
 }
 
 async function flushPendingToFile(requirePhysical = false): Promise<void> {
@@ -360,9 +418,19 @@ function isPerformanceAuditReportLine(line: string): boolean {
   );
 }
 
-/** Drop prior audit dump lines so a new reserved-tail write does not stack multi-MB JSON. */
+/** Drop prior audit dump lines so a new reserved-tail write does not stack blocks. */
 function stripPerformanceAuditReportLines(content: string): string {
   if (!content) return '';
+  // Splitting and rejoining a 2MB log costs two more full copies. Almost every
+  // flush has no audit block to strip, so check before paying for it.
+  if (
+    !content.includes(PERFORMANCE_AUDIT_REPORT_BEGIN) &&
+    !content.includes(PERFORMANCE_AUDIT_REPORT_JSON) &&
+    !content.includes(PERFORMANCE_AUDIT_REPORT_END) &&
+    !content.includes(PERFORMANCE_AUDIT_REPORT_SIDECAR)
+  ) {
+    return content;
+  }
   const hadTrailingNewline = content.endsWith('\n');
   const kept = content
     .split('\n')
@@ -376,13 +444,65 @@ function ensureTrailingNewline(content: string): string {
   return content.endsWith('\n') ? content : `${content}\n`;
 }
 
-async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<void> {
-  if (!FileSystem.documentDirectory) return;
+/**
+ * AsyncStorage is SQLite-backed on Android and a multi-megabyte row is exactly
+ * what makes later reads blow the cursor window. The sidecar file already holds
+ * the full body, so oversized snapshots are skipped instead of stored, and any
+ * previous snapshot is dropped so a stale smaller audit cannot look like the
+ * newest one.
+ */
+export const MAX_AUDIT_SNAPSHOT_STORAGE_CHARS = 128 * 1024;
+/** Body budget leaving room for JSON escaping to expand the stored record. */
+export const MAX_AUDIT_SNAPSHOT_BODY_CHARS = Math.floor(MAX_AUDIT_SNAPSHOT_STORAGE_CHARS / 2);
+/**
+ * Bounds only the recovery copy this module *appends* to an export when the
+ * physical log no longer carries the audit block. The log itself is already
+ * capped at MAX_LOG_FILE_BYTES, so a block the log did keep is returned as-is:
+ * re-splitting a 2MB log to strip it would cost exactly the extra full copies
+ * this path exists to avoid.
+ */
+export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
+
+async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise<void> {
+  // Measure the body directly: serializing an oversized record only to discard
+  // it allocated another full copy of the report on the blocking path. The
+  // record that actually lands is JSON.stringify(stored), which escapes every
+  // quote in a quote-dense report body and carries summaryMarker too, so budget
+  // the body at half the record limit rather than against it.
+  if (stored.reportJson.length > MAX_AUDIT_SNAPSHOT_BODY_CHARS) {
+    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
+    return;
+  }
+  try {
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
+  } catch {
+    // non-fatal once the sidecar exists
+  }
+}
+
+/** Writes the sidecar and returns its byte length so durability can be checked by size. */
+async function writePerformanceAuditSidecar(stored: StoredPerformanceAudit): Promise<number> {
+  if (!FileSystem.documentDirectory) return 0;
   await ensureLogDir();
-  await FileSystem.writeAsStringAsync(
-    PERFORMANCE_AUDIT_SIDECAR_FILE,
-    JSON.stringify(stored),
-  );
+  const payload = JSON.stringify(stored);
+  await FileSystem.writeAsStringAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, payload);
+  return textEncoder.encode(payload).length;
+}
+
+/**
+ * Existence and size must stay distinguishable: a platform that does not report
+ * a size is fine to skip comparing, but a file that is not there at all is a
+ * failed write, and the sidecar is the only copy of the report body.
+ */
+async function statFile(path: string): Promise<{ exists: boolean; size: number | null }> {
+  try {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists) return { exists: false, size: null };
+    const size = (info as { size?: number }).size;
+    return { exists: true, size: typeof size === 'number' ? size : null };
+  } catch {
+    return { exists: false, size: null };
+  }
 }
 
 async function readPerformanceAuditSidecar(): Promise<StoredPerformanceAudit | null> {
@@ -421,6 +541,7 @@ async function writeReservedPerformanceAuditBlock(
   await FileSystem.writeAsStringAsync(LOG_FILE, combined);
   if (epoch !== fileWriteEpoch) return;
   fileContentCache = combined;
+  fileByteLength = textEncoder.encode(combined).length;
 }
 
 function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit | null {
@@ -440,103 +561,6 @@ function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit
   } catch {
     return null;
   }
-}
-
-async function readLatestStoredPerformanceAudit(): Promise<StoredPerformanceAudit | null> {
-  return (
-    (await readPerformanceAuditSidecar()) ??
-    parseStoredPerformanceAudit(
-      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
-    )
-  );
-}
-
-function compactStoredPerformanceAudit(latest: StoredPerformanceAudit): string {
-  try {
-    return redactSecrets(
-      JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
-    );
-  } catch {
-    return latest.reportJson;
-  }
-}
-
-async function readPhysicalLogTailForUpload(): Promise<{
-  text: string;
-  omittedBytes: number;
-}> {
-  if (!FileSystem.documentDirectory) {
-    return { text: buffer.getText(), omittedBytes: 0 };
-  }
-  const info = await FileSystem.getInfoAsync(LOG_FILE).catch(() => ({ exists: false }));
-  if (!info.exists) return { text: buffer.getText(), omittedBytes: 0 };
-  const size = typeof (info as { size?: unknown }).size === 'number'
-    ? Math.max(0, Math.floor((info as { size: number }).size))
-    : 0;
-  if (size <= LOG_UPLOAD_READ_CHUNK_BYTES || size === 0) {
-    return {
-      text: await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText()),
-      omittedBytes: 0,
-    };
-  }
-  const position = size - LOG_UPLOAD_READ_CHUNK_BYTES;
-  const chunk = await FileSystem.readAsStringAsync(LOG_FILE, {
-    position,
-    length: LOG_UPLOAD_READ_CHUNK_BYTES,
-  }).catch(() => buffer.getText());
-  const firstNewline = chunk.indexOf('\n');
-  const text = firstNewline >= 0 ? chunk.slice(firstNewline + 1) : chunk;
-  return {
-    text,
-    omittedBytes: position + (firstNewline >= 0 ? firstNewline + 1 : 0),
-  };
-}
-
-function buildBoundedAuditUploadText(
-  physicalTail: string,
-  initiallyOmittedBytes: number,
-  latest: StoredPerformanceAudit | null,
-): string {
-  const cleanTail = stripPerformanceAuditReportLines(redactSecrets(physicalTail));
-  const auditBlock = latest
-    ? [
-        '# Latest complete performance audit',
-        latest.summaryMarker,
-        compactStoredPerformanceAudit(latest),
-      ].join('\n')
-    : '';
-  const auditBytes = textEncoder.encode(auditBlock).length;
-  const markerReserveBytes = 256;
-  if (auditBytes + markerReserveBytes > LOG_UPLOAD_MAX_BODY_BYTES) {
-    throw new Error(
-      `Compact performance report (${auditBytes} bytes) exceeds the automatic upload budget`,
-    );
-  }
-  let tail = trimToBudget(
-    cleanTail,
-    LOG_UPLOAD_MAX_BODY_BYTES - auditBytes - markerReserveBytes,
-  );
-  let omittedBytes = initiallyOmittedBytes + Math.max(
-    0,
-    textEncoder.encode(cleanTail).length - textEncoder.encode(tail).length,
-  );
-  const compose = () => [
-    ...(omittedBytes > 0 ? [
-      `# Earlier physical debug log content omitted from the automatic upload ` +
-        `(omitted_bytes=${omittedBytes}); the complete log remains on device.`,
-    ] : []),
-    tail,
-    auditBlock,
-  ].filter(Boolean).join('\n');
-  let result = compose();
-  const overflow = textEncoder.encode(result).length - LOG_UPLOAD_MAX_BODY_BYTES;
-  if (overflow > 0) {
-    const beforeBytes = textEncoder.encode(tail).length;
-    tail = trimToBudget(tail, Math.max(0, beforeBytes - overflow - 64));
-    omittedBytes += beforeBytes - textEncoder.encode(tail).length;
-    result = compose();
-  }
-  return result;
 }
 
 const VALID_LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
@@ -577,6 +601,7 @@ export const debugLog = {
     buffer.clear();
     pendingFileLines = [];
     fileContentCache = null;
+    fileByteLength = null;
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
@@ -588,7 +613,12 @@ export const debugLog = {
       if (inFlight) await inFlight.catch(() => {});
       await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
       await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
-      await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
+      // The audit sidecar deliberately survives. A run that crashes the app is
+      // precisely when its report matters, and deleting the sidecar on the next
+      // launch destroyed the only copy before anyone could read it — which is
+      // how a crashed 259-check audit left no trace at all. The AsyncStorage
+      // snapshot already persists across launches; this matches it. An explicit
+      // `clear()` still removes both.
     })();
     return coldStartResetPromise;
   },
@@ -597,6 +627,7 @@ export const debugLog = {
     buffer.clear();
     pendingFileLines = [];
     fileContentCache = null;
+    fileByteLength = null;
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
@@ -642,12 +673,23 @@ export const debugLog = {
     await flushPendingToFile(requirePhysical);
   },
   /**
-   * Persist the canonical complete audit in both durable snapshot storage and
-   * the physical diagnostic log. Snapshot storage keeps the newest diagnosis
-   * independently recoverable if the bounded log later rolls over; explicit
-   * begin/end records make a crash-truncated physical report detectable.
+   * Persist the canonical complete audit to its sidecar file and record a
+   * crash-detectable begin/sidecar/end block in the physical diagnostic log.
+   *
+   * The report body itself lives in exactly one place: the sidecar. Writing a
+   * second compacted copy into the log meant compacting the whole object graph,
+   * re-serializing it, re-redacting it, appending a megabyte log entry (encoded
+   * twice for ring accounting), and reserving that many bytes at the file tail —
+   * a dozen megabyte-scale synchronous bursts on the JS thread while the user
+   * watched a frozen 100% progress bar. `onStage` lets the caller surface each
+   * remaining step and yield the thread between them.
    */
-  async storePerformanceAudit(summaryMarker: string, report: unknown): Promise<void> {
+  async storePerformanceAudit(
+    summaryMarker: string,
+    report: unknown,
+    onStage: (stage: string) => Promise<void> | void = () => {},
+  ): Promise<void> {
+    await onStage('Serializing the report');
     const stored: StoredPerformanceAudit = {
       schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
       summaryMarker: redactSecrets(summaryMarker),
@@ -655,26 +697,15 @@ export const debugLog = {
     };
     // Sidecar first: AsyncStorage can fail after a durable disk write; reverse order
     // would leave neither physical artifact when setItem throws.
-    await writePerformanceAuditSidecar(stored);
-    try {
-      await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify(stored));
-    } catch {
-      // non-fatal once the sidecar exists
-    }
+    await onStage('Saving the complete report');
+    const sidecarBytes = await writePerformanceAuditSidecar(stored);
+    await storeLatestAuditSnapshot(stored);
 
+    await onStage('Recording the report in the log');
     const beginMessage = physicalAuditMarker(stored.summaryMarker);
-    let compactReportJson = stored.reportJson;
-    try {
-      compactReportJson = redactSecrets(
-        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(stored.reportJson))),
-      );
-    } catch {
-      // Keep the original body if compaction cannot parse a custom fixture.
-    }
-    const jsonMessage = `${PERFORMANCE_AUDIT_REPORT_JSON} ${compactReportJson}`;
     const endMessage = `${PERFORMANCE_AUDIT_REPORT_END} ${stored.summaryMarker}`;
     const sidecarMessage = `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE}`;
-    const blockEntries: LogEntry[] = [beginMessage, jsonMessage, sidecarMessage, endMessage].map(
+    const blockEntries: LogEntry[] = [beginMessage, sidecarMessage, endMessage].map(
       (message) => ({
         ts: new Date().toISOString(),
         level: 'info' as const,
@@ -696,27 +727,27 @@ export const debugLog = {
     await flushPendingToFile(FileSystem.documentDirectory != null);
     if (FileSystem.documentDirectory) {
       const epoch = fileWriteEpoch;
-      const fullBlockText = blockEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
-      const compactEntries = blockEntries.filter(
-        (entry) => !entry.message.startsWith(`${PERFORMANCE_AUDIT_REPORT_JSON} `),
-      );
-      const compactBlockText = compactEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
-      const blockText =
-        textEncoder.encode(fullBlockText).length <= MAX_LOG_FILE_BYTES
-          ? fullBlockText
-          : compactBlockText;
+      const blockText = blockEntries.map((entry) => `${formatEntry(entry)}\n`).join('');
       await writeReservedPerformanceAuditBlock(blockText, epoch);
-      const physical = await FileSystem.readAsStringAsync(LOG_FILE);
-      const sidecar = await readPerformanceAuditSidecar();
-      const beginOk = physical.includes(beginMessage);
-      const endOk = physical.includes(endMessage);
-      const jsonInLog = physical.includes(compactReportJson);
-      const sidecarOk =
-        sidecar?.summaryMarker === stored.summaryMarker &&
-        sidecar.reportJson === stored.reportJson;
-      // Reserved-tail write keeps begin/end intact; compact JSON lives in the log
-      // when it fits, otherwise the sidecar is the durable full body.
-      if (!beginOk || !endOk || (!jsonInLog && !sidecarOk)) {
+      await onStage('Verifying the saved report');
+      // Verify durability by size, not by content. Reading the log back and
+      // re-parsing plus re-redacting the sidecar re-processed the very bytes
+      // just written — a megabyte of synchronous JS-thread work that blocked
+      // long enough for Android to raise its "isn't responding" dialog. Both
+      // writes throw on failure, so what is left to prove is that the bytes
+      // landed whole, and a stat answers that in constant time.
+      const [logStat, sidecarStat] = await Promise.all([
+        statFile(LOG_FILE),
+        statFile(PERFORMANCE_AUDIT_SIDECAR_FILE),
+      ]);
+      // Both files must be present. Sizes are compared only when the platform
+      // reports them, so a stat without a size degrades to an existence check
+      // rather than silently passing a truncated write.
+      const logOk = logStat.exists
+        && (logStat.size == null || fileByteLength == null || logStat.size === fileByteLength);
+      const sidecarOk = sidecarStat.exists
+        && (sidecarStat.size == null || sidecarStat.size === sidecarBytes);
+      if (!logOk || !sidecarOk) {
         throw new Error('Complete performance audit was not verified in the physical log file');
       }
     }
@@ -733,38 +764,36 @@ export const debugLog = {
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
-    const latest = await readLatestStoredPerformanceAudit();
+    const latest =
+      (await readPerformanceAuditSidecar()) ??
+      parseStoredPerformanceAudit(
+        await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
+      );
     if (!latest) return clean;
-    const physicalBegin = physicalAuditMarker(latest.summaryMarker);
-    const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
-    const compactJson = compactStoredPerformanceAudit(latest);
-    if (
-      clean.includes(physicalBegin) &&
-      clean.includes(physicalEnd) &&
-      (clean.includes(compactJson) || clean.includes(latest.reportJson))
-    ) {
-      return clean;
+    // The physical log carries only the begin/sidecar/end markers, so an export
+    // always appends the body from the sidecar. Compaction happens here rather
+    // than during persistence: by the time anything reads a complete export the
+    // report is already durable and the audit screen already has its results.
+    let compactJson: string;
+    try {
+      compactJson = redactSecrets(
+        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
+      );
+    } catch {
+      compactJson = latest.reportJson;
     }
     return [
       clean,
       '',
       '# Latest complete performance audit',
       latest.summaryMarker,
-      compactJson,
+      compactJson.length > MAX_APPENDED_AUDIT_REPORT_CHARS
+        // An export that carries a body this large is rejected by the paste
+        // service anyway, and building it costs several full copies of the log.
+        ? `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE} ` +
+          `(compact report omitted from this export: ${compactJson.length} chars)`
+        : compactJson,
     ].join('\n');
-  },
-  /** Bounded automatic-upload snapshot: newest physical lines plus the complete compact audit. */
-  async readAuditUploadText(): Promise<string> {
-    if (fileFlushTimer) {
-      clearTimeout(fileFlushTimer);
-      fileFlushTimer = null;
-    }
-    await flushPendingToFile();
-    const [physical, latest] = await Promise.all([
-      readPhysicalLogTailForUpload(),
-      readLatestStoredPerformanceAudit(),
-    ]);
-    return buildBoundedAuditUploadText(physical.text, physical.omittedBytes, latest);
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
@@ -780,6 +809,7 @@ export const debugLog = {
         if (info.exists) {
           const text = await FileSystem.readAsStringAsync(LOG_FILE);
           fileContentCache = text;
+          fileByteLength = textEncoder.encode(text).length;
           restored.push(...parseLogFile(text).slice(-MAX_LOG_LINES));
         }
       }

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-08T06:33:31.398Z",
+  "generated_at": "2026-08-08T22:54:11.380Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -628,6 +628,30 @@
         "fix(mobile): finish perf audit after progress hits 100% (#154)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.117"
+    },
+    {
+      "version": "1.0.119",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): stop the perf audit exhausting memory at 100% (#156)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.119"
+    },
+    {
+      "version": "1.0.121",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "perf(mobile): append log writes and stop duplicating the audit report (#158)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.121"
+    },
+    {
+      "version": "1.0.123",
+      "date": "2026-08-08",
+      "summaryBullets": [
+        "fix(mobile): verify audit persistence by size, not by re-reading it (#160)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.123"
     }
   ]
 }
