@@ -52,6 +52,10 @@ export function DiagnosticsConsentBanner({
 
   return (
     <View
+      // A bare View never claims the responder, so a tap on the banner's own
+      // padding would otherwise reach whatever sits underneath it. Children are
+      // offered the responder first, so the action buttons still work.
+      onStartShouldSetResponder={() => true}
       style={{
         position: 'absolute',
         left: 8,
