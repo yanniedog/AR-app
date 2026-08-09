@@ -2208,25 +2208,28 @@ export function PerformanceAuditRunner() {
           const startedPaused = getPerformanceAuditPauseCount();
           check = await runOnce();
           if (getPerformanceAuditPauseCount() !== startedPaused) {
+            // Contaminated: the app left the foreground mid-measurement. Do not
+            // replay the step. Most plan actions advance from current state —
+            // the `*.next` cyclers and the `*.toggle` family — so a second
+            // invocation would move the app twice, corrupting both this reading
+            // and the state later steps expect. A replay would also record a
+            // warmed attempt under the cold-pass label. Skipping keeps the
+            // report honest, and aggregateRepeatedJourneys already ignores
+            // skipped cold/warm pairs.
             debugLog.info(
               PERFORMANCE_AUDIT_LOG_TAG,
-              `retaking ${label} after the app returned to the foreground`,
+              `${label} was interrupted by the app leaving the foreground; recorded as skipped`,
             );
+            check = {
+              ...check,
+              status: 'skipped',
+              metrics: {
+                ...check.metrics,
+                interruptedByBackground: true,
+                reason: 'The app left the foreground during this check',
+              },
+            };
             await waitWhilePaused(watchdog);
-            try {
-              await recoverAuditRoute(() => pathnameRef.current);
-            } catch (recoveryCaught) {
-              debugLog.warn(
-                PERFORMANCE_AUDIT_LOG_TAG,
-                `route recovery before retake failed: ${formatAuditErrorForLog(recoveryCaught)}`,
-              );
-            }
-            const retakenFrom = getPerformanceAuditPauseCount();
-            check = await runOnce();
-            // A second interruption is recorded rather than retried forever.
-            if (getPerformanceAuditPauseCount() !== retakenFrom) {
-              check = { ...check, metrics: { ...check.metrics, interruptedByBackground: true } };
-            }
           }
           try {
             // Durable check storage/logging failures remain fatal — only the step
@@ -2236,7 +2239,10 @@ export function PerformanceAuditRunner() {
             rethrowAuditControl(caught);
             throw caught;
           }
-          if (check.status === 'fail') await recoverAfterFailure();
+          // An interrupted step may have left the app mid-navigation.
+          if (check.status === 'fail' || check.metrics.interruptedByBackground === true) {
+            await recoverAfterFailure();
+          }
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
