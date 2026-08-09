@@ -1,6 +1,7 @@
 import type { CorePayload } from '../src/types';
 import {
   aggregateRepeatedJourneys,
+  AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
@@ -536,6 +537,37 @@ describe('performance audit lifecycle', () => {
     expect(getPerformanceAuditPauseCount()).toBe(before + 2);
   });
 
+  it('clears the pause when the run reaches a terminal state', () => {
+    const sessionId = requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    pausePerformanceAudit();
+
+    completePerformanceAudit({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      sessionId,
+      startedAt: '2026-08-08T00:00:00.000Z',
+      finishedAt: '2026-08-08T00:01:00.000Z',
+      durationMs: 60_000,
+      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
+      watchdog: {
+        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+        storedCheckCount: 0,
+        lastStoredCheckAt: null,
+      },
+      environment,
+      summary: summarizePerformanceAudit([]),
+      checks: [],
+      routeAggregates: [],
+      limitations: [],
+    }, 'pending');
+
+    // resumePerformanceAudit refuses terminal states, so a pause left set here
+    // could never be cleared and every ForegroundElapsed built afterwards for
+    // the post-publish upload would accrue nothing and never time out.
+    expect(getPerformanceAuditState().paused).toBe(false);
+    expect(new ForegroundElapsed(() => 0).foregroundMs).toBe(0);
+  });
+
   it('never pauses a cancelled or finished audit', () => {
     requestPerformanceAudit();
     markPerformanceAuditRunning(10);
@@ -556,6 +588,48 @@ describe('performance audit lifecycle', () => {
       storedCheckCount: 0,
       lastStoredCheckAt: null,
     });
+  });
+});
+
+describe('interrupted check latency stripping', () => {
+  // A failure observed before an interruption is real and stays a failure, so it
+  // remains in the summary's completed set. Its timings are not usable, and
+  // AUDIT_LATENCY_METRIC_KEYS is what the runner strips to keep them out.
+  const stripped = (metrics: AuditCheck['metrics']) => {
+    const out = { ...metrics };
+    for (const key of AUDIT_LATENCY_METRIC_KEYS) delete out[key];
+    return out;
+  };
+
+  it('covers every metric the summary can read as a latency', () => {
+    const contaminated = Object.fromEntries(
+      AUDIT_LATENCY_METRIC_KEYS.map((key) => [key, 300_000]),
+    );
+    // One per special case in representativeLatency, plus a plain journey.
+    const ids = ['runtime-responsiveness', 'active-data', 'async-storage', 'file-system'];
+    for (const id of ids) {
+      const summary = summarizePerformanceAudit([
+        { ...check(id, 'fail', 0, stripped(contaminated)), kind: 'runtime' },
+        check('healthy', 'pass', 12, {}),
+      ]);
+      expect(summary.slowestCheckId).toBe('healthy');
+      expect(summary.maxEventLoopLagMs).toBe(0);
+      expect(summary.maxFrameGapMs).toBe(0);
+    }
+
+    const journey = summarizePerformanceAudit([
+      { ...check('deep-step', 'fail', 0, stripped(contaminated)), kind: 'journey' },
+      check('healthy', 'pass', 12, {}),
+    ]);
+    expect(journey.slowestCheckId).toBe('healthy');
+  });
+
+  it('would otherwise let a minutes-long interrupted reading win', () => {
+    const summary = summarizePerformanceAudit([
+      { ...check('deep-step', 'fail', 0, { forwardMs: 300_000 }), kind: 'journey' },
+      check('healthy', 'pass', 12, {}),
+    ]);
+    expect(summary.slowestCheckId).toBe('deep-step');
   });
 });
 

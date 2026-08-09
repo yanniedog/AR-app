@@ -507,6 +507,7 @@ export function completePerformanceAudit(
       label: 'Audit complete',
     },
     cancelRequested: false,
+    paused: false,
     report,
     uploadUrl: result.url ?? null,
     uploadProvider: result.provider ?? null,
@@ -540,6 +541,10 @@ export function markPerformanceAuditCancelled(): void {
     ...auditState,
     status: 'cancelled',
     cancelRequested: false,
+    // A terminal run is not paused. resumePerformanceAudit refuses terminal
+    // states, so a pause left set here could never be cleared, and every
+    // foreground budget created afterwards would accrue nothing.
+    paused: false,
     progress: { ...auditState.progress, label: 'Audit cancelled' },
   });
 }
@@ -549,6 +554,7 @@ export function failPerformanceAudit(error: string): void {
     ...auditState,
     status: 'failed',
     cancelRequested: false,
+    paused: false,
     progress: { ...auditState.progress, label: 'Audit failed' },
     error,
   });
@@ -1024,12 +1030,37 @@ export function worstStatus(...statuses: AuditCheckStatus[]): AuditCheckStatus {
   );
 }
 
+/**
+ * Every metric `summarizePerformanceAudit` can read as a check's representative
+ * latency, plus the two report-wide maxima.
+ *
+ * A check whose measurement spanned a background pause times a process Android
+ * had stopped drawing. Where such a check still has to be reported — a failure
+ * observed before the interruption is real and must not be downgraded — these
+ * keys are stripped so the unusable timing cannot become the report's slowest
+ * check or its worst lag.
+ */
+export const AUDIT_LATENCY_METRIC_KEYS = [
+  'forwardMs',
+  'backMs',
+  'maxEventLoopLagMs',
+  'maxFrameGapMs',
+  'stringifyMs',
+  'parseMs',
+  'traversalMs',
+  'maxWriteMs',
+  'maxReadMs',
+  'writeMs',
+  'readMs',
+] as const;
+
 export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAuditSummary {
   const pass = checks.filter((check) => check.status === 'pass').length;
   const warn = checks.filter((check) => check.status === 'warn').length;
   const fail = checks.filter((check) => check.status === 'fail').length;
   const skipped = checks.filter((check) => check.status === 'skipped').length;
   const completed = checks.filter((check) => check.status !== 'skipped');
+  // Keep AUDIT_LATENCY_METRIC_KEYS in step with every key read below.
   const representativeLatency = (check: AuditCheck): number => {
     const numeric = (...keys: string[]) =>
       keys.map((key) => Number(check.metrics[key] ?? 0)).filter(Number.isFinite);

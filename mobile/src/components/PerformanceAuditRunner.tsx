@@ -45,6 +45,7 @@ import {
 } from '../lib/performanceAuditRollback';
 import {
   aggregateRepeatedJourneys,
+  AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   captureAuditTrace,
   completePerformanceAudit,
@@ -182,8 +183,7 @@ function contaminatedTimingsRemoved(
   metrics: Record<string, AuditMetricValue>,
 ): Record<string, AuditMetricValue> {
   const out = { ...metrics };
-  delete out.maxEventLoopLagMs;
-  delete out.maxFrameGapMs;
+  for (const key of AUDIT_LATENCY_METRIC_KEYS) delete out[key];
   return out;
 }
 
@@ -2251,17 +2251,28 @@ export function PerformanceAuditRunner() {
             // warmed attempt under the cold-pass label. Skipping keeps the
             // report honest, and aggregateRepeatedJourneys already ignores
             // skipped cold/warm pairs.
+            //
+            // A failure the check already observed is real and survives. Only
+            // the timings are unusable; downgrading the status would hide a
+            // genuine fault behind an interruption and could report the run
+            // healthy.
+            const observedFailure = check.status === 'fail';
             debugLog.info(
               PERFORMANCE_AUDIT_LOG_TAG,
-              `${label} was interrupted by the app leaving the foreground; recorded as skipped`,
+              `${label} was interrupted by the app leaving the foreground; recorded as ` +
+              `${observedFailure ? 'a failure without timings' : 'skipped'}`,
             );
             check = {
               ...check,
-              status: 'skipped',
+              status: observedFailure ? 'fail' : 'skipped',
+              // A duration spanning a pause must not become the slowest check.
+              durationMs: 0,
               metrics: {
                 ...contaminatedTimingsRemoved(check.metrics),
                 interruptedByBackground: true,
-                reason: 'The app left the foreground during this check',
+                reason: observedFailure
+                  ? 'The app left the foreground during this check; the failure was observed before the interruption and timings are not reported'
+                  : 'The app left the foreground during this check',
               },
             };
             await waitWhilePaused(watchdog);
@@ -2445,6 +2456,12 @@ export function PerformanceAuditRunner() {
           },
         });
         watchdog.beginFinalization();
+        // Publish the terminal state in the foreground. A terminal run cannot be
+        // resumed, so completing while paused would leave the pause set with no
+        // AppState listener left to clear it, and every foreground budget the
+        // post-publish upload creates would then accrue nothing and never time
+        // out — leaving uploadPending and the run gate held indefinitely.
+        await waitWhilePaused(watchdog);
 
         environment = {
           ...environment,
