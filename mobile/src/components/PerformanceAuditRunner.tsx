@@ -169,14 +169,10 @@ function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void
  */
 async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
   if (!getPerformanceAuditState().paused) return;
-  watchdog.setPaused(true);
-  try {
-    while (getPerformanceAuditState().paused) {
-      assertAuditActive();
-      await delay(120);
-    }
-  } finally {
-    watchdog.setPaused(false);
+  while (getPerformanceAuditState().paused) {
+    // Cancel must still escape a paused run.
+    assertAuditActive();
+    await delay(120);
   }
   assertSessionActive(watchdog);
 }
@@ -2044,6 +2040,13 @@ export function PerformanceAuditRunner() {
       const startedMs = Date.now();
       const app = installedAuditIdentity();
       const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
+      // Mirror pauses onto the watchdog the instant they happen, not when the
+      // loop next reaches a step boundary. A step already in flight when the
+      // app backgrounds keeps polling isExpired() every 50ms, so a short hang
+      // timeout plus a phone call would otherwise abort the run as hung.
+      const unsubscribePause = subscribePerformanceAudit(() => {
+        watchdog.setPaused(getPerformanceAuditState().paused);
+      });
       const originalStore = useStore.getState();
       let plan = buildDeepPerformanceAuditPlan(originalStore.core);
       let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
@@ -2119,6 +2122,11 @@ export function PerformanceAuditRunner() {
           'Waiting for active payload work to finish',
         );
         await waitForRefreshWork(watchdog);
+        // Setup snapshots the store, plan and environment the whole run is
+        // pinned to. Capturing that from a backgrounded process would pin the
+        // report to state the user cannot see, so wait for the foreground here
+        // too rather than only at the first measured check.
+        await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
         plan = buildDeepPerformanceAuditPlan(initialStore.core);
         total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
@@ -2155,9 +2163,6 @@ export function PerformanceAuditRunner() {
         auditEnvironment = environment;
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-
-        updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
-        await record(await runRuntimeCheck(monitor, watchdog));
 
         const recordContinuable = async (
           label: string,
@@ -2233,6 +2238,16 @@ export function PerformanceAuditRunner() {
           }
           if (check.status === 'fail') await recoverAfterFailure();
         };
+
+        updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
+        // Routed through recordContinuable so the responsiveness sample gets the
+        // same foreground gate as every other check: it measures event-loop lag and
+        // animation callback gaps, which are the readings least meaningful when
+        // Android has stopped drawing.
+        await recordContinuable(
+          'Sampling idle responsiveness',
+          () => runRuntimeCheck(monitor, watchdog),
+        );
 
         for (const pass of plan.passes) {
           for (const step of pass.steps) {
@@ -2721,6 +2736,7 @@ export function PerformanceAuditRunner() {
           ].join('\n'));
         }
       } finally {
+        unsubscribePause();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
         if (!rollbackRestored && rollbackSnapshot) {
           try {

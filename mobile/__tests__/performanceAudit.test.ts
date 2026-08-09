@@ -629,6 +629,27 @@ describe('performance audit inactivity watchdog', () => {
     expect(watchdog.isExpired()).toBe(true);
   });
 
+  it('does not count time spent backgrounded as a hang', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
+
+    watchdog.recordStoredCheck();
+    watchdog.setPaused(true);
+    // A step in flight when the app backgrounds keeps polling isExpired(); a
+    // short hang timeout plus a phone call must not abort the run as hung.
+    elapsedMs = 120_000;
+    expect(watchdog.isPaused).toBe(true);
+    expect(watchdog.isExpired()).toBe(false);
+
+    // Resuming restarts the window rather than resuming a spent one.
+    watchdog.setPaused(false);
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 145_000;
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 150_001;
+    expect(watchdog.isExpired()).toBe(true);
+  });
+
   it('beginFinalization suspends hang expiry for report persistence and upload', () => {
     let elapsedMs = 0;
     const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
