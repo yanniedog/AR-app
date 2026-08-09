@@ -4,6 +4,8 @@ import * as FileSystem from 'expo-file-system/legacy';
 // eslint-disable-next-line import/first -- imports after jest mocks
 import {
   ANDROID_LOG_PATH_HINT,
+  LOG_UPLOAD_MAX_BODY_BYTES,
+  LOG_UPLOAD_READ_CHUNK_BYTES,
   MAX_LOG_BYTES,
   MAX_LOG_FILE_BYTES,
   MAX_LOG_LINES,
@@ -495,6 +497,50 @@ describe('persistent log file', () => {
 
     expect(complete).toContain('token=[REDACTED]');
     expect(complete).not.toContain('old-secret');
+  });
+
+  it('builds a bounded automatic upload from a physical tail plus the latest audit', async () => {
+    const physical = Array.from(
+      { length: Math.ceil((LOG_UPLOAD_READ_CHUNK_BYTES * 3) / 80) },
+      (_, index) => `${String(index).padStart(8, '0')} ${'x'.repeat(70)}\n`,
+    ).join('');
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => ({
+      exists: path === LOG_PATH,
+      ...(path === LOG_PATH ? { size: new TextEncoder().encode(physical).length } : {}),
+    }));
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementation(
+      async (path: string, options?: { position?: number; length?: number }) => {
+        if (path !== LOG_PATH) throw new Error(`missing file ${path}`);
+        const position = options?.position ?? 0;
+        const length = options?.length ?? physical.length;
+        return physical.slice(position, position + length);
+      },
+    );
+    const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=upload app_version=9.8.7 build_version=654`;
+    await AsyncStorage.setItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY, JSON.stringify({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: marker,
+      reportJson: JSON.stringify({
+        schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+        app: { appVersion: '9.8.7', buildVersion: '654' },
+        sentinel: 'bounded-audit-upload',
+      }),
+    }));
+
+    const upload = await debugLog.readAuditUploadText();
+
+    expect(new TextEncoder().encode(upload).length).toBeLessThanOrEqual(LOG_UPLOAD_MAX_BODY_BYTES);
+    expect(upload).toContain('Earlier physical debug log content omitted');
+    expect(upload).toContain('# Latest complete performance audit');
+    expect(upload).toContain(marker);
+    expect(upload).toContain('bounded-audit-upload');
+    expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith(
+      LOG_PATH,
+      expect.objectContaining({
+        position: expect.any(Number),
+        length: LOG_UPLOAD_READ_CHUNK_BYTES,
+      }),
+    );
   });
 
   it('flushes a crash-detectable complete audit into the physical log without export duplication', async () => {

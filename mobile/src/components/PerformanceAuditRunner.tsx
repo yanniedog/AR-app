@@ -39,8 +39,15 @@ import {
 } from '../lib/performanceAuditReadiness';
 import {
   beginPerformanceAuditRollback,
-  restorePerformanceAuditRollback,
+  tryRestorePerformanceAuditRollback,
 } from '../lib/performanceAuditRollback';
+import {
+  assertPerformanceAuditSessionActive,
+  awaitPerformanceAuditWork,
+  awaitPerformanceAuditWorkWithTimeout,
+  PerformanceAuditCancelledError as AuditCancelledError,
+  PerformanceAuditInactivityError as AuditInactivityError,
+} from '../lib/performanceAuditControl';
 import {
   aggregateRepeatedJourneys,
   cancelPerformanceAudit,
@@ -107,23 +114,6 @@ const FINALIZATION_READ_TIMEOUT_MS = 60_000;
 const FINALIZATION_UPLOAD_TIMEOUT_MS = 90_000;
 type JourneyIteration = 'cold' | 'warm';
 
-class AuditCancelledError extends Error {
-  constructor() {
-    super('Performance audit cancelled');
-    this.name = 'AuditCancelledError';
-  }
-}
-
-class AuditInactivityError extends Error {
-  constructor(watchdog: PerformanceAuditInactivityWatchdog) {
-    super(
-      `Performance audit stored no completed check for ${watchdog.hangTimeoutMs}ms ` +
-        `(stored checks: ${watchdog.storedCheckCount})`,
-    );
-    this.name = 'AuditInactivityError';
-  }
-}
-
 class AuditDatasetChangedError extends Error {
   constructor(message: string) {
     super(message);
@@ -151,8 +141,10 @@ function assertAuditActive(): void {
 }
 
 function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void {
-  assertAuditActive();
-  if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
+  assertPerformanceAuditSessionActive(
+    watchdog,
+    getPerformanceAuditState().cancelRequested,
+  );
 }
 
 function rethrowAuditControl(error: unknown): void {
@@ -196,27 +188,12 @@ async function awaitAuditWork<T>(
   watchdog: PerformanceAuditInactivityWatchdog,
   label: string,
 ): Promise<T> {
-  assertSessionActive(watchdog);
-  let timer: ReturnType<typeof setInterval> | null = null;
-  const control = new Promise<never>((_resolve, reject) => {
-    timer = setInterval(() => {
-      try {
-        assertSessionActive(watchdog);
-      } catch (error) {
-        if (timer) clearInterval(timer);
-        timer = null;
-        reject(error);
-      }
-    }, 50);
-  });
-  try {
-    return await Promise.race([promise, control]);
-  } catch (error) {
-    rethrowAuditControl(error);
-    throw new Error(`${label} failed: ${formatAuditError(error)}`);
-  } finally {
-    if (timer) clearInterval(timer);
-  }
+  return awaitPerformanceAuditWork(
+    promise,
+    watchdog,
+    () => getPerformanceAuditState().cancelRequested,
+    label,
+  );
 }
 
 async function awaitAuditWorkWithTimeout<T>(
@@ -225,38 +202,13 @@ async function awaitAuditWorkWithTimeout<T>(
   label: string,
   timeoutMs: number,
 ): Promise<T> {
-  assertSessionActive(watchdog);
-  let timer: ReturnType<typeof setInterval> | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
-  const control = new Promise<never>((_resolve, reject) => {
-    timer = setInterval(() => {
-      try {
-        assertSessionActive(watchdog);
-      } catch (error) {
-        if (timer) clearInterval(timer);
-        timer = null;
-        if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = null;
-        reject(error);
-      }
-    }, 50);
-    timeoutId = setTimeout(() => {
-      if (timer) clearInterval(timer);
-      timer = null;
-      timeoutId = null;
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([promise, control]);
-  } catch (error) {
-    rethrowAuditControl(error);
-    if (error instanceof Error && error.message.includes('timed out after')) throw error;
-    throw new Error(`${label} failed: ${formatAuditError(error)}`);
-  } finally {
-    if (timer) clearInterval(timer);
-    if (timeoutId) clearTimeout(timeoutId);
-  }
+  return awaitPerformanceAuditWorkWithTimeout(
+    promise,
+    watchdog,
+    () => getPerformanceAuditState().cancelRequested,
+    label,
+    timeoutMs,
+  );
 }
 
 async function settleUiUnchecked(): Promise<void> {
@@ -2268,23 +2220,27 @@ export function PerformanceAuditRunner() {
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         const restoreStarted = now();
-        await awaitAuditWorkWithTimeout(
-          restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+        const rollbackResult = await awaitAuditWorkWithTimeout(
+          tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
           watchdog,
           'Audit state restoration',
           FINALIZATION_STORE_TIMEOUT_MS,
         );
-        rollbackRestored = true;
+        rollbackRestored = rollbackResult.restored;
         await record({
           id: 'audit-state-restoration',
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
-          status: 'pass',
+          status: rollbackResult.restored ? 'pass' : 'fail',
           durationMs: roundMetric(now() - restoreStarted),
           metrics: {
-            restored: true,
-            journalClearedAfterPersistence: true,
+            restored: rollbackResult.restored,
+            journalClearedAfterPersistence: rollbackResult.restored,
           },
+          ...(rollbackResult.error ? {
+            error: rollbackResult.error,
+            trace: captureAuditTrace('audit state restoration failed'),
+          } : {}),
         });
         watchdog.beginFinalization();
 
@@ -2389,7 +2345,7 @@ export function PerformanceAuditRunner() {
         let upload: { url?: string; provider?: string; error?: string } = {};
         try {
           const completeLog = await awaitAuditWorkWithTimeout(
-            debugLog.readCompleteText(),
+            debugLog.readAuditUploadText(),
             watchdog,
             'Complete audit log read',
             FINALIZATION_READ_TIMEOUT_MS,
@@ -2625,11 +2581,19 @@ export function PerformanceAuditRunner() {
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
         if (!rollbackRestored && rollbackSnapshot) {
           try {
-            await timeoutAfter(
-              restorePerformanceAuditRollback(useStore, rollbackSnapshot),
+            const rollbackRetry = await timeoutAfter(
+              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
               5_000,
               'Final audit rollback',
             );
+            rollbackRestored = rollbackRetry.restored;
+            if (rollbackRetry.error) {
+              debugLog.error(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `audit rollback retained for launch recovery: ${flattenAuditLogText(rollbackRetry.error)}`,
+              );
+              await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+            }
           } catch (rollbackError) {
             debugLog.error(
               PERFORMANCE_AUDIT_LOG_TAG,

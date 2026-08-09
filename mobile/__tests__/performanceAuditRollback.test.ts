@@ -16,6 +16,7 @@ import {
   performanceAuditSnapshotFingerprint,
   recoverInterruptedPerformanceAudit,
   restorePerformanceAuditRollback,
+  tryRestorePerformanceAuditRollback,
   type PerformanceAuditRollbackStore,
 } from '../src/lib/performanceAuditRollback';
 
@@ -158,6 +159,25 @@ describe('performance audit rollback journal', () => {
     secureStore.delete(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
 
     await expect(restorePerformanceAuditRollback(store)).rejects.toThrow(/missing from SecureStore/);
+    await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
+  });
+
+  it('reports a teardown restoration failure without throwing or clearing recovery artifacts', async () => {
+    const store = makeStore();
+    const before = await beginPerformanceAuditRollback(store);
+    store.setState = (next) => {
+      const current = store.getState();
+      (store as { getState: () => AppState }).getState = () => ({ ...current, ...next });
+    };
+
+    jest.useFakeTimers();
+    const pending = tryRestorePerformanceAuditRollback(store, before);
+    await jest.advanceTimersByTimeAsync(3_100);
+    const result = await pending;
+    jest.useRealTimers();
+
+    expect(result.restored).toBe(false);
+    expect(result.error).toMatch(/not durably persisted/);
     await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
   });
 });

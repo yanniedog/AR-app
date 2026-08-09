@@ -24,6 +24,9 @@ export const MAX_LOG_BYTES = 512 * 1024;
 export const PERSIST_TAIL_LINES = 100;
 export const MAX_LOG_FILE_BYTES = 2 * 1024 * 1024;
 export const MAX_LOG_DISPLAY_BYTES = 16 * 1024;
+/** Upper bound for automatic audit upload bodies — avoids holding multi-MiB strings. */
+export const LOG_UPLOAD_MAX_BODY_BYTES = 768 * 1024;
+export const LOG_UPLOAD_READ_CHUNK_BYTES = 256 * 1024;
 export const LOG_FILE_FLUSH_MS = 100;
 export const ANDROID_PACKAGE = 'com.eyex.australianrates';
 export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs/ar-local.log`;
@@ -439,6 +442,103 @@ function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit
   }
 }
 
+async function readLatestStoredPerformanceAudit(): Promise<StoredPerformanceAudit | null> {
+  return (
+    (await readPerformanceAuditSidecar()) ??
+    parseStoredPerformanceAudit(
+      await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
+    )
+  );
+}
+
+function compactStoredPerformanceAudit(latest: StoredPerformanceAudit): string {
+  try {
+    return redactSecrets(
+      JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
+    );
+  } catch {
+    return latest.reportJson;
+  }
+}
+
+async function readPhysicalLogTailForUpload(): Promise<{
+  text: string;
+  omittedBytes: number;
+}> {
+  if (!FileSystem.documentDirectory) {
+    return { text: buffer.getText(), omittedBytes: 0 };
+  }
+  const info = await FileSystem.getInfoAsync(LOG_FILE).catch(() => ({ exists: false }));
+  if (!info.exists) return { text: buffer.getText(), omittedBytes: 0 };
+  const size = typeof (info as { size?: unknown }).size === 'number'
+    ? Math.max(0, Math.floor((info as { size: number }).size))
+    : 0;
+  if (size <= LOG_UPLOAD_READ_CHUNK_BYTES || size === 0) {
+    return {
+      text: await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText()),
+      omittedBytes: 0,
+    };
+  }
+  const position = size - LOG_UPLOAD_READ_CHUNK_BYTES;
+  const chunk = await FileSystem.readAsStringAsync(LOG_FILE, {
+    position,
+    length: LOG_UPLOAD_READ_CHUNK_BYTES,
+  }).catch(() => buffer.getText());
+  const firstNewline = chunk.indexOf('\n');
+  const text = firstNewline >= 0 ? chunk.slice(firstNewline + 1) : chunk;
+  return {
+    text,
+    omittedBytes: position + (firstNewline >= 0 ? firstNewline + 1 : 0),
+  };
+}
+
+function buildBoundedAuditUploadText(
+  physicalTail: string,
+  initiallyOmittedBytes: number,
+  latest: StoredPerformanceAudit | null,
+): string {
+  const cleanTail = stripPerformanceAuditReportLines(redactSecrets(physicalTail));
+  const auditBlock = latest
+    ? [
+        '# Latest complete performance audit',
+        latest.summaryMarker,
+        compactStoredPerformanceAudit(latest),
+      ].join('\n')
+    : '';
+  const auditBytes = textEncoder.encode(auditBlock).length;
+  const markerReserveBytes = 256;
+  if (auditBytes + markerReserveBytes > LOG_UPLOAD_MAX_BODY_BYTES) {
+    throw new Error(
+      `Compact performance report (${auditBytes} bytes) exceeds the automatic upload budget`,
+    );
+  }
+  let tail = trimToBudget(
+    cleanTail,
+    LOG_UPLOAD_MAX_BODY_BYTES - auditBytes - markerReserveBytes,
+  );
+  let omittedBytes = initiallyOmittedBytes + Math.max(
+    0,
+    textEncoder.encode(cleanTail).length - textEncoder.encode(tail).length,
+  );
+  const compose = () => [
+    ...(omittedBytes > 0 ? [
+      `# Earlier physical debug log content omitted from the automatic upload ` +
+        `(omitted_bytes=${omittedBytes}); the complete log remains on device.`,
+    ] : []),
+    tail,
+    auditBlock,
+  ].filter(Boolean).join('\n');
+  let result = compose();
+  const overflow = textEncoder.encode(result).length - LOG_UPLOAD_MAX_BODY_BYTES;
+  if (overflow > 0) {
+    const beforeBytes = textEncoder.encode(tail).length;
+    tail = trimToBudget(tail, Math.max(0, beforeBytes - overflow - 64));
+    omittedBytes += beforeBytes - textEncoder.encode(tail).length;
+    result = compose();
+  }
+  return result;
+}
+
 const VALID_LOG_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
 function isValidEntry(entry: unknown): entry is LogEntry {
@@ -633,22 +733,11 @@ export const debugLog = {
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
-    const latest =
-      (await readPerformanceAuditSidecar()) ??
-      parseStoredPerformanceAudit(
-        await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
-      );
+    const latest = await readLatestStoredPerformanceAudit();
     if (!latest) return clean;
     const physicalBegin = physicalAuditMarker(latest.summaryMarker);
     const physicalEnd = `${PERFORMANCE_AUDIT_REPORT_END} ${latest.summaryMarker}`;
-    let compactJson: string;
-    try {
-      compactJson = redactSecrets(
-        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
-      );
-    } catch {
-      compactJson = latest.reportJson;
-    }
+    const compactJson = compactStoredPerformanceAudit(latest);
     if (
       clean.includes(physicalBegin) &&
       clean.includes(physicalEnd) &&
@@ -663,6 +752,19 @@ export const debugLog = {
       latest.summaryMarker,
       compactJson,
     ].join('\n');
+  },
+  /** Bounded automatic-upload snapshot: newest physical lines plus the complete compact audit. */
+  async readAuditUploadText(): Promise<string> {
+    if (fileFlushTimer) {
+      clearTimeout(fileFlushTimer);
+      fileFlushTimer = null;
+    }
+    await flushPendingToFile();
+    const [physical, latest] = await Promise.all([
+      readPhysicalLogTailForUpload(),
+      readLatestStoredPerformanceAudit(),
+    ]);
+    return buildBoundedAuditUploadText(physical.text, physical.omittedBytes, latest);
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
