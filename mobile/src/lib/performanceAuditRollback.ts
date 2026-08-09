@@ -102,11 +102,19 @@ async function persistRollbackScenario(scenario: UserRateScenario | null): Promi
     }
     return;
   }
-  await SecureStore.setItemAsync(
-    PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
-    JSON.stringify(normalizeUserRateScenario(scenario)),
-    { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
-  );
+  try {
+    await SecureStore.setItemAsync(
+      PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
+      JSON.stringify(normalizeUserRateScenario(scenario)),
+      { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
+    );
+  } catch (error) {
+    throw new Error(
+      `Performance audit rollback scenario could not be stored securely: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
 }
 
 async function loadRollbackScenario(): Promise<UserRateScenario | null> {
@@ -294,24 +302,47 @@ async function restoreSnapshot(
   await waitForPersistence(restored);
 }
 
+export interface PerformanceAuditRollbackRestoreResult {
+  restored: boolean;
+  error?: string;
+  cause?: unknown;
+}
+
 export async function restorePerformanceAuditRollback(
   store: PerformanceAuditRollbackStore,
   fallback?: PerformanceAuditUserSnapshot,
 ): Promise<boolean> {
-  const journal = await readRollbackJournal();
-  if (!journal && !fallback) return false;
-  // Prefer SecureStore/journal scenario, then the in-memory begin() snapshot
-  // (required on web where SecureStore persistence is a no-op).
-  const snapshot: PerformanceAuditUserSnapshot = {
-    ...(journal?.snapshot ?? fallback!),
-    userRateScenario:
-      journal?.snapshot.userRateScenario
-      ?? fallback?.userRateScenario
-      ?? null,
-  };
-  await restoreSnapshot(store, snapshot);
-  await clearRollbackArtifacts();
-  return true;
+  const result = await tryRestorePerformanceAuditRollback(store, fallback);
+  if (!result.restored && result.error) {
+    throw result.cause instanceof Error ? result.cause : new Error(result.error);
+  }
+  return result.restored;
+}
+
+/** Soft-fail wrapper for audit teardown — SecureStore/persistence errors must not crash the app. */
+export async function tryRestorePerformanceAuditRollback(
+  store: PerformanceAuditRollbackStore,
+  fallback?: PerformanceAuditUserSnapshot,
+): Promise<PerformanceAuditRollbackRestoreResult> {
+  try {
+    const journal = await readRollbackJournal();
+    if (!journal && !fallback) return { restored: false };
+    const snapshot: PerformanceAuditUserSnapshot = {
+      ...(journal?.snapshot ?? fallback!),
+      userRateScenario:
+        journal?.snapshot.userRateScenario
+        ?? fallback?.userRateScenario
+        ?? null,
+    };
+    await restoreSnapshot(store, snapshot);
+    await clearRollbackArtifacts();
+    return { restored: true };
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.stack ?? `${error.name}: ${error.message}`
+      : String(error);
+    return { restored: false, error: message, cause: error };
+  }
 }
 
 export async function recoverInterruptedPerformanceAudit(
