@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-09T10:58:06.388Z",
+  "generated_at": "2026-08-09T22:49:47.597Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -693,6 +693,14 @@
         "Fix performance audit stalls and coverage proof (#171)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.133"
+    },
+    {
+      "version": "1.0.135",
+      "date": "2026-08-09",
+      "summaryBullets": [
+        "Reduce first-run and navigation friction (#173)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.135"
     }
   ]
 }
