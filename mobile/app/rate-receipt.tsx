@@ -3,7 +3,7 @@ import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, type ScrollView, View } from 'react-native';
 
-import { EmptyState } from '../src/components/feedback';
+import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../src/components/Screen';
 import { TOUCH_TARGET_MIN } from '../src/components/TouchTarget';
@@ -157,7 +157,7 @@ export default function RateReceiptScreen() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
   if (!found || !row || !receipt || !brief) {
     return (
       <>

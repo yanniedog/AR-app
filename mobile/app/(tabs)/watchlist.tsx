@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { EmptyState } from '../../src/components/feedback';
+import { EmptyState, ScreenSkeleton } from '../../src/components/feedback';
 import { ProductCard } from '../../src/components/ProductCard';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
@@ -192,7 +192,7 @@ export default function Saved() {
     [items, removeSavedRate, showUndo],
   );
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   if (!items.length) {
     return (

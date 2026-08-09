@@ -9,4 +9,5 @@ export {
   DetailLoadingLines,
   EmptyState,
   LoadingRows,
+  ScreenSkeleton,
 } from './feedbackPlaceholders';

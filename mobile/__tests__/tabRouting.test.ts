@@ -6,15 +6,19 @@ import {
 } from '../src/lib/tabRouting';
 
 describe('tabRouting', () => {
-  it('orders tabs Today → Products → Moves → Outlook → Saved → Settings', () => {
+  it('orders tabs Today → Products → Rate moves → Market → Saved', () => {
     expect([...TAB_BAR_ORDER]).toEqual([
       'index',
       'browse',
       'passthrough',
       'trends',
       'watchlist',
-      'settings',
     ]);
+  });
+
+  it('keeps Settings out of the primary tab bar', () => {
+    expect(TAB_BAR_ORDER).not.toContain('settings');
+    expect(TAB_BAR_ORDER.length).toBeLessThanOrEqual(5);
   });
 
   it('hides the bar before onboarding and on the onboarding route', () => {

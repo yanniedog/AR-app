@@ -151,6 +151,27 @@ export function LoadingRows({ count = 6 }: { count?: number }) {
   );
 }
 
+/**
+ * Whole-screen placeholder for the window between a screen mounting and the
+ * core payload being in memory (a cold start, or the first paint after Clear
+ * cache). Screens used to render `null` here, which reads as a broken app.
+ */
+export function ScreenSkeleton({ rows = 4 }: { rows?: number }) {
+  const theme = useTheme();
+  return (
+    <View
+      style={{ flex: 1, backgroundColor: theme.colors.bg, padding: 16, gap: 12 }}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading rates"
+    >
+      <ShimmerBox height={18} width="46%" borderRadius={theme.radius.sm} />
+      <ShimmerBox height={12} width="72%" borderRadius={theme.radius.sm} />
+      <View style={{ height: 4 }} />
+      <LoadingRows count={rows} />
+    </View>
+  );
+}
+
 const DETAIL_LINE_WIDTHS: DimensionValue[] = ['68%', '52%', '44%'];
 
 /** Compact shimmer lines for product detail groups. */

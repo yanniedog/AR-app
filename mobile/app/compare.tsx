@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
-import { EmptyState } from '../src/components/feedback';
+import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
 import { AppText, Badge, Divider } from '../src/components/ui';
@@ -20,7 +20,6 @@ import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
-import { hasProAccess } from '../src/lib/proAccess';
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -60,9 +59,7 @@ export default function Compare() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
-  const productHistoryAvailable = useStore(
-    (s) => hasProAccess(s.prefs) && s.productHistory != null,
-  );
+  const productHistoryAvailable = useStore((s) => s.productHistory != null);
   const horizontalScrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);
 
@@ -148,7 +145,7 @@ export default function Compare() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
   if (entries.length < 2) {
     return (
       <EmptyState

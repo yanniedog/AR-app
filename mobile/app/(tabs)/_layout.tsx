@@ -1,14 +1,58 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs } from 'expo-router';
+import { Tabs, router } from 'expo-router';
 import React from 'react';
-import { Platform } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
 import { BrandLockup } from '../../src/components/BrandLockup';
 import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
+import { resolveInterestSection } from '../../src/data/interests';
+import { useStore } from '../../src/data/store';
+import { openSearch } from '../../src/lib/nav';
 import { getTabIonicon } from '../../src/lib/tabIcons';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
+
+/**
+ * Search is the app's primary verb, so it gets a permanent home in the Today
+ * header rather than living only behind an icon inside Products.
+ */
+function HomeHeaderActions() {
+  const theme = useTheme();
+  const section = useStore((s) => resolveInterestSection(s.prefs.interests, s.activeSection));
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', paddingRight: 4 }}>
+      <Pressable
+        onPress={() => openSearch(section)}
+        accessibilityRole="button"
+        accessibilityLabel="Search rates"
+        style={({ pressed }) => ({
+          minWidth: 48,
+          minHeight: 48,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <Ionicons name="search" size={22} color={theme.colors.text} />
+      </Pressable>
+      <Pressable
+        onPress={() => router.push('/settings')}
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+        style={({ pressed }) => ({
+          minWidth: 48,
+          minHeight: 48,
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: pressed ? 0.6 : 1,
+        })}
+      >
+        <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
+      </Pressable>
+    </View>
+  );
+}
 
 export default function TabsLayout() {
   const theme = useTheme();
@@ -49,6 +93,7 @@ export default function TabsLayout() {
         options={{
           title: 'Today',
           headerTitle: () => <BrandLockup markSize={28} />,
+          headerRight: () => <HomeHeaderActions />,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('index')!} size={size} color={color} />
           ),

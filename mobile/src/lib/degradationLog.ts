@@ -1,7 +1,6 @@
 import type { SuitabilityExclusionCounts } from '../data/access';
 import { debugLog, formatErrorTrace, type LogLevel } from './debugLog';
 import { isDiagnosticsEnabled } from './observability';
-import type { ProGateIntent } from './proAccess';
 import type { SectionKey } from '../types';
 
 export const DEGRADE_TAG = 'degrade';
@@ -61,10 +60,6 @@ export function logSwallowedError(context: string, err: unknown): void {
     error: msg,
     trace: formatErrorTrace(err),
   });
-}
-
-export function logProGateBlocked(intent: ProGateIntent, source?: string): void {
-  logDegradation('info', 'pro.gateBlocked', { intent, ...(source ? { from: source } : {}) });
 }
 
 export function logTabNoOp(tab: string): void {

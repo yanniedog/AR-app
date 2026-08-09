@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 
-import { IndeterminateProgressBar } from '../src/components/feedback';
+import { IndeterminateProgressBar, ScreenSkeleton } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
 import {
   productRateChangeText,
@@ -41,7 +41,6 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
-import { hasProAccess } from '../src/lib/proAccess';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import type { RateRow, SectionKey } from '../src/types';
@@ -72,9 +71,7 @@ export default function Calculator() {
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
-  const productHistory = useStore((s) =>
-    hasProAccess(s.prefs) ? s.productHistory : null,
-  );
+  const productHistory = useStore((s) => s.productHistory);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const interests = useStore((s) => s.prefs.interests);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
@@ -429,7 +426,7 @@ export default function Calculator() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   const inputStyle = {
     borderWidth: 1,

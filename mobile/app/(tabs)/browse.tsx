@@ -14,6 +14,7 @@ import { useStore } from '../../src/data/store';
 import { checkDrillOutcome, logNavParamDrop } from '../../src/lib/degradationLog';
 import { openBrowse, openSearch, parseBrowsePath, scalarRouteParam } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { ScreenSkeleton } from '../../src/components/feedback';
 
 export default function Browse() {
   const theme = useTheme();
@@ -69,7 +70,7 @@ export default function Browse() {
     checkDrillOutcome(section, drillPath);
   }, [section, drillPath]);
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   return (
     <Screen>

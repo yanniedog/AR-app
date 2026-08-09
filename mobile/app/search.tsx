@@ -7,7 +7,7 @@ import { Alert, Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../src/components/FilterSheet';
-import { EmptyState, IndeterminateProgressBar, LoadingRows } from '../src/components/feedback';
+import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../src/components/feedback';
 import { ProductCard } from '../src/components/ProductCard';
 import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../src/components/Screen';
 import { ToolbarIconButton } from '../src/components/ToolbarIconButton';
@@ -39,7 +39,7 @@ import {
   auditActionString,
   auditActionStrings,
 } from '../src/lib/performanceAuditActionParams';
-import { canAddAlertSubscription, effectiveDeepSearch } from '../src/lib/proAccess';
+import { effectiveDeepSearch } from '../src/lib/proAccess';
 import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -210,9 +210,6 @@ export default function Search() {
       unsubscribeSearch(searchSub.id);
       return;
     }
-    if (!canAddAlertSubscription(subscriptions, useStore.getState().prefs)) {
-      return;
-    }
     const ok = await ensurePermissions();
     if (!ok) {
       Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
@@ -325,7 +322,7 @@ export default function Search() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
   const title = path.length ? breadcrumb(section, path).at(-1)! : `${SECTIONS[section].title}`;
   const filterCount = activeFilterCount(effectiveFilters);
 

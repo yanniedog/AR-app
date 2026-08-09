@@ -480,7 +480,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
     async ensureBankInsights(opts: { force?: boolean } = {}) {
       const { force = false } = opts;
-      if (!effectiveBankInsights(get().prefs)) {
+      if (!effectiveBankInsights()) {
         logEnsureSkipped('ensureBankInsights', 'proGate');
         return;
       }
@@ -570,7 +570,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     },
 
     async retryBankInsights() {
-      if (!effectiveBankInsights(get().prefs)) {
+      if (!effectiveBankInsights()) {
         logEnsureSkipped('retryBankInsights', 'proGate');
         return;
       }
@@ -589,7 +589,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const prefs = get().prefs;
       const permitted =
         purpose === 'bank_move'
-          ? effectiveBankInsights(prefs)
+          ? effectiveBankInsights()
           : effectiveHistoryRibbon(prefs);
       if (!permitted) {
         logEnsureSkipped('ensureProductHistory', `${purpose}Gate`);

@@ -3,7 +3,7 @@ import * as Application from 'expo-application';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, View } from 'react-native';
+import { Alert, Pressable, ScrollView, View } from 'react-native';
 
 import { SegmentedControl } from '../../src/components/controls';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
@@ -95,6 +95,21 @@ export default function Settings() {
     }, 350);
     return () => clearTimeout(id);
   }, [focus, t, router]);
+
+  // Audit and debug screens are maintainer tools, not product features. They stay
+  // hidden until the version row is tapped seven times (or in a dev build); the
+  // routes themselves remain registered so the audit plan can still drive them.
+  const developerTools = __DEV__ || prefs.developerToolsUnlocked;
+  const versionTaps = useRef(0);
+  const tapVersion = useCallback(() => {
+    if (prefs.developerToolsUnlocked) return;
+    versionTaps.current += 1;
+    if (versionTaps.current < 7) return;
+    versionTaps.current = 0;
+    setPref('developerToolsUnlocked', true);
+    setDiagnosticsOpen(true);
+    Alert.alert('Developer tools enabled', 'Performance audit and debug log are now in Diagnostics & debug.');
+  }, [prefs.developerToolsUnlocked, setPref]);
 
   const onToggleDeepSearch = (value: boolean) => {
     setPref('enableDeepSearch', value);
@@ -616,28 +631,34 @@ export default function Settings() {
               setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
             }}
           />
-          <SettingsGap size={8} />
-          <NavRow
-            icon="speedometer-outline"
-            label="Performance audit"
-            sub="Test every screen, navigation, responsiveness, storage, and network"
-            onPress={() => router.push('/performance-audit' as Href)}
-          />
-          <SettingsGap size={8} />
-          <NavRow
-            icon="document-text-outline"
-            label="Debug log"
-            sub="View, share, or upload logs"
-            onPress={() => router.push('/debug-log' as Href)}
-          />
+          {developerTools ? (
+            <>
+              <SettingsGap size={8} />
+              <NavRow
+                icon="speedometer-outline"
+                label="Performance audit"
+                sub="Test every screen, navigation, responsiveness, storage, and network"
+                onPress={() => router.push('/performance-audit' as Href)}
+              />
+              <SettingsGap size={8} />
+              <NavRow
+                icon="document-text-outline"
+                label="Debug log"
+                sub="View, share, or upload logs"
+                onPress={() => router.push('/debug-log' as Href)}
+              />
+            </>
+          ) : null}
         </DisclosureGroup>
       </Section>
 
       <Section title="About">
-        <InfoRow
-          label="Version"
-          value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '0'})`}
-        />
+        <Pressable onPress={tapVersion} accessibilityRole="button" accessibilityLabel="App version">
+          <InfoRow
+            label="Version"
+            value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '0'})`}
+          />
+        </Pressable>
         <SettingsGap size={4} />
         <NavRow
           icon="document-text-outline"

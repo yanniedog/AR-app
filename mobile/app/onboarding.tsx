@@ -1,16 +1,14 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BankAvatar } from '../src/components/BankAvatar';
-import { ProfileEditor } from '../src/components/ProfileEditor';
 import { Chip } from '../src/components/ui';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import { DEFAULT_INTERESTS, toggleInterest } from '../src/data/interests';
-import { EMPTY_PROFILE, PROFILE_FEATURE_OPTIONS, type ProfileFilters } from '../src/data/profile';
 import { formatRankedFraction, formatRate } from '../src/data/format';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
 import { bestRow, rankFraction } from '../src/data/selectors';
@@ -22,8 +20,9 @@ import { useTheme } from '../src/theme/ThemeProvider';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
+import { ScreenSkeleton } from '../src/components/feedback';
 
-type OnboardingStep = 1 | 2 | 3;
+type OnboardingStep = 1 | 2;
 
 function primaryInterest(interests: SectionKey[]): SectionKey {
   return interests[0] ?? 'Mortgage';
@@ -103,7 +102,6 @@ export default function Onboarding() {
   const insets = useSafeAreaInsets();
   const core = useStore((s) => s.core);
   const completeOnboarding = useStore((s) => s.completeOnboarding);
-  const setPref = useStore((s) => s.setPref);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const suitabilityRevision = useSuitabilityRevision();
@@ -112,7 +110,6 @@ export default function Onboarding() {
   const hydrated = useStore((s) => s.hydrated);
   const [step, setStep] = useState<OnboardingStep>(1);
   const [interests, setInterests] = useState<SectionKey[]>([...DEFAULT_INTERESTS]);
-  const [profile, setProfile] = useState<ProfileFilters>({ ...EMPTY_PROFILE });
   const [notify, setNotify] = useState(false);
   const [laidOutStep, setLaidOutStep] = useState<OnboardingStep | null>(null);
   const [notificationPreviewReady, setNotificationPreviewReady] = useState(false);
@@ -150,17 +147,14 @@ export default function Onboarding() {
     (key: SectionKey) => setInterests((prev) => toggleInterest(prev, key)),
     [],
   );
-  const showProfileStep = useCallback(() => setStep(2), []);
-  const showNotificationStep = useCallback(() => setStep(3), []);
+  const showNotificationStep = useCallback(() => setStep(2), []);
   const goBack = useCallback(() => {
     setStep((current) => Math.max(1, current - 1) as OnboardingStep);
   }, []);
-  const updateProfile = useCallback((next: ProfileFilters) => setProfile(next), []);
   const toggleNotifications = useCallback(() => {
     setNotify((value) => !value);
     setNotificationPreviewReady(false);
   }, []);
-  const firstProfileFeature = PROFILE_FEATURE_OPTIONS[section]?.[0] ?? null;
   const auditActions = useMemo(() => ({
     'onboarding.open': () => undefined,
     'onboarding.section.toggle': () => {
@@ -168,37 +162,23 @@ export default function Onboarding() {
         ?? SECTION_ORDER.find((key) => key !== section);
       if (next) toggle(next);
     },
-    'onboarding.step.next': showProfileStep,
-    'onboarding.profile.first': () => {
-      if (!firstProfileFeature) return;
-      const selected = profile.accountFeatures.includes(firstProfileFeature);
-      updateProfile({
-        ...profile,
-        accountFeatures: selected
-          ? profile.accountFeatures.filter((value) => value !== firstProfileFeature)
-          : [...profile.accountFeatures, firstProfileFeature],
-      });
-    },
+    'onboarding.step.next': showNotificationStep,
     'onboarding.notify.preview': () => {
       showNotificationStep();
       if (!notify) toggleNotifications();
     },
     'onboarding.step.back': goBack,
   }), [
-    firstProfileFeature,
     goBack,
     interests,
     notify,
-    profile,
     section,
     showNotificationStep,
-    showProfileStep,
     toggle,
     toggleNotifications,
-    updateProfile,
   ]);
   const needsSnapshotLogo = step === 1 && snapshot?.best != null;
-  const needsNotificationGraphic = step === 3 && notify;
+  const needsNotificationGraphic = step === 2 && notify;
   const onboardingLogoIds = useMemo(
     () => needsSnapshotLogo ? ['onboarding-best'] : [],
     [needsSnapshotLogo],
@@ -217,7 +197,6 @@ export default function Onboarding() {
       section,
       notify ? 'notify' : 'quiet',
       interests,
-      profile,
     ]),
     actions: auditActions,
     probes: [
@@ -263,7 +242,6 @@ export default function Onboarding() {
   });
 
   const start = async () => {
-    setPref('profileFilters', profile);
     if (notify) {
       const ok = await ensurePermissions();
       completeOnboarding(interests, ok);
@@ -273,7 +251,7 @@ export default function Onboarding() {
     router.replace('/(tabs)');
   };
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   const comparison = snapshot
     ? snapshotComparison(section, snapshot.stats, snapshot.rba)
@@ -290,7 +268,7 @@ export default function Onboarding() {
     >
       <Row style={{ justifyContent: 'space-between', marginBottom: 20 }}>
         <AppText variant="tiny" color="textFaint" weight="700">
-          {step} / 3
+          {step} / 2
         </AppText>
         {step > 1 ? (
           <Pressable onPress={goBack} hitSlop={8}>
@@ -370,31 +348,12 @@ export default function Onboarding() {
           <Button
             title="Continue"
             icon="arrow-forward"
-            onPress={showProfileStep}
-            style={{ marginBottom: insets.bottom + 20 }}
-          />
-        </View>
-      ) : step === 2 ? (
-        <View key="onboarding-2" style={{ flex: 1 }} onLayout={() => setLaidOutStep(2)}>
-          <AppText variant="h1">Make it yours</AppText>
-          <AppText variant="body" color="textMuted" style={{ marginTop: 8, lineHeight: 22 }}>
-            Lock in the product attributes that match you — owner-occupied, principal & interest,
-            your LVR — and any must-have features like an offset account or early repayment.
-            They seed search filters everywhere so you never re-select them. Skip any group to
-            see everything; change it anytime from your profile.
-          </AppText>
-          <ScrollView style={{ flex: 1, marginTop: 20 }} contentContainerStyle={{ paddingBottom: 12 }}>
-            <ProfileEditor sections={interests} value={profile} onChange={updateProfile} />
-          </ScrollView>
-          <Button
-            title="Continue"
-            icon="arrow-forward"
             onPress={showNotificationStep}
             style={{ marginBottom: insets.bottom + 20 }}
           />
         </View>
       ) : (
-        <View key="onboarding-3" style={{ flex: 1 }} onLayout={() => setLaidOutStep(3)}>
+        <View key="onboarding-2" style={{ flex: 1 }} onLayout={() => setLaidOutStep(2)}>
           <AppText variant="h1">Stay ahead of moves</AppText>
           <AppText variant="body" color="textMuted" style={{ marginTop: 8, lineHeight: 22 }}>
             Get a local alert when the best {meta.short.toLowerCase()} rate changes or the RBA

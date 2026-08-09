@@ -22,19 +22,19 @@ describe('tabIcons', () => {
     expect(getTabLabel('unknown', 'Fallback')).toBe('Fallback');
   });
 
-  it('presents the macro and market analysis destination as Outlook', () => {
-    expect(getTabLabel('trends')).toBe('Outlook');
+  it('presents the macro and market analysis destination as Market', () => {
+    expect(getTabLabel('trends')).toBe('Market');
   });
 
-  it('uses decision-oriented labels for the primary navigation', () => {
+  it('uses plain-language labels a first-time user can guess', () => {
     expect(getTabLabel('index')).toBe('Today');
     expect(getTabLabel('browse')).toBe('Products');
-    expect(getTabLabel('passthrough')).toBe('Moves');
+    expect(getTabLabel('passthrough')).toBe('Rate moves');
     expect(getTabLabel('watchlist')).toBe('Saved');
     expect(getTabLabel('settings')).toBe('Settings');
   });
 
-  it('lists Settings as the final primary tab', () => {
+  it('keeps a route entry for settings even though it is not a bottom tab', () => {
     expect(TAB_ROUTES.at(-1)).toBe('settings');
     expect(TAB_ROUTES).toEqual([
       'index',

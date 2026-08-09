@@ -8,7 +8,6 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
-  type GestureResponderEvent,
   Platform,
   StyleSheet,
   useWindowDimensions,
@@ -49,7 +48,6 @@ import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
-import { isDiagnosticsConsentTap } from '../src/lib/diagnosticsConsent';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import {
   isSessionReplayRouteAllowed,
@@ -235,7 +233,6 @@ function RootNavigator() {
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
   const coldStartChecked = useRef(false);
-  const consentTouchStart = useRef<{ x: number; y: number } | null>(null);
   const [morphComplete, setMorphComplete] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
   const [morphTarget, setMorphTarget] = useState<SplashMorphTarget | null>(null);
@@ -271,52 +268,17 @@ function RootNavigator() {
     [setPref],
   );
 
-  const acceptSelectedDiagnostics = useCallback(() => {
+  // Consent is only ever recorded from an explicit tap on the banner's own
+  // buttons. Session replay stays opt-in from Settings, so "Allow" grants
+  // exactly what the banner names.
+  const acceptDiagnostics = useCallback(() => {
     if (privacyChoiceCurrent) return;
-    confirmDiagnosticsChoice({
-      crashReports: crashReportsEnabled,
-      sessionReplay: sessionReplayEnabled,
-    });
-  }, [
-    confirmDiagnosticsChoice,
-    crashReportsEnabled,
-    privacyChoiceCurrent,
-    sessionReplayEnabled,
-  ]);
+    confirmDiagnosticsChoice({ crashReports: true, sessionReplay: false });
+  }, [confirmDiagnosticsChoice, privacyChoiceCurrent]);
 
   const declineDiagnostics = useCallback(() => {
     confirmDiagnosticsChoice({ crashReports: false, sessionReplay: false });
   }, [confirmDiagnosticsChoice]);
-
-  const handleConsentTouchStart = useCallback(
-    (event: GestureResponderEvent) => {
-      if (privacyChoiceCurrent) return;
-      consentTouchStart.current = {
-        x: event.nativeEvent.pageX,
-        y: event.nativeEvent.pageY,
-      };
-    },
-    [privacyChoiceCurrent],
-  );
-
-  const handleConsentTouchEnd = useCallback(
-    (event: GestureResponderEvent) => {
-      const start = consentTouchStart.current;
-      consentTouchStart.current = null;
-      if (!start || privacyChoiceCurrent) return;
-      // Observe a completed tap without becoming the responder or consuming
-      // the user's intended navigation. Scrolling does not count as consent.
-      if (
-        isDiagnosticsConsentTap(start, {
-          x: event.nativeEvent.pageX,
-          y: event.nativeEvent.pageY,
-        })
-      ) {
-        acceptSelectedDiagnostics();
-      }
-    },
-    [acceptSelectedDiagnostics, privacyChoiceCurrent],
-  );
 
   useEffect(() => {
     installGlobalErrorHandlers();
@@ -392,14 +354,7 @@ function RootNavigator() {
   if (dataUnavailable) {
     return (
       <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
-        <View
-          style={{ flex: 1, backgroundColor: theme.colors.bg }}
-          onTouchStart={handleConsentTouchStart}
-          onTouchEnd={handleConsentTouchEnd}
-          onTouchCancel={() => {
-            consentTouchStart.current = null;
-          }}
-        >
+        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
           <StatusBar style={theme.dark ? 'light' : 'dark'} />
           {showUpdateBanner ? (
             <AppUpdateBanner
@@ -411,7 +366,7 @@ function RootNavigator() {
           <DataUnavailableScreen />
           <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
-            onAccept={acceptSelectedDiagnostics}
+            onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}
           />
         </View>
@@ -426,14 +381,7 @@ function RootNavigator() {
       registerTarget={registerTarget}
     >
       <AppUpdateBannerLayoutProvider visible={showUpdateBanner}>
-        <View
-          style={{ flex: 1, backgroundColor: theme.colors.bg }}
-          onTouchStart={handleConsentTouchStart}
-          onTouchEnd={handleConsentTouchEnd}
-          onTouchCancel={() => {
-            consentTouchStart.current = null;
-          }}
-        >
+        <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
           {showUpdateBanner ? (
             <AppUpdateBanner
               remote={updateBanner.remote!}
@@ -503,7 +451,8 @@ function RootNavigator() {
           <PerformanceAuditRunner />
           <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
-            onAccept={acceptSelectedDiagnostics}
+            aboveTabBar
+            onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}
           />
         </View>

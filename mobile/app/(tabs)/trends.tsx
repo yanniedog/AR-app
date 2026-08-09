@@ -5,7 +5,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 
 import {
   BankMovesFeed,
-  InsightsLockedCard,
   MarketPulseStrip,
   MoversLeaderboard,
 } from '../../src/components/BankInsights';
@@ -13,7 +12,6 @@ import { HistoryExplorer } from '../../src/components/viz/HistoryExplorer';
 import type { HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
 import { PulseDayMovers } from '../../src/components/PulseDayMovers';
 import { MarketSnapshotList } from '../../src/components/MarketSnapshot';
-import { ProPaywall } from '../../src/components/ProPaywall';
 import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
 import {
   RbaOutlook,
@@ -39,7 +37,6 @@ import { rbaRateAsOf } from '../../src/data/bankHistoryTransform';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
-import { useProPaywall } from '../../src/hooks/useProPaywall';
 import {
   usePerformanceAuditProbe,
   usePerformanceAuditSurface,
@@ -52,6 +49,7 @@ import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/pro
 import { yieldToPaintFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import type { HistoryWindow } from '../../src/types';
+import { ScreenSkeleton } from '../../src/components/feedback';
 
 export default function Trends() {
   const theme = useTheme();
@@ -70,7 +68,7 @@ export default function Trends() {
     showHistoryRibbon,
     includeNonStandard,
   );
-  const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
+  const showBankInsights = effectiveBankInsights();
   const historyBanks = useStore((s) => s.historyBanks);
   const historyBanksError = useStore((s) => s.historyBanksError);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
@@ -85,7 +83,6 @@ export default function Trends() {
   const activeSection = useStore((s) => s.activeSection);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const suitabilityRevision = useSuitabilityRevision();
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const historyRequestKey = useRef<string | null>(null);
   const insightsRequestKey = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -553,7 +550,7 @@ export default function Trends() {
     actualCount: rbaGraphic?.pointCount ?? 0,
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
   const currentRba = core.rba.at(-1);
 
   return (
@@ -619,11 +616,7 @@ export default function Trends() {
             <DeferredChartPlaceholder label="Preparing lender movers" />
           ) : null}
         </>
-      ) : (
-        <Card style={{ marginBottom: 16 }}>
-          <InsightsLockedCard onUnlock={() => requestPro('bank_insights')} />
-        </Card>
-      )}
+      ) : null}
 
       {outlookReady ? (
         <RbaOutlook
@@ -827,13 +820,10 @@ export default function Trends() {
           <DeferredChartPlaceholder label="Preparing market history" height={220} />
         ) : (
           <Button
-            title="Enable Market explorer"
-            icon="sparkles"
+            title="Show market history"
+            icon="analytics-outline"
             variant="secondary"
-            onPress={() => {
-              if (!requestPro('history_ribbon')) return;
-              setPref('showHistoryRibbon', true);
-            }}
+            onPress={() => setPref('showHistoryRibbon', true)}
           />
         )}
       </Card>
@@ -886,14 +876,6 @@ export default function Trends() {
       <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 8 }}>
         Snapshot from {formatRunDate(core.run_date)}
       </AppText>
-      <ProPaywall
-        visible={paywallVisible}
-        intent={paywallIntent}
-        onClose={closePaywall}
-        onUpgraded={() => {
-          if (paywallIntent === 'history_ribbon') setPref('showHistoryRibbon', true);
-        }}
-      />
     </ScreenScrollView>
   );
 }

@@ -58,6 +58,8 @@ export interface Prefs {
   dismissedUpdateBuild: string | null;
   /** Require fingerprint/Face ID (with device-credential fallback) on app start. */
   appLockEnabled: boolean;
+  /** Unlocked by tapping the Settings version row; reveals audit/debug tools. */
+  developerToolsUnlocked: boolean;
   /** Saved product profile — default filters applied across the app. */
   profileFilters: ProfileFilters;
   /** Persisted mortgage/savings calculator inputs (so the calc remembers your situation). */
@@ -70,8 +72,10 @@ export const DEFAULT_PREFS: Prefs = {
   themeMode: 'system',
   defaultSection: 'Mortgage',
   notificationsEnabled: false,
-  crashReportsEnabled: true,
-  sessionReplayEnabled: true,
+  // Off until the consent banner records an explicit tap — nothing is collected
+  // before the user has actually chosen.
+  crashReportsEnabled: false,
+  sessionReplayEnabled: false,
   privacyChoiceVersion: 0,
   diagnosticsEnabled: false,
   wifiOnly: false,
@@ -79,14 +83,17 @@ export const DEFAULT_PREFS: Prefs = {
   includeNonStandard: false,
   depositRankMetric: 'base',
   mortgageRateMetric: 'headline',
-  enableDeepSearch: false,
-  showHistoryRibbon: false,
+  // Both are free. Ship them on so charts, history, and fee/feature search are
+  // discoverable without a trip to Settings.
+  enableDeepSearch: true,
+  showHistoryRibbon: true,
   rateIntelligencePro: false,
   onboarded: false,
   interests: [...DEFAULT_INTERESTS],
   rateMoveThresholdBps: RATE_MOVE_BPS_THRESHOLD,
   dismissedUpdateBuild: null,
   appLockEnabled: false,
+  developerToolsUnlocked: false,
   profileFilters: { ...EMPTY_PROFILE },
   calc: { ...EMPTY_CALC },
 };
