@@ -1,0 +1,36 @@
+{
+  "version": "1.0.125",
+  "releaseTag": "app-arm-v1.0.125",
+  "date": "2026-08-09",
+  "summaryBullets": [
+    "feat(mobile): pause the perf audit off screen instead of cancelling it (#162)",
+    "fix(mobile): harden performance audit teardown (#163)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "feat(mobile): pause the perf audit off screen instead of cancelling it (#162)"
+        },
+        {
+          "text": "fix(mobile): harden performance audit teardown (#163)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.125"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.124"
+        }
+      ]
+    }
+  ]
+}
