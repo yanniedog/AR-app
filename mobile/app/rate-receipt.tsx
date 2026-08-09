@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Stack, router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Linking, Pressable, type ScrollView, View } from 'react-native';
 
@@ -93,7 +93,25 @@ export default function RateReceiptScreen() {
   const auditActions = useMemo(() => ({
     'receipt.open': () => undefined,
     'receipt.scroll.evidence': () => scrollRef.current?.scrollToEnd({ animated: true }),
-    'receipt.back-to-product': () => router.back(),
+    'receipt.back-to-product': (parameters: unknown) => {
+      const plannedKey = parameters && typeof parameters === 'object'
+        ? (parameters as { productKey?: unknown }).productKey
+        : null;
+      const plannedRateIndex = parameters && typeof parameters === 'object'
+        ? (parameters as { rateIndex?: unknown }).rateIndex
+        : null;
+      if (typeof plannedKey === 'string' && plannedKey) {
+        router.replace({
+          pathname: '/product/[key]',
+          params: {
+            key: plannedKey,
+            ...(typeof plannedRateIndex === 'number' ? { ri: String(plannedRateIndex) } : {}),
+          },
+        } as unknown as Href);
+      } else {
+        router.back();
+      }
+    },
   }), []);
   const receiptFactCount = receipt
     ? receipt.tier.length + receipt.conditions.length + receipt.fees.length

@@ -37,7 +37,7 @@ import {
 import { moveInterest, orderedInterestSections, toggleInterest } from '../../src/data/interests';
 import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
-import { CURRENT_PRIVACY_CHOICE_VERSION } from '../../src/data/storeTypes';
+import { CURRENT_PRIVACY_CHOICE_VERSION, type Prefs } from '../../src/data/storeTypes';
 import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
 import type { Subscription } from '../../src/data/subscriptions';
 import type { ThemeMode } from '../../src/theme/theme';
@@ -80,6 +80,7 @@ export default function Settings() {
   });
   const auditThemeSnapshot = useRef<ThemeMode | null>(null);
   const auditRankSnapshot = useRef<RankMetric | null>(null);
+  const auditPreferenceSnapshot = useRef<Prefs | null>(null);
   useScrollToTop(scrollRef);
 
   const { focus, t } = useLocalSearchParams<{ focus?: string; t?: string }>();
@@ -140,6 +141,24 @@ export default function Settings() {
     () => changeDiagnosticsOpen(!diagnosticsOpen),
     [changeDiagnosticsOpen, diagnosticsOpen],
   );
+  const captureAuditPreferences = useCallback(() => {
+    auditPreferenceSnapshot.current ??= prefs;
+  }, [prefs]);
+  const toggleAuditPreference = useCallback(<K extends keyof Prefs>(key: K, value: Prefs[K]) => {
+    captureAuditPreferences();
+    setPref(key, value);
+  }, [captureAuditPreferences, setPref]);
+  const restoreAuditPreferences = useCallback(async () => {
+    const snapshot = auditPreferenceSnapshot.current;
+    if (!snapshot) return;
+    (Object.keys(snapshot) as (keyof Prefs)[]).forEach((key) => setPref(key, snapshot[key]));
+    auditPreferenceSnapshot.current = null;
+    if (snapshot.enableDeepSearch) await useStore.getState().ensureSearchIndex();
+    if (snapshot.showHistoryRibbon) {
+      await useStore.getState().ensureHistoryBanks();
+      await useStore.getState().ensureBankInsights();
+    }
+  }, [setPref]);
   const onUpdateStatusChange = useCallback((next: AppUpdateSurfaceStatus) => {
     setUpdateStatus(next);
   }, []);
@@ -187,11 +206,57 @@ export default function Settings() {
     'settings.theme.restore': restoreTheme,
     'settings.rank.next': selectNextRank,
     'settings.rank.restore': restoreRank,
+    'settings.non-standard.toggle': () =>
+      toggleAuditPreference('includeNonStandard', !prefs.includeNonStandard),
+    'settings.mortgage-rank.next': () => toggleAuditPreference(
+      'mortgageRateMetric',
+      prefs.mortgageRateMetric === 'headline' ? 'comparison' : 'headline',
+    ),
+    'settings.interests.reorder': () => toggleAuditPreference(
+      'interests',
+      prefs.interests.length > 1
+        ? [...prefs.interests.slice(1), prefs.interests[0]]
+        : prefs.interests,
+    ),
+    'settings.default-section.next': () => {
+      const current = Math.max(0, prefs.interests.indexOf(prefs.defaultSection));
+      const next = prefs.interests[(current + 1) % Math.max(1, prefs.interests.length)];
+      if (next) toggleAuditPreference('defaultSection', next);
+    },
+    'settings.deep-search.toggle': () =>
+      toggleAuditPreference('enableDeepSearch', !prefs.enableDeepSearch),
+    'settings.history-explorer.toggle': () =>
+      toggleAuditPreference('showHistoryRibbon', !prefs.showHistoryRibbon),
+    'settings.wifi-only.toggle': () => toggleAuditPreference('wifiOnly', !prefs.wifiOnly),
+    'settings.apk-wifi-only.toggle': () =>
+      toggleAuditPreference('apkUpdatesWifiOnly', !prefs.apkUpdatesWifiOnly),
+    'settings.alert-threshold.next': () => {
+      const index = Math.max(0, THRESHOLDS.indexOf(prefs.rateMoveThresholdBps));
+      toggleAuditPreference(
+        'rateMoveThresholdBps',
+        THRESHOLDS[(index + 1) % THRESHOLDS.length] ?? THRESHOLDS[0],
+      );
+    },
+    'settings.preferences.restore': restoreAuditPreferences,
+    'settings.notifications.observe': () => ({
+      enabled: prefs.notificationsEnabled,
+      permissionMutationExcluded: true,
+    }),
+    'settings.privacy.observe': () => ({
+      choiceVersion: prefs.privacyChoiceVersion,
+      crashReportsEnabled: prefs.crashReportsEnabled,
+      sessionReplayEnabled: prefs.sessionReplayEnabled,
+      mutationExcluded: true,
+    }),
+    'settings.app-lock.observe': () => ({
+      enabled: prefs.appLockEnabled,
+      deviceCredentialMutationExcluded: true,
+    }),
     'settings.feature.deep-search.observe': () => searchIndex
-      ? effectiveDeepSearch(prefs)
+      ? { enabled: effectiveDeepSearch(prefs), assetAvailable: true }
       : { unavailableReason: 'The trusted deep-search index is absent' },
     'settings.feature.history-explorer.observe': () => historyBanks && bankInsights
-      ? effectiveHistoryRibbon(prefs)
+      ? { enabled: effectiveHistoryRibbon(prefs), assetsAvailable: true }
       : { unavailableReason: 'The trusted history or bank-insights asset is absent' },
     'settings.update-status.observe': () => updateStatus.error
       ? { unavailableReason: `Update status ended with an error: ${updateStatus.error}` }
@@ -202,12 +267,14 @@ export default function Settings() {
     historyBanks,
     restoreRank,
     restoreTheme,
+    restoreAuditPreferences,
     selectNextRank,
     selectNextTheme,
     searchIndex,
     toggleDataDetails,
     toggleDiagnostics,
     toggleHomeSections,
+    toggleAuditPreference,
     updateStatus,
   ]);
   usePerformanceAuditSurface({

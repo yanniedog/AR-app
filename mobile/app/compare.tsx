@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -88,12 +88,24 @@ export default function Compare() {
   );
   const logoReadiness = useLogoReadiness(logoIds.join('|'), logoIds);
 
-  const auditActions = useMemo(() => ({
-    'compare.open': () => undefined,
-    'compare.scroll.last-column': () => horizontalScrollRef.current?.scrollToEnd({ animated: true }),
-    'compare.dismiss': () => router.back(),
-    'saved.compare.dismiss': () => router.back(),
-  }), []);
+  const auditActions = useMemo(() => {
+    const dismiss = (parameters: unknown) => {
+      const returnPath = parameters && typeof parameters === 'object'
+        ? (parameters as { returnPath?: unknown }).returnPath
+        : null;
+      if (typeof returnPath === 'string' && returnPath.startsWith('/')) {
+        router.replace(returnPath as Href);
+      } else {
+        router.back();
+      }
+    };
+    return {
+      'compare.open': () => undefined,
+      'compare.scroll.last-column': () => horizontalScrollRef.current?.scrollToEnd({ animated: true }),
+      'compare.dismiss': dismiss,
+      'saved.compare.dismiss': dismiss,
+    };
+  }, []);
   usePerformanceAuditSurface({
     id: 'compare.table',
     routeKey: '/compare',

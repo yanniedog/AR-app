@@ -611,8 +611,37 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           set({ productHistory: null, productHistoryError: null });
           return;
         }
-        const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
         const coreSha = manifest?.files.core.sha256 ?? '';
+        const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
+        const current = get();
+        if (
+          current.source !== 'remote' ||
+          current.core?.run_date !== core.run_date ||
+          (current.manifest?.files.core.sha256 ?? '') !== coreSha
+        ) {
+          return;
+        }
+        const trustedHistoryDates = current.historyBanks?.run_date === core.run_date
+          ? current.historyBanks.run_dates
+          : null;
+        if (
+          !force &&
+          cached &&
+          coreSha &&
+          cached.core_sha === coreSha &&
+          cached.run_date === core.run_date &&
+          trustedHistoryDates?.length === cached.run_dates.length &&
+          trustedHistoryDates.every((date, index) => date === cached.run_dates[index])
+        ) {
+          if (productHistory !== cached || current.productHistoryError) {
+            set({ productHistory: cached, productHistoryError: null });
+          }
+          debugLog.debug(
+            'perf',
+            `ensureProductHistory exact-cache slices=${cached.run_dates.length}`,
+          );
+          return;
+        }
         const requestId = ++productHistorySyncState.request;
         let lastPublished = cached ?? null;
         const revisionIsCurrent = () => {

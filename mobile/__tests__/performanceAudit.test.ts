@@ -27,6 +27,7 @@ import {
   requestPerformanceAudit,
   releasePerformanceAuditUploadDeletion,
   resolveAuditJourneyOptionalData,
+  requiresPerformanceAuditRouteRecovery,
   resumePerformanceAudit,
   resetPerformanceAuditForTests,
   subscribePerformanceAudit,
@@ -363,11 +364,76 @@ describe('performance audit scoring', () => {
       warn: 1,
       fail: 1,
       skipped: 1,
+      executed: 3,
+      justifiedSkipped: 0,
+      unexpectedSkipped: 1,
+      coveragePercent: 75,
       slowestCheckId: 'slow',
       slowestCheckMs: 200,
       maxEventLoopLagMs: 350,
       maxFrameGapMs: 80,
     });
+  });
+
+  it('never treats incomplete unexpected coverage as healthy', () => {
+    const summary = summarizePerformanceAudit([
+      check('fast', 'pass', 20),
+      check('cascade', 'skipped', 0, { reason: 'route recovery cascade' }),
+    ]);
+    expect(summary).toMatchObject({
+      overall: 'bottleneck',
+      executed: 1,
+      unexpectedSkipped: 1,
+      coveragePercent: 50,
+    });
+  });
+
+  it('counts terminal availability evidence as justified coverage', () => {
+    const summary = summarizePerformanceAudit([
+      check('fast', 'pass', 20),
+      check('terminal', 'skipped', 1, {
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'mounted action terminal-unavailable result',
+      }),
+    ]);
+    expect(summary).toMatchObject({
+      overall: 'attention',
+      justifiedSkipped: 1,
+      unexpectedSkipped: 0,
+      coveragePercent: 100,
+    });
+  });
+
+  it('recovers only when a journey invalidated route state, never for latency alone', () => {
+    const slow = check('slow-route', 'fail', 1_000, {
+      nonTimingFailure: false,
+      maxEventLoopLagMs: 400,
+    });
+    slow.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(slow)).toBe(false);
+
+    const structural = check('broken-route', 'fail', 10, {
+      routeStateInvalidated: true,
+    });
+    structural.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(structural)).toBe(true);
+
+    const nonTimingFailure = check('invalid-result', 'fail', 10, {
+      nonTimingFailure: true,
+    });
+    nonTimingFailure.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(nonTimingFailure)).toBe(true);
+
+    const errored = check('errored-route', 'fail', 10);
+    errored.kind = 'journey';
+    errored.error = 'route action failed';
+    expect(requiresPerformanceAuditRouteRecovery(errored)).toBe(true);
+
+    const interrupted = check('interrupted-route', 'skipped', 0, {
+      interruptedByBackground: true,
+    });
+    interrupted.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(interrupted)).toBe(true);
   });
 
   it('aggregates paired cold and warm route timings', () => {

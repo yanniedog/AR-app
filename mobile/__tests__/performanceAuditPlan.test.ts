@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
 import {
   DEEP_AUDIT_EXCLUDED_ACTION_IDS,
   DEEP_AUDIT_PASS_IDS,
@@ -84,6 +87,8 @@ describe('deep performance audit plan', () => {
   test('builds structurally identical first and repeat whole-app passes with stable unique ids', () => {
     const plan = buildDeepPerformanceAuditPlan(corePayload());
     expect(plan.passes.map((pass) => pass.id)).toEqual(DEEP_AUDIT_PASS_IDS);
+    expect(plan.coverageProfile).toBe('maximum-safe-coverage-v1');
+    expect(plan.safeActionCount).toBe(plan.passes[0].steps.length);
 
     const ids = plan.passes.flatMap((pass) => pass.steps.map((step) => step.id));
     expect(new Set(ids).size).toBe(ids.length);
@@ -177,6 +182,36 @@ describe('deep performance audit plan', () => {
       'settings.update-status.observe',
       'debug-log.scroll.end',
     ].forEach((action) => expect(actions).toContain(action));
+  });
+
+  test('plans exactly every registered safe mounted action after normalising aliases', () => {
+    const mobileRoot = path.resolve(__dirname, '..');
+    const roots = [path.join(mobileRoot, 'app'), path.join(mobileRoot, 'src', 'components')];
+    const files: string[] = [];
+    const visit = (directory: string) => {
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        const target = path.join(directory, entry.name);
+        if (entry.isDirectory()) visit(target);
+        else if (/\.tsx?$/.test(entry.name)) files.push(target);
+      }
+    };
+    roots.forEach(visit);
+    const actionPattern = /['"]([a-z][a-z0-9-]*(?:\.[a-z0-9-]+)+)['"]\s*:/g;
+    const registered = new Set<string>();
+    for (const file of files) {
+      const source = fs.readFileSync(file, 'utf8');
+      if (!source.includes('usePerformanceAuditSurface(')) continue;
+      for (const match of source.matchAll(actionPattern)) registered.add(match[1]);
+    }
+    const planned = new Set(
+      buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps
+        .map((step) => step.semanticActionId),
+    );
+    const expected = new Set(registered);
+    expected.delete('calculator.section.next');
+    expected.add('redirect.node.verify');
+    expect([...expected].filter((action) => !planned.has(action))).toEqual([]);
+    expect([...planned].filter((action) => !expected.has(action))).toEqual([]);
   });
 
   test('derives exact deterministic same-section comparison inputs and preserves rate_index', () => {
