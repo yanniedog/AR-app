@@ -681,6 +681,51 @@ describe('optional feature prefs', () => {
     expect(store.getState().productHistoryError).toBeNull();
   });
 
+  it('does not install an exact cached ledger after the core revision changes during cache read', async () => {
+    const cached = {
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      core_sha: remoteManifest.files.core.sha256,
+      run_dates: [remoteCore.run_date],
+      products: { product: [0.05] },
+    };
+    let finishRead!: (value: typeof cached) => void;
+    const pendingRead = new Promise<typeof cached>((resolve) => {
+      finishRead = resolve;
+    });
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      historyBanks: {
+        schema_version: 1,
+        run_date: remoteCore.run_date,
+        run_dates: [remoteCore.run_date],
+        sections: {},
+      },
+      productHistory: null,
+    });
+    mockReadProductHistory.mockReturnValueOnce(pendingRead);
+
+    const pending = store.getState().ensureProductHistory();
+    store.setState({
+      manifest: {
+        ...remoteManifest,
+        files: {
+          ...remoteManifest.files,
+          core: { ...remoteManifest.files.core, sha256: 'new-core-sha' },
+        },
+      },
+      productHistory: null,
+    });
+    finishRead(cached);
+    await pending;
+
+    expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
+    expect(store.getState().productHistory).toBeNull();
+  });
+
   it('ensureProductHistory coalesces concurrent calls into one sync', async () => {
     let finishSync!: (value: unknown) => void;
     const sync = new Promise((resolve) => {

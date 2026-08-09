@@ -184,7 +184,7 @@ describe('deep performance audit plan', () => {
     ].forEach((action) => expect(actions).toContain(action));
   });
 
-  test('plans every registered safe mounted action, with only the section alias exempt', () => {
+  test('plans exactly every registered safe mounted action after normalising aliases', () => {
     const mobileRoot = path.resolve(__dirname, '..');
     const roots = [path.join(mobileRoot, 'app'), path.join(mobileRoot, 'src', 'components')];
     const files: string[] = [];
@@ -207,12 +207,11 @@ describe('deep performance audit plan', () => {
       buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps
         .map((step) => step.semanticActionId),
     );
-    const aliasesCoveredBySpecificVariants = new Set(['calculator.section.next']);
-    expect(
-      [...registered].filter((action) =>
-        !planned.has(action) && !aliasesCoveredBySpecificVariants.has(action)),
-    ).toEqual([]);
-    expect(planned.size).toBe(registered.size);
+    const expected = new Set(registered);
+    expected.delete('calculator.section.next');
+    expected.add('redirect.node.verify');
+    expect([...expected].filter((action) => !planned.has(action))).toEqual([]);
+    expect([...planned].filter((action) => !expected.has(action))).toEqual([]);
   });
 
   test('derives exact deterministic same-section comparison inputs and preserves rate_index', () => {

@@ -1174,6 +1174,7 @@ async function runMaximumCoverageProfileCheck(
     state.prefs.enableDeepSearch &&
     state.prefs.showHistoryRibbon &&
     state.prefs.rateIntelligencePro &&
+    state.prefs.onboarded &&
     state.prefs.depositRankMetric === 'max' &&
     state.prefs.mortgageRateMetric === 'comparison';
   const ok = maximumSafeFeaturesEnabled && missingAssets.length === 0 && errors.length === 0;
@@ -3098,7 +3099,7 @@ export function PerformanceAuditRunner() {
             checks,
             routeAggregates: aggregateRepeatedJourneys(checks),
             limitations: [
-              'This is a structured partial schema-v4 report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.',
+              `This is a structured partial schema-v${PERFORMANCE_AUDIT_SCHEMA_VERSION} report for an unrecoverable stop (cancel, hang watchdog, dataset revision change, or setup/teardown failure). Per-step journey failures no longer abort the plan; those produce a complete report with aggregated fail/warn checks.`,
               `Unrecoverable failure occurred after ${completed} of ${total} planned durable checks.`,
               `The report applies to app version ${app.appVersion}, build ${app.buildVersion}.`,
             ],

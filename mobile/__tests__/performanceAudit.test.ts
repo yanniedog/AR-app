@@ -418,6 +418,17 @@ describe('performance audit scoring', () => {
     structural.kind = 'journey';
     expect(requiresPerformanceAuditRouteRecovery(structural)).toBe(true);
 
+    const nonTimingFailure = check('invalid-result', 'fail', 10, {
+      nonTimingFailure: true,
+    });
+    nonTimingFailure.kind = 'journey';
+    expect(requiresPerformanceAuditRouteRecovery(nonTimingFailure)).toBe(true);
+
+    const errored = check('errored-route', 'fail', 10);
+    errored.kind = 'journey';
+    errored.error = 'route action failed';
+    expect(requiresPerformanceAuditRouteRecovery(errored)).toBe(true);
+
     const interrupted = check('interrupted-route', 'skipped', 0, {
       interruptedByBackground: true,
     });
