@@ -33,7 +33,8 @@ export interface AuditCheck {
   label: string;
   kind: 'journey' | 'runtime' | 'storage' | 'network' | 'data' | 'update';
   status: AuditCheckStatus;
-  durationMs: number;
+  /** Null means the check was interrupted before a trustworthy duration existed. */
+  durationMs: number | null;
   metrics: Record<string, AuditMetricValue>;
   /** Full stacks are retained only for errors so the audit does not profile its own logging. */
   trace?: string;
@@ -82,6 +83,7 @@ export interface PerformanceAuditSummary {
   warn: number;
   fail: number;
   skipped: number;
+  unavailable: number;
   executed: number;
   justifiedSkipped: number;
   unexpectedSkipped: number;
@@ -120,7 +122,15 @@ export interface PerformanceAuditCoverage {
   executedJourneyChecks: number;
   justifiedSkippedJourneyChecks: number;
   unexpectedSkippedJourneyChecks: number;
+  unavailableJourneyChecks: number;
+  /** Checks that actually ran. Availability-only skips never count here. */
   coveragePercent: number;
+  /** Planned checks whose result was durably stored, including failures. */
+  attemptedPercent: number;
+  missingPlannedCheckIds: string[];
+  duplicateStoredCheckIds: string[];
+  unexpectedStoredCheckIds: string[];
+  excludedUnsafeFacetCount: number;
   complete: boolean;
 }
 
@@ -177,6 +187,7 @@ export interface AuditJourney {
   label: string;
   href?: Href;
   expectedPath: string;
+  expectedSurface: string;
   expectedSection?: SectionKey;
   navigationKind: 'tab' | 'stack';
   skipReason?: string;
@@ -655,31 +666,17 @@ export function failPerformanceAudit(error: string): void {
   });
 }
 
-/**
- * A deep audit records ~260 checks. Mounting a card for every one of them the
- * instant the run finishes competes for memory with the teardown that is still
- * persisting and uploading the report, so the screen shows the checks that carry
- * the diagnosis — every failure, warning and skip, then the slowest passes.
- */
+/** Page size used by the results screen. The selector returns every check in
+ * diagnostic order; the screen progressively mounts pages so no finding is
+ * hidden and report teardown is not forced to render hundreds of cards at once. */
 export const MAX_REPORTED_AUDIT_CHECKS = 80;
 
 export function selectReportedAuditChecks(checks: AuditCheck[]): AuditCheck[] {
-  if (checks.length <= MAX_REPORTED_AUDIT_CHECKS) return checks;
   const notable = checks.filter((check) => check.status !== 'pass');
-  if (notable.length >= MAX_REPORTED_AUDIT_CHECKS) {
-    return notable.slice(0, MAX_REPORTED_AUDIT_CHECKS);
-  }
-  const slowestPassIds = new Set(
-    checks
-      .filter((check) => check.status === 'pass')
-      .sort((a, b) => b.durationMs - a.durationMs)
-      .slice(0, MAX_REPORTED_AUDIT_CHECKS - notable.length)
-      .map((check) => check.id),
-  );
-  // Keep the original run order so the list still reads as a timeline.
-  return checks.filter(
-    (check) => check.status !== 'pass' || slowestPassIds.has(check.id),
-  );
+  const passes = checks
+    .filter((check) => check.status === 'pass')
+    .sort((a, b) => (b.durationMs ?? -1) - (a.durationMs ?? -1));
+  return [...notable, ...passes];
 }
 
 export function resetPerformanceAuditForTests(): void {
@@ -745,6 +742,7 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
         } as unknown as Href)
       : undefined,
     expectedPath: '/browse',
+    expectedSurface: 'browse.hierarchy',
     expectedSection: section,
     navigationKind: 'tab',
     skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
@@ -771,6 +769,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Home',
       href: '/(tabs)' as Href,
       expectedPath: '/',
+      expectedSurface: 'today.hero',
       navigationKind: 'tab',
     },
     ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
@@ -779,6 +778,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Bank response',
       href: '/passthrough' as Href,
       expectedPath: '/passthrough',
+      expectedSurface: 'moves.response-chart',
       navigationKind: 'tab',
     },
     {
@@ -786,6 +786,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Outlook',
       href: '/trends' as Href,
       expectedPath: '/trends',
+      expectedSurface: 'outlook.dashboard',
       navigationKind: 'tab',
     },
     {
@@ -793,6 +794,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Why rates move',
       href: '/rba' as Href,
       expectedPath: '/trends',
+      expectedSurface: 'outlook.rba-response',
       navigationKind: 'tab',
     },
     {
@@ -800,6 +802,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Watchlist',
       href: '/watchlist' as Href,
       expectedPath: '/watchlist',
+      expectedSurface: 'saved.list',
       navigationKind: 'tab',
     },
     {
@@ -807,6 +810,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Settings',
       href: '/settings' as Href,
       expectedPath: '/settings',
+      expectedSurface: 'settings.sections',
       navigationKind: 'tab',
     },
     {
@@ -817,6 +821,7 @@ export function buildPerformanceAuditJourneys(
         params: { section: 'Mortgage' },
       } as unknown as Href,
       expectedPath: '/search',
+      expectedSurface: 'search.results',
       navigationKind: 'stack',
     },
     {
@@ -824,6 +829,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Switch and save calculator',
       href: '/calculator' as Href,
       expectedPath: '/calculator',
+      expectedSurface: 'calculator.results',
       navigationKind: 'stack',
     },
     {
@@ -834,6 +840,7 @@ export function buildPerformanceAuditJourneys(
         params: { section: 'Mortgage' },
       } as unknown as Href,
       expectedPath: '/projections',
+      expectedSurface: 'projections.lifecycle-chart',
       navigationKind: 'stack',
     },
     {
@@ -841,6 +848,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Lenders',
       href: '/banks' as Href,
       expectedPath: '/banks',
+      expectedSurface: 'lenders.list',
       navigationKind: 'stack',
     },
     {
@@ -848,6 +856,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Product profile',
       href: '/profile' as Href,
       expectedPath: '/profile',
+      expectedSurface: 'profile.filters',
       navigationKind: 'stack',
     },
     {
@@ -863,6 +872,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: first ? `/product/${encodeURIComponent(first.product_key)}` : '/product',
+      expectedSurface: 'product.details',
       navigationKind: 'stack',
       skipReason: first ? undefined : 'No product is loaded',
     },
@@ -879,6 +889,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: '/rate-receipt',
+      expectedSurface: 'receipt.evidence',
       navigationKind: 'stack',
       skipReason: first ? undefined : 'No product is loaded',
     },
@@ -892,6 +903,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: provider ? `/bank/${encodeURIComponent(provider)}` : '/bank',
+      expectedSurface: 'lender.details',
       navigationKind: 'stack',
       skipReason: provider ? undefined : 'No lender is loaded',
     },
@@ -906,6 +918,7 @@ export function buildPerformanceAuditJourneys(
             } as unknown as Href)
           : undefined,
       expectedPath: '/compare',
+      expectedSurface: 'compare.table',
       navigationKind: 'stack',
       skipReason: first && second ? undefined : 'Fewer than two products are loaded',
     },
@@ -914,6 +927,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Terms and notices',
       href: '/terms' as Href,
       expectedPath: '/terms',
+      expectedSurface: 'terms.notices',
       navigationKind: 'stack',
     },
     {
@@ -921,6 +935,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Debug log',
       href: '/debug-log' as Href,
       expectedPath: '/debug-log',
+      expectedSurface: 'debug-log.entries',
       navigationKind: 'stack',
     },
   ];
@@ -1206,15 +1221,25 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
   const warn = checks.filter((check) => check.status === 'warn').length;
   const fail = checks.filter((check) => check.status === 'fail').length;
   const skipped = checks.filter((check) => check.status === 'skipped').length;
+  const unavailable = checks.filter(
+    (check) => check.metrics.availabilityFailure === true ||
+      check.metrics.executionAttempted === false,
+  ).length;
   const justifiedSkipped = checks.filter(
     (check) => check.status === 'skipped' &&
       (check.metrics.skipClassification === 'terminal-availability' ||
         check.metrics.availabilityEvidence != null),
   ).length;
   const unexpectedSkipped = skipped - justifiedSkipped;
-  const executed = checks.length - skipped;
+  const executed = checks.filter(
+    (check) => check.status !== 'skipped' &&
+      check.metrics.availabilityFailure !== true &&
+      check.metrics.executionAttempted !== false,
+  ).length;
+  // Coverage means execution. A declared reason can make an unavailable facet
+  // understandable, but it cannot turn work that did not run into coverage.
   const coveragePercent = checks.length
-    ? roundMetric(((executed + justifiedSkipped) / checks.length) * 100)
+    ? roundMetric((executed / checks.length) * 100)
     : 0;
   const completed = checks.filter((check) => check.status !== 'skipped');
   // Keep AUDIT_LATENCY_METRIC_KEYS in step with every key read below.
@@ -1236,7 +1261,7 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     if (check.id === 'file-system') {
       return Math.max(0, ...numeric('writeMs', 'readMs'));
     }
-    return check.durationMs;
+    return check.durationMs ?? 0;
   };
   const slowest = completed.reduce<{ check: AuditCheck; latencyMs: number } | null>(
     (current, check) => {
@@ -1264,6 +1289,7 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     warn,
     fail,
     skipped,
+    unavailable,
     executed,
     justifiedSkipped,
     unexpectedSkipped,
@@ -1288,7 +1314,10 @@ export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggre
     pair[iteration] = check;
     byJourney.set(journeyId, pair);
   }
-  const number = (check: AuditCheck, key: string) => Number(check.metrics[key] ?? 0);
+  const measuredNumber = (check: AuditCheck, key: string): number | null => {
+    const value = check.metrics[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
   const aggregates: AuditRouteAggregate[] = [];
   for (const [journeyId, pair] of byJourney) {
     if (!pair.cold || !pair.warm) continue;
@@ -1299,10 +1328,17 @@ export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggre
       pair.cold.metrics.interruptedByBackground === true ||
       pair.warm.metrics.interruptedByBackground === true
     ) continue;
-    const coldForwardMs = number(pair.cold, 'forwardMs');
-    const warmForwardMs = number(pair.warm, 'forwardMs');
-    const coldBackMs = number(pair.cold, 'backMs');
-    const warmBackMs = number(pair.warm, 'backMs');
+    const coldForwardMs = measuredNumber(pair.cold, 'forwardMs');
+    const warmForwardMs = measuredNumber(pair.warm, 'forwardMs');
+    const coldBackMs = measuredNumber(pair.cold, 'backMs');
+    const warmBackMs = measuredNumber(pair.warm, 'backMs');
+    // Route aggregates are specifically forward/back round trips. Semantic
+    // actions have a different timing contract and must never be coerced into
+    // fabricated zero-duration back navigation.
+    if (
+      coldForwardMs == null || warmForwardMs == null ||
+      coldBackMs == null || warmBackMs == null
+    ) continue;
     aggregates.push({
       journeyId,
       label: String(pair.cold.metrics.journeyLabel ?? journeyId),

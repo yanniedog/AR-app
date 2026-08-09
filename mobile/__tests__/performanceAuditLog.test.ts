@@ -134,6 +134,7 @@ describe('performanceAuditLog compaction', () => {
       sessionId: 's1',
       app: { appVersion: '1.0.0', buildVersion: '1' },
       summary: { overall: 'bottleneck', pass: 1, warn: 0, fail: 1 },
+      coverage: { plannedChecks: 2, storedChecks: 2, coveragePercent: 100 },
       plan: {
         schemaVersion: 1,
         inputs: { provider: 'AFG' },
@@ -146,7 +147,17 @@ describe('performanceAuditLog compaction', () => {
           kind: 'journey',
           status: 'pass',
           durationMs: 1,
-          metrics: { maxEventLoopLagMs: 1, readinessEvidence: `x:${sha}` },
+          metrics: {
+            measurementMode: 'semantic-action',
+            actionInvoked: true,
+            actionCompleted: true,
+            actionRevisionBefore: 3,
+            actionRevisionAfter: 4,
+            actionMs: 2,
+            forwardMs: 700,
+            maxEventLoopLagMs: 1,
+            readinessEvidence: `x:${sha}`,
+          },
         },
         {
           id: 'bad',
@@ -163,7 +174,8 @@ describe('performanceAuditLog compaction', () => {
     }) as Record<string, unknown>;
 
     expect(compact.blob).toBeUndefined();
-    expect(compact.limitations).toEqual(['a', 'b', 'c', 'd']);
+    expect(compact.limitations).toEqual(['a', 'b', 'c', 'd', 'e']);
+    expect(compact.coverage).toEqual({ plannedChecks: 2, storedChecks: 2, coveragePercent: 100 });
     expect(compact.plan).toEqual({
       schemaVersion: 1,
       inputs: { provider: 'AFG' },
@@ -171,12 +183,19 @@ describe('performanceAuditLog compaction', () => {
       stepCount: 3,
     });
     const checks = compact.checks as Record<string, unknown>[];
-    expect(checks[0]).not.toHaveProperty('metrics');
+    expect(checks[0].metrics).toEqual(expect.objectContaining({
+      measurementMode: 'semantic-action',
+      actionInvoked: true,
+      actionCompleted: true,
+      actionRevisionBefore: 3,
+      actionRevisionAfter: 4,
+    }));
+    expect(checks[0].metrics).not.toHaveProperty('readinessEvidence');
     expect((checks[1].metrics as Record<string, unknown>).readinessEvidence).toContain('e5ed9d7c0831…');
     expect(checks[1].error).toBe('nope');
 
     const encoded = compactAuditLogJson(compact);
-    expect(encoded.length).toBeLessThan(2_000);
+    expect(encoded.length).toBeLessThan(2_500);
     expect(encoded).not.toContain(sha);
   });
 });

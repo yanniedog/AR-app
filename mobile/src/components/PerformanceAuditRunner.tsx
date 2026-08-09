@@ -30,7 +30,6 @@ import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debug
 import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildDeepPerformanceAuditPlan,
-  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
@@ -50,6 +49,7 @@ import {
 } from '../lib/performanceAuditRollback';
 import {
   aggregateRepeatedJourneys,
+  buildPerformanceAuditJourneys,
   cancelPerformanceAudit,
   captureAuditTrace,
   completePerformanceAudit,
@@ -597,7 +597,7 @@ async function runDeepAuditStep(
       id: `deep-${step.id}`,
       label,
       kind: 'journey',
-      status: 'skipped',
+      status: 'fail',
       durationMs: roundMetric(now() - started),
       metrics: {
         journeyId: `${step.scenarioId}.${step.semanticActionId}`,
@@ -607,8 +607,11 @@ async function runDeepAuditStep(
         depth: step.depth,
         reason: step.skipReason,
         skipSafety: step.skipSafety.reason,
-        skipClassification: 'terminal-availability',
+        executionAttempted: false,
+        availabilityFailure: true,
       },
+      error: `Planned audit facet could not run: ${step.skipReason}`,
+      trace: captureAuditTrace(`deep step ${step.id} was unavailable before execution`),
     };
   }
 
@@ -678,6 +681,12 @@ async function runDeepAuditStepBody(
   assertDatasetRevision(datasetRevision);
   const logCursor = debugLog.getCursor();
   let actionSource = 'router';
+  let actionRevisionBefore: number | null = null;
+  let actionRevisionAfter: number | null = null;
+  let renderRevisionBefore: string | null = null;
+  let renderRevisionAfter: string | null = null;
+  let completedActionName: string | null = null;
+  const pathBeforeAction = currentPath();
   let expectedPath = step.expectedPath;
   let preActionWaitMs = 0;
   let measuredAction: {
@@ -688,15 +697,22 @@ async function runDeepAuditStepBody(
   };
   const href = routeEntryHref(step);
   if (href) {
+    if (
+      pathMatches(currentPath(), step.expectedPath) &&
+      !step.semanticActionId.startsWith('redirect.')
+    ) {
+      router.replace(AUDIT_HOME_PATH as Href);
+      await waitForPath(currentPath, AUDIT_HOME_PATH, `${label} route reset`, { watchdog });
+      await settleUi();
+      assertSessionActive(watchdog);
+    }
     measuredAction = await measureAuditAction(
       () => {
-        if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
-          // A scenario entry is an independent sample, not a growing user back
-          // stack. Compatibility redirects remain pushes because following the
-          // redirect is the behaviour under test.
-          if (step.semanticActionId.startsWith('redirect.')) router.push(href);
-          else router.replace(href);
-        }
+        // A scenario entry is an independent sample, not a growing user back
+        // stack. Compatibility redirects remain pushes because following the
+        // redirect is the behaviour under test.
+        if (step.semanticActionId.startsWith('redirect.')) router.push(href);
+        else router.replace(href);
       },
       () => monitor.snapshot(),
       now,
@@ -719,6 +735,10 @@ async function runDeepAuditStepBody(
       `terminal availability evidence: ${step.semanticActionId}`,
     );
     actionSource = source.id;
+    const sourceBefore = performanceAuditReadinessRegistry.snapshot().surfaces
+      .find((surface) => surface.id === source.id);
+    actionRevisionBefore = sourceBefore?.actionRevision ?? null;
+    renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     // Settle interactable readiness before invoking — exclude logo/list/graphic
     // decoration so stale off-screen asset probes cannot block unrelated taps.
     const preActionAbort = new AbortController();
@@ -750,6 +770,11 @@ async function runDeepAuditStepBody(
       () => monitor.snapshot(),
       now,
     );
+    const immediateCompletion = performanceAuditReadinessRegistry.snapshot().surfaces
+      .find((surface) => surface.id === source.id);
+    actionRevisionAfter = immediateCompletion?.actionRevision ?? null;
+    renderRevisionAfter = immediateCompletion?.renderRevision ?? null;
+    completedActionName = immediateCompletion?.lastCompletedAction ?? null;
     const actionResult = measuredAction.result;
     if (
       actionResult != null &&
@@ -776,7 +801,7 @@ async function runDeepAuditStepBody(
         id: `deep-${step.id}`,
         label,
         kind: 'journey',
-        status: 'skipped',
+        status: 'fail',
         durationMs: roundMetric(now() - started),
         metrics: {
           journeyId: `${step.scenarioId}.${step.semanticActionId}`,
@@ -787,8 +812,14 @@ async function runDeepAuditStepBody(
           reason: actionResult.unavailableReason,
           skipSafety: step.skipSafety.reason,
           availabilityEvidence: 'mounted action terminal-unavailable result',
-          skipClassification: 'terminal-availability',
+          executionAttempted: true,
+          actionInvoked: true,
+          actionCompleted: false,
+          actionMs: roundMetric(measuredAction.durationMs),
+          availabilityFailure: true,
         },
+        error: `Planned audit action was unavailable: ${actionResult.unavailableReason}`,
+        trace: captureAuditTrace(`deep step ${step.id} returned unavailable`),
       };
     }
   }
@@ -842,6 +873,38 @@ async function runDeepAuditStepBody(
       );
     }
   }
+  if (actionSource !== 'router') {
+    const completedSurface = performanceAuditReadinessRegistry.snapshot().surfaces
+      .find((surface) => surface.id === actionSource);
+    actionRevisionAfter = completedSurface?.actionRevision ?? actionRevisionAfter;
+    renderRevisionAfter = completedSurface?.renderRevision ?? renderRevisionAfter;
+    completedActionName = completedSurface?.lastCompletedAction ?? completedActionName;
+    if (
+      actionRevisionBefore == null ||
+      actionRevisionAfter == null ||
+      actionRevisionAfter <= actionRevisionBefore ||
+      completedActionName !== step.semanticActionId
+    ) {
+      throw new Error(
+        `Mounted action execution was not proven for ${step.semanticActionId}; ` +
+        `revision ${actionRevisionBefore ?? 'missing'} -> ${actionRevisionAfter ?? 'missing'}, ` +
+        `last action ${completedActionName ?? 'none'}`,
+      );
+    }
+    const pathChanged = !pathMatches(currentPath(), pathBeforeAction);
+    const requiresChangedRender = step.safety.stateImpact !== 'none' &&
+      !step.semanticActionId.includes('.scroll.');
+    if (
+      requiresChangedRender &&
+      !pathChanged &&
+      renderRevisionBefore === renderRevisionAfter
+    ) {
+      throw new Error(
+        `Mounted action completed without an observable path or render-state change: ` +
+        `${step.semanticActionId} (${renderRevisionBefore ?? 'no render revision'})`,
+      );
+    }
+  }
   await settleUi();
   assertDatasetRevision(datasetRevision);
   const responsiveness = monitor.metricsSince(responsivenessAt);
@@ -872,11 +935,21 @@ async function runDeepAuditStepBody(
       expectedPath,
       expectedSurface: step.expectedSurface,
       actionSource,
+      measurementMode: 'semantic-action',
+      executionAttempted: true,
+      actionInvoked: true,
+      actionCompleted: true,
+      actionRevisionBefore,
+      actionRevisionAfter,
+      renderRevisionBefore,
+      renderRevisionAfter,
+      actionResultEvidence: measuredAction.result == null
+        ? null
+        : JSON.stringify(measuredAction.result).slice(0, 512),
       actionMs: roundMetric(actionMs),
-      preActionWaitMs: roundMetric(preActionWaitMs),
+      ...(actionSource === 'router' ? {} : { preActionWaitMs: roundMetric(preActionWaitMs) }),
       forwardMs: roundMetric(forwardMs),
       backgroundSettleMs: roundMetric(readinessMs),
-      backMs: 0,
       readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
       runtimeErrors: errors.journey.length,
       runtimeErrorMessages: errors.journey.join(' | ') || null,
@@ -1183,7 +1256,9 @@ async function runMaximumCoverageProfileCheck(
     id: 'maximum-coverage-profile',
     label: 'Maximum safe audit coverage preparation',
     kind: 'data',
-    status: ok ? 'pass' : 'fail',
+    status: ok
+      ? worstStatus('pass', responsivenessStatus(responsiveness))
+      : 'fail',
     durationMs: roundMetric(now() - started),
     metrics: {
       profile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
@@ -1249,8 +1324,12 @@ async function runStorageCheck(
       error ??= formatAuditError(caught);
     }
   }
-  const maxWriteMs = writeTimes.reduce((maximum, value) => Math.max(maximum, value), 0);
-  const maxReadMs = readTimes.reduce((maximum, value) => Math.max(maximum, value), 0);
+  const maxWriteMs = writeTimes.length
+    ? Math.max(...writeTimes)
+    : null;
+  const maxReadMs = readTimes.length
+    ? Math.max(...readTimes)
+    : null;
   const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'async-storage',
@@ -1259,22 +1338,22 @@ async function runStorageCheck(
     status: error
       ? 'fail'
       : worstStatus(
-          scoreLatency(maxWriteMs, 50, 200),
-          scoreLatency(maxReadMs, 50, 200),
+          scoreLatency(maxWriteMs ?? 0, 50, 200),
+          scoreLatency(maxReadMs ?? 0, 50, 200),
           responsivenessStatus(responsiveness),
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
       payloadBytes: payload.length,
       iterations: writeTimes.length,
-      maxWriteMs: roundMetric(maxWriteMs),
-      maxReadMs: roundMetric(maxReadMs),
-      averageWriteMs: roundMetric(
-        writeTimes.reduce((sum, value) => sum + value, 0) / Math.max(1, writeTimes.length),
-      ),
-      averageReadMs: roundMetric(
-        readTimes.reduce((sum, value) => sum + value, 0) / Math.max(1, readTimes.length),
-      ),
+      maxWriteMs: maxWriteMs == null ? null : roundMetric(maxWriteMs),
+      maxReadMs: maxReadMs == null ? null : roundMetric(maxReadMs),
+      averageWriteMs: writeTimes.length
+        ? roundMetric(writeTimes.reduce((sum, value) => sum + value, 0) / writeTimes.length)
+        : null,
+      averageReadMs: readTimes.length
+        ? roundMetric(readTimes.reduce((sum, value) => sum + value, 0) / readTimes.length)
+        : null,
       temporaryKeyDeleted,
       ...responsivenessRecord(responsiveness),
     },
@@ -1295,18 +1374,21 @@ async function runFileSystemCheck(
       id: 'file-system',
       label: 'Log filesystem round-trip',
       kind: 'storage',
-      status: 'skipped',
+      status: 'fail',
       durationMs: roundMetric(now() - started),
       metrics: {
         reason: 'documentDirectory unavailable',
+        executionAttempted: false,
+        availabilityFailure: true,
         ...responsivenessRecord(responsiveness),
       },
+      error: 'Planned filesystem round trip could not run because documentDirectory is unavailable',
     };
   }
   const uri = `${FileSystem.documentDirectory}performance-audit-${sessionId}.tmp`;
   const payload = 'f'.repeat(FILE_PAYLOAD_BYTES);
-  let writeMs = 0;
-  let readMs = 0;
+  let writeMs: number | null = null;
+  let readMs: number | null = null;
   let error: string | undefined;
   let temporaryFileDeleted = false;
   try {
@@ -1346,15 +1428,15 @@ async function runFileSystemCheck(
     status: error
       ? 'fail'
       : worstStatus(
-          scoreLatency(writeMs, 80, 300),
-          scoreLatency(readMs, 80, 300),
+          scoreLatency(writeMs ?? 0, 80, 300),
+          scoreLatency(readMs ?? 0, 80, 300),
           responsivenessStatus(responsiveness),
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
       payloadBytes: payload.length,
-      writeMs: roundMetric(writeMs),
-      readMs: roundMetric(readMs),
+      writeMs: writeMs == null ? null : roundMetric(writeMs),
+      readMs: readMs == null ? null : roundMetric(readMs),
       temporaryFileDeleted,
       ...responsivenessRecord(responsiveness),
     },
@@ -1373,18 +1455,19 @@ async function runDataCheck(
       id: 'active-data',
       label: 'Active payload processing',
       kind: 'data',
-      status: 'skipped',
+      status: 'fail',
       durationMs: roundMetric(now() - started),
-      metrics: { reason: 'No active payload is loaded' },
+      metrics: { reason: 'No active payload is loaded', executionAttempted: false },
+      error: 'Planned active-payload processing could not run because no payload is loaded',
     };
   }
 
   const responsiveAt = monitor.snapshot();
-  let stringifyMs = 0;
-  let parseMs = 0;
-  let traversalMs = 0;
-  let payloadChars = 0;
-  let rateRows = 0;
+  let stringifyMs: number | null = null;
+  let parseMs: number | null = null;
+  let traversalMs: number | null = null;
+  let payloadChars: number | null = null;
+  let rateRows: number | null = null;
   let error: string | undefined;
   try {
     assertSessionActive(watchdog);
@@ -1403,6 +1486,7 @@ async function runDataCheck(
     await nextFrame();
     assertSessionActive(watchdog);
     at = now();
+    rateRows = 0;
     for (const section of Object.values(parsed.sections)) {
       const rates = [...(section.rates ?? [])];
       rateRows += rates.length;
@@ -1420,8 +1504,8 @@ async function runDataCheck(
   }
   const responsiveness = monitor.metricsSince(responsiveAt);
   const processingStatus = worstStatus(
-    scoreLatency(stringifyMs, 250, 1_000),
-    scoreLatency(parseMs, 350, 1_500),
+    scoreLatency(stringifyMs ?? 0, 250, 1_000),
+    scoreLatency(parseMs ?? 0, 350, 1_500),
     responsivenessStatus(responsiveness),
   );
   return {
@@ -1433,9 +1517,9 @@ async function runDataCheck(
     metrics: {
       payloadChars,
       rateRows,
-      stringifyMs: roundMetric(stringifyMs),
-      parseMs: roundMetric(parseMs),
-      traversalMs: roundMetric(traversalMs),
+      stringifyMs: stringifyMs == null ? null : roundMetric(stringifyMs),
+      parseMs: parseMs == null ? null : roundMetric(parseMs),
+      traversalMs: traversalMs == null ? null : roundMetric(traversalMs),
       ...responsivenessRecord(responsiveness),
     },
     ...(error ? { error, trace: captureAuditTrace('active payload processing failed') } : {}),
@@ -1458,11 +1542,11 @@ async function runNetworkCheck(
   const cancelTimer = setInterval(() => {
     if (getPerformanceAuditState().cancelRequested) abort.abort();
   }, 50);
-  let headersMs = 0;
-  let bodyMs = 0;
-  let parseMs = 0;
-  let statusCode = 0;
-  let responseChars = 0;
+  let headersMs: number | null = null;
+  let bodyMs: number | null = null;
+  let parseMs: number | null = null;
+  let statusCode: number | null = null;
+  let responseChars: number | null = null;
   let error: string | undefined;
   try {
     assertSessionActive(watchdog);
@@ -1507,9 +1591,9 @@ async function runNetworkCheck(
     metrics: {
       statusCode,
       responseChars,
-      headersMs: roundMetric(headersMs),
-      bodyMs: roundMetric(bodyMs),
-      parseMs: roundMetric(parseMs),
+      headersMs: headersMs == null ? null : roundMetric(headersMs),
+      bodyMs: bodyMs == null ? null : roundMetric(bodyMs),
+      parseMs: parseMs == null ? null : roundMetric(parseMs),
       timeoutMs,
       ...responsivenessRecord(responsiveness),
     },
@@ -1531,9 +1615,10 @@ async function runSectionModelCheck(
       id: `section-model-${section.toLowerCase()}`,
       label: `${section} section model`,
       kind: 'data',
-      status: 'skipped',
+      status: 'fail',
       durationMs: roundMetric(now() - started),
-      metrics: { reason: 'Section data is unavailable', section },
+      metrics: { reason: 'Section data is unavailable', section, executionAttempted: false },
+      error: `Planned ${section} section benchmark could not run because its data is unavailable`,
     };
   }
 
@@ -1620,21 +1705,21 @@ async function runSectionModelCheck(
     durationMs: roundMetric(now() - started),
     metrics: {
       section,
-      rows: first?.rows ?? 0,
-      visibleRows: first?.visibleRows ?? 0,
-      childNodes: first?.childNodes ?? 0,
-      rankedRows: first?.rankedRows ?? 0,
-      statsCount: first?.statsCount ?? 0,
-      firstScopeMs: roundMetric(first?.scopeMs ?? 0),
-      firstFilterMs: roundMetric(first?.filterMs ?? 0),
-      firstHierarchyMs: roundMetric(first?.hierarchyMs ?? 0),
-      firstStatsMs: roundMetric(first?.statsMs ?? 0),
-      firstRankMs: roundMetric(first?.rankMs ?? 0),
-      repeatScopeMs: roundMetric(repeat?.scopeMs ?? 0),
-      repeatFilterMs: roundMetric(repeat?.filterMs ?? 0),
-      repeatHierarchyMs: roundMetric(repeat?.hierarchyMs ?? 0),
-      repeatStatsMs: roundMetric(repeat?.statsMs ?? 0),
-      repeatRankMs: roundMetric(repeat?.rankMs ?? 0),
+      rows: first?.rows ?? null,
+      visibleRows: first?.visibleRows ?? null,
+      childNodes: first?.childNodes ?? null,
+      rankedRows: first?.rankedRows ?? null,
+      statsCount: first?.statsCount ?? null,
+      firstScopeMs: first == null ? null : roundMetric(first.scopeMs),
+      firstFilterMs: first == null ? null : roundMetric(first.filterMs),
+      firstHierarchyMs: first == null ? null : roundMetric(first.hierarchyMs),
+      firstStatsMs: first == null ? null : roundMetric(first.statsMs),
+      firstRankMs: first == null ? null : roundMetric(first.rankMs),
+      repeatScopeMs: repeat == null ? null : roundMetric(repeat.scopeMs),
+      repeatFilterMs: repeat == null ? null : roundMetric(repeat.filterMs),
+      repeatHierarchyMs: repeat == null ? null : roundMetric(repeat.hierarchyMs),
+      repeatStatsMs: repeat == null ? null : roundMetric(repeat.statsMs),
+      repeatRankMs: repeat == null ? null : roundMetric(repeat.rankMs),
       responsivenessClassification: 'recorded-not-scored-benchmark-self-work',
       ...responsivenessRecord(responsiveness),
     },
@@ -1648,9 +1733,9 @@ async function runLogIoCheck(
 ): Promise<AuditCheck> {
   const started = now();
   const responsivenessAt = monitor.snapshot();
-  let flushMs = 0;
-  let readMs = 0;
-  let bytes = 0;
+  let flushMs: number | null = null;
+  let readMs: number | null = null;
+  let bytes: number | null = null;
   let error: string | undefined;
   try {
     assertSessionActive(watchdog);
@@ -1678,15 +1763,15 @@ async function runLogIoCheck(
     status: error
       ? 'fail'
       : worstStatus(
-          scoreLatency(flushMs, 100, 500),
-          scoreLatency(readMs, 100, 500),
+          scoreLatency(flushMs ?? 0, 100, 500),
+          scoreLatency(readMs ?? 0, 100, 500),
           responsivenessStatus(responsiveness),
         ),
     durationMs: roundMetric(now() - started),
     metrics: {
       bytes,
-      flushMs: roundMetric(flushMs),
-      readMs: roundMetric(readMs),
+      flushMs: flushMs == null ? null : roundMetric(flushMs),
+      readMs: readMs == null ? null : roundMetric(readMs),
       ...responsivenessRecord(responsiveness),
     },
     ...(error ? { error, trace: captureAuditTrace('debug log persistence failed') } : {}),
@@ -1930,7 +2015,7 @@ async function waitForJourneyData(
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<{
   labels: string[];
-  durationMs: number;
+  durationMs: number | null;
 }> {
   // Give mounted effects a chance to claim their store work before inspecting
   // loading state. The subsequent poll keeps that cold work inside this
@@ -1939,7 +2024,7 @@ async function waitForJourneyData(
   assertSessionActive(watchdog);
   const requirements = journeyDataRequirements(journey, logCursor);
   const labels = [...new Set(requirements.map(({ label }) => label))];
-  if (requirements.length === 0) return { labels, durationMs: 0 };
+  if (requirements.length === 0) return { labels, durationMs: null };
 
   const started = now();
   const settleDeadlineMs = started + DATA_SETTLE_TIMEOUT_MS;
@@ -1964,8 +2049,8 @@ async function waitForJourneyData(
   }
 }
 
-/** Retained as a compatibility test seam for schema-v3 route timing fixtures.
- * Schema v4 runs the readiness-gated deep plan above. */
+/** Measure a real route round trip independently from the stateful semantic
+ * action plan. Every published back timing corresponds to router.back(). */
 export async function runJourney(
   journey: AuditJourney,
   iteration: JourneyIteration,
@@ -1980,24 +2065,29 @@ export async function runJourney(
       id: `journey-${journey.id}-${iteration}`,
       label: `${journey.label} (${iteration})`,
       kind: 'journey',
-      status: 'skipped',
+      status: 'fail',
       durationMs: roundMetric(now() - started),
       metrics: {
+        measurementMode: 'route-round-trip',
         reason: journey.skipReason ?? 'Route unavailable',
+        executionAttempted: false,
+        availabilityFailure: true,
         journeyId: journey.id,
         journeyLabel: journey.label,
         iteration,
       },
+      error: `Planned route round trip could not run: ${journey.skipReason ?? 'Route unavailable'}`,
     };
   }
 
   const responsivenessAt = monitor.snapshot();
   const logCursor = debugLog.getCursor();
-  let forwardMs = 0;
-  let backgroundSettleMs = 0;
+  let forwardMs: number | null = null;
+  let backgroundSettleMs: number | null = null;
+  let destinationReadinessMs: number | null = null;
   let backgroundTasks: string[] = [];
-  let backMs = 0;
-  let returnFallbackMs = 0;
+  let backMs: number | null = null;
+  let returnFallbackMs: number | null = null;
   let backDestination: string | null = null;
   let backReturnedToAudit = false;
   let backChangedPath = false;
@@ -2006,8 +2096,9 @@ export async function runJourney(
     | 'second-back'
     | 'replace-recovery'
     | 'second-back+replace-recovery' = 'none';
-  let secondBackMs = 0;
-  let replaceRecoveryMs = 0;
+  let secondBackMs: number | null = null;
+  let replaceRecoveryMs: number | null = null;
+  let originReadinessMs: number | null = null;
   let forwardResponsiveness = EMPTY_RESPONSIVENESS;
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
   let backResponsiveness = EMPTY_RESPONSIVENESS;
@@ -2028,8 +2119,6 @@ export async function runJourney(
     await settleUi();
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
-    forwardMs = now() - at;
-    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     if (
       journey.expectedSection &&
       useStore.getState().activeSection !== journey.expectedSection
@@ -2047,6 +2136,28 @@ export async function runJourney(
     backgroundSettleMs = background.durationMs;
     backgroundTasks = background.labels;
     assertDatasetRevision(datasetRevision);
+    const destinationReadinessStarted = now();
+    const destinationReadinessAbort = new AbortController();
+    const destinationReadinessGuard = setInterval(() => {
+      if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+        destinationReadinessAbort.abort();
+      }
+    }, 50);
+    try {
+      await performanceAuditReadinessRegistry.waitForReady({
+        surfaceIds: [journey.expectedSurface],
+        quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        timeoutMs: readinessTimeoutMs(watchdog),
+        signal: destinationReadinessAbort.signal,
+      });
+      watchdog.touchProgress();
+    } finally {
+      clearInterval(destinationReadinessGuard);
+    }
+    assertSessionActive(watchdog);
+    destinationReadinessMs = now() - destinationReadinessStarted;
+    forwardMs = now() - at;
+    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     // Keep the destination mounted long enough to expose deferred work,
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
@@ -2082,7 +2193,10 @@ export async function runJourney(
       await settleUi();
       backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
       secondBackMs = now() - secondBackStarted;
-      returnFallbackMs += secondBackMs;
+      backMs += secondBackMs;
+      backDestination = currentPath();
+      returnFallbackMs = secondBackMs;
+      backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     }
 
     if (!backReturnedToAudit) {
@@ -2101,7 +2215,7 @@ export async function runJourney(
       await settleUi();
       assertSessionActive(watchdog);
       replaceRecoveryMs = now() - fallbackStarted;
-      returnFallbackMs += replaceRecoveryMs;
+      returnFallbackMs = (returnFallbackMs ?? 0) + replaceRecoveryMs;
     }
   } catch (caught) {
     rethrowAuditControl(caught);
@@ -2117,16 +2231,41 @@ export async function runJourney(
     }
   }
 
+  if (!routeError && backReturnedToAudit) {
+    const originReadinessStarted = now();
+    const originReadinessAbort = new AbortController();
+    const originReadinessGuard = setInterval(() => {
+      if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+        originReadinessAbort.abort();
+      }
+    }, 50);
+    try {
+      await performanceAuditReadinessRegistry.waitForReady({
+        surfaceIds: ['audit.progress'],
+        quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        timeoutMs: readinessTimeoutMs(watchdog),
+        signal: originReadinessAbort.signal,
+      });
+      originReadinessMs = now() - originReadinessStarted;
+    } catch (caught) {
+      rethrowAuditControl(caught);
+      assertSessionActive(watchdog);
+      routeError = `Audit origin did not become ready after back navigation: ${formatAuditError(caught)}`;
+    } finally {
+      clearInterval(originReadinessGuard);
+    }
+  }
+
   const responsiveness = monitor.metricsSince(responsivenessAt);
   const errors = routeErrorMessages(logCursor);
   const backContractStatus =
-    journey.navigationKind === 'stack' && !backReturnedToAudit ? 'warn' : 'pass';
+    backReturnedToAudit && backChangedPath && backMs != null && backMs > 0 ? 'pass' : 'fail';
   const status = routeError || errors.journey.length
     ? 'fail'
     : worstStatus(
-        scoreLatency(forwardMs, 900, 2_500),
-        scoreLatency(backgroundSettleMs, 2_000, 10_000),
-        scoreLatency(backMs, 800, 2_000),
+        scoreLatency(forwardMs ?? 0, 900, 2_500),
+        scoreLatency(backgroundSettleMs ?? 0, 2_000, 10_000),
+        scoreLatency(backMs ?? 0, 800, 2_000),
         responsivenessStatus(responsiveness),
         backContractStatus,
       );
@@ -2137,22 +2276,30 @@ export async function runJourney(
     status,
     durationMs: roundMetric(now() - started),
     metrics: {
+      measurementMode: 'route-round-trip',
+      executionAttempted: true,
+      actionInvoked: true,
+      actionCompleted: routeError == null,
       journeyId: journey.id,
       journeyLabel: journey.label,
       iteration,
       expectedPath: journey.expectedPath,
+      expectedSurface: journey.expectedSurface,
       navigationKind: journey.navigationKind,
-      forwardMs: roundMetric(forwardMs),
-      backgroundSettleMs: roundMetric(backgroundSettleMs),
+      forwardMs: forwardMs == null ? null : roundMetric(forwardMs),
+      backgroundSettleMs: backgroundSettleMs == null ? null : roundMetric(backgroundSettleMs),
+      destinationReadinessMs:
+        destinationReadinessMs == null ? null : roundMetric(destinationReadinessMs),
       backgroundTasks: backgroundTasks.join(', ') || null,
-      backMs: roundMetric(backMs),
+      backMs: backMs == null ? null : roundMetric(backMs),
+      originReadinessMs: originReadinessMs == null ? null : roundMetric(originReadinessMs),
       backDestination,
       backChangedPath,
       backReturnedToAudit,
       returnNavigationKind,
-      secondBackMs: roundMetric(secondBackMs),
-      replaceRecoveryMs: roundMetric(replaceRecoveryMs),
-      returnFallbackMs: roundMetric(returnFallbackMs),
+      secondBackMs: secondBackMs == null ? null : roundMetric(secondBackMs),
+      replaceRecoveryMs: replaceRecoveryMs == null ? null : roundMetric(replaceRecoveryMs),
+      returnFallbackMs: returnFallbackMs == null ? null : roundMetric(returnFallbackMs),
       runtimeErrors: errors.journey.length,
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
@@ -2237,7 +2384,13 @@ export function PerformanceAuditRunner() {
       const unsubscribePause = subscribePerformanceAudit(mirrorPauseToWatchdog);
       const originalStore = useStore.getState();
       let plan = buildDeepPerformanceAuditPlan(originalStore.core);
-      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+      let navigationJourneys = buildPerformanceAuditJourneys(
+        originalStore.core,
+        SECTION_ORDER,
+      );
+      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS - (Platform.OS === 'android' ? 0 : 1);
+      let total = platformBenchmarkChecks + SECTION_ORDER.length +
+        navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
       const monitor = new ResponsivenessMonitor();
@@ -2318,7 +2471,12 @@ export function PerformanceAuditRunner() {
         await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
         plan = buildDeepPerformanceAuditPlan(initialStore.core);
-        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+        navigationJourneys = buildPerformanceAuditJourneys(
+          initialStore.core,
+          SECTION_ORDER,
+        );
+        total = platformBenchmarkChecks + SECTION_ORDER.length +
+          navigationJourneys.length * 2 +
           plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
         const datasetRevision = captureDatasetRevision();
         activeDatasetRevision = datasetRevision;
@@ -2369,12 +2527,13 @@ export function PerformanceAuditRunner() {
               );
             }
           };
+          const checkStarted = now();
           const continuedFailureCheck = (caught: unknown): AuditCheck => ({
             id: `continued-failure-${completed + 1}`,
             label,
             kind: 'runtime',
             status: 'fail',
-            durationMs: 0,
+            durationMs: roundMetric(now() - checkStarted),
             metrics: {
               continuedAfterFailure: true,
               routeStateInvalidated: true,
@@ -2431,7 +2590,7 @@ export function PerformanceAuditRunner() {
               ...check,
               status: observedFailure ? 'fail' : 'skipped',
               // A duration spanning a pause must not become the slowest check.
-              durationMs: 0,
+              durationMs: null,
               metrics: {
                 ...contaminatedTimingsRemoved(check.metrics),
                 interruptedByBackground: true,
@@ -2459,9 +2618,13 @@ export function PerformanceAuditRunner() {
         };
 
         updatePerformanceAuditProgress(completed, total, 'Preparing maximum safe feature coverage');
+        const maximumProfileResult: { check: AuditCheck | null } = { check: null };
         await recordContinuable(
           'Preparing maximum safe feature coverage',
-          () => runMaximumCoverageProfileCheck(monitor, watchdog),
+          async () => {
+            maximumProfileResult.check = await runMaximumCoverageProfileCheck(monitor, watchdog);
+            return maximumProfileResult.check;
+          },
         );
         const maximumProfileState = useStore.getState();
         environment = {
@@ -2471,10 +2634,8 @@ export function PerformanceAuditRunner() {
           productHistoryLoaded: maximumProfileState.productHistory != null,
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
           maximumSafeFeaturesEnabled:
-            maximumProfileState.prefs.includeNonStandard &&
-            maximumProfileState.prefs.enableDeepSearch &&
-            maximumProfileState.prefs.showHistoryRibbon &&
-            maximumProfileState.prefs.rateIntelligencePro,
+            maximumProfileResult.check != null &&
+            maximumProfileResult.check.status !== 'fail',
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2487,37 +2648,33 @@ export function PerformanceAuditRunner() {
           () => runRuntimeCheck(monitor, watchdog),
         );
 
-        const reentryGate = new ScenarioReentryGate();
+        // Deep semantic callbacks deliberately keep their screen mounted so a
+        // scenario can continue. They cannot also be honest forward/back route
+        // measurements. Run every steady-state destination as its own cold/warm
+        // push -> readiness/data settle -> hardware-equivalent back round trip.
+        for (const iteration of ['cold', 'warm'] as const) {
+          for (const journey of navigationJourneys) {
+            const label = `${journey.label} route round trip (${iteration})`;
+            updatePerformanceAuditProgress(completed, total, label);
+            await recordContinuable(
+              label,
+              () => runJourney(
+                journey,
+                iteration,
+                () => pathnameRef.current,
+                monitor,
+                watchdog,
+                datasetRevision,
+              ),
+            );
+          }
+        }
 
         for (const pass of plan.passes) {
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
             const label = `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`;
-            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
-              // Route recovery unmounted the screen this step acts on, so the
-              // reading it would take is of a screen no user would be looking at.
-              updatePerformanceAuditProgress(completed, total, label);
-              await record({
-                id: `deep-${step.id}`,
-                label,
-                kind: 'journey',
-                status: 'skipped',
-                durationMs: 0,
-                metrics: {
-                  journeyId: `${step.scenarioId}.${step.semanticActionId}`,
-                  journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
-                  iteration: step.passId === 'first-pass' ? 'cold' : 'warm',
-                  passId: step.passId,
-                  depth: step.depth,
-                  dependsOnRecoveredScenario: true,
-                  reason:
-                    'An earlier step in this scenario was interrupted and the screen ' +
-                    'this step depends on was unmounted by route recovery',
-                },
-              });
-              continue;
-            }
             updatePerformanceAuditProgress(completed, total, label);
             logAuditEvent(app, {
               kind: 'deep-step-start',
@@ -2541,7 +2698,7 @@ export function PerformanceAuditRunner() {
                 datasetRevision,
               ),
             );
-            if (recovered) reentryGate.markRecovered(step);
+            void recovered;
           }
         }
 
@@ -2597,13 +2754,15 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
-        updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
-        await recordContinuable(
-          'Inspecting Android update readiness',
-          () => runUpdateReadinessCheck(app, monitor, watchdog),
-        );
-        assertSessionActive(watchdog);
-        assertDatasetRevision(datasetRevision);
+        if (Platform.OS === 'android') {
+          updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
+          await recordContinuable(
+            'Inspecting Android update readiness',
+            () => runUpdateReadinessCheck(app, monitor, watchdog),
+          );
+          assertSessionActive(watchdog);
+          assertDatasetRevision(datasetRevision);
+        }
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         // The last measured step, and the only one not routed through
@@ -2647,7 +2806,7 @@ export function PerformanceAuditRunner() {
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
           status: rollbackResult.restored ? 'pass' : 'fail',
-          durationMs: restoreInterrupted ? 0 : roundMetric(now() - restoreStarted),
+          durationMs: restoreInterrupted ? null : roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
             attempts: rollbackAttempts,
@@ -2698,13 +2857,47 @@ export function PerformanceAuditRunner() {
           check.status === 'skipped' &&
           check.metrics.skipClassification !== 'terminal-availability' &&
           check.metrics.availabilityEvidence == null).length;
-        const plannedJourneyChecks = plan.passes.reduce(
+        const unavailableJourneyChecks = journeyChecks.filter(
+          (check) => check.metrics.availabilityFailure === true ||
+            check.metrics.executionAttempted === false,
+        ).length;
+        const plannedJourneyChecks = navigationJourneys.length * 2 + plan.passes.reduce(
           (sum, pass) => sum + pass.steps.length,
           0,
         );
         const executedJourneyChecks = journeyChecks.filter(
-          (check) => check.status !== 'skipped',
+          (check) => check.status !== 'skipped' &&
+            check.metrics.availabilityFailure !== true &&
+            check.metrics.executionAttempted !== false,
         ).length;
+        const plannedCheckIds = [
+          'maximum-coverage-profile',
+          'runtime-responsiveness',
+          ...navigationJourneys.flatMap((journey) => [
+            `journey-${journey.id}-cold`,
+            `journey-${journey.id}-warm`,
+          ]),
+          ...plan.passes.flatMap((pass) => pass.steps.map((step) => `deep-${step.id}`)),
+          ...SECTION_ORDER.map((section) => `section-model-${section.toLowerCase()}`),
+          'async-storage',
+          'file-system',
+          'debug-log-io',
+          'active-data',
+          'manifest-network',
+          ...(Platform.OS === 'android' ? ['update-readiness'] : []),
+          'audit-state-restoration',
+        ];
+        const plannedIdSet = new Set(plannedCheckIds);
+        const storedIdCounts = new Map<string, number>();
+        for (const check of checks) {
+          storedIdCounts.set(check.id, (storedIdCounts.get(check.id) ?? 0) + 1);
+        }
+        const missingPlannedCheckIds = plannedCheckIds.filter((id) => !storedIdCounts.has(id));
+        const duplicateStoredCheckIds = [...storedIdCounts]
+          .filter(([, count]) => count > 1)
+          .map(([id]) => id);
+        const unexpectedStoredCheckIds = [...storedIdCounts.keys()]
+          .filter((id) => !plannedIdSet.has(id));
         const report: PerformanceAuditReport = {
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
@@ -2727,15 +2920,30 @@ export function PerformanceAuditRunner() {
             executedJourneyChecks,
             justifiedSkippedJourneyChecks,
             unexpectedSkippedJourneyChecks,
+            unavailableJourneyChecks,
             coveragePercent: plannedJourneyChecks
               ? roundMetric(
-                  ((executedJourneyChecks + justifiedSkippedJourneyChecks) /
-                    plannedJourneyChecks) * 100,
+                  (executedJourneyChecks / plannedJourneyChecks) * 100,
                 )
               : 0,
+            attemptedPercent: total
+              ? roundMetric(
+                  (plannedCheckIds.filter((id) => storedIdCounts.has(id)).length / total) * 100,
+                )
+              : 0,
+            missingPlannedCheckIds,
+            duplicateStoredCheckIds,
+            unexpectedStoredCheckIds,
+            excludedUnsafeFacetCount: plan.excludedUnsafeActions.length,
             complete:
               checks.length === total &&
-              unexpectedSkippedJourneyChecks === 0,
+              checks.every((check) => check.status !== 'skipped') &&
+              checks.every((check) => check.metrics.availabilityFailure !== true) &&
+              missingPlannedCheckIds.length === 0 &&
+              duplicateStoredCheckIds.length === 0 &&
+              unexpectedStoredCheckIds.length === 0 &&
+              maximumProfileResult.check != null &&
+              maximumProfileResult.check.status !== 'fail',
           },
           summary,
           checks,
@@ -2744,7 +2952,8 @@ export function PerformanceAuditRunner() {
             `This report applies exactly to app version ${app.appVersion}, build ${app.buildVersion}.`,
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
-            'The first-pass and repeat whole-app scenarios run linearly. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
+            'The first and repeat whole-app scenarios run linearly after maximum-profile asset preparation; they are not process-level or empty-cache cold starts. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
+            'Every steady-state route also runs a separate push, exact destination settle, router back, and exact audit-origin recovery measurement in both passes. Semantic action checks never publish a synthetic back timing.',
             `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, preloads their trusted assets, and is covered by the same durable rollback journal as saved data and scenarios. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
             'Failed journey or benchmark steps are recorded with error evidence; the runner recovers route/state when needed and continues the remaining plan. Cancel requests, hang-watchdog expiry, and mid-run dataset revision changes remain unrecoverable stops.',
             'In-page actions invoke the same registered callbacks as product searches, filters, calculator/projection field updates, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input.edit actions remain explicitly excluded for safety.',
@@ -2772,6 +2981,7 @@ export function PerformanceAuditRunner() {
           `executed=${summary.executed}`,
           `justified_skipped=${summary.justifiedSkipped}`,
           `unexpected_skipped=${summary.unexpectedSkipped}`,
+          `unavailable=${summary.unavailable}`,
           `coverage_percent=${summary.coveragePercent}`,
           `slowest=${summary.slowestCheckId ?? 'none'}`,
           `slowest_ms=${summary.slowestCheckMs}`,
@@ -2999,7 +3209,7 @@ export function PerformanceAuditRunner() {
             label: getPerformanceAuditState().progress.label || 'Performance audit fatal error',
             kind: 'runtime',
             status: 'fail',
-            durationMs: 0,
+            durationMs: null,
             metrics: {
               completedBeforeFailure: completed,
               plannedChecks: total,

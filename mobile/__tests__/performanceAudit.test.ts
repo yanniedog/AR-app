@@ -190,6 +190,11 @@ describe('performance audit journeys', () => {
     expect(journeys.find((journey) => journey.id === 'product')?.href).toBeDefined();
     expect(journeys.find((journey) => journey.id === 'rate-receipt')?.href).toBeDefined();
     expect(journeys.find((journey) => journey.id === 'compare')?.href).toBeDefined();
+    expect(journeys.every((journey) => journey.expectedSurface.length > 0)).toBe(true);
+    expect(journeys.find((journey) => journey.id === 'product')?.expectedSurface)
+      .toBe('product.details');
+    expect(journeys.find((journey) => journey.id === 'compare')?.expectedSurface)
+      .toBe('compare.table');
   });
 
   it('keeps data-dependent journeys visible but skipped when no payload exists', () => {
@@ -292,6 +297,18 @@ describe('repeat-journey aggregates', () => {
     expect(aggregates).toHaveLength(1);
     expect(aggregates[0]).toMatchObject({ coldForwardMs: 900, forwardChangeMs: -450 });
   });
+
+  it('does not turn semantic actions without back measurements into zero-time routes', () => {
+    const aggregates = aggregateRepeatedJourneys([
+      journey('route.search.search.query', 'cold', 'pass', {
+        measurementMode: 'semantic-action', actionMs: 2, forwardMs: 710,
+      }),
+      journey('route.search.search.query', 'warm', 'pass', {
+        measurementMode: 'semantic-action', actionMs: 1, forwardMs: 690,
+      }),
+    ]);
+    expect(aggregates).toEqual([]);
+  });
 });
 
 describe('performance audit scoring', () => {
@@ -388,7 +405,7 @@ describe('performance audit scoring', () => {
     });
   });
 
-  it('counts terminal availability evidence as justified coverage', () => {
+  it('classifies terminal availability but never counts it as execution coverage', () => {
     const summary = summarizePerformanceAudit([
       check('fast', 'pass', 20),
       check('terminal', 'skipped', 1, {
@@ -400,7 +417,7 @@ describe('performance audit scoring', () => {
       overall: 'attention',
       justifiedSkipped: 1,
       unexpectedSkipped: 0,
-      coveragePercent: 100,
+      coveragePercent: 50,
     });
   });
 
@@ -500,38 +517,40 @@ describe('performance audit maintenance isolation', () => {
 });
 
 describe('reported audit check selection', () => {
-  function check(id: string, status: AuditCheck['status'], durationMs: number): AuditCheck {
+  function check(id: string, status: AuditCheck['status'], durationMs: number | null): AuditCheck {
     return { id, label: id, kind: 'journey', status, durationMs, metrics: {} };
   }
 
   it('renders every check for a short report', () => {
     const checks = [check('a', 'pass', 1), check('b', 'fail', 2)];
-    expect(selectReportedAuditChecks(checks)).toBe(checks);
+    expect(selectReportedAuditChecks(checks)).toEqual([checks[1], checks[0]]);
   });
 
-  it('keeps all non-pass checks and the slowest passes in run order', () => {
+  it('keeps every check reachable with non-pass checks before slowest passes', () => {
     const checks = [
       ...Array.from({ length: 300 }, (_, index) => check(`p${index}`, 'pass', index)),
       check('f1', 'fail', 5),
       check('w1', 'warn', 6),
       check('s1', 'skipped', 0),
+      check('unmeasured', 'pass', null),
     ];
 
     const selected = selectReportedAuditChecks(checks);
 
-    expect(selected).toHaveLength(MAX_REPORTED_AUDIT_CHECKS);
+    expect(selected).toHaveLength(checks.length);
     expect(selected.map((entry) => entry.id)).toEqual(
       expect.arrayContaining(['f1', 'w1', 's1', 'p299']),
     );
-    // The fastest passes are the ones dropped.
-    expect(selected.map((entry) => entry.id)).not.toContain('p0');
-    const order = selected.map((entry) => checks.indexOf(entry));
-    expect(order).toEqual([...order].sort((a, b) => a - b));
+    expect(selected.map((entry) => entry.id)).toContain('p0');
+    expect(selected.slice(0, 3).map((entry) => entry.id)).toEqual(['f1', 'w1', 's1']);
+    expect(selected[3].id).toBe('p299');
+    expect(selected.at(-1)?.id).toBe('unmeasured');
   });
 
-  it('caps a report that is entirely failures', () => {
+  it('never hides failures when there are more than one UI page', () => {
     const checks = Array.from({ length: 300 }, (_, index) => check(`f${index}`, 'fail', index));
-    expect(selectReportedAuditChecks(checks)).toHaveLength(MAX_REPORTED_AUDIT_CHECKS);
+    expect(selectReportedAuditChecks(checks)).toHaveLength(300);
+    expect(MAX_REPORTED_AUDIT_CHECKS).toBeLessThan(checks.length);
   });
 });
 
