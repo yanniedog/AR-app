@@ -27,6 +27,7 @@ import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { openBrowse } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
+import { OpaquePerformanceAuditRenderRevision } from '../src/lib/performanceAuditReadiness';
 
 const SECTION_OPTIONS: { label: string; value: SectionKey }[] = [
   { label: 'Mortgage', value: 'Mortgage' },
@@ -259,6 +260,8 @@ export default function Projections() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
+  const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
+  auditRenderRevisionTracker.current ??= new OpaquePerformanceAuditRenderRevision();
 
   const changeSection = useCallback((next: SectionKey) => setSection(next), []);
   const toggleAdvanced = useCallback(() => setAdvanced((value) => !value), []);
@@ -374,6 +377,17 @@ export default function Projections() {
     extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount),
   };
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
+  const activeBaseScenario = section === 'Mortgage'
+    ? scenario.mortgage
+    : section === 'TD'
+      ? scenario.termDeposit
+      : scenario.savings;
+  const projectionStateRevision = auditRenderRevisionTracker.current.update([
+    advanced,
+    section,
+    activeBaseScenario,
+    projectionInputs,
+  ]);
   const projectionRenderRevision = [
     coreRevision ?? 'none',
     section,
@@ -382,7 +396,7 @@ export default function Projections() {
     result.ready ? 'ready' : `missing:${result.missing.join(',')}`,
     dimension,
     metric,
-    JSON.stringify(projectionInputs),
+    projectionStateRevision,
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');

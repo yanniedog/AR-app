@@ -255,7 +255,7 @@ export function deriveDeepAuditInputs(core: CorePayload | null): DeepAuditDerive
   const providerSections = new Map<string, Set<SectionKey>>();
   for (const section of SECTION_KEYS) {
     for (const row of core.sections[section]?.rates ?? []) {
-      if (!row.provider.trim()) continue;
+      if (!row.product_key.trim() || !row.provider.trim()) continue;
       const sections = providerSections.get(row.provider) ?? new Set<SectionKey>();
       sections.add(section);
       providerSections.set(row.provider, sections);

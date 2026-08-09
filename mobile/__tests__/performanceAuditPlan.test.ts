@@ -273,13 +273,37 @@ describe('deep performance audit plan', () => {
 
   test('prefers a primary provider represented across multiple sections', () => {
     const core = corePayload();
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Alpha Bank',
+      productKey: 'mortgage-alpha',
+    });
     core.sections.Savings.rates.push(rate({
       provider: 'Zed Bank',
       product_key: 'savings-zed',
       taxonomy_path: 'SAVINGS.STANDARD',
     }));
 
-    expect(deriveDeepAuditInputs(core).primaryProduct?.provider).toBe('Zed Bank');
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Zed Bank',
+      productKey: 'mortgage-zed',
+    });
+  });
+
+  test('ignores provider coverage from rows without a product key', () => {
+    const core = corePayload();
+    core.sections.Savings.rates.push(rate({
+      provider: 'Zed Bank',
+      product_key: '',
+      taxonomy_path: 'SAVINGS.STANDARD',
+    }));
+
+    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
+      section: 'Mortgage',
+      provider: 'Alpha Bank',
+      productKey: 'mortgage-alpha',
+    });
   });
 
   test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {

@@ -359,7 +359,9 @@ export class RingBuffer {
       if (lineBytes + separatorBytes + visibleBytes > limit) {
         if (visible.length === 0) {
           const bytes = textEncoder.encode(line);
-          visible.push(textDecoder.decode(bytes.slice(Math.max(0, bytes.length - limit))));
+          let start = Math.max(0, bytes.length - limit);
+          while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start += 1;
+          visible.push(textDecoder.decode(bytes.slice(start)));
         }
         break;
       }

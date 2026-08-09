@@ -163,6 +163,24 @@ export interface PerformanceAuditActionCompletion {
   readonly actionRevision: number;
 }
 
+/**
+ * Converts potentially sensitive render state into a capture-local monotonic
+ * token. Only the opaque token is exposed to audit reports and diagnostic logs.
+ */
+export class OpaquePerformanceAuditRenderRevision {
+  private stateKey: string | null = null;
+  private revision = 0;
+
+  update(state: readonly unknown[]): string {
+    const nextKey = JSON.stringify(state);
+    if (nextKey !== this.stateKey) {
+      this.stateKey = nextKey;
+      this.revision += 1;
+    }
+    return `state-${this.revision}`;
+  }
+}
+
 const systemClock: PerformanceAuditReadinessClock = {
   now: () => globalThis.performance?.now?.() ?? Date.now(),
   setTimeout: (callback, delayMs) => setTimeout(callback, delayMs),

@@ -1196,7 +1196,6 @@ describe('debug log display tail', () => {
     const ring = new RingBuffer();
     ring.append({ ts: '2026-01-01T00:00:00.000Z', level: 'info', tag: 'old', message: 'x'.repeat(100) });
     ring.append({ ts: '2026-01-01T00:00:01.000Z', level: 'info', tag: 'new', message: 'latest' });
-    const fullText = ring.getText();
     const getText = jest.spyOn(ring, 'getText');
 
     const display = ring.getDisplayText(80);
@@ -1205,7 +1204,23 @@ describe('debug log display tail', () => {
     expect(display).toContain('exports include the full log');
     expect(display).toContain('latest');
     expect(display).not.toContain('x'.repeat(20));
+    getText.mockRestore();
+    const fullText = ring.getText();
+    const renderedTail = display.slice(display.indexOf('\n') + 1);
+    expect(new TextEncoder().encode(renderedTail).length).toBeLessThanOrEqual(80);
     expect(fullText).toContain('x'.repeat(100));
+
+    const unicodeRing = new RingBuffer();
+    unicodeRing.append({
+      ts: '2026-01-01T00:00:00.000Z',
+      level: 'info',
+      tag: 'unicode',
+      message: '🙂'.repeat(100),
+    });
+    const unicodeDisplay = unicodeRing.getDisplayText(81);
+    const unicodeTail = unicodeDisplay.slice(unicodeDisplay.indexOf('\n') + 1);
+    expect(unicodeTail).not.toContain('�');
+    expect(new TextEncoder().encode(unicodeTail).length).toBeLessThanOrEqual(81);
   });
 });
 

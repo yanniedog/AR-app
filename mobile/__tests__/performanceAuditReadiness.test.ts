@@ -2,11 +2,42 @@ import {
   createPerformanceAuditGraphicToken,
   createPerformanceAuditListToken,
   createPerformanceAuditLogoToken,
+  OpaquePerformanceAuditRenderRevision,
   PerformanceAuditReadinessProbeError,
   PerformanceAuditReadinessRegistry,
   PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessClock,
 } from '../src/lib/performanceAuditReadiness';
+
+describe('opaque performance audit render revisions', () => {
+  it('changes for advanced and base-scenario edits without exposing financial inputs', () => {
+    const revisions = new OpaquePerformanceAuditRenderRevision();
+    const initial = revisions.update([
+      false,
+      { balance: '50000', currentRate: '2.50' },
+      { horizonYears: '10' },
+    ]);
+
+    expect(revisions.update([
+      false,
+      { balance: '50000', currentRate: '2.50' },
+      { horizonYears: '10' },
+    ])).toBe(initial);
+    const advanced = revisions.update([
+      true,
+      { balance: '50000', currentRate: '2.50' },
+      { horizonYears: '10' },
+    ]);
+    const changedBase = revisions.update([
+      true,
+      { balance: '51000', currentRate: '2.60' },
+      { horizonYears: '10' },
+    ]);
+
+    expect(new Set([initial, advanced, changedBase]).size).toBe(3);
+    expect(`${initial}:${advanced}:${changedBase}`).not.toMatch(/50000|51000|2\.50|2\.60/);
+  });
+});
 
 class FakeClock implements PerformanceAuditReadinessClock {
   private nowMs = 0;
