@@ -203,6 +203,16 @@ describe('filterBankInsightsForSuitability', () => {
     expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(payload);
   });
 
+  test('reuses the filtered feed for identical mounted-screen inputs', () => {
+    const first = filterBankInsightsForSuitability(payload, filterCore, false);
+    const second = filterBankInsightsForSuitability(payload, filterCore, false);
+    expect(second).toBe(first);
+
+    setSuitabilityAllowed(new Set(['alpha-standard']));
+    const afterRevision = filterBankInsightsForSuitability(payload, filterCore, false);
+    expect(afterRevision).not.toBe(first);
+  });
+
   test('fails closed while the post-ingest suitability gate is warming', () => {
     setSuitabilityAllowed(new Set());
 

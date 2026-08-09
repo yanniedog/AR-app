@@ -6,7 +6,7 @@ import type {
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import { toFraction, visibleAccountRows } from './format';
-import { getSuitabilityAllowed } from './suitabilityGate';
+import { getSuitabilityAllowed, getSuitabilityRevision } from './suitabilityGate';
 import {
   DEFAULT_PASS_THROUGH_WINDOW_DAYS,
   MOVE_DIRS,
@@ -115,6 +115,14 @@ function currentStandardSeries(
   return { median: medians, best, count };
 }
 
+let suitabilityFilterCache: {
+  payload: BankInsightsPayload;
+  core: CorePayload;
+  detailsProducts: Record<string, ProductDetail> | null | undefined;
+  revision: number;
+  result: BankInsightsPayload | null;
+} | null = null;
+
 export function filterBankInsightsForSuitability(
   payload: BankInsightsPayload | null | undefined,
   core: CorePayload | null | undefined,
@@ -124,7 +132,17 @@ export function filterBankInsightsForSuitability(
   if (!payload) return null;
   if (includeNonStandard) return payload;
   if (!core) return null;
-  if (getSuitabilityAllowed()?.size === 0) return null;
+  const revision = getSuitabilityRevision();
+  if (
+    suitabilityFilterCache?.payload === payload &&
+    suitabilityFilterCache.core === core &&
+    suitabilityFilterCache.detailsProducts === detailsProducts &&
+    suitabilityFilterCache.revision === revision
+  ) return suitabilityFilterCache.result;
+  if (getSuitabilityAllowed()?.size === 0) {
+    suitabilityFilterCache = { payload, core, detailsProducts, revision, result: null };
+    return null;
+  }
 
   const historicalPairs = new Set<string>();
   const pairKey = (provider: string, section: SectionKey) => `${section}\u0000${provider}`;
@@ -201,7 +219,7 @@ export function filterBankInsightsForSuitability(
     }
   }
 
-  return {
+  const result: BankInsightsPayload = {
     ...payload,
     banks,
     events: payload.events.filter((event) =>
@@ -209,6 +227,8 @@ export function filterBankInsightsForSuitability(
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,
   };
+  suitabilityFilterCache = { payload, core, detailsProducts, revision, result };
+  return result;
 }
 
 function numberOrNull(value: unknown): number | null {

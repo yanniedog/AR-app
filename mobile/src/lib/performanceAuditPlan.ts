@@ -1,7 +1,8 @@
 import { ROOT } from '../data/taxonomy';
 import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../types';
+import { MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID } from './performanceAuditProfile';
 
-export const DEEP_AUDIT_PLAN_SCHEMA_VERSION = 1 as const;
+export const DEEP_AUDIT_PLAN_SCHEMA_VERSION = 2 as const;
 export const DEEP_AUDIT_PASS_IDS = ['first-pass', 'repeat'] as const;
 
 export type DeepAuditPassId = (typeof DEEP_AUDIT_PASS_IDS)[number];
@@ -115,6 +116,8 @@ export interface DeepAuditPass {
 
 export interface DeepPerformanceAuditPlan {
   schemaVersion: typeof DEEP_AUDIT_PLAN_SCHEMA_VERSION;
+  coverageProfile: typeof MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID;
+  safeActionCount: number;
   inputs: DeepAuditDerivedInputs;
   excludedUnsafeActions: DeepAuditExcludedActionId[];
   passes: DeepAuditPass[];
@@ -537,6 +540,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       expectedPath: '/search',
       expectedSurface: 'search.results',
       readiness: ['list'],
+      parameters: { returnPath: '/search' },
       stateImpact: 'local-only',
     },
   ]);
@@ -596,7 +600,17 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipWhen: ['The observed provider has no current rows', 'Optional bank intelligence is absent'],
     skipExplanation: 'Provider input comes from the same exact product used earlier in the chain.',
   }, [
-    { depth: 0, semanticActionId: 'product.lender.open', parameters: { provider: inputs.provider } },
+    {
+      depth: 0,
+      semanticActionId: 'product.open',
+      expectedPath: productPath,
+      expectedSurface: 'product.details',
+      readiness: ['details', 'logos'],
+      parameters: exactProductParameters,
+      optional: true,
+      skipReason: missingPrimary,
+    },
+    { depth: 1, semanticActionId: 'product.lender.open', parameters: { provider: inputs.provider } },
     { depth: 1, semanticActionId: 'lender.chart.section.next', readiness: ['bank-insights', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'lender.history.window.next', readiness: ['bank-insights', 'bank-history', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'lender.history.date.previous', readiness: ['bank-insights', 'graphics'], optional: true, ...optionalFeatureSkip },
@@ -813,7 +827,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'saved.compare.select.0', parameters: primary ? { selectionToken: primary.selectionToken, rateIndex: primary.rateIndex } : {}, stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'saved.compare.select.1', parameters: secondary ? { selectionToken: secondary.selectionToken, rateIndex: secondary.rateIndex } : {}, stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'saved.compare.open', expectedPath: '/compare', expectedSurface: 'compare.table', readiness: ['details', 'logos', 'graphics'], parameters: compareParameters },
-    { depth: 1, semanticActionId: 'saved.compare.dismiss', expectedPath: '/watchlist', expectedSurface: 'saved.list', readiness: ['list', 'logos'], stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'saved.compare.dismiss', expectedPath: '/watchlist', expectedSurface: 'saved.list', readiness: ['list', 'logos'], parameters: { returnPath: '/watchlist' }, stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'saved.fixture.restore', stateImpact: 'restorable' },
   ]);
 
@@ -855,6 +869,19 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'settings.theme.restore', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.rank.next', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'settings.rank.restore', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.non-standard.toggle', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.mortgage-rank.next', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.interests.reorder', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.default-section.next', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.deep-search.toggle', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.history-explorer.toggle', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.wifi-only.toggle', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.apk-wifi-only.toggle', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.alert-threshold.next', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.preferences.restore', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'settings.notifications.observe' },
+    { depth: 1, semanticActionId: 'settings.privacy.observe' },
+    { depth: 1, semanticActionId: 'settings.app-lock.observe' },
     { depth: 1, semanticActionId: 'settings.feature.deep-search.observe', readiness: ['search-index'], optional: true, ...optionalFeatureSkip },
     { depth: 1, semanticActionId: 'settings.feature.history-explorer.observe', readiness: ['bank-history', 'bank-insights'], optional: true, ...optionalFeatureSkip },
     { depth: 1, semanticActionId: 'settings.update-status.observe', readiness: ['update-status'], optional: true, ...optionalFeatureSkip },
@@ -957,6 +984,8 @@ export function buildDeepPerformanceAuditPlan(
   }));
   return {
     schemaVersion: DEEP_AUDIT_PLAN_SCHEMA_VERSION,
+    coverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
+    safeActionCount: templates.length,
     inputs,
     excludedUnsafeActions: [...DEEP_AUDIT_EXCLUDED_ACTION_IDS],
     passes,

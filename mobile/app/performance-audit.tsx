@@ -40,6 +40,10 @@ function statusLabel(status: AuditCheckStatus): string {
 }
 
 function checkDetail(check: AuditCheck): string {
+  if (check.status === 'skipped') {
+    const reason = String(check.metrics.reason ?? 'No timing was recorded');
+    return `Timing unavailable · ${reason}`;
+  }
   if (check.kind === 'journey') {
     const forward = Number(check.metrics.forwardMs ?? 0);
     const back = Number(check.metrics.backMs ?? 0);
@@ -219,9 +223,10 @@ export default function PerformanceAuditScreen() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">Full responsiveness diagnosis</AppText>
         <AppText variant="small" color="textMuted">
-          One tap repeats every screen cold and warm, then tests section models, responsiveness,
-          storage, payload processing, network and Android update readiness. When complete, the
-          full on-disk log is publicly hosted; the app then tries to copy its link.
+          Maximum safe coverage is always on. One tap temporarily enables every local feature and
+          all three sections, preloads their trusted assets, repeats every safe screen action cold
+          and warm, then tests models, responsiveness, storage, payload processing, network and
+          Android update readiness. Your settings and saved data are restored exactly afterward.
         </AppText>
         <AppText variant="tiny" color="warning">
           Anyone with the link can read the uploaded full log. You will be asked to confirm before
@@ -327,6 +332,22 @@ export default function PerformanceAuditScreen() {
               {report.summary.pass} good · {report.summary.warn} slow · {report.summary.fail}{' '}
               bottlenecks · {report.summary.skipped} skipped
             </AppText>
+            <AppText
+              variant="small"
+              color={report.summary.unexpectedSkipped > 0 ? 'danger' : 'textMuted'}
+            >
+              Coverage {report.summary.coveragePercent.toFixed(1)}% · {report.summary.executed}{' '}
+              executed · {report.summary.justifiedSkipped} terminal skips ·{' '}
+              {report.summary.unexpectedSkipped} unexpected skips
+            </AppText>
+            {report.coverage ? (
+              <AppText variant="small" color={report.coverage.complete ? 'textMuted' : 'danger'}>
+                Safe journey facets {report.coverage.executedJourneyChecks}/
+                {report.coverage.plannedJourneyChecks} executed ·{' '}
+                {report.coverage.justifiedSkippedJourneyChecks} terminal unavailable ·{' '}
+                {report.coverage.unexpectedSkippedJourneyChecks} unexpected
+              </AppText>
+            ) : null}
             <AppText variant="small" color="textMuted">
               Slowest: {report.summary.slowestCheckLabel ?? '—'} (
               {report.summary.slowestCheckMs.toFixed(0)} ms)

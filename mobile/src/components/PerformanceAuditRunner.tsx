@@ -34,6 +34,10 @@ import {
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
+  MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
+  maximumPerformanceAuditPrefs,
+} from '../lib/performanceAuditProfile';
+import {
   performanceAuditReadinessRegistry,
   PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessKind,
@@ -69,6 +73,7 @@ import {
   PerformanceAuditInactivityWatchdog,
   ResponsivenessMonitor,
   resolveAuditJourneyOptionalData,
+  requiresPerformanceAuditRouteRecovery,
   resumePerformanceAudit,
   roundMetric,
   scoreLatency,
@@ -106,9 +111,9 @@ const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
-// Runtime, storage, filesystem, log I/O, payload, network, update readiness,
-// and durable audit-state restoration.
-const FIXED_BENCHMARK_CHECKS = 8;
+// Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
+// network, update readiness, and durable audit-state restoration.
+const FIXED_BENCHMARK_CHECKS = 9;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -496,6 +501,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'not-found.open': return '/__audit-not-found__' as Href;
     case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
     case 'redirect.rba.verify': return '/rba' as Href;
+    case 'redirect.root.verify': return '/' as Href;
     case 'redirect.node.verify': {
       const taxonomyPath = stringArrayParameter(step, 'taxonomyPath');
       return {
@@ -601,6 +607,7 @@ async function runDeepAuditStep(
         depth: step.depth,
         reason: step.skipReason,
         skipSafety: step.skipSafety.reason,
+        skipClassification: 'terminal-availability',
       },
     };
   }
@@ -644,6 +651,7 @@ async function runDeepAuditStep(
         expectedPath: step.expectedPath,
         expectedSurface: step.expectedSurface,
         continuedAfterFailure: true,
+        routeStateInvalidated: true,
         optional: step.optional,
         optionalReadinessTimeout:
           step.optional && caught instanceof PerformanceAuditReadinessTimeoutError,
@@ -683,17 +691,13 @@ async function runDeepAuditStepBody(
     measuredAction = await measureAuditAction(
       () => {
         if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
-          router.push(href);
+          // A scenario entry is an independent sample, not a growing user back
+          // stack. Compatibility redirects remain pushes because following the
+          // redirect is the behaviour under test.
+          if (step.semanticActionId.startsWith('redirect.')) router.push(href);
+          else router.replace(href);
         }
       },
-      () => monitor.snapshot(),
-      now,
-    );
-  } else if (step.semanticActionId === 'redirect.root.verify') {
-    // The preceding not-found recovery action must already have reached Home.
-    actionSource = 'route-contract';
-    measuredAction = await measureAuditAction(
-      () => undefined,
       () => monitor.snapshot(),
       now,
     );
@@ -783,6 +787,7 @@ async function runDeepAuditStepBody(
           reason: actionResult.unavailableReason,
           skipSafety: step.skipSafety.reason,
           availabilityEvidence: 'mounted action terminal-unavailable result',
+          skipClassification: 'terminal-availability',
         },
       };
     }
@@ -1109,6 +1114,95 @@ async function runRuntimeCheck(
     status: responsivenessStatus(metrics),
     durationMs: roundMetric(now() - started),
     metrics: responsivenessRecord(metrics),
+  };
+}
+
+async function runMaximumCoverageProfileCheck(
+  monitor: ResponsivenessMonitor,
+  watchdog: PerformanceAuditInactivityWatchdog,
+): Promise<AuditCheck> {
+  const started = now();
+  const responsiveAt = monitor.snapshot();
+  const original = useStore.getState();
+  const prefs = maximumPerformanceAuditPrefs(original.prefs);
+  useStore.setState({ prefs, activeSection: prefs.defaultSection });
+  await yieldToUi();
+
+  const preparationErrors: string[] = [];
+  const prepare = async (label: string, work: () => Promise<void>) => {
+    try {
+      await awaitAuditWork(work(), watchdog, label);
+    } catch (caught) {
+      rethrowAuditControl(caught);
+      preparationErrors.push(`${label}: ${formatAuditError(caught)}`);
+    }
+  };
+  const prepared = useStore.getState();
+  await prepare('Maximum coverage details', () => prepared.ensureDetails());
+  await prepare('Maximum coverage search index', () => prepared.ensureSearchIndex());
+  await prepare('Maximum coverage bank history', () => prepared.ensureHistoryBanks());
+  await prepare('Maximum coverage bank insights', () => prepared.ensureBankInsights());
+  await prepare('Maximum coverage RBA calendar', () => prepared.ensureRbaCalendar());
+  await prepare('Maximum coverage product history', () =>
+    prepared.ensureProductHistory({ purpose: 'history_ribbon' }));
+  assertSessionActive(watchdog);
+
+  const state = useStore.getState();
+  const requiredAssets = {
+    core: state.core != null,
+    details: state.details != null,
+    searchIndex: state.searchIndex != null,
+    bankHistory: state.historyBanks != null,
+    bankInsights: state.bankInsights != null,
+    rbaCalendar: state.rbaCalendar != null,
+    productHistory: state.productHistory != null,
+  };
+  const missingAssets = Object.entries(requiredAssets)
+    .filter(([, available]) => !available)
+    .map(([name]) => name);
+  const dataErrors = [
+    state.historyBanksError,
+    state.bankInsightsError,
+    state.rbaCalendarError,
+    state.productHistoryError,
+  ].filter((value): value is string => Boolean(value));
+  const errors = [...preparationErrors, ...dataErrors];
+  const maximumSafeFeaturesEnabled =
+    state.prefs.interests.length === SECTION_ORDER.length &&
+    SECTION_ORDER.every((section) => state.prefs.interests.includes(section)) &&
+    state.prefs.includeNonStandard &&
+    state.prefs.enableDeepSearch &&
+    state.prefs.showHistoryRibbon &&
+    state.prefs.rateIntelligencePro &&
+    state.prefs.depositRankMetric === 'max' &&
+    state.prefs.mortgageRateMetric === 'comparison';
+  const ok = maximumSafeFeaturesEnabled && missingAssets.length === 0 && errors.length === 0;
+  const responsiveness = monitor.metricsSince(responsiveAt);
+  return {
+    id: 'maximum-coverage-profile',
+    label: 'Maximum safe audit coverage preparation',
+    kind: 'data',
+    status: ok ? 'pass' : 'fail',
+    durationMs: roundMetric(now() - started),
+    metrics: {
+      profile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
+      maximumSafeFeaturesEnabled,
+      enabledSections: state.prefs.interests.join(','),
+      includeNonStandard: state.prefs.includeNonStandard,
+      deepSearchEnabled: state.prefs.enableDeepSearch,
+      historyExplorerEnabled: state.prefs.showHistoryRibbon,
+      depositRankMetric: state.prefs.depositRankMetric,
+      mortgageRateMetric: state.prefs.mortgageRateMetric,
+      requiredAssets: Object.keys(requiredAssets).length,
+      availableAssets: Object.values(requiredAssets).filter(Boolean).length,
+      missingAssets: missingAssets.join(',') || null,
+      nonTimingFailure: !ok,
+      ...responsivenessRecord(responsiveness),
+    },
+    ...(ok ? {} : {
+      error: errors.join(' | ') || `Missing maximum-coverage assets: ${missingAssets.join(', ')}`,
+      trace: captureAuditTrace('maximum audit coverage preparation failed'),
+    }),
   };
 }
 
@@ -2282,6 +2376,7 @@ export function PerformanceAuditRunner() {
             durationMs: 0,
             metrics: {
               continuedAfterFailure: true,
+              routeStateInvalidated: true,
               currentPath: pathnameRef.current,
               datasetRevision: datasetRevisionLabel(datasetRevision),
             },
@@ -2355,11 +2450,30 @@ export function PerformanceAuditRunner() {
             throw caught;
           }
           // An interrupted step may have left the app mid-navigation.
-          if (check.status === 'fail' || check.metrics.interruptedByBackground === true) {
+          if (requiresPerformanceAuditRouteRecovery(check)) {
             await recoverAfterFailure();
             return true;
           }
           return false;
+        };
+
+        updatePerformanceAuditProgress(completed, total, 'Preparing maximum safe feature coverage');
+        await recordContinuable(
+          'Preparing maximum safe feature coverage',
+          () => runMaximumCoverageProfileCheck(monitor, watchdog),
+        );
+        const maximumProfileState = useStore.getState();
+        environment = {
+          ...environment,
+          detailsLoaded: maximumProfileState.details != null,
+          historyLoaded: maximumProfileState.historyBanks != null,
+          productHistoryLoaded: maximumProfileState.productHistory != null,
+          auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
+          maximumSafeFeaturesEnabled:
+            maximumProfileState.prefs.includeNonStandard &&
+            maximumProfileState.prefs.enableDeepSearch &&
+            maximumProfileState.prefs.showHistoryRibbon &&
+            maximumProfileState.prefs.rateIntelligencePro,
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2574,6 +2688,22 @@ export function PerformanceAuditRunner() {
 
         const finishedAt = new Date().toISOString();
         const summary = summarizePerformanceAudit(checks);
+        const journeyChecks = checks.filter((check) => check.kind === 'journey');
+        const justifiedSkippedJourneyChecks = journeyChecks.filter((check) =>
+          check.status === 'skipped' &&
+          (check.metrics.skipClassification === 'terminal-availability' ||
+            check.metrics.availabilityEvidence != null)).length;
+        const unexpectedSkippedJourneyChecks = journeyChecks.filter((check) =>
+          check.status === 'skipped' &&
+          check.metrics.skipClassification !== 'terminal-availability' &&
+          check.metrics.availabilityEvidence == null).length;
+        const plannedJourneyChecks = plan.passes.reduce(
+          (sum, pass) => sum + pass.steps.length,
+          0,
+        );
+        const executedJourneyChecks = journeyChecks.filter(
+          (check) => check.status !== 'skipped',
+        ).length;
         const report: PerformanceAuditReport = {
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
@@ -2589,6 +2719,23 @@ export function PerformanceAuditRunner() {
           },
           environment,
           plan,
+          coverage: {
+            plannedChecks: total,
+            storedChecks: checks.length,
+            plannedJourneyChecks,
+            executedJourneyChecks,
+            justifiedSkippedJourneyChecks,
+            unexpectedSkippedJourneyChecks,
+            coveragePercent: plannedJourneyChecks
+              ? roundMetric(
+                  ((executedJourneyChecks + justifiedSkippedJourneyChecks) /
+                    plannedJourneyChecks) * 100,
+                )
+              : 0,
+            complete:
+              checks.length === total &&
+              unexpectedSkippedJourneyChecks === 0,
+          },
           summary,
           checks,
           routeAggregates: aggregateRepeatedJourneys(checks),
@@ -2597,6 +2744,7 @@ export function PerformanceAuditRunner() {
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The first-pass and repeat whole-app scenarios run linearly. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
+            `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, preloads their trusted assets, and is covered by the same durable rollback journal as saved data and scenarios. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
             'Failed journey or benchmark steps are recorded with error evidence; the runner recovers route/state when needed and continues the remaining plan. Cancel requests, hang-watchdog expiry, and mid-run dataset revision changes remain unrecoverable stops.',
             'In-page actions invoke the same registered callbacks as product searches, filters, calculator/projection field updates, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input.edit actions remain explicitly excluded for safety.',
             'Calculator and projection scenarios apply restorable canned parameter sets through registered UI callbacks; encrypted scenario values are restored with the audit rollback journal.',
@@ -2620,6 +2768,10 @@ export function PerformanceAuditRunner() {
           `pass=${summary.pass}`,
           `warn=${summary.warn}`,
           `fail=${summary.fail}`,
+          `executed=${summary.executed}`,
+          `justified_skipped=${summary.justifiedSkipped}`,
+          `unexpected_skipped=${summary.unexpectedSkipped}`,
+          `coverage_percent=${summary.coveragePercent}`,
           `slowest=${summary.slowestCheckId ?? 'none'}`,
           `slowest_ms=${summary.slowestCheckMs}`,
         ].join(' ');

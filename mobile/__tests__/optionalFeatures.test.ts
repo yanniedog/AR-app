@@ -651,6 +651,36 @@ describe('optional feature prefs', () => {
     expect(store.getState().productHistoryError).toBeNull();
   });
 
+  it('uses the trusted loaded history timeline to skip exact-cache network revalidation', async () => {
+    const cached = {
+      schema_version: 2,
+      run_date: remoteCore.run_date,
+      core_sha: remoteManifest.files.core.sha256,
+      run_dates: [remoteCore.run_date],
+      products: { product: [0.05] },
+    };
+    store.setState({
+      prefs: historyRibbonPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+      historyBanks: {
+        schema_version: 1,
+        run_date: remoteCore.run_date,
+        run_dates: [remoteCore.run_date],
+        sections: {},
+      },
+      productHistory: cached,
+      productHistoryError: 'stale sync failure',
+    });
+
+    await store.getState().ensureProductHistory();
+
+    expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
+    expect(store.getState().productHistory).toBe(cached);
+    expect(store.getState().productHistoryError).toBeNull();
+  });
+
   it('ensureProductHistory coalesces concurrent calls into one sync', async () => {
     let finishSync!: (value: unknown) => void;
     const sync = new Promise((resolve) => {

@@ -72,6 +72,8 @@ export interface AuditEnvironment {
   networkType: string | null;
   networkConnected: boolean | null;
   networkInternetReachable: boolean | null;
+  auditCoverageProfile?: string;
+  maximumSafeFeaturesEnabled?: boolean;
 }
 
 export interface PerformanceAuditSummary {
@@ -80,6 +82,10 @@ export interface PerformanceAuditSummary {
   warn: number;
   fail: number;
   skipped: number;
+  executed: number;
+  justifiedSkipped: number;
+  unexpectedSkipped: number;
+  coveragePercent: number;
   slowestCheckId: string | null;
   slowestCheckLabel: string | null;
   slowestCheckMs: number;
@@ -100,10 +106,22 @@ export interface PerformanceAuditReport {
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
   plan?: DeepPerformanceAuditPlan;
+  coverage?: PerformanceAuditCoverage;
   summary: PerformanceAuditSummary;
   checks: AuditCheck[];
   routeAggregates: AuditRouteAggregate[];
   limitations: string[];
+}
+
+export interface PerformanceAuditCoverage {
+  plannedChecks: number;
+  storedChecks: number;
+  plannedJourneyChecks: number;
+  executedJourneyChecks: number;
+  justifiedSkippedJourneyChecks: number;
+  unexpectedSkippedJourneyChecks: number;
+  coveragePercent: number;
+  complete: boolean;
 }
 
 export interface AuditRouteAggregate {
@@ -1146,6 +1164,20 @@ export function hasExplicitNonTimingFailure(check: AuditCheck): boolean {
 }
 
 /**
+ * A slow, successfully completed interaction is still valid route state. Only
+ * journey failures that explicitly invalidate that state may unmount the
+ * screen and suppress dependent actions.
+ */
+export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolean {
+  if (check.kind !== 'journey') return false;
+  if (check.metrics.interruptedByBackground === true) return true;
+  if (check.status !== 'fail') return false;
+  return check.metrics.routeStateInvalidated === true ||
+    check.metrics.nonTimingFailure === true ||
+    Boolean(check.error);
+}
+
+/**
  * Every metric `summarizePerformanceAudit` can read as a check's representative
  * latency, plus the two report-wide maxima.
  *
@@ -1174,6 +1206,16 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
   const warn = checks.filter((check) => check.status === 'warn').length;
   const fail = checks.filter((check) => check.status === 'fail').length;
   const skipped = checks.filter((check) => check.status === 'skipped').length;
+  const justifiedSkipped = checks.filter(
+    (check) => check.status === 'skipped' &&
+      (check.metrics.skipClassification === 'terminal-availability' ||
+        check.metrics.availabilityEvidence != null),
+  ).length;
+  const unexpectedSkipped = skipped - justifiedSkipped;
+  const executed = checks.length - skipped;
+  const coveragePercent = checks.length
+    ? roundMetric(((executed + justifiedSkipped) / checks.length) * 100)
+    : 0;
   const completed = checks.filter((check) => check.status !== 'skipped');
   // Keep AUDIT_LATENCY_METRIC_KEYS in step with every key read below.
   const representativeLatency = (check: AuditCheck): number => {
@@ -1213,11 +1255,19 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
   );
 
   return {
-    overall: fail > 0 ? 'bottleneck' : warn > 0 ? 'attention' : 'healthy',
+    overall: fail > 0 || unexpectedSkipped > 0
+      ? 'bottleneck'
+      : warn > 0 || justifiedSkipped > 0
+        ? 'attention'
+        : 'healthy',
     pass,
     warn,
     fail,
     skipped,
+    executed,
+    justifiedSkipped,
+    unexpectedSkipped,
+    coveragePercent,
     slowestCheckId: slowest?.check.id ?? null,
     slowestCheckLabel: slowest?.check.label ?? null,
     slowestCheckMs: roundMetric(slowest?.latencyMs ?? 0),
