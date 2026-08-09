@@ -238,6 +238,10 @@ describe('PerformanceAuditReadinessRegistry', () => {
       actionRevision: 1,
       lastCompletedAction: 'browse.category.first',
     });
+    expect(registry.actionCompletion('browse.hierarchy')).toEqual({
+      actionRevision: 1,
+      actionName: 'browse.category.first',
+    });
   });
 
   it('does not stamp completion for unavailable action results', async () => {

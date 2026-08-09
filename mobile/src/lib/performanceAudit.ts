@@ -1187,6 +1187,10 @@ export function requiresPerformanceAuditRouteRecovery(check: AuditCheck): boolea
   if (check.kind !== 'journey') return false;
   if (check.metrics.interruptedByBackground === true) return true;
   if (check.status !== 'fail') return false;
+  // A mounted optional control can prove that it is absent without corrupting
+  // the route. Keep the screen mounted so independent controls in that
+  // scenario can still be exercised.
+  if (check.metrics.routeStateInvalidated === false) return false;
   return check.metrics.routeStateInvalidated === true ||
     check.metrics.nonTimingFailure === true ||
     Boolean(check.error);
@@ -1231,11 +1235,15 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
         check.metrics.availabilityEvidence != null),
   ).length;
   const unexpectedSkipped = skipped - justifiedSkipped;
-  const executed = checks.filter(
-    (check) => check.status !== 'skipped' &&
-      check.metrics.availabilityFailure !== true &&
-      check.metrics.executionAttempted !== false,
-  ).length;
+  const executed = checks.filter((check) => {
+    if (check.status === 'skipped' || check.metrics.availabilityFailure === true) return false;
+    // Benchmarks do not invoke UI actions. Journey coverage is stricter: only
+    // explicit attempted + invoked + completed proof counts.
+    if (check.kind !== 'journey') return check.metrics.executionAttempted !== false;
+    return check.metrics.executionAttempted === true &&
+      check.metrics.actionInvoked === true &&
+      check.metrics.actionCompleted === true;
+  }).length;
   // Coverage means execution. A declared reason can make an unavailable facet
   // understandable, but it cannot turn work that did not run into coverage.
   const coveragePercent = checks.length

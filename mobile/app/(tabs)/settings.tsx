@@ -56,6 +56,7 @@ export default function Settings() {
   const prefs = useStore((s) => s.prefs);
   const hydrated = useStore((s) => s.hydrated);
   const setPref = useStore((s) => s.setPref);
+  const setPrefs = useStore((s) => s.setPrefs);
   const core = useStore((s) => s.core);
   const searchIndex = useStore((s) => s.searchIndex);
   const historyBanks = useStore((s) => s.historyBanks);
@@ -148,17 +149,12 @@ export default function Settings() {
     captureAuditPreferences();
     setPref(key, value);
   }, [captureAuditPreferences, setPref]);
-  const restoreAuditPreferences = useCallback(async () => {
+  const restoreAuditPreferences = useCallback(() => {
     const snapshot = auditPreferenceSnapshot.current;
     if (!snapshot) return;
-    (Object.keys(snapshot) as (keyof Prefs)[]).forEach((key) => setPref(key, snapshot[key]));
+    setPrefs(snapshot);
     auditPreferenceSnapshot.current = null;
-    if (snapshot.enableDeepSearch) await useStore.getState().ensureSearchIndex();
-    if (snapshot.showHistoryRibbon) {
-      await useStore.getState().ensureHistoryBanks();
-      await useStore.getState().ensureBankInsights();
-    }
-  }, [setPref]);
+  }, [setPrefs]);
   const onUpdateStatusChange = useCallback((next: AppUpdateSurfaceStatus) => {
     setUpdateStatus(next);
   }, []);

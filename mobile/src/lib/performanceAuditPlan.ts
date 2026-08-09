@@ -137,6 +137,7 @@ interface StepTemplate {
   stateImpact?: DeepAuditStateImpact;
   unsafeActionsExcluded?: DeepAuditExcludedActionId[];
   parameters?: Record<string, DeepAuditParameter>;
+  repeatParameters?: Record<string, DeepAuditParameter>;
 }
 
 interface ScenarioDefaults {
@@ -251,12 +252,25 @@ export function deriveDeepAuditInputs(core: CorePayload | null): DeepAuditDerive
   let chosenSection: SectionKey | null = null;
   let chosenRows: RateRow[] = [];
   let singleFallback: { section: SectionKey; rows: RateRow[] } | null = null;
+  const providerSections = new Map<string, Set<SectionKey>>();
+  for (const section of SECTION_KEYS) {
+    for (const row of core.sections[section]?.rates ?? []) {
+      if (!row.provider.trim()) continue;
+      const sections = providerSections.get(row.provider) ?? new Set<SectionKey>();
+      sections.add(section);
+      providerSections.set(row.provider, sections);
+    }
+  }
 
   for (const section of SECTION_KEYS) {
     const sorted = (core.sections[section]?.rates ?? [])
       .filter((row) => row.product_key.trim() && row.provider.trim())
       .slice()
-      .sort((left, right) => compareRows(left, right, section));
+      .sort((left, right) =>
+        (providerSections.get(right.provider)?.size ?? 0) -
+          (providerSections.get(left.provider)?.size ?? 0) ||
+        compareRows(left, right, section),
+      );
     const uniqueProducts: RateRow[] = [];
     const seen = new Set<string>();
     for (const row of sorted) {
@@ -323,6 +337,7 @@ function scenario(
       unsafeActionsExcluded:
         action.unsafeActionsExcluded ?? defaults.unsafeActionsExcluded ?? NO_UNSAFE_ACTIONS,
       parameters: action.parameters ?? {},
+      repeatParameters: action.repeatParameters ?? {},
     });
   }
 }
@@ -688,6 +703,10 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
         balance: '50000',
         currentRate: '2.50',
       },
+      repeatParameters: {
+        balance: '51000',
+        currentRate: '2.60',
+      },
       stateImpact: 'restorable',
     },
     {
@@ -753,8 +772,8 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'projections.advanced.toggle', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'projections.dimension.next', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'projections.metric.next', readiness: ['graphics'], stateImpact: 'local-only' },
-    { depth: 3, semanticActionId: 'projections.chart.previous', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 3, semanticActionId: 'projections.chart.next', readiness: ['graphics'], stateImpact: 'local-only' },
+    { depth: 3, semanticActionId: 'projections.chart.previous', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'projections.section.next', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
@@ -968,7 +987,10 @@ function materializeStep(template: StepTemplate, passId: DeepAuditPassId): DeepA
       stateImpact,
       unsafeActionsExcluded: [...(template.unsafeActionsExcluded ?? NO_UNSAFE_ACTIONS)],
     },
-    parameters: { ...(template.parameters ?? {}) },
+    parameters: {
+      ...(template.parameters ?? {}),
+      ...(passId === 'repeat' ? template.repeatParameters ?? {} : {}),
+    },
   };
 }
 

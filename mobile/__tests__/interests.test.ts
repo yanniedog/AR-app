@@ -66,6 +66,33 @@ describe('store interests prefs', () => {
     expect(useStore.getState().prefs.defaultSection).toBe('Savings');
   });
 
+  it('restores multiple preferences in one normalized store update', () => {
+    useStore.setState({ activeSection: 'TD' });
+    let updates = 0;
+    const unsubscribe = useStore.subscribe(() => {
+      updates += 1;
+    });
+
+    useStore.getState().setPrefs({
+      interests: ['Savings'],
+      defaultSection: 'Mortgage',
+      themeMode: 'dark',
+      includeNonStandard: true,
+    });
+    unsubscribe();
+
+    expect(updates).toBe(1);
+    expect(useStore.getState()).toMatchObject({
+      activeSection: 'Savings',
+      prefs: {
+        interests: ['Savings'],
+        defaultSection: 'Savings',
+        themeMode: 'dark',
+        includeNonStandard: true,
+      },
+    });
+  });
+
   it('normalizes interests on onboarding complete', () => {
     useStore.getState().completeOnboarding(['TD', 'TD', 'Savings'], false);
     expect(useStore.getState().prefs.interests).toEqual(['TD', 'Savings']);

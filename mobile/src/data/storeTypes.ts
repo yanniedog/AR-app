@@ -196,6 +196,7 @@ export interface AppState {
     filters: FilterSnapshot;
   }) => Subscription | undefined;
   setPref: <K extends keyof Prefs>(key: K, value: Prefs[K]) => void;
+  setPrefs: (values: Partial<Prefs>) => void;
   setActiveSection: (section: SectionKey) => void;
   completeOnboarding: (interests: SectionKey[], notifications: boolean) => void;
   clearCache: () => Promise<void>;

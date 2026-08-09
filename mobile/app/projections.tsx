@@ -382,6 +382,7 @@ export default function Projections() {
     result.ready ? 'ready' : `missing:${result.missing.join(',')}`,
     dimension,
     metric,
+    JSON.stringify(projectionInputs),
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');

@@ -421,6 +421,23 @@ describe('performance audit scoring', () => {
     });
   });
 
+  it('counts journey coverage only with complete execution proof', () => {
+    const missingProof = check('missing-proof', 'fail', 10, { executionAttempted: true });
+    missingProof.kind = 'journey';
+    const completedWithLatencyFailure = check('timing-fail', 'fail', 900, {
+      executionAttempted: true,
+      actionInvoked: true,
+      actionCompleted: true,
+      maxEventLoopLagMs: 400,
+    });
+    completedWithLatencyFailure.kind = 'journey';
+
+    expect(summarizePerformanceAudit([missingProof, completedWithLatencyFailure])).toMatchObject({
+      executed: 1,
+      coveragePercent: 50,
+    });
+  });
+
   it('recovers only when a journey invalidated route state, never for latency alone', () => {
     const slow = check('slow-route', 'fail', 1_000, {
       nonTimingFailure: false,
@@ -445,6 +462,14 @@ describe('performance audit scoring', () => {
     errored.kind = 'journey';
     errored.error = 'route action failed';
     expect(requiresPerformanceAuditRouteRecovery(errored)).toBe(true);
+
+    const terminalUnavailable = check('terminal-unavailable', 'fail', 10, {
+      availabilityFailure: true,
+      routeStateInvalidated: false,
+    });
+    terminalUnavailable.kind = 'journey';
+    terminalUnavailable.error = 'optional action unavailable';
+    expect(requiresPerformanceAuditRouteRecovery(terminalUnavailable)).toBe(false);
 
     const interrupted = check('interrupted-route', 'skipped', 0, {
       interruptedByBackground: true,

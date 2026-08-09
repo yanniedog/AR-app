@@ -344,6 +344,31 @@ export class RingBuffer {
     return this.entries.map(({ entry }) => formatEntry(entry)).join('\n');
   }
 
+  getDisplayText(maxBytes = MAX_LOG_DISPLAY_BYTES): string {
+    const limit = Math.max(0, Math.floor(maxBytes));
+    if (limit === 0 || this.entries.length === 0) return '';
+    const fullBytes = Math.max(0, this.bytes - 1);
+    if (fullBytes <= limit) return this.getText();
+
+    const visible: string[] = [];
+    let visibleBytes = 0;
+    for (let index = this.entries.length - 1; index >= 0; index -= 1) {
+      const line = formatEntry(this.entries[index].entry);
+      const lineBytes = textEncoder.encode(line).length;
+      const separatorBytes = visible.length ? 1 : 0;
+      if (lineBytes + separatorBytes + visibleBytes > limit) {
+        if (visible.length === 0) {
+          const bytes = textEncoder.encode(line);
+          visible.push(textDecoder.decode(bytes.slice(Math.max(0, bytes.length - limit))));
+        }
+        break;
+      }
+      visible.unshift(line);
+      visibleBytes += lineBytes + separatorBytes;
+    }
+    return `[Showing newest ${limit} bytes of ${fullBytes}; exports include the full log]\n${visible.join('\n')}`;
+  }
+
   size(): number {
     return this.entries.length;
   }
@@ -667,7 +692,7 @@ export const debugLog = {
     return buffer.getText();
   },
   getDisplayText(maxBytes = MAX_LOG_DISPLAY_BYTES): string {
-    return formatLogDisplayTail(buffer.getText(), maxBytes);
+    return buffer.getDisplayText(maxBytes);
   },
   getEntries(): LogEntry[] {
     return buffer.getEntries();

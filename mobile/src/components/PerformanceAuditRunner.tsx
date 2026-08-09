@@ -590,6 +590,7 @@ async function runDeepAuditStep(
   datasetRevision: AuditDatasetRevision,
 ): Promise<AuditCheck> {
   const started = now();
+  const execution = { attempted: false, invoked: false };
   const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
   const label = `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`;
   if (step.skipReason) {
@@ -625,6 +626,7 @@ async function runDeepAuditStep(
       started,
       iteration,
       label,
+      execution,
     );
   } catch (caught) {
     // Cancel / hang / dataset-revision changes remain unrecoverable. Every other
@@ -655,6 +657,9 @@ async function runDeepAuditStep(
         expectedSurface: step.expectedSurface,
         continuedAfterFailure: true,
         routeStateInvalidated: true,
+        executionAttempted: execution.attempted,
+        actionInvoked: execution.invoked,
+        actionCompleted: false,
         optional: step.optional,
         optionalReadinessTimeout:
           step.optional && caught instanceof PerformanceAuditReadinessTimeoutError,
@@ -676,6 +681,7 @@ async function runDeepAuditStepBody(
   started: number,
   iteration: JourneyIteration,
   label: string,
+  execution: { attempted: boolean; invoked: boolean },
 ): Promise<AuditCheck> {
   assertSessionActive(watchdog);
   assertDatasetRevision(datasetRevision);
@@ -706,8 +712,10 @@ async function runDeepAuditStepBody(
       await settleUi();
       assertSessionActive(watchdog);
     }
+    execution.attempted = true;
     measuredAction = await measureAuditAction(
       () => {
+        execution.invoked = true;
         // A scenario entry is an independent sample, not a growing user back
         // stack. Compatibility redirects remain pushes because following the
         // redirect is the behaviour under test.
@@ -761,20 +769,29 @@ async function runDeepAuditStepBody(
     }
     assertSessionActive(watchdog);
     preActionWaitMs = now() - preActionStarted;
+    execution.attempted = true;
     measuredAction = await measureAuditAction(
-      () => performanceAuditReadinessRegistry.invokeAction(
-        source.id,
-        step.semanticActionId,
-        step.parameters,
-      ),
+      () => {
+        execution.invoked = true;
+        return performanceAuditReadinessRegistry.invokeAction(
+          source.id,
+          step.semanticActionId,
+          step.parameters,
+        );
+      },
       () => monitor.snapshot(),
       now,
     );
     const immediateCompletion = performanceAuditReadinessRegistry.snapshot().surfaces
       .find((surface) => surface.id === source.id);
-    actionRevisionAfter = immediateCompletion?.actionRevision ?? null;
+    const durableImmediateCompletion = performanceAuditReadinessRegistry.actionCompletion(source.id);
+    actionRevisionAfter = immediateCompletion?.actionRevision
+      ?? durableImmediateCompletion?.actionRevision
+      ?? null;
     renderRevisionAfter = immediateCompletion?.renderRevision ?? null;
-    completedActionName = immediateCompletion?.lastCompletedAction ?? null;
+    completedActionName = immediateCompletion?.lastCompletedAction
+      ?? durableImmediateCompletion?.actionName
+      ?? null;
     const actionResult = measuredAction.result;
     if (
       actionResult != null &&
@@ -817,6 +834,7 @@ async function runDeepAuditStepBody(
           actionCompleted: false,
           actionMs: roundMetric(measuredAction.durationMs),
           availabilityFailure: true,
+          routeStateInvalidated: false,
         },
         error: `Planned audit action was unavailable: ${actionResult.unavailableReason}`,
         trace: captureAuditTrace(`deep step ${step.id} returned unavailable`),
@@ -876,9 +894,14 @@ async function runDeepAuditStepBody(
   if (actionSource !== 'router') {
     const completedSurface = performanceAuditReadinessRegistry.snapshot().surfaces
       .find((surface) => surface.id === actionSource);
-    actionRevisionAfter = completedSurface?.actionRevision ?? actionRevisionAfter;
+    const durableCompletion = performanceAuditReadinessRegistry.actionCompletion(actionSource);
+    actionRevisionAfter = completedSurface?.actionRevision
+      ?? durableCompletion?.actionRevision
+      ?? actionRevisionAfter;
     renderRevisionAfter = completedSurface?.renderRevision ?? renderRevisionAfter;
-    completedActionName = completedSurface?.lastCompletedAction ?? completedActionName;
+    completedActionName = completedSurface?.lastCompletedAction
+      ?? durableCompletion?.actionName
+      ?? completedActionName;
     if (
       actionRevisionBefore == null ||
       actionRevisionAfter == null ||
@@ -2868,7 +2891,9 @@ export function PerformanceAuditRunner() {
         const executedJourneyChecks = journeyChecks.filter(
           (check) => check.status !== 'skipped' &&
             check.metrics.availabilityFailure !== true &&
-            check.metrics.executionAttempted !== false,
+            check.metrics.executionAttempted === true &&
+            check.metrics.actionInvoked === true &&
+            check.metrics.actionCompleted === true,
         ).length;
         const plannedCheckIds = [
           'maximum-coverage-profile',
@@ -2939,6 +2964,11 @@ export function PerformanceAuditRunner() {
               checks.length === total &&
               checks.every((check) => check.status !== 'skipped') &&
               checks.every((check) => check.metrics.availabilityFailure !== true) &&
+              journeyChecks.every((check) =>
+                check.metrics.executionAttempted === true &&
+                check.metrics.actionInvoked === true &&
+                check.metrics.actionCompleted === true,
+              ) &&
               missingPlannedCheckIds.length === 0 &&
               duplicateStoredCheckIds.length === 0 &&
               unexpectedStoredCheckIds.length === 0 &&
