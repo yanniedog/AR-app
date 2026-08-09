@@ -7,11 +7,10 @@ import {
   BankHistoryChart,
   type BankHistoryChartAuditActions,
 } from '../../src/components/BankHistoryChart';
-import { BankMoveRow, InsightsLockedCard } from '../../src/components/BankInsights';
+import { BankMoveRow } from '../../src/components/BankInsights';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
-import { EmptyState } from '../../src/components/feedback';
+import { EmptyState, ScreenSkeleton } from '../../src/components/feedback';
 import { ProductCard } from '../../src/components/ProductCard';
-import { ProPaywall } from '../../src/components/ProPaywall';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
@@ -31,7 +30,6 @@ import {
 } from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
-import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { openProduct } from '../../src/lib/nav';
@@ -111,7 +109,7 @@ export default function BankDetail() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
-  const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
+  const showBankInsights = effectiveBankInsights();
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
@@ -122,7 +120,6 @@ export default function BankDetail() {
   // so opening a bank from Outlook never stalls on a multi‑MB store update.
   const [productHistoryReady, setProductHistoryReady] = useState(false);
   const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -432,7 +429,7 @@ export default function BankDetail() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   return (
     <>
@@ -465,7 +462,6 @@ export default function BankDetail() {
           >
             <Row style={{ justifyContent: 'space-between', marginBottom: 6 }}>
               <AppText variant="h3">Move detail</AppText>
-              <Chip label="PRO" selected />
             </Row>
             <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
               {moveVerb(focusSection, focusEvent.dir)} {SECTIONS[focusSection].title.toLowerCase()} on{' '}
@@ -521,7 +517,6 @@ export default function BankDetail() {
             <Card style={{ marginBottom: 16 }}>
               <Row style={{ justifyContent: 'space-between', marginBottom: 10 }}>
                 <AppText variant="h3">Rate history</AppText>
-                <Chip label="PRO" selected />
               </Row>
               {chartSections.length > 1 ? (
                 <SegmentedControl
@@ -568,11 +563,7 @@ export default function BankDetail() {
               ) : null}
             </Card>
           ) : null
-        ) : (
-          <Card style={{ marginBottom: 16 }}>
-            <InsightsLockedCard onUnlock={() => requestPro('bank_insights')} />
-          </Card>
-        )}
+        ) : null}
 
         {showBankInsights && !focusEvent && recentMoveBreakdowns.length ? (
           <Card style={{ marginBottom: 16 }}>
@@ -625,7 +616,6 @@ export default function BankDetail() {
             </View>
           ))
         )}
-        <ProPaywall visible={paywallVisible} intent={paywallIntent} onClose={closePaywall} />
       </ScreenScrollView>
     </>
   );

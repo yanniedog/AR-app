@@ -17,8 +17,8 @@ export const TAB_LABELS: Record<TabRouteName, string> = {
   index: 'Today',
   browse: 'Products',
   watchlist: 'Saved',
-  trends: 'Outlook',
-  passthrough: 'Moves',
+  trends: 'Market',
+  passthrough: 'Rate moves',
   settings: 'Settings',
 };
 

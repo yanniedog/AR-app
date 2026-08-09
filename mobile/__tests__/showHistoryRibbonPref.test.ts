@@ -16,10 +16,10 @@ describe('showHistoryRibbon pref', () => {
     useStore.setState({ prefs: { ...DEFAULT_PREFS }, hydrated: true });
   });
 
-  it('defaults to false', () => {
-    expect(DEFAULT_PREFS.enableDeepSearch).toBe(false);
-    expect(DEFAULT_PREFS.showHistoryRibbon).toBe(false);
-    expect(useStore.getState().prefs.showHistoryRibbon).toBe(false);
+  it('defaults on so charts and fee/feature search are discoverable', () => {
+    expect(DEFAULT_PREFS.enableDeepSearch).toBe(true);
+    expect(DEFAULT_PREFS.showHistoryRibbon).toBe(true);
+    expect(useStore.getState().prefs.showHistoryRibbon).toBe(true);
   });
 
   it('shows chart only when pref is on and history model exists', () => {
@@ -60,7 +60,7 @@ describe('showHistoryRibbon pref', () => {
     expect(useStore.getState().prefs.enableDeepSearch).toBe(true);
   });
 
-  it('preselects diagnostics without converting the legacy flag into consent', async () => {
+  it('never turns a collector on without a recorded consent choice', async () => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
       'ar-rates',
@@ -70,8 +70,8 @@ describe('showHistoryRibbon pref', () => {
       }),
     );
     await useStore.persist.rehydrate();
-    expect(useStore.getState().prefs.crashReportsEnabled).toBe(true);
-    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(true);
+    expect(useStore.getState().prefs.crashReportsEnabled).toBe(false);
+    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(false);
     expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
   });
 

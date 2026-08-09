@@ -7,7 +7,6 @@ import { dataSourceLabel } from '../lib/nextIngest';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import type { PayloadSource } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
-import { BrandLockup } from './BrandLockup';
 import { AppText, Row } from './ui';
 
 const SPRING = { damping: 14, stiffness: 180, mass: 0.8 };
@@ -106,24 +105,12 @@ export function HomeHero({
     >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <BrandLockup markSize={28} style={{ marginBottom: 6 }} />
-          <AppText
-            variant="tiny"
-            color="textMuted"
-            weight="700"
-            style={{ letterSpacing: 1.4, textTransform: 'uppercase', marginBottom: 2 }}
-          >
-            Rate intelligence
-          </AppText>
-          <AppText variant="h2" weight="800" style={{ lineHeight: 28 }}>
-            Compare observed Australian rates.
-          </AppText>
           <Animated.View style={dateStyle}>
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
               {runDateLabel} · {runAgeLabel}
             </AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 2 }}>
-              {source === 'sample' ? 'Bundled sample · not today’s market' : coverageLabel}
+              {source === 'sample' ? 'Sample data · not today’s market' : coverageLabel}
             </AppText>
           </Animated.View>
         </View>

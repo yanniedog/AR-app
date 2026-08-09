@@ -6,7 +6,7 @@ import { Pressable, View } from 'react-native';
 
 import { BankAvatar } from '../src/components/BankAvatar';
 import { SearchBar, SegmentedControl } from '../src/components/controls';
-import { EmptyState, IndeterminateProgressBar, LoadingRows } from '../src/components/feedback';
+import { EmptyState, IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../src/components/feedback';
 import { Screen } from '../src/components/Screen';
 import { AppText, Button, Row } from '../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
@@ -202,7 +202,7 @@ export default function Banks() {
     ],
   });
 
-  if (!core) return null;
+  if (!core) return <ScreenSkeleton />;
 
   const direction = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
   const metricNote =

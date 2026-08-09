@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { getTabBarContentHeight } from '../lib/androidChrome';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, androidRipple } from './ui';
 
@@ -9,15 +10,22 @@ export function DiagnosticsConsentBanner({
   visible,
   onAccept,
   onDecline,
+  /** Clears the bottom tab bar when it is on screen, so navigation is never covered. */
+  aboveTabBar = false,
 }: {
   visible: boolean;
   onAccept: () => void;
   onDecline: () => void;
+  aboveTabBar?: boolean;
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!visible) return null;
+
+  const bottomOffset = aboveTabBar
+    ? getTabBarContentHeight() + insets.bottom + 8
+    : Math.max(8, insets.bottom + 4);
 
   const action = (label: string, accessibilityLabel: string, onPress: () => void) => (
     <Pressable
@@ -44,20 +52,18 @@ export function DiagnosticsConsentBanner({
 
   return (
     <View
-      onTouchStart={(event) => event.stopPropagation()}
-      onTouchEnd={(event) => event.stopPropagation()}
+      // A bare View never claims the responder, so a tap on the banner's own
+      // padding would otherwise reach whatever sits underneath it. Children are
+      // offered the responder first, so the action buttons still work.
+      onStartShouldSetResponder={() => true}
       style={{
         position: 'absolute',
         left: 8,
         right: 8,
-        bottom: Math.max(8, insets.bottom + 4),
+        bottom: bottomOffset,
         zIndex: 95,
-        minHeight: 48,
-        paddingLeft: 12,
-        paddingRight: 2,
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 4,
+        padding: 12,
+        gap: 8,
         borderWidth: 1,
         borderColor: theme.colors.border,
         borderRadius: theme.radius.md,
@@ -70,14 +76,19 @@ export function DiagnosticsConsentBanner({
       <AppText
         accessibilityRole="alert"
         accessibilityLiveRegion="polite"
-        variant="tiny"
-        color="textMuted"
-        style={{ flex: 1 }}
+        variant="small"
+        color="text"
       >
-        Crash/performance reports + limited public-screen replay
+        Send anonymous crash reports to help fix bugs?
       </AppText>
-      {action('Off', 'Turn diagnostics off', onDecline)}
-      {action('OK', 'Allow selected diagnostics', onAccept)}
+      <AppText variant="tiny" color="textFaint">
+        Sends crash traces and device details. We strip what we can identify, but
+        traces are generated automatically. Change this any time in Settings.
+      </AppText>
+      <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
+        {action('Not now', 'Decline diagnostics', onDecline)}
+        {action('Allow', 'Allow diagnostics', onAccept)}
+      </View>
     </View>
   );
 }

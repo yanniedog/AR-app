@@ -9,7 +9,6 @@ import {
 } from '../../src/components/BankHistoryChart';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState } from '../../src/components/feedback';
-import { ProPaywall } from '../../src/components/ProPaywall';
 import { ProductRateChangeLine } from '../../src/components/product/ProductRateChangeLine';
 import {
   AccessNotice,
@@ -35,7 +34,6 @@ import {
 import { ensurePermissions } from '../../src/data/notifications';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
-import { useProPaywall } from '../../src/hooks/useProPaywall';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
@@ -43,7 +41,6 @@ import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
 import {
-  canAddAlertSubscription,
   effectiveBankInsights,
   effectiveHistoryRibbon,
 } from '../../src/lib/proAccess';
@@ -75,12 +72,11 @@ export default function ProductDetail() {
   const subscribed = useStore((s) => s.isProductSubscribed(productKey, rateIndex));
   const subscribeProduct = useStore((s) => s.subscribeProduct);
   const unsubscribeProduct = useStore((s) => s.unsubscribeProduct);
-  const subscriptions = useStore((s) => s.subscriptions);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
-  const showBankInsights = useStore((s) => effectiveBankInsights(s.prefs));
+  const showBankInsights = effectiveBankInsights();
   const historyBanks = useStore((s) => s.historyBanks);
   const bankInsights = useStore((s) => s.bankInsights);
   const bankInsightsError = useStore((s) => s.bankInsightsError);
@@ -89,7 +85,6 @@ export default function ProductDetail() {
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
@@ -361,10 +356,6 @@ export default function ProductDetail() {
       unsubscribeProduct(productKey, rateIndex);
       return;
     }
-    if (!canAddAlertSubscription(subscriptions, useStore.getState().prefs)) {
-      requestPro('alert_limit');
-      return;
-    }
     const ok = await ensurePermissions();
     if (!ok) {
       Alert.alert('Notifications disabled', 'Enable notifications for Australian Rates in system settings.');
@@ -558,12 +549,10 @@ export default function ProductDetail() {
                 See how {row.product_name}&apos;s rate moved over time against the market&apos;s mean and median.
               </AppText>
               <Button
-                title="Unlock rate history"
-                icon="sparkles"
+                title="Show rate history"
+                icon="analytics-outline"
                 variant="secondary"
-                onPress={() => {
-                  if (requestPro('history_ribbon')) setPref('showHistoryRibbon', true);
-                }}
+                onPress={() => setPref('showHistoryRibbon', true)}
               />
             </>
           )}
@@ -592,14 +581,6 @@ export default function ProductDetail() {
           </AppText>
         ) : null}
       </ScreenScrollView>
-      <ProPaywall
-        visible={paywallVisible}
-        intent={paywallIntent}
-        onClose={closePaywall}
-        onUpgraded={() => {
-          if (paywallIntent === 'history_ribbon') setPref('showHistoryRibbon', true);
-        }}
-      />
     </>
   );
 }

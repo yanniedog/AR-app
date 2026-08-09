@@ -236,7 +236,7 @@ export function resolveAuditJourneyOptionalData(
   return {
     deepSearch: journeyId === 'search' && hasSearchIndex && effectiveDeepSearch(prefs),
     bankInsights:
-      effectiveBankInsights(prefs) &&
+      effectiveBankInsights() &&
       ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
     // Product and lender screens intentionally suppress their deferred history
     // fan-out while an audit is active. Waiting for that suppressed work caused

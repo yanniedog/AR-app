@@ -393,7 +393,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 0, semanticActionId: 'onboarding.open' },
     { depth: 1, semanticActionId: 'onboarding.section.toggle', stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'onboarding.step.next', stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'onboarding.profile.first', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'onboarding.notify.preview', stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'onboarding.step.back', stateImpact: 'local-only' },
   ]);

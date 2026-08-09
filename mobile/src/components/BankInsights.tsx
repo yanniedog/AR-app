@@ -25,7 +25,7 @@ import { openBank } from '../lib/nav';
 import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { BankAvatar } from './BankAvatar';
-import { AppText, Badge, Button, Divider, Row } from './ui';
+import { AppText, Badge, Divider, Row } from './ui';
 
 function bpsLabel(bps: number): string {
   const rounded = Math.round(bps * 10) / 10;
@@ -315,23 +315,3 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
   );
 });
 
-/** Free-tier teaser: sells the historical moat without downloading anything. */
-export function InsightsLockedCard({ onUnlock }: { onUnlock: () => void }) {
-  const theme = useTheme();
-  return (
-    <View style={{ gap: 10 }}>
-      <Row gap={8}>
-        <Ionicons name="pulse" size={18} color={theme.colors.primary} />
-        <AppText variant="body" weight="700" style={{ flex: 1 }}>
-          Bank intelligence
-        </AppText>
-        <Badge label="PRO" tone="primary" />
-      </Row>
-      <AppText variant="small" color="textMuted">
-        See observed movements across tracked lenders: who changed advertised rates, how quickly
-        they responded after RBA decisions, and how their published rates moved over time.
-      </AppText>
-      <Button title="Unlock bank intelligence" icon="sparkles" onPress={onUnlock} />
-    </View>
-  );
-}

@@ -2,15 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, View } from 'react-native';
 
-import { InsightsLockedCard } from '../../src/components/BankInsights';
 import { PassThroughDashboard } from '../../src/components/passthrough/PassThroughDashboard';
-import { ProPaywall } from '../../src/components/ProPaywall';
 import { AppText, Button, Card } from '../../src/components/ui';
 import { useStore } from '../../src/data/store';
-import { useProPaywall } from '../../src/hooks/useProPaywall';
-import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { scalarRouteParam } from '../../src/lib/nav';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { ScreenSkeleton } from '../../src/components/feedback';
 
 export default function PassThroughTab() {
   const theme = useTheme();
@@ -18,33 +15,20 @@ export default function PassThroughTab() {
   const calendar = useStore((state) => state.rbaCalendar);
   const payload = useStore((state) => state.bankInsights);
   const error = useStore((state) => state.bankInsightsError);
-  const enabled = useStore((state) => effectiveBankInsights(state.prefs));
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
-  const { paywallVisible, paywallIntent, requestPro, closePaywall } = useProPaywall();
   const [retrying, setRetrying] = useState(false);
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
 
   useEffect(() => {
-    if (!enabled || !core) return;
+    if (!core) return;
     void ensureBankInsights();
     void ensureRbaCalendar();
-  }, [enabled, core, ensureBankInsights, ensureRbaCalendar]);
+  }, [core, ensureBankInsights, ensureRbaCalendar]);
 
-  if (!core) return null;
-
-  if (!enabled) {
-    return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.bg, padding: 16 }}>
-        <Card>
-          <InsightsLockedCard onUnlock={() => requestPro('bank_insights')} />
-        </Card>
-        <ProPaywall visible={paywallVisible} intent={paywallIntent} onClose={closePaywall} />
-      </View>
-    );
-  }
+  if (!core) return <ScreenSkeleton />;
 
   if (!payload) {
     return (

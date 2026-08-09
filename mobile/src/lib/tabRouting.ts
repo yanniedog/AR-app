@@ -2,14 +2,18 @@ import type { Href } from 'expo-router';
 
 import type { TabRouteName } from './tabIcons';
 
-/** Bottom-tab display order: Today → Products → Moves → Outlook → Saved → Settings. */
+/**
+ * Bottom-tab display order: Today → Products → Rate moves → Market → Saved.
+ * Settings is deliberately absent — it is a occasional destination, not a
+ * primary one, and reaches the platform cap of five primary tabs otherwise.
+ * It opens from the Today header instead.
+ */
 export const TAB_BAR_ORDER: readonly TabRouteName[] = [
   'index',
   'browse',
   'passthrough',
   'trends',
   'watchlist',
-  'settings',
 ];
 
 const TAB_HREFS: Record<TabRouteName, Href> = {

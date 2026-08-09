@@ -204,13 +204,16 @@ describe('optional feature prefs', () => {
     });
   });
 
-  it('defaults deep search and history ribbon off', () => {
-    expect(DEFAULT_PREFS.enableDeepSearch).toBe(false);
-    expect(DEFAULT_PREFS.showHistoryRibbon).toBe(false);
+  it('defaults deep search and history ribbon on', () => {
+    expect(DEFAULT_PREFS.enableDeepSearch).toBe(true);
+    expect(DEFAULT_PREFS.showHistoryRibbon).toBe(true);
   });
 
-  it('shouldWarmDetails is false with default prefs', () => {
-    expect(shouldWarmDetails(DEFAULT_PREFS, [])).toBe(false);
+  it('shouldWarmDetails follows the deep-search preference', () => {
+    // Deep search matches fees/features, which only exist in the details
+    // payload, so warming it is the cost of that preference being on.
+    expect(shouldWarmDetails(DEFAULT_PREFS, [])).toBe(true);
+    expect(shouldWarmDetails({ ...DEFAULT_PREFS, enableDeepSearch: false }, [])).toBe(false);
   });
 
   it('shouldWarmDetails is true when profile has account feature picks', () => {
@@ -378,10 +381,22 @@ describe('optional feature prefs', () => {
     expect(store.getState().details).toBe(sampleDetails);
   });
 
-  it('ensureProductHistory stays gated off by default (no eager dated-core fan-out)', async () => {
-    store.setState({ prefs: { ...DEFAULT_PREFS }, source: 'remote', manifest: remoteManifest, core: remoteCore });
+  it('ensureProductHistory stays gated when history is turned off', async () => {
+    store.setState({
+      prefs: { ...DEFAULT_PREFS, showHistoryRibbon: false },
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
     await store.getState().ensureProductHistory();
-    // Default prefs (Pro/history off) must not trigger the on-device history build.
+    expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
+  });
+
+  it('never fans out dated cores during bootstrap, even with history on', async () => {
+    // History is on by default, so the guarantee that matters is that the
+    // expensive build stays screen-lazy rather than running at startup.
+    store.setState({ prefs: { ...DEFAULT_PREFS }, source: 'remote', manifest: remoteManifest, core: remoteCore });
+    await store.getState().bootstrap({ skipRefresh: true });
     expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
   });
 
@@ -591,7 +606,8 @@ describe('optional feature prefs', () => {
     const ensureHistoryBanks = jest.fn(async () => {});
     const ensureBankInsights = jest.fn(async () => {});
     store.setState({
-      prefs: proPrefs,
+      // The ribbon ships on, so start from off to observe the transition.
+      prefs: { ...proPrefs, showHistoryRibbon: false },
       ensureHistoryBanks,
       ensureBankInsights,
     });
