@@ -73,6 +73,10 @@ describe('performance audit rollback journal', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: originalOs });
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('captures user state before mutations and restores exact values and ordering', async () => {
     const store = makeStore();
     await ensureUserRateScenarioLoaded();
@@ -145,7 +149,6 @@ describe('performance audit rollback journal', () => {
     await jest.advanceTimersByTimeAsync(3_100);
     await rejected;
     await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
-    jest.useRealTimers();
   });
 
   it('retains rollback artifacts when a captured SecureStore scenario companion is missing', async () => {
@@ -174,10 +177,12 @@ describe('performance audit rollback journal', () => {
     const pending = tryRestorePerformanceAuditRollback(store, before);
     await jest.advanceTimersByTimeAsync(3_100);
     const result = await pending;
-    jest.useRealTimers();
 
     expect(result.restored).toBe(false);
     expect(result.error).toMatch(/not durably persisted/);
     await expect(AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY)).resolves.not.toBeNull();
+    await expect(
+      SecureStore.getItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY),
+    ).resolves.not.toBeNull();
   });
 });

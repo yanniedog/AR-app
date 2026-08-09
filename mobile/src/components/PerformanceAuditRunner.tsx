@@ -2294,7 +2294,6 @@ export function PerformanceAuditRunner() {
           durationMs: roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
-            journalClearedAfterPersistence: rollbackResult.restored,
           },
           ...(rollbackResult.error ? {
             error: rollbackResult.error,

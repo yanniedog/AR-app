@@ -292,6 +292,7 @@ async function restoreSnapshot(
 export interface PerformanceAuditRollbackRestoreResult {
   restored: boolean;
   error?: string;
+  cause?: unknown;
 }
 
 export async function restorePerformanceAuditRollback(
@@ -300,7 +301,7 @@ export async function restorePerformanceAuditRollback(
 ): Promise<boolean> {
   const result = await tryRestorePerformanceAuditRollback(store, fallback);
   if (!result.restored && result.error) {
-    throw new Error(result.error);
+    throw result.cause instanceof Error ? result.cause : new Error(result.error);
   }
   return result.restored;
 }
@@ -327,7 +328,7 @@ export async function tryRestorePerformanceAuditRollback(
     const message = error instanceof Error
       ? error.stack ?? `${error.name}: ${error.message}`
       : String(error);
-    return { restored: false, error: message };
+    return { restored: false, error: message, cause: error };
   }
 }
 
