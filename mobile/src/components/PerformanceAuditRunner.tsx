@@ -2279,12 +2279,34 @@ export function PerformanceAuditRunner() {
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         const restoreStarted = now();
-        const rollbackResult = await awaitAuditWorkWithTimeout(
+        const initialRollbackResult = await awaitAuditWorkWithTimeout(
           tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
           watchdog,
           'Audit state restoration',
           FINALIZATION_STORE_TIMEOUT_MS,
         );
+        let rollbackResult = initialRollbackResult;
+        let rollbackAttempts = 1;
+        if (!rollbackResult.restored) {
+          updatePerformanceAuditProgress(completed, total, 'Retrying settings and saved data restoration');
+          await yieldToUi();
+          const retryResult = await awaitAuditWorkWithTimeout(
+            tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
+            watchdog,
+            'Audit state restoration retry',
+            FINALIZATION_STORE_TIMEOUT_MS,
+          );
+          rollbackAttempts = 2;
+          rollbackResult = retryResult.restored
+            ? retryResult
+            : {
+              ...retryResult,
+              error: [initialRollbackResult.error, retryResult.error]
+                .filter(Boolean)
+                .join('\nRetry: '),
+              cause: retryResult.cause ?? initialRollbackResult.cause,
+            };
+        }
         rollbackRestored = rollbackResult.restored;
         await record({
           id: 'audit-state-restoration',
@@ -2294,6 +2316,7 @@ export function PerformanceAuditRunner() {
           durationMs: roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
+            attempts: rollbackAttempts,
           },
           ...(rollbackResult.error ? {
             error: rollbackResult.error,
@@ -2507,6 +2530,32 @@ export function PerformanceAuditRunner() {
         } catch (recoveryCaught) {
           recoveryError = formatAuditError(recoveryCaught);
         }
+        // Finish the last rollback attempt before publishing any terminal UI
+        // state. A retry from finally could otherwise overwrite edits made
+        // after the audit overlay disappears.
+        if (!rollbackRestored && rollbackSnapshot) {
+          try {
+            const rollbackRetry = await timeoutAfter(
+              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
+              5_000,
+              'Pre-terminal audit rollback',
+            );
+            rollbackRestored = rollbackRetry.restored;
+            if (rollbackRetry.error) {
+              debugLog.error(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `audit rollback retained for launch recovery: ${flattenAuditLogText(rollbackRetry.error)}`,
+              );
+              await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+            }
+          } catch (rollbackError) {
+            debugLog.error(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
+            );
+            await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
+          }
+        }
         if (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
           logAuditEvent(app, {
             kind: 'cancelled',
@@ -2674,29 +2723,6 @@ export function PerformanceAuditRunner() {
         }
       } finally {
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
-        if (!rollbackRestored && rollbackSnapshot) {
-          try {
-            const rollbackRetry = await timeoutAfter(
-              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
-              5_000,
-              'Final audit rollback',
-            );
-            rollbackRestored = rollbackRetry.restored;
-            if (rollbackRetry.error) {
-              debugLog.error(
-                PERFORMANCE_AUDIT_LOG_TAG,
-                `audit rollback retained for launch recovery: ${flattenAuditLogText(rollbackRetry.error)}`,
-              );
-              await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
-            }
-          } catch (rollbackError) {
-            debugLog.error(
-              PERFORMANCE_AUDIT_LOG_TAG,
-              `audit rollback retained for launch recovery: ${formatAuditErrorForLog(rollbackError)}`,
-            );
-            await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
-          }
-        }
         try {
           monitor.stop();
         } catch {
