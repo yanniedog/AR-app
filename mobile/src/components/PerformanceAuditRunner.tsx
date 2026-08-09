@@ -74,6 +74,7 @@ import {
   worstStatus,
   type AuditCheck,
   type AuditCheckStatus,
+  type AuditMetricValue,
   type AuditEnvironment,
   type AuditJourney,
   type AuditAppIdentity,
@@ -167,6 +168,23 @@ function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void
  * watchdog suspended for that whole time. Cancelling still works from the
  * paused state, so this can never trap a run.
  */
+/**
+ * Drop the readings that feed the report-wide maxima.
+ *
+ * summarizePerformanceAudit excludes skipped checks from the slowest-check
+ * calculation but takes maxEventLoopLagMs and maxFrameGapMs across every check,
+ * so an animation gap that merely spans a background pause — minutes, not
+ * milliseconds — would otherwise be published as the app's worst frame gap.
+ */
+function contaminatedTimingsRemoved(
+  metrics: Record<string, AuditMetricValue>,
+): Record<string, AuditMetricValue> {
+  const out = { ...metrics };
+  delete out.maxEventLoopLagMs;
+  delete out.maxFrameGapMs;
+  return out;
+}
+
 async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
   if (!getPerformanceAuditState().paused) return;
   while (getPerformanceAuditState().paused) {
@@ -249,25 +267,32 @@ async function awaitAuditWorkWithTimeout<T>(
 ): Promise<T> {
   assertSessionActive(watchdog);
   let timer: ReturnType<typeof setInterval> | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
   const control = new Promise<never>((_resolve, reject) => {
+    // Count only foreground time against the budget. A wall-clock timeout would
+    // fire while the app sat in the background, failing the run for work the
+    // user simply stepped away from — the same mistake the hang watchdog makes
+    // if it is not suspended.
+    let foregroundMs = 0;
+    let lastTickAt = Date.now();
     timer = setInterval(() => {
+      const now = Date.now();
+      if (!getPerformanceAuditState().paused) foregroundMs += now - lastTickAt;
+      lastTickAt = now;
+      const stop = (error: unknown) => {
+        if (timer) clearInterval(timer);
+        timer = null;
+        reject(error);
+      };
       try {
         assertSessionActive(watchdog);
       } catch (error) {
-        if (timer) clearInterval(timer);
-        timer = null;
-        if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = null;
-        reject(error);
+        stop(error);
+        return;
+      }
+      if (foregroundMs >= timeoutMs) {
+        stop(new Error(`${label} timed out after ${timeoutMs}ms`));
       }
     }, 50);
-    timeoutId = setTimeout(() => {
-      if (timer) clearInterval(timer);
-      timer = null;
-      timeoutId = null;
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
   });
   try {
     return await Promise.race([promise, control]);
@@ -277,7 +302,6 @@ async function awaitAuditWorkWithTimeout<T>(
     throw new Error(`${label} failed: ${formatAuditError(error)}`);
   } finally {
     if (timer) clearInterval(timer);
-    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -2224,7 +2248,7 @@ export function PerformanceAuditRunner() {
               ...check,
               status: 'skipped',
               metrics: {
-                ...check.metrics,
+                ...contaminatedTimingsRemoved(check.metrics),
                 interruptedByBackground: true,
                 reason: 'The app left the foreground during this check',
               },
@@ -2350,7 +2374,11 @@ export function PerformanceAuditRunner() {
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
+        // The last measured step, and the only one not routed through
+        // recordContinuable. Start it in the foreground like the rest.
+        await waitWhilePaused(watchdog);
         const restoreStarted = now();
+        const restoreStartedPaused = getPerformanceAuditPauseCount();
         await awaitAuditWorkWithTimeout(
           restorePerformanceAuditRollback(useStore, rollbackSnapshot),
           watchdog,
@@ -2358,15 +2386,25 @@ export function PerformanceAuditRunner() {
           FINALIZATION_STORE_TIMEOUT_MS,
         );
         rollbackRestored = true;
+        // Restoration itself must still be reported as done — the state really
+        // was restored — but a duration spanning a pause must not become the
+        // report's slowest check.
+        const restoreInterrupted = getPerformanceAuditPauseCount() !== restoreStartedPaused;
         await record({
           id: 'audit-state-restoration',
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
           status: 'pass',
-          durationMs: roundMetric(now() - restoreStarted),
+          durationMs: restoreInterrupted ? 0 : roundMetric(now() - restoreStarted),
           metrics: {
             restored: true,
             journalClearedAfterPersistence: true,
+            ...(restoreInterrupted
+              ? {
+                interruptedByBackground: true,
+                reason: 'The app left the foreground during restoration; timing not reported',
+              }
+              : {}),
           },
         });
         watchdog.beginFinalization();
