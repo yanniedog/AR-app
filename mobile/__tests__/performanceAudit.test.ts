@@ -1,22 +1,31 @@
 import type { CorePayload } from '../src/types';
 import {
   aggregateRepeatedJourneys,
+  AUDIT_LATENCY_METRIC_KEYS,
+  cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   flattenAuditLogText,
+  ForegroundElapsed,
   formatAuditError,
   formatAuditErrorForLog,
+  getPerformanceAuditPauseCount,
   getPerformanceAuditState,
+  hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
+  markPerformanceAuditRunning,
   parsePerformanceAuditHangTimeoutSeconds,
+  pausePerformanceAudit,
   pathMatches,
   PerformanceAuditInactivityWatchdog,
   percentile,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   requestPerformanceAudit,
   resolveAuditJourneyOptionalData,
+  resumePerformanceAudit,
   resetPerformanceAuditForTests,
+  subscribePerformanceAudit,
   MAX_REPORTED_AUDIT_CHECKS,
   scoreLatency,
   selectReportedAuditChecks,
@@ -27,6 +36,26 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+
+describe('background interruption failure evidence', () => {
+  const check = (metrics: AuditCheck['metrics'], error?: string): AuditCheck => ({
+    id: 'interrupted',
+    label: 'Interrupted check',
+    kind: 'runtime',
+    status: 'fail',
+    durationMs: 0,
+    metrics,
+    ...(error ? { error } : {}),
+  });
+
+  it('does not preserve a generic error that may have come from a paused timeout', () => {
+    expect(hasExplicitNonTimingFailure(check({}, 'Update manifest check timed out'))).toBe(false);
+  });
+
+  it('preserves only an explicitly identified non-timing failure', () => {
+    expect(hasExplicitNonTimingFailure(check({ nonTimingFailure: true }))).toBe(true);
+  });
+});
 
 const core: CorePayload = {
   schema_version: 1,
@@ -225,6 +254,41 @@ describe('performance audit optional data', () => {
   });
 });
 
+describe('repeat-journey aggregates', () => {
+  const journey = (
+    id: string,
+    iteration: 'cold' | 'warm',
+    status: AuditCheck['status'],
+    metrics: AuditCheck['metrics'],
+  ): AuditCheck => ({
+    id: `${id}-${iteration}`,
+    label: id,
+    kind: 'journey',
+    status,
+    durationMs: 0,
+    metrics: { journeyId: id, journeyLabel: id, iteration, ...metrics },
+  });
+
+  it('drops a pair whose check was interrupted rather than publishing a zero it never measured', () => {
+    // An interrupted failure keeps its status but loses its timings, so
+    // aggregating it would show a bogus 0 ms cold against a real warm.
+    const aggregates = aggregateRepeatedJourneys([
+      journey('route.search', 'cold', 'fail', { interruptedByBackground: true }),
+      journey('route.search', 'warm', 'pass', { forwardMs: 450, backMs: 120 }),
+    ]);
+    expect(aggregates).toEqual([]);
+  });
+
+  it('still aggregates an ordinary failing pair', () => {
+    const aggregates = aggregateRepeatedJourneys([
+      journey('route.search', 'cold', 'fail', { forwardMs: 900, backMs: 200 }),
+      journey('route.search', 'warm', 'pass', { forwardMs: 450, backMs: 120 }),
+    ]);
+    expect(aggregates).toHaveLength(1);
+    expect(aggregates[0]).toMatchObject({ coldForwardMs: 900, forwardChangeMs: -450 });
+  });
+});
+
 describe('performance audit scoring', () => {
   it('computes percentiles and responsiveness counters', () => {
     expect(percentile([1, 2, 3, 50], 0.95)).toBe(50);
@@ -379,6 +443,25 @@ describe('reported audit check selection', () => {
 describe('performance audit lifecycle', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
+  const reportFixture = (sessionId: string) => ({
+    schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+    sessionId,
+    startedAt: '2026-08-08T00:00:00.000Z',
+    finishedAt: '2026-08-08T00:01:00.000Z',
+    durationMs: 60_000,
+    app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
+    watchdog: {
+      hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+      storedCheckCount: 0,
+      lastStoredCheckAt: null,
+    },
+    environment,
+    summary: summarizePerformanceAudit([]),
+    checks: [],
+    routeAggregates: [],
+    limitations: [],
+  });
+
   it('retains the completed report for the settings result screen', () => {
     const sessionId = requestPerformanceAudit();
     const report = {
@@ -502,6 +585,76 @@ describe('performance audit lifecycle', () => {
     });
   });
 
+  it('pauses and resumes a running audit instead of discarding it', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+
+    pausePerformanceAudit();
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'running', paused: true });
+    // A paused run is still active, so route maintenance stays suppressed.
+    expect(isPerformanceAuditActive()).toBe(true);
+
+    resumePerformanceAudit();
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'running', paused: false });
+  });
+
+  it('counts each pause so a step can tell whether it spanned one', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    const before = getPerformanceAuditPauseCount();
+
+    pausePerformanceAudit();
+    pausePerformanceAudit(); // already paused; not a second interruption
+    expect(getPerformanceAuditPauseCount()).toBe(before + 1);
+
+    resumePerformanceAudit();
+    pausePerformanceAudit();
+    expect(getPerformanceAuditPauseCount()).toBe(before + 2);
+  });
+
+  it('clears the pause when the run reaches a terminal state', () => {
+    const sessionId = requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    pausePerformanceAudit();
+
+    completePerformanceAudit(reportFixture(sessionId), 'pending');
+
+    // resumePerformanceAudit refuses terminal states, so a pause left set here
+    // could never be cleared and every ForegroundElapsed built afterwards for
+    // the post-publish upload would accrue nothing and never time out.
+    expect(getPerformanceAuditState().paused).toBe(false);
+    expect(new ForegroundElapsed(() => 0).foregroundMs).toBe(0);
+  });
+
+  it('keeps pause tracking while a published report is still uploading', () => {
+    const sessionId = requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    completePerformanceAudit(reportFixture(sessionId), 'pending');
+
+    // The upload runs on a foreground budget, so it still needs transitions.
+    pausePerformanceAudit();
+    expect(getPerformanceAuditState().paused).toBe(true);
+    resumePerformanceAudit();
+    expect(getPerformanceAuditState().paused).toBe(false);
+
+    pausePerformanceAudit();
+    setPerformanceAuditUploadResult(sessionId, { url: 'https://paste.example/audit' });
+    // Nothing is left to clear a pause once the upload has settled.
+    expect(getPerformanceAuditState()).toMatchObject({ uploadPending: false, paused: false });
+  });
+
+  it('never pauses a cancelled or finished audit', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    cancelPerformanceAudit();
+
+    pausePerformanceAudit();
+
+    // Pausing a cancelling run would strand it waiting for a foreground it no
+    // longer needs.
+    expect(getPerformanceAuditState()).toMatchObject({ cancelRequested: true, paused: false });
+  });
+
   it('stores a validated custom hang timeout on the queued audit', () => {
     requestPerformanceAudit({ hangTimeoutMs: 420_000 });
     expect(getPerformanceAuditState()).toMatchObject({
@@ -513,7 +666,146 @@ describe('performance audit lifecycle', () => {
   });
 });
 
+describe('interrupted check latency stripping', () => {
+  // A failure observed before an interruption is real and stays a failure, so it
+  // remains in the summary's completed set. Its timings are not usable, and
+  // AUDIT_LATENCY_METRIC_KEYS is what the runner strips to keep them out.
+  const stripped = (metrics: AuditCheck['metrics']) => {
+    const out = { ...metrics };
+    for (const key of AUDIT_LATENCY_METRIC_KEYS) delete out[key];
+    return out;
+  };
+
+  it('covers every metric the summary can read as a latency', () => {
+    const contaminated = Object.fromEntries(
+      AUDIT_LATENCY_METRIC_KEYS.map((key) => [key, 300_000]),
+    );
+    // One per special case in representativeLatency, plus a plain journey.
+    const ids = ['runtime-responsiveness', 'active-data', 'async-storage', 'file-system'];
+    for (const id of ids) {
+      const summary = summarizePerformanceAudit([
+        { ...check(id, 'fail', 0, stripped(contaminated)), kind: 'runtime' },
+        check('healthy', 'pass', 12, {}),
+      ]);
+      expect(summary.slowestCheckId).toBe('healthy');
+      expect(summary.maxEventLoopLagMs).toBe(0);
+      expect(summary.maxFrameGapMs).toBe(0);
+    }
+
+    const journey = summarizePerformanceAudit([
+      { ...check('deep-step', 'fail', 0, stripped(contaminated)), kind: 'journey' },
+      check('healthy', 'pass', 12, {}),
+    ]);
+    expect(journey.slowestCheckId).toBe('healthy');
+  });
+
+  it('strips every timing the report or log would show, not only the summary keys', () => {
+    // The check-results screen renders backgroundSettleMs and actionMs, and the
+    // uploaded log carries the rest, so a check whose reason says timings are
+    // not reported must not still carry any of them.
+    const contaminated = {
+      backgroundSettleMs: 300_000,
+      actionMs: 300_000,
+      headersMs: 300_000,
+      bodyMs: 300_000,
+      readinessQuietWindowMs: 650,
+      forwardMs: 300_000,
+      runtimeErrors: 0,
+      expectedSurface: 'search.results',
+    };
+    const out = { ...contaminated } as Record<string, unknown>;
+    for (const key of Object.keys(out)) {
+      if (key.endsWith('Ms')) delete out[key];
+    }
+    expect(Object.keys(out).sort()).toEqual(['expectedSurface', 'runtimeErrors']);
+    // Every summary-consumed key is covered by the same suffix rule.
+    for (const key of AUDIT_LATENCY_METRIC_KEYS) expect(key.endsWith('Ms')).toBe(true);
+  });
+
+  it('would otherwise let a minutes-long interrupted reading win', () => {
+    const summary = summarizePerformanceAudit([
+      { ...check('deep-step', 'fail', 0, { forwardMs: 300_000 }), kind: 'journey' },
+      check('healthy', 'pass', 12, {}),
+    ]);
+    expect(summary.slowestCheckId).toBe('deep-step');
+  });
+});
+
+describe('foreground elapsed budget', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
+  it('defaults to a monotonic clock rather than the wall clock', () => {
+    // Automatic time correction moving the wall clock would otherwise blow a
+    // budget instantly or postpone the only active timeout indefinitely.
+    const elapsed = new ForegroundElapsed();
+    const before = performance.now();
+    elapsed.accrue();
+    const after = performance.now();
+    // A Date.now()-based default would report ~1.7e12 here.
+    expect(elapsed.foregroundMs).toBeLessThanOrEqual(after - before + 50);
+  });
+
+  it('charges only time the audit spent on screen', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+
+    nowMs = 1_000;
+    elapsed.accrue();
+    expect(elapsed.foregroundMs).toBe(1_000);
+
+    pausePerformanceAudit();
+    elapsed.accrue();
+    nowMs = 301_000;
+    resumePerformanceAudit();
+    elapsed.accrue();
+
+    // Five minutes off screen must not reach a two-minute budget.
+    expect(elapsed.foregroundMs).toBe(1_000);
+  });
+
+  it('does not charge a suspended poll for the span it slept through', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+    // The runner accrues on every store emission as well as on its poll, which
+    // is what closes the span at the transition.
+    const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
+    try {
+      nowMs = 1_000;
+      elapsed.accrue();
+
+      // Android suspends the JS thread: no poll ticks fire for the whole pause,
+      // and the first one to run does so after `resume` cleared the flag.
+      pausePerformanceAudit();
+      nowMs = 301_000;
+      resumePerformanceAudit();
+      nowMs = 301_050;
+      elapsed.accrue();
+
+      expect(elapsed.foregroundMs).toBe(1_050);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it('still charges a foreground stall, which is a real hang', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    let nowMs = 0;
+    const elapsed = new ForegroundElapsed(() => nowMs);
+
+    nowMs = 130_000;
+    elapsed.accrue();
+    expect(elapsed.foregroundMs).toBe(130_000);
+  });
+});
+
 describe('performance audit inactivity watchdog', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
   it('uses the five-minute default and accepts a custom timeout', () => {
     let elapsedMs = 0;
     const clock = () => elapsedMs;
@@ -583,6 +875,57 @@ describe('performance audit inactivity watchdog', () => {
     expect(watchdog.isExpired()).toBe(false);
     elapsedMs = 590_001;
     expect(watchdog.isExpired()).toBe(true);
+  });
+
+  it('does not count time spent backgrounded as a hang', () => {
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
+
+    watchdog.recordStoredCheck();
+    watchdog.setPaused(true);
+    // A step in flight when the app backgrounds keeps polling isExpired(); a
+    // short hang timeout plus a phone call must not abort the run as hung.
+    elapsedMs = 120_000;
+    expect(watchdog.isPaused).toBe(true);
+    expect(watchdog.isExpired()).toBe(false);
+
+    // Resuming restarts the window rather than resuming a spent one.
+    watchdog.setPaused(false);
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 145_000;
+    expect(watchdog.isExpired()).toBe(false);
+    elapsedMs = 150_001;
+    expect(watchdog.isExpired()).toBe(true);
+  });
+
+  it('adopts a pause that began before the watchdog existed', () => {
+    // The run gate can hold a queued audit past a pause, so the runner seeds the
+    // watchdog from current state before subscribing. Without the seed the
+    // watchdog never learns it was paused, and the resume that follows resets
+    // nothing.
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    pausePerformanceAudit();
+
+    let elapsedMs = 0;
+    const watchdog = new PerformanceAuditInactivityWatchdog(30_000, () => elapsedMs);
+    const mirror = () => watchdog.setPaused(getPerformanceAuditState().paused);
+    mirror();
+    const unsubscribe = subscribePerformanceAudit(mirror);
+    try {
+      expect(watchdog.isPaused).toBe(true);
+      elapsedMs = 120_000;
+      expect(watchdog.isExpired()).toBe(false);
+
+      resumePerformanceAudit();
+      expect(watchdog.isPaused).toBe(false);
+      elapsedMs = 149_000;
+      expect(watchdog.isExpired()).toBe(false);
+      elapsedMs = 150_001;
+      expect(watchdog.isExpired()).toBe(true);
+    } finally {
+      unsubscribe();
+    }
   });
 
   it('beginFinalization suspends hang expiry for report persistence and upload', () => {

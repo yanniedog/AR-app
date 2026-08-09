@@ -12,6 +12,7 @@ import {
   ensureUserRateScenarioLoaded,
   restoreUserRateScenarioForAudit,
 } from '../hooks/useUserRateScenario';
+import { ForegroundElapsed, subscribePerformanceAudit } from './performanceAudit';
 
 export const PERFORMANCE_AUDIT_ROLLBACK_KEY = '@ar/performance-audit/rollback-v1';
 /** Encrypted companion for calculator/projection inputs; never written to AsyncStorage. */
@@ -250,11 +251,23 @@ function persistedComparable(snapshot: PerformanceAuditUserSnapshot): unknown {
 
 async function waitForPersistence(snapshot: PerformanceAuditUserSnapshot): Promise<void> {
   const expected = JSON.stringify(persistedComparable(snapshot));
-  const deadline = Date.now() + PERSISTENCE_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    const stored = persistedSnapshot(await AsyncStorage.getItem(PERSISTED_STORE_KEY));
-    if (stored && JSON.stringify(persistedComparable(stored)) === expected) return;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+  // Three seconds of the app actually running, not three seconds of wall clock.
+  // Android suspends the JS thread when the app leaves the foreground, so a
+  // wall-clock deadline could expire during a pause and fail a completed audit
+  // before this loop ever got to re-check whether Zustand had persisted.
+  const elapsed = new ForegroundElapsed();
+  const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
+  try {
+    for (;;) {
+      const stored = persistedSnapshot(await AsyncStorage.getItem(PERSISTED_STORE_KEY));
+      if (stored && JSON.stringify(persistedComparable(stored)) === expected) return;
+      elapsed.accrue();
+      if (elapsed.foregroundMs >= PERSISTENCE_TIMEOUT_MS) break;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      elapsed.accrue();
+    }
+  } finally {
+    unsubscribe();
   }
   throw new Error('Performance audit state restoration was not durably persisted');
 }

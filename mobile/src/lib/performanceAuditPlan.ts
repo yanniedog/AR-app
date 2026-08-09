@@ -960,3 +960,37 @@ export function buildDeepPerformanceAuditPlan(
     passes,
   };
 }
+
+/**
+ * Tracks whether route recovery has invalidated the rest of a scenario.
+ *
+ * Recovery replaces the current screen with the audit route, which discards the
+ * local state earlier steps established — an open filter sheet, a selected
+ * provider, a chosen compare column. Every later step in that scenario would
+ * then run on a freshly mounted screen, outside the state a user would be in,
+ * so they are skipped until a step re-enters a route on its own.
+ */
+export class ScenarioReentryGate {
+  private awaitingScenarioId: string | null = null;
+
+  /** Record that recovery ran after this step. */
+  markRecovered(step: DeepAuditStep): void {
+    this.awaitingScenarioId = step.scenarioId;
+  }
+
+  /**
+   * True when the step depends on a screen recovery unmounted. Call once per
+   * step in plan order: a step that clears the gate also consumes it.
+   *
+   * `entersRouteDirectly` is the caller's answer to whether the step navigates
+   * to its own route rather than acting on whatever is already mounted.
+   */
+  shouldSkip(step: DeepAuditStep, entersRouteDirectly: boolean): boolean {
+    if (this.awaitingScenarioId == null) return false;
+    if (step.scenarioId !== this.awaitingScenarioId || entersRouteDirectly) {
+      this.awaitingScenarioId = null;
+      return false;
+    }
+    return true;
+  }
+}

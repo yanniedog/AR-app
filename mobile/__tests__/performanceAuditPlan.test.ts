@@ -3,6 +3,7 @@ import {
   DEEP_AUDIT_PASS_IDS,
   buildDeepPerformanceAuditPlan,
   deriveDeepAuditInputs,
+  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../src/lib/performanceAuditPlan';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
@@ -287,6 +288,77 @@ describe('deep performance audit plan', () => {
         expect(step.skipSafety.when.length).toBeGreaterThan(0);
         expect(step.skipSafety.reason).toBeTruthy();
       }
+    }
+  });
+});
+
+describe('scenario re-entry gate', () => {
+  // The search scenario is the clearest case: a filter sheet opened at depth 1
+  // and acted on at depth 2, all local-only state that route recovery discards.
+  const searchSteps = () =>
+    allSteps().filter(
+      (step) => step.passId === 'first-pass' && step.scenarioId === 'route.search',
+    );
+  // Mirrors routeEntryHref in the runner: depth-0 opens push their own route,
+  // as do the redirect verifications. Deeper `.open` actions such as
+  // search.compare.open are mounted controls on the current screen.
+  const routeEntry = (step: DeepAuditStep) =>
+    step.depth === 0 || step.semanticActionId.startsWith('redirect.');
+
+  test('skips the rest of a scenario once recovery has unmounted its screen', () => {
+    const steps = searchSteps();
+    const filtersOpen = steps.findIndex(
+      (step) => step.semanticActionId === 'search.filters.open',
+    );
+    expect(filtersOpen).toBeGreaterThan(0);
+    const gate = new ScenarioReentryGate();
+
+    // Everything up to the interruption runs normally.
+    for (const step of steps.slice(0, filtersOpen + 1)) {
+      expect(gate.shouldSkip(step, routeEntry(step))).toBe(false);
+    }
+
+    gate.markRecovered(steps[filtersOpen]);
+
+    // The provider filter and the apply that depends on it would otherwise run
+    // against a freshly mounted screen with no sheet open.
+    const dependents = steps.slice(filtersOpen + 1);
+    expect(dependents.map((step) => step.semanticActionId)).toEqual(
+      expect.arrayContaining(['search.filter.provider.first', 'search.filters.apply']),
+    );
+    for (const step of dependents) {
+      expect(gate.shouldSkip(step, routeEntry(step))).toBe(true);
+    }
+  });
+
+  test('resumes at the next scenario rather than discarding the rest of the pass', () => {
+    const steps = allSteps().filter((step) => step.passId === 'first-pass');
+    const searchIndex = steps.findIndex(
+      (step) => step.semanticActionId === 'search.filters.open',
+    );
+    const gate = new ScenarioReentryGate();
+    gate.markRecovered(steps[searchIndex]);
+
+    const next = steps.slice(searchIndex + 1).find((step) => step.scenarioId !== 'route.search');
+    expect(next).toBeDefined();
+    expect(gate.shouldSkip(next!, routeEntry(next!))).toBe(false);
+  });
+
+  test('a step that navigates to its own route clears the gate', () => {
+    const steps = searchSteps();
+    const gate = new ScenarioReentryGate();
+    gate.markRecovered(steps[steps.length - 1]);
+
+    const open = steps.find((step) => step.semanticActionId === 'search.open');
+    expect(open).toBeDefined();
+    // search.open pushes /search itself, so it re-establishes the screen.
+    expect(gate.shouldSkip(open!, true)).toBe(false);
+  });
+
+  test('does nothing when no recovery has happened', () => {
+    const gate = new ScenarioReentryGate();
+    for (const step of searchSteps()) {
+      expect(gate.shouldSkip(step, routeEntry(step))).toBe(false);
     }
   });
 });

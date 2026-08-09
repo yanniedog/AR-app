@@ -30,6 +30,7 @@ import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debug
 import { reportPerformanceAudit } from '../lib/observability';
 import {
   buildDeepPerformanceAuditPlan,
+  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
@@ -49,19 +50,24 @@ import {
   completePerformanceAudit,
   failPerformanceAudit,
   flattenAuditLogText,
+  ForegroundElapsed,
   formatAuditError,
   formatAuditErrorForLog,
+  getPerformanceAuditPauseCount,
   getPerformanceAuditState,
+  hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
   markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
   markPerformanceAuditRunning,
+  pausePerformanceAudit,
   pathMatches,
   PERFORMANCE_AUDIT_LOG_TAG,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   PerformanceAuditInactivityWatchdog,
   ResponsivenessMonitor,
   resolveAuditJourneyOptionalData,
+  resumePerformanceAudit,
   roundMetric,
   scoreLatency,
   setPerformanceAuditUploadResult,
@@ -71,6 +77,7 @@ import {
   worstStatus,
   type AuditCheck,
   type AuditCheckStatus,
+  type AuditMetricValue,
   type AuditEnvironment,
   type AuditJourney,
   type AuditAppIdentity,
@@ -159,6 +166,50 @@ function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void
   if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
 }
 
+/**
+ * Block at a step boundary while the app is backgrounded, and keep the hang
+ * watchdog suspended for that whole time. Cancelling still works from the
+ * paused state, so this can never trap a run.
+ */
+/**
+ * Drop the readings that feed the report-wide maxima.
+ *
+ * summarizePerformanceAudit excludes skipped checks from the slowest-check
+ * calculation but takes maxEventLoopLagMs and maxFrameGapMs across every check,
+ * so an animation gap that merely spans a background pause — minutes, not
+ * milliseconds — would otherwise be published as the app's worst frame gap.
+ */
+/**
+ * Drop every elapsed-time metric from a check whose measurement spanned a
+ * background pause.
+ *
+ * The rule is the `Ms` suffix rather than a list, because the report and the
+ * uploaded log show far more timings than the summary reads —
+ * `backgroundSettleMs` and `actionMs` are rendered on the results screen, and a
+ * check that says its timings are not reported must not still carry them.
+ * AUDIT_LATENCY_METRIC_KEYS names the subset the summary consumes; a test
+ * asserts this rule covers all of it.
+ */
+function contaminatedTimingsRemoved(
+  metrics: Record<string, AuditMetricValue>,
+): Record<string, AuditMetricValue> {
+  const out = { ...metrics };
+  for (const key of Object.keys(out)) {
+    if (key.endsWith('Ms')) delete out[key];
+  }
+  return out;
+}
+
+async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
+  if (!getPerformanceAuditState().paused) return;
+  while (getPerformanceAuditState().paused) {
+    // Cancel must still escape a paused run.
+    assertAuditActive();
+    await delay(120);
+  }
+  assertSessionActive(watchdog);
+}
+
 function rethrowAuditControl(error: unknown): void {
   if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
     throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
@@ -231,25 +282,32 @@ async function awaitAuditWorkWithTimeout<T>(
 ): Promise<T> {
   assertSessionActive(watchdog);
   let timer: ReturnType<typeof setInterval> | null = null;
-  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  // Spend only foreground time against the budget. A wall-clock timeout would
+  // fire while the app sat in the background, failing the run for work the user
+  // simply stepped away from — the same mistake the hang watchdog makes if it
+  // is not suspended. Accruing on the pause and resume emissions as well as on
+  // the poll keeps a JS thread suspended mid-interval from charging the
+  // off-screen span once it resumes.
+  const elapsed = new ForegroundElapsed();
+  const unsubscribe = subscribePerformanceAudit(() => elapsed.accrue());
   const control = new Promise<never>((_resolve, reject) => {
     timer = setInterval(() => {
+      elapsed.accrue();
+      const stop = (error: unknown) => {
+        if (timer) clearInterval(timer);
+        timer = null;
+        reject(error);
+      };
       try {
         assertSessionActive(watchdog);
       } catch (error) {
-        if (timer) clearInterval(timer);
-        timer = null;
-        if (timeoutId) clearTimeout(timeoutId);
-        timeoutId = null;
-        reject(error);
+        stop(error);
+        return;
+      }
+      if (elapsed.foregroundMs >= timeoutMs) {
+        stop(new Error(`${label} timed out after ${timeoutMs}ms`));
       }
     }, 50);
-    timeoutId = setTimeout(() => {
-      if (timer) clearInterval(timer);
-      timer = null;
-      timeoutId = null;
-      reject(new Error(`${label} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
   });
   try {
     return await Promise.race([promise, control]);
@@ -259,7 +317,7 @@ async function awaitAuditWorkWithTimeout<T>(
     throw new Error(`${label} failed: ${formatAuditError(error)}`);
   } finally {
     if (timer) clearInterval(timer);
-    if (timeoutId) clearTimeout(timeoutId);
+    unsubscribe();
   }
 }
 
@@ -791,6 +849,9 @@ async function runDeepAuditStepBody(
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
+      // Errors the app itself logged. Unlike a latency score or a timeout,
+      // these cannot be produced by the clock, so they survive an interruption.
+      nonTimingFailure: errors.journey.length > 0,
       ...readinessMetrics(readiness),
       ...responsivenessRecord(responsiveness),
     },
@@ -1568,6 +1629,10 @@ async function runUpdateReadinessCheck(
       manifestHasSha256: !!remote?.sha256,
       installedApplicationId: Application.applicationId ?? null,
       manifestPackageMatches: remote?.package_name === Application.applicationId,
+      // The only failure in the audit derived from content rather than an error
+      // or a clock, so an interruption must not discard it as a stale timing.
+      nonTimingFailure:
+        error == null && result != null && result.status !== 'error' && manifestContentStatus === 'fail',
       durationMayUseTtlCache: true,
       durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
@@ -1969,6 +2034,9 @@ export async function runJourney(
       runtimeErrorMessages: errors.journey.join(' | ') || null,
       incidentalRuntimeErrors: errors.incidental.length,
       incidentalRuntimeErrorMessages: errors.incidental.join(' | ') || null,
+      // routeError covers navigation timeouts, which a pause can manufacture;
+      // only the app's own logged errors count as clock-independent evidence.
+      nonTimingFailure: errors.journey.length > 0,
       ...responsivenessRecord(responsiveness),
       ...responsivenessRecord(forwardResponsiveness, 'forward'),
       ...responsivenessRecord(backgroundResponsiveness, 'background'),
@@ -2020,8 +2088,30 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
+      // The report's duration is time the audit actually measured. A five-minute
+      // pause is the user's, not the app's, and counting it would attribute the
+      // wait to a run that was deliberately suspended for it.
+      const runElapsed = new ForegroundElapsed();
+      const unsubscribeRunElapsed = subscribePerformanceAudit(() => runElapsed.accrue());
+      const activeDurationMs = () => {
+        runElapsed.accrue();
+        return roundMetric(runElapsed.foregroundMs);
+      };
       const app = installedAuditIdentity();
       const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
+      // Mirror pauses onto the watchdog the instant they happen, not when the
+      // loop next reaches a step boundary. A step already in flight when the
+      // app backgrounds keeps polling isExpired() every 50ms, so a short hang
+      // timeout plus a phone call would otherwise abort the run as hung.
+      const mirrorPauseToWatchdog = () => {
+        watchdog.setPaused(getPerformanceAuditState().paused);
+      };
+      // Seed from current state before subscribing: the run gate can hold a
+      // queued audit until after it has already been paused, and a subscription
+      // only sees later emissions. A watchdog that never learned it was paused
+      // does not reset its deadline when the resume arrives.
+      mirrorPauseToWatchdog();
+      const unsubscribePause = subscribePerformanceAudit(mirrorPauseToWatchdog);
       const originalStore = useStore.getState();
       let plan = buildDeepPerformanceAuditPlan(originalStore.core);
       let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
@@ -2097,6 +2187,11 @@ export function PerformanceAuditRunner() {
           'Waiting for active payload work to finish',
         );
         await waitForRefreshWork(watchdog);
+        // Setup snapshots the store, plan and environment the whole run is
+        // pinned to. Capturing that from a backgrounded process would pin the
+        // report to state the user cannot see, so wait for the foreground here
+        // too rather than only at the first measured check.
+        await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
         plan = buildDeepPerformanceAuditPlan(initialStore.core);
         total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
@@ -2134,13 +2229,12 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
-        updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
-        await record(await runRuntimeCheck(monitor, watchdog));
-
+        // Resolves true when route recovery ran, so a caller can tell that the
+        // screen was replaced under it.
         const recordContinuable = async (
           label: string,
           run: () => Promise<AuditCheck>,
-        ): Promise<void> => {
+        ): Promise<boolean> => {
           const recoverAfterFailure = async () => {
             try {
               await recoverAuditRoute(() => pathnameRef.current);
@@ -2165,12 +2259,63 @@ export function PerformanceAuditRunner() {
             error: formatAuditError(caught),
             trace: captureAuditTrace(`${label} failed; audit continues`),
           });
+          // Start only in the foreground, and retake once if the app left it
+          // mid-step: a measurement spanning a pause times a process Android
+          // stopped drawing, not the app.
+          await waitWhilePaused(watchdog);
           let check: AuditCheck;
-          try {
-            check = await run();
-          } catch (caught) {
-            rethrowAuditControl(caught);
-            check = continuedFailureCheck(caught);
+          const runOnce = async (): Promise<AuditCheck> => {
+            try {
+              return await run();
+            } catch (caught) {
+              rethrowAuditControl(caught);
+              return continuedFailureCheck(caught);
+            }
+          };
+          const startedPaused = getPerformanceAuditPauseCount();
+          check = await runOnce();
+          if (getPerformanceAuditPauseCount() !== startedPaused) {
+            // Contaminated: the app left the foreground mid-measurement. Do not
+            // replay the step. Most plan actions advance from current state —
+            // the `*.next` cyclers and the `*.toggle` family — so a second
+            // invocation would move the app twice, corrupting both this reading
+            // and the state later steps expect. A replay would also record a
+            // warmed attempt under the cold-pass label. Skipping keeps the
+            // report honest, and aggregateRepeatedJourneys already ignores
+            // skipped cold/warm pairs.
+            //
+            // A failure the check already observed is real and survives. Only
+            // the timings are unusable; downgrading the status would hide a
+            // genuine fault behind an interruption and could report the run
+            // healthy.
+            // Only a failure the check positively identified as clock-
+            // independent survives. Latency scores are the obvious hazard, but
+            // a recorded `error` is not evidence either: readiness waits, route
+            // navigation and the manifest fetch all raise errors on wall-clock
+            // timeouts a pause can trigger by itself. Anything short of an
+            // explicit signal is recorded as skipped — with its error text
+            // intact, so the evidence stays in the report even when it does not
+            // count toward the diagnosis.
+            const observedFailure = hasExplicitNonTimingFailure(check);
+            debugLog.info(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `${label} was interrupted by the app leaving the foreground; recorded as ` +
+              `${observedFailure ? 'a failure without timings' : 'skipped'}`,
+            );
+            check = {
+              ...check,
+              status: observedFailure ? 'fail' : 'skipped',
+              // A duration spanning a pause must not become the slowest check.
+              durationMs: 0,
+              metrics: {
+                ...contaminatedTimingsRemoved(check.metrics),
+                interruptedByBackground: true,
+                reason: observedFailure
+                  ? 'The app left the foreground during this check; the failure was observed before the interruption and timings are not reported'
+                  : 'The app left the foreground during this check',
+              },
+            };
+            await waitWhilePaused(watchdog);
           }
           try {
             // Durable check storage/logging failures remain fatal — only the step
@@ -2180,18 +2325,56 @@ export function PerformanceAuditRunner() {
             rethrowAuditControl(caught);
             throw caught;
           }
-          if (check.status === 'fail') await recoverAfterFailure();
+          // An interrupted step may have left the app mid-navigation.
+          if (check.status === 'fail' || check.metrics.interruptedByBackground === true) {
+            await recoverAfterFailure();
+            return true;
+          }
+          return false;
         };
+
+        updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
+        // Routed through recordContinuable so the responsiveness sample gets the
+        // same foreground gate as every other check: it measures event-loop lag and
+        // animation callback gaps, which are the readings least meaningful when
+        // Android has stopped drawing.
+        await recordContinuable(
+          'Sampling idle responsiveness',
+          () => runRuntimeCheck(monitor, watchdog),
+        );
+
+        const reentryGate = new ScenarioReentryGate();
 
         for (const pass of plan.passes) {
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
-            updatePerformanceAuditProgress(
-              completed,
-              total,
-              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
-            );
+            const label = `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`;
+            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
+              // Route recovery unmounted the screen this step acts on, so the
+              // reading it would take is of a screen no user would be looking at.
+              updatePerformanceAuditProgress(completed, total, label);
+              await record({
+                id: `deep-${step.id}`,
+                label,
+                kind: 'journey',
+                status: 'skipped',
+                durationMs: 0,
+                metrics: {
+                  journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+                  journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+                  iteration: step.passId === 'first-pass' ? 'cold' : 'warm',
+                  passId: step.passId,
+                  depth: step.depth,
+                  dependsOnRecoveredScenario: true,
+                  reason:
+                    'An earlier step in this scenario was interrupted and the screen ' +
+                    'this step depends on was unmounted by route recovery',
+                },
+              });
+              continue;
+            }
+            updatePerformanceAuditProgress(completed, total, label);
             logAuditEvent(app, {
               kind: 'deep-step-start',
               sessionId,
@@ -2204,8 +2387,8 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
-            await recordContinuable(
-              `${pass.label}: depth ${step.depth} - ${step.semanticActionId}`,
+            const recovered = await recordContinuable(
+              label,
               () => runDeepAuditStep(
                 step,
                 () => pathnameRef.current,
@@ -2214,6 +2397,7 @@ export function PerformanceAuditRunner() {
                 datasetRevision,
               ),
             );
+            if (recovered) reentryGate.markRecovered(step);
           }
         }
 
@@ -2278,7 +2462,11 @@ export function PerformanceAuditRunner() {
         assertDatasetRevision(datasetRevision);
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
+        // The last measured step, and the only one not routed through
+        // recordContinuable. Start it in the foreground like the rest.
+        await waitWhilePaused(watchdog);
         const restoreStarted = now();
+        const restoreStartedPaused = getPerformanceAuditPauseCount();
         const initialRollbackResult = await awaitAuditWorkWithTimeout(
           tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
           watchdog,
@@ -2289,6 +2477,7 @@ export function PerformanceAuditRunner() {
         let rollbackAttempts = 1;
         if (!rollbackResult.restored) {
           updatePerformanceAuditProgress(completed, total, 'Retrying settings and saved data restoration');
+          await waitWhilePaused(watchdog);
           await yieldToUi();
           const retryResult = await awaitAuditWorkWithTimeout(
             tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
@@ -2308,15 +2497,25 @@ export function PerformanceAuditRunner() {
             };
         }
         rollbackRestored = rollbackResult.restored;
+        // The outcome is reported either way — the state either was restored or
+        // was not — but a duration spanning a pause must not become the
+        // report's slowest check.
+        const restoreInterrupted = getPerformanceAuditPauseCount() !== restoreStartedPaused;
         await record({
           id: 'audit-state-restoration',
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
           status: rollbackResult.restored ? 'pass' : 'fail',
-          durationMs: roundMetric(now() - restoreStarted),
+          durationMs: restoreInterrupted ? 0 : roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
             attempts: rollbackAttempts,
+            ...(restoreInterrupted
+              ? {
+                interruptedByBackground: true,
+                reason: 'The app left the foreground during restoration; timing not reported',
+              }
+              : {}),
           },
           ...(rollbackResult.error ? {
             error: rollbackResult.error,
@@ -2324,6 +2523,12 @@ export function PerformanceAuditRunner() {
           } : {}),
         });
         watchdog.beginFinalization();
+        // Publish the terminal state in the foreground. A terminal run cannot be
+        // resumed, so completing while paused would leave the pause set with no
+        // AppState listener left to clear it, and every foreground budget the
+        // post-publish upload creates would then accrue nothing and never time
+        // out — leaving uploadPending and the run gate held indefinitely.
+        await waitWhilePaused(watchdog);
 
         environment = {
           ...environment,
@@ -2340,7 +2545,8 @@ export function PerformanceAuditRunner() {
           sessionId,
           startedAt,
           finishedAt,
-          durationMs: Date.now() - startedMs,
+          durationMs: activeDurationMs(),
+          wallClockMs: Date.now() - startedMs,
           app,
           watchdog: {
             hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -2428,6 +2634,10 @@ export function PerformanceAuditRunner() {
           );
         }
         assertSessionActive(watchdog);
+        // Persistence and route recovery above are both slow enough for the
+        // user to leave, so re-check here rather than trusting the gate taken
+        // before them.
+        await waitWhilePaused(watchdog);
         // Publish as soon as the report is durable. Everything below — the
         // Crashlytics envelope, the log flush, and reading/redacting/posting the
         // whole on-disk log — is heavy work the user should never wait behind,
@@ -2662,7 +2872,8 @@ export function PerformanceAuditRunner() {
             sessionId,
             startedAt,
             finishedAt: new Date().toISOString(),
-            durationMs: Date.now() - startedMs,
+            durationMs: activeDurationMs(),
+            wallClockMs: Date.now() - startedMs,
             app,
             watchdog: {
               hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -2722,6 +2933,8 @@ export function PerformanceAuditRunner() {
           ].join('\n'));
         }
       } finally {
+        unsubscribePause();
+        unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
         try {
           monitor.stop();
@@ -2765,23 +2978,46 @@ export function PerformanceAuditRunner() {
   }, [state.status]);
 
   useEffect(() => {
-    if (state.status !== 'queued' && state.status !== 'running') return;
-    const cancelForInactiveState = (nextState: string) => {
-      if (nextState === 'active') return;
-      debugLog.info(
-        PERFORMANCE_AUDIT_LOG_TAG,
-        `audit cancelled safely because app state changed to ${nextState}`,
-      );
-      cancelPerformanceAudit();
+    // Tracking continues while a published report's log upload is still
+    // running: that work is still on a foreground budget, and without pause
+    // and resume emissions it would charge the whole suspended interval and
+    // time out the moment the user came back.
+    const tracking = state.status === 'queued' || state.status === 'running' ||
+      (state.status === 'complete' && state.uploadPending);
+    if (!tracking) return;
+    // Leaving the app suspends the run rather than discarding it. Route timing,
+    // mounted-surface readiness and animation callback gaps do not exist once
+    // Android stops committing frames, so the audit waits for the foreground
+    // instead of recording a backgrounded process.
+    const applyAppState = (nextState: string) => {
+      if (nextState === 'active') {
+        if (getPerformanceAuditState().paused) {
+          debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, 'audit resumed on returning to the foreground');
+        }
+        resumePerformanceAudit();
+        return;
+      }
+      if (!getPerformanceAuditState().paused) {
+        debugLog.info(
+          PERFORMANCE_AUDIT_LOG_TAG,
+          `audit paused because app state changed to ${nextState}`,
+        );
+      }
+      pausePerformanceAudit();
     };
     const subscription = AppState.addEventListener('change', (nextState) => {
-      cancelForInactiveState(nextState);
+      applyAppState(nextState);
     });
     // The app may already have backgrounded between the audit state update
     // and this effect subscribing, in which case no future transition fires.
-    if (AppState.currentState != null) cancelForInactiveState(AppState.currentState);
-    return () => subscription.remove();
-  }, [state.status]);
+    if (AppState.currentState != null) applyAppState(AppState.currentState);
+    return () => {
+      subscription.remove();
+      // Never leave a pause set with no listener to clear it. A dependency
+      // change re-subscribes immediately and re-applies the current state.
+      resumePerformanceAudit();
+    };
+  }, [state.status, state.uploadPending]);
 
   if (state.status !== 'queued' && state.status !== 'running') return null;
 
@@ -2813,7 +3049,7 @@ export function PerformanceAuditRunner() {
           </AppText>
         </Row>
         <AppText variant="small" color="textMuted" numberOfLines={2}>
-          {state.progress.label}
+          {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
         </AppText>
         <View
           accessibilityRole="progressbar"

@@ -92,7 +92,10 @@ export interface PerformanceAuditReport {
   sessionId: string;
   startedAt: string;
   finishedAt: string;
+  /** Time the audit spent measuring. Excludes any interval the app was off screen. */
   durationMs: number;
+  /** Wall-clock time the user waited, including pauses. Absent before schema 4. */
+  wallClockMs?: number;
   app: AuditAppIdentity;
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
@@ -137,6 +140,8 @@ export interface PerformanceAuditState {
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
   cancelRequested: boolean;
+  /** The run is suspended because the app left the foreground. */
+  paused: boolean;
   report: PerformanceAuditReport | null;
   uploadUrl: string | null;
   uploadProvider: string | null;
@@ -205,6 +210,7 @@ const IDLE_STATE: PerformanceAuditState = {
   lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
   cancelRequested: false,
+  paused: false,
   report: null,
   uploadUrl: null,
   uploadProvider: null,
@@ -214,6 +220,7 @@ const IDLE_STATE: PerformanceAuditState = {
 };
 
 let auditState: PerformanceAuditState = IDLE_STATE;
+let pauseCount = 0;
 
 function emit(next: PerformanceAuditState): void {
   auditState = next;
@@ -283,12 +290,49 @@ function monotonicNow(): number {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
+/**
+ * Accumulates only the time the audit spent in the foreground, for budgets that
+ * must not be spent by an app the user simply stepped away from.
+ *
+ * Each interval is classified by the state that held *during* it rather than the
+ * state at its end. Android suspends the JS thread in the background, so a
+ * poller can miss every tick of a pause and then run for the first time once
+ * `paused` is already false — charging the whole off-screen span. Calling
+ * `accrue` on the pause and resume transitions themselves closes the span at the
+ * transition, so no interval can straddle one.
+ */
+export class ForegroundElapsed {
+  private elapsedMs = 0;
+  private lastAccrualAt: number;
+  private paused: boolean;
+
+  // Wall-clock time can jump forward or back under automatic time correction,
+  // which would either blow a budget instantly or postpone it indefinitely.
+  constructor(private readonly clock: MonotonicClock = monotonicNow) {
+    this.lastAccrualAt = clock();
+    this.paused = getPerformanceAuditState().paused;
+  }
+
+  accrue(): void {
+    const at = this.clock();
+    if (!this.paused) this.elapsedMs += at - this.lastAccrualAt;
+    this.lastAccrualAt = at;
+    this.paused = getPerformanceAuditState().paused;
+  }
+
+  get foregroundMs(): number {
+    return this.elapsedMs;
+  }
+}
+
 export class PerformanceAuditInactivityWatchdog {
   readonly hangTimeoutMs: number;
   private lastStoredProgressMs: number;
   private storedChecks = 0;
   /** Report persistence/upload no longer stores checks; hang prevention must not abort teardown. */
   private finalizing = false;
+  /** Time spent backgrounded is the user's, not a hang. */
+  private paused = false;
 
   constructor(
     hangTimeoutMs = DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -311,8 +355,22 @@ export class PerformanceAuditInactivityWatchdog {
   }
 
   isExpired(): boolean {
-    if (this.finalizing) return false;
+    if (this.finalizing || this.paused) return false;
     return this.remainingMs() <= 0;
+  }
+
+  /**
+   * A backgrounded audit is waiting on the user, not hung. Suspend expiry while
+   * paused and restart the window on resume, so time spent in another app is
+   * never counted against the hang timeout.
+   */
+  setPaused(paused: boolean): void {
+    if (this.paused && !paused) this.touchProgress();
+    this.paused = paused;
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
   }
 
   /** Suspend stored-check inactivity once planned checks finish; teardown may exceed one hang window. */
@@ -351,6 +409,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
     cancelRequested: false,
+    paused: false,
     report: null,
     uploadUrl: null,
     uploadProvider: null,
@@ -396,6 +455,44 @@ export function markPerformanceAuditCheckStored(
   });
 }
 
+/**
+ * Suspend a run that left the foreground instead of discarding it.
+ *
+ * Most of the audit measures the UI — route timing, mounted-surface readiness,
+ * animation callback gaps — and none of that exists once Android stops
+ * committing frames. Continuing would record numbers that describe a
+ * backgrounded process rather than the app. Pausing keeps the completed work
+ * and lets the run continue when the user comes back.
+ */
+/**
+ * A published report whose log upload is still running is still doing timed
+ * work, so it keeps pause tracking. Without it the upload's foreground budget
+ * would see no transitions and charge the whole suspended interval on the first
+ * tick after the user returns.
+ */
+function pauseTrackingApplies(): boolean {
+  return auditState.status === 'queued' ||
+    auditState.status === 'running' ||
+    (auditState.status === 'complete' && auditState.uploadPending);
+}
+
+export function pausePerformanceAudit(): void {
+  if (!pauseTrackingApplies()) return;
+  if (auditState.paused || auditState.cancelRequested) return;
+  pauseCount += 1;
+  emit({ ...auditState, paused: true });
+}
+
+/** Increments on every pause so a step can tell whether it spanned one. */
+export function getPerformanceAuditPauseCount(): number {
+  return pauseCount;
+}
+
+export function resumePerformanceAudit(): void {
+  if (!auditState.paused) return;
+  emit({ ...auditState, paused: false });
+}
+
 export function cancelPerformanceAudit(): void {
   if (auditState.status !== 'queued' && auditState.status !== 'running') return;
   emit({
@@ -426,6 +523,7 @@ export function completePerformanceAudit(
       label: 'Audit complete',
     },
     cancelRequested: false,
+    paused: false,
     report,
     uploadUrl: result.url ?? null,
     uploadProvider: result.provider ?? null,
@@ -451,6 +549,8 @@ export function setPerformanceAuditUploadResult(
     uploadProvider: upload.provider ?? null,
     uploadError: upload.error ?? null,
     uploadPending: false,
+    // Pause tracking ends with the upload; nothing remains to clear it.
+    paused: false,
   });
 }
 
@@ -459,6 +559,10 @@ export function markPerformanceAuditCancelled(): void {
     ...auditState,
     status: 'cancelled',
     cancelRequested: false,
+    // A terminal run is not paused. resumePerformanceAudit refuses terminal
+    // states, so a pause left set here could never be cleared, and every
+    // foreground budget created afterwards would accrue nothing.
+    paused: false,
     progress: { ...auditState.progress, label: 'Audit cancelled' },
   });
 }
@@ -468,6 +572,7 @@ export function failPerformanceAudit(error: string): void {
     ...auditState,
     status: 'failed',
     cancelRequested: false,
+    paused: false,
     progress: { ...auditState.progress, label: 'Audit failed' },
     error,
   });
@@ -943,12 +1048,47 @@ export function worstStatus(...statuses: AuditCheckStatus[]): AuditCheckStatus {
   );
 }
 
+/**
+ * A check interrupted by Android backgrounding may keep a failure only when
+ * the check explicitly recorded evidence that does not depend on elapsed time
+ * or a timeout. Generic errors are not sufficient: inner wall-clock guards can
+ * expire while the JavaScript thread is suspended.
+ */
+export function hasExplicitNonTimingFailure(check: AuditCheck): boolean {
+  return check.status === 'fail' && check.metrics.nonTimingFailure === true;
+}
+
+/**
+ * Every metric `summarizePerformanceAudit` can read as a check's representative
+ * latency, plus the two report-wide maxima.
+ *
+ * A check whose measurement spanned a background pause times a process Android
+ * had stopped drawing. Where such a check still has to be reported — a failure
+ * observed before the interruption is real and must not be downgraded — these
+ * keys are stripped so the unusable timing cannot become the report's slowest
+ * check or its worst lag.
+ */
+export const AUDIT_LATENCY_METRIC_KEYS = [
+  'forwardMs',
+  'backMs',
+  'maxEventLoopLagMs',
+  'maxFrameGapMs',
+  'stringifyMs',
+  'parseMs',
+  'traversalMs',
+  'maxWriteMs',
+  'maxReadMs',
+  'writeMs',
+  'readMs',
+] as const;
+
 export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAuditSummary {
   const pass = checks.filter((check) => check.status === 'pass').length;
   const warn = checks.filter((check) => check.status === 'warn').length;
   const fail = checks.filter((check) => check.status === 'fail').length;
   const skipped = checks.filter((check) => check.status === 'skipped').length;
   const completed = checks.filter((check) => check.status !== 'skipped');
+  // Keep AUDIT_LATENCY_METRIC_KEYS in step with every key read below.
   const representativeLatency = (check: AuditCheck): number => {
     const numeric = (...keys: string[]) =>
       keys.map((key) => Number(check.metrics[key] ?? 0)).filter(Number.isFinite);
@@ -1016,6 +1156,12 @@ export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggre
   for (const [journeyId, pair] of byJourney) {
     if (!pair.cold || !pair.warm) continue;
     if (pair.cold.status === 'skipped' || pair.warm.status === 'skipped') continue;
+    // An interrupted check keeps its status but loses its timings, so aggregating
+    // it would publish a comparison against a zero it never measured.
+    if (
+      pair.cold.metrics.interruptedByBackground === true ||
+      pair.warm.metrics.interruptedByBackground === true
+    ) continue;
     const coldForwardMs = number(pair.cold, 'forwardMs');
     const warmForwardMs = number(pair.warm, 'forwardMs');
     const coldBackMs = number(pair.cold, 'backMs');
