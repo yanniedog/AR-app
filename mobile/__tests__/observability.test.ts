@@ -163,7 +163,7 @@ describe('observability', () => {
         networkInternetReachable: true,
       },
       summary: {
-        overall: 'bottleneck', pass: 0, warn: 0, fail: 1, skipped: 0,
+        overall: 'bottleneck', pass: 0, warn: 0, fail: 1, skipped: 0, unavailable: 0,
         executed: 1, justifiedSkipped: 0, unexpectedSkipped: 0, coveragePercent: 100,
         slowestCheckId: 'manifest-network', slowestCheckLabel: 'Manifest', slowestCheckMs: 7000,
         maxEventLoopLagMs: 6000, maxFrameGapMs: 6000,

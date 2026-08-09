@@ -92,7 +92,7 @@ export function compactAuditCheckForLog(check: {
   label: string;
   kind: string;
   status: string;
-  durationMs: number;
+  durationMs: number | null;
   metrics: Record<string, unknown>;
   error?: string | null;
   trace?: string | null;
@@ -113,6 +113,34 @@ export function compactAuditCheckForLog(check: {
       base.maxFrameGapMs = check.metrics.maxFrameGapMs;
     }
     if (typeof check.metrics.reason === 'string') base.reason = check.metrics.reason;
+    const proofKeys = [
+      'measurementMode',
+      'executionAttempted',
+      'actionInvoked',
+      'actionCompleted',
+      'actionSource',
+      'actionRevisionBefore',
+      'actionRevisionAfter',
+      'renderRevisionBefore',
+      'renderRevisionAfter',
+      'actionResultEvidence',
+      'actionMs',
+      'forwardMs',
+      'backMs',
+      'backgroundSettleMs',
+      'expectedPath',
+      'backDestination',
+      'backReturnedToAudit',
+      'readinessActionEvidence',
+    ];
+    const proof: Record<string, unknown> = {};
+    for (const key of proofKeys) {
+      const value = check.metrics[key];
+      if (value != null) proof[key] = typeof value === 'string'
+        ? shortenAuditEvidenceText(value)
+        : value;
+    }
+    if (Object.keys(proof).length) base.metrics = proof;
     return base;
   }
   const metrics = compactAuditMetrics(check.metrics);
@@ -134,7 +162,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
         typeof check.label !== 'string' ||
         typeof check.kind !== 'string' ||
         typeof check.status !== 'string' ||
-        typeof check.durationMs !== 'number' ||
+        (check.durationMs != null && typeof check.durationMs !== 'number') ||
         check.metrics == null ||
         typeof check.metrics !== 'object' ||
         Array.isArray(check.metrics)
@@ -146,7 +174,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
         label: check.label,
         kind: check.kind,
         status: check.status,
-        durationMs: check.durationMs,
+        durationMs: typeof check.durationMs === 'number' ? check.durationMs : null,
         metrics: check.metrics as Record<string, unknown>,
         error: typeof check.error === 'string' ? check.error : null,
         trace: typeof check.trace === 'string' ? check.trace : null,
@@ -172,7 +200,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
 
   const kept = new Set([
     'schemaVersion', 'sessionId', 'startedAt', 'finishedAt', 'durationMs', 'partial',
-    'app', 'watchdog', 'environment', 'plan', 'summary', 'checks', 'routeAggregates', 'limitations',
+    'app', 'watchdog', 'environment', 'plan', 'coverage', 'summary', 'checks', 'routeAggregates', 'limitations',
   ]);
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -192,10 +220,11 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
     watchdog: source.watchdog,
     environment: source.environment,
     plan: compactPlan,
+    coverage: source.coverage,
     summary: source.summary,
     checks,
     routeAggregates: source.routeAggregates,
-    limitations: Array.isArray(source.limitations) ? source.limitations.slice(0, 4) : source.limitations,
+    limitations: source.limitations,
     ...extras,
   });
 }

@@ -627,7 +627,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'The directory query uses an observed provider.',
   }, [
     { depth: 0, semanticActionId: 'lenders.open' },
-    { depth: 1, semanticActionId: 'lenders.section.next', parameters: { section: section ?? null }, stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'lenders.section.next', stateImpact: 'restorable' },
     { depth: 1, semanticActionId: 'lenders.query.provider', parameters: { query: inputs.provider }, stateImpact: 'local-only', optional: true, skipReason: missingProvider },
     { depth: 1, semanticActionId: 'lenders.query.clear', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'lenders.provider.open', expectedPath: lenderPath, expectedSurface: 'lender.details', readiness: ['logos', 'list'], parameters: { provider: inputs.provider }, optional: true, skipReason: missingProvider },
@@ -755,7 +755,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'projections.metric.next', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 3, semanticActionId: 'projections.chart.previous', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 3, semanticActionId: 'projections.chart.next', readiness: ['graphics'], stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'projections.section.next', parameters: { section: section ?? null }, readiness: ['graphics'], stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'projections.section.next', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.moves', {
@@ -767,7 +767,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   }, [
     { depth: 0, semanticActionId: 'moves.open' },
     { depth: 1, semanticActionId: 'moves.decision.previous', readiness: ['rba-calendar'], stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'moves.section.next', parameters: { section: section ?? null }, stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'restorable' },
     { depth: 2, semanticActionId: 'moves.response-chart.zoom-in', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'moves.response-chart.reset', readiness: ['graphics'], stateImpact: 'local-only' },
     { depth: 3, semanticActionId: 'moves.response-chart.provider.first', readiness: ['graphics'], stateImpact: 'local-only' },
@@ -797,7 +797,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     unsafeActionsExcluded: ['external-link.open'],
   }, [
     { depth: 0, semanticActionId: 'outlook.open' },
-    { depth: 1, semanticActionId: 'outlook.section.next', parameters: { section: section ?? null }, stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'outlook.section.next', stateImpact: 'restorable' },
     { depth: 2, semanticActionId: 'outlook.history.mode.spread', readiness: ['bank-history', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.history.mode.calendar', readiness: ['bank-history', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.history.mode.pulse', readiness: ['bank-insights', 'product-history', 'graphics'], optional: true, ...optionalFeatureSkip },

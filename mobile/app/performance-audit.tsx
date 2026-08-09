@@ -16,6 +16,7 @@ import {
   requestPerformanceAudit,
   releasePerformanceAuditUploadDeletion,
   selectReportedAuditChecks,
+  MAX_REPORTED_AUDIT_CHECKS,
   subscribePerformanceAudit,
   type AuditCheck,
   type AuditCheckStatus,
@@ -39,39 +40,70 @@ function statusLabel(status: AuditCheckStatus): string {
   return 'Skipped';
 }
 
+function metricNumber(check: AuditCheck, key: string): number | null {
+  const value = check.metrics[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function metricDuration(check: AuditCheck, key: string, label: string): string {
+  const value = metricNumber(check, key);
+  if (value == null) return `${label} not measured`;
+  return value === 0 ? `${label} <0.1 ms (measured)` : `${label} ${value.toFixed(1)} ms`;
+}
+
+function measuredMs(label: string, value: number | null): string {
+  if (value == null) return `${label} not measured`;
+  return value === 0 ? `${label} <0.1 ms (measured)` : `${label} ${value.toFixed(0)} ms`;
+}
+
 function checkDetail(check: AuditCheck): string {
   if (check.status === 'skipped') {
     const reason = String(check.metrics.reason ?? 'No timing was recorded');
     return `Timing unavailable · ${reason}`;
   }
   if (check.kind === 'journey') {
-    const forward = Number(check.metrics.forwardMs ?? 0);
-    const back = Number(check.metrics.backMs ?? 0);
-    const background = Number(check.metrics.backgroundSettleMs ?? 0);
-    const jsLag = Number(check.metrics.maxEventLoopLagMs ?? 0);
-    const animationGap = Number(check.metrics.maxFrameGapMs ?? 0);
-    const parts = [`Open ${forward.toFixed(0)} ms`, `Back ${back.toFixed(0)} ms`];
-    if (background > 0) parts.push(`Background ${background.toFixed(0)} ms`);
-    if (jsLag > 0) parts.push(`Max JS lag ${jsLag.toFixed(0)} ms`);
-    if (animationGap > 0) parts.push(`JS animation gap ${animationGap.toFixed(0)} ms`);
+    const measured = (key: string) => metricNumber(check, key);
+    const forward = measured('forwardMs');
+    const back = measured('backMs');
+    const action = measured('actionMs');
+    const background = measured('backgroundSettleMs');
+    const jsLag = measured('maxEventLoopLagMs');
+    const animationGap = measured('maxFrameGapMs');
+    const isRoundTrip = check.metrics.measurementMode === 'route-round-trip';
+    const parts: string[] = [];
+    if (isRoundTrip) {
+      parts.push(
+        measuredMs('Open', forward),
+        measuredMs('Back', back),
+      );
+    } else {
+      parts.push(measuredMs('Action', action));
+      if (forward != null) parts.push(measuredMs('Ready', forward));
+    }
+    if (background != null) parts.push(measuredMs('Background', background));
+    if (jsLag != null) parts.push(measuredMs('Max JS lag', jsLag));
+    if (animationGap != null) parts.push(measuredMs('JS animation gap', animationGap));
     return parts.join(' · ');
   }
   if (check.id === 'active-data') {
-    return `Parse ${Number(check.metrics.parseMs ?? 0).toFixed(0)} ms · ${Number(check.metrics.rateRows ?? 0).toLocaleString()} rate rows`;
+    const rows = metricNumber(check, 'rateRows');
+    return `${metricDuration(check, 'parseMs', 'Parse')} · ${rows == null ? 'Rows not measured' : `${rows.toLocaleString()} rate rows`}`;
   }
   if (check.id === 'manifest-network') {
-    return `${check.durationMs.toFixed(0)} ms · HTTP ${check.metrics.statusCode ?? '—'}`;
+    return `${measuredMs('Request', check.durationMs)} · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
   if (check.id.startsWith('section-model-')) {
+    const rows = metricNumber(check, 'rows');
     return [
-      `Rows ${Number(check.metrics.rows ?? 0).toLocaleString()}`,
-      `Hierarchy ${Number(check.metrics.firstHierarchyMs ?? 0).toFixed(0)} ms`,
-      `Stats ${Number(check.metrics.firstStatsMs ?? 0).toFixed(0)} ms`,
-      `Rank ${Number(check.metrics.firstRankMs ?? 0).toFixed(0)} ms`,
+      rows == null ? 'Rows not measured' : `Rows ${rows.toLocaleString()}`,
+      metricDuration(check, 'firstHierarchyMs', 'Hierarchy'),
+      metricDuration(check, 'firstStatsMs', 'Stats'),
+      metricDuration(check, 'firstRankMs', 'Rank'),
     ].join(' · ');
   }
   if (check.id === 'debug-log-io') {
-    return `Flush ${Number(check.metrics.flushMs ?? 0).toFixed(0)} ms · Read ${Number(check.metrics.readMs ?? 0).toFixed(0)} ms · ${Number(check.metrics.bytes ?? 0).toLocaleString()} bytes`;
+    const bytes = metricNumber(check, 'bytes');
+    return `${metricDuration(check, 'flushMs', 'Flush')} · ${metricDuration(check, 'readMs', 'Read')} · ${bytes == null ? 'Bytes not measured' : `${bytes.toLocaleString()} bytes`}`;
   }
   if (check.id === 'update-readiness') {
     return `${check.metrics.checkStatus ?? 'unknown'} · installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) · cache ${check.metrics.downloadPhase ?? 'unknown'}`;
@@ -79,7 +111,7 @@ function checkDetail(check: AuditCheck): string {
   if (check.id === 'runtime-responsiveness') {
     return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · JS animation callback gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
   }
-  return `${check.durationMs.toFixed(0)} ms`;
+  return measuredMs('Duration', check.durationMs);
 }
 
 export default function PerformanceAuditScreen() {
@@ -91,12 +123,17 @@ export default function PerformanceAuditScreen() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [deletingUpload, setDeletingUpload] = useState(false);
+  const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const deletingUploadRef = useRef(false);
   const report = state.report;
-  const reportedChecks = useMemo(
+  const orderedChecks = useMemo(
     () => (report ? selectReportedAuditChecks(report.checks) : []),
     [report],
   );
+  const reportedChecks = orderedChecks.slice(0, visibleCheckLimit);
+  useEffect(() => {
+    setVisibleCheckLimit(MAX_REPORTED_AUDIT_CHECKS);
+  }, [report?.sessionId]);
   const running = state.status === 'queued' || state.status === 'running';
   const hangTimeoutSeconds = parsePerformanceAuditHangTimeoutSeconds(hangTimeoutInput);
   const auditActions = useMemo(() => ({
@@ -330,22 +367,25 @@ export default function PerformanceAuditScreen() {
             </Row>
             <AppText variant="small" color="textMuted">
               {report.summary.pass} good · {report.summary.warn} slow · {report.summary.fail}{' '}
-              bottlenecks · {report.summary.skipped} skipped
+              bottlenecks · {report.summary.skipped} interrupted · {report.summary.unavailable}{' '}
+              unavailable
             </AppText>
             <AppText
               variant="small"
               color={report.summary.unexpectedSkipped > 0 ? 'danger' : 'textMuted'}
             >
               Coverage {report.summary.coveragePercent.toFixed(1)}% · {report.summary.executed}{' '}
-              executed · {report.summary.justifiedSkipped} terminal skips ·{' '}
-              {report.summary.unexpectedSkipped} unexpected skips
+              executed · {report.summary.justifiedSkipped} declared unavailable ·{' '}
+              {report.summary.unexpectedSkipped} interrupted/unexpected
             </AppText>
             {report.coverage ? (
               <AppText variant="small" color={report.coverage.complete ? 'textMuted' : 'danger'}>
-                Safe journey facets {report.coverage.executedJourneyChecks}/
+                Safe journey checks {report.coverage.executedJourneyChecks}/
                 {report.coverage.plannedJourneyChecks} executed ·{' '}
                 {report.coverage.justifiedSkippedJourneyChecks} terminal unavailable ·{' '}
-                {report.coverage.unexpectedSkippedJourneyChecks} unexpected
+                {report.coverage.unavailableJourneyChecks} unavailable ·{' '}
+                {report.coverage.unexpectedSkippedJourneyChecks} unexpected ·{' '}
+                {report.coverage.excludedUnsafeFacetCount} unsafe side effects declared separately
               </AppText>
             ) : null}
             <AppText variant="small" color="textMuted">
@@ -398,7 +438,7 @@ export default function PerformanceAuditScreen() {
           {report.routeAggregates.length > 0 ? (
             <View style={{ gap: 8 }}>
               <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
-                COLD VS WARM ROUTES
+                FIRST VS REPEAT ROUTE ROUND TRIPS
               </AppText>
               {report.routeAggregates.map((route) => (
                 <Card key={route.journeyId} style={{ gap: 4 }}>
@@ -416,11 +456,10 @@ export default function PerformanceAuditScreen() {
             <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
               CHECK RESULTS
             </AppText>
-            {reportedChecks.length < report.checks.length ? (
+            {reportedChecks.length < orderedChecks.length ? (
               <AppText variant="tiny" color="textFaint" style={{ marginLeft: 4 }}>
-                Showing {reportedChecks.length} of {report.checks.length} checks, selecting
-                bottlenecks, warnings and skips before the slowest passes. The uploaded log
-                holds the complete report.
+                Showing {reportedChecks.length} of {orderedChecks.length} checks. All
+                bottlenecks, warnings and unavailable facets come before successful checks.
               </AppText>
             ) : null}
             {reportedChecks.map((check) => {
@@ -453,6 +492,18 @@ export default function PerformanceAuditScreen() {
                 </Card>
               );
             })}
+            {reportedChecks.length < orderedChecks.length ? (
+              <Button
+                title={`Show next ${Math.min(
+                  MAX_REPORTED_AUDIT_CHECKS,
+                  orderedChecks.length - reportedChecks.length,
+                )} checks`}
+                icon="chevron-down-outline"
+                variant="ghost"
+                onPress={() => setVisibleCheckLimit((current) =>
+                  Math.min(orderedChecks.length, current + MAX_REPORTED_AUDIT_CHECKS))}
+              />
+            ) : null}
           </View>
         </>
       ) : null}
