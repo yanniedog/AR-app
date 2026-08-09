@@ -785,13 +785,17 @@ async function runDeepAuditStepBody(
     const immediateCompletion = performanceAuditReadinessRegistry.snapshot().surfaces
       .find((surface) => surface.id === source.id);
     const durableImmediateCompletion = performanceAuditReadinessRegistry.actionCompletion(source.id);
-    actionRevisionAfter = immediateCompletion?.actionRevision
-      ?? durableImmediateCompletion?.actionRevision
-      ?? null;
+    const authoritativeImmediateCompletion = durableImmediateCompletion ?? (
+      immediateCompletion?.lastCompletedAction
+        ? {
+            actionRevision: immediateCompletion.actionRevision,
+            actionName: immediateCompletion.lastCompletedAction,
+          }
+        : null
+    );
+    actionRevisionAfter = authoritativeImmediateCompletion?.actionRevision ?? null;
     renderRevisionAfter = immediateCompletion?.renderRevision ?? null;
-    completedActionName = immediateCompletion?.lastCompletedAction
-      ?? durableImmediateCompletion?.actionName
-      ?? null;
+    completedActionName = authoritativeImmediateCompletion?.actionName ?? null;
     const actionResult = measuredAction.result;
     if (
       actionResult != null &&
@@ -895,13 +899,17 @@ async function runDeepAuditStepBody(
     const completedSurface = performanceAuditReadinessRegistry.snapshot().surfaces
       .find((surface) => surface.id === actionSource);
     const durableCompletion = performanceAuditReadinessRegistry.actionCompletion(actionSource);
-    actionRevisionAfter = completedSurface?.actionRevision
-      ?? durableCompletion?.actionRevision
-      ?? actionRevisionAfter;
+    const authoritativeCompletion = durableCompletion ?? (
+      completedSurface?.lastCompletedAction
+        ? {
+            actionRevision: completedSurface.actionRevision,
+            actionName: completedSurface.lastCompletedAction,
+          }
+        : null
+    );
+    actionRevisionAfter = authoritativeCompletion?.actionRevision ?? actionRevisionAfter;
     renderRevisionAfter = completedSurface?.renderRevision ?? renderRevisionAfter;
-    completedActionName = completedSurface?.lastCompletedAction
-      ?? durableCompletion?.actionName
-      ?? completedActionName;
+    completedActionName = authoritativeCompletion?.actionName ?? completedActionName;
     if (
       actionRevisionBefore == null ||
       actionRevisionAfter == null ||

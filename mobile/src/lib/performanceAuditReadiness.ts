@@ -159,8 +159,8 @@ type Listener = () => void;
 
 /** Survives remounts of the same surface ID within one capture session. */
 export interface PerformanceAuditActionCompletion {
-  actionName: string;
-  actionRevision: number;
+  readonly actionName: string;
+  readonly actionRevision: number;
 }
 
 const systemClock: PerformanceAuditReadinessClock = {

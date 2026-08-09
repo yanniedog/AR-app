@@ -296,6 +296,11 @@ function inList(value: string | undefined, list: string[] | undefined): boolean 
   return !list || list.length === 0 || (value !== undefined && list.includes(value));
 }
 
+/**
+ * Stable filtering contract: returned rows retain the relative order of the
+ * input. Search relies on this to sort its full dataset once and cheaply apply
+ * changing text and facet filters without changing result order.
+ */
 export function filterRows(
   rows: RateRow[],
   filters: Filters,
