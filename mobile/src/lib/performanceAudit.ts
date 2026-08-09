@@ -464,8 +464,20 @@ export function markPerformanceAuditCheckStored(
  * backgrounded process rather than the app. Pausing keeps the completed work
  * and lets the run continue when the user comes back.
  */
+/**
+ * A published report whose log upload is still running is still doing timed
+ * work, so it keeps pause tracking. Without it the upload's foreground budget
+ * would see no transitions and charge the whole suspended interval on the first
+ * tick after the user returns.
+ */
+function pauseTrackingApplies(): boolean {
+  return auditState.status === 'queued' ||
+    auditState.status === 'running' ||
+    (auditState.status === 'complete' && auditState.uploadPending);
+}
+
 export function pausePerformanceAudit(): void {
-  if (auditState.status !== 'queued' && auditState.status !== 'running') return;
+  if (!pauseTrackingApplies()) return;
   if (auditState.paused || auditState.cancelRequested) return;
   pauseCount += 1;
   emit({ ...auditState, paused: true });
@@ -477,7 +489,6 @@ export function getPerformanceAuditPauseCount(): number {
 }
 
 export function resumePerformanceAudit(): void {
-  if (auditState.status !== 'queued' && auditState.status !== 'running') return;
   if (!auditState.paused) return;
   emit({ ...auditState, paused: false });
 }
@@ -538,6 +549,8 @@ export function setPerformanceAuditUploadResult(
     uploadProvider: upload.provider ?? null,
     uploadError: upload.error ?? null,
     uploadPending: false,
+    // Pause tracking ends with the upload; nothing remains to clear it.
+    paused: false,
   });
 }
 

@@ -422,6 +422,25 @@ describe('reported audit check selection', () => {
 describe('performance audit lifecycle', () => {
   beforeEach(() => resetPerformanceAuditForTests());
 
+  const reportFixture = (sessionId: string) => ({
+    schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+    sessionId,
+    startedAt: '2026-08-08T00:00:00.000Z',
+    finishedAt: '2026-08-08T00:01:00.000Z',
+    durationMs: 60_000,
+    app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
+    watchdog: {
+      hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+      storedCheckCount: 0,
+      lastStoredCheckAt: null,
+    },
+    environment,
+    summary: summarizePerformanceAudit([]),
+    checks: [],
+    routeAggregates: [],
+    limitations: [],
+  });
+
   it('retains the completed report for the settings result screen', () => {
     const sessionId = requestPerformanceAudit();
     const report = {
@@ -577,30 +596,30 @@ describe('performance audit lifecycle', () => {
     markPerformanceAuditRunning(10);
     pausePerformanceAudit();
 
-    completePerformanceAudit({
-      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-      sessionId,
-      startedAt: '2026-08-08T00:00:00.000Z',
-      finishedAt: '2026-08-08T00:01:00.000Z',
-      durationMs: 60_000,
-      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
-      watchdog: {
-        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
-        storedCheckCount: 0,
-        lastStoredCheckAt: null,
-      },
-      environment,
-      summary: summarizePerformanceAudit([]),
-      checks: [],
-      routeAggregates: [],
-      limitations: [],
-    }, 'pending');
+    completePerformanceAudit(reportFixture(sessionId), 'pending');
 
     // resumePerformanceAudit refuses terminal states, so a pause left set here
     // could never be cleared and every ForegroundElapsed built afterwards for
     // the post-publish upload would accrue nothing and never time out.
     expect(getPerformanceAuditState().paused).toBe(false);
     expect(new ForegroundElapsed(() => 0).foregroundMs).toBe(0);
+  });
+
+  it('keeps pause tracking while a published report is still uploading', () => {
+    const sessionId = requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    completePerformanceAudit(reportFixture(sessionId), 'pending');
+
+    // The upload runs on a foreground budget, so it still needs transitions.
+    pausePerformanceAudit();
+    expect(getPerformanceAuditState().paused).toBe(true);
+    resumePerformanceAudit();
+    expect(getPerformanceAuditState().paused).toBe(false);
+
+    pausePerformanceAudit();
+    setPerformanceAuditUploadResult(sessionId, { url: 'https://paste.example/audit' });
+    // Nothing is left to clear a pause once the upload has settled.
+    expect(getPerformanceAuditState()).toMatchObject({ uploadPending: false, paused: false });
   });
 
   it('never pauses a cancelled or finished audit', () => {

@@ -2597,6 +2597,10 @@ export function PerformanceAuditRunner() {
           );
         }
         assertSessionActive(watchdog);
+        // Persistence and route recovery above are both slow enough for the
+        // user to leave, so re-check here rather than trusting the gate taken
+        // before them.
+        await waitWhilePaused(watchdog);
         // Publish as soon as the report is durable. Everything below — the
         // Crashlytics envelope, the log flush, and reading/redacting/posting the
         // whole on-disk log — is heavy work the user should never wait behind,
@@ -2926,7 +2930,13 @@ export function PerformanceAuditRunner() {
   }, [state.status]);
 
   useEffect(() => {
-    if (state.status !== 'queued' && state.status !== 'running') return;
+    // Tracking continues while a published report's log upload is still
+    // running: that work is still on a foreground budget, and without pause
+    // and resume emissions it would charge the whole suspended interval and
+    // time out the moment the user came back.
+    const tracking = state.status === 'queued' || state.status === 'running' ||
+      (state.status === 'complete' && state.uploadPending);
+    if (!tracking) return;
     // Leaving the app suspends the run rather than discarding it. Route timing,
     // mounted-surface readiness and animation callback gaps do not exist once
     // Android stops committing frames, so the audit waits for the foreground
@@ -2953,8 +2963,13 @@ export function PerformanceAuditRunner() {
     // The app may already have backgrounded between the audit state update
     // and this effect subscribing, in which case no future transition fires.
     if (AppState.currentState != null) applyAppState(AppState.currentState);
-    return () => subscription.remove();
-  }, [state.status]);
+    return () => {
+      subscription.remove();
+      // Never leave a pause set with no listener to clear it. A dependency
+      // change re-subscribes immediately and re-applies the current state.
+      resumePerformanceAudit();
+    };
+  }, [state.status, state.uploadPending]);
 
   if (state.status !== 'queued' && state.status !== 'running') return null;
 
