@@ -1,0 +1,32 @@
+{
+  "version": "1.0.129",
+  "releaseTag": "app-arm-v1.0.129",
+  "date": "2026-08-09",
+  "summaryBullets": [
+    "Make the mobile performance audit exhaustive (#167)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Make the mobile performance audit exhaustive (#167)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.129"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.128"
+        }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-09T05:29:29.968Z",
+  "generated_at": "2026-08-09T07:15:37.250Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -669,6 +669,14 @@
         "Fix mobile audit upload reliability and responsiveness (#165)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.127"
+    },
+    {
+      "version": "1.0.129",
+      "date": "2026-08-09",
+      "summaryBullets": [
+        "Make the mobile performance audit exhaustive (#167)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.129"
     }
   ]
 }
