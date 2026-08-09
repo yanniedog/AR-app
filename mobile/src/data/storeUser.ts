@@ -35,7 +35,9 @@ function setPreferences(
   );
   if (changed.size === 0) return;
 
-  const interests = normalizeInterests(values.interests ?? current.interests);
+  const interests = values.interests === undefined
+    ? current.interests
+    : normalizeInterests(values.interests);
   const requestedDefault = values.defaultSection ?? current.defaultSection;
   const prefs: Prefs = {
     ...current,

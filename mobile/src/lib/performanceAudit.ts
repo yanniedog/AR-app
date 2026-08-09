@@ -200,6 +200,26 @@ export interface AuditJourneyOptionalData {
   productHistory: boolean;
 }
 
+export interface PerformanceAuditPreferenceRestoration {
+  setPrefs: (prefs: Partial<Prefs>) => void;
+  ensureSearchIndex: () => Promise<unknown>;
+  ensureHistoryBanks: () => Promise<unknown>;
+  ensureBankInsights: () => Promise<unknown>;
+}
+
+/** Restore preferences atomically, then await all enabled assets concurrently. */
+export async function restorePerformanceAuditPreferences(
+  snapshot: Prefs,
+  restoration: PerformanceAuditPreferenceRestoration,
+): Promise<void> {
+  restoration.setPrefs(snapshot);
+  await Promise.all([
+    snapshot.enableDeepSearch ? restoration.ensureSearchIndex() : Promise.resolve(),
+    snapshot.showHistoryRibbon ? restoration.ensureHistoryBanks() : Promise.resolve(),
+    snapshot.showHistoryRibbon ? restoration.ensureBankInsights() : Promise.resolve(),
+  ]);
+}
+
 /** Keep audit waiting rules aligned with the same free-beta access helpers used by screens. */
 export function resolveAuditJourneyOptionalData(
   journeyId: string,

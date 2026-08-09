@@ -1,4 +1,5 @@
 import type { CorePayload } from '../src/types';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import {
   aggregateRepeatedJourneys,
   AUDIT_LATENCY_METRIC_KEYS,
@@ -27,6 +28,7 @@ import {
   requestPerformanceAudit,
   releasePerformanceAuditUploadDeletion,
   resolveAuditJourneyOptionalData,
+  restorePerformanceAuditPreferences,
   requiresPerformanceAuditRouteRecovery,
   resumePerformanceAudit,
   resetPerformanceAuditForTests,
@@ -41,6 +43,39 @@ import {
   type AuditCheck,
   type AuditEnvironment,
 } from '../src/lib/performanceAudit';
+
+describe('performance audit preference restoration', () => {
+  it('writes once and awaits enabled optional assets concurrently', async () => {
+    const pending: (() => void)[] = [];
+    const wait = () => new Promise<void>((resolve) => pending.push(resolve));
+    const setPrefs = jest.fn();
+    const ensureSearchIndex = jest.fn(wait);
+    const ensureHistoryBanks = jest.fn(wait);
+    const ensureBankInsights = jest.fn(wait);
+    const restoration = restorePerformanceAuditPreferences(
+      {
+        ...DEFAULT_PREFS,
+        enableDeepSearch: true,
+        showHistoryRibbon: true,
+      },
+      { setPrefs, ensureSearchIndex, ensureHistoryBanks, ensureBankInsights },
+    );
+
+    expect(setPrefs).toHaveBeenCalledTimes(1);
+    expect(ensureSearchIndex).toHaveBeenCalledTimes(1);
+    expect(ensureHistoryBanks).toHaveBeenCalledTimes(1);
+    expect(ensureBankInsights).toHaveBeenCalledTimes(1);
+    expect(pending).toHaveLength(3);
+    let settled = false;
+    void restoration.then(() => { settled = true; });
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    pending.forEach((resolve) => resolve());
+    await restoration;
+    expect(settled).toBe(true);
+  });
+});
 
 describe('background interruption failure evidence', () => {
   const check = (metrics: AuditCheck['metrics'], error?: string): AuditCheck => ({

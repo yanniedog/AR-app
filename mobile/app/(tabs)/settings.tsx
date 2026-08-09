@@ -42,6 +42,7 @@ import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
 import type { Subscription } from '../../src/data/subscriptions';
 import type { ThemeMode } from '../../src/theme/theme';
 import { dataSourceLabel } from '../../src/lib/nextIngest';
+import { restorePerformanceAuditPreferences } from '../../src/lib/performanceAudit';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -149,11 +150,16 @@ export default function Settings() {
     captureAuditPreferences();
     setPref(key, value);
   }, [captureAuditPreferences, setPref]);
-  const restoreAuditPreferences = useCallback(() => {
+  const restoreAuditPreferences = useCallback(async () => {
     const snapshot = auditPreferenceSnapshot.current;
     if (!snapshot) return;
-    setPrefs(snapshot);
     auditPreferenceSnapshot.current = null;
+    await restorePerformanceAuditPreferences(snapshot, {
+      setPrefs,
+      ensureSearchIndex: () => useStore.getState().ensureSearchIndex(),
+      ensureHistoryBanks: () => useStore.getState().ensureHistoryBanks(),
+      ensureBankInsights: () => useStore.getState().ensureBankInsights(),
+    });
   }, [setPrefs]);
   const onUpdateStatusChange = useCallback((next: AppUpdateSurfaceStatus) => {
     setUpdateStatus(next);

@@ -66,6 +66,14 @@ describe('store interests prefs', () => {
     expect(useStore.getState().prefs.defaultSection).toBe('Savings');
   });
 
+  it('preserves the interests reference for unrelated preference updates', () => {
+    const interests = useStore.getState().prefs.interests;
+
+    useStore.getState().setPref('themeMode', 'dark');
+
+    expect(useStore.getState().prefs.interests).toBe(interests);
+  });
+
   it('restores multiple preferences in one normalized store update', () => {
     useStore.setState({ activeSection: 'TD' });
     let updates = 0;
