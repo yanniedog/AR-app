@@ -137,6 +137,8 @@ export interface PerformanceAuditState {
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
   cancelRequested: boolean;
+  /** The run is suspended because the app left the foreground. */
+  paused: boolean;
   report: PerformanceAuditReport | null;
   uploadUrl: string | null;
   uploadProvider: string | null;
@@ -205,6 +207,7 @@ const IDLE_STATE: PerformanceAuditState = {
   lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
   cancelRequested: false,
+  paused: false,
   report: null,
   uploadUrl: null,
   uploadProvider: null,
@@ -214,6 +217,7 @@ const IDLE_STATE: PerformanceAuditState = {
 };
 
 let auditState: PerformanceAuditState = IDLE_STATE;
+let pauseCount = 0;
 
 function emit(next: PerformanceAuditState): void {
   auditState = next;
@@ -289,6 +293,8 @@ export class PerformanceAuditInactivityWatchdog {
   private storedChecks = 0;
   /** Report persistence/upload no longer stores checks; hang prevention must not abort teardown. */
   private finalizing = false;
+  /** Time spent backgrounded is the user's, not a hang. */
+  private paused = false;
 
   constructor(
     hangTimeoutMs = DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -311,8 +317,22 @@ export class PerformanceAuditInactivityWatchdog {
   }
 
   isExpired(): boolean {
-    if (this.finalizing) return false;
+    if (this.finalizing || this.paused) return false;
     return this.remainingMs() <= 0;
+  }
+
+  /**
+   * A backgrounded audit is waiting on the user, not hung. Suspend expiry while
+   * paused and restart the window on resume, so time spent in another app is
+   * never counted against the hang timeout.
+   */
+  setPaused(paused: boolean): void {
+    if (this.paused && !paused) this.touchProgress();
+    this.paused = paused;
+  }
+
+  get isPaused(): boolean {
+    return this.paused;
   }
 
   /** Suspend stored-check inactivity once planned checks finish; teardown may exceed one hang window. */
@@ -351,6 +371,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
     cancelRequested: false,
+    paused: false,
     report: null,
     uploadUrl: null,
     uploadProvider: null,
@@ -394,6 +415,33 @@ export function markPerformanceAuditCheckStored(
     lastStoredCheckAt: storedAt,
     progress: { completed, total, label },
   });
+}
+
+/**
+ * Suspend a run that left the foreground instead of discarding it.
+ *
+ * Most of the audit measures the UI — route timing, mounted-surface readiness,
+ * animation callback gaps — and none of that exists once Android stops
+ * committing frames. Continuing would record numbers that describe a
+ * backgrounded process rather than the app. Pausing keeps the completed work
+ * and lets the run continue when the user comes back.
+ */
+export function pausePerformanceAudit(): void {
+  if (auditState.status !== 'queued' && auditState.status !== 'running') return;
+  if (auditState.paused || auditState.cancelRequested) return;
+  pauseCount += 1;
+  emit({ ...auditState, paused: true });
+}
+
+/** Increments on every pause so a step can tell whether it spanned one. */
+export function getPerformanceAuditPauseCount(): number {
+  return pauseCount;
+}
+
+export function resumePerformanceAudit(): void {
+  if (auditState.status !== 'queued' && auditState.status !== 'running') return;
+  if (!auditState.paused) return;
+  emit({ ...auditState, paused: false });
 }
 
 export function cancelPerformanceAudit(): void {

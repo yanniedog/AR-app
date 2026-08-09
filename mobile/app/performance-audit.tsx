@@ -175,7 +175,9 @@ export default function PerformanceAuditScreen() {
           full on-disk log uploads and its link is copied automatically.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          The screen stays awake during visual checks; leaving the app cancels the run safely.
+          The screen stays awake during visual checks. Leaving the app pauses the run and it
+          continues where it left off when you return — route and animation timings cannot be
+          measured while the app is off screen.
         </AppText>
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">

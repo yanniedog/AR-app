@@ -1,21 +1,26 @@
 import type { CorePayload } from '../src/types';
 import {
   aggregateRepeatedJourneys,
+  cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   flattenAuditLogText,
   formatAuditError,
   formatAuditErrorForLog,
+  getPerformanceAuditPauseCount,
   getPerformanceAuditState,
   isPerformanceAuditActive,
+  markPerformanceAuditRunning,
   parsePerformanceAuditHangTimeoutSeconds,
+  pausePerformanceAudit,
   pathMatches,
   PerformanceAuditInactivityWatchdog,
   percentile,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   requestPerformanceAudit,
   resolveAuditJourneyOptionalData,
+  resumePerformanceAudit,
   resetPerformanceAuditForTests,
   MAX_REPORTED_AUDIT_CHECKS,
   scoreLatency,
@@ -500,6 +505,45 @@ describe('performance audit lifecycle', () => {
       uploadUrl: null,
       uploadPending: true,
     });
+  });
+
+  it('pauses and resumes a running audit instead of discarding it', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+
+    pausePerformanceAudit();
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'running', paused: true });
+    // A paused run is still active, so route maintenance stays suppressed.
+    expect(isPerformanceAuditActive()).toBe(true);
+
+    resumePerformanceAudit();
+    expect(getPerformanceAuditState()).toMatchObject({ status: 'running', paused: false });
+  });
+
+  it('counts each pause so a step can tell whether it spanned one', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    const before = getPerformanceAuditPauseCount();
+
+    pausePerformanceAudit();
+    pausePerformanceAudit(); // already paused; not a second interruption
+    expect(getPerformanceAuditPauseCount()).toBe(before + 1);
+
+    resumePerformanceAudit();
+    pausePerformanceAudit();
+    expect(getPerformanceAuditPauseCount()).toBe(before + 2);
+  });
+
+  it('never pauses a cancelled or finished audit', () => {
+    requestPerformanceAudit();
+    markPerformanceAuditRunning(10);
+    cancelPerformanceAudit();
+
+    pausePerformanceAudit();
+
+    // Pausing a cancelling run would strand it waiting for a foreground it no
+    // longer needs.
+    expect(getPerformanceAuditState()).toMatchObject({ cancelRequested: true, paused: false });
   });
 
   it('stores a validated custom hang timeout on the queued audit', () => {

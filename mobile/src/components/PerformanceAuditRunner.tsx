@@ -51,17 +51,20 @@ import {
   flattenAuditLogText,
   formatAuditError,
   formatAuditErrorForLog,
+  getPerformanceAuditPauseCount,
   getPerformanceAuditState,
   isPerformanceAuditActive,
   markPerformanceAuditCheckStored,
   markPerformanceAuditCancelled,
   markPerformanceAuditRunning,
+  pausePerformanceAudit,
   pathMatches,
   PERFORMANCE_AUDIT_LOG_TAG,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   PerformanceAuditInactivityWatchdog,
   ResponsivenessMonitor,
   resolveAuditJourneyOptionalData,
+  resumePerformanceAudit,
   roundMetric,
   scoreLatency,
   setPerformanceAuditUploadResult,
@@ -157,6 +160,25 @@ function assertAuditActive(): void {
 function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void {
   assertAuditActive();
   if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
+}
+
+/**
+ * Block at a step boundary while the app is backgrounded, and keep the hang
+ * watchdog suspended for that whole time. Cancelling still works from the
+ * paused state, so this can never trap a run.
+ */
+async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
+  if (!getPerformanceAuditState().paused) return;
+  watchdog.setPaused(true);
+  try {
+    while (getPerformanceAuditState().paused) {
+      assertAuditActive();
+      await delay(120);
+    }
+  } finally {
+    watchdog.setPaused(false);
+  }
+  assertSessionActive(watchdog);
 }
 
 function rethrowAuditControl(error: unknown): void {
@@ -2165,12 +2187,41 @@ export function PerformanceAuditRunner() {
             error: formatAuditError(caught),
             trace: captureAuditTrace(`${label} failed; audit continues`),
           });
+          // Start only in the foreground, and retake once if the app left it
+          // mid-step: a measurement spanning a pause times a process Android
+          // stopped drawing, not the app.
+          await waitWhilePaused(watchdog);
           let check: AuditCheck;
-          try {
-            check = await run();
-          } catch (caught) {
-            rethrowAuditControl(caught);
-            check = continuedFailureCheck(caught);
+          const runOnce = async (): Promise<AuditCheck> => {
+            try {
+              return await run();
+            } catch (caught) {
+              rethrowAuditControl(caught);
+              return continuedFailureCheck(caught);
+            }
+          };
+          const startedPaused = getPerformanceAuditPauseCount();
+          check = await runOnce();
+          if (getPerformanceAuditPauseCount() !== startedPaused) {
+            debugLog.info(
+              PERFORMANCE_AUDIT_LOG_TAG,
+              `retaking ${label} after the app returned to the foreground`,
+            );
+            await waitWhilePaused(watchdog);
+            try {
+              await recoverAuditRoute(() => pathnameRef.current);
+            } catch (recoveryCaught) {
+              debugLog.warn(
+                PERFORMANCE_AUDIT_LOG_TAG,
+                `route recovery before retake failed: ${formatAuditErrorForLog(recoveryCaught)}`,
+              );
+            }
+            const retakenFrom = getPerformanceAuditPauseCount();
+            check = await runOnce();
+            // A second interruption is recorded rather than retried forever.
+            if (getPerformanceAuditPauseCount() !== retakenFrom) {
+              check = { ...check, metrics: { ...check.metrics, interruptedByBackground: true } };
+            }
           }
           try {
             // Durable check storage/logging failures remain fatal — only the step
@@ -2729,20 +2780,32 @@ export function PerformanceAuditRunner() {
 
   useEffect(() => {
     if (state.status !== 'queued' && state.status !== 'running') return;
-    const cancelForInactiveState = (nextState: string) => {
-      if (nextState === 'active') return;
-      debugLog.info(
-        PERFORMANCE_AUDIT_LOG_TAG,
-        `audit cancelled safely because app state changed to ${nextState}`,
-      );
-      cancelPerformanceAudit();
+    // Leaving the app suspends the run rather than discarding it. Route timing,
+    // mounted-surface readiness and animation callback gaps do not exist once
+    // Android stops committing frames, so the audit waits for the foreground
+    // instead of recording a backgrounded process.
+    const applyAppState = (nextState: string) => {
+      if (nextState === 'active') {
+        if (getPerformanceAuditState().paused) {
+          debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, 'audit resumed on returning to the foreground');
+        }
+        resumePerformanceAudit();
+        return;
+      }
+      if (!getPerformanceAuditState().paused) {
+        debugLog.info(
+          PERFORMANCE_AUDIT_LOG_TAG,
+          `audit paused because app state changed to ${nextState}`,
+        );
+      }
+      pausePerformanceAudit();
     };
     const subscription = AppState.addEventListener('change', (nextState) => {
-      cancelForInactiveState(nextState);
+      applyAppState(nextState);
     });
     // The app may already have backgrounded between the audit state update
     // and this effect subscribing, in which case no future transition fires.
-    if (AppState.currentState != null) cancelForInactiveState(AppState.currentState);
+    if (AppState.currentState != null) applyAppState(AppState.currentState);
     return () => subscription.remove();
   }, [state.status]);
 
@@ -2776,7 +2839,7 @@ export function PerformanceAuditRunner() {
           </AppText>
         </Row>
         <AppText variant="small" color="textMuted" numberOfLines={2}>
-          {state.progress.label}
+          {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
         </AppText>
         <View
           accessibilityRole="progressbar"
