@@ -282,6 +282,9 @@ export default function PerformanceAuditScreen() {
               Worst JS lag {report.summary.maxEventLoopLagMs.toFixed(0)} ms · Worst frame gap{' '}
               {report.summary.maxFrameGapMs.toFixed(0)} ms · Total{' '}
               {(report.durationMs / 1_000).toFixed(1)} s
+              {report.wallClockMs != null && report.wallClockMs - report.durationMs >= 1_000
+                ? ` (+ ${((report.wallClockMs - report.durationMs) / 1_000).toFixed(1)} s paused)`
+                : ''}
             </AppText>
             <AppText variant="small" color="textMuted">
               Hang timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}

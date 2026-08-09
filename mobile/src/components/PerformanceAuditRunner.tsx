@@ -45,7 +45,6 @@ import {
 } from '../lib/performanceAuditRollback';
 import {
   aggregateRepeatedJourneys,
-  AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   captureAuditTrace,
   completePerformanceAudit,
@@ -179,11 +178,24 @@ function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void
  * so an animation gap that merely spans a background pause — minutes, not
  * milliseconds — would otherwise be published as the app's worst frame gap.
  */
+/**
+ * Drop every elapsed-time metric from a check whose measurement spanned a
+ * background pause.
+ *
+ * The rule is the `Ms` suffix rather than a list, because the report and the
+ * uploaded log show far more timings than the summary reads —
+ * `backgroundSettleMs` and `actionMs` are rendered on the results screen, and a
+ * check that says its timings are not reported must not still carry them.
+ * AUDIT_LATENCY_METRIC_KEYS names the subset the summary consumes; a test
+ * asserts this rule covers all of it.
+ */
 function contaminatedTimingsRemoved(
   metrics: Record<string, AuditMetricValue>,
 ): Record<string, AuditMetricValue> {
   const out = { ...metrics };
-  for (const key of AUDIT_LATENCY_METRIC_KEYS) delete out[key];
+  for (const key of Object.keys(out)) {
+    if (key.endsWith('Ms')) delete out[key];
+  }
   return out;
 }
 
@@ -1613,6 +1625,9 @@ async function runUpdateReadinessCheck(
       manifestHasSha256: !!remote?.sha256,
       installedApplicationId: Application.applicationId ?? null,
       manifestPackageMatches: remote?.package_name === Application.applicationId,
+      // The only failure in the audit derived from content rather than an error
+      // or a clock, so an interruption must not discard it as a stale timing.
+      nonTimingFailure: manifestContentStatus === 'fail',
       durationMayUseTtlCache: true,
       durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
@@ -2065,6 +2080,15 @@ export function PerformanceAuditRunner() {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
       const startedMs = Date.now();
+      // The report's duration is time the audit actually measured. A five-minute
+      // pause is the user's, not the app's, and counting it would attribute the
+      // wait to a run that was deliberately suspended for it.
+      const runElapsed = new ForegroundElapsed();
+      const unsubscribeRunElapsed = subscribePerformanceAudit(() => runElapsed.accrue());
+      const activeDurationMs = () => {
+        runElapsed.accrue();
+        return roundMetric(runElapsed.foregroundMs);
+      };
       const app = installedAuditIdentity();
       const watchdog = new PerformanceAuditInactivityWatchdog(state.hangTimeoutMs);
       // Mirror pauses onto the watchdog the instant they happen, not when the
@@ -2256,7 +2280,13 @@ export function PerformanceAuditRunner() {
             // the timings are unusable; downgrading the status would hide a
             // genuine fault behind an interruption and could report the run
             // healthy.
-            const observedFailure = check.status === 'fail';
+            // Only a failure the check observed independently of the clock
+            // survives. Most `fail` statuses come from scoreLatency thresholds,
+            // and a reading that spans a pause times a process Android had
+            // stopped drawing — preserving those would report "Bottleneck
+            // found" after an ordinary switch to another app.
+            const observedFailure = check.status === 'fail' &&
+              (check.error != null || check.metrics.nonTimingFailure === true);
             debugLog.info(
               PERFORMANCE_AUDIT_LOG_TAG,
               `${label} was interrupted by the app leaving the foreground; recorded as ` +
@@ -2478,7 +2508,8 @@ export function PerformanceAuditRunner() {
           sessionId,
           startedAt,
           finishedAt,
-          durationMs: Date.now() - startedMs,
+          durationMs: activeDurationMs(),
+          wallClockMs: Date.now() - startedMs,
           app,
           watchdog: {
             hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -2774,7 +2805,8 @@ export function PerformanceAuditRunner() {
             sessionId,
             startedAt,
             finishedAt: new Date().toISOString(),
-            durationMs: Date.now() - startedMs,
+            durationMs: activeDurationMs(),
+            wallClockMs: Date.now() - startedMs,
             app,
             watchdog: {
               hangTimeoutMs: watchdog.hangTimeoutMs,
@@ -2835,6 +2867,7 @@ export function PerformanceAuditRunner() {
         }
       } finally {
         unsubscribePause();
+        unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
         if (!rollbackRestored && rollbackSnapshot) {
           try {

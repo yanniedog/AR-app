@@ -92,7 +92,10 @@ export interface PerformanceAuditReport {
   sessionId: string;
   startedAt: string;
   finishedAt: string;
+  /** Time the audit spent measuring. Excludes any interval the app was off screen. */
   durationMs: number;
+  /** Wall-clock time the user waited, including pauses. Absent before schema 4. */
+  wallClockMs?: number;
   app: AuditAppIdentity;
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
@@ -303,7 +306,9 @@ export class ForegroundElapsed {
   private lastAccrualAt: number;
   private paused: boolean;
 
-  constructor(private readonly clock: MonotonicClock = () => Date.now()) {
+  // Wall-clock time can jump forward or back under automatic time correction,
+  // which would either blow a budget instantly or postpone it indefinitely.
+  constructor(private readonly clock: MonotonicClock = monotonicNow) {
     this.lastAccrualAt = clock();
     this.paused = getPerformanceAuditState().paused;
   }
@@ -1128,6 +1133,12 @@ export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggre
   for (const [journeyId, pair] of byJourney) {
     if (!pair.cold || !pair.warm) continue;
     if (pair.cold.status === 'skipped' || pair.warm.status === 'skipped') continue;
+    // An interrupted check keeps its status but loses its timings, so aggregating
+    // it would publish a comparison against a zero it never measured.
+    if (
+      pair.cold.metrics.interruptedByBackground === true ||
+      pair.warm.metrics.interruptedByBackground === true
+    ) continue;
     const coldForwardMs = number(pair.cold, 'forwardMs');
     const warmForwardMs = number(pair.warm, 'forwardMs');
     const coldBackMs = number(pair.cold, 'backMs');

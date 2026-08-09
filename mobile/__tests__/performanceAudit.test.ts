@@ -233,6 +233,41 @@ describe('performance audit optional data', () => {
   });
 });
 
+describe('repeat-journey aggregates', () => {
+  const journey = (
+    id: string,
+    iteration: 'cold' | 'warm',
+    status: AuditCheck['status'],
+    metrics: AuditCheck['metrics'],
+  ): AuditCheck => ({
+    id: `${id}-${iteration}`,
+    label: id,
+    kind: 'journey',
+    status,
+    durationMs: 0,
+    metrics: { journeyId: id, journeyLabel: id, iteration, ...metrics },
+  });
+
+  it('drops a pair whose check was interrupted rather than publishing a zero it never measured', () => {
+    // An interrupted failure keeps its status but loses its timings, so
+    // aggregating it would show a bogus 0 ms cold against a real warm.
+    const aggregates = aggregateRepeatedJourneys([
+      journey('route.search', 'cold', 'fail', { interruptedByBackground: true }),
+      journey('route.search', 'warm', 'pass', { forwardMs: 450, backMs: 120 }),
+    ]);
+    expect(aggregates).toEqual([]);
+  });
+
+  it('still aggregates an ordinary failing pair', () => {
+    const aggregates = aggregateRepeatedJourneys([
+      journey('route.search', 'cold', 'fail', { forwardMs: 900, backMs: 200 }),
+      journey('route.search', 'warm', 'pass', { forwardMs: 450, backMs: 120 }),
+    ]);
+    expect(aggregates).toHaveLength(1);
+    expect(aggregates[0]).toMatchObject({ coldForwardMs: 900, forwardChangeMs: -450 });
+  });
+});
+
 describe('performance audit scoring', () => {
   it('computes percentiles and responsiveness counters', () => {
     expect(percentile([1, 2, 3, 50], 0.95)).toBe(50);
@@ -624,6 +659,29 @@ describe('interrupted check latency stripping', () => {
     expect(journey.slowestCheckId).toBe('healthy');
   });
 
+  it('strips every timing the report or log would show, not only the summary keys', () => {
+    // The check-results screen renders backgroundSettleMs and actionMs, and the
+    // uploaded log carries the rest, so a check whose reason says timings are
+    // not reported must not still carry any of them.
+    const contaminated = {
+      backgroundSettleMs: 300_000,
+      actionMs: 300_000,
+      headersMs: 300_000,
+      bodyMs: 300_000,
+      readinessQuietWindowMs: 650,
+      forwardMs: 300_000,
+      runtimeErrors: 0,
+      expectedSurface: 'search.results',
+    };
+    const out = { ...contaminated } as Record<string, unknown>;
+    for (const key of Object.keys(out)) {
+      if (key.endsWith('Ms')) delete out[key];
+    }
+    expect(Object.keys(out).sort()).toEqual(['expectedSurface', 'runtimeErrors']);
+    // Every summary-consumed key is covered by the same suffix rule.
+    for (const key of AUDIT_LATENCY_METRIC_KEYS) expect(key.endsWith('Ms')).toBe(true);
+  });
+
   it('would otherwise let a minutes-long interrupted reading win', () => {
     const summary = summarizePerformanceAudit([
       { ...check('deep-step', 'fail', 0, { forwardMs: 300_000 }), kind: 'journey' },
@@ -635,6 +693,17 @@ describe('interrupted check latency stripping', () => {
 
 describe('foreground elapsed budget', () => {
   beforeEach(() => resetPerformanceAuditForTests());
+
+  it('defaults to a monotonic clock rather than the wall clock', () => {
+    // Automatic time correction moving the wall clock would otherwise blow a
+    // budget instantly or postpone the only active timeout indefinitely.
+    const elapsed = new ForegroundElapsed();
+    const before = performance.now();
+    elapsed.accrue();
+    const after = performance.now();
+    // A Date.now()-based default would report ~1.7e12 here.
+    expect(elapsed.foregroundMs).toBeLessThanOrEqual(after - before + 50);
+  });
 
   it('charges only time the audit spent on screen', () => {
     requestPerformanceAudit();
