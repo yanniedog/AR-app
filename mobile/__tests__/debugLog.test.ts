@@ -288,17 +288,15 @@ describe('uploadDebugLog', () => {
   });
 
   it('cleans up a paste.rs partial even when the complete backup upload fails', async () => {
-    const sleep = jest.fn(async () => {});
     const partialUrl = 'https://paste.rs/partial-failed-backup';
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce({ status: 206, text: async () => partialUrl })
       .mockResolvedValueOnce({ status: 200 })
-      .mockResolvedValueOnce({ status: 503, text: async () => 'down' })
-      .mockResolvedValueOnce({ status: 503, text: async () => 'still down' }) as unknown as typeof fetch;
+      .mockResolvedValueOnce({ status: 503, text: async () => 'down' }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog('complete-log-body', mockFetch, { sleep })).rejects.toMatchObject({
-      attempts: 3,
+    await expect(uploadDebugLog('complete-log-body', mockFetch)).rejects.toMatchObject({
+      attempts: 2,
     });
 
     expect(mockFetch).toHaveBeenNthCalledWith(
@@ -306,7 +304,7 @@ describe('uploadDebugLog', () => {
       partialUrl,
       expect.objectContaining({ method: 'DELETE' }),
     );
-    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
   });
 
   it('does not create a second public copy when partial cleanup fails', async () => {
@@ -326,26 +324,36 @@ describe('uploadDebugLog', () => {
     expect((mockFetch as jest.Mock).mock.calls.every(([url]) => url !== PASTE_CNET_URL)).toBe(true);
   });
 
-  it('retries the full-capacity provider once after a transient failure', async () => {
+  it('does not retry the full-capacity POST after a failed response', async () => {
     const sleep = jest.fn(async () => {});
     const mockFetch = jest
       .fn()
       .mockResolvedValueOnce({ status: 503, text: async () => 'primary down' })
-      .mockResolvedValueOnce({ status: 503, text: async () => 'backup down' })
+      .mockResolvedValueOnce({ status: 503, text: async () => 'backup down' }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('hello', mockFetch, { sleep })).rejects.toMatchObject({
+      attempts: 2,
+    });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(sleep).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an ambiguous full-capacity network failure', async () => {
+    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+    const mockFetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('response lost after submission'))
       .mockResolvedValueOnce({
         status: 200,
         text: async () => JSON.stringify({
-          url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
-          delete_key: 'delete-secret',
+          url: 'https://paste.c-net.org/orphaned-second-copy',
+          delete_key: 'unreachable-delete-key',
         }),
       }) as unknown as typeof fetch;
 
-    const result = await uploadDebugLog('hello', mockFetch, { sleep });
-
-    expect(result.attempts).toBe(3);
-    expect(mockFetch).toHaveBeenCalledTimes(3);
-    expect(sleep).toHaveBeenCalledTimes(1);
-    expect(sleep).toHaveBeenCalledWith(1_000);
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1 });
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
   it('does not duplicate a client-rejected upload to the backup', async () => {

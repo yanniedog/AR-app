@@ -1189,7 +1189,6 @@ export async function uploadDebugLog(
 ): Promise<DebugLogUploadResult> {
   const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS);
   const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
-  const now = options.now ?? Date.now;
   const originalBytes = textEncoder.encode(body).length;
   let attempts = 0;
   let triedPrimary = false;
@@ -1243,31 +1242,29 @@ export async function uploadDebugLog(
     }
   }
 
-  let backupFailure: PasteRsAttemptError | null = null;
-  for (let backupAttempt = 0; backupAttempt < 2; backupAttempt += 1) {
-    attempts += 1;
-    try {
-      const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
-      return {
-        url: result.url,
-        provider: 'paste.c-net.org',
-        ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
-        truncated: false,
-        clientTruncated: false,
-        attempts,
-        originalBytes,
-        // c-net returned success for the exact original body; never report a
-        // tail or a provider-side partial as the completed full-log upload.
-        uploadedBytes: originalBytes,
-      };
-    } catch (error) {
-      backupFailure = error as PasteRsAttemptError;
-      if (!backupFailure.transient || backupAttempt === 1) break;
-      await sleep(retryDelayMs(backupFailure.retryAfter, now()));
-    }
+  let backupFailure: PasteRsAttemptError;
+  attempts += 1;
+  try {
+    const result = await runPasteCnetAttempt(body, fetchImpl, timeoutMs);
+    return {
+      url: result.url,
+      provider: 'paste.c-net.org',
+      ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+      truncated: false,
+      clientTruncated: false,
+      attempts,
+      originalBytes,
+      // c-net returned success for the exact original body; never report a
+      // tail or a provider-side partial as the completed full-log upload.
+      uploadedBytes: originalBytes,
+    };
+  } catch (error) {
+    // A timeout or lost response may occur after c-net accepted the POST. A
+    // blind retry could create another public copy whose delete key is lost.
+    backupFailure = error as PasteRsAttemptError;
   }
 
-  const detail = friendlyPasteRsError(backupFailure as PasteRsAttemptError)
+  const detail = friendlyPasteRsError(backupFailure)
     .replaceAll('paste.rs', 'the full-capacity upload service');
   throw new PasteRsUploadError(
     `${triedPrimary ? 'The complete debug-log upload failed.' : 'The log was too large for paste.rs.'} ${detail}`,
