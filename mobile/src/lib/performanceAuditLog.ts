@@ -12,6 +12,26 @@ const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
  */
 export const MAX_AUDIT_EVIDENCE_CHARS = 2_000;
 export const MAX_AUDIT_METRIC_TEXT_CHARS = 512;
+const AUDIT_PROOF_METRIC_KEYS = [
+  'measurementMode',
+  'executionAttempted',
+  'actionInvoked',
+  'actionCompleted',
+  'actionSource',
+  'actionRevisionBefore',
+  'actionRevisionAfter',
+  'renderRevisionBefore',
+  'renderRevisionAfter',
+  'actionResultEvidence',
+  'actionMs',
+  'forwardMs',
+  'backMs',
+  'backgroundSettleMs',
+  'expectedPath',
+  'backDestination',
+  'backReturnedToAudit',
+  'readinessActionEvidence',
+] as const;
 
 export function truncateAuditText(value: string, maxChars: number): string {
   if (value.length <= maxChars) return value;
@@ -113,28 +133,8 @@ export function compactAuditCheckForLog(check: {
       base.maxFrameGapMs = check.metrics.maxFrameGapMs;
     }
     if (typeof check.metrics.reason === 'string') base.reason = check.metrics.reason;
-    const proofKeys = [
-      'measurementMode',
-      'executionAttempted',
-      'actionInvoked',
-      'actionCompleted',
-      'actionSource',
-      'actionRevisionBefore',
-      'actionRevisionAfter',
-      'renderRevisionBefore',
-      'renderRevisionAfter',
-      'actionResultEvidence',
-      'actionMs',
-      'forwardMs',
-      'backMs',
-      'backgroundSettleMs',
-      'expectedPath',
-      'backDestination',
-      'backReturnedToAudit',
-      'readinessActionEvidence',
-    ];
     const proof: Record<string, unknown> = {};
-    for (const key of proofKeys) {
+    for (const key of AUDIT_PROOF_METRIC_KEYS) {
       const value = check.metrics[key];
       if (value != null) proof[key] = typeof value === 'string'
         ? shortenAuditEvidenceText(value)

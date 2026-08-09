@@ -457,7 +457,12 @@ export default function PerformanceAuditScreen() {
               CHECK RESULTS
             </AppText>
             {reportedChecks.length < orderedChecks.length ? (
-              <AppText variant="tiny" color="textFaint" style={{ marginLeft: 4 }}>
+              <AppText
+                variant="tiny"
+                color="textFaint"
+                style={{ marginLeft: 4 }}
+                accessibilityLiveRegion="polite"
+              >
                 Showing {reportedChecks.length} of {orderedChecks.length} checks. All
                 bottlenecks, warnings and unavailable facets come before successful checks.
               </AppText>

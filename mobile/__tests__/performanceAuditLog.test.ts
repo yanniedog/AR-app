@@ -190,6 +190,7 @@ describe('performanceAuditLog compaction', () => {
       actionRevisionBefore: 3,
       actionRevisionAfter: 4,
     }));
+    expect(checks[0].metrics).not.toHaveProperty('readinessEvidence');
     expect((checks[1].metrics as Record<string, unknown>).readinessEvidence).toContain('e5ed9d7c0831…');
     expect(checks[1].error).toBe('nope');
 

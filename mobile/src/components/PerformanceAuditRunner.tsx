@@ -2200,16 +2200,26 @@ export async function runJourney(
 
   if (!routeError && backReturnedToAudit) {
     const originReadinessStarted = now();
+    const originReadinessAbort = new AbortController();
+    const originReadinessGuard = setInterval(() => {
+      if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+        originReadinessAbort.abort();
+      }
+    }, 50);
     try {
       await performanceAuditReadinessRegistry.waitForReady({
         surfaceIds: ['audit.progress'],
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
         timeoutMs: readinessTimeoutMs(watchdog),
+        signal: originReadinessAbort.signal,
       });
       originReadinessMs = now() - originReadinessStarted;
     } catch (caught) {
       rethrowAuditControl(caught);
+      assertSessionActive(watchdog);
       routeError = `Audit origin did not become ready after back navigation: ${formatAuditError(caught)}`;
+    } finally {
+      clearInterval(originReadinessGuard);
     }
   }
 
@@ -2342,7 +2352,8 @@ export function PerformanceAuditRunner() {
         originalStore.core,
         SECTION_ORDER,
       );
-      let total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+      const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS - (Platform.OS === 'android' ? 0 : 1);
+      let total = platformBenchmarkChecks + SECTION_ORDER.length +
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
@@ -2428,7 +2439,7 @@ export function PerformanceAuditRunner() {
           initialStore.core,
           SECTION_ORDER,
         );
-        total = FIXED_BENCHMARK_CHECKS + SECTION_ORDER.length +
+        total = platformBenchmarkChecks + SECTION_ORDER.length +
           navigationJourneys.length * 2 +
           plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
         const datasetRevision = captureDatasetRevision();
@@ -2586,7 +2597,9 @@ export function PerformanceAuditRunner() {
           historyLoaded: maximumProfileState.historyBanks != null,
           productHistoryLoaded: maximumProfileState.productHistory != null,
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
-          maximumSafeFeaturesEnabled: maximumProfileResult.check?.status !== 'fail',
+          maximumSafeFeaturesEnabled:
+            maximumProfileResult.check != null &&
+            maximumProfileResult.check.status !== 'fail',
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2705,13 +2718,15 @@ export function PerformanceAuditRunner() {
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
 
-        updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
-        await recordContinuable(
-          'Inspecting Android update readiness',
-          () => runUpdateReadinessCheck(app, monitor, watchdog),
-        );
-        assertSessionActive(watchdog);
-        assertDatasetRevision(datasetRevision);
+        if (Platform.OS === 'android') {
+          updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
+          await recordContinuable(
+            'Inspecting Android update readiness',
+            () => runUpdateReadinessCheck(app, monitor, watchdog),
+          );
+          assertSessionActive(watchdog);
+          assertDatasetRevision(datasetRevision);
+        }
 
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         // The last measured step, and the only one not routed through
@@ -2833,7 +2848,7 @@ export function PerformanceAuditRunner() {
           'debug-log-io',
           'active-data',
           'manifest-network',
-          'update-readiness',
+          ...(Platform.OS === 'android' ? ['update-readiness'] : []),
           'audit-state-restoration',
         ];
         const plannedIdSet = new Set(plannedCheckIds);
@@ -2891,7 +2906,8 @@ export function PerformanceAuditRunner() {
               missingPlannedCheckIds.length === 0 &&
               duplicateStoredCheckIds.length === 0 &&
               unexpectedStoredCheckIds.length === 0 &&
-              maximumProfileResult.check?.status !== 'fail',
+              maximumProfileResult.check != null &&
+              maximumProfileResult.check.status !== 'fail',
           },
           summary,
           checks,

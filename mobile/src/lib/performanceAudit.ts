@@ -671,7 +671,6 @@ export function failPerformanceAudit(error: string): void {
 export const MAX_REPORTED_AUDIT_CHECKS = 80;
 
 export function selectReportedAuditChecks(checks: AuditCheck[]): AuditCheck[] {
-  if (checks.length <= MAX_REPORTED_AUDIT_CHECKS) return checks;
   const notable = checks.filter((check) => check.status !== 'pass');
   const passes = checks
     .filter((check) => check.status === 'pass')

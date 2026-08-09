@@ -512,13 +512,13 @@ describe('performance audit maintenance isolation', () => {
 });
 
 describe('reported audit check selection', () => {
-  function check(id: string, status: AuditCheck['status'], durationMs: number): AuditCheck {
+  function check(id: string, status: AuditCheck['status'], durationMs: number | null): AuditCheck {
     return { id, label: id, kind: 'journey', status, durationMs, metrics: {} };
   }
 
   it('renders every check for a short report', () => {
     const checks = [check('a', 'pass', 1), check('b', 'fail', 2)];
-    expect(selectReportedAuditChecks(checks)).toBe(checks);
+    expect(selectReportedAuditChecks(checks)).toEqual([checks[1], checks[0]]);
   });
 
   it('keeps every check reachable with non-pass checks before slowest passes', () => {
@@ -527,6 +527,7 @@ describe('reported audit check selection', () => {
       check('f1', 'fail', 5),
       check('w1', 'warn', 6),
       check('s1', 'skipped', 0),
+      check('unmeasured', 'pass', null),
     ];
 
     const selected = selectReportedAuditChecks(checks);
@@ -538,6 +539,7 @@ describe('reported audit check selection', () => {
     expect(selected.map((entry) => entry.id)).toContain('p0');
     expect(selected.slice(0, 3).map((entry) => entry.id)).toEqual(['f1', 'w1', 's1']);
     expect(selected[3].id).toBe('p299');
+    expect(selected.at(-1)?.id).toBe('unmeasured');
   });
 
   it('never hides failures when there are more than one UI page', () => {

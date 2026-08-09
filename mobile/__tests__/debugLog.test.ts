@@ -30,6 +30,7 @@ import {
   uploadLogsToPasteRs,
 } from '../src/lib/debugLog';
 import {
+  LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from '../src/lib/performanceAuditSchema';
@@ -1028,6 +1029,16 @@ describe('persistent log file', () => {
     expect(complete).toBe('current log only');
     expect(complete).not.toContain('old-schema-marker');
     expect(complete).not.toContain('old-schema-report');
+  });
+
+  it('removes the legacy v5 snapshot while reading the latest audit', async () => {
+    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS[0];
+    await AsyncStorage.setItem(legacyKey, 'legacy audit');
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
+
+    await debugLog.readCompleteText();
+
+    await expect(AsyncStorage.getItem(legacyKey)).resolves.toBeNull();
   });
 
   it('clear deletes the persistent log file', async () => {

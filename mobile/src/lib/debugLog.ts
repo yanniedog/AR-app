@@ -6,6 +6,7 @@ import {
   compactPerformanceAuditReportForLog,
 } from './performanceAuditLog';
 import {
+  LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from './performanceAuditSchema';
@@ -472,7 +473,15 @@ export const MAX_AUDIT_SNAPSHOT_BODY_CHARS = Math.floor(MAX_AUDIT_SNAPSHOT_STORA
  */
 export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
 
+async function removeLegacyPerformanceAuditSnapshots(): Promise<void> {
+  await Promise.all(
+    LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.map((key) =>
+      AsyncStorage.removeItem(key).catch(() => {})),
+  );
+}
+
 async function storeLatestAuditSnapshot(stored: StoredPerformanceAudit): Promise<void> {
+  await removeLegacyPerformanceAuditSnapshots();
   // Measure the body directly: serializing an oversized record only to discard
   // it allocated another full copy of the report on the blocking path. The
   // record that actually lands is JSON.stringify(stored), which escapes every
@@ -650,6 +659,7 @@ export const debugLog = {
     notify();
     await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
     await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
+    await removeLegacyPerformanceAuditSnapshots();
     await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
     await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
   },
@@ -772,6 +782,7 @@ export const debugLog = {
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     const clean = redactSecrets(text);
+    await removeLegacyPerformanceAuditSnapshots();
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
     const latest =
       (await readPerformanceAuditSidecar()) ??
