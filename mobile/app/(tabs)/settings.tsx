@@ -188,15 +188,14 @@ export default function Settings() {
   const hiddenSections = SECTION_ORDER.filter((key) => !prefs.interests.includes(key));
   const sectionsSummary = orderedInterests.map((key) => SECTIONS[key].title).join(' · ');
 
-  const settingsRenderRevision = [
+  const settingsRenderRevision = JSON.stringify([
     hydrated ? 'hydrated' : 'loading',
-    prefs.themeMode,
-    prefs.depositRankMetric,
+    prefs,
     homeSectionsOpen ? 'home-open' : 'home-closed',
     dataDetailsOpen ? 'data-open' : 'data-closed',
     diagnosticsOpen ? 'diagnostics-open' : 'diagnostics-closed',
     updateStatus.status,
-  ].join(':');
+  ]);
   const auditActions = useMemo(() => ({
     'settings.open': () => undefined,
     'settings.home-sections.toggle': toggleHomeSections,

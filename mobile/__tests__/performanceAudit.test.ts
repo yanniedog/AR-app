@@ -190,6 +190,11 @@ describe('performance audit journeys', () => {
     expect(journeys.find((journey) => journey.id === 'product')?.href).toBeDefined();
     expect(journeys.find((journey) => journey.id === 'rate-receipt')?.href).toBeDefined();
     expect(journeys.find((journey) => journey.id === 'compare')?.href).toBeDefined();
+    expect(journeys.every((journey) => journey.expectedSurface.length > 0)).toBe(true);
+    expect(journeys.find((journey) => journey.id === 'product')?.expectedSurface)
+      .toBe('product.details');
+    expect(journeys.find((journey) => journey.id === 'compare')?.expectedSurface)
+      .toBe('compare.table');
   });
 
   it('keeps data-dependent journeys visible but skipped when no payload exists', () => {

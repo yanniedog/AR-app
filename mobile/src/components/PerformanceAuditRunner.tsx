@@ -697,15 +697,22 @@ async function runDeepAuditStepBody(
   };
   const href = routeEntryHref(step);
   if (href) {
+    if (
+      pathMatches(currentPath(), step.expectedPath) &&
+      !step.semanticActionId.startsWith('redirect.')
+    ) {
+      router.replace(AUDIT_HOME_PATH as Href);
+      await waitForPath(currentPath, AUDIT_HOME_PATH, `${label} route reset`, { watchdog });
+      await settleUi();
+      assertSessionActive(watchdog);
+    }
     measuredAction = await measureAuditAction(
       () => {
-        if (!pathMatches(currentPath(), step.expectedPath) || step.semanticActionId.startsWith('redirect.')) {
-          // A scenario entry is an independent sample, not a growing user back
-          // stack. Compatibility redirects remain pushes because following the
-          // redirect is the behaviour under test.
-          if (step.semanticActionId.startsWith('redirect.')) router.push(href);
-          else router.replace(href);
-        }
+        // A scenario entry is an independent sample, not a growing user back
+        // stack. Compatibility redirects remain pushes because following the
+        // redirect is the behaviour under test.
+        if (step.semanticActionId.startsWith('redirect.')) router.push(href);
+        else router.replace(href);
       },
       () => monitor.snapshot(),
       now,
@@ -1371,6 +1378,8 @@ async function runFileSystemCheck(
       durationMs: roundMetric(now() - started),
       metrics: {
         reason: 'documentDirectory unavailable',
+        executionAttempted: false,
+        availabilityFailure: true,
         ...responsivenessRecord(responsiveness),
       },
       error: 'Planned filesystem round trip could not run because documentDirectory is unavailable',
@@ -2075,6 +2084,7 @@ export async function runJourney(
   const logCursor = debugLog.getCursor();
   let forwardMs: number | null = null;
   let backgroundSettleMs: number | null = null;
+  let destinationReadinessMs: number | null = null;
   let backgroundTasks: string[] = [];
   let backMs: number | null = null;
   let returnFallbackMs: number | null = null;
@@ -2109,8 +2119,6 @@ export async function runJourney(
     await settleUi();
     assertSessionActive(watchdog);
     assertDatasetRevision(datasetRevision);
-    forwardMs = now() - at;
-    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     if (
       journey.expectedSection &&
       useStore.getState().activeSection !== journey.expectedSection
@@ -2128,6 +2136,28 @@ export async function runJourney(
     backgroundSettleMs = background.durationMs;
     backgroundTasks = background.labels;
     assertDatasetRevision(datasetRevision);
+    const destinationReadinessStarted = now();
+    const destinationReadinessAbort = new AbortController();
+    const destinationReadinessGuard = setInterval(() => {
+      if (getPerformanceAuditState().cancelRequested || watchdog.isExpired()) {
+        destinationReadinessAbort.abort();
+      }
+    }, 50);
+    try {
+      await performanceAuditReadinessRegistry.waitForReady({
+        surfaceIds: [journey.expectedSurface],
+        quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        timeoutMs: readinessTimeoutMs(watchdog),
+        signal: destinationReadinessAbort.signal,
+      });
+      watchdog.touchProgress();
+    } finally {
+      clearInterval(destinationReadinessGuard);
+    }
+    assertSessionActive(watchdog);
+    destinationReadinessMs = now() - destinationReadinessStarted;
+    forwardMs = now() - at;
+    forwardResponsiveness = monitor.metricsSince(forwardResponsivenessAt);
     // Keep the destination mounted long enough to expose deferred work,
     // subscriptions, and JS stalls without charging the deliberate dwell to
     // the forward-navigation latency.
@@ -2163,7 +2193,10 @@ export async function runJourney(
       await settleUi();
       backReturnedToAudit = pathMatches(currentPath(), AUDIT_HOME_PATH);
       secondBackMs = now() - secondBackStarted;
+      backMs += secondBackMs;
+      backDestination = currentPath();
       returnFallbackMs = secondBackMs;
+      backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     }
 
     if (!backReturnedToAudit) {
@@ -2251,9 +2284,12 @@ export async function runJourney(
       journeyLabel: journey.label,
       iteration,
       expectedPath: journey.expectedPath,
+      expectedSurface: journey.expectedSurface,
       navigationKind: journey.navigationKind,
       forwardMs: forwardMs == null ? null : roundMetric(forwardMs),
       backgroundSettleMs: backgroundSettleMs == null ? null : roundMetric(backgroundSettleMs),
+      destinationReadinessMs:
+        destinationReadinessMs == null ? null : roundMetric(destinationReadinessMs),
       backgroundTasks: backgroundTasks.join(', ') || null,
       backMs: backMs == null ? null : roundMetric(backMs),
       originReadinessMs: originReadinessMs == null ? null : roundMetric(originReadinessMs),
@@ -2770,7 +2806,7 @@ export function PerformanceAuditRunner() {
           label: 'Audit state rollback and durable verification',
           kind: 'storage',
           status: rollbackResult.restored ? 'pass' : 'fail',
-          durationMs: restoreInterrupted ? 0 : roundMetric(now() - restoreStarted),
+          durationMs: restoreInterrupted ? null : roundMetric(now() - restoreStarted),
           metrics: {
             restored: rollbackResult.restored,
             attempts: rollbackAttempts,

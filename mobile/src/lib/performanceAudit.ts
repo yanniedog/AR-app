@@ -187,6 +187,7 @@ export interface AuditJourney {
   label: string;
   href?: Href;
   expectedPath: string;
+  expectedSurface: string;
   expectedSection?: SectionKey;
   navigationKind: 'tab' | 'stack';
   skipReason?: string;
@@ -741,6 +742,7 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
         } as unknown as Href)
       : undefined,
     expectedPath: '/browse',
+    expectedSurface: 'browse.hierarchy',
     expectedSection: section,
     navigationKind: 'tab',
     skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
@@ -767,6 +769,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Home',
       href: '/(tabs)' as Href,
       expectedPath: '/',
+      expectedSurface: 'today.hero',
       navigationKind: 'tab',
     },
     ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
@@ -775,6 +778,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Bank response',
       href: '/passthrough' as Href,
       expectedPath: '/passthrough',
+      expectedSurface: 'moves.response-chart',
       navigationKind: 'tab',
     },
     {
@@ -782,6 +786,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Outlook',
       href: '/trends' as Href,
       expectedPath: '/trends',
+      expectedSurface: 'outlook.dashboard',
       navigationKind: 'tab',
     },
     {
@@ -789,6 +794,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Why rates move',
       href: '/rba' as Href,
       expectedPath: '/trends',
+      expectedSurface: 'outlook.rba-response',
       navigationKind: 'tab',
     },
     {
@@ -796,6 +802,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Watchlist',
       href: '/watchlist' as Href,
       expectedPath: '/watchlist',
+      expectedSurface: 'saved.list',
       navigationKind: 'tab',
     },
     {
@@ -803,6 +810,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Settings',
       href: '/settings' as Href,
       expectedPath: '/settings',
+      expectedSurface: 'settings.sections',
       navigationKind: 'tab',
     },
     {
@@ -813,6 +821,7 @@ export function buildPerformanceAuditJourneys(
         params: { section: 'Mortgage' },
       } as unknown as Href,
       expectedPath: '/search',
+      expectedSurface: 'search.results',
       navigationKind: 'stack',
     },
     {
@@ -820,6 +829,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Switch and save calculator',
       href: '/calculator' as Href,
       expectedPath: '/calculator',
+      expectedSurface: 'calculator.results',
       navigationKind: 'stack',
     },
     {
@@ -830,6 +840,7 @@ export function buildPerformanceAuditJourneys(
         params: { section: 'Mortgage' },
       } as unknown as Href,
       expectedPath: '/projections',
+      expectedSurface: 'projections.lifecycle-chart',
       navigationKind: 'stack',
     },
     {
@@ -837,6 +848,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Lenders',
       href: '/banks' as Href,
       expectedPath: '/banks',
+      expectedSurface: 'lenders.list',
       navigationKind: 'stack',
     },
     {
@@ -844,6 +856,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Product profile',
       href: '/profile' as Href,
       expectedPath: '/profile',
+      expectedSurface: 'profile.filters',
       navigationKind: 'stack',
     },
     {
@@ -859,6 +872,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: first ? `/product/${encodeURIComponent(first.product_key)}` : '/product',
+      expectedSurface: 'product.details',
       navigationKind: 'stack',
       skipReason: first ? undefined : 'No product is loaded',
     },
@@ -875,6 +889,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: '/rate-receipt',
+      expectedSurface: 'receipt.evidence',
       navigationKind: 'stack',
       skipReason: first ? undefined : 'No product is loaded',
     },
@@ -888,6 +903,7 @@ export function buildPerformanceAuditJourneys(
           } as unknown as Href)
         : undefined,
       expectedPath: provider ? `/bank/${encodeURIComponent(provider)}` : '/bank',
+      expectedSurface: 'lender.details',
       navigationKind: 'stack',
       skipReason: provider ? undefined : 'No lender is loaded',
     },
@@ -902,6 +918,7 @@ export function buildPerformanceAuditJourneys(
             } as unknown as Href)
           : undefined,
       expectedPath: '/compare',
+      expectedSurface: 'compare.table',
       navigationKind: 'stack',
       skipReason: first && second ? undefined : 'Fewer than two products are loaded',
     },
@@ -910,6 +927,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Terms and notices',
       href: '/terms' as Href,
       expectedPath: '/terms',
+      expectedSurface: 'terms.notices',
       navigationKind: 'stack',
     },
     {
@@ -917,6 +935,7 @@ export function buildPerformanceAuditJourneys(
       label: 'Debug log',
       href: '/debug-log' as Href,
       expectedPath: '/debug-log',
+      expectedSurface: 'debug-log.entries',
       navigationKind: 'stack',
     },
   ];

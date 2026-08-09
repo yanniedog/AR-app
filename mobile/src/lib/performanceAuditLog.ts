@@ -28,6 +28,8 @@ const AUDIT_PROOF_METRIC_KEYS = [
   'backMs',
   'backgroundSettleMs',
   'expectedPath',
+  'expectedSurface',
+  'destinationReadinessMs',
   'backDestination',
   'backReturnedToAudit',
   'readinessActionEvidence',
