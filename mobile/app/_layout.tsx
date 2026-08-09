@@ -44,6 +44,7 @@ import { registerBackgroundRefresh, routeFromNotificationResponse } from '../src
 import { useStore } from '../src/data/store';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
+import { shouldShowAppTabBar } from '../src/lib/tabRouting';
 import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
 import { syncContentKeys } from '../src/lib/keyService';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
@@ -242,6 +243,9 @@ function RootNavigator() {
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
+  // Only reserve the tab-bar strip when the bar is actually on screen; it is
+  // hidden through onboarding, where the extra offset would leave a gap.
+  const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);
 
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -451,7 +455,7 @@ function RootNavigator() {
           <PerformanceAuditRunner />
           <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
-            aboveTabBar
+            aboveTabBar={tabBarVisible}
             onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}
           />

@@ -15,6 +15,7 @@ import {
   uploadDebugLog,
 } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { ScreenSkeleton } from '../src/components/feedback';
 import { useDeveloperToolsEnabled } from '../src/lib/developerTools';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -389,6 +390,9 @@ function DebugLogScreenInner() {
  */
 export default function DebugLogScreen() {
   const developerTools = useDeveloperToolsEnabled();
+  // Undecided until prefs rehydrate — redirecting here would discard the
+  // requested destination for a user who has actually unlocked these tools.
+  if (developerTools == null) return <ScreenSkeleton rows={2} />;
   if (!developerTools) return <Redirect href="/settings" />;
   return <DebugLogScreenInner />;
 }
