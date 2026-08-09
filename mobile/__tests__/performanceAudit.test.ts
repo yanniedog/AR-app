@@ -4,6 +4,7 @@ import {
   AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
+  claimPerformanceAuditUploadDeletion,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   flattenAuditLogText,
@@ -24,6 +25,7 @@ import {
   percentile,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   requestPerformanceAudit,
+  releasePerformanceAuditUploadDeletion,
   resolveAuditJourneyOptionalData,
   resumePerformanceAudit,
   resetPerformanceAuditForTests,
@@ -533,6 +535,16 @@ describe('performance audit lifecycle', () => {
       uploadDeleteKey: null,
       uploadDeleted: true,
     });
+  });
+
+  it('synchronously rejects a second upload deletion until the first request releases', () => {
+    const guard = { current: false };
+
+    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(true);
+    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(false);
+
+    releasePerformanceAuditUploadDeletion(guard);
+    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(true);
   });
 
   it('publishes the report before the upload finishes and attaches its result later', () => {

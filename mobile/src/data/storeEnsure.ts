@@ -634,7 +634,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             // An identity-equal result is the immutable current cache. Do not
             // stringify and atomically rewrite it on product-screen entry.
             if (checkpoint === cached) {
-              if (productHistory !== checkpoint) {
+              const current = get();
+              if (current.productHistory !== checkpoint || current.productHistoryError) {
                 set({ productHistory: checkpoint, productHistoryError: null });
               }
               lastPublished = checkpoint;

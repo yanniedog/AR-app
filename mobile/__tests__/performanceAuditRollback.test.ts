@@ -219,4 +219,17 @@ describe('performance audit rollback journal', () => {
     });
     expect(attempt).toHaveBeenCalledTimes(3);
   });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])(
+    'normalizes non-finite retry limit %p to three bounded attempts',
+    async (maxAttempts) => {
+      const attempt = jest.fn().mockResolvedValue({ restored: false });
+
+      await expect(retryPerformanceAuditRollback(attempt, maxAttempts)).resolves.toMatchObject({
+        restored: false,
+        attempts: 3,
+      });
+      expect(attempt).toHaveBeenCalledTimes(3);
+    },
+  );
 });

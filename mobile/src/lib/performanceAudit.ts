@@ -594,6 +594,25 @@ export function markPerformanceAuditUploadDeleted(sessionId: string): void {
   });
 }
 
+export interface PerformanceAuditUploadDeletionGuard {
+  current: boolean;
+}
+
+/** Claim deletion synchronously so two confirmation callbacks cannot issue duplicate requests. */
+export function claimPerformanceAuditUploadDeletion(
+  guard: PerformanceAuditUploadDeletionGuard,
+): boolean {
+  if (guard.current) return false;
+  guard.current = true;
+  return true;
+}
+
+export function releasePerformanceAuditUploadDeletion(
+  guard: PerformanceAuditUploadDeletionGuard,
+): void {
+  guard.current = false;
+}
+
 export function markPerformanceAuditCancelled(): void {
   emit({
     ...auditState,

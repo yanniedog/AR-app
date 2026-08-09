@@ -319,7 +319,8 @@ export async function retryPerformanceAuditRollback(
   maxAttempts = 3,
   beforeRetry?: (attemptNumber: number) => void | Promise<void>,
 ): Promise<PerformanceAuditRollbackAttemptsResult> {
-  const limit = Math.max(1, Math.floor(maxAttempts));
+  const normalizedMaxAttempts = Number.isFinite(maxAttempts) ? maxAttempts : 3;
+  const limit = Math.max(1, Math.floor(normalizedMaxAttempts));
   const errors: string[] = [];
   let latest: PerformanceAuditRollbackRestoreResult = { restored: false };
   for (let attemptNumber = 1; attemptNumber <= limit; attemptNumber += 1) {

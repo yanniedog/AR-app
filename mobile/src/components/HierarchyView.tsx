@@ -210,9 +210,14 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
           unavailableReason: 'No taxonomy path is available for deepest category drill',
         };
       }
-      const targetSection = requested && SECTION_KEYS.includes(requested as SectionKey)
-        ? requested as SectionKey
-        : section;
+      if (
+        requested &&
+        (!SECTION_KEYS.includes(requested as SectionKey) ||
+          !availableSections.includes(requested as SectionKey))
+      ) {
+        return { unavailableReason: 'The requested audit section is not available' };
+      }
+      const targetSection = requested ? requested as SectionKey : section;
       openBrowseDrill(targetSection, exactPath);
     },
     'browse.category.back': () => openBrowseDrill(section, path.slice(0, -1)),

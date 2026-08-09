@@ -617,6 +617,7 @@ describe('optional feature prefs', () => {
       manifest: remoteManifest,
       core: remoteCore,
       productHistory: cached,
+      productHistoryError: 'stale sync failure',
     });
     mockSyncProductHistoryFromDailyPayloads.mockResolvedValue(cached);
 
@@ -644,8 +645,10 @@ describe('optional feature prefs', () => {
 
     await store.getState().ensureProductHistory();
 
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
     expect(mockWriteProductHistory).not.toHaveBeenCalled();
     expect(store.getState().productHistory).toBe(cached);
+    expect(store.getState().productHistoryError).toBeNull();
   });
 
   it('ensureProductHistory coalesces concurrent calls into one sync', async () => {

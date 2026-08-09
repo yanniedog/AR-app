@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
@@ -7,12 +7,14 @@ import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
+  claimPerformanceAuditUploadDeletion,
   markPerformanceAuditUploadDeleted,
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   parsePerformanceAuditHangTimeoutSeconds,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
+  releasePerformanceAuditUploadDeletion,
   selectReportedAuditChecks,
   subscribePerformanceAudit,
   type AuditCheck,
@@ -85,6 +87,7 @@ export default function PerformanceAuditScreen() {
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [deletingUpload, setDeletingUpload] = useState(false);
+  const deletingUploadRef = useRef(false);
   const report = state.report;
   const reportedChecks = useMemo(
     () => (report ? selectReportedAuditChecks(report.checks) : []),
@@ -160,7 +163,7 @@ export default function PerformanceAuditScreen() {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
     Alert.alert(
       'Run and publicly upload the full log?',
-      'After the audit, the complete redacted debug log is uploaded to a public paste host. Anyone with the link can read it. Review or clear the debug log first if needed.',
+      'After the audit, the complete redacted debug log is uploaded to paste.rs, or to paste.c-net.org when needed. Anyone with the link can read it. C-net uploads expire after 180 inactive days; access resets that period. Review or clear the debug log first if needed.',
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Run and upload', style: 'destructive', onPress: runAudit },
@@ -180,6 +183,7 @@ export default function PerformanceAuditScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            if (!claimPerformanceAuditUploadDeletion(deletingUploadRef)) return;
             setDeletingUpload(true);
             void deleteDebugLogUpload(url, state.uploadDeleteKey ?? undefined)
               .then(() => markPerformanceAuditUploadDeleted(sessionId))
@@ -189,7 +193,10 @@ export default function PerformanceAuditScreen() {
                   error instanceof Error ? error.message : String(error),
                 );
               })
-              .finally(() => setDeletingUpload(false));
+              .finally(() => {
+                releasePerformanceAuditUploadDeletion(deletingUploadRef);
+                setDeletingUpload(false);
+              });
           },
         },
       ],
