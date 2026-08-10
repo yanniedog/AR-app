@@ -116,19 +116,19 @@ export default function Market() {
   useEffect(() => setRewindDate(null), [activeSection]);
 
   useEffect(() => {
-    if (focus !== 'rba') {
+    if (!isFocused || focus !== 'rba') {
       legacyRbaHandled.current = false;
       return;
     }
     setRbaGraphicState(null);
     setRbaOpen(true);
-  }, [focus, core?.run_date]);
+  }, [focus, core?.run_date, isFocused]);
 
   useEffect(() => {
-    if (focus !== 'rba' || !rbaOpen || rbaLayoutY == null || legacyRbaHandled.current) return;
+    if (!isFocused || focus !== 'rba' || !rbaOpen || rbaLayoutY == null || legacyRbaHandled.current) return;
     legacyRbaHandled.current = true;
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, rbaLayoutY - 12), animated: false }));
-  }, [focus, rbaLayoutY, rbaOpen]);
+  }, [focus, isFocused, rbaLayoutY, rbaOpen]);
 
   useEffect(() => {
     if (!economyOpen || !pendingEconomyAuditAction) return;
@@ -231,7 +231,7 @@ export default function Market() {
     datasetRevision,
     renderRevision,
     actions: {
-      'outlook.open': () => undefined,
+      'outlook.open': () => setHistoryOpen(true),
       'outlook.section.next': nextSection,
       'outlook.history.mode.spread': () => { setHistoryOpen(true); setAdvancedViews(true); setExplorerMode('edge'); },
       'outlook.history.mode.calendar': () => { setHistoryOpen(true); setAdvancedViews(true); setExplorerMode('calendar'); },

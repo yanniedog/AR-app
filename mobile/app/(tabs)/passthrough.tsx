@@ -11,6 +11,7 @@ import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability, marketPulse } from '../../src/data/bankInsights';
 import { sectionSegmentOptions } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
+import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { formatRunDate } from '../../src/data/format';
 import { scalarRouteParam } from '../../src/lib/nav';
@@ -38,6 +39,7 @@ export default function RateMovesTab() {
   const error = useStore((state) => state.bankInsightsError);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
+  const ensureDetails = useStore((state) => state.ensureDetails);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
@@ -57,6 +59,16 @@ export default function RateMovesTab() {
     void ensureRbaCalendar();
   }, [core, ensureBankInsights, ensureRbaCalendar]);
 
+  const suitabilityReady = useMemo(() => {
+    void suitabilityRevision;
+    return isSuitabilityFilterReady(includeNonStandard);
+  }, [includeNonStandard, suitabilityRevision]);
+
+  useEffect(() => {
+    if (!core || includeNonStandard || isSuitabilityFilterReady(includeNonStandard)) return;
+    void ensureDetails({ force: true });
+  }, [core, ensureDetails, includeNonStandard]);
+
   // Preserve existing notification deep links while making the tab itself a
   // useful chronological feed rather than an advanced analytics landing page.
   useEffect(() => {
@@ -74,7 +86,8 @@ export default function RateMovesTab() {
     );
   }, [core, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
-  const filteredEmpty = rawPayload !== null && payload === null && !error;
+  const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
+  const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
 
   if (!core) return <ScreenSkeleton />;
 
@@ -108,6 +121,18 @@ export default function RateMovesTab() {
         {payload ? (
           <Card>
             <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14} />
+          </Card>
+        ) : suitabilityWarming ? (
+          <Card variant="outlined" style={{ gap: 10 }}>
+            <AppText variant="body" weight="700">Preparing compatible rate moves</AppText>
+            <AppText variant="small" color="textMuted">
+              Checking which products are broadly available before showing lender changes.
+            </AppText>
+            <Button
+              title="Retry preparation"
+              variant="secondary"
+              onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
+            />
           </Card>
         ) : filteredEmpty ? (
           <Card variant="outlined" style={{ gap: 8 }}>
