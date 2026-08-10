@@ -796,10 +796,10 @@ export function buildPerformanceAuditJourneys(
     {
       id: 'response',
       label: 'Bank response',
-      href: '/passthrough' as Href,
-      expectedPath: '/passthrough',
+      href: '/rba-response' as Href,
+      expectedPath: '/rba-response',
       expectedSurface: 'moves.response-chart',
-      navigationKind: 'tab',
+      navigationKind: 'stack',
     },
     {
       id: 'outlook',

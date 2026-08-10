@@ -7,6 +7,7 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import { toFraction, visibleAccountRows } from './format';
 import { getSuitabilityAllowed, getSuitabilityRevision } from './suitabilityGate';
+import { bankHistoryPairKey, quarantinedBankHistoryPairs } from './sectionIntegrity';
 import {
   DEFAULT_PASS_THROUGH_WINDOW_DAYS,
   MOVE_DIRS,
@@ -123,6 +124,45 @@ let suitabilityFilterCache: {
   result: BankInsightsPayload | null;
 } | null = null;
 
+function filterBankInsightsForSectionIntegrity(
+  payload: BankInsightsPayload,
+  core: CorePayload,
+): BankInsightsPayload {
+  const quarantinedPairs = quarantinedBankHistoryPairs(core);
+  if (!quarantinedPairs.size) return payload;
+
+  const banks: BankInsightsPayload['banks'] = {};
+  for (const [provider, sections] of Object.entries(payload.banks)) {
+    const retained = Object.fromEntries(
+      Object.entries(sections).filter(([section]) =>
+        !quarantinedPairs.has(bankHistoryPairKey(provider, section as SectionKey)),
+      ),
+    ) as Partial<Record<SectionKey, BankSectionSeries>>;
+    if (Object.keys(retained).length) banks[provider] = retained;
+  }
+
+  const behaviour: BankInsightsPayload['behaviour'] = {};
+  for (const section of SECTION_KEYS) {
+    const summary = payload.behaviour?.[section];
+    if (!summary) continue;
+    const providers = Object.fromEntries(
+      Object.entries(summary.providers).filter(([provider]) =>
+        !quarantinedPairs.has(bankHistoryPairKey(provider, section)),
+      ),
+    );
+    if (Object.keys(providers).length) behaviour[section] = { ...summary, providers };
+  }
+
+  return {
+    ...payload,
+    banks,
+    events: payload.events.filter((event) =>
+      !quarantinedPairs.has(bankHistoryPairKey(event.provider, event.section)),
+    ),
+    behaviour: Object.keys(behaviour).length ? behaviour : undefined,
+  };
+}
+
 export function filterBankInsightsForSuitability(
   payload: BankInsightsPayload | null | undefined,
   core: CorePayload | null | undefined,
@@ -130,8 +170,9 @@ export function filterBankInsightsForSuitability(
   detailsProducts?: Record<string, ProductDetail> | null,
 ): BankInsightsPayload | null {
   if (!payload) return null;
-  if (includeNonStandard) return payload;
   if (!core) return null;
+  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, core);
+  if (includeNonStandard) return integrityPayload;
   const revision = getSuitabilityRevision();
   if (
     suitabilityFilterCache?.payload === payload &&
@@ -145,7 +186,7 @@ export function filterBankInsightsForSuitability(
   }
 
   const historicalPairs = new Set<string>();
-  const pairKey = (provider: string, section: SectionKey) => `${section}\u0000${provider}`;
+  const pairKey = bankHistoryPairKey;
   const visibleByPair = new Map<
     string,
     CorePayload['sections'][SectionKey]['rates']
@@ -181,8 +222,8 @@ export function filterBankInsightsForSuitability(
   }
 
   const banks: BankInsightsPayload['banks'] = {};
-  const currentIndex = payload.run_dates.indexOf(core.run_date);
-  for (const [provider, sections] of Object.entries(payload.banks)) {
+  const currentIndex = integrityPayload.run_dates.indexOf(core.run_date);
+  for (const [provider, sections] of Object.entries(integrityPayload.banks)) {
     const filteredSections: Partial<Record<SectionKey, BankSectionSeries>> = {};
     for (const section of SECTION_KEYS) {
       const series = sections[section];
@@ -195,7 +236,7 @@ export function filterBankInsightsForSuitability(
       const current = currentStandardSeries(
         visibleByPair.get(key) ?? [],
         section,
-        payload.run_dates.length,
+        integrityPayload.run_dates.length,
         currentIndex,
       );
       if (current) {
@@ -207,7 +248,7 @@ export function filterBankInsightsForSuitability(
 
   const behaviour: BankInsightsPayload['behaviour'] = {};
   for (const section of SECTION_KEYS) {
-    const summary = payload.behaviour?.[section];
+    const summary = integrityPayload.behaviour?.[section];
     if (!summary) continue;
     const providers = Object.fromEntries(
       Object.entries(summary.providers).filter(([provider]) =>
@@ -220,9 +261,9 @@ export function filterBankInsightsForSuitability(
   }
 
   const result: BankInsightsPayload = {
-    ...payload,
+    ...integrityPayload,
     banks,
-    events: payload.events.filter((event) =>
+    events: integrityPayload.events.filter((event) =>
       historicalPairs.has(pairKey(event.provider, event.section)),
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,

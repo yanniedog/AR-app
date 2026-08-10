@@ -1,5 +1,5 @@
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -26,7 +26,7 @@ import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../../src/
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { rateValueLabel } from '../../src/lib/a11ySummaries';
 import { runStoreRetry } from '../../src/lib/degradationLog';
-import { openBrowse } from '../../src/lib/nav';
+import { openBrowse, scalarRouteParam } from '../../src/lib/nav';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
 import { yieldToPaintFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -36,6 +36,8 @@ export default function Market() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const scrollRef = useRef<ScrollView>(null);
+  const { focus: focusRaw } = useLocalSearchParams<{ focus?: string | string[] }>();
+  const focus = scalarRouteParam(focusRaw);
   useScrollToTop(scrollRef);
 
   const core = useStore((s) => s.core);
@@ -66,7 +68,7 @@ export default function Market() {
 
   const [historyOpen, setHistoryOpen] = useState(true);
   const [advancedViews, setAdvancedViews] = useState(false);
-  const [rbaOpen, setRbaOpen] = useState(false);
+  const [rbaOpen, setRbaOpen] = useState(focus === 'rba');
   const [economyOpen, setEconomyOpen] = useState(false);
   const [historyReady, setHistoryReady] = useState(false);
   const [retryingHistory, setRetryingHistory] = useState(false);
@@ -76,9 +78,12 @@ export default function Market() {
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
   const [historyLayoutRevision, setHistoryLayoutRevision] = useState<string | null>(null);
-  const [rbaGraphicCount, setRbaGraphicCount] = useState(0);
+  const [rbaGraphicState, setRbaGraphicState] = useState<{ revision: string; pointCount: number } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
+  const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<'lens' | 'window' | 'date' | null>(null);
+  const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
   const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
+  const legacyRbaHandled = useRef(false);
 
   const interestSections = useMemo(() => orderedInterestSections(interests), [interests]);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
@@ -108,6 +113,31 @@ export default function Market() {
   }, [ensureProductHistory, explorerMode, historyOpen, isFocused]);
 
   useEffect(() => setRewindDate(null), [activeSection]);
+
+  useEffect(() => {
+    if (focus !== 'rba') {
+      legacyRbaHandled.current = false;
+      return;
+    }
+    setRbaGraphicState(null);
+    setRbaOpen(true);
+  }, [focus, core?.run_date]);
+
+  useEffect(() => {
+    if (focus !== 'rba' || !rbaOpen || rbaLayoutY == null || legacyRbaHandled.current) return;
+    legacyRbaHandled.current = true;
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: Math.max(0, rbaLayoutY - 12), animated: false }));
+  }, [focus, rbaLayoutY, rbaOpen]);
+
+  useEffect(() => {
+    if (!economyOpen || !pendingEconomyAuditAction) return;
+    const audit = rbaOutlookRef.current;
+    if (!audit) return;
+    if (pendingEconomyAuditAction === 'lens') audit.nextLens();
+    else if (pendingEconomyAuditAction === 'window') audit.nextWindow();
+    else audit.previousDate();
+    setPendingEconomyAuditAction(null);
+  }, [economyOpen, pendingEconomyAuditAction]);
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
@@ -156,6 +186,19 @@ export default function Market() {
   const decisions = useMemo(() => recentDecisions(calendar, 5), [calendar]);
   const currentRba = core?.rba.at(-1) ?? null;
   const datasetRevision = core?.run_date ?? null;
+  const rbaGraphicRevisionPrefix = `${core?.rba.at(-1)?.date ?? 'none'}:${core?.rba_holds?.length ?? 0}:`;
+  const rbaGraphicReady = !!rbaGraphicState &&
+    rbaGraphicState.pointCount > 0 &&
+    rbaGraphicState.revision.startsWith(rbaGraphicRevisionPrefix);
+  const openRba = useCallback(() => {
+    setRbaGraphicState(null);
+    setRbaOpen(true);
+  }, []);
+  const queueEconomyAuditAction = useCallback((action: 'lens' | 'window' | 'date') => {
+    setEconomyOpen(true);
+    setPendingEconomyAuditAction(action);
+  }, []);
+  useEffect(() => setRbaGraphicState(null), [datasetRevision]);
   const historyDates = useMemo(
     () => explorerMode === 'pulse' || explorerMode === 'race'
       ? explorerInsights?.run_dates ?? []
@@ -196,10 +239,10 @@ export default function Market() {
       'outlook.history.window.30d': () => setExplorerWindow('30D'),
       'outlook.history.window.all': () => setExplorerWindow('All'),
       'outlook.history.date.previous': previousHistoryDate,
-      'outlook.rba-response.decision.previous': () => { setRbaOpen(true); previousRbaDate(); },
-      'outlook.economy.lens.next': () => { setEconomyOpen(true); rbaOutlookRef.current?.nextLens(); },
-      'outlook.economy.window.next': () => { setEconomyOpen(true); rbaOutlookRef.current?.nextWindow(); },
-      'outlook.economy.date.previous': () => { setEconomyOpen(true); rbaOutlookRef.current?.previousDate(); },
+      'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
+      'outlook.economy.lens.next': () => queueEconomyAuditAction('lens'),
+      'outlook.economy.window.next': () => queueEconomyAuditAction('window'),
+      'outlook.economy.date.previous': () => queueEconomyAuditAction('date'),
       'outlook.snapshot.browse.first': () => {
         openBrowse(activeSection);
         return { expectedPath: '/browse' };
@@ -261,8 +304,9 @@ export default function Market() {
   });
   usePerformanceAuditProbe(rbaSurface, {
     id: 'rba-graphic', kind: 'graphic', required: rbaOpen,
-    status: !rbaOpen || rbaGraphicCount > 0 ? 'ready' : 'pending', datasetRevision,
-    expectedCount: rbaOpen ? core?.rba.length ?? 1 : 0, actualCount: rbaGraphicCount,
+    status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
+    expectedCount: rbaOpen ? core?.rba.length ?? 1 : 0,
+    actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
   });
 
   const handleRetryHistory = async () => {
@@ -384,13 +428,17 @@ export default function Market() {
         )}
       </Disclosure>
 
-      <Disclosure
-        title="RBA cash rate"
-        summary={currentRba ? `${formatRate(currentRba.rate)}${trend.summary ? ` · ${trend.summary}` : ''}` : 'Cash-rate history and decisions'}
-        open={rbaOpen}
-        onToggle={() => setRbaOpen((open) => !open)}
-      >
-        <View style={{ gap: 12 }}>
+      <View onLayout={(event) => setRbaLayoutY(event.nativeEvent.layout.y)}>
+        <Disclosure
+          title="RBA cash rate"
+          summary={currentRba ? `${formatRate(currentRba.rate)}${trend.summary ? ` · ${trend.summary}` : ''}` : 'Cash-rate history and decisions'}
+          open={rbaOpen}
+          onToggle={() => {
+            setRbaGraphicState(null);
+            setRbaOpen((open) => !open);
+          }}
+        >
+          <View style={{ gap: 12 }}>
           <Row style={{ justifyContent: 'space-between' }}>
             <AppText variant="small" color="textMuted">Current cash rate</AppText>
             <AppText variant="rateHero" style={{ color: theme.colors.rba }}>{currentRba ? formatRate(currentRba.rate) : '—'}</AppText>
@@ -401,7 +449,7 @@ export default function Market() {
             height={190}
             selectedDate={rbaSelectedDate}
             onDateSelect={setRbaSelectedDate}
-            onGraphicReady={(state) => setRbaGraphicCount(state.pointCount)}
+            onGraphicReady={setRbaGraphicState}
           />
           {decisions.length ? <Divider /> : null}
           {decisions.map((decision) => (
@@ -410,8 +458,9 @@ export default function Market() {
               <AppText variant="small" weight="700">{decisionLine(decision)}</AppText>
             </Row>
           ))}
-        </View>
-      </Disclosure>
+          </View>
+        </Disclosure>
+      </View>
 
       <Disclosure
         title="What is shaping rates"

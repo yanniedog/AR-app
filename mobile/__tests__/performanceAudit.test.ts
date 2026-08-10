@@ -230,6 +230,11 @@ describe('performance audit journeys', () => {
       .toBe('product.details');
     expect(journeys.find((journey) => journey.id === 'compare')?.expectedSurface)
       .toBe('compare.table');
+    expect(journeys.find((journey) => journey.id === 'response')).toMatchObject({
+      expectedPath: '/rba-response',
+      expectedSurface: 'moves.response-chart',
+      navigationKind: 'stack',
+    });
   });
 
   it('keeps data-dependent journeys visible but skipped when no payload exists', () => {

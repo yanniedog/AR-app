@@ -777,7 +777,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   ]);
 
   scenario(templates, 'route.moves', {
-    expectedPath: '/passthrough',
+    expectedPath: '/rba-response',
     expectedSurface: 'moves.response-chart',
     readiness: ['app', 'data', 'bank-insights', 'rba-calendar', 'graphics', 'list'],
     optional: true,

@@ -15,6 +15,7 @@ import {
   type PassThroughRow,
 } from '../src/data/bankInsights';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
+import { normalizeCoreSectionIntegrity } from '../src/data/sectionIntegrity';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { lenderRaceModel, marketActivityModel } from '../src/data/vizModels';
 import type { CorePayload, RbaEntry } from '../src/types';
@@ -201,6 +202,34 @@ describe('filterBankInsightsForSuitability', () => {
 
   test('returns the complete feed when non-standard products are enabled', () => {
     expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(payload);
+  });
+
+  test('withholds provider-section history that includes quarantined products', () => {
+    const contaminated = normalizeCoreSectionIntegrity({
+      ...filterCore,
+      sections: {
+        ...filterCore.sections,
+        Savings: {
+          ...filterCore.sections.Savings,
+          rates: [
+            ...filterCore.sections.Savings.rates,
+            {
+              provider: 'GammaBank',
+              product_key: 'gamma-term-deposit',
+              product_name: 'Term Deposit 12 months',
+              rate: '0.054',
+            },
+          ],
+        },
+      },
+    });
+
+    const filtered = filterBankInsightsForSuitability(payload, contaminated, true)!;
+
+    expect(filtered).not.toBe(payload);
+    expect(filtered.banks.GammaBank).toBeUndefined();
+    expect(filtered.events.some((event) => event.provider === 'GammaBank')).toBe(false);
+    expect(filtered.banks.AlphaBank.Mortgage).toBe(payload.banks.AlphaBank.Mortgage);
   });
 
   test('reuses the filtered feed for identical mounted-screen inputs', () => {
@@ -1043,11 +1072,22 @@ describe('rbaPassThrough', () => {
 describe('marketPulse', () => {
   test('counts distinct movers, cuts, and hikes in the window', () => {
     const pulse = marketPulse(payload, 7);
-    expect(pulse).toMatchObject({ banksMoved: 2, cuts: 1, hikes: 1 });
+    expect(pulse).toMatchObject({ banksMoved: 2, cuts: 1, hikes: 1, mixed: 0 });
+  });
+
+  test('counts mixed provider events explicitly', () => {
+    const mixedPayload: BankInsightsPayload = {
+      ...payload,
+      events: [
+        ...payload.events,
+        { date: '2026-06-01', provider: 'DeltaBank', section: 'Savings', dir: 'mixed', moved: 2, total: 4, avg_bps: 0 },
+      ],
+    };
+    expect(marketPulse(mixedPayload, 7)).toMatchObject({ banksMoved: 3, cuts: 1, hikes: 1, mixed: 1 });
   });
 
   test('handles a quiet window', () => {
     const pulse = marketPulse({ ...payload, events: [] }, 7);
-    expect(pulse).toMatchObject({ banksMoved: 0, cuts: 0, hikes: 0 });
+    expect(pulse).toMatchObject({ banksMoved: 0, cuts: 0, hikes: 0, mixed: 0 });
   });
 });

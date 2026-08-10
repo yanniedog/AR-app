@@ -163,6 +163,10 @@ describe('deep performance audit plan', () => {
     ]));
 
     const actions = new Set(steps.map((step) => step.semanticActionId));
+    expect(steps.find((step) => step.semanticActionId === 'moves.open')).toMatchObject({
+      expectedPath: '/rba-response',
+      expectedSurface: 'moves.response-chart',
+    });
     [
       'browse.category.deepest',
       'browse.products.all',

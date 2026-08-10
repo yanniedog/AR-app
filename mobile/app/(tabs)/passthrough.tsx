@@ -23,10 +23,13 @@ function weeklySummary(
   if (!pulse || pulse.banksMoved === 0) return `No tracked ${label} changes in the last 7 days.`;
   const up = pulse.hikes;
   const down = pulse.cuts;
+  const mixedSummary = pulse.mixed
+    ? ` and ${pulse.mixed} mixed move${pulse.mixed === 1 ? '' : 's'}`
+    : '';
   if (section === 'Mortgage') {
-    return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${down} cut${down === 1 ? '' : 's'} and ${up} increase${up === 1 ? '' : 's'}.`;
+    return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${down} cut${down === 1 ? '' : 's'}, ${up} increase${up === 1 ? '' : 's'}${mixedSummary}.`;
   }
-  return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${up} increase${up === 1 ? '' : 's'} and ${down} decrease${down === 1 ? '' : 's'}.`;
+  return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${up} increase${up === 1 ? '' : 's'}, ${down} decrease${down === 1 ? '' : 's'}${mixedSummary}.`;
 }
 
 export default function RateMovesTab() {

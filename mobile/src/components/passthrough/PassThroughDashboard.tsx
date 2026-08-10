@@ -470,7 +470,7 @@ export function PassThroughDashboard({
 
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
-    routeKey: '/passthrough',
+    routeKey: '/rba-response',
     datasetRevision: payload.run_date,
     renderRevision,
     actions,

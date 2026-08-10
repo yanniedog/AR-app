@@ -1,8 +1,10 @@
 import rawSampleCore from '../assets/sample/core.json';
 import { sampleCore } from '../src/data/sample';
 import {
+  bankHistoryPairKey,
   isExplicitTermDepositProduct,
   normalizeCoreSectionIntegrity,
+  quarantinedBankHistoryPairs,
 } from '../src/data/sectionIntegrity';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
 
@@ -94,6 +96,10 @@ describe('core section integrity', () => {
     expect(normalized.sections.Savings.rates).toEqual([saver]);
     expect(normalized.sections.TD).toBe(input.sections.TD);
     expect(normalized.sections.TD.rates).toEqual([validTd]);
+    expect([...quarantinedBankHistoryPairs(normalized)]).toEqual([
+      bankHistoryPairKey('MOVE Bank', 'Savings'),
+      bankHistoryPairKey('Great Southern Bank Business+', 'Savings'),
+    ]);
   });
 
   it('rebuilds Savings range, counts and per-provider aggregates', () => {
@@ -102,6 +108,8 @@ describe('core section integrity', () => {
       row({ provider: 'Bank A', product_key: 'A|1', rate_index: 2, rate: '0.04' }),
       row({ provider: 'Bank B', product_key: 'B|1', rate: '0.05' }),
       row({ provider: 'Bank C', product_key: 'C|invalid', rate: 'not-published' }),
+      row({ provider: 'Bank D', product_key: 'D|empty', rate: '' }),
+      row({ provider: 'Bank E', product_key: 'E|zero', rate: '0' }),
       row({ provider: 'MOVE Bank', product_key: 'MOVE|td', product_name: 'Term Deposit', rate: '0.054' }),
     ];
 

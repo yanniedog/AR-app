@@ -1,4 +1,15 @@
-import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats } from '../types';
+import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, SectionKey } from '../types';
+
+const bankHistoryQuarantine = new WeakMap<CorePayload, ReadonlySet<string>>();
+
+export function bankHistoryPairKey(provider: string, section: SectionKey): string {
+  return `${section}\u0000${provider}`;
+}
+
+/** Provider/section aggregates that cannot be separated safely after download. */
+export function quarantinedBankHistoryPairs(core: CorePayload): ReadonlySet<string> {
+  return bankHistoryQuarantine.get(core) ?? new Set<string>();
+}
 
 /**
  * Some data holders publish products explicitly named "Term Deposit" under the
@@ -30,8 +41,9 @@ function stats(values: number[]): RibbonStats {
 }
 
 function finiteRate(row: RateRow): number | null {
+  if (row.rate == null || row.rate === '') return null;
   const value = Number(row.rate);
-  return Number.isFinite(value) ? value : null;
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 /** Rebuild the complete producer-shaped ribbon after quarantining rows. */
@@ -88,7 +100,13 @@ export function normalizeCoreSectionIntegrity(core: CorePayload): CorePayload {
   const rates = savings.rates.filter((row) => !isExplicitTermDepositProduct(row));
   if (rates.length === savings.rates.length) return core;
 
-  return {
+  const quarantinedPairs = new Set(
+    savings.rates
+      .filter(isExplicitTermDepositProduct)
+      .map((row) => bankHistoryPairKey(row.provider, 'Savings')),
+  );
+
+  const normalized: CorePayload = {
     ...core,
     sections: {
       ...core.sections,
@@ -99,4 +117,6 @@ export function normalizeCoreSectionIntegrity(core: CorePayload): CorePayload {
       },
     },
   };
+  bankHistoryQuarantine.set(normalized, quarantinedPairs);
+  return normalized;
 }
