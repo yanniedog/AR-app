@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-09T22:49:47.597Z",
+  "generated_at": "2026-08-10T05:21:38.162Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -701,6 +701,14 @@
         "Reduce first-run and navigation friction (#173)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.135"
+    },
+    {
+      "version": "1.0.137",
+      "date": "2026-08-10",
+      "summaryBullets": [
+        "Calm rate discovery and quarantine misclassified deposits (#175)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.137"
     }
   ]
 }
