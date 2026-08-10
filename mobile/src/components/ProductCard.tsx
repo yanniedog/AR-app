@@ -61,6 +61,8 @@ export function ProductCard({
   selected,
   embedded = false,
   heroRate = false,
+  displayedRate,
+  displayedRateLabel,
   logoRenderStateId,
   onLogoRenderStateChange,
 }: {
@@ -74,6 +76,10 @@ export function ProductCard({
   embedded?: boolean;
   /** Emphasises the one displayed rate without repeating it above the product. */
   heroRate?: boolean;
+  /** Exact fraction used to rank this row when it differs from the headline. */
+  displayedRate?: number | string | null;
+  /** Metric-specific label for displayedRate, such as Ongoing or Comparison rate. */
+  displayedRateLabel?: string;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
@@ -91,12 +97,13 @@ export function ProductCard({
   );
   const tags = chips(row, section, qualifier);
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const rateLabel = rateValueLabel(section);
-  const rateText = formatRate(row.rate);
+  const rateLabel = displayedRateLabel ?? rateValueLabel(section);
+  const rateText = formatRate(displayedRate ?? row.rate);
+  const showingComparisonRate = displayedRateLabel === 'Comparison rate';
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
-    row.comparison_rate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
+    row.comparison_rate && !showingComparisonRate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
   }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
     rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
   }`;
@@ -237,7 +244,7 @@ export function ProductCard({
           }}
         >
           <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {compact ? 'Rate' : rateLabel}
+            {rateLabel}
           </AppText>
           <AppText
             variant={heroRate ? 'rateHero' : 'rate'}
@@ -245,7 +252,7 @@ export function ProductCard({
           >
             {rateText}
           </AppText>
-          {row.comparison_rate ? (
+          {row.comparison_rate && !showingComparisonRate ? (
             <AppText variant="tiny" color="textFaint" numberOfLines={1}>
               {formatRate(row.comparison_rate)} cmp
             </AppText>

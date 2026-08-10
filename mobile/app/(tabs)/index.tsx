@@ -311,6 +311,13 @@ export default function Home() {
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const heroRateLabel = section === 'Mortgage'
+    ? mortgageRateMetric === 'comparison' ? 'Comparison rate' : 'Interest rate'
+    : section === 'Savings' && depositRankMetric === 'base'
+      ? 'Ongoing rate'
+      : section === 'Savings'
+        ? 'Maximum rate'
+        : 'Rate';
   const scenarioSummary = useMemo(() => {
     if (section === 'Mortgage') {
       return {
@@ -530,6 +537,8 @@ export default function Home() {
                 section={section}
                 embedded
                 heroRate
+                displayedRate={heroRate}
+                displayedRateLabel={heroRateLabel}
                 onPress={openBestProduct}
                 onLongPress={() => openBank(activeBest.provider)}
                 logoRenderStateId={todayLogoIds[0]}

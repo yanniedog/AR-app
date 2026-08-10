@@ -12,7 +12,7 @@ import { Ribbon } from '../../src/components/Ribbon';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from '../../src/components/ui';
 import { HistoryExplorer, type HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
-import { SECTIONS } from '../../src/constants';
+import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../../src/data/historySelectors';
@@ -27,6 +27,7 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { rateValueLabel } from '../../src/lib/a11ySummaries';
 import { runStoreRetry } from '../../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../../src/lib/nav';
+import { auditActionString } from '../../src/lib/performanceAuditActionParams';
 import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
 import { yieldToPaintFrames } from '../../src/lib/yieldToUi';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -243,8 +244,12 @@ export default function Market() {
       'outlook.economy.lens.next': () => queueEconomyAuditAction('lens'),
       'outlook.economy.window.next': () => queueEconomyAuditAction('window'),
       'outlook.economy.date.previous': () => queueEconomyAuditAction('date'),
-      'outlook.snapshot.browse.first': () => {
-        openBrowse(activeSection);
+      'outlook.snapshot.browse.first': (...args: unknown[]) => {
+        const planned = auditActionString(args, 'section');
+        const target = planned && SECTION_ORDER.includes(planned as typeof activeSection)
+          ? planned as typeof activeSection
+          : activeSection;
+        openBrowse(target);
         return { expectedPath: '/browse' };
       },
     },
@@ -268,7 +273,7 @@ export default function Market() {
   });
   usePerformanceAuditProbe(surface, {
     id: 'bank-history', kind: 'data', required: prebuiltHistoryEnabled,
-    status: !prebuiltHistoryEnabled || historyModel ? 'ready' : historyBanksError ? 'error' : 'pending',
+    status: !prebuiltHistoryEnabled || historyBanks ? 'ready' : historyBanksError ? 'error' : 'pending',
     error: historyBanksError, datasetRevision, renderRevision,
   });
   usePerformanceAuditProbe(surface, {
