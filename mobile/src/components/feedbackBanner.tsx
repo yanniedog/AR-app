@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useRef, useState } from 'react';
+import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   FadeIn,
   FadeOut,
@@ -77,7 +78,15 @@ function resolveBannerSurface(
   };
 }
 
-export function OfflineBanner({ source, offline }: { source: string; offline: boolean }) {
+export function OfflineBanner({
+  source,
+  offline,
+  containerStyle,
+}: {
+  source: string;
+  offline: boolean;
+  containerStyle?: StyleProp<ViewStyle>;
+}) {
   const theme = useTheme();
   const payloadProgress = useStore((s) => s.payloadProgress);
   const refreshing = useStore((s) => s.refreshing);
@@ -146,7 +155,7 @@ export function OfflineBanner({ source, offline }: { source: string; offline: bo
     <Animated.View
       entering={FadeIn.duration(200)}
       exiting={FadeOut.duration(BANNER_FADE_MS)}
-      style={{ marginBottom: 12 }}
+      style={[{ marginBottom: 12 }, containerStyle]}
     >
       <Row
         gap={8}

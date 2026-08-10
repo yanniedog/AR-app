@@ -71,8 +71,14 @@ export function AppText({
   );
 }
 
-export function Card({ style, children, ...rest }: ViewProps) {
+export function Card({
+  style,
+  children,
+  variant = 'plain',
+  ...rest
+}: ViewProps & { variant?: 'plain' | 'outlined' | 'elevated' }) {
   const theme = useTheme();
+  const elevated = variant === 'elevated';
   return (
     <View
       style={[
@@ -80,8 +86,9 @@ export function Card({ style, children, ...rest }: ViewProps) {
           backgroundColor: theme.colors.card,
           borderRadius: theme.radius.lg,
           padding: theme.spacing(4),
-          ...(Platform.OS === 'android' ? { elevation: 1 } : null),
-          ...(Platform.OS === 'ios'
+          ...(variant === 'outlined' ? { borderWidth: 1, borderColor: theme.colors.border } : null),
+          ...(Platform.OS === 'android' && elevated ? { elevation: 1 } : null),
+          ...(Platform.OS === 'ios' && elevated
             ? {
                 shadowColor: theme.colors.shadow,
                 shadowOffset: { width: 0, height: 1 },
@@ -214,7 +221,7 @@ export function Button({
           paddingVertical: 13,
           borderRadius: theme.radius.md,
           backgroundColor: bg,
-          borderWidth: variant === 'ghost' ? 1 : 0,
+          borderWidth: variant === 'secondary' ? 1 : 0,
           borderColor: theme.colors.border,
           overflow: 'hidden',
           ...(disabled ? { opacity: 0.6 } : pressedOpacity(pressed, 0.85)),
@@ -231,6 +238,78 @@ export function Button({
         </>
       )}
     </Pressable>
+  );
+}
+
+export function SectionHeading({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle?: string;
+  action?: React.ReactNode;
+}) {
+  return (
+    <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <View style={{ flex: 1, paddingRight: action ? 12 : 0 }}>
+        <AppText variant="h3">{title}</AppText>
+        {subtitle ? (
+          <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
+            {subtitle}
+          </AppText>
+        ) : null}
+      </View>
+      {action}
+    </Row>
+  );
+}
+
+export function Disclosure({
+  title,
+  summary,
+  open,
+  onToggle,
+  children,
+  icon = 'chevron-down',
+}: {
+  title: string;
+  summary?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+  icon?: keyof typeof Ionicons.glyphMap;
+}) {
+  const theme = useTheme();
+  return (
+    <Card variant="outlined" style={{ padding: 0, overflow: 'hidden' }}>
+      <Pressable
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`${open ? 'Hide' : 'Show'} ${title}`}
+        accessibilityState={{ expanded: open }}
+        android_ripple={androidRipple(theme.colors.primaryMuted)}
+        style={{
+          minHeight: 64,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: theme.spacing(4),
+          paddingVertical: theme.spacing(3),
+          gap: theme.spacing(3),
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <AppText variant="body" weight="700">{title}</AppText>
+          {summary ? <AppText variant="small" color="textMuted">{summary}</AppText> : null}
+        </View>
+        <Ionicons
+          name={open ? 'chevron-up' : icon}
+          size={20}
+          color={theme.colors.textMuted}
+        />
+      </Pressable>
+      {open ? <View style={{ padding: theme.spacing(4), paddingTop: 0 }}>{children}</View> : null}
+    </Card>
   );
 }
 

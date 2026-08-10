@@ -159,7 +159,7 @@ export function LenderRaceChart({
           <Svg
             width={width}
             height={height}
-            importantForAccessibility="no-hide-descendants"
+            aria-hidden
           >
             {Array.from({ length: lanes }, (_, lane) => (
               <React.Fragment key={`lane-${lane}`}>

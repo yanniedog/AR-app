@@ -93,7 +93,7 @@ export function RateHeatCalendar({
         style={{ width: '100%' }}
       >
         {width > 0 ? (
-          <Svg width={gridW} height={gridH} importantForAccessibility="no-hide-descendants">
+          <Svg width={gridW} height={gridH} aria-hidden>
           {model.monthLabels.map((m) => (
             <SvgText
               key={`${m.weekIndex}-${m.label}`}

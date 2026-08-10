@@ -219,7 +219,7 @@ export function LifecycleChart({
         style={{ height, width: '100%' }}
       >
         {width > 0 && dates.length ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} aria-hidden>
             {[0, 0.5, 1].map((fraction) => {
               const value = yMin + (yMax - yMin) * fraction;
               const y = yAt(value);

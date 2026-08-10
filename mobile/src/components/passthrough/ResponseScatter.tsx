@@ -82,8 +82,8 @@ function ZoomButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled }}
       style={{
-        minWidth: 40,
-        minHeight: 40,
+        minWidth: 48,
+        minHeight: 48,
         paddingHorizontal: 10,
         borderRadius: theme.radius.md,
         borderWidth: 1,
@@ -233,7 +233,7 @@ export const ResponseScatter = memo(function ResponseScatter({
     <Svg
       width={plotSize.width}
       height={plotSize.height}
-      importantForAccessibility="no-hide-descendants"
+      aria-hidden
       onPress={(event) => {
         const { locationX, locationY } = event.nativeEvent;
         const result = resolveResponseScatterPress(

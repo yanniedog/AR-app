@@ -11,6 +11,7 @@ import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
+import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -254,10 +255,11 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
+    const core = normalizeCoreSectionIntegrity(b.core);
     if (sidecar && sidecar.coreSha === b.meta.coreSha) {
-      return { meta: sidecar, core: b.core };
+      return { meta: sidecar, core };
     }
-    return b;
+    return { ...b, core };
   },
 
   async readMeta(): Promise<CacheMeta | null> {

@@ -58,6 +58,8 @@ export function ProductCard({
   onPress,
   selectMode,
   selected,
+  embedded = false,
+  heroRate = false,
   logoRenderStateId,
   onLogoRenderStateChange,
 }: {
@@ -66,6 +68,10 @@ export function ProductCard({
   onPress?: () => void;
   selectMode?: boolean;
   selected?: boolean;
+  /** Removes surrounding chrome when this card is already inside a parent surface. */
+  embedded?: boolean;
+  /** Emphasises the one displayed rate without repeating it above the product. */
+  heroRate?: boolean;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
@@ -101,13 +107,13 @@ export function ProductCard({
         flexDirection: 'row',
         alignItems: compact ? 'flex-start' : 'center',
         gap: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 14,
-        backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.card,
+        paddingVertical: embedded ? 0 : 12,
+        paddingHorizontal: embedded ? 0 : 14,
+        backgroundColor: selected ? theme.colors.primaryMuted : embedded ? 'transparent' : theme.colors.card,
         borderRadius: theme.radius.lg,
-        borderWidth: 1,
+        borderWidth: embedded ? 0 : 1,
         borderColor: selected ? theme.colors.primary : theme.colors.border,
-        marginBottom: 10,
+        marginBottom: embedded ? 0 : 10,
       }}
     >
       <Pressable
@@ -229,7 +235,7 @@ export function ProductCard({
             {compact ? 'Rate' : rateLabel}
           </AppText>
           <AppText
-            variant="rate"
+            variant={heroRate ? 'rateHero' : 'rate'}
             style={{ color: lowerIsBetter ? theme.colors.success : theme.colors.primary }}
           >
             {rateText}

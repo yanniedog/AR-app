@@ -186,7 +186,7 @@ export const RbaChart = React.memo(function RbaChart({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} aria-hidden>
           <Line x1={padL} y1={y(maxR)} x2={width - padR} y2={y(maxR)} stroke={theme.colors.border} strokeWidth={1} />
           <Line x1={padL} y1={y(minR)} x2={width - padR} y2={y(minR)} stroke={theme.colors.border} strokeWidth={1} />
           <SvgText x={width - padR + 4} y={y(maxR) + 4} fontSize={10} fill={theme.colors.textFaint}>

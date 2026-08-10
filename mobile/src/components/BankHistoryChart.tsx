@@ -369,7 +369,7 @@ export function BankHistoryChart({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} aria-hidden>
             {[0, 0.5, 1].map((frac) => {
               const v = yDomain.min + span * frac;
               const y = yAt(v);

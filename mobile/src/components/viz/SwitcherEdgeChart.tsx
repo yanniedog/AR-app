@@ -151,7 +151,7 @@ export function SwitcherEdgeChart({
           <Svg
             width={width}
             height={height}
-            importantForAccessibility="no-hide-descendants"
+            aria-hidden
           >
             {[0, 0.5, 1].map((frac) => {
               const bps = yMax * frac;

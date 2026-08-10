@@ -202,7 +202,7 @@ export function EconomicChartFrame({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} aria-hidden>
             {targetBand ? (
               <Rect
                 x={padL}
