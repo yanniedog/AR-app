@@ -134,6 +134,7 @@ export default function Market() {
     if (!core) return [];
     return interestSections.flatMap((key) => {
       const data = core.sections[key];
+      if (!data) return [];
       const stats = resolveSectionRibbonStats(
         data,
         data.rates,
@@ -369,7 +370,7 @@ export default function Market() {
                 if (advancedViews) setExplorerMode('edge');
               }}
             />
-            {historyBanksError ? (
+            {prebuiltHistoryEnabled && historyBanksError ? (
               <Row style={{ justifyContent: 'space-between' }}>
                 <AppText variant="small" color="textMuted" style={{ flex: 1 }}>
                   Showing available history · latest history check failed.

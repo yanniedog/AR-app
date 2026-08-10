@@ -5,6 +5,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
 
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from './decorativeSvgAccessibility';
+
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
 import {
   axisLabelInterval,
@@ -369,7 +371,7 @@ export function BankHistoryChart({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} aria-hidden>
+          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
             {[0, 0.5, 1].map((frac) => {
               const v = yDomain.min + span * frac;
               const y = yAt(v);

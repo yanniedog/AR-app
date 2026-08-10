@@ -4,6 +4,7 @@ import React, { memo, startTransition, useCallback, useEffect, useMemo, useRef, 
 import { Pressable, View } from 'react-native';
 
 import { SECTION_ORDER, SECTIONS } from '../../constants';
+import { sectionSegmentOptions } from '../../data/interests';
 import {
   rbaPassThroughDecisionList,
   rbaPassThroughMultiSection,
@@ -184,12 +185,14 @@ const AnalysisHeader = memo(function AnalysisHeader({
   model,
   decisions,
   section,
+  sectionOptions,
   onSectionChange,
   onDecisionChange,
 }: {
   model: MultiSectionPassThroughModel;
   decisions: ReturnType<typeof rbaPassThroughDecisionList>;
   section: SectionKey;
+  sectionOptions: ReturnType<typeof sectionSegmentOptions>;
   onSectionChange: (section: SectionKey) => void;
   onDecisionChange: (date: string) => void;
 }) {
@@ -240,7 +243,7 @@ const AnalysisHeader = memo(function AnalysisHeader({
       </Card>
 
       <SegmentedControl
-        options={SECTION_ORDER.map((key) => ({ value: key, label: SECTIONS[key].short }))}
+        options={sectionOptions}
         value={section}
         onChange={onSectionChange}
       />
@@ -342,6 +345,7 @@ export function PassThroughDashboard({
   initialDecisionDate,
   section: controlledSection,
   onSectionChange: controlledSectionChange,
+  interests,
 }: {
   payload: BankInsightsPayload;
   rba: RbaEntry[];
@@ -349,6 +353,7 @@ export function PassThroughDashboard({
   initialDecisionDate?: string;
   section?: SectionKey;
   onSectionChange?: (section: SectionKey) => void;
+  interests?: SectionKey[];
 }) {
   const [localSection, setLocalSection] = useState<SectionKey>(controlledSection ?? 'Mortgage');
   const section = controlledSection ?? localSection;
@@ -362,6 +367,8 @@ export function PassThroughDashboard({
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [listMounted, setListMounted] = useState(false);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
+  const sectionOptions = useMemo(() => sectionSegmentOptions(interests ?? SECTION_ORDER), [interests]);
+  const availableSections = useMemo(() => sectionOptions.map((option) => option.value), [sectionOptions]);
   const registerLogosLoaded = useRegisterLogosStore((state) => state.loaded);
   const listRef = useRef<FlashListRef<LenderRow>>(null);
   const decisions = useMemo(
@@ -434,12 +441,12 @@ export function PassThroughDashboard({
     },
     'moves.section.next': (parameters: unknown) => {
       const planned = actionSection(parameters);
-      if (planned) {
+      if (planned && availableSections.includes(planned)) {
         onSectionChange(planned);
         return;
       }
-      const index = Math.max(0, SECTION_ORDER.indexOf(section));
-      onSectionChange(SECTION_ORDER[(index + 1) % SECTION_ORDER.length]);
+      const index = Math.max(0, availableSections.indexOf(section));
+      onSectionChange(availableSections[(index + 1) % availableSections.length]);
     },
     'moves.response-chart.zoom-in': () => setChartZoom((current) => Math.min(3, current + 0.5)),
     'moves.response-chart.reset': () => setChartZoom(1),
@@ -459,7 +466,7 @@ export function PassThroughDashboard({
       }
       return { unavailableReason: 'No lender is rendered for drill-down' };
     },
-  }), [activeDate, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
+  }), [activeDate, availableSections, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
 
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
@@ -534,11 +541,12 @@ export function PassThroughDashboard({
         model={model}
         decisions={decisions}
         section={section}
+        sectionOptions={sectionOptions}
         onSectionChange={onSectionChange}
         onDecisionChange={onDecisionChange}
       />
     );
-  }, [model, decisions, section, onSectionChange, onDecisionChange]);
+  }, [model, decisions, section, sectionOptions, onSectionChange, onDecisionChange]);
 
   const compareControls = useMemo(
     () => (

@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 import { SECTIONS } from '../../constants';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import type {
   MultiSectionPassThroughModel,
   PassThroughSourceDecision,
@@ -233,7 +234,7 @@ export const ResponseScatter = memo(function ResponseScatter({
     <Svg
       width={plotSize.width}
       height={plotSize.height}
-      aria-hidden
+      {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
       onPress={(event) => {
         const { locationX, locationY } = event.nativeEvent;
         const result = resolveResponseScatterPress(

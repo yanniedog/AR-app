@@ -19,6 +19,7 @@ export default function RbaResponseScreen() {
   const error = useStore((state) => state.bankInsightsError);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
+  const interests = useStore((state) => state.prefs.interests);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
@@ -42,12 +43,17 @@ export default function RbaResponseScreen() {
 
   if (!core) return <ScreenSkeleton />;
   if (!payload) {
+    const filteredEmpty = rawPayload !== null && !error;
     return (
       <View style={{ flex: 1, justifyContent: 'center', backgroundColor: theme.colors.bg, padding: 24 }}>
         <Card variant="outlined" style={{ gap: 12 }}>
-          <AppText variant="h3">RBA response analysis unavailable</AppText>
+          <AppText variant="h3">
+            {filteredEmpty ? 'No compatible RBA response analysis' : 'RBA response analysis unavailable'}
+          </AppText>
           <AppText variant="small" color="textMuted">
-            {error ?? 'Preparing the observed lender response windows…'}
+            {filteredEmpty
+              ? 'No observed lender response windows match the products currently included in your settings.'
+              : error ?? 'Preparing the observed lender response windows…'}
           </AppText>
           {error ? (
             <Button
@@ -73,6 +79,7 @@ export default function RbaResponseScreen() {
       initialDecisionDate={decisionDate}
       section={activeSection}
       onSectionChange={setActiveSection}
+      interests={interests}
     />
   );
 }

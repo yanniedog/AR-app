@@ -525,21 +525,16 @@ export default function Home() {
               ) : null}
             </View>
             {activeBest ? (
-              <Pressable
+              <ProductCard
+                row={activeBest}
+                section={section}
+                embedded
+                heroRate
+                onPress={openBestProduct}
                 onLongPress={() => openBank(activeBest.provider)}
-                delayLongPress={450}
-                accessibilityHint="Long press to open lender profile"
-              >
-                <ProductCard
-                  row={activeBest}
-                  section={section}
-                  embedded
-                  heroRate
-                  onPress={openBestProduct}
-                  logoRenderStateId={todayLogoIds[0]}
-                  onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
-                />
-              </Pressable>
+                logoRenderStateId={todayLogoIds[0]}
+                onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
+              />
             ) : null}
             {bestNote ? (
               <AppText
@@ -556,7 +551,7 @@ export default function Home() {
               <Pressable
                 onPress={() => router.push('/profile')}
                 accessibilityRole="button"
-                accessibilityLabel="Refine to my situation"
+                accessibilityLabel="Refine what matches me"
                 accessibilityHint="Set the loan or account attributes that apply to you"
                 style={({ pressed }) => ({
                   marginTop: theme.spacing(3),

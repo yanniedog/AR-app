@@ -33,7 +33,6 @@ export default function RateMovesTab() {
   const core = useStore((state) => state.core);
   const rawPayload = useStore((state) => state.bankInsights);
   const error = useStore((state) => state.bankInsightsError);
-  const calendar = useStore((state) => state.rbaCalendar);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
@@ -72,6 +71,7 @@ export default function RateMovesTab() {
     );
   }, [core, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
+  const filteredEmpty = rawPayload !== null && payload === null && !error;
 
   if (!core) return <ScreenSkeleton />;
 
@@ -94,11 +94,24 @@ export default function RateMovesTab() {
       <View style={{ gap: 10 }}>
         <SectionHeading
           title="Latest changes"
-          subtitle={payload ? `Updated ${formatRunDate(payload.run_date)}` : 'Preparing the latest observed changes'}
+          subtitle={
+            payload
+              ? `Updated ${formatRunDate(payload.run_date)}`
+              : filteredEmpty
+                ? 'No observations match the current product settings'
+                : 'Preparing the latest observed changes'
+          }
         />
         {payload ? (
           <Card>
             <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14} />
+          </Card>
+        ) : filteredEmpty ? (
+          <Card variant="outlined" style={{ gap: 8 }}>
+            <AppText variant="body" weight="700">No compatible rate moves</AppText>
+            <AppText variant="small" color="textMuted">
+              No observed lender changes match the products currently included in your settings.
+            </AppText>
           </Card>
         ) : error ? (
           <Card variant="outlined" style={{ gap: 12 }}>
@@ -124,14 +137,16 @@ export default function RateMovesTab() {
         ) : null}
       </View>
 
-      <Disclosure
-        title="Biggest 30-day movers"
-        summary="See which lenders changed the most"
-        open={moversOpen}
-        onToggle={() => setMoversOpen((open) => !open)}
-      >
-        <MoversLeaderboard payload={payload} section={activeSection} />
-      </Disclosure>
+      {payload ? (
+        <Disclosure
+          title="Biggest 30-day movers"
+          summary="See which lenders changed the most"
+          open={moversOpen}
+          onToggle={() => setMoversOpen((open) => !open)}
+        >
+          <MoversLeaderboard payload={payload} section={activeSection} />
+        </Disclosure>
+      ) : null}
 
       <Card variant="outlined" style={{ gap: 10 }}>
         <SectionHeading
@@ -143,7 +158,7 @@ export default function RateMovesTab() {
           variant="secondary"
           icon="analytics-outline"
           onPress={() => router.push('/rba-response')}
-          disabled={!payload || !calendar}
+          disabled={!payload}
         />
       </Card>
 

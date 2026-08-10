@@ -56,6 +56,7 @@ export function ProductCard({
   row,
   section,
   onPress,
+  onLongPress,
   selectMode,
   selected,
   embedded = false,
@@ -66,6 +67,7 @@ export function ProductCard({
   row: RateRow;
   section: SectionKey;
   onPress?: () => void;
+  onLongPress?: () => void;
   selectMode?: boolean;
   selected?: boolean;
   /** Removes surrounding chrome when this card is already inside a parent surface. */
@@ -118,8 +120,11 @@ export function ProductCard({
     >
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
+        accessibilityHint={onLongPress ? 'Long press to open lender profile' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
