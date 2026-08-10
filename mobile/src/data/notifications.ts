@@ -374,7 +374,7 @@ export function computeChanges(
     messages.push({
       title: 'RBA cash rate changed',
       body: `Cash rate is now ${newRba.rate.toFixed(2)}% (was ${oldRba.rate.toFixed(2)}%).`,
-      href: `${DEEP_LINK_SCHEME}://(tabs)/passthrough?date=${encodeURIComponent(newRba.date)}`,
+      href: `${DEEP_LINK_SCHEME}://rba-response?date=${encodeURIComponent(newRba.date)}`,
     });
   }
 

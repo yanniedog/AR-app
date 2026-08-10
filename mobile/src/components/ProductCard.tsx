@@ -56,16 +56,30 @@ export function ProductCard({
   row,
   section,
   onPress,
+  onLongPress,
   selectMode,
   selected,
+  embedded = false,
+  heroRate = false,
+  displayedRate,
+  displayedRateLabel,
   logoRenderStateId,
   onLogoRenderStateChange,
 }: {
   row: RateRow;
   section: SectionKey;
   onPress?: () => void;
+  onLongPress?: () => void;
   selectMode?: boolean;
   selected?: boolean;
+  /** Removes surrounding chrome when this card is already inside a parent surface. */
+  embedded?: boolean;
+  /** Emphasises the one displayed rate without repeating it above the product. */
+  heroRate?: boolean;
+  /** Exact fraction used to rank this row when it differs from the headline. */
+  displayedRate?: number | string | null;
+  /** Metric-specific label for displayedRate, such as Ongoing or Comparison rate. */
+  displayedRateLabel?: string;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
@@ -83,12 +97,13 @@ export function ProductCard({
   );
   const tags = chips(row, section, qualifier);
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const rateLabel = rateValueLabel(section);
-  const rateText = formatRate(row.rate);
+  const rateLabel = displayedRateLabel ?? rateValueLabel(section);
+  const rateText = formatRate(displayedRate ?? row.rate);
+  const showingComparisonRate = displayedRateLabel === 'Comparison rate';
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
-    row.comparison_rate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
+    row.comparison_rate && !showingComparisonRate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
   }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
     rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
   }`;
@@ -101,19 +116,22 @@ export function ProductCard({
         flexDirection: 'row',
         alignItems: compact ? 'flex-start' : 'center',
         gap: 8,
-        paddingVertical: 12,
-        paddingHorizontal: 14,
-        backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.card,
+        paddingVertical: embedded ? 0 : 12,
+        paddingHorizontal: embedded ? 0 : 14,
+        backgroundColor: selected ? theme.colors.primaryMuted : embedded ? 'transparent' : theme.colors.card,
         borderRadius: theme.radius.lg,
-        borderWidth: 1,
+        borderWidth: embedded ? 0 : 1,
         borderColor: selected ? theme.colors.primary : theme.colors.border,
-        marginBottom: 10,
+        marginBottom: embedded ? 0 : 10,
       }}
     >
       <Pressable
         onPress={onPress}
+        onLongPress={onLongPress}
+        delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
+        accessibilityHint={onLongPress ? 'Long press to open lender profile' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
@@ -226,15 +244,15 @@ export function ProductCard({
           }}
         >
           <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-            {compact ? 'Rate' : rateLabel}
+            {rateLabel}
           </AppText>
           <AppText
-            variant="rate"
+            variant={heroRate ? 'rateHero' : 'rate'}
             style={{ color: lowerIsBetter ? theme.colors.success : theme.colors.primary }}
           >
             {rateText}
           </AppText>
-          {row.comparison_rate ? (
+          {row.comparison_rate && !showingComparisonRate ? (
             <AppText variant="tiny" color="textFaint" numberOfLines={1}>
               {formatRate(row.comparison_rate)} cmp
             </AppText>

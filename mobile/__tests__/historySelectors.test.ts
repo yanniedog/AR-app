@@ -6,6 +6,7 @@ import {
   shouldEnsurePrebuiltBankHistory,
 } from '../src/data/historySelectors';
 import type { BankInsightsPayload } from '../src/data/bankInsights';
+import { normalizeCoreSectionIntegrity } from '../src/data/sectionIntegrity';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { BankHistoryCache, CorePayload, SectionKey } from '../src/types';
 
@@ -154,5 +155,51 @@ describe('historySelectors', () => {
     );
     // Falls back to current-day ribbon rather than the unsafe full-catalogue series.
     expect(model?.dates).toEqual([sample.run_date]);
+  });
+
+  it('withholds contaminated prebuilt Savings history after section quarantine', () => {
+    const normalized = normalizeCoreSectionIntegrity(sample);
+    const insights: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: normalized.run_date,
+      run_dates: ['2026-08-04', normalized.run_date],
+      banks: {
+        'Clean Bank': {
+          Savings: {
+            median: [0.04, 0.041],
+            best: [0.042, 0.043],
+            count: [2, 2],
+          },
+        },
+      },
+      events: [],
+    };
+
+    const model = selectBankHistoryChartModel(
+      {
+        core: normalized,
+        includeNonStandard: true,
+        bankInsights: insights,
+        historyBanks: {
+          schema_version: 1,
+          run_date: normalized.run_date,
+          run_dates: ['2026-08-04', normalized.run_date],
+          sections: {
+            Savings: {
+              points: [
+                { date: '2026-08-04', min: 0.5, max: 0.6, mean: 0.55, median: 0.55, count: 10 },
+                { date: normalized.run_date, min: 0.51, max: 0.61, mean: 0.56, median: 0.56, count: 10 },
+              ],
+            },
+          },
+        },
+      },
+      'Savings',
+      'All',
+    );
+
+    expect(model?.dates).toEqual(['2026-08-04', normalized.run_date]);
+    expect(model?.points[0].min).toBeCloseTo(0.04, 8);
+    expect(model?.points[1].max).toBeCloseTo(0.043, 8);
   });
 });

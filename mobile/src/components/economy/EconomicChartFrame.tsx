@@ -10,6 +10,7 @@ import { buildLinePath } from '../../lib/chartSvgPaths';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
 
 export interface EconomicChartSeries {
@@ -202,7 +203,7 @@ export function EconomicChartFrame({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
             {targetBand ? (
               <Rect
                 x={padL}

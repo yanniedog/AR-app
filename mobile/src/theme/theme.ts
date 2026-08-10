@@ -25,10 +25,9 @@ export interface Theme {
 
 const base = {
   spacing: (n: number) => n * 4,
-  // Dashboard shell radii: panels/cards 12px, stat chips 8px, hero title scale ~1.35rem.
-  radius: { sm: 8, md: 12, lg: 12, xl: 16, pill: 999 },
-  font: { h1: 28, h2: 22, h3: 16, body: 15, small: 13, tiny: 11, rate: 20, rateHero: 28 },
-  lineHeight: { h1: 34, h2: 28, h3: 22, body: 22, small: 18, tiny: 16, rate: 24, rateHero: 34 },
+  radius: { sm: 9, md: 14, lg: 18, xl: 24, pill: 999 },
+  font: { h1: 28, h2: 22, h3: 17, body: 15, small: 14, tiny: 12, rate: 21, rateHero: 30 },
+  lineHeight: { h1: 35, h2: 29, h3: 23, body: 22, small: 20, tiny: 17, rate: 26, rateHero: 36 },
 };
 
 export const darkTheme: Theme = { dark: true, colors: DARK, ...base };
@@ -41,7 +40,7 @@ function isDarkMode(mode: ThemeMode, scheme: ColorSchemeName | null | undefined)
   return resolved !== 'light';
 }
 
-/** Resolve persisted theme mode + OS appearance to a static fallback theme object. */
+/** Resolve persisted theme mode + OS appearance to the app's stable theme object. */
 export function resolveTheme(mode: ThemeMode, scheme: ColorSchemeName | null | undefined): Theme {
   return isDarkMode(mode, scheme) ? darkTheme : lightTheme;
 }

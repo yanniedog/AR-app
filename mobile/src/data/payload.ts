@@ -11,6 +11,7 @@ import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
 import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
+import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
@@ -301,7 +302,7 @@ export async function downloadCore(
     startedAt: parseStarted,
     phaseComplete: false,
   });
-  const core = await parseJsonHeavy<CorePayload>(text);
+  const core = normalizeCoreSectionIntegrity(await parseJsonHeavy<CorePayload>(text));
   // Leave parse incomplete until the caller finishes cache install — otherwise
   // the bar hits 100% while writeBundle is still flushing multi-MB JSON.
   emit(opts.onProgress, {

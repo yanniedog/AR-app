@@ -1,8 +1,4 @@
-/**
- * App-facing color tokens. Runtime values come from Material 3 dynamic/system
- * schemes mapped in `m3Palette.ts`; DARK/LIGHT remain static fallbacks for tests
- * and non-M3 paths.
- */
+/** App-facing color tokens with stable meaning in both appearance modes. */
 export interface Palette {
   bg: string;
   surface: string;
@@ -39,17 +35,17 @@ export function withAlpha(hex: string, alpha: number): string {
 }
 
 export const DARK: Palette = {
-  bg: '#0b0e11', surface: '#161d26', surfaceAlt: '#12181f', card: '#1b2530', border: '#2a3442',
-  text: '#edf3f9', textMuted: '#98a6b5', textFaint: '#6f7d8c', primary: '#2563eb', primaryMuted: '#1e2a3d',
-  onPrimary: '#ffffff', success: '#1fb978', warning: '#f59e0b', danger: '#ef4444', chip: '#1b2530',
-  chipText: '#c5ced8', shadow: '#00000088', skeleton: '#212d3a', overlay: '#05080cb8',
-  rba: '#f59e0b', onRba: '#0b0e11', rateLoan: '#1fb978', rateDeposit: '#3b82f6', favorite: '#eab308',
+  bg: '#0d1117', surface: '#141a22', surfaceAlt: '#19212b', card: '#171e27', border: '#2b3542',
+  text: '#f2f5f8', textMuted: '#a9b4c0', textFaint: '#7f8c9a', primary: '#84adff', primaryMuted: '#1d2b43',
+  onPrimary: '#08111f', success: '#69c89d', warning: '#e9b66d', danger: '#f08c82', chip: '#202936',
+  chipText: '#d1d8e0', shadow: '#00000066', skeleton: '#202a36', overlay: '#05080cb8',
+  rba: '#e9b66d', onRba: '#15100a', rateLoan: '#69c89d', rateDeposit: '#84adff', favorite: '#e7c466',
 };
 
 export const LIGHT: Palette = {
-  bg: '#f3f6fa', surface: '#ffffff', surfaceAlt: '#edf2f8', card: '#ffffff', border: '#dce3eb',
-  text: '#102033', textMuted: '#4f6276', textFaint: '#7a8a9a', primary: '#2563eb', primaryMuted: '#e8effd',
-  onPrimary: '#ffffff', success: '#0a6d49', warning: '#8a4b00', danger: '#c2410c', chip: '#eef3f8',
-  chipText: '#24364a', shadow: '#10203316', skeleton: '#e7ecf4', overlay: '#10203347',
-  rba: '#b45309', onRba: '#ffffff', rateLoan: '#0a6d49', rateDeposit: '#2563eb', favorite: '#ca8a04',
+  bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#edf1f6', card: '#ffffff', border: '#d8e0e9',
+  text: '#172231', textMuted: '#526275', textFaint: '#748497', primary: '#285ea8', primaryMuted: '#e4edfb',
+  onPrimary: '#ffffff', success: '#187451', warning: '#8a560e', danger: '#b44137', chip: '#edf2f7',
+  chipText: '#304257', shadow: '#17223112', skeleton: '#e5eaf0', overlay: '#17223147',
+  rba: '#9a5d0d', onRba: '#ffffff', rateLoan: '#187451', rateDeposit: '#285ea8', favorite: '#9b6d08',
 };

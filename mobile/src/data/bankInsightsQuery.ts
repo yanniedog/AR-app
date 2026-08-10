@@ -304,6 +304,7 @@ export interface MarketPulse {
   banksMoved: number;
   cuts: number;
   hikes: number;
+  mixed: number;
   sinceDate: string;
 }
 
@@ -320,6 +321,7 @@ export function marketPulse(
   const movers = new Set<string>();
   let cuts = 0;
   let hikes = 0;
+  let mixed = 0;
   let sinceDate = payload.run_dates[payload.run_dates.length - 1];
   for (const event of payload.events) {
     if (sections && !sections.includes(event.section)) continue;
@@ -328,8 +330,8 @@ export function marketPulse(
     movers.add(event.provider);
     if (event.dir === 'cut') cuts += 1;
     else if (event.dir === 'hike') hikes += 1;
+    else mixed += 1;
     if (event.date < sinceDate) sinceDate = event.date;
   }
-  return { banksMoved: movers.size, cuts, hikes, sinceDate };
+  return { banksMoved: movers.size, cuts, hikes, mixed, sinceDate };
 }
-

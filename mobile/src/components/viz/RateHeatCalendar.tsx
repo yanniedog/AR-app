@@ -9,6 +9,7 @@ import type { BankHistoryPoint, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartSliceControls } from '../charts/ChartSliceControls';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
 
 const CELL_GAP = 3;
@@ -93,7 +94,7 @@ export function RateHeatCalendar({
         style={{ width: '100%' }}
       >
         {width > 0 ? (
-          <Svg width={gridW} height={gridH} importantForAccessibility="no-hide-descendants">
+          <Svg width={gridW} height={gridH} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
           {model.monthLabels.map((m) => (
             <SvgText
               key={`${m.weekIndex}-${m.label}`}

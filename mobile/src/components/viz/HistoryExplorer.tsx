@@ -45,6 +45,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   onWindowChange,
   auditRevision,
   onLeaderLogoReadiness,
+  showModePicker = true,
 }: {
   section: SectionKey;
   historyModel: BankHistoryChartModel | null;
@@ -67,6 +68,8 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   onWindowChange?: (window: HistoryWindow) => void;
   auditRevision?: string;
   onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
+  /** Keeps the default Market view calm; advanced lenses can be disclosed on demand. */
+  showModePicker?: boolean;
 }) {
   const [localMode, setLocalMode] = useState<HistoryViewMode>(controlledMode ?? 'edge');
   const [localWindow, setLocalWindow] = useState<HistoryWindow>('90D');
@@ -103,22 +106,26 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
 
   return (
     <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-        <Row gap={6}>
-          {modes.map((m) => (
-            <Chip
-              key={m}
-              label={MODE_META[m].label}
-              icon={MODE_META[m].icon}
-              selected={activeMode === m}
-              onPress={() => setMode(m)}
-            />
-          ))}
-        </Row>
-      </ScrollView>
-      <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-        {MODE_META[activeMode].blurb}
-      </AppText>
+      {showModePicker ? (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+            <Row gap={6}>
+              {modes.map((m) => (
+                <Chip
+                  key={m}
+                  label={MODE_META[m].label}
+                  icon={MODE_META[m].icon}
+                  selected={activeMode === m}
+                  onPress={() => setMode(m)}
+                />
+              ))}
+            </Row>
+          </ScrollView>
+          <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+            {MODE_META[activeMode].blurb}
+          </AppText>
+        </>
+      ) : null}
       {standardOnly &&
       !standardFilterWarming &&
       (activeMode === 'calendar' || activeMode === 'edge') &&

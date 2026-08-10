@@ -491,7 +491,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         pathname: '/projections',
         params: section ? { section } : {},
       } as unknown as Href;
-    case 'moves.open': return '/passthrough' as Href;
+    case 'moves.open': return '/rba-response' as Href;
     case 'outlook.open': return '/trends' as Href;
     case 'saved.open': return '/watchlist' as Href;
     case 'profile.open': return '/profile' as Href;

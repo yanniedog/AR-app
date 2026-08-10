@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 
-import { HomeHero, SpringOnNewData } from '../../src/components/HomeHero';
+import { HomeHero } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
 import { IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../src/components/feedback';
 import { ScreenScrollView } from '../../src/components/Screen';
@@ -311,6 +311,13 @@ export default function Home() {
     : profileCount > 0
       ? heroBest
       : heroBest ?? (meta.lowerIsBetter ? stats.min : stats.max);
+  const heroRateLabel = section === 'Mortgage'
+    ? mortgageRateMetric === 'comparison' ? 'Comparison rate' : 'Interest rate'
+    : section === 'Savings' && depositRankMetric === 'base'
+      ? 'Ongoing rate'
+      : section === 'Savings'
+        ? 'Maximum rate'
+        : 'Rate';
   const scenarioSummary = useMemo(() => {
     if (section === 'Mortgage') {
       return {
@@ -448,9 +455,7 @@ export default function Home() {
     ? `${productCount.toLocaleString()} products from ${lenderCount} lenders`
     : `${lenderCount} lenders`;
   const sectionAccent = meta.accentColor;
-  const rateInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const bestNote = conditionalNote(activeBest, section);
-  const heroDataKey = todayRenderRevision;
 
   return (
     <ScreenScrollView
@@ -480,7 +485,7 @@ export default function Home() {
       ) : null}
 
       <SectionCrossfade section={section}>
-      <Card style={{ borderColor: `${sectionAccent}44` }}>
+      <Card variant="outlined" style={{ borderColor: `${sectionAccent}44` }}>
         {!ratesReady ? (
           <View style={{ gap: theme.spacing(3) }}>
             <View>
@@ -509,51 +514,45 @@ export default function Home() {
           </View>
         ) : (
           <>
-            <SpringOnNewData dataKey={heroDataKey}>
-              <Row
-                style={{
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  marginBottom: activeBest ? theme.spacing(3) : 0,
-                }}
-              >
-                <View style={{ flex: 1, paddingRight: theme.spacing(3) }}>
-                  <AppText variant="tiny" color="textFaint" weight="700">
-                    BEST IN {meta.title.toUpperCase()}
-                  </AppText>
-                  <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
-                    {meta.lowerIsBetter ? 'Lowest' : 'Top'} rate today
-                    {profileCount > 0 ? ' · matches your profile' : ''}
-                  </AppText>
-                  <AppText variant="rateHero" style={{ color: rateInk, marginTop: theme.spacing(1) }}>
-                    {formatRate(heroRate)}
-                  </AppText>
-                  {bestNote ? (
-                    <AppText
-                      variant="tiny"
-                      weight="700"
-                      style={{ color: theme.colors.warning, marginTop: theme.spacing(1) }}
-                    >
-                      {bestNote}
-                    </AppText>
-                  ) : null}
-                </View>
-              </Row>
-            </SpringOnNewData>
+            <View style={{ marginBottom: activeBest ? theme.spacing(4) : 0 }}>
+              <AppText variant="h3">Best match today</AppText>
+              <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
+                {meta.title}{profileCount > 0 ? ' · matched to your profile' : ' · broadly available'}
+              </AppText>
+              {!activeBest ? (
+                <AppText
+                  variant="rateHero"
+                  style={{
+                    color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit,
+                    marginTop: theme.spacing(2),
+                  }}
+                >
+                  {formatRate(heroRate)}
+                </AppText>
+              ) : null}
+            </View>
             {activeBest ? (
-              <Pressable
+              <ProductCard
+                row={activeBest}
+                section={section}
+                embedded
+                heroRate
+                displayedRate={heroRate}
+                displayedRateLabel={heroRateLabel}
+                onPress={openBestProduct}
                 onLongPress={() => openBank(activeBest.provider)}
-                delayLongPress={450}
-                accessibilityHint="Long press to open lender profile"
+                logoRenderStateId={todayLogoIds[0]}
+                onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
+              />
+            ) : null}
+            {bestNote ? (
+              <AppText
+                variant="small"
+                weight="700"
+                style={{ color: theme.colors.warning, marginTop: theme.spacing(2) }}
               >
-                <ProductCard
-                  row={activeBest}
-                  section={section}
-                  onPress={openBestProduct}
-                  logoRenderStateId={todayLogoIds[0]}
-                  onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
-                />
-              </Pressable>
+                {bestNote}
+              </AppText>
             ) : null}
             {profileCount === 0 ? (
               // Personalisation is offered here, against a real result, rather
@@ -561,7 +560,7 @@ export default function Home() {
               <Pressable
                 onPress={() => router.push('/profile')}
                 accessibilityRole="button"
-                accessibilityLabel="Refine to my situation"
+                accessibilityLabel="Refine what matches me"
                 accessibilityHint="Set the loan or account attributes that apply to you"
                 style={({ pressed }) => ({
                   marginTop: theme.spacing(3),
@@ -569,7 +568,7 @@ export default function Home() {
                 })}
               >
                 <AppText variant="small" color="primary" weight="700">
-                  Not quite right? Refine to my situation →
+                  Refine what matches me
                 </AppText>
               </Pressable>
             ) : null}

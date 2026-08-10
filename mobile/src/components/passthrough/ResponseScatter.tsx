@@ -4,6 +4,7 @@ import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 
 import { SECTIONS } from '../../constants';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import type {
   MultiSectionPassThroughModel,
   PassThroughSourceDecision,
@@ -82,8 +83,8 @@ function ZoomButton({
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled }}
       style={{
-        minWidth: 40,
-        minHeight: 40,
+        minWidth: 48,
+        minHeight: 48,
         paddingHorizontal: 10,
         borderRadius: theme.radius.md,
         borderWidth: 1,
@@ -233,7 +234,7 @@ export const ResponseScatter = memo(function ResponseScatter({
     <Svg
       width={plotSize.width}
       height={plotSize.height}
-      importantForAccessibility="no-hide-descendants"
+      {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
       onPress={(event) => {
         const { locationX, locationY } = event.nativeEvent;
         const result = resolveResponseScatterPress(

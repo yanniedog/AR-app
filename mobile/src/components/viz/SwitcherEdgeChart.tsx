@@ -9,6 +9,7 @@ import { SECTIONS } from '../../constants';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Badge, Row } from '../ui';
 
 /**
@@ -151,7 +152,7 @@ export function SwitcherEdgeChart({
           <Svg
             width={width}
             height={height}
-            importantForAccessibility="no-hide-descendants"
+            {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
           >
             {[0, 0.5, 1].map((frac) => {
               const bps = yMax * frac;

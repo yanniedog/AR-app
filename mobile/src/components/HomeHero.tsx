@@ -94,13 +94,7 @@ export function HomeHero({
   return (
     <View
       style={{
-        backgroundColor: theme.colors.surface,
-        borderRadius: theme.radius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        padding: 12,
-        marginBottom: 12,
-        overflow: 'hidden',
+        paddingVertical: 2,
       }}
     >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -114,18 +108,16 @@ export function HomeHero({
             </AppText>
           </Animated.View>
         </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+        <View style={{ alignItems: 'flex-end' }}>
           <View
             style={{
               flexDirection: 'row',
               alignItems: 'center',
               gap: 6,
-              backgroundColor: theme.colors.chip,
-              paddingHorizontal: 10,
-              paddingVertical: 6,
-              borderRadius: theme.radius.sm,
-              borderWidth: 1,
-              borderColor: theme.colors.border,
+              backgroundColor: theme.colors.primaryMuted,
+              paddingHorizontal: 9,
+              paddingVertical: 5,
+              borderRadius: theme.radius.pill,
             }}
           >
             <Ionicons name={statusIcon} size={14} color={statusColor} />
@@ -140,19 +132,15 @@ export function HomeHero({
               accessibilityRole="button"
               accessibilityLabel="Share today's rates"
               style={({ pressed }) => ({
-                flexDirection: 'row',
+                minWidth: 48,
+                minHeight: 48,
                 alignItems: 'center',
-                gap: 5,
-                paddingHorizontal: 10,
-                paddingVertical: 5,
-                borderRadius: theme.radius.sm,
+                justifyContent: 'center',
+                borderRadius: theme.radius.pill,
                 opacity: pressed ? 0.7 : 1,
               })}
             >
-              <Ionicons name="share-social-outline" size={14} color={theme.colors.primary} />
-              <AppText variant="tiny" weight="700" color="primary">
-                Share
-              </AppText>
+              <Ionicons name="share-social-outline" size={19} color={theme.colors.primary} />
             </Pressable>
           ) : null}
         </View>

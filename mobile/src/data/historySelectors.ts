@@ -20,6 +20,7 @@ import {
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
 import { toFraction, visibleAccountRows } from './format';
+import { quarantinedBankHistoryPairs } from './sectionIntegrity';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { rowsUnder } from './taxonomy';
 
@@ -238,7 +239,9 @@ export function selectBankHistoryChartModel(
 
     // Prebuilt section history contains the full catalogue and no product keys.
     // It is therefore safe only when the user explicitly includes non-standard products.
-    const prebuilt = includeNonStandard
+    const sectionHistoryQuarantined = [...quarantinedBankHistoryPairs(core)]
+      .some((key) => key.startsWith(`${section}\u0000`));
+    const prebuilt = includeNonStandard && !sectionHistoryQuarantined
       ? chartModelFromPrebuiltHistory(historyBanks, section, window)
       : null;
     if (prebuilt?.dates.length) {

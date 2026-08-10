@@ -8,7 +8,8 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
-import { AppText, Button, Row } from '../../src/components/ui';
+import { AppText, Button, SectionHeading } from '../../src/components/ui';
+import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { resolveSavedRates, unresolvedSavedRateRefs } from '../../src/data/savedRates';
 import { makeSavedRateRef, type SavedRateRef } from '../../src/data/savedRates';
 import { useStore } from '../../src/data/store';
@@ -223,19 +224,22 @@ export default function Saved() {
 
   return (
     <Screen onLayout={() => setLayoutReady(true)}>
-      <ScreenScrollView ref={scrollRef} contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 32 }}>
-        <Row style={{ justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <AppText variant="small" color="textMuted">
-            {items.length} saved {items.length === 1 ? 'rate' : 'rates'}
-          </AppText>
-          {items.length >= 2 ? (
+      <ScreenScrollView
+        ref={scrollRef}
+        showDataHealthBanner={false}
+        contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 32 }}
+      >
+        <SectionHeading
+          title="Saved rates"
+          subtitle={`${items.length} saved ${items.length === 1 ? 'rate' : 'rates'} · changes appear on each item`}
+          action={items.length >= 2 ? (
             <Button
-              title={selectMode ? 'Done' : 'Choose to compare'}
+              title={selectMode ? 'Done' : 'Compare'}
               variant="secondary"
               onPress={toggleCompareMode}
             />
-          ) : null}
-        </Row>
+          ) : undefined}
+        />
         {unavailableRefs.length ? (
           <View style={{ gap: 8, marginBottom: 12 }}>
             <AppText variant="small" color="textMuted">
@@ -256,31 +260,42 @@ export default function Saved() {
             onPress={openSelectedCompare}
           />
         ) : null}
-        {items.map(({ ref, row, section }) => {
-          const token = compareToken(row.product_key, row.rate_index ?? null);
-          const selectedNow = selected.includes(token);
+        {SECTION_ORDER.map((groupSection) => {
+          const sectionItems = items.filter((item) => item.section === groupSection);
+          if (!sectionItems.length) return null;
           return (
-            <SwipeableRow
-              key={ref.id}
-              onDelete={() => remove(ref.id)}
-              deleteLabel="Remove from saved"
-            >
-              <ProductCard
-                row={row}
-                section={section}
-                selectMode={selectMode}
-                selected={selectedNow}
-                logoRenderStateId={`saved:${ref.id}`}
-                onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
-                onPress={() => {
-                  if (!selectMode) {
-                    openProduct(row.product_key, row.rate_index);
-                    return;
-                  }
-                  toggleSelection(token);
-                }}
-              />
-            </SwipeableRow>
+            <View key={groupSection} style={{ gap: 4 }}>
+              <AppText variant="small" weight="700" color="textMuted">
+                {SECTIONS[groupSection].title}
+              </AppText>
+              {sectionItems.map(({ ref, row, section }) => {
+                const token = compareToken(row.product_key, row.rate_index ?? null);
+                const selectedNow = selected.includes(token);
+                return (
+                  <SwipeableRow
+                    key={ref.id}
+                    onDelete={() => remove(ref.id)}
+                    deleteLabel="Remove from saved"
+                  >
+                    <ProductCard
+                      row={row}
+                      section={section}
+                      selectMode={selectMode}
+                      selected={selectedNow}
+                      logoRenderStateId={`saved:${ref.id}`}
+                      onLogoRenderStateChange={savedLogos.onLogoRenderStateChange}
+                      onPress={() => {
+                        if (!selectMode) {
+                          openProduct(row.product_key, row.rate_index);
+                          return;
+                        }
+                        toggleSelection(token);
+                      }}
+                    />
+                  </SwipeableRow>
+                );
+              })}
+            </View>
           );
         })}
         <View style={{ height: 8 }} />

@@ -425,6 +425,7 @@ function RootNavigator() {
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
               <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
               <Stack.Screen name="projections" options={{ title: 'Lifecycle projections' }} />
+              <Stack.Screen name="rba-response" options={{ title: 'RBA response', headerBackTitle: 'Rate moves' }} />
               <Stack.Screen
                 name="rate-receipt"
                 options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}

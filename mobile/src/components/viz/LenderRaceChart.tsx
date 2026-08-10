@@ -12,6 +12,7 @@ import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { BankAvatar } from '../BankAvatar';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
 
 const FALLBACK_PALETTE = ['#3b82f6', '#14b8a6', '#d97706', '#a855f7', '#ef4444', '#0ea5e9', '#84cc16', '#ec4899'];
@@ -159,7 +160,7 @@ export function LenderRaceChart({
           <Svg
             width={width}
             height={height}
-            importantForAccessibility="no-hide-descendants"
+            {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
           >
             {Array.from({ length: lanes }, (_, lane) => (
               <React.Fragment key={`lane-${lane}`}>

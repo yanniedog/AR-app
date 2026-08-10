@@ -19,11 +19,13 @@ const BANNER_WRAP = { paddingHorizontal: 16, paddingTop: 12 } as const;
 export function DataHealthBannerStrip() {
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
-  return (
-    <View style={BANNER_WRAP}>
-      <DataHealthBanner source={source} offline={offline} />
-    </View>
-  );
+  return <DataHealthBanner source={source} offline={offline} />;
+}
+
+function PaddedDataHealthBannerStrip() {
+  const source = useStore((s) => s.source);
+  const offline = useStore((s) => s.offline);
+  return <DataHealthBanner source={source} offline={offline} containerStyle={BANNER_WRAP} />;
 }
 
 /** Horizontal + top padding for fixed screen headers (toolbars). */
@@ -66,7 +68,7 @@ export function Screen({
   const theme = useTheme();
   return (
     <View style={[{ flex: 1, backgroundColor: theme.colors.bg }, style]} {...rest}>
-      {showDataHealthBanner ? <DataHealthBannerStrip /> : null}
+      {showDataHealthBanner ? <PaddedDataHealthBannerStrip /> : null}
       {children}
     </View>
   );

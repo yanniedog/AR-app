@@ -43,6 +43,7 @@ describe('tabRouting', () => {
     expect(resolveActiveTab('/product/x')).toBe('browse');
     expect(resolveActiveTab('/search')).toBe('browse');
     expect(resolveActiveTab('/passthrough')).toBe('passthrough');
+    expect(resolveActiveTab('/rba-response')).toBe('passthrough');
     expect(resolveActiveTab('/trends')).toBe('trends');
     expect(resolveActiveTab('/rba')).toBe('trends');
     expect(resolveActiveTab('/watchlist')).toBe('watchlist');

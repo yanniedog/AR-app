@@ -5,6 +5,7 @@ import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
 import type { EconomicMomentumModel } from '../../data/economicModels';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText } from '../ui';
 
 export function MomentumChart({ model }: { model: EconomicMomentumModel }) {
@@ -35,7 +36,7 @@ export function MomentumChart({ model }: { model: EconomicMomentumModel }) {
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
             <Line
               x1={zeroX}
               y1={4}

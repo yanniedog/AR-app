@@ -68,28 +68,28 @@ export function AppTabBar() {
             onPress={() => onPressTab(route)}
             style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48 }}
           >
-            <View
-              style={{
-                alignItems: 'center',
-                justifyContent: 'center',
-                paddingHorizontal: 4,
-                paddingVertical: isAndroid ? 4 : 2,
-                borderRadius: theme.radius.pill,
-                backgroundColor: isAndroid && focused ? theme.colors.primaryMuted : 'transparent',
-                width: '100%',
-                maxWidth: '100%',
-              }}
-            >
+            <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+              <View
+                style={{
+                  width: 52,
+                  height: 30,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: theme.radius.pill,
+                  backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
+                }}
+              >
               {isAndroid && symbol ? (
                 <MaterialSymbol name={symbol} filled={focused} size={24} color={tint} />
               ) : ionicon ? (
                 <Ionicons name={ionicon} size={24} color={tint} />
               ) : null}
+              </View>
               <Text
                 numberOfLines={1}
                 style={{
                   marginTop: 2,
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: focused ? '600' : '500',
                   color: tint,
                   textAlign: 'center',

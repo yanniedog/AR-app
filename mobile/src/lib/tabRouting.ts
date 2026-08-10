@@ -55,7 +55,12 @@ export function resolveActiveTab(pathname: string): TabRouteName {
     return 'settings';
   }
 
-  if (path === '/passthrough' || path.startsWith('/passthrough/')) return 'passthrough';
+  if (
+    path === '/passthrough' ||
+    path.startsWith('/passthrough/') ||
+    path === '/rba-response' ||
+    path.startsWith('/rba-response/')
+  ) return 'passthrough';
   if (path === '/trends' || path.startsWith('/trends/') || path.startsWith('/rba')) {
     return 'trends';
   }

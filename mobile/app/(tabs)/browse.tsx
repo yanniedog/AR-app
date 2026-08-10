@@ -1,12 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { View } from 'react-native';
 
 import { HierarchyView } from '../../src/components/HierarchyView';
 import { Screen, screenEdgeStyle } from '../../src/components/Screen';
-import { ToolbarIconButton } from '../../src/components/ToolbarIconButton';
 import { SegmentedControl } from '../../src/components/controls';
-import { Row } from '../../src/components/ui';
+import { Button, Chip, Row } from '../../src/components/ui';
 import { sectionFromSlug } from '../../src/constants';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { profileSectionCount } from '../../src/data/profile';
@@ -18,8 +17,6 @@ import { ScreenSkeleton } from '../../src/components/feedback';
 
 export default function Browse() {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const compactToolbar = width < 480;
   const core = useStore((s) => s.core);
   const params = useLocalSearchParams<{
     section?: string | string[];
@@ -75,43 +72,31 @@ export default function Browse() {
   return (
     <Screen>
       <View style={screenEdgeStyle(theme)}>
-        <View
-          style={{
-            flexDirection: compactToolbar ? 'column' : 'row',
-            gap: theme.spacing(3),
-          }}
-        >
-          <View style={{ flex: compactToolbar ? undefined : 1, width: compactToolbar ? '100%' : undefined }}>
+        <View style={{ gap: theme.spacing(3) }}>
+          <View>
             {sectionOptions.length > 1 ? (
               <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
             ) : null}
           </View>
-          <Row
-            gap={theme.spacing(3)}
-            style={compactToolbar ? { justifyContent: 'space-between' } : undefined}
-          >
-            <ToolbarIconButton
+          <Row gap={theme.spacing(2)}>
+            <Button
+              title="Search products"
+              icon="search"
+              style={{ flex: 1 }}
+              onPress={() => openSearch(section)}
+            />
+            <Button
+              title={profileCount ? `Profile · ${profileCount}` : 'My profile'}
               icon="person-circle-outline"
-              badge={profileCount || undefined}
+              variant="secondary"
               onPress={() => router.push('/profile')}
-              accessibilityLabel="Your product profile"
-              accessibilityHint="Set default filters applied across the app"
             />
-            <ToolbarIconButton
-              icon="business-outline"
-              onPress={() => router.push('/banks')}
-              accessibilityLabel="Browse lenders"
-              accessibilityHint="Opens searchable lender directory"
-            />
+          </Row>
+          <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
+            <Chip label="Browse lenders" icon="business-outline" onPress={() => router.push('/banks')} />
             {section === 'Mortgage' ? (
-              <ToolbarIconButton
-                icon="calculator-outline"
-                onPress={() => router.push('/calculator')}
-                accessibilityLabel="Mortgage calculator"
-                accessibilityHint="Opens repayment calculator"
-              />
+              <Chip label="Calculator" icon="calculator-outline" onPress={() => router.push('/calculator')} />
             ) : null}
-            <ToolbarIconButton icon="search" onPress={() => openSearch(section)} accessibilityLabel="Search products" />
           </Row>
         </View>
       </View>

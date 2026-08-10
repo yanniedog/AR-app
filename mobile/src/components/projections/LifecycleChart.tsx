@@ -13,6 +13,7 @@ import {
 import type { SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
 import { useChartScrub } from '../charts/ChartSliceControls';
 
@@ -219,7 +220,7 @@ export function LifecycleChart({
         style={{ height, width: '100%' }}
       >
         {width > 0 && dates.length ? (
-          <Svg width={width} height={height} importantForAccessibility="no-hide-descendants">
+          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
             {[0, 0.5, 1].map((fraction) => {
               const value = yMin + (yMax - yMin) * fraction;
               const y = yAt(value);

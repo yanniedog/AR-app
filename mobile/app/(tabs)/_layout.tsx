@@ -113,7 +113,7 @@ export default function TabsLayout() {
         name="passthrough"
         listeners={tabPressListener}
         options={{
-          title: 'Moves',
+          title: 'Rate moves',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />
           ),
@@ -123,7 +123,7 @@ export default function TabsLayout() {
         name="trends"
         listeners={tabPressListener}
         options={{
-          title: 'Outlook',
+          title: 'Market',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />
           ),

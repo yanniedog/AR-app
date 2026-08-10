@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import React, { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { SECTION_ORDER, SECTIONS } from '../../constants';
+import { sectionSegmentOptions } from '../../data/interests';
 import {
   rbaPassThroughDecisionList,
   rbaPassThroughMultiSection,
@@ -36,7 +37,7 @@ import type { RbaEntry, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { SearchBar, SegmentedControl } from '../controls';
-import { AppText, Badge, Card, Chip, Row } from '../ui';
+import { AppText, Badge, Button, Card, Chip, Row } from '../ui';
 import { ResponseScatter } from './ResponseScatter';
 
 type LenderRow = MultiSectionPassThroughRow & { response: PassThroughRow };
@@ -121,15 +122,11 @@ const LenderResponseRow = memo(function LenderResponseRow({
   section,
   model,
   selected,
-  onSelect,
-  onClearFilter,
 }: {
   item: LenderRow;
   section: SectionKey;
   model: MultiSectionPassThroughModel;
   selected: boolean;
-  onSelect: (provider: string) => void;
-  onClearFilter: () => void;
 }) {
   const theme = useTheme();
   const accessibilityLabel = lenderResponseAccessibilityLabel(
@@ -165,56 +162,20 @@ const LenderResponseRow = memo(function LenderResponseRow({
             </Row>
           </View>
         </Row>
-        <Row gap={0} style={{ alignItems: 'stretch', marginTop: 10 }}>
-          {SECTION_ORDER.map((key, index) => (
-            <View
-              key={key}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                paddingHorizontal: 8,
-                borderLeftWidth: index === 0 ? 0 : 1,
-                borderLeftColor: theme.colors.border,
-                backgroundColor: key === section ? theme.colors.primaryMuted : 'transparent',
-              }}
-            >
-              <ResponseCell
-                section={key}
-                row={item.sections[key]}
-                partial={model.decision.partialObservation}
-              />
-            </View>
-          ))}
-        </Row>
-      </Pressable>
-      <Pressable
-        onPress={() => (selected ? onClearFilter() : onSelect(item.provider))}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        accessibilityLabel={
-          selected
-            ? `Clear filter and show all lenders`
-            : `Filter lender list to ${item.provider}`
-        }
-        style={{
-          minHeight: 48,
-          paddingHorizontal: 14,
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.border,
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 6,
-        }}
-      >
-        <Ionicons
-          name={selected ? 'close-circle-outline' : 'filter-outline'}
-          size={15}
-          color={theme.colors.primary}
-        />
-        <AppText variant="tiny" weight="700" color="primary">
-          {selected ? 'CLEAR FILTER · SHOW ALL' : 'FILTER LIST TO THIS BANK'}
-        </AppText>
+        <View
+          style={{
+            marginTop: 10,
+            padding: 10,
+            borderRadius: theme.radius.md,
+            backgroundColor: theme.colors.surfaceAlt,
+          }}
+        >
+          <ResponseCell
+            section={section}
+            row={item.sections[section]}
+            partial={model.decision.partialObservation}
+          />
+        </View>
       </Pressable>
     </View>
   );
@@ -224,12 +185,14 @@ const AnalysisHeader = memo(function AnalysisHeader({
   model,
   decisions,
   section,
+  sectionOptions,
   onSectionChange,
   onDecisionChange,
 }: {
   model: MultiSectionPassThroughModel;
   decisions: ReturnType<typeof rbaPassThroughDecisionList>;
   section: SectionKey;
+  sectionOptions: ReturnType<typeof sectionSegmentOptions>;
   onSectionChange: (section: SectionKey) => void;
   onDecisionChange: (date: string) => void;
 }) {
@@ -237,11 +200,14 @@ const AnalysisHeader = memo(function AnalysisHeader({
   const summary = useMemo(() => summarizeSectionResponse(model, section), [model, section]);
   const direction = model.decision.bps > 0 ? 'raised' : 'cut';
   const partial = model.decision.partialObservation;
+  const decisionIndex = Math.max(0, decisions.findIndex((decision) => decision.date === model.decision.date));
+  const newerDecision = decisions[decisionIndex - 1];
+  const olderDecision = decisions[decisionIndex + 1];
   return (
     <View>
-      <Card style={{ marginBottom: 14, overflow: 'hidden' }}>
-        <AppText variant="tiny" color="textFaint" weight="700">
-          RBA DECISION · {formatRunDate(model.decision.date).toUpperCase()}
+      <Card variant="outlined" style={{ marginBottom: 14, overflow: 'hidden' }}>
+        <AppText variant="small" color="textMuted">
+          RBA decision · {formatRunDate(model.decision.date)}
         </AppText>
         <Row gap={8} style={{ marginTop: 4, alignItems: 'baseline', flexWrap: 'wrap' }}>
           <AppText variant="h1">{model.decision.bps > 0 ? '+' : '−'}{Math.abs(model.decision.bps)} bp</AppText>
@@ -257,28 +223,32 @@ const AnalysisHeader = memo(function AnalysisHeader({
           Observed through {formatRunDate(model.observedThrough)} · window {model.windowOpen ? 'open to' : 'closed'} {formatRunDate(model.windowEnd)}
         </AppText>
         {decisions.length > 1 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-            <Row gap={6}>
-              {decisions.map((decision) => (
-                <Chip
-                  key={decision.date}
-                  label={`${formatRunDate(decision.date)} · ${decision.bps > 0 ? '+' : '−'}${Math.abs(decision.bps)} bp`}
-                  selected={decision.date === model.decision.date}
-                  onPress={() => onDecisionChange(decision.date)}
-                />
-              ))}
-            </Row>
-          </ScrollView>
+          <Row gap={8} style={{ marginTop: 10 }}>
+            <Button
+              title="Earlier"
+              variant="ghost"
+              disabled={!olderDecision}
+              onPress={() => olderDecision && onDecisionChange(olderDecision.date)}
+              style={{ flex: 1 }}
+            />
+            <Button
+              title="Later"
+              variant="ghost"
+              disabled={!newerDecision}
+              onPress={() => newerDecision && onDecisionChange(newerDecision.date)}
+              style={{ flex: 1 }}
+            />
+          </Row>
         ) : null}
       </Card>
 
       <SegmentedControl
-        options={SECTION_ORDER.map((key) => ({ value: key, label: SECTIONS[key].short }))}
+        options={sectionOptions}
         value={section}
         onChange={onSectionChange}
       />
 
-      <Card style={{ marginTop: 14, marginBottom: 14 }}>
+      <View style={{ marginTop: 14, marginBottom: 14, paddingHorizontal: 4 }}>
         <Row gap={8} style={{ alignItems: 'flex-start' }}>
           <Ionicons
             name={partial ? 'flask-outline' : 'analytics-outline'}
@@ -296,7 +266,7 @@ const AnalysisHeader = memo(function AnalysisHeader({
             </AppText>
           </View>
         </Row>
-      </Card>
+      </View>
 
       <Row gap={10} style={{ flexWrap: 'wrap', marginBottom: 14 }}>
         <MetricTile label="Observed" value={`${summary.movedWithRba}/${summary.eligible}`} detail="moved with the RBA direction" />
@@ -310,7 +280,6 @@ const AnalysisHeader = memo(function AnalysisHeader({
           value={summary.medianDays == null ? '—' : `${partial ? '≤' : ''}${summary.medianDays}d`}
           detail="median first observed response"
         />
-        <MetricTile label="Opposite" value={`${summary.movedOpposite}`} detail="provider medians moved the other way" />
       </Row>
     </View>
   );
@@ -374,13 +343,20 @@ export function PassThroughDashboard({
   rba,
   calendar,
   initialDecisionDate,
+  section: controlledSection,
+  onSectionChange: controlledSectionChange,
+  interests,
 }: {
   payload: BankInsightsPayload;
   rba: RbaEntry[];
   calendar: RbaCalendar | null;
   initialDecisionDate?: string;
+  section?: SectionKey;
+  onSectionChange?: (section: SectionKey) => void;
+  interests?: SectionKey[];
 }) {
-  const [section, setSection] = useState<SectionKey>('Mortgage');
+  const [localSection, setLocalSection] = useState<SectionKey>(controlledSection ?? 'Mortgage');
+  const section = controlledSection ?? localSection;
   const [selectedDate, setSelectedDate] = useState<string | null>(initialDecisionDate ?? null);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -391,6 +367,8 @@ export function PassThroughDashboard({
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [listMounted, setListMounted] = useState(false);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
+  const sectionOptions = useMemo(() => sectionSegmentOptions(interests ?? SECTION_ORDER), [interests]);
+  const availableSections = useMemo(() => sectionOptions.map((option) => option.value), [sectionOptions]);
   const registerLogosLoaded = useRegisterLogosStore((state) => state.loaded);
   const listRef = useRef<FlashListRef<LenderRow>>(null);
   const decisions = useMemo(
@@ -426,9 +404,10 @@ export function PassThroughDashboard({
   }, [listMounted, model, renderRevision, rows]);
 
   const onSectionChange = useCallback((next: SectionKey) => {
-    setSection(next);
+    if (controlledSection == null) setLocalSection(next);
+    controlledSectionChange?.(next);
     setSelectedProvider(null);
-  }, []);
+  }, [controlledSection, controlledSectionChange]);
 
   const onDecisionChange = useCallback((date: string) => {
     setSelectedDate(date);
@@ -452,12 +431,6 @@ export function PassThroughDashboard({
     setSelectedProvider(null);
   }, []);
 
-  const onListProviderSelect = useCallback((provider: string) => {
-    hapticSelection();
-    setSelectedProvider(provider);
-    requestAnimationFrame(() => listRef.current?.scrollToOffset({ offset: 0, animated: true }));
-  }, []);
-
   const actions = useMemo(() => ({
     'moves.open': () => undefined,
     'moves.decision.previous': () => {
@@ -468,12 +441,12 @@ export function PassThroughDashboard({
     },
     'moves.section.next': (parameters: unknown) => {
       const planned = actionSection(parameters);
-      if (planned) {
+      if (planned && availableSections.includes(planned)) {
         onSectionChange(planned);
         return;
       }
-      const index = Math.max(0, SECTION_ORDER.indexOf(section));
-      onSectionChange(SECTION_ORDER[(index + 1) % SECTION_ORDER.length]);
+      const index = Math.max(0, availableSections.indexOf(section));
+      onSectionChange(availableSections[(index + 1) % availableSections.length]);
     },
     'moves.response-chart.zoom-in': () => setChartZoom((current) => Math.min(3, current + 0.5)),
     'moves.response-chart.reset': () => setChartZoom(1),
@@ -493,11 +466,11 @@ export function PassThroughDashboard({
       }
       return { unavailableReason: 'No lender is rendered for drill-down' };
     },
-  }), [activeDate, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
+  }), [activeDate, availableSections, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
 
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
-    routeKey: '/passthrough',
+    routeKey: '/rba-response',
     datasetRevision: payload.run_date,
     renderRevision,
     actions,
@@ -556,11 +529,9 @@ export function PassThroughDashboard({
         section={section}
         model={model!}
         selected={item.provider === selectedProvider}
-        onSelect={onListProviderSelect}
-        onClearFilter={clearProviderFilter}
       />
     ),
-    [section, model, selectedProvider, onListProviderSelect, clearProviderFilter],
+    [section, model, selectedProvider],
   );
 
   const staticHeader = useMemo(() => {
@@ -570,11 +541,12 @@ export function PassThroughDashboard({
         model={model}
         decisions={decisions}
         section={section}
+        sectionOptions={sectionOptions}
         onSectionChange={onSectionChange}
         onDecisionChange={onDecisionChange}
       />
     );
-  }, [model, decisions, section, onSectionChange, onDecisionChange]);
+  }, [model, decisions, section, sectionOptions, onSectionChange, onDecisionChange]);
 
   const compareControls = useMemo(
     () => (
