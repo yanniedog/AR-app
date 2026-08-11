@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  AppState,
   Platform,
   StyleSheet,
   useWindowDimensions,
@@ -42,6 +43,7 @@ import {
 import { AppText } from '../src/components/ui';
 import { registerBackgroundRefresh, routeFromNotificationResponse } from '../src/data/notifications';
 import { useStore } from '../src/data/store';
+import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { shouldShowAppTabBar } from '../src/lib/tabRouting';
@@ -233,6 +235,7 @@ function RootNavigator() {
   const performanceAuditActive = usePerformanceAuditActiveState();
   const androidHeader = androidStackScreenOptions(theme);
   const pendingNotificationRoute = useRef<Href | null>(null);
+  const lastAppState = useRef(AppState.currentState);
   const coldStartChecked = useRef(false);
   const [morphComplete, setMorphComplete] = useState(false);
   const [overlayVisible, setOverlayVisible] = useState(true);
@@ -298,6 +301,22 @@ function RootNavigator() {
     if (!appReady) return;
     void registerBackgroundRefresh();
   }, [appReady]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      const resumed = lastAppState.current !== 'active' && nextState === 'active';
+      lastAppState.current = nextState;
+      if (!resumed || performanceAuditActive) return;
+      const live = useStore.getState();
+      if (live.status !== 'ready' || live.refreshing) return;
+      if (shouldRefreshOnResume(live.lastCheckedAt)) {
+        void live
+          .refresh({ background: true })
+          .catch((err) => logSwallowedError('resume.refresh', err));
+      }
+    });
+    return () => sub.remove();
+  }, [performanceAuditActive]);
 
   // Refresh tier-issued content keys on app start / sign-in (Phase D; no-op
   // until the key service URL is configured).

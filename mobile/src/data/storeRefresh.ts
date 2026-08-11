@@ -23,6 +23,7 @@ import {
 } from './suitabilityIndex';
 import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
+import { rbaCalendarCoverage } from './rbaCalendar';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -40,16 +41,22 @@ type OptionalRefreshWork = {
 };
 
 function optionalRefreshWork(
-  previous: AppState['manifest'],
+  state: Pick<AppState, 'manifest' | 'rbaCalendar' | 'rbaCalendarSha'>,
   next: AppState['manifest'],
 ): OptionalRefreshWork {
+  const previous = state.manifest;
+  const nextRbaSha = next?.files.rba_calendar?.sha256 ?? null;
   return {
     historyBanks:
       previous?.files.history_banks?.sha256 !== next?.files.history_banks?.sha256,
     bankInsights:
       previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
-    rbaCalendar:
-      previous?.files.rba_calendar?.sha256 !== next?.files.rba_calendar?.sha256,
+    rbaCalendar: !!nextRbaSha && (
+      previous?.files.rba_calendar?.sha256 !== nextRbaSha ||
+      !state.rbaCalendar ||
+      state.rbaCalendarSha !== nextRbaSha ||
+      rbaCalendarCoverage(state.rbaCalendar).status === 'awaiting-result'
+    ),
   };
 }
 
@@ -90,9 +97,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             await Promise.all([
               optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
               optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
-              optionalWork.rbaCalendar ? get().ensureRbaCalendar() : Promise.resolve(),
             ]);
           }
+          // The calendar is tiny and drives decision alerts/countdowns. Keep it
+          // current even in a bounded OS-scheduled refresh; heavy ledgers remain
+          // foreground-only.
+          if (optionalWork.rbaCalendar) await get().ensureRbaCalendar();
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
           if (!background) {
@@ -289,8 +299,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
 
         // Dated tags often omit optional assets. Prefer rolling (same day) then
         // the already-installed day so bank history / RBA calendar survive.
-        remote = mergeOptionalManifestFiles(remote, rolling);
+        // Rolling is the authoritative same-core source for corrected optional
+        // assets; it may carry a newer RBA calendar than a reused dated manifest.
+        remote = mergeOptionalManifestFiles(remote, rolling, true);
         remote = mergeOptionalManifestFiles(remote, get().manifest);
+        optionalWork = optionalRefreshWork(get(), remote);
 
         const meta = await cache.readMeta();
         const upToDate =
@@ -305,15 +318,15 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // can navigate. Only touch disk for a cold/headless refresh or a
           // mismatched in-memory core.
           const live = get();
-          optionalWork = optionalRefreshWork(live.manifest, remote);
           // Persist enriched optional file entries so the next cold start does
           // not re-load a core/details-only dated manifest from cache meta.
-          const cachedOptionalMissing =
+          const cachedOptionalChanged =
             !!meta?.manifest &&
             OPTIONAL_MANIFEST_KEYS.some(
-              (key) => !meta.manifest.files[key] && !!remote.files[key],
+              (key) =>
+                meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
             );
-          if (cachedOptionalMissing) {
+          if (cachedOptionalChanged) {
             await cache.updateMeta({
               coreSha: remote.files.core.sha256,
               manifest: remote,

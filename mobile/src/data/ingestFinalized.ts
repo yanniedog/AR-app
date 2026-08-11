@@ -27,6 +27,7 @@ type OptionalManifestKey = (typeof OPTIONAL_MANIFEST_KEYS)[number];
 export function mergeOptionalManifestFiles(
   target: Manifest,
   source: Manifest | null | undefined,
+  replaceExisting = false,
 ): Manifest {
   if (!source) return target;
   const targetDate = String(target.run_date || '').slice(0, 10);
@@ -38,7 +39,8 @@ export function mergeOptionalManifestFiles(
   const files: Manifest['files'] = { ...target.files };
   for (const key of OPTIONAL_MANIFEST_KEYS) {
     const fromSource: ManifestFile | undefined = source.files[key as OptionalManifestKey];
-    if (!files[key as OptionalManifestKey] && fromSource) {
+    if (fromSource && (replaceExisting || !files[key as OptionalManifestKey])) {
+      if (files[key as OptionalManifestKey]?.sha256 === fromSource.sha256) continue;
       files[key as OptionalManifestKey] = fromSource;
       changed = true;
     }

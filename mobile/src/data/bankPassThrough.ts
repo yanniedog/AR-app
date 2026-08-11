@@ -114,20 +114,16 @@ function passStatusFor(passedBps: number, decisionBps: number): PassThroughStatu
 }
 
 function windowEndForDecision(
-  decisions: PassThroughSourceDecision[],
-  index: number,
+  decision: Pick<PassThroughSourceDecision, 'date'>,
+  policyDates: readonly string[],
   windowDays: number,
 ): string | null {
-  const dec = decisions[index];
-  if (!dec) return null;
-  let windowEnd = addDaysYmd(dec.date, windowDays);
+  let windowEnd = addDaysYmd(decision.date, windowDays);
   if (!windowEnd) return null;
-  if (index + 1 < decisions.length) {
-    const nextDec = decisions[index + 1];
-    if (nextDec) {
-      const dayBeforeNext = addDaysYmd(nextDec.date, -1);
-      if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
-    }
+  const nextDate = policyDates.find((date) => date > decision.date);
+  if (nextDate) {
+    const dayBeforeNext = addDaysYmd(nextDate, -1);
+    if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
   }
   return windowEnd;
 }
@@ -189,6 +185,20 @@ function calendarPassThroughDecisions(
   );
 }
 
+function policyBoundaryDates(
+  calendar: RbaCalendar | null | undefined,
+  fallback: readonly PassThroughSourceDecision[],
+): string[] {
+  const fromCalendar = calendar?.decisions
+    ?.map((decision) => decision.date)
+    .filter((date) => !!parseYmd(date));
+  return [...new Set([
+    ...(fromCalendar ?? []),
+    ...fallback.map((decision) => decision.date),
+  ])]
+    .sort();
+}
+
 /** True when a core.rba step is the same RBA move as a calendar announcement. */
 function isCalendarEffectiveTwin(
   seriesDecision: PassThroughSourceDecision,
@@ -221,6 +231,7 @@ export function resolvePassThroughDecisions(
 
 function scoreDecisionsAgainstLedger(
   decisions: PassThroughSourceDecision[],
+  policyDates: readonly string[],
   ledgerStart: string,
   ledgerEnd: string,
   windowDays: number,
@@ -229,7 +240,7 @@ function scoreDecisionsAgainstLedger(
   for (let i = 0; i < decisions.length; i += 1) {
     const dec = decisions[i];
     if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
-    const windowEnd = windowEndForDecision(decisions, i, windowDays);
+    const windowEnd = windowEndForDecision(dec, policyDates, windowDays);
     if (!windowEnd) continue;
     // Response window must overlap the ledger; announcement must not be after ledger end.
     if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
@@ -262,16 +273,27 @@ export function scorablePassThroughDecisions(
 
   const fromCal = calendarPassThroughDecisions(opts.calendar);
   const fromSeries = decisionsFromRbaSeries(rba);
+  const seriesOnly = fromSeries.filter((decision) => !isCalendarEffectiveTwin(decision, fromCal));
   const primary = fromCal.length ? fromCal : fromSeries;
   if (!primary.length) return [];
+  // Even when the calendar is the preferred decision source, its payload may
+  // lag a newer core series step. Every scoring path must share that later
+  // policy boundary so an older response window cannot remain open through it.
+  const boundaries = policyBoundaryDates(opts.calendar, seriesOnly);
 
-  let scored = scoreDecisionsAgainstLedger(primary, ledgerStart, ledgerEnd, windowDays);
+  let scored = scoreDecisionsAgainstLedger(primary, boundaries, ledgerStart, ledgerEnd, windowDays);
   // Stale calendar that still overlaps the ledger can hide a newer core.rba
   // decision — merge series-scored decisions dated after the calendar set.
   // Skip effective-date twins: live core.rba steps on effective dates while the
   // calendar keys announcements (typically announcement+1).
   if (fromCal.length && fromSeries.length) {
-    const seriesScored = scoreDecisionsAgainstLedger(fromSeries, ledgerStart, ledgerEnd, windowDays);
+    const seriesScored = scoreDecisionsAgainstLedger(
+      fromSeries,
+      boundaries,
+      ledgerStart,
+      ledgerEnd,
+      windowDays,
+    );
     if (!scored.length) {
       scored = seriesScored;
     } else if (seriesScored.length) {
@@ -467,9 +489,15 @@ function resolvePassThroughDecisionContext(
       : null) ?? scorable[scorable.length - 1];
   if (!decision) return null;
 
-  const idx = scorable.findIndex((d) => d.date === decision.date);
-  if (idx < 0) return null;
-  const windowEnd = windowEndForDecision(scorable, idx, windowDays);
+  const calendarDecisions = calendarPassThroughDecisions(opts.calendar);
+  const seriesOnly = decisionsFromRbaSeries(rba).filter(
+    (seriesDecision) => !isCalendarEffectiveTwin(seriesDecision, calendarDecisions),
+  );
+  const windowEnd = windowEndForDecision(
+    decision,
+    policyBoundaryDates(opts.calendar, seriesOnly),
+    windowDays,
+  );
   if (!windowEnd) return null;
 
   const observedThrough =
