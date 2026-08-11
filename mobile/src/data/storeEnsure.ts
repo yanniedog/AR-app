@@ -37,6 +37,11 @@ import {
   suitabilityIndexMatches,
 } from './suitabilityIndex';
 import { isSuitabilityFilterReady } from './suitabilityGate';
+import { computeChanges, notify } from './notifications';
+import {
+  integrateRbaCalendarIntoCore,
+  refreshRbaCalendarFromOfficial,
+} from './rbaOfficialLive';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -544,18 +549,50 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         set({ rbaCalendar: null, rbaCalendarSha: null, rbaCalendarError: 'rba calendar unavailable' });
         return;
       }
-      if (rbaCalendar && rbaCalendarSha === asset.sha256) return;
+      let calendar = rbaCalendar && rbaCalendarSha === asset.sha256 ? rbaCalendar : null;
       try {
-        const { rbaCalendar: downloaded } = await downloadRbaCalendar(asset.url, asset.sha256);
-        set({ rbaCalendar: downloaded, rbaCalendarSha: asset.sha256, rbaCalendarError: null });
+        if (!calendar) {
+          const { rbaCalendar: downloaded } = await downloadRbaCalendar(asset.url, asset.sha256);
+          calendar = downloaded;
+        }
+        const reconciled = await refreshRbaCalendarFromOfficial(calendar);
+        const live = get();
+        if (
+          live.manifest?.files.rba_calendar?.sha256 !== asset.sha256 ||
+          live.manifest?.files.core.sha256 !== manifest.files.core.sha256
+        ) return;
+        const nextCore = live.core ? integrateRbaCalendarIntoCore(live.core, reconciled) : live.core;
+        set({
+          core: nextCore,
+          rbaCalendar: reconciled,
+          rbaCalendarSha: asset.sha256,
+          rbaCalendarError: null,
+        });
         debugLog.info(
           'store',
-          `ensureRbaCalendar ok decisions=${downloaded.decisions.length} schedule=${downloaded.schedule.length}`,
+          `ensureRbaCalendar ok decisions=${reconciled.decisions.length} schedule=${reconciled.schedule.length}`,
         );
+        if (live.core && nextCore && nextCore !== live.core && live.prefs.notificationsEnabled) {
+          const messages = computeChanges(
+            live.core,
+            nextCore,
+            live.savedRates?.length ? live.savedRates : live.favorites,
+            live.prefs.rateMoveThresholdBps,
+            live.subscriptions,
+            live.details?.products ?? null,
+            live.details?.products ?? null,
+            live.prefs.depositRankMetric,
+            live.prefs.mortgageRateMetric,
+          );
+          await notify(messages.filter((message) => message.title.startsWith('RBA')));
+        }
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureRbaCalendar failed: ${msg}`);
-        set({ rbaCalendarError: msg });
+        set({
+          ...(calendar ? { rbaCalendar: calendar, rbaCalendarSha: asset.sha256 } : {}),
+          rbaCalendarError: msg,
+        });
       }
     },
 

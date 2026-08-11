@@ -134,6 +134,8 @@ export function rbaCalendarCoverage(
     return { status: 'current', unresolvedMeeting: null };
   }
   const recorded = new Set(calendar.decisions.map((decision) => decision.date));
+  // schedule is normalized oldest-first; surface the earliest gap because all
+  // later policy interpretation depends on resolving that first missing result.
   const unresolvedMeeting =
     calendar.schedule.find((meeting) => {
       const announcedAt = Date.parse(meeting.announce_utc);

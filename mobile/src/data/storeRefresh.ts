@@ -23,6 +23,7 @@ import {
 } from './suitabilityIndex';
 import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
+import { rbaCalendarCoverage } from './rbaCalendar';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -53,7 +54,8 @@ function optionalRefreshWork(
     rbaCalendar: !!nextRbaSha && (
       previous?.files.rba_calendar?.sha256 !== nextRbaSha ||
       !state.rbaCalendar ||
-      state.rbaCalendarSha !== nextRbaSha
+      state.rbaCalendarSha !== nextRbaSha ||
+      rbaCalendarCoverage(state.rbaCalendar).status === 'awaiting-result'
     ),
   };
 }

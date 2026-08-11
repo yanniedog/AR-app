@@ -343,6 +343,8 @@ export default function Market() {
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
 
+      <RbaCountdownCard expandable={false} />
+
       <Card variant="outlined" style={{ gap: 14 }}>
         <SectionHeading
           title="Market now"
@@ -372,8 +374,6 @@ export default function Market() {
           <AppText variant="small" color="textMuted">Preparing the current standard-product market…</AppText>
         )}
       </Card>
-
-      <RbaCountdownCard expandable={false} />
 
       <Disclosure
         title="Rate trend"

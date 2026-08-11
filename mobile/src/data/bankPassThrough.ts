@@ -120,9 +120,7 @@ function windowEndForDecision(
 ): string | null {
   let windowEnd = addDaysYmd(decision.date, windowDays);
   if (!windowEnd) return null;
-  const nextDate = policyDates
-    .filter((date) => date > decision.date)
-    .sort()[0];
+  const nextDate = policyDates.find((date) => date > decision.date);
   if (nextDate) {
     const dayBeforeNext = addDaysYmd(nextDate, -1);
     if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;

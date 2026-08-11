@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { AppText, Card, Divider, Row } from './ui';
@@ -11,6 +11,7 @@ import {
   recentDecisions,
 } from '../data/rbaCalendar';
 import { useStore } from '../data/store';
+import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
 
 /** Countdown to the next RBA cash-rate decision; tap to reveal recent decisions
@@ -18,31 +19,57 @@ import { useTheme } from '../theme/ThemeProvider';
 export function RbaCountdownCard({ expandable = true }: { expandable?: boolean } = {}) {
   const theme = useTheme();
   const calendar = useStore((s) => s.rbaCalendar);
+  const ensureRbaCalendar = useStore((s) => s.ensureRbaCalendar);
   const [expanded, setExpanded] = useState(false);
   const countdown = rbaCountdown(calendar);
   const unresolved = rbaCalendarCoverage(calendar).unresolvedMeeting;
+  useEffect(() => {
+    if (!unresolved) return;
+    void ensureRbaCalendar();
+    const timer = setInterval(() => void ensureRbaCalendar(), 60_000);
+    return () => clearInterval(timer);
+  }, [ensureRbaCalendar, unresolved]);
   if (!countdown && !unresolved) return null;
   const days = countdown?.calendarDays ?? 0;
   const when = unresolved
-    ? 'awaiting verified result'
+    ? 'today'
     : days <= 0
       ? 'today'
       : days === 1
         ? 'tomorrow'
         : `in ${days} days`;
   const meetingDate = unresolved?.date ?? countdown!.meeting.date;
+  const meetingYear = meetingDate.slice(0, 4);
+  const hero = unresolved
+    ? 'Today'
+    : days <= 0
+      ? 'Today'
+      : days === 1
+        ? 'Tomorrow'
+        : `${days} days`;
   const recent = recentDecisions(calendar, 4);
   const showDisclosure = expandable && recent.length > 0;
 
   const header = (
-    <Row style={{ justifyContent: 'space-between' }}>
-      <AppText variant="tiny" weight="700" color="textFaint">
-        {unresolved ? 'RBA DECISION UPDATE' : 'NEXT RBA DECISION'}
-      </AppText>
-      <Row gap={theme.spacing(2)}>
-        <AppText variant="small" color="textMuted">
-          {formatRbaDate(meetingDate)} · {when}
-        </AppText>
+    <View>
+      <Row style={{ justifyContent: 'space-between' }}>
+        <Row gap={theme.spacing(2)}>
+          <View
+            style={{
+              width: 34,
+              height: 34,
+              borderRadius: 17,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: withAlpha(theme.colors.rba, theme.dark ? 0.2 : 0.12),
+            }}
+          >
+            <Ionicons name="business-outline" size={19} color={theme.colors.rba} />
+          </View>
+          <AppText variant="small" weight="800" style={{ color: theme.colors.rba, letterSpacing: 0.7 }}>
+            {unresolved ? 'RBA DECISION TODAY' : 'NEXT RBA DECISION'}
+          </AppText>
+        </Row>
         {showDisclosure ? (
           <Ionicons
             name={expanded ? 'chevron-up' : 'chevron-down'}
@@ -51,11 +78,37 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
           />
         ) : null}
       </Row>
-    </Row>
+      <AppText
+        variant="rateHero"
+        style={{ color: theme.colors.text, marginTop: theme.spacing(4) }}
+      >
+        {hero}
+      </AppText>
+      <AppText variant="body" weight="700" style={{ marginTop: theme.spacing(1) }}>
+        {formatRbaDate(meetingDate)} {meetingYear}
+      </AppText>
+      <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) }}>
+        {`Scheduled announcement · ${when}`}
+      </AppText>
+    </View>
   );
 
   return (
-    <Card>
+    <Card
+      variant="outlined"
+      accessible={!showDisclosure}
+      accessibilityLabel={
+        unresolved
+          ? `RBA decision today, ${formatRbaDate(meetingDate)} ${meetingYear}.`
+          : `Next RBA decision ${hero}, ${formatRbaDate(meetingDate)} ${meetingYear}.`
+      }
+      style={{
+        padding: theme.spacing(5),
+        borderWidth: 2,
+        borderColor: withAlpha(theme.colors.rba, 0.72),
+        backgroundColor: withAlpha(theme.colors.rba, theme.dark ? 0.1 : 0.07),
+      }}
+    >
       {showDisclosure ? (
         <Pressable
           onPress={() => setExpanded((value) => !value)}
