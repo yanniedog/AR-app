@@ -70,6 +70,19 @@ describe('computeChanges', () => {
     expect(msgs.some((m) => m.title.includes('RBA'))).toBe(false);
   });
 
+  test('RBA hold notifies and links to the decision date', () => {
+    const before = core('0.05', 4.35, '2026-05-06');
+    before.rba_holds = ['2026-06-16'];
+    const after = core('0.05', 4.35, '2026-05-06');
+    after.rba_holds = ['2026-06-16', '2026-08-11'];
+    const msgs = computeChanges(before, after, [], 5);
+    expect(msgs).toContainEqual(expect.objectContaining({
+      title: 'RBA cash rate held',
+      body: 'Cash rate remains 4.35%.',
+      href: 'arrates://rba-response?date=2026-08-11',
+    }));
+  });
+
   test('watchlisted product change notifies', () => {
     const msgs = computeChanges(core('0.0579'), core('0.0574'), ['A|1'], 5);
     expect(msgs.some((m) => m.body.includes('→'))).toBe(true);

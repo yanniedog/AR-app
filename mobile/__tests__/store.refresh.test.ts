@@ -254,7 +254,7 @@ describe('store refresh lifecycle', () => {
 
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
-    expect(mockEnsureRbaCalendar).not.toHaveBeenCalled();
+    expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
     expect(mockEnsureDetails).not.toHaveBeenCalled();
     expect(mockYieldToUi).not.toHaveBeenCalled();
   });

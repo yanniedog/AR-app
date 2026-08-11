@@ -377,6 +377,18 @@ export function computeChanges(
       href: `${DEEP_LINK_SCHEME}://rba-response?date=${encodeURIComponent(newRba.date)}`,
     });
   }
+  const oldHolds = new Set(oldCore.rba_holds ?? []);
+  const newHold = (newCore.rba_holds ?? [])
+    .filter((date) => !oldHolds.has(date))
+    .sort()
+    .at(-1);
+  if (newHold && newRba) {
+    messages.push({
+      title: 'RBA cash rate held',
+      body: `Cash rate remains ${newRba.rate.toFixed(2)}%.`,
+      href: `${DEEP_LINK_SCHEME}://rba-response?date=${encodeURIComponent(newHold)}`,
+    });
+  }
 
   // Watchlisted products — compare row-for-row by rate_index and report the largest
   // qualifying move (order-independent; catches changes to any rate row, not just the first).

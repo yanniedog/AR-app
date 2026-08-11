@@ -32,6 +32,12 @@ export interface RbaCalendar {
   schedule: RbaScheduledMeeting[];
 }
 
+export interface RbaCalendarCoverage {
+  status: 'current' | 'awaiting-result';
+  /** Elapsed scheduled meeting whose published outcome is not in decisions yet. */
+  unresolvedMeeting: RbaScheduledMeeting | null;
+}
+
 const YMD_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function ymd(value: unknown): string {
@@ -115,6 +121,27 @@ export function nextMeeting(
     if (Number.isFinite(ts) && ts > now) return meeting;
   }
   return null;
+}
+
+/** Detect an elapsed scheduled meeting whose result has not reached the verified
+ * decision list. Consumers must not silently skip it and present the following
+ * meeting as though the latest policy decision were already integrated. */
+export function rbaCalendarCoverage(
+  calendar: RbaCalendar | null | undefined,
+  now: number = Date.now(),
+): RbaCalendarCoverage {
+  if (!calendar?.schedule?.length) {
+    return { status: 'current', unresolvedMeeting: null };
+  }
+  const recorded = new Set(calendar.decisions.map((decision) => decision.date));
+  const unresolvedMeeting =
+    calendar.schedule.find((meeting) => {
+      const announcedAt = Date.parse(meeting.announce_utc);
+      return Number.isFinite(announcedAt) && announcedAt <= now && !recorded.has(meeting.date);
+    }) ?? null;
+  return unresolvedMeeting
+    ? { status: 'awaiting-result', unresolvedMeeting }
+    : { status: 'current', unresolvedMeeting: null };
 }
 
 export interface RbaCountdown {

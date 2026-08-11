@@ -3,7 +3,13 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { AppText, Card, Divider, Row } from './ui';
-import { decisionLine, formatRbaDate, rbaCountdown, recentDecisions } from '../data/rbaCalendar';
+import {
+  decisionLine,
+  formatRbaDate,
+  rbaCalendarCoverage,
+  rbaCountdown,
+  recentDecisions,
+} from '../data/rbaCalendar';
 import { useStore } from '../data/store';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -14,20 +20,28 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
   const calendar = useStore((s) => s.rbaCalendar);
   const [expanded, setExpanded] = useState(false);
   const countdown = rbaCountdown(calendar);
-  if (!countdown) return null;
-  const days = countdown.calendarDays;
-  const when = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+  const unresolved = rbaCalendarCoverage(calendar).unresolvedMeeting;
+  if (!countdown && !unresolved) return null;
+  const days = countdown?.calendarDays ?? 0;
+  const when = unresolved
+    ? 'awaiting verified result'
+    : days <= 0
+      ? 'today'
+      : days === 1
+        ? 'tomorrow'
+        : `in ${days} days`;
+  const meetingDate = unresolved?.date ?? countdown!.meeting.date;
   const recent = recentDecisions(calendar, 4);
   const showDisclosure = expandable && recent.length > 0;
 
   const header = (
     <Row style={{ justifyContent: 'space-between' }}>
       <AppText variant="tiny" weight="700" color="textFaint">
-        NEXT RBA DECISION
+        {unresolved ? 'RBA DECISION UPDATE' : 'NEXT RBA DECISION'}
       </AppText>
       <Row gap={theme.spacing(2)}>
         <AppText variant="small" color="textMuted">
-          {formatRbaDate(countdown.meeting.date)} · {when}
+          {formatRbaDate(meetingDate)} · {when}
         </AppText>
         {showDisclosure ? (
           <Ionicons

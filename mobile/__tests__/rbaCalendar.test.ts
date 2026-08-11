@@ -7,6 +7,7 @@ import {
   formatRbaDate,
   decisionLine,
   rbaTrend,
+  rbaCalendarCoverage,
   type RbaDecisionEntry,
 } from '../src/data/rbaCalendar';
 
@@ -75,6 +76,26 @@ describe('nextMeeting / rbaCountdown', () => {
   it('rolls to the following meeting once the announcement passes', () => {
     const justAfter = Date.parse('2026-08-11T04:30:00.001Z');
     expect(nextMeeting(cal, justAfter)!.date).toBe('2026-09-29');
+  });
+
+  it('flags an elapsed meeting until its verified decision arrives', () => {
+    const justAfter = Date.parse('2026-08-11T04:30:00.001Z');
+    expect(rbaCalendarCoverage(cal, justAfter)).toEqual({
+      status: 'awaiting-result',
+      unresolvedMeeting: cal.schedule[0],
+    });
+    const current = normalizeRbaCalendar({
+      ...CAL,
+      decisions: [
+        ...CAL.decisions,
+        { date: '2026-08-11', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+      ],
+    })!;
+    expect(rbaCalendarCoverage(current, justAfter)).toEqual({
+      status: 'current',
+      unresolvedMeeting: null,
+    });
+    expect(nextMeeting(current, justAfter)?.date).toBe('2026-09-29');
   });
 
   it('treats the exact announcement instant as no longer upcoming', () => {

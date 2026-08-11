@@ -487,6 +487,7 @@ describe('rbaPassThrough', () => {
       outcome: 'hike',
       partialObservation: true,
     });
+    expect(model!.windowEnd).toBe('2026-06-15');
     expect(model!.rows[0]).toMatchObject({
       provider: 'AlphaBank',
       passedBps: 25,
