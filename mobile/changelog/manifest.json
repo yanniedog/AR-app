@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-11T14:42:52.615Z",
+  "generated_at": "2026-08-11T21:42:47.919Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -717,6 +717,14 @@
         "Clarify lender product rate moves (#177)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.139"
+    },
+    {
+      "version": "1.0.141",
+      "date": "2026-08-11",
+      "summaryBullets": [
+        "Integrate RBA decisions reliably across app (#179)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.141"
     }
   ]
 }
