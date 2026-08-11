@@ -184,7 +184,7 @@ function firstSundayUtc(year: number, monthIndex: number): number {
 /** Sydney calendar date (YYYY-MM-DD) for a UTC instant — the RBA's frame of
  * reference. AEDT (+11) from the first Sunday in October to the first Sunday in
  * April, else AEST (+10); computed without a tzdata dependency, mirroring the Pi. */
-function sydneyYmd(ms: number): string {
+export function sydneyYmd(ms: number): string {
   const year = new Date(ms).getUTCFullYear();
   const dstStart = firstSundayUtc(year, 9); // October
   const dstEnd = firstSundayUtc(year, 3); // April
