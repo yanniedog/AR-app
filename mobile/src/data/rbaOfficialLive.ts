@@ -1,6 +1,6 @@
 import type { CorePayload } from '../types';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
-import { rbaCalendarCoverage } from './rbaCalendar';
+import { rbaCalendarCoverage, sydneyYmd } from './rbaCalendar';
 
 export const RBA_OVERVIEW_URL = 'https://www.rba.gov.au/cash-rate-target-overview.html';
 export const RBA_MEDIA_RELEASE_FEED_URL = 'https://www.rba.gov.au/rss/rss-cb-media-releases.xml';
@@ -140,6 +140,7 @@ export async function refreshRbaCalendarFromOfficial(
   now: number = Date.now(),
 ): Promise<RbaCalendar> {
   if (!rbaCalendarCoverage(calendar, now).unresolvedMeeting) return calendar;
+  const original = calendar;
   try {
     const feedResponse = await fetch(RBA_MEDIA_RELEASE_FEED_URL, {
       headers: { Accept: 'application/rss+xml, application/xml, text/xml' },
@@ -155,35 +156,51 @@ export async function refreshRbaCalendarFromOfficial(
   } catch {
     // The independently published overview below remains authoritative fallback.
   }
-  const response = await fetch(RBA_OVERVIEW_URL, {
-    headers: { Accept: 'text/html' },
-  });
-  if (!response.ok) throw new Error(`official RBA overview returned HTTP ${response.status}`);
-  const overview = parseRbaOfficialOverview(await response.text());
-  if (!overview) throw new Error('official RBA overview could not be verified');
-  return reconcileRbaOfficialOverview(calendar, overview, now) ?? calendar;
+  try {
+    const response = await fetch(RBA_OVERVIEW_URL, {
+      headers: { Accept: 'text/html' },
+    });
+    if (!response.ok) throw new Error(`official RBA overview returned HTTP ${response.status}`);
+    const overview = parseRbaOfficialOverview(await response.text());
+    if (!overview) throw new Error('official RBA overview could not be verified');
+    return reconcileRbaOfficialOverview(calendar, overview, now) ?? calendar;
+  } catch (error) {
+    if (calendar !== original) return calendar;
+    throw error;
+  }
 }
 
 export function integrateRbaCalendarIntoCore(
   core: CorePayload,
   calendar: RbaCalendar,
+  now: number = Date.now(),
 ): CorePayload {
-  const latest = calendar.decisions.at(-1);
-  if (!latest) return core;
-  if (latest.outcome === 'hold') {
-    if (core.rba_holds?.includes(latest.date)) return core;
-    const holds = new Set(core.rba_holds ?? []);
-    holds.add(latest.date);
-    return { ...core, rba_holds: [...holds].sort() };
-  }
-  // A policy change is announced before it becomes the prevailing cash rate.
-  // Keep the result in the decision calendar immediately, but do not put its
-  // next-day step into the current-rate graph or "is now" notifications early.
-  if (!latest.effective || latest.effective > core.run_date.slice(0, 10)) return core;
-  if (core.rba.some((entry) => entry.date === latest.effective && entry.rate === latest.rate)) {
-    return core;
-  }
+  const asOf = sydneyYmd(now);
+  const holds = new Set(core.rba_holds ?? []);
   const byDate = new Map(core.rba.map((entry) => [entry.date, entry]));
-  byDate.set(latest.effective, { date: latest.effective, rate: latest.rate });
-  return { ...core, rba: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)) };
+  let changed = false;
+  for (const decision of calendar.decisions) {
+    if (decision.outcome === 'hold') {
+      if (!holds.has(decision.date)) {
+        holds.add(decision.date);
+        changed = true;
+      }
+      continue;
+    }
+    // A policy change is announced before it becomes the prevailing cash rate.
+    // Keep it in decision history immediately, but gate graphs/current-rate
+    // notifications against today's date in the RBA's Sydney frame.
+    if (!decision.effective || decision.effective > asOf) continue;
+    const existing = byDate.get(decision.effective);
+    if (!existing || existing.rate !== decision.rate) {
+      byDate.set(decision.effective, { date: decision.effective, rate: decision.rate });
+      changed = true;
+    }
+  }
+  if (!changed) return core;
+  return {
+    ...core,
+    rba: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    rba_holds: [...holds].sort(),
+  };
 }
