@@ -53,7 +53,7 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
   const header = (
     <View>
       <Row style={{ justifyContent: 'space-between' }}>
-        <Row gap={theme.spacing(2)}>
+        <Row gap={theme.spacing(2)} style={{ flex: 1, minWidth: 0 }}>
           <View
             style={{
               width: 34,
@@ -66,7 +66,11 @@ export function RbaCountdownCard({ expandable = true }: { expandable?: boolean }
           >
             <Ionicons name="business-outline" size={19} color={theme.colors.rba} />
           </View>
-          <AppText variant="small" weight="800" style={{ color: theme.colors.rba, letterSpacing: 0.7 }}>
+          <AppText
+            variant="small"
+            weight="800"
+            style={{ color: theme.colors.rba, letterSpacing: 0.7, flexShrink: 1 }}
+          >
             {unresolved ? 'RBA DECISION TODAY' : 'NEXT RBA DECISION'}
           </AppText>
         </Row>

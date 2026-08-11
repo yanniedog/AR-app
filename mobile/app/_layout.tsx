@@ -310,7 +310,9 @@ function RootNavigator() {
       const live = useStore.getState();
       if (live.status !== 'ready' || live.refreshing) return;
       if (shouldRefreshOnResume(live.lastCheckedAt)) {
-        void live.refresh({ background: true });
+        void live
+          .refresh({ background: true })
+          .catch((err) => logSwallowedError('resume.refresh', err));
       }
     });
     return () => sub.remove();

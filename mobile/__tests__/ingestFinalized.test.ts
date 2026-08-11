@@ -191,6 +191,16 @@ describe('ingestFinalized', () => {
     };
     expect(mergeOptionalManifestFiles(targetSame, source).files.bank_history?.sha256).toBe('bh');
 
+    const staleOptional: Manifest = {
+      ...targetSame,
+      files: {
+        ...targetSame.files,
+        bank_history: optionalAsset('old-bank-history.json.gz', 'old-bh'),
+      },
+    };
+    expect(mergeOptionalManifestFiles(staleOptional, source).files.bank_history?.sha256).toBe('old-bh');
+    expect(mergeOptionalManifestFiles(staleOptional, source, true).files.bank_history?.sha256).toBe('bh');
+
     const differentCore: Manifest = {
       ...targetSame,
       files: {

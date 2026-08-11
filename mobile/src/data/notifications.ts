@@ -382,11 +382,14 @@ export function computeChanges(
     .filter((date) => !oldHolds.has(date))
     .sort()
     .at(-1);
-  if (newHold && newRba) {
+  const heldRate = newHold
+    ? newCore.rba.filter((entry) => entry.date <= newHold).at(-1)?.rate
+    : null;
+  if (newHold && heldRate != null) {
     messages.push({
       title: 'RBA cash rate held',
-      body: `Cash rate remains ${newRba.rate.toFixed(2)}%.`,
-      href: `${DEEP_LINK_SCHEME}://rba-response?date=${encodeURIComponent(newHold)}`,
+      body: `Cash rate remains ${heldRate.toFixed(2)}%.`,
+      href: `${DEEP_LINK_SCHEME}://rba`,
     });
   }
 

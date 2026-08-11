@@ -273,9 +273,13 @@ export function scorablePassThroughDecisions(
 
   const fromCal = calendarPassThroughDecisions(opts.calendar);
   const fromSeries = decisionsFromRbaSeries(rba);
+  const seriesOnly = fromSeries.filter((decision) => !isCalendarEffectiveTwin(decision, fromCal));
   const primary = fromCal.length ? fromCal : fromSeries;
   if (!primary.length) return [];
-  const boundaries = policyBoundaryDates(opts.calendar, primary);
+  // Even when the calendar is the preferred decision source, its payload may
+  // lag a newer core series step. Every scoring path must share that later
+  // policy boundary so an older response window cannot remain open through it.
+  const boundaries = policyBoundaryDates(opts.calendar, seriesOnly);
 
   let scored = scoreDecisionsAgainstLedger(primary, boundaries, ledgerStart, ledgerEnd, windowDays);
   // Stale calendar that still overlaps the ledger can hide a newer core.rba
@@ -285,7 +289,7 @@ export function scorablePassThroughDecisions(
   if (fromCal.length && fromSeries.length) {
     const seriesScored = scoreDecisionsAgainstLedger(
       fromSeries,
-      policyBoundaryDates(opts.calendar, fromSeries),
+      boundaries,
       ledgerStart,
       ledgerEnd,
       windowDays,
@@ -485,9 +489,13 @@ function resolvePassThroughDecisionContext(
       : null) ?? scorable[scorable.length - 1];
   if (!decision) return null;
 
+  const calendarDecisions = calendarPassThroughDecisions(opts.calendar);
+  const seriesOnly = decisionsFromRbaSeries(rba).filter(
+    (seriesDecision) => !isCalendarEffectiveTwin(seriesDecision, calendarDecisions),
+  );
   const windowEnd = windowEndForDecision(
     decision,
-    policyBoundaryDates(opts.calendar, scorable),
+    policyBoundaryDates(opts.calendar, seriesOnly),
     windowDays,
   );
   if (!windowEnd) return null;

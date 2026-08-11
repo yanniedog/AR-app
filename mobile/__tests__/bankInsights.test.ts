@@ -727,6 +727,10 @@ describe('rbaPassThrough', () => {
     expect(rbaPassThrough(payload, series, { calendar: staleButOverlapping })!.decision.date).toBe(
       '2026-06-01',
     );
+    expect(rbaPassThrough(payload, series, {
+      calendar: staleButOverlapping,
+      decisionDate: '2026-05-10',
+    })!.windowEnd).toBe('2026-05-31');
   });
 
   test('does not treat a core.rba effective-date twin as a second decision', () => {

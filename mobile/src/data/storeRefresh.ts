@@ -299,7 +299,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
 
         // Dated tags often omit optional assets. Prefer rolling (same day) then
         // the already-installed day so bank history / RBA calendar survive.
-        remote = mergeOptionalManifestFiles(remote, rolling);
+        // Rolling is the authoritative same-core source for corrected optional
+        // assets; it may carry a newer RBA calendar than a reused dated manifest.
+        remote = mergeOptionalManifestFiles(remote, rolling, true);
         remote = mergeOptionalManifestFiles(remote, get().manifest);
         optionalWork = optionalRefreshWork(get(), remote);
 

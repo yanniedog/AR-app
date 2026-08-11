@@ -11,6 +11,7 @@ describe('shouldRefreshOnResume', () => {
 
   test('uses a short freshness window for decision-day updates', () => {
     expect(shouldRefreshOnResume('2026-08-12T01:50:00Z', now)).toBe(false);
+    expect(shouldRefreshOnResume('2026-08-12T01:45:00Z', now)).toBe(true);
     expect(shouldRefreshOnResume('2026-08-12T01:44:59Z', now)).toBe(true);
   });
 });
