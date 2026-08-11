@@ -1,0 +1,32 @@
+{
+  "version": "1.0.139",
+  "releaseTag": "app-arm-v1.0.139",
+  "date": "2026-08-11",
+  "summaryBullets": [
+    "Clarify lender product rate moves (#177)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Clarify lender product rate moves (#177)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.139"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.138"
+        }
+      ]
+    }
+  ]
+}
