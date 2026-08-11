@@ -25,21 +25,21 @@ export function productRateChangeText(
   if (!summary) return null;
   if (summary.kind === 'tracking') {
     return compact
-      ? `Tracking since ${formatRateChangeDate(summary.trackedSince)}`
-      : `Tracking this rate since ${formatRateChangeDate(summary.trackedSince)}`;
+      ? `Best rate tracked since ${formatRateChangeDate(summary.trackedSince)}`
+      : `Tracking best rate since ${formatRateChangeDate(summary.trackedSince)}`;
   }
   if (summary.kind === 'unchanged') {
     return compact
-      ? `No change since ${formatRateChangeDate(summary.trackedSince)}`
-      : `No rate change observed since ${formatRateChangeDate(summary.trackedSince)}`;
+      ? `Best rate unchanged since ${formatRateChangeDate(summary.trackedSince)}`
+      : `No best-rate change observed since ${formatRateChangeDate(summary.trackedSince)}`;
   }
 
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const verb = summary.bps > 0 ? 'rose' : 'fell';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? `Last change ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
-    : `Last rate change ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
+    ? `Best-rate change ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
+    : `Best rate last ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
         summary.fromRate,
       )} → ${formatRate(summary.toRate)}`;
 }

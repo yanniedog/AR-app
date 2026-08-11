@@ -7,6 +7,7 @@ import {
   hasProductSeries,
   normalizeProductHistoryPayload,
   productMoveBreakdownForCatalog,
+  productHistoryRepresentsRateRow,
   productMovesForBankEvent,
   productMovesForCatalog,
   productSeriesRecord,
@@ -204,6 +205,20 @@ describe('summarizeProductBestRateSeries', () => {
     expect(bestRateForProduct(currentCore, 'P|1')).toBe(0.055);
     expect(bestRateForProduct(currentCore, 'S|1')).toBe(0.05);
     expect(bestRateForProduct(currentCore, 'missing')).toBeNull();
+  });
+
+  it('only maps a selected row to history when it is the product-best headline rate', () => {
+    const base = {
+      ...rateRow('S|mixed', '0.04'),
+      ribbon_deposit_kind: 'base',
+    };
+    const bonus = {
+      ...rateRow('S|mixed', '0.05'),
+      ribbon_deposit_kind: 'bonus',
+    };
+    const currentCore = core('2026-07-31', { Savings: [base, bonus] });
+    expect(productHistoryRepresentsRateRow(currentCore, base)).toBe(false);
+    expect(productHistoryRepresentsRateRow(currentCore, bonus)).toBe(true);
   });
 
   it('does not invent a direction from sparse or invalid history', () => {

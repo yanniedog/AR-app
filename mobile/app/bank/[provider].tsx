@@ -25,6 +25,7 @@ import {
 } from '../../src/data/bankInsights';
 import { formatRate, formatRunDate, visibleAccountRows } from '../../src/data/format';
 import {
+  productHistoryRepresentsRateRow,
   productMoveBreakdownForCatalog,
   type ProductMoveCatalogEntry,
   type ProductRateMove,
@@ -160,17 +161,20 @@ export default function BankDetail() {
   useEffect(() => {
     // Product-level move drill-down needs the on-device product history ledger.
     // Do NOT pull history_banks here — bank trend charts use bankInsights only.
-    // Defer until after navigation/interactions so the bank page paints instantly.
-    if (!showBankInsights || (!rawBankEvents.length && (!focusDate || !focusSection))) {
+    // Subscribe to an existing cache after paint, but only warm the multi-day
+    // ledger after the user explicitly opens a dated move drill-down.
+    if (!showBankInsights) {
       historyRequestKey.current = null;
       setProductHistoryReady(false);
       return;
     }
     const key = core?.run_date ?? null;
     if (!key) return;
+    const shouldFetch = !!(focusDate && focusSection);
+    if (!shouldFetch) historyRequestKey.current = null;
     if (isPerformanceAuditActive()) {
       setProductHistoryReady(true);
-      if (historyRequestKey.current !== key) {
+      if (shouldFetch && historyRequestKey.current !== key) {
         historyRequestKey.current = key;
         void ensureProductHistory({ purpose: 'bank_move' });
       }
@@ -181,7 +185,7 @@ export default function BankDetail() {
       void yieldToUi().then(() => {
         if (cancelled) return;
         setProductHistoryReady(true);
-        if (historyRequestKey.current === key) return;
+        if (!shouldFetch || historyRequestKey.current === key) return;
         historyRequestKey.current = key;
         void ensureProductHistory({ purpose: 'bank_move' });
       });
@@ -195,7 +199,6 @@ export default function BankDetail() {
     ensureProductHistory,
     focusDate,
     focusSection,
-    rawBankEvents.length,
     showBankInsights,
   ]);
 
@@ -224,18 +227,22 @@ export default function BankDetail() {
 
   const catalogsBySection = useMemo(() => {
     // Keep event denominators and product names in the exact same scope as the
-    // cards below. In broadly-applicable mode this deliberately excludes
-    // conditional bonus/intro and access-restricted rows.
+    // cards below, but only where the selected row is also the product-best
+    // rate represented by the product-key history ledger. Withhold ambiguous
+    // base/bonus or comparison-selected rows rather than misattribute a move.
     const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
     for (const { section, rows } of bySection) {
-      out[section] = rows.map((row) => ({
+      out[section] = rows.flatMap((row) => {
+        if (!productHistoryRepresentsRateRow(core, row)) return [];
+        return [{
           productKey: row.product_key,
           productName: (row.product_name && row.product_name.trim()) || row.product_key,
           rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
-        }));
+        }];
+      });
     }
     return out;
-  }, [bySection]);
+  }, [bySection, core]);
 
   const visibleBankInsights = useMemo(
     () =>
@@ -316,22 +323,36 @@ export default function BankDetail() {
       breakdown.matched,
       breakdown.moves,
     );
-    return event ? { event, moves: breakdown.moves } : null;
+    return { event, matched: breakdown.matched, moves: breakdown.moves };
   }, [catalogsBySection, focusSection, focusSourceEvent, productHistory]);
 
   const focusEvent = focusBreakdown?.event ?? null;
   const focusedMoves = focusBreakdown?.moves ?? [];
+  const focusHistoryState = useMemo(() => {
+    if (!focusSourceEvent || !focusSection) return 'idle' as const;
+    if (!productHistory) return 'loading' as const;
+    if (!(catalogsBySection[focusSection]?.length)) return 'unsafe' as const;
+    if (!productHistory.run_dates.includes(focusSourceEvent.date)) return 'incomplete' as const;
+    if (!focusBreakdown?.matched) return 'incomplete' as const;
+    return focusEvent ? 'matched' as const : 'none' as const;
+  }, [catalogsBySection, focusBreakdown?.matched, focusEvent, focusSection, focusSourceEvent, productHistory]);
+
+  const displayBankEvents = useMemo(
+    () => (productHistory ? bankEvents : rawBankEvents.slice(0, 8)),
+    [bankEvents, productHistory, rawBankEvents],
+  );
 
   const bankEventContexts = useMemo(() => {
     const map = new Map<string, BankEventRateContext | null>();
-    for (const event of bankEvents) {
+    const contextPayload = productHistory ? visibleBankInsights : bankInsights;
+    for (const event of displayBankEvents) {
       map.set(
         `${event.date}:${event.section}`,
-        bankEventMedianContext(visibleBankInsights, event),
+        bankEventMedianContext(contextPayload, event),
       );
     }
     return map;
-  }, [bankEvents, visibleBankInsights]);
+  }, [bankInsights, displayBankEvents, productHistory, visibleBankInsights]);
 
   const focusRateCtx = useMemo(
     () => (focusEvent ? bankEventMedianContext(visibleBankInsights, focusEvent) : null),
@@ -405,13 +426,12 @@ export default function BankDetail() {
     [provider],
   );
   const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
-  const moveHistoryRequired =
-    showBankInsights && (rawBankEvents.length > 0 || !!(focusDate && focusSection));
+  const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
   usePerformanceAuditSurface({
     id: 'lender.details',
     routeKey: '/bank/[provider]',
     datasetRevision: core?.run_date ?? null,
-    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}:${productHistory ? `moves-${bankEvents.length}` : 'moves-pending'}`,
+    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`,
     actions: auditActions,
     probes: [
       {
@@ -457,11 +477,13 @@ export default function BankDetail() {
         id: 'lender.product-history-data',
         kind: 'data',
         required: moveHistoryRequired,
-        status: !moveHistoryRequired || productHistory
+        status: !moveHistoryRequired
           ? 'ready'
           : productHistoryError
             ? 'error'
-            : 'pending',
+            : focusHistoryState === 'loading'
+              ? 'pending'
+              : 'ready',
         error: moveHistoryRequired ? productHistoryError : null,
         expectedCount: moveHistoryRequired ? 1 : 0,
         actualCount: moveHistoryRequired && productHistory ? 1 : 0,
@@ -562,11 +584,15 @@ export default function BankDetail() {
               {SECTIONS[focusSection].title} · {formatRunDate(focusSourceEvent.date)}
             </AppText>
             <AppText variant="small" color="textMuted">
-              {!productHistory
-                ? productHistoryError
-                  ? 'Product-level history is unavailable right now — pull to refresh and try again.'
-                  : 'Matching this move to the products included in your settings…'
-                : 'None of the products included in your current settings comprised this move.'}
+              {productHistoryError && focusHistoryState === 'loading'
+                ? 'Product-level history is unavailable right now — try this move again shortly.'
+                : focusHistoryState === 'loading'
+                  ? 'Loading product-level history to identify which accounts moved…'
+                  : focusHistoryState === 'unsafe'
+                    ? 'Available history cannot safely identify this selected rate row, so no product is attributed.'
+                    : focusHistoryState === 'incomplete'
+                      ? 'Available history does not yet cover this move with a prior product observation.'
+                      : 'None of the exactly matched products in your current settings comprised this move.'}
             </AppText>
           </Card>
         ) : null}
@@ -577,7 +603,7 @@ export default function BankDetail() {
               Products that changed
             </AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              The accounts behind each recent X-of-Y change
+              Exact product matches from available cached history
             </AppText>
             {recentMoveBreakdowns.map(({ event, moves }, bi) => (
               <View
@@ -638,14 +664,13 @@ export default function BankDetail() {
                   <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
                     Recent moves
                   </AppText>
-                  {!productHistory ? (
-                    <AppText variant="small" color="textMuted" style={{ paddingVertical: 8 }}>
-                      {productHistoryError
-                        ? 'Could not match recent moves to the products included in your settings.'
-                        : 'Matching recent moves to the products included in your settings…'}
-                    </AppText>
-                  ) : bankEvents.length ? (
-                    bankEvents.map((event) => (
+                  <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
+                    {productHistory
+                      ? 'Counts reflect exact product matches under your settings.'
+                      : 'Counts cover all tracked products. Tap a move to identify the products under your settings.'}
+                  </AppText>
+                  {displayBankEvents.length ? (
+                    displayBankEvents.map((event) => (
                       <BankMoveRow
                         key={`${event.date}-${event.section}`}
                         event={event}
@@ -661,7 +686,7 @@ export default function BankDetail() {
                     ))
                   ) : (
                     <AppText variant="small" color="textMuted" style={{ paddingVertical: 8 }}>
-                      No recent changes among the products included in your settings.
+                      No recent changes could be exactly matched to products in your settings.
                     </AppText>
                   )}
                 </>

@@ -1,6 +1,6 @@
 import { SECTIONS } from '../constants';
 import { debugLog } from '../lib/debugLog';
-import type { CorePayload, SectionKey } from '../types';
+import type { CorePayload, RateRow, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
@@ -186,6 +186,25 @@ export function bestRateForProduct(
     currentBestRatesCache.set(core, best);
   }
   return best.get(productKey) ?? null;
+}
+
+/**
+ * Whether a selected current row is represented by the product-key history
+ * ledger. The ledger stores only each product's section-best headline rate, so
+ * a base row beside a higher bonus or a comparison-selected mortgage row must
+ * not be attributed changes from that collapsed series.
+ */
+export function productHistoryRepresentsRateRow(
+  core: CorePayload | null | undefined,
+  row: RateRow,
+): boolean {
+  const selectedRate = toFraction(row.rate);
+  const historyRate = bestRateForProduct(core, row.product_key);
+  return (
+    selectedRate != null &&
+    historyRate != null &&
+    Math.abs(selectedRate - historyRate) <= 1e-9
+  );
 }
 
 /**
