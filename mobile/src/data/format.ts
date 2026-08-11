@@ -199,11 +199,32 @@ export function isNonStandard(row: RateRow): boolean {
 }
 
 /**
+ * Whether a deposit row's advertised rate depends on bonus actions or an
+ * introductory window. These remain available in the opt-in full catalogue,
+ * but are not unconditional rates that broadly apply without further steps.
+ */
+export function isConditionalDepositRate(row: RateRow): boolean {
+  const depositKind = (row.ribbon_deposit_kind ?? '').toLowerCase().trim();
+  const rateStructure = (row.ribbon_rate_structure ?? '').toLowerCase().trim();
+  if (depositKind === 'bonus' || depositKind === 'introductory' || depositKind === 'intro') {
+    return true;
+  }
+  if (rateStructure === 'bonus' || rateStructure === 'introductory' || rateStructure === 'intro') {
+    return true;
+  }
+  const pathTokens = (row.taxonomy_path ?? '').toUpperCase().split('.');
+  return pathTokens.some(
+    (token) => token === 'BONUS' || token === 'INTRO' || token === 'INTRODUCTORY',
+  );
+}
+
+/**
  * The unified default-suitability gate. A product is shown to ordinary users by
  * default only when it is *broadly available*: not a non-standard account class,
- * not a curated non-standard cohort, and not access-restricted (youth, region,
- * staff, occupation, membership, business, student, pension, package/existing-
- * customer gates — via product name, lender brand, or loaded eligibility).
+ * not a curated non-standard cohort, not a conditional bonus/introductory rate,
+ * and not access-restricted (youth, region, staff, occupation, membership,
+ * business, student, pension, package/existing-customer gates — via product
+ * name, lender brand, or loaded eligibility).
  * Product-structure dimensions (LVR, deposit size, TD term, OO/investor, fixed/
  * variable) are allowed. Advanced users opt everything back in via the
  * "Broadly applicable products" setting (`includeNonStandard`). This is the ONE
@@ -216,6 +237,7 @@ export function isBroadlyAvailable(
 ): boolean {
   if (!row) return false;
   if (isNonStandard(row)) return false;
+  if (isConditionalDepositRate(row)) return false;
   const access = assessAccess(row.product_name, detail ?? null, row.provider);
   if (accessExcludesFromStandard(access)) return false;
   return true;
@@ -231,7 +253,12 @@ export function visibleAccountRows(
   // details warm. Fall back to per-row assessAccess before the index exists.
   const allowed = getSuitabilityAllowed();
   if (allowed) {
-    return rows.filter((row) => allowed.has(row.product_key));
+    // The suitability index is product-key based. Recheck row-level rate
+    // conditionality so a product with both base and bonus rows cannot let its
+    // conditional variant through merely because the base row is allowed.
+    return rows.filter(
+      (row) => allowed.has(row.product_key) && !isConditionalDepositRate(row),
+    );
   }
   return rows.filter((row) => isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null));
 }

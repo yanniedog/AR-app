@@ -18,13 +18,15 @@ import { SECTIONS, SECTION_ORDER } from '../../src/constants';
 import {
   bankEventMedianContext,
   bankTrendChartModel,
+  filterBankInsightsForSuitability,
   recentBankEvents,
   type BankEventRateContext,
   type BankRateEvent,
 } from '../../src/data/bankInsights';
 import { formatRate, formatRunDate, visibleAccountRows } from '../../src/data/format';
 import {
-  productMovesForCatalog,
+  productHistoryRepresentsRateRow,
+  productMoveBreakdownForCatalog,
   type ProductMoveCatalogEntry,
   type ProductRateMove,
 } from '../../src/data/productHistory';
@@ -53,6 +55,24 @@ function bpsLabel(bps: number): string {
 
 function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
+}
+
+function eventForVisibleProducts(
+  source: BankRateEvent,
+  matched: number,
+  moves: readonly ProductRateMove[],
+): BankRateEvent | null {
+  if (!moves.length || matched <= 0) return null;
+  const hasIncrease = moves.some((move) => move.bps > 0);
+  const hasDecrease = moves.some((move) => move.bps < 0);
+  const avgBps = moves.reduce((sum, move) => sum + move.bps, 0) / moves.length;
+  return {
+    ...source,
+    dir: hasIncrease && hasDecrease ? 'mixed' : hasIncrease ? 'hike' : 'cut',
+    moved: moves.length,
+    total: matched,
+    avg_bps: Math.round(avgBps * 10) / 10,
+  };
 }
 
 const ProductMoveRow = React.memo(function ProductMoveRow({
@@ -126,6 +146,11 @@ export default function BankDetail() {
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
 
+  const rawBankEvents = useMemo(
+    () => recentBankEvents(bankInsights, { provider }),
+    [bankInsights, provider],
+  );
+
   useEffect(() => {
     const key = showBankInsights ? core?.run_date ?? null : null;
     if (!key || insightsRequestKey.current === key) return;
@@ -136,17 +161,20 @@ export default function BankDetail() {
   useEffect(() => {
     // Product-level move drill-down needs the on-device product history ledger.
     // Do NOT pull history_banks here — bank trend charts use bankInsights only.
-    // Defer until after navigation/interactions so the bank page paints instantly.
-    if (!showBankInsights || !focusDate || !focusSection) {
+    // Subscribe to an existing cache after paint, but only warm the multi-day
+    // ledger after the user explicitly opens a dated move drill-down.
+    if (!showBankInsights) {
       historyRequestKey.current = null;
       setProductHistoryReady(false);
       return;
     }
     const key = core?.run_date ?? null;
     if (!key) return;
+    const shouldFetch = !!(focusDate && focusSection);
+    if (!shouldFetch) historyRequestKey.current = null;
     if (isPerformanceAuditActive()) {
       setProductHistoryReady(true);
-      if (historyRequestKey.current !== key) {
+      if (shouldFetch && historyRequestKey.current !== key) {
         historyRequestKey.current = key;
         void ensureProductHistory({ purpose: 'bank_move' });
       }
@@ -157,7 +185,7 @@ export default function BankDetail() {
       void yieldToUi().then(() => {
         if (cancelled) return;
         setProductHistoryReady(true);
-        if (historyRequestKey.current === key) return;
+        if (!shouldFetch || historyRequestKey.current === key) return;
         historyRequestKey.current = key;
         void ensureProductHistory({ purpose: 'bank_move' });
       });
@@ -198,32 +226,40 @@ export default function BankDetail() {
   }, [core, provider, depositRankMetric, mortgageRateMetric, includeNonStandard, detailsProducts, suitabilityRevision]);
 
   const catalogsBySection = useMemo(() => {
-    // Must match bank-insights event scope (unfiltered provider/section products).
-    // Building from `bySection` would omit non-standard / token-rate products that
-    // still contribute to headline moved/total counts when Standard-only is on.
+    // Keep event denominators and product names in the exact same scope as the
+    // cards below, but only where the selected row is also the product-best
+    // rate represented by the product-key history ledger. Withhold ambiguous
+    // base/bonus or comparison-selected rows rather than misattribute a move.
     const out: Partial<Record<SectionKey, ProductMoveCatalogEntry[]>> = {};
-    if (!core) return out;
-    for (const section of SECTION_ORDER) {
-      const catalog: ProductMoveCatalogEntry[] = [];
-      const seen = new Set<string>();
-      for (const row of core.sections[section]?.rates ?? []) {
-        if (row.provider !== provider || !row.product_key || seen.has(row.product_key)) continue;
-        seen.add(row.product_key);
-        catalog.push({
+    for (const { section, rows } of bySection) {
+      out[section] = rows.flatMap((row) => {
+        if (!productHistoryRepresentsRateRow(core, row)) return [];
+        return [{
           productKey: row.product_key,
           productName: (row.product_name && row.product_name.trim()) || row.product_key,
           rateIndex: typeof row.rate_index === 'number' ? row.rate_index : null,
-        });
-      }
-      if (catalog.length) out[section] = catalog;
+        }];
+      });
     }
     return out;
-  }, [core, provider]);
+  }, [bySection, core]);
+
+  const visibleBankInsights = useMemo(
+    () =>
+      filterBankInsightsForSuitability(
+        bankInsights,
+        core,
+        includeNonStandard,
+        detailsProducts,
+        suitabilityRevision,
+      ),
+    [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision],
+  );
 
   const chartSections = useMemo(
     () =>
-      SECTION_ORDER.filter((section) => !!bankInsights?.banks?.[provider]?.[section]),
-    [bankInsights, provider],
+      SECTION_ORDER.filter((section) => !!visibleBankInsights?.banks?.[provider]?.[section]),
+    [provider, visibleBankInsights],
   );
   const [chartSection, setChartSection] = useState<SectionKey | null>(null);
   const activeChartSection =
@@ -236,72 +272,94 @@ export default function BankDetail() {
   const chartModel = useMemo(
     () =>
       activeChartSection
-        ? bankTrendChartModel(bankInsights, provider, activeChartSection)
+        ? bankTrendChartModel(visibleBankInsights, provider, activeChartSection)
         : null,
-    [activeChartSection, bankInsights, provider],
-  );
-  const bankEvents = useMemo(
-    () => recentBankEvents(bankInsights, { provider, limit: 8 }),
-    [bankInsights, provider],
+    [activeChartSection, provider, visibleBankInsights],
   );
 
-  const bankEventContexts = useMemo(() => {
-    const map = new Map<string, BankEventRateContext | null>();
-    for (const event of bankEvents) {
-      map.set(`${event.date}:${event.section}`, bankEventMedianContext(bankInsights, event));
-    }
-    return map;
-  }, [bankEvents, bankInsights]);
-
-  const focusEvent: BankRateEvent | null = useMemo(() => {
+  const focusSourceEvent: BankRateEvent | null = useMemo(() => {
     if (!focusDate || !focusSection) return null;
     return (
-      bankEvents.find((e) => e.date === focusDate && e.section === focusSection) ??
+      rawBankEvents.find((e) => e.date === focusDate && e.section === focusSection) ??
       recentBankEvents(bankInsights, { provider }).find(
         (e) => e.date === focusDate && e.section === focusSection,
       ) ??
       null
     );
-  }, [bankEvents, bankInsights, focusDate, focusSection, provider]);
+  }, [bankInsights, focusDate, focusSection, provider, rawBankEvents]);
 
-  const focusRateCtx = useMemo(
-    () => (focusEvent ? bankEventMedianContext(bankInsights, focusEvent) : null),
-    [bankInsights, focusEvent],
+  const eventBreakdowns = useMemo(() => {
+    if (!productHistory) return [] as { event: BankRateEvent; moves: ProductRateMove[] }[];
+    const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
+    for (const source of rawBankEvents) {
+      const breakdown = productMoveBreakdownForCatalog(
+        productHistory,
+        catalogsBySection[source.section] ?? [],
+        { date: source.date },
+      );
+      const event = eventForVisibleProducts(source, breakdown.matched, breakdown.moves);
+      if (event) {
+        out.push({ event, moves: breakdown.moves });
+        if (out.length === 8) break;
+      }
+    }
+    return out;
+  }, [catalogsBySection, productHistory, rawBankEvents]);
+
+  const bankEvents = useMemo(
+    () => eventBreakdowns.map(({ event }) => event),
+    [eventBreakdowns],
   );
 
-  const focusedMoves = useMemo(() => {
-    if (!focusDate || !focusSection || !productHistory) return [] as ProductRateMove[];
-    return productMovesForCatalog(productHistory, catalogsBySection[focusSection] ?? [], {
-      date: focusDate,
-    });
-  }, [catalogsBySection, focusDate, focusSection, productHistory]);
+  const focusBreakdown = useMemo(() => {
+    if (!focusSourceEvent || !focusSection || !productHistory) return null;
+    const breakdown = productMoveBreakdownForCatalog(
+      productHistory,
+      catalogsBySection[focusSection] ?? [],
+      { date: focusSourceEvent.date },
+    );
+    const event = eventForVisibleProducts(
+      focusSourceEvent,
+      breakdown.matched,
+      breakdown.moves,
+    );
+    return { event, matched: breakdown.matched, moves: breakdown.moves };
+  }, [catalogsBySection, focusSection, focusSourceEvent, productHistory]);
 
-  // Defer unfocused "Products involved" diffs until after paint — never on the
-  // critical path of opening the bank page or landing productHistory in the store.
-  const [recentMoveBreakdowns, setRecentMoveBreakdowns] = useState<
-    { event: BankRateEvent; moves: ProductRateMove[] }[]
-  >([]);
-  useEffect(() => {
-    if (focusEvent || !productHistory || !bankEvents.length) {
-      setRecentMoveBreakdowns([]);
-      return;
+  const focusEvent = focusBreakdown?.event ?? null;
+  const focusedMoves = focusBreakdown?.moves ?? [];
+  const focusHistoryState = useMemo(() => {
+    if (!focusSourceEvent || !focusSection) return 'idle' as const;
+    if (!productHistory) return 'loading' as const;
+    if (!(catalogsBySection[focusSection]?.length)) return 'unsafe' as const;
+    if (!productHistory.run_dates.includes(focusSourceEvent.date)) return 'incomplete' as const;
+    if (!focusBreakdown?.matched) return 'incomplete' as const;
+    return focusEvent ? 'matched' as const : 'none' as const;
+  }, [catalogsBySection, focusBreakdown?.matched, focusEvent, focusSection, focusSourceEvent, productHistory]);
+
+  const displayBankEvents = useMemo(
+    () => (productHistory ? bankEvents : rawBankEvents.slice(0, 8)),
+    [bankEvents, productHistory, rawBankEvents],
+  );
+
+  const bankEventContexts = useMemo(() => {
+    const map = new Map<string, BankEventRateContext | null>();
+    const contextPayload = productHistory ? visibleBankInsights : bankInsights;
+    for (const event of displayBankEvents) {
+      map.set(
+        `${event.date}:${event.section}`,
+        bankEventMedianContext(contextPayload, event),
+      );
     }
-    let cancelled = false;
-    void yieldToUi().then(() => {
-      if (cancelled) return;
-      const out: { event: BankRateEvent; moves: ProductRateMove[] }[] = [];
-      for (const event of bankEvents.slice(0, 3)) {
-        const moves = productMovesForCatalog(productHistory, catalogsBySection[event.section] ?? [], {
-          date: event.date,
-        });
-        if (moves.length) out.push({ event, moves });
-      }
-      if (!cancelled) setRecentMoveBreakdowns(out);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [bankEvents, catalogsBySection, focusEvent, productHistory]);
+    return map;
+  }, [bankInsights, displayBankEvents, productHistory, visibleBankInsights]);
+
+  const focusRateCtx = useMemo(
+    () => (focusEvent ? bankEventMedianContext(visibleBankInsights, focusEvent) : null),
+    [focusEvent, visibleBankInsights],
+  );
+
+  const recentMoveBreakdowns = focusSourceEvent ? [] : eventBreakdowns.slice(0, 3);
 
   const productCount = useMemo(() => bySection.reduce((n, s) => n + s.rows.length, 0), [bySection]);
 
@@ -354,24 +412,26 @@ export default function BankDetail() {
       actions['lender.history.date.previous'] = () =>
         historyAuditActionsRef.current?.selectPreviousDate();
     }
-    if (bankEvents[0]) {
+    const firstMove = bankEvents[0] ?? rawBankEvents[0];
+    if (firstMove) {
       actions['lender.move.first'] = () => {
-        handleMoveSelect(bankEvents[0]);
+        handleMoveSelect(firstMove);
         return { expectedPath: `/bank/${encodeURIComponent(provider)}` };
       };
     }
     return actions;
-  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider]);
+  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, rawBankEvents]);
   const lenderLogoIds = useMemo(
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],
   );
   const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
+  const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
   usePerformanceAuditSurface({
     id: 'lender.details',
     routeKey: '/bank/[provider]',
     datasetRevision: core?.run_date ?? null,
-    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}`,
+    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`,
     actions: auditActions,
     probes: [
       {
@@ -416,15 +476,17 @@ export default function BankDetail() {
       {
         id: 'lender.product-history-data',
         kind: 'data',
-        required: !!focusEvent,
-        status: !focusEvent || productHistory
+        required: moveHistoryRequired,
+        status: !moveHistoryRequired
           ? 'ready'
           : productHistoryError
             ? 'error'
-            : 'pending',
-        error: focusEvent ? productHistoryError : null,
-        expectedCount: focusEvent ? 1 : 0,
-        actualCount: focusEvent && productHistory ? 1 : 0,
+            : focusHistoryState === 'loading'
+              ? 'pending'
+              : 'ready',
+        error: moveHistoryRequired ? productHistoryError : null,
+        expectedCount: moveHistoryRequired ? 1 : 0,
+        actualCount: moveHistoryRequired && productHistory ? 1 : 0,
       },
     ],
   });
@@ -449,7 +511,8 @@ export default function BankDetail() {
           <View style={{ flex: 1 }}>
             <AppText variant="h3">{provider}</AppText>
             <AppText variant="small" color="textMuted">
-              {productCount} products
+              {productCount} {productCount === 1 ? 'product' : 'products'}
+              {!includeNonStandard ? ' · broadly applicable' : ''}
             </AppText>
           </View>
         </Row>
@@ -512,6 +575,61 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
+        {showBankInsights && focusSourceEvent && focusSection && !focusEvent ? (
+          <Card style={{ marginBottom: 16 }} accessibilityLiveRegion="polite">
+            <AppText variant="h3" style={{ marginBottom: 6 }}>
+              Move detail
+            </AppText>
+            <AppText variant="small" color="textMuted" style={{ marginBottom: 8 }}>
+              {SECTIONS[focusSection].title} · {formatRunDate(focusSourceEvent.date)}
+            </AppText>
+            <AppText variant="small" color="textMuted">
+              {productHistoryError && focusHistoryState === 'loading'
+                ? 'Product-level history is unavailable right now — try this move again shortly.'
+                : focusHistoryState === 'loading'
+                  ? 'Loading product-level history to identify which accounts moved…'
+                  : focusHistoryState === 'unsafe'
+                    ? 'Available history cannot safely identify this selected rate row, so no product is attributed.'
+                    : focusHistoryState === 'incomplete'
+                      ? 'Available history does not yet cover this move with a prior product observation.'
+                      : 'None of the exactly matched products in your current settings comprised this move.'}
+            </AppText>
+          </Card>
+        ) : null}
+
+        {showBankInsights && recentMoveBreakdowns.length ? (
+          <Card style={{ marginBottom: 16 }}>
+            <AppText variant="h3" style={{ marginBottom: 4 }}>
+              Products that changed
+            </AppText>
+            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
+              Exact product matches from available cached history
+            </AppText>
+            {recentMoveBreakdowns.map(({ event, moves }, bi) => (
+              <View
+                key={`${event.date}-${event.section}`}
+                style={{ marginBottom: bi < recentMoveBreakdowns.length - 1 ? 12 : 0 }}
+              >
+                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
+                  {formatRunDate(event.date)} · {SECTIONS[event.section].short} · {event.moved} of{' '}
+                  {event.total}
+                </AppText>
+                {moves.slice(0, 5).map((move, i) => (
+                  <React.Fragment key={move.productKey}>
+                    {i > 0 ? <Divider /> : null}
+                    <ProductMoveRow move={move} section={event.section} />
+                  </React.Fragment>
+                ))}
+                {moves.length > 5 ? (
+                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
+                    +{moves.length - 5} more products
+                  </AppText>
+                ) : null}
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
         {showBankInsights ? (
           chartModel && activeChartSection ? (
             <Card style={{ marginBottom: 16 }}>
@@ -540,59 +658,41 @@ export default function BankDetail() {
                   height={200}
                 />
               </ChartErrorBoundary>
-              {bankEvents.length ? (
+              {rawBankEvents.length ? (
                 <>
                   <Divider style={{ marginVertical: 10 }} />
                   <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
                     Recent moves
                   </AppText>
-                  {bankEvents.map((event) => (
-                    <BankMoveRow
-                      key={`${event.date}-${event.section}`}
-                      event={event}
-                      rateContext={bankEventContexts.get(`${event.date}:${event.section}`) ?? null}
-                      focused={
-                        !!focusEvent &&
-                        event.date === focusEvent.date &&
-                        event.section === focusEvent.section
-                      }
-                      onSelect={handleMoveSelect}
-                    />
-                  ))}
+                  <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
+                    {productHistory
+                      ? 'Counts reflect exact product matches under your settings.'
+                      : 'Counts cover all tracked products. Tap a move to identify the products under your settings.'}
+                  </AppText>
+                  {displayBankEvents.length ? (
+                    displayBankEvents.map((event) => (
+                      <BankMoveRow
+                        key={`${event.date}-${event.section}`}
+                        event={event}
+                        rateContext={bankEventContexts.get(`${event.date}:${event.section}`) ?? null}
+                        focused={
+                          !!focusEvent &&
+                          event.date === focusEvent.date &&
+                          event.section === focusEvent.section
+                        }
+                        showProductHint
+                        onSelect={handleMoveSelect}
+                      />
+                    ))
+                  ) : (
+                    <AppText variant="small" color="textMuted" style={{ paddingVertical: 8 }}>
+                      No recent changes could be exactly matched to products in your settings.
+                    </AppText>
+                  )}
                 </>
               ) : null}
             </Card>
           ) : null
-        ) : null}
-
-        {showBankInsights && !focusEvent && recentMoveBreakdowns.length ? (
-          <Card style={{ marginBottom: 16 }}>
-            <AppText variant="h3" style={{ marginBottom: 4 }}>
-              Products involved
-            </AppText>
-            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              Which accounts drove the latest detected moves
-            </AppText>
-            {recentMoveBreakdowns.map(({ event, moves }, bi) => (
-              <View key={`${event.date}-${event.section}`} style={{ marginBottom: bi < recentMoveBreakdowns.length - 1 ? 12 : 0 }}>
-                <AppText variant="small" weight="700" style={{ marginBottom: 2 }}>
-                  {formatRunDate(event.date)} · {SECTIONS[event.section].short} · avg{' '}
-                  {bpsLabel(event.avg_bps)}
-                </AppText>
-                {moves.slice(0, 5).map((move, i) => (
-                  <React.Fragment key={move.productKey}>
-                    {i > 0 ? <Divider /> : null}
-                    <ProductMoveRow move={move} section={event.section} />
-                  </React.Fragment>
-                ))}
-                {moves.length > 5 ? (
-                  <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
-                    +{moves.length - 5} more products
-                  </AppText>
-                ) : null}
-              </View>
-            ))}
-          </Card>
         ) : null}
 
         {bySection.length === 0 ? (
@@ -608,6 +708,7 @@ export default function BankDetail() {
                   key={r.product_key}
                   row={r}
                   section={section}
+                  displayedRateLabel="Current rate"
                   logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
                   onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
                   onPress={() => openProduct(r.product_key, r.rate_index)}

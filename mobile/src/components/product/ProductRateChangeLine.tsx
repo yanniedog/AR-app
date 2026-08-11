@@ -38,8 +38,8 @@ export function productRateChangeText(
   const verb = summary.bps > 0 ? 'rose' : 'fell';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? `Best ${arrow} ${bpsMagnitude(summary.bps)} · observed ${when}`
-    : `Best rate ${verb} ${bpsMagnitude(summary.bps)} · observed ${when} · ${formatRate(
+    ? `Best-rate change ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
+    : `Best rate last ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
         summary.fromRate,
       )} → ${formatRate(summary.toRate)}`;
 }

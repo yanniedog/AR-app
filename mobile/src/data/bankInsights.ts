@@ -168,20 +168,26 @@ export function filterBankInsightsForSuitability(
   core: CorePayload | null | undefined,
   includeNonStandard: boolean,
   detailsProducts?: Record<string, ProductDetail> | null,
+  suitabilityRevision = getSuitabilityRevision(),
 ): BankInsightsPayload | null {
   if (!payload) return null;
   if (!core) return null;
   const integrityPayload = filterBankInsightsForSectionIntegrity(payload, core);
   if (includeNonStandard) return integrityPayload;
-  const revision = getSuitabilityRevision();
   if (
     suitabilityFilterCache?.payload === payload &&
     suitabilityFilterCache.core === core &&
     suitabilityFilterCache.detailsProducts === detailsProducts &&
-    suitabilityFilterCache.revision === revision
+    suitabilityFilterCache.revision === suitabilityRevision
   ) return suitabilityFilterCache.result;
   if (getSuitabilityAllowed()?.size === 0) {
-    suitabilityFilterCache = { payload, core, detailsProducts, revision, result: null };
+    suitabilityFilterCache = {
+      payload,
+      core,
+      detailsProducts,
+      revision: suitabilityRevision,
+      result: null,
+    };
     return null;
   }
 
@@ -268,7 +274,13 @@ export function filterBankInsightsForSuitability(
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,
   };
-  suitabilityFilterCache = { payload, core, detailsProducts, revision, result };
+  suitabilityFilterCache = {
+    payload,
+    core,
+    detailsProducts,
+    revision: suitabilityRevision,
+    result,
+  };
   return result;
 }
 

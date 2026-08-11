@@ -6,6 +6,8 @@ import {
   forwardFillSeriesRecord,
   hasProductSeries,
   normalizeProductHistoryPayload,
+  productMoveBreakdownForCatalog,
+  productHistoryRepresentsRateRow,
   productMovesForBankEvent,
   productMovesForCatalog,
   productSeriesRecord,
@@ -205,6 +207,20 @@ describe('summarizeProductBestRateSeries', () => {
     expect(bestRateForProduct(currentCore, 'missing')).toBeNull();
   });
 
+  it('only maps a selected row to history when it is the product-best headline rate', () => {
+    const base = {
+      ...rateRow('S|mixed', '0.04'),
+      ribbon_deposit_kind: 'base',
+    };
+    const bonus = {
+      ...rateRow('S|mixed', '0.05'),
+      ribbon_deposit_kind: 'bonus',
+    };
+    const currentCore = core('2026-07-31', { Savings: [base, bonus] });
+    expect(productHistoryRepresentsRateRow(currentCore, base)).toBe(false);
+    expect(productHistoryRepresentsRateRow(currentCore, bonus)).toBe(true);
+  });
+
   it('does not invent a direction from sparse or invalid history', () => {
     expect(summarizeProductBestRateSeries([], [])).toBeNull();
     expect(
@@ -302,6 +318,30 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
     );
     expect(moves).toHaveLength(1);
     expect(moves[0].bps).toBe(-50);
+  });
+
+  it('keeps the matched product denominator alongside the changed products', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      products: {
+        'P|cut': [0.06, 0.055],
+        'P|flat': [0.06, 0.06],
+        'P|new': [null, 0.05],
+      },
+    };
+    const breakdown = productMoveBreakdownForCatalog(
+      history,
+      [
+        { productKey: 'P|cut', productName: 'Cut loan', rateIndex: null },
+        { productKey: 'P|flat', productName: 'Flat loan', rateIndex: null },
+        { productKey: 'P|new', productName: 'New loan', rateIndex: null },
+      ],
+      { date: '2026-06-10' },
+    );
+    expect(breakdown.matched).toBe(2);
+    expect(breakdown.moves.map((move) => move.productKey)).toEqual(['P|cut']);
   });
 
   it('counts exact 5 bps moves despite floating-point fraction noise', () => {
