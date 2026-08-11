@@ -435,20 +435,30 @@ export interface ProductMoveCatalogEntry {
   rateIndex: number | null;
 }
 
-/** Diff a known product catalog against product history for one event date. */
-export function productMovesForCatalog(
+export interface ProductMoveBreakdown {
+  /** Catalog products with a finite rate on the event date and a prior observation. */
+  matched: number;
+  moves: ProductRateMove[];
+}
+
+/**
+ * Diff a known product catalog against product history for one event date,
+ * retaining the matched denominator used by an "X of Y products" claim.
+ */
+export function productMoveBreakdownForCatalog(
   history: ProductHistoryPayload | null | undefined,
   catalog: readonly ProductMoveCatalogEntry[],
   opts: { date: string; thresholdBps?: number },
-): ProductRateMove[] {
-  if (!history?.run_dates?.length || !catalog.length) return [];
+): ProductMoveBreakdown {
+  if (!history?.run_dates?.length || !catalog.length) return { matched: 0, moves: [] };
   const date = String(opts.date || '').slice(0, 10);
-  if (!date) return [];
+  if (!date) return { matched: 0, moves: [] };
   const thresholdBps = opts.thresholdBps ?? 5;
   const dateIndex = history.run_dates.indexOf(date);
-  if (dateIndex < 0) return [];
+  if (dateIndex < 0) return { matched: 0, moves: [] };
 
   const moves: ProductRateMove[] = [];
+  let matched = 0;
   for (const meta of catalog) {
     const series = history.products[meta.productKey];
     if (!series) continue;
@@ -456,6 +466,7 @@ export function productMovesForCatalog(
     if (toRate == null || !Number.isFinite(toRate) || toRate <= 0) continue;
     const fromRate = lastFiniteBefore(series, dateIndex);
     if (fromRate == null || fromRate <= 0) continue;
+    matched += 1;
     // Compare in rounded bps space — fraction subtraction can land just under
     // 0.0005 for a true 5 bps move (e.g. 0.0600 − 0.0595 → 0.0004999…).
     const bps = Math.round((toRate - fromRate) * 10000 * 10) / 10;
@@ -471,7 +482,16 @@ export function productMovesForCatalog(
     });
   }
   moves.sort((a, b) => Math.abs(b.bps) - Math.abs(a.bps) || a.productName.localeCompare(b.productName));
-  return moves;
+  return { matched, moves };
+}
+
+/** Diff a known product catalog against product history for one event date. */
+export function productMovesForCatalog(
+  history: ProductHistoryPayload | null | undefined,
+  catalog: readonly ProductMoveCatalogEntry[],
+  opts: { date: string; thresholdBps?: number },
+): ProductRateMove[] {
+  return productMoveBreakdownForCatalog(history, catalog, opts).moves;
 }
 
 /** Validate a cached/parsed payload before it reaches chart code. */

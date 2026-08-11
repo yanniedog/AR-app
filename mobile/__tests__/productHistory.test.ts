@@ -6,6 +6,7 @@ import {
   forwardFillSeriesRecord,
   hasProductSeries,
   normalizeProductHistoryPayload,
+  productMoveBreakdownForCatalog,
   productMovesForBankEvent,
   productMovesForCatalog,
   productSeriesRecord,
@@ -302,6 +303,30 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
     );
     expect(moves).toHaveLength(1);
     expect(moves[0].bps).toBe(-50);
+  });
+
+  it('keeps the matched product denominator alongside the changed products', () => {
+    const history: ProductHistoryPayload = {
+      schema_version: 1,
+      run_date: '2026-06-10',
+      run_dates: ['2026-05-13', '2026-06-10'],
+      products: {
+        'P|cut': [0.06, 0.055],
+        'P|flat': [0.06, 0.06],
+        'P|new': [null, 0.05],
+      },
+    };
+    const breakdown = productMoveBreakdownForCatalog(
+      history,
+      [
+        { productKey: 'P|cut', productName: 'Cut loan', rateIndex: null },
+        { productKey: 'P|flat', productName: 'Flat loan', rateIndex: null },
+        { productKey: 'P|new', productName: 'New loan', rateIndex: null },
+      ],
+      { date: '2026-06-10' },
+    );
+    expect(breakdown.matched).toBe(2);
+    expect(breakdown.moves.map((move) => move.productKey)).toEqual(['P|cut']);
   });
 
   it('counts exact 5 bps moves despite floating-point fraction noise', () => {

@@ -68,6 +68,7 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   showDate = true,
   rateContext = null,
   focused = false,
+  showProductHint = false,
   onSelect,
 }: {
   event: BankRateEvent;
@@ -76,6 +77,8 @@ export const BankMoveRow = React.memo(function BankMoveRow({
   rateContext?: BankEventRateContext | null;
   /** Highlight when this row is the drill-down focus. */
   focused?: boolean;
+  /** Makes the product drill-down affordance visible, not merely discoverable by tapping. */
+  showProductHint?: boolean;
   /** Stable select handler (keeps React.memo effective across parent renders). */
   onSelect?: (event: BankRateEvent) => void;
 }) {
@@ -116,6 +119,11 @@ export const BankMoveRow = React.memo(function BankMoveRow({
           {rateContext ? (
             <AppText variant="tiny" weight="600" numberOfLines={1}>
               Median {formatRate(rateContext.before)} → {formatRate(rateContext.after)}
+            </AppText>
+          ) : null}
+          {showProductHint ? (
+            <AppText variant="tiny" weight="700" style={{ color: theme.colors.primary }}>
+              See which {event.moved} changed
             </AppText>
           ) : null}
         </View>
@@ -314,4 +322,3 @@ export const MoversLeaderboard = React.memo(function MoversLeaderboard({
     </View>
   );
 });
-

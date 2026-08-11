@@ -9,10 +9,12 @@ import {
   formatTerm,
   humanizeEnum,
   isBroadlyAvailable,
+  isConditionalDepositRate,
   isNonStandard,
   toFraction,
   visibleAccountRows,
 } from '../src/data/format';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { RateRow } from '../src/types';
 
 describe('format', () => {
@@ -339,6 +341,43 @@ describe('format', () => {
       'a|qld',
       'a|lvr',
     ]);
+  });
+
+  test('broadly applicable mode excludes conditional bonus and introductory rate rows', () => {
+    const base = {
+      provider: 'Bank A',
+      product_key: 'a|saver',
+      product_name: 'Saver',
+      rate: '0.04',
+      ribbon_deposit_kind: 'base',
+      account_class: 'standard',
+    } as RateRow;
+    const bonus = {
+      ...base,
+      rate: '0.05',
+      ribbon_deposit_kind: 'bonus',
+    };
+    const intro = {
+      ...base,
+      product_key: 'a|intro',
+      taxonomy_path: 'SAVINGS.SAVINGS_ACCT.INTRODUCTORY.FLAT',
+    };
+
+    expect(isConditionalDepositRate(base)).toBe(false);
+    expect(isConditionalDepositRate(bonus)).toBe(true);
+    expect(isConditionalDepositRate(intro)).toBe(true);
+    expect(isBroadlyAvailable(bonus)).toBe(false);
+    expect(isBroadlyAvailable(intro)).toBe(false);
+    expect(visibleAccountRows([base, bonus, intro], false)).toEqual([base]);
+    expect(visibleAccountRows([base, bonus, intro], true)).toEqual([base, bonus, intro]);
+
+    // A product-level suitability hit for the base row must not leak its bonus row.
+    setSuitabilityAllowed(new Set(['a|saver', 'a|intro']));
+    try {
+      expect(visibleAccountRows([base, bonus, intro], false)).toEqual([base]);
+    } finally {
+      setSuitabilityAllowed(null);
+    }
   });
 
   test('orange restricted badge and standard-only filter share assessAccess', () => {

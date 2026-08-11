@@ -165,16 +165,21 @@ describe('selectors', () => {
     const rows = [
       mk({ product_key: 'JUNK|S', rate: '0.0001' }),
       mk({ product_key: 'OK|S', rate: '0.045' }),
-      // Genuine bonus: high headline, near-zero ongoing — keep in lists under both metrics.
+      // Genuine bonus: high headline, near-zero ongoing — available only in the full catalogue.
       mk({ product_key: 'BONUS|S', rate: '0.052', ribbon_deposit_kind: 'bonus', ongoing_rate: '0.0001' }),
     ];
-    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual([
-      'OK|S',
-      'BONUS|S',
-    ]);
-    // Max metric ranks on the headline bonus rate (5.2%).
+    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual(['OK|S']);
+    // The full catalogue retains the bonus; max ranks on its 5.2% headline.
     expect(
-      queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings', null, null, 'max').map((r) => r.product_key),
+      queryAndSort(
+        rows,
+        { ...EMPTY_FILTERS, includeNonStandard: true },
+        'rate',
+        'Savings',
+        null,
+        null,
+        'max',
+      ).map((r) => r.product_key),
     ).toEqual(['BONUS|S', 'OK|S']);
   });
 
@@ -349,10 +354,11 @@ describe('selectors', () => {
       mk({ product_key: 'A|S', rate: '0.045', ribbon_deposit_kind: 'base' }),
       mk({ product_key: 'B|S', rate: '0.052', ribbon_deposit_kind: 'bonus', ongoing_rate: '0.010' }),
     ];
-    // Base 4.5% beats the bonus account's 1.0% ongoing rate.
+    // Broadly-applicable mode excludes the conditional account.
     expect(bestRow(rows, 'Savings')?.product_key).toBe('A|S');
-    // Opting into max ranks by the 5.2% headline bonus rate.
-    expect(bestRow(rows, 'Savings', false, 'max')?.product_key).toBe('B|S');
+    // Headline ranking cannot reintroduce conditional rows in broadly-applicable mode.
+    expect(bestRow(rows, 'Savings', false, 'max')?.product_key).toBe('A|S');
+    expect(bestRow(rows, 'Savings', true, 'max')?.product_key).toBe('B|S');
   });
 
   test('sortRows (savings) orders by base ongoing rate by default', () => {
@@ -387,7 +393,8 @@ describe('selectors', () => {
       mk({ product_key: 'B|S', rate: '0.055', ribbon_deposit_kind: 'bonus' }), // no ongoing_rate -> unrankable
     ];
     expect(bestRow(rows, 'Savings')?.product_key).toBe('A|S');
-    expect(bestRow(rows, 'Savings', false, 'max')?.product_key).toBe('B|S');
+    expect(bestRow(rows, 'Savings', false, 'max')?.product_key).toBe('A|S');
+    expect(bestRow(rows, 'Savings', true, 'max')?.product_key).toBe('B|S');
   });
 
   test('bestRow (savings) returns null when every candidate is an unrankable bonus', () => {
@@ -405,9 +412,20 @@ describe('selectors', () => {
       mk({ product_key: 'C|S', rate: '0.055', ribbon_deposit_kind: 'bonus' }), // unrankable (no ongoing_rate)
     ];
     expect(sortRows(rows, 'rate', 'Savings').map((r) => r.product_key)).toEqual(['A|S', 'B|S', 'C|S']);
-    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual(['A|S', 'B|S', 'C|S']);
+    expect(queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings').map((r) => r.product_key)).toEqual(['A|S']);
     expect(
       queryAndSort(rows, EMPTY_FILTERS, 'rate', 'Savings', null, null, 'max').map((r) => r.product_key),
+    ).toEqual(['A|S']);
+    expect(
+      queryAndSort(
+        rows,
+        { ...EMPTY_FILTERS, includeNonStandard: true },
+        'rate',
+        'Savings',
+        null,
+        null,
+        'max',
+      ).map((r) => r.product_key),
     ).toEqual(['C|S', 'B|S', 'A|S']);
   });
 
@@ -583,9 +601,15 @@ describe('selectors', () => {
       mk({ provider: 'Bank B', product_key: 'B|S', rate: '0.052', ribbon_deposit_kind: 'bonus' }),
       mk({ provider: 'Bank C', product_key: 'C|S', rate: '0.048', ribbon_deposit_kind: 'bonus' }),
     ];
-    expect(filterRows(deposits, EMPTY_FILTERS)).toHaveLength(3);
+    expect(filterRows(deposits, EMPTY_FILTERS)).toHaveLength(1);
     const bonus = filterRows(deposits, { ...EMPTY_FILTERS, depositKinds: ['bonus'] });
-    expect(bonus.map((r) => r.product_key)).toEqual(['B|S', 'C|S']);
+    expect(bonus).toEqual([]);
+    const allBonus = filterRows(deposits, {
+      ...EMPTY_FILTERS,
+      includeNonStandard: true,
+      depositKinds: ['bonus'],
+    });
+    expect(allBonus.map((r) => r.product_key)).toEqual(['B|S', 'C|S']);
     const byProvider = filterRows(deposits, { ...EMPTY_FILTERS, providers: ['Bank A'] });
     expect(byProvider).toHaveLength(1);
   });
@@ -776,6 +800,9 @@ describe('selectors', () => {
       'A|S',
     );
     expect(groupByProvider(sections, 'max').find((g) => g.provider === 'Bank A')?.bestBySection.Savings?.product_key).toBe(
+      'A|S',
+    );
+    expect(groupByProvider(sections, 'max', true).find((g) => g.provider === 'Bank A')?.bestBySection.Savings?.product_key).toBe(
       'B|S',
     );
   });
@@ -915,13 +942,15 @@ describe('selectors', () => {
       },
       TD: { rates: [] },
     } as Record<SectionKey, { rates: RateRow[] }>;
-    // base metric ranks bonus on ongoing (1%) so Bank Base (4.5%) wins.
+    // Broadly-applicable mode excludes the conditional bank entirely.
     expect(groupByProvider(sections, 'base', false, null, 'Savings').map((g) => g.provider)).toEqual([
       'Bank Base',
-      'Bank Bonus',
     ]);
-    // max metric ranks on headline so Bank Bonus (5.5%) wins.
     expect(groupByProvider(sections, 'max', false, null, 'Savings').map((g) => g.provider)).toEqual([
+      'Bank Base',
+    ]);
+    // The full catalogue can still rank bonus products by their headline rate.
+    expect(groupByProvider(sections, 'max', true, null, 'Savings').map((g) => g.provider)).toEqual([
       'Bank Bonus',
       'Bank Base',
     ]);

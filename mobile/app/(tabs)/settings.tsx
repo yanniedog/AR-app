@@ -362,7 +362,7 @@ export default function Settings() {
         <ToggleRow
           icon="people-outline"
           label="Broadly applicable products"
-          sub="Hide youth, region, staff-only, and other restricted products by default"
+          sub="Show only rates without bonus, intro, age, region, staff, or other eligibility conditions"
           value={!prefs.includeNonStandard}
           onChange={(v) => setPref('includeNonStandard', !v)}
         />
