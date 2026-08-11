@@ -64,6 +64,16 @@ test('finds the policy decision when another RBA release leads the feed', () => 
   });
 });
 
+test('selects the latest policy decision from an unordered feed', () => {
+  const older = FEED
+    .replaceAll('2026-08-11', '2026-06-16')
+    .replaceAll('4.35', '4.10');
+  expect(parseRbaMediaReleaseFeed(`${older}${FEED}`)).toEqual({
+    date: '2026-08-11',
+    rate: 4.35,
+  });
+});
+
 test('rejects an overview that does not correspond to the elapsed meeting', () => {
   expect(reconcileRbaOfficialOverview(
     calendar,

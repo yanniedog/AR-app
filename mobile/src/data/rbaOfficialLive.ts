@@ -45,6 +45,7 @@ export interface RbaOfficialFeedDecision {
 }
 
 export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision | null {
+  let latest: RbaOfficialFeedDecision | null = null;
   for (const item of xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? []) {
     if (!/Monetary Policy Decision/i.test(item)) continue;
     const description = item.match(/<description>([\s\S]*?)<\/description>/i)?.[1]
@@ -52,9 +53,11 @@ export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision |
     const date = item.match(/<dc:date>(\d{4}-\d{2}-\d{2})T/i)?.[1];
     const rate = description.match(/cash rate target[^.]*?\b(?:at|to)\s+(\d+(?:\.\d+)?)\s+per cent/i)?.[1];
     const parsedRate = Number(rate);
-    if (date && Number.isFinite(parsedRate)) return { date, rate: parsedRate };
+    if (date && Number.isFinite(parsedRate) && (!latest || date > latest.date)) {
+      latest = { date, rate: parsedRate };
+    }
   }
-  return null;
+  return latest;
 }
 
 export function parseRbaOfficialOverview(html: string): RbaOfficialOverview | null {
