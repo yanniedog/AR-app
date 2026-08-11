@@ -56,6 +56,14 @@ test('uses the immediate official media-release feed decision', () => {
   expect(resolved.schedule[0].date).toBe('2026-09-29');
 });
 
+test('finds the policy decision when another RBA release leads the feed', () => {
+  const bulletin = '<item><title>Payments bulletin</title><dc:date>2026-08-11T15:00:00+10:00</dc:date></item>';
+  expect(parseRbaMediaReleaseFeed(`${bulletin}${FEED}`)).toEqual({
+    date: '2026-08-11',
+    rate: 4.35,
+  });
+});
+
 test('rejects an overview that does not correspond to the elapsed meeting', () => {
   expect(reconcileRbaOfficialOverview(
     calendar,

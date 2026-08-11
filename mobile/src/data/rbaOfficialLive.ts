@@ -45,14 +45,16 @@ export interface RbaOfficialFeedDecision {
 }
 
 export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision | null {
-  const item = xml.match(/<item\b[\s\S]*?<\/item>/i)?.[0];
-  if (!item || !/Monetary Policy Decision/i.test(item)) return null;
-  const description = item.match(/<description>([\s\S]*?)<\/description>/i)?.[1]
-    ?.replace(/<!\[CDATA\[|\]\]>/g, '') ?? '';
-  const date = item.match(/<dc:date>(\d{4}-\d{2}-\d{2})T/i)?.[1];
-  const rate = description.match(/cash rate target[^.]*?\b(?:at|to)\s+(\d+(?:\.\d+)?)\s+per cent/i)?.[1];
-  const parsedRate = Number(rate);
-  return date && Number.isFinite(parsedRate) ? { date, rate: parsedRate } : null;
+  for (const item of xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? []) {
+    if (!/Monetary Policy Decision/i.test(item)) continue;
+    const description = item.match(/<description>([\s\S]*?)<\/description>/i)?.[1]
+      ?.replace(/<!\[CDATA\[|\]\]>/g, '') ?? '';
+    const date = item.match(/<dc:date>(\d{4}-\d{2}-\d{2})T/i)?.[1];
+    const rate = description.match(/cash rate target[^.]*?\b(?:at|to)\s+(\d+(?:\.\d+)?)\s+per cent/i)?.[1];
+    const parsedRate = Number(rate);
+    if (date && Number.isFinite(parsedRate)) return { date, rate: parsedRate };
+  }
+  return null;
 }
 
 export function parseRbaOfficialOverview(html: string): RbaOfficialOverview | null {
