@@ -87,7 +87,7 @@ test('propagates a reconciled hold into graph-facing core data', () => {
   const core = {
     schema_version: 1, run_date: '2026-08-11', sections: {}, brands: {},
     rba: [{ date: '2026-05-06', rate: 4.35 }], rba_holds: ['2026-06-16'],
-  } as CorePayload;
+  } as unknown as CorePayload;
   const resolved = reconcileRbaOfficialOverview(
     calendar,
     parseRbaOfficialOverview(HTML)!,
@@ -96,4 +96,22 @@ test('propagates a reconciled hold into graph-facing core data', () => {
   expect(integrateRbaCalendarIntoCore(core, resolved).rba_holds).toEqual([
     '2026-06-16', '2026-08-11',
   ]);
+});
+
+test('does not make an announced change prevailing before its effective date', () => {
+  const core = {
+    schema_version: 1, run_date: '2026-08-11', sections: {}, brands: {},
+    rba: [{ date: '2026-05-06', rate: 4.35 }], rba_holds: [],
+  } as unknown as CorePayload;
+  const changed = normalizeRbaCalendar({
+    timezone: 'Australia/Sydney',
+    decisions: [{
+      date: '2026-08-11', effective: '2026-08-12', rate: 4.60,
+      delta_bps: 25, outcome: 'hike',
+    }],
+    schedule: [],
+  })!;
+  expect(integrateRbaCalendarIntoCore(core, changed)).toBe(core);
+  expect(integrateRbaCalendarIntoCore({ ...core, run_date: '2026-08-12' }, changed).rba.at(-1))
+    .toEqual({ date: '2026-08-12', rate: 4.60 });
 });

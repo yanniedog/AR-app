@@ -159,7 +159,10 @@ export function integrateRbaCalendarIntoCore(
     holds.add(latest.date);
     return { ...core, rba_holds: [...holds].sort() };
   }
-  if (!latest.effective) return core;
+  // A policy change is announced before it becomes the prevailing cash rate.
+  // Keep the result in the decision calendar immediately, but do not put its
+  // next-day step into the current-rate graph or "is now" notifications early.
+  if (!latest.effective || latest.effective > core.run_date.slice(0, 10)) return core;
   if (core.rba.some((entry) => entry.date === latest.effective && entry.rate === latest.rate)) {
     return core;
   }
