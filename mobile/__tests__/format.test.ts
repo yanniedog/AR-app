@@ -362,10 +362,19 @@ describe('format', () => {
       product_key: 'a|intro',
       taxonomy_path: 'SAVINGS.SAVINGS_ACCT.INTRODUCTORY.FLAT',
     };
+    const terminalTaxonomyRows = ['BONUS', 'INTRO', 'INTRODUCTORY'].map(
+      (token) =>
+        ({
+          ...base,
+          product_key: `a|${token.toLowerCase()}`,
+          taxonomy_path: `SAVINGS.SAVINGS_ACCT.${token}`,
+        }) as RateRow,
+    );
 
     expect(isConditionalDepositRate(base)).toBe(false);
     expect(isConditionalDepositRate(bonus)).toBe(true);
     expect(isConditionalDepositRate(intro)).toBe(true);
+    expect(terminalTaxonomyRows.every(isConditionalDepositRate)).toBe(true);
     expect(isBroadlyAvailable(bonus)).toBe(false);
     expect(isBroadlyAvailable(intro)).toBe(false);
     expect(visibleAccountRows([base, bonus, intro], false)).toEqual([base]);

@@ -212,8 +212,10 @@ export function isConditionalDepositRate(row: RateRow): boolean {
   if (rateStructure === 'bonus' || rateStructure === 'introductory' || rateStructure === 'intro') {
     return true;
   }
-  const path = (row.taxonomy_path ?? '').toUpperCase();
-  return path.includes('.BONUS.') || path.includes('.INTRO.') || path.includes('.INTRODUCTORY.');
+  const pathTokens = (row.taxonomy_path ?? '').toUpperCase().split('.');
+  return pathTokens.some(
+    (token) => token === 'BONUS' || token === 'INTRO' || token === 'INTRODUCTORY',
+  );
 }
 
 /**

@@ -146,7 +146,7 @@ export default function BankDetail() {
   const [layoutReady, setLayoutReady] = useState(false);
 
   const rawBankEvents = useMemo(
-    () => recentBankEvents(bankInsights, { provider, limit: 8 }),
+    () => recentBankEvents(bankInsights, { provider }),
     [bankInsights, provider],
   );
 
@@ -238,15 +238,14 @@ export default function BankDetail() {
   }, [bySection]);
 
   const visibleBankInsights = useMemo(
-    () => {
-      void suitabilityRevision;
-      return filterBankInsightsForSuitability(
+    () =>
+      filterBankInsightsForSuitability(
         bankInsights,
         core,
         includeNonStandard,
         detailsProducts,
-      );
-    },
+        suitabilityRevision,
+      ),
     [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision],
   );
 
@@ -292,7 +291,10 @@ export default function BankDetail() {
         { date: source.date },
       );
       const event = eventForVisibleProducts(source, breakdown.matched, breakdown.moves);
-      if (event) out.push({ event, moves: breakdown.moves });
+      if (event) {
+        out.push({ event, moves: breakdown.moves });
+        if (out.length === 8) break;
+      }
     }
     return out;
   }, [catalogsBySection, productHistory, rawBankEvents]);
@@ -403,7 +405,8 @@ export default function BankDetail() {
     [provider],
   );
   const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
-  const moveHistoryRequired = showBankInsights && rawBankEvents.length > 0;
+  const moveHistoryRequired =
+    showBankInsights && (rawBankEvents.length > 0 || !!(focusDate && focusSection));
   usePerformanceAuditSurface({
     id: 'lender.details',
     routeKey: '/bank/[provider]',
