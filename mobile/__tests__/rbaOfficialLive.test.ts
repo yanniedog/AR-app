@@ -190,11 +190,15 @@ test('preserves a partial feed reconciliation if the overview fallback fails', a
   const fetchMock = jest.spyOn(global, 'fetch')
     .mockResolvedValueOnce({ ok: true, text: async () => FEED } as Response)
     .mockRejectedValueOnce(new Error('overview offline'));
-  await expect(refreshRbaCalendarFromOfficial(
-    prior,
-    Date.parse('2026-09-29T05:00:00Z'),
-  )).resolves.toMatchObject({
-    decisions: expect.arrayContaining([expect.objectContaining({ date: '2026-08-11' })]),
-  });
-  fetchMock.mockRestore();
+  try {
+    await expect(refreshRbaCalendarFromOfficial(
+      prior,
+      Date.parse('2026-09-29T05:00:00Z'),
+    )).resolves.toMatchObject({
+      decisions: expect.arrayContaining([expect.objectContaining({ date: '2026-08-11' })]),
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  } finally {
+    fetchMock.mockRestore();
+  }
 });
