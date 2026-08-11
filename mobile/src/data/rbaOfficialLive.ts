@@ -44,8 +44,8 @@ export interface RbaOfficialFeedDecision {
   rate: number;
 }
 
-export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision | null {
-  let latest: RbaOfficialFeedDecision | null = null;
+export function parseRbaMediaReleaseFeedDecisions(xml: string): RbaOfficialFeedDecision[] {
+  const byDate = new Map<string, RbaOfficialFeedDecision>();
   for (const item of xml.match(/<item\b[\s\S]*?<\/item>/gi) ?? []) {
     if (!/Monetary Policy Decision/i.test(item)) continue;
     const description = item.match(/<description>([\s\S]*?)<\/description>/i)?.[1]
@@ -53,11 +53,13 @@ export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision |
     const date = item.match(/<dc:date>(\d{4}-\d{2}-\d{2})T/i)?.[1];
     const rate = description.match(/cash rate target[^.]*?\b(?:at|to)\s+(\d+(?:\.\d+)?)\s+per cent/i)?.[1];
     const parsedRate = Number(rate);
-    if (date && Number.isFinite(parsedRate) && (!latest || date > latest.date)) {
-      latest = { date, rate: parsedRate };
-    }
+    if (date && Number.isFinite(parsedRate)) byDate.set(date, { date, rate: parsedRate });
   }
-  return latest;
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function parseRbaMediaReleaseFeed(xml: string): RbaOfficialFeedDecision | null {
+  return parseRbaMediaReleaseFeedDecisions(xml).at(-1) ?? null;
 }
 
 export function parseRbaOfficialOverview(html: string): RbaOfficialOverview | null {
@@ -121,6 +123,18 @@ export function reconcileRbaFeedDecision(
   };
 }
 
+export function reconcileRbaFeedDecisions(
+  calendar: RbaCalendar,
+  feed: readonly RbaOfficialFeedDecision[],
+  now: number = Date.now(),
+): RbaCalendar | null {
+  let reconciled = calendar;
+  for (const decision of [...feed].sort((a, b) => a.date.localeCompare(b.date))) {
+    reconciled = reconcileRbaFeedDecision(reconciled, decision, now) ?? reconciled;
+  }
+  return reconciled === calendar ? null : reconciled;
+}
+
 export async function refreshRbaCalendarFromOfficial(
   calendar: RbaCalendar,
   now: number = Date.now(),
@@ -131,9 +145,12 @@ export async function refreshRbaCalendarFromOfficial(
       headers: { Accept: 'application/rss+xml, application/xml, text/xml' },
     });
     if (feedResponse.ok) {
-      const feed = parseRbaMediaReleaseFeed(await feedResponse.text());
-      const reconciled = feed ? reconcileRbaFeedDecision(calendar, feed, now) : null;
-      if (reconciled) return reconciled;
+      const feed = parseRbaMediaReleaseFeedDecisions(await feedResponse.text());
+      const reconciled = reconcileRbaFeedDecisions(calendar, feed, now);
+      if (reconciled) {
+        calendar = reconciled;
+        if (!rbaCalendarCoverage(calendar, now).unresolvedMeeting) return calendar;
+      }
     }
   } catch {
     // The independently published overview below remains authoritative fallback.

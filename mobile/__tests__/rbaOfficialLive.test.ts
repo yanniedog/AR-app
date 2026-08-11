@@ -1,8 +1,10 @@
 import {
   integrateRbaCalendarIntoCore,
   parseRbaMediaReleaseFeed,
+  parseRbaMediaReleaseFeedDecisions,
   parseRbaOfficialOverview,
   reconcileRbaFeedDecision,
+  reconcileRbaFeedDecisions,
   reconcileRbaOfficialOverview,
 } from '../src/data/rbaOfficialLive';
 import { normalizeRbaCalendar } from '../src/data/rbaCalendar';
@@ -72,6 +74,35 @@ test('selects the latest policy decision from an unordered feed', () => {
     date: '2026-08-11',
     rate: 4.35,
   });
+});
+
+test('applies multiple missing feed decisions in chronological order', () => {
+  const prior = normalizeRbaCalendar({
+    timezone: 'Australia/Sydney',
+    decisions: [{ date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' }],
+    schedule: [
+      { date: '2026-08-11', announce_utc: '2026-08-11T04:30:00+00:00' },
+      { date: '2026-09-29', announce_utc: '2026-09-29T04:30:00+00:00' },
+    ],
+  })!;
+  const august = FEED.replace('4.35', '4.10');
+  const september = FEED
+    .replaceAll('2026-08-11', '2026-09-29')
+    .replace('4.35', '4.10');
+  const feed = parseRbaMediaReleaseFeedDecisions(`${september}${august}`);
+  const resolved = reconcileRbaFeedDecisions(
+    prior,
+    feed,
+    Date.parse('2026-09-29T05:00:00Z'),
+  )!;
+  expect(resolved.decisions.slice(-2).map((decision) => ({
+    date: decision.date,
+    delta: decision.delta_bps,
+  }))).toEqual([
+    { date: '2026-08-11', delta: -25 },
+    { date: '2026-09-29', delta: 0 },
+  ]);
+  expect(resolved.schedule).toEqual([]);
 });
 
 test('rejects an overview that does not correspond to the elapsed meeting', () => {
