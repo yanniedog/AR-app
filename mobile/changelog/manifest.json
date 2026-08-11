@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-10T05:21:38.162Z",
+  "generated_at": "2026-08-11T14:42:52.615Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -709,6 +709,14 @@
         "Calm rate discovery and quarantine misclassified deposits (#175)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.137"
+    },
+    {
+      "version": "1.0.139",
+      "date": "2026-08-11",
+      "summaryBullets": [
+        "Clarify lender product rate moves (#177)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.139"
     }
   ]
 }
