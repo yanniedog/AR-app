@@ -262,6 +262,13 @@ describe('pass-through presentation models', () => {
             count: [3, 3, 3, 3, 3],
           },
         },
+        CensoredBank: {
+          Mortgage: {
+            median: [0.062, null, null, null, null],
+            best: [0.057, null, null, null, null],
+            count: [3, 0, 0, 0, 0],
+          },
+        },
       },
       events: [
         { date: '2026-02-05', provider: 'FollowBank', section: 'Mortgage', dir: 'cut', moved: 3, total: 3, avg_bps: -25 },
@@ -288,6 +295,11 @@ describe('pass-through presentation models', () => {
       windowsObserved: 1,
       movedWithRba: 1,
       responseRatePct: 100,
+      currentWindowIncluded: false,
+    });
+    expect(cuts.find((profile) => profile.provider === 'CensoredBank')).toMatchObject({
+      windowsObserved: 0,
+      responseRatePct: null,
       currentWindowIncluded: false,
     });
 

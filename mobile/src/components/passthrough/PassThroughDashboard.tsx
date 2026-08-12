@@ -395,7 +395,7 @@ export function PassThroughDashboard({
       windowOpen: activeWindow.windowOpen,
     };
   }, [activeWindow, payload.run_date, scoredModel]);
-  const hasWindowData = !!scoredModel;
+  const hasWindowData = !!scoredModel && sectionRows(scoredModel, section).length > 0;
   const rows = useMemo(
     () =>
       model

@@ -348,9 +348,13 @@ export function buildBankResponseProfiles(
         byProvider.set(provider, stats);
         continue;
       }
-      // General tendencies use only complete, closed evidence. An open non-move
-      // is censored, and a missing pre-decision baseline is not a holdout.
-      if (model.decision.partialObservation || !response.baselineComplete) {
+      // General tendencies use only complete, closed evidence. Open non-moves,
+      // missing baselines, and lenders lost before the window end are censored.
+      if (
+        model.decision.partialObservation ||
+        !response.baselineComplete ||
+        !response.windowEndComplete
+      ) {
         byProvider.set(provider, stats);
         continue;
       }

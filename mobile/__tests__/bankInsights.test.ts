@@ -424,6 +424,7 @@ describe('rbaPassThrough', () => {
       daysToFirstMove: 5,
       ratio: 1.2,
       baselineComplete: true,
+      windowEndComplete: true,
       passStatus: 'over',
     });
     expect(model!.rows[1]).toEqual({
@@ -433,6 +434,7 @@ describe('rbaPassThrough', () => {
       daysToFirstMove: null,
       ratio: null,
       baselineComplete: true,
+      windowEndComplete: true,
       passStatus: 'none',
     });
   });

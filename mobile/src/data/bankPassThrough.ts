@@ -49,6 +49,12 @@ export interface PassThroughRow {
   ratio: number | null;
   /** False when the decision predates the ledger and no pre-decision baseline exists. */
   baselineComplete?: boolean;
+  /**
+   * True when this lender has an observation on the final tracked ledger date
+   * in the window. Closed-window tendencies must not treat an earlier last
+   * value as evidence that the lender chose not to respond.
+   */
+  windowEndComplete?: boolean;
   passStatus: PassThroughStatus;
 }
 
@@ -451,6 +457,11 @@ function buildPassThroughRows(
   section: SectionKey,
 ): PassThroughRow[] {
   const rows: PassThroughRow[] = [];
+  let requiredEndIndex = -1;
+  for (let i = 0; i < payload.run_dates.length; i += 1) {
+    if (payload.run_dates[i] > windowEnd) break;
+    requiredEndIndex = i;
+  }
   for (const [provider, sections] of Object.entries(payload.banks)) {
     const sectionSeries = sections[section];
     if (!sectionSeries) continue;
@@ -475,6 +486,7 @@ function buildPassThroughRows(
     if (baseline == null) continue;
 
     let final = baseline;
+    let finalObservationIndex = baselineIndex;
     const wantSign = Math.sign(decision.bps);
     for (let i = baselineIndex + 1; i < payload.run_dates.length; i += 1) {
       const date = payload.run_dates[i];
@@ -482,6 +494,7 @@ function buildPassThroughRows(
       const value = values[i];
       if (value == null) continue;
       final = value;
+      finalObservationIndex = i;
     }
 
     const netChangeBps = Math.round((final - baseline) * 10000 * 10) / 10;
@@ -506,6 +519,8 @@ function buildPassThroughRows(
         : null,
       ratio,
       baselineComplete,
+      windowEndComplete:
+        requiredEndIndex >= 0 && finalObservationIndex === requiredEndIndex,
       passStatus: baselineComplete ? passStatusFor(passedBps, decision.bps) : 'unscored',
     });
   }
