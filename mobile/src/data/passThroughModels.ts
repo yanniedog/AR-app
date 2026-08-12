@@ -43,9 +43,11 @@ export interface BankResponseProfile {
   confidence: 'one-window' | 'early' | 'developing' | 'established';
 }
 
+export const RESPONSE_WINDOW_SWIPE_THRESHOLD_PX = 44;
+
 export function responseWindowSwipeDirection(
   deltaX: number,
-  threshold = 44,
+  threshold = RESPONSE_WINDOW_SWIPE_THRESHOLD_PX,
 ): 'older' | 'newer' | null {
   if (deltaX <= -threshold) return 'older';
   if (deltaX >= threshold) return 'newer';

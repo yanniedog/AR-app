@@ -6,6 +6,7 @@ import type { MultiSectionPassThroughModel, RbaDecisionRef } from '../../data/ba
 import { formatRunDate } from '../../data/format';
 import {
   passThroughEvidenceLabel,
+  RESPONSE_WINDOW_SWIPE_THRESHOLD_PX,
   responseWindowSwipeDirection,
 } from '../../data/passThroughModels';
 import { hapticSelection } from '../../lib/haptics';
@@ -73,7 +74,8 @@ export function ResponseWindowHeader({
   const panResponder = useMemo(
     () => PanResponder.create({
       onMoveShouldSetPanResponder: (_, gesture) =>
-        Math.abs(gesture.dx) > 18 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
+        Math.abs(gesture.dx) >= RESPONSE_WINDOW_SWIPE_THRESHOLD_PX &&
+        Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.35,
       onPanResponderRelease: (_, gesture) => {
         const direction = responseWindowSwipeDirection(gesture.dx);
         if (direction === 'older') move(older);
