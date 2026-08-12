@@ -193,7 +193,7 @@ export default function RateMovesTab() {
       <Card variant="outlined" style={{ gap: 10 }}>
         <SectionHeading
           title="RBA response · Current window"
-          subtitle={currentRbaSummary
+          subtitle={currentRbaSummary && currentRbaSummary.eligible > 0
             ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} banks have moved with the RBA direction since the latest cash-rate change`
             : 'Explore bank responses across current and previous cash-rate changes'}
         />

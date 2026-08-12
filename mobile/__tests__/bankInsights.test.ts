@@ -1064,7 +1064,7 @@ describe('rbaPassThrough', () => {
     const cal: RbaCalendar = {
       timezone: 'Australia/Sydney',
       decisions: [
-        { date: '2026-02-18', effective: '2026-02-19', rate: 4.1, delta_bps: 25, outcome: 'cut' },
+        { date: '2026-02-18', effective: '2026-02-19', rate: 4.1, delta_bps: -25, outcome: 'cut' },
         { date: '2026-03-31', effective: '2026-04-01', rate: 4.1, delta_bps: 0, outcome: 'hold' },
         { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
         { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
@@ -1083,6 +1083,77 @@ describe('rbaPassThrough', () => {
       calendar: cal,
       decisionDate: '2026-02-18',
     })).toBeNull();
+  });
+
+  test('keeps the prior window provisional while bank observations lag a known next change', () => {
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-09-29', effective: '2026-09-30', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const laggingLedger: BankInsightsPayload = {
+      ...payload,
+      run_date: '2026-09-27',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-09-27'],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-04-01', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+      { date: '2026-09-30', rate: 4.1 },
+    ];
+    expect(rbaPassThrough(laggingLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-05-05',
+    })).toMatchObject({
+      windowEnd: '2026-09-28',
+      observedThrough: '2026-09-27',
+      windowOpen: true,
+    });
+  });
+
+  test('scores older non-twin series changes listed beside a newer calendar', () => {
+    const mixedLedger: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-06-01',
+      run_dates: ['2026-01-01', '2026-02-10', '2026-05-01', '2026-05-15', '2026-06-01'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.0575, 0.0575, 0.06, 0.06],
+            best: [0.055, 0.0525, 0.0525, 0.055, 0.055],
+            count: [3, 3, 3, 3, 3],
+          },
+        },
+      },
+      events: [
+        { date: '2026-02-10', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 3, total: 3, avg_bps: -25 },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+      ],
+      schedule: [],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-01-01', rate: 4.35 },
+      { date: '2026-02-01', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+    ];
+    expect(rbaResponseWindowList(mixedLedger, series, { calendar: cal }).map(
+      (window) => window.decision.date,
+    )).toEqual(['2026-05-05', '2026-02-01']);
+    expect(rbaPassThrough(mixedLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-02-01',
+    })).toMatchObject({
+      decision: { date: '2026-02-01', outcome: 'cut' },
+      rows: [{ provider: 'AlphaBank', passedBps: -25 }],
+    });
   });
 
   test('passThroughDaysLabel encodes partial and open-window trust cues', () => {

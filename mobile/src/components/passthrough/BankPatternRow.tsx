@@ -35,7 +35,17 @@ export const BankPatternRow = memo(function BankPatternRow({
     <Pressable
       onPress={() => openBank(profile.provider)}
       accessibilityRole="button"
-      accessibilityLabel={`${profile.provider}. ${profile.windowsObserved ? `Moved with the RBA in ${profile.movedWithRba} of ${profile.windowsObserved} complete tracked rate-change windows.` : 'General pattern is still building.'} ${profile.medianDays == null ? 'No typical response time available.' : `Typical response ${profile.medianDays} days.`} ${current ?? ''}`}
+      accessibilityLabel={[
+        `${profile.provider}.`,
+        profile.direction === 'hike' ? 'After cash-rate increases.' : 'After cash-rate cuts.',
+        profile.windowsObserved
+          ? `Moved with the RBA in ${profile.movedWithRba} of ${profile.windowsObserved} complete tracked rate-change windows.`
+          : 'General pattern is still building.',
+        profile.medianDays == null
+          ? 'No typical response time available.'
+          : `Typical response ${profile.medianDays} days.`,
+        current,
+      ].filter(Boolean).join(' ')}
       accessibilityHint="Open this lender's profile."
       style={{
         marginBottom: 10,

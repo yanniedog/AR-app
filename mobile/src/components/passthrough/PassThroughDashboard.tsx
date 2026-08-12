@@ -191,7 +191,8 @@ const LenderResponseRow = memo(function LenderResponseRow({
 
 const AnalysisHeader = memo(function AnalysisHeader({
   model,
-  tracked,
+  hasWindowData,
+  windowTracked,
   decisions,
   section,
   sectionOptions,
@@ -199,7 +200,8 @@ const AnalysisHeader = memo(function AnalysisHeader({
   onDecisionChange,
 }: {
   model: MultiSectionPassThroughModel;
-  tracked: boolean;
+  hasWindowData: boolean;
+  windowTracked: boolean;
   decisions: RbaDecisionRef[];
   section: SectionKey;
   sectionOptions: ReturnType<typeof sectionSegmentOptions>;
@@ -222,7 +224,7 @@ const AnalysisHeader = memo(function AnalysisHeader({
         onChange={onSectionChange}
       />
 
-      {!tracked ? (
+      {!windowTracked ? (
         <Card style={{ marginTop: 14, marginBottom: 14 }}>
           <AppText variant="h3">No tracked bank data</AppText>
           <AppText variant="small" color="textMuted" style={{ marginTop: 5 }}>
@@ -231,7 +233,16 @@ const AnalysisHeader = memo(function AnalysisHeader({
         </Card>
       ) : null}
 
-      {tracked ? <Card style={{ marginTop: 14, marginBottom: 14 }}>
+      {windowTracked && !hasWindowData ? (
+        <Card style={{ marginTop: 14, marginBottom: 14 }}>
+          <AppText variant="h3">No lender observations</AppText>
+          <AppText variant="small" color="textMuted" style={{ marginTop: 5 }}>
+            Bank history overlaps this window, but no eligible provider series can be scored for the selected product section.
+          </AppText>
+        </Card>
+      ) : null}
+
+      {hasWindowData ? <Card style={{ marginTop: 14, marginBottom: 14 }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 12 }}>
           <View>
             <AppText variant="h3">Window response</AppText>
@@ -244,7 +255,7 @@ const AnalysisHeader = memo(function AnalysisHeader({
         <ResponseComposition summary={summary} />
       </Card> : null}
 
-      {tracked ? <Row gap={10} style={{ flexWrap: 'wrap', marginBottom: 14 }}>
+      {hasWindowData ? <Row gap={10} style={{ flexWrap: 'wrap', marginBottom: 14 }}>
         <MetricTile
           label="Typical size"
           value={summary.medianObservedBps == null ? '—' : `${summary.medianObservedBps} bp`}
@@ -393,10 +404,10 @@ export function PassThroughDashboard({
     [model, section, query, sort, selectedProvider],
   );
   const profiles = useMemo(
-    () => model
+    () => model && view === 'patterns'
       ? buildBankResponseProfiles(payload, rba, calendar, section, patternDirection)
       : [],
-    [calendar, model, patternDirection, payload, rba, section],
+    [calendar, model, patternDirection, payload, rba, section, view],
   );
   const visibleProfiles = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase();
@@ -450,6 +461,12 @@ export function PassThroughDashboard({
     setSelectedProvider(null);
   }, []);
 
+  const changeView = useCallback((next: ResponseView) => {
+    setView(next);
+    setSelectedProvider(null);
+    setQuery('');
+  }, []);
+
   const actions = useMemo(() => ({
     'moves.open': () => undefined,
     'moves.decision.previous': () => {
@@ -477,7 +494,7 @@ export function PassThroughDashboard({
     'moves.sort.timing': () => setSort('timing'),
     'moves.query.provider': (value: unknown) => setQuery(actionParameter(value, 'query') ?? ''),
     'moves.filter.provider.clear': clearProviderFilter,
-    'moves.patterns.open': () => setView('patterns'),
+    'moves.patterns.open': () => changeView('patterns'),
     'moves.lender.open': (value: unknown) => {
       const provider = actionParameter(value, 'provider') ?? selectedProvider ?? rows[0]?.provider;
       if (provider) {
@@ -486,7 +503,7 @@ export function PassThroughDashboard({
       }
       return { unavailableReason: 'No lender is rendered for drill-down' };
     },
-  }), [activeDate, availableSections, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
+  }), [activeDate, availableSections, changeView, clearProviderFilter, decisions, onChartProviderSelect, onDecisionChange, onSectionChange, rows, section, selectedProvider]);
 
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
@@ -572,7 +589,8 @@ export function PassThroughDashboard({
     return (
       <AnalysisHeader
         model={model}
-        tracked={hasWindowData}
+        hasWindowData={hasWindowData}
+        windowTracked={activeWindow?.tracked !== false}
         decisions={decisions}
         section={section}
         sectionOptions={sectionOptions}
@@ -580,7 +598,7 @@ export function PassThroughDashboard({
         onDecisionChange={onDecisionChange}
       />
     );
-  }, [model, hasWindowData, decisions, section, sectionOptions, onSectionChange, onDecisionChange]);
+  }, [activeWindow?.tracked, model, hasWindowData, decisions, section, sectionOptions, onSectionChange, onDecisionChange]);
 
   const compareControls = useMemo(
     () => (
@@ -591,11 +609,7 @@ export function PassThroughDashboard({
             { value: 'patterns', label: 'Bank patterns' },
           ]}
           value={view}
-          onChange={(next) => {
-            setView(next);
-            setSelectedProvider(null);
-            setQuery('');
-          }}
+          onChange={changeView}
         />
         <Row style={{ justifyContent: 'space-between', marginTop: 16, marginBottom: 8, alignItems: 'flex-end' }}>
           <View>
@@ -646,7 +660,7 @@ export function PassThroughDashboard({
         )}
       </>
     ),
-    [clearProviderFilter, patternDirection, query, rows.length, section, selectedProvider, sort, view, visibleProfiles.length],
+    [changeView, clearProviderFilter, patternDirection, query, rows.length, section, selectedProvider, sort, view, visibleProfiles.length],
   );
 
   const listHeader = useMemo(() => {

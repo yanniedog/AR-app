@@ -127,7 +127,11 @@ function windowEndForDecision(
   const nextDate = rateChangeDates.find((date) => date > decision.date);
   if (nextDate) {
     const dayBeforeNext = addDaysYmd(nextDate, -1);
-    return dayBeforeNext ? { windowEnd: dayBeforeNext, windowOpen: false } : null;
+    if (!dayBeforeNext) return null;
+    return {
+      windowEnd: dayBeforeNext,
+      windowOpen: observedThrough < dayBeforeNext,
+    };
   }
   return parseYmd(observedThrough)
     ? { windowEnd: observedThrough, windowOpen: true }
@@ -287,8 +291,9 @@ export function scorablePassThroughDecisions(
   const boundaries = rateChangeBoundaryDates(opts.calendar, seriesOnly);
 
   let scored = scoreDecisionsAgainstLedger(primary, boundaries, ledgerStart, ledgerEnd);
-  // Stale calendar that still overlaps the ledger can hide a newer core.rba
-  // decision — merge series-scored decisions dated after the calendar set.
+  // A partial or stale calendar can omit older or newer core.rba decisions.
+  // Merge every non-twin series decision so the scoreable set stays identical
+  // to the window chronology instead of supporting only the newest additions.
   // Skip effective-date twins: live core.rba steps on effective dates while the
   // calendar keys announcements (typically announcement+1).
   if (fromCal.length && fromSeries.length) {
@@ -298,18 +303,12 @@ export function scorablePassThroughDecisions(
       ledgerStart,
       ledgerEnd,
     );
-    if (!scored.length) {
-      scored = seriesScored;
-    } else if (seriesScored.length) {
-      const latestCal = scored.reduce((a, b) => (a.date >= b.date ? a : b)).date;
-      const newer = seriesScored.filter(
-        (d) => d.date > latestCal && !isCalendarEffectiveTwin(d, fromCal),
-      );
-      if (newer.length) {
-        const byDate = new Map(scored.map((d) => [d.date, d]));
-        for (const d of newer) byDate.set(d.date, d);
-        scored = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+    if (seriesScored.length) {
+      const byDate = new Map(scored.map((d) => [d.date, d]));
+      for (const d of seriesScored) {
+        if (!isCalendarEffectiveTwin(d, fromCal)) byDate.set(d.date, d);
       }
+      scored = [...byDate.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
     }
   }
   return scored;

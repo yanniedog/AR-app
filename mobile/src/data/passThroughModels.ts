@@ -5,8 +5,8 @@ import type {
   PassThroughRow,
 } from './bankInsights';
 import {
+  rbaPassThrough,
   rbaPassThroughDecisionList,
-  rbaPassThroughMultiSection,
 } from './bankInsights';
 import type { RbaCalendar } from './rbaCalendar';
 import { SECTIONS } from '../constants';
@@ -315,15 +315,15 @@ export function buildBankResponseProfiles(
   }>();
 
   for (const decision of decisions) {
-    const model = rbaPassThroughMultiSection(payload, rba, {
+    const model = rbaPassThrough(payload, rba, {
       calendar,
       decisionDate: decision.date,
+      section,
     });
     if (!model) continue;
-    for (const row of model.rows) {
-      const response = row.sections[section];
-      if (!response) continue;
-      const stats = byProvider.get(row.provider) ?? {
+    for (const response of model.rows) {
+      const provider = response.provider;
+      const stats = byProvider.get(provider) ?? {
         windows: 0,
         current: false,
         withRba: 0,
@@ -345,13 +345,13 @@ export function buildBankResponseProfiles(
           : (response.netChangeBps ?? 0) !== 0
             ? 'opposite'
             : 'waiting';
-        byProvider.set(row.provider, stats);
+        byProvider.set(provider, stats);
         continue;
       }
       // General tendencies use only complete, closed evidence. An open non-move
       // is censored, and a missing pre-decision baseline is not a holdout.
       if (model.decision.partialObservation || !response.baselineComplete) {
-        byProvider.set(row.provider, stats);
+        byProvider.set(provider, stats);
         continue;
       }
       stats.windows += 1;
@@ -364,7 +364,7 @@ export function buildBankResponseProfiles(
       } else {
         stats.unchanged += 1;
       }
-      byProvider.set(row.provider, stats);
+      byProvider.set(provider, stats);
     }
   }
 

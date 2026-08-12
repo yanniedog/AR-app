@@ -271,7 +271,7 @@ describe('pass-through presentation models', () => {
     const calendar: RbaCalendar = {
       timezone: 'Australia/Sydney',
       decisions: [
-        { date: '2026-02-01', effective: '2026-02-02', rate: 4.1, delta_bps: 25, outcome: 'cut' },
+        { date: '2026-02-01', effective: '2026-02-02', rate: 4.1, delta_bps: -25, outcome: 'cut' },
         { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
         { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
       ],
