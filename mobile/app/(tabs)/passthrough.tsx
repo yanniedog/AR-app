@@ -8,7 +8,12 @@ import { SegmentedControl } from '../../src/components/controls';
 import { ScreenSkeleton } from '../../src/components/feedback';
 import { AppText, Button, Card, Disclosure, SectionHeading } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
-import { filterBankInsightsForSuitability, marketPulse } from '../../src/data/bankInsights';
+import {
+  filterBankInsightsForSuitability,
+  marketPulse,
+  rbaPassThroughMultiSection,
+} from '../../src/data/bankInsights';
+import { summarizeSectionResponse } from '../../src/data/passThroughModels';
 import { sectionSegmentOptions } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
@@ -36,6 +41,7 @@ function weeklySummary(
 export default function RateMovesTab() {
   const core = useStore((state) => state.core);
   const rawPayload = useStore((state) => state.bankInsights);
+  const calendar = useStore((state) => state.rbaCalendar);
   const error = useStore((state) => state.bankInsightsError);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
@@ -86,6 +92,14 @@ export default function RateMovesTab() {
     );
   }, [core, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
+  const currentRbaWindow = useMemo(
+    () => payload && core ? rbaPassThroughMultiSection(payload, core.rba, { calendar }) : null,
+    [calendar, core, payload],
+  );
+  const currentRbaSummary = useMemo(
+    () => currentRbaWindow ? summarizeSectionResponse(currentRbaWindow, activeSection) : null,
+    [activeSection, currentRbaWindow],
+  );
   const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
 
@@ -178,11 +192,13 @@ export default function RateMovesTab() {
 
       <Card variant="outlined" style={{ gap: 10 }}>
         <SectionHeading
-          title="After an RBA decision"
-          subtitle="Explore how quickly advertised lender medians responded"
+          title="RBA response · Current window"
+          subtitle={currentRbaSummary && currentRbaSummary.eligible > 0
+            ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} banks have moved with the RBA direction since the latest cash-rate change`
+            : 'Explore bank responses across current and previous cash-rate changes'}
         />
         <Button
-          title="Explore RBA responses"
+          title="View response window"
           variant="secondary"
           icon="analytics-outline"
           onPress={() => router.push('/rba-response')}

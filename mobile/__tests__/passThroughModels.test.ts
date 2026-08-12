@@ -1,5 +1,6 @@
 import type { MultiSectionPassThroughModel } from '../src/data/bankInsights';
 import {
+  buildBankResponseProfiles,
   buildResponseScatterPoints,
   clampScatterZoom,
   filterAndSortSectionRows,
@@ -9,9 +10,12 @@ import {
   passThroughCustomerContext,
   passThroughEvidenceLabel,
   resolveResponseScatterPress,
+  responseWindowSwipeDirection,
   selectResponseScatterProvider,
   summarizeSectionResponse,
 } from '../src/data/passThroughModels';
+import type { BankInsightsPayload } from '../src/data/bankInsights';
+import type { RbaCalendar } from '../src/data/rbaCalendar';
 
 const model: MultiSectionPassThroughModel = {
   decision: {
@@ -212,6 +216,12 @@ describe('pass-through presentation models', () => {
     expect(filterAndSortSectionRows(model, 'Mortgage', 'zzz', 'bank', 'Gamma')).toEqual([]);
   });
 
+  test('maps carousel flicks to older and newer response windows', () => {
+    expect(responseWindowSwipeDirection(-60)).toBe('older');
+    expect(responseWindowSwipeDirection(60)).toBe('newer');
+    expect(responseWindowSwipeDirection(20)).toBeNull();
+  });
+
   test('announces all aligned lender columns without truncating the provider', () => {
     const row = {
       provider: 'Great Southern Bank Business+',
@@ -226,10 +236,85 @@ describe('pass-through presentation models', () => {
       },
     };
 
-    const label = lenderResponseAccessibilityLabel(row, false);
+    const label = lenderResponseAccessibilityLabel(row, 'Savings', false);
     expect(label).toContain('Great Southern Bank Business+');
-    expect(label).toContain('Home loans: +20 bp');
     expect(label).toContain('Savings accounts: +5 bp');
-    expect(label).toContain('Term deposits: no series');
+    expect(label).not.toContain('Home loans');
+  });
+
+  test('keeps current waiting evidence separate from complete historical tendencies', () => {
+    const payload: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-08-20',
+      run_dates: ['2026-01-01', '2026-02-05', '2026-04-30', '2026-05-20', '2026-08-20'],
+      banks: {
+        FollowBank: {
+          Mortgage: {
+            median: [0.06, 0.0575, 0.0575, 0.06, 0.06],
+            best: [0.055, 0.0525, 0.0525, 0.055, 0.055],
+            count: [3, 3, 3, 3, 3],
+          },
+        },
+        WaitingBank: {
+          Mortgage: {
+            median: [0.061, 0.061, 0.061, 0.061, 0.061],
+            best: [0.056, 0.056, 0.056, 0.056, 0.056],
+            count: [3, 3, 3, 3, 3],
+          },
+        },
+        CensoredBank: {
+          Mortgage: {
+            median: [0.062, null, null, null, null],
+            best: [0.057, null, null, null, null],
+            count: [3, 0, 0, 0, 0],
+          },
+        },
+      },
+      events: [
+        { date: '2026-02-05', provider: 'FollowBank', section: 'Mortgage', dir: 'cut', moved: 3, total: 3, avg_bps: -25 },
+        { date: '2026-05-20', provider: 'FollowBank', section: 'Mortgage', dir: 'hike', moved: 3, total: 3, avg_bps: 25 },
+      ],
+    };
+    const calendar: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-02-01', effective: '2026-02-02', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+      ],
+      schedule: [],
+    };
+    const rba = [
+      { date: '2026-01-01', rate: 4.35 },
+      { date: '2026-02-02', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+    ];
+
+    const cuts = buildBankResponseProfiles(payload, rba, calendar, 'Mortgage', 'cut');
+    expect(cuts.find((profile) => profile.provider === 'FollowBank')).toMatchObject({
+      windowsObserved: 1,
+      movedWithRba: 1,
+      responseRatePct: 100,
+      currentWindowIncluded: false,
+    });
+    expect(cuts.find((profile) => profile.provider === 'CensoredBank')).toMatchObject({
+      windowsObserved: 0,
+      responseRatePct: null,
+      currentWindowIncluded: false,
+    });
+
+    const hikes = buildBankResponseProfiles(payload, rba, calendar, 'Mortgage', 'hike');
+    expect(hikes.find((profile) => profile.provider === 'WaitingBank')).toMatchObject({
+      windowsObserved: 0,
+      responseRatePct: null,
+      currentWindowIncluded: true,
+      currentStatus: 'waiting',
+    });
+    expect(hikes.find((profile) => profile.provider === 'FollowBank')).toMatchObject({
+      windowsObserved: 0,
+      responseRatePct: null,
+      currentWindowIncluded: true,
+      currentStatus: 'followed',
+    });
   });
 });

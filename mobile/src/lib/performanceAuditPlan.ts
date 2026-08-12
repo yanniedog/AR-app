@@ -792,6 +792,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'moves.sort.timing', stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'moves.query.provider', parameters: { query: inputs.provider }, stateImpact: 'local-only', optional: true, skipReason: missingProvider },
     { depth: 2, semanticActionId: 'moves.filter.provider.clear', stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'moves.patterns.open', readiness: ['list'], stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'moves.lender.open', expectedPath: lenderPath, expectedSurface: 'lender.details', readiness: ['logos', 'list'], parameters: { provider: inputs.provider }, optional: true, skipReason: missingProvider },
   ]);
 

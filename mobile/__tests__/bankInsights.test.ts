@@ -9,6 +9,7 @@ import {
   rbaPassThrough,
   rbaPassThroughDecisionList,
   rbaPassThroughMultiSection,
+  rbaResponseWindowList,
   recentBankEvents,
   topMovers,
   type BankInsightsPayload,
@@ -412,7 +413,7 @@ describe('rbaPassThrough', () => {
       rate: 4.1,
       partialObservation: false,
     });
-    expect(model!.windowEnd).toBe('2026-07-09');
+    expect(model!.windowEnd).toBe('2026-06-01');
     expect(model!.observedThrough).toBe('2026-06-01');
     expect(model!.windowOpen).toBe(true);
     // Size comes from the provider median, not a sum of event averages.
@@ -423,6 +424,7 @@ describe('rbaPassThrough', () => {
       daysToFirstMove: 5,
       ratio: 1.2,
       baselineComplete: true,
+      windowEndComplete: true,
       passStatus: 'over',
     });
     expect(model!.rows[1]).toEqual({
@@ -432,6 +434,7 @@ describe('rbaPassThrough', () => {
       daysToFirstMove: null,
       ratio: null,
       baselineComplete: true,
+      windowEndComplete: true,
       passStatus: 'none',
     });
   });
@@ -487,7 +490,9 @@ describe('rbaPassThrough', () => {
       outcome: 'hike',
       partialObservation: true,
     });
-    expect(model!.windowEnd).toBe('2026-06-15');
+    // The June hold does not split the May rate-change response window.
+    expect(model!.windowEnd).toBe('2026-06-01');
+    expect(model!.windowOpen).toBe(true);
     expect(model!.rows[0]).toMatchObject({
       provider: 'AlphaBank',
       passedBps: 25,
@@ -545,14 +550,18 @@ describe('rbaPassThrough', () => {
     });
   });
 
-  test('returns null when no decision response window overlaps the ledger', () => {
+  test('returns null without a change, but keeps the latest known change open', () => {
     expect(rbaPassThrough(payload, [{ date: '2026-04-01', rate: 4.35 }])).toBeNull();
     expect(
       rbaPassThrough(payload, [
         { date: '2026-01-01', rate: 4.35 },
         { date: '2026-02-01', rate: 4.1 },
       ]),
-    ).toBeNull();
+    ).toMatchObject({
+      decision: { date: '2026-02-01', outcome: 'cut' },
+      windowEnd: '2026-06-01',
+      windowOpen: true,
+    });
   });
 
   test('attributes a move to only one decision when windows would overlap', () => {
@@ -650,7 +659,7 @@ describe('rbaPassThrough', () => {
     const model = rbaPassThrough(statusPayload, [{ date: '2026-05-06', rate: 4.35 }], {
       calendar: cal,
     });
-    expect(model!.windowDays).toBe(60);
+    expect(model!.windowDays).toBe(27);
     expect(model!.rows.find((r) => r.provider === 'OverBank')).toMatchObject({
       passedBps: 35,
       ratio: 1.4,
@@ -972,7 +981,7 @@ describe('rbaPassThrough', () => {
     expect(model!.decision).toMatchObject({ date: '2026-05-11', bps: -25, outcome: 'cut' });
   });
 
-  test('marks the response window closed once observedThrough passes windowEnd', () => {
+  test('does not expire the latest response window after an arbitrary day count', () => {
     const closedLedger: BankInsightsPayload = {
       ...payload,
       run_date: '2026-08-01',
@@ -988,9 +997,165 @@ describe('rbaPassThrough', () => {
       },
     };
     const model = rbaPassThrough(closedLedger, rba, { calendar });
-    expect(model!.windowEnd).toBe('2026-07-09');
+    expect(model!.windowEnd).toBe('2026-08-01');
     expect(model!.observedThrough).toBe('2026-08-01');
-    expect(model!.windowOpen).toBe(false);
+    expect(model!.windowOpen).toBe(true);
+  });
+
+  test('holds stay inside a window and only the next hike or cut closes it', () => {
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+        { date: '2026-08-11', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+        { date: '2026-09-29', effective: '2026-09-30', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const longLedger: BankInsightsPayload = {
+      ...payload,
+      run_date: '2026-10-02',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-09-28', '2026-10-02'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.0625, 0.0625, 0.06],
+            best: [0.055, 0.0575, 0.0575, 0.055],
+            count: [10, 10, 10, 10],
+          },
+        },
+      },
+      events: [],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-04-01', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+      { date: '2026-09-30', rate: 4.1 },
+    ];
+    const may = rbaPassThrough(longLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-05-05',
+    });
+    const september = rbaPassThrough(longLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-09-29',
+    });
+    expect(may).toMatchObject({ windowEnd: '2026-09-28', windowOpen: false });
+    expect(september).toMatchObject({ windowEnd: '2026-10-02', windowOpen: true });
+    expect(rbaResponseWindowList(longLedger, series, { calendar: cal })).toMatchObject([
+      {
+        decision: { date: '2026-09-29', outcome: 'cut' },
+        windowEnd: '2026-10-02',
+        windowOpen: true,
+      },
+      {
+        decision: { date: '2026-05-05', outcome: 'hike' },
+        windowEnd: '2026-09-28',
+        windowOpen: false,
+      },
+    ]);
+  });
+
+  test('keeps untracked older rate-change windows navigable without scoring them', () => {
+    const recentLedger: BankInsightsPayload = {
+      ...payload,
+      run_date: '2026-08-20',
+      run_dates: ['2026-05-13', '2026-06-01', '2026-08-20'],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-02-18', effective: '2026-02-19', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+        { date: '2026-03-31', effective: '2026-04-01', rate: 4.1, delta_bps: 0, outcome: 'hold' },
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-06-16', effective: null, rate: 4.35, delta_bps: 0, outcome: 'hold' },
+      ],
+      schedule: [],
+    };
+    const windows = rbaResponseWindowList(recentLedger, [], { calendar: cal });
+    expect(windows.map((window) => window.decision.date)).toEqual(['2026-05-05', '2026-02-18']);
+    expect(windows[0]).toMatchObject({ tracked: true, windowOpen: true });
+    expect(windows[1]).toMatchObject({
+      tracked: false,
+      windowEnd: '2026-05-04',
+      windowOpen: false,
+    });
+    expect(rbaPassThrough(recentLedger, [], {
+      calendar: cal,
+      decisionDate: '2026-02-18',
+    })).toBeNull();
+  });
+
+  test('keeps the prior window provisional while bank observations lag a known next change', () => {
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+        { date: '2026-09-29', effective: '2026-09-30', rate: 4.1, delta_bps: -25, outcome: 'cut' },
+      ],
+      schedule: [],
+    };
+    const laggingLedger: BankInsightsPayload = {
+      ...payload,
+      run_date: '2026-09-27',
+      run_dates: ['2026-05-01', '2026-05-15', '2026-09-27'],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-04-01', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+      { date: '2026-09-30', rate: 4.1 },
+    ];
+    expect(rbaPassThrough(laggingLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-05-05',
+    })).toMatchObject({
+      windowEnd: '2026-09-28',
+      observedThrough: '2026-09-27',
+      windowOpen: true,
+    });
+  });
+
+  test('scores older non-twin series changes listed beside a newer calendar', () => {
+    const mixedLedger: BankInsightsPayload = {
+      schema_version: 1,
+      run_date: '2026-06-01',
+      run_dates: ['2026-01-01', '2026-02-10', '2026-05-01', '2026-05-15', '2026-06-01'],
+      banks: {
+        AlphaBank: {
+          Mortgage: {
+            median: [0.06, 0.0575, 0.0575, 0.06, 0.06],
+            best: [0.055, 0.0525, 0.0525, 0.055, 0.055],
+            count: [3, 3, 3, 3, 3],
+          },
+        },
+      },
+      events: [
+        { date: '2026-02-10', provider: 'AlphaBank', section: 'Mortgage', dir: 'cut', moved: 3, total: 3, avg_bps: -25 },
+      ],
+    };
+    const cal: RbaCalendar = {
+      timezone: 'Australia/Sydney',
+      decisions: [
+        { date: '2026-05-05', effective: '2026-05-06', rate: 4.35, delta_bps: 25, outcome: 'hike' },
+      ],
+      schedule: [],
+    };
+    const series: RbaEntry[] = [
+      { date: '2026-01-01', rate: 4.35 },
+      { date: '2026-02-01', rate: 4.1 },
+      { date: '2026-05-06', rate: 4.35 },
+    ];
+    expect(rbaResponseWindowList(mixedLedger, series, { calendar: cal }).map(
+      (window) => window.decision.date,
+    )).toEqual(['2026-05-05', '2026-02-01']);
+    expect(rbaPassThrough(mixedLedger, series, {
+      calendar: cal,
+      decisionDate: '2026-02-01',
+    })).toMatchObject({
+      decision: { date: '2026-02-01', outcome: 'cut' },
+      rows: [{ provider: 'AlphaBank', passedBps: -25 }],
+    });
   });
 
   test('passThroughDaysLabel encodes partial and open-window trust cues', () => {
