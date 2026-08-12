@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-11T22:11:19.448Z",
+  "generated_at": "2026-08-12T15:54:28.594Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -733,6 +733,14 @@
         "Scan the complete RBA decision feed (#181)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.143"
+    },
+    {
+      "version": "1.0.146",
+      "date": "2026-08-12",
+      "summaryBullets": [
+        "Overhaul RBA response windows (#184)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.146"
     }
   ]
 }
