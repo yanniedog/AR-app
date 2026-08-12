@@ -39,6 +39,7 @@ export {
   rbaPassThrough,
   rbaPassThroughDecisionList,
   rbaPassThroughMultiSection,
+  rbaResponseWindowList,
   resolvePassThroughDecisions,
   scorablePassThroughDecisions,
 } from './bankPassThrough';
@@ -51,6 +52,7 @@ export type {
   PassThroughSourceDecision,
   PassThroughStatus,
   RbaDecisionRef,
+  RbaResponseWindowRef,
 } from './bankPassThrough';
 
 export {

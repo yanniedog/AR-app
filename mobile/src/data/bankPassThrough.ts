@@ -4,7 +4,6 @@ import { parseYmd } from './bankHistoryTransform';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import {
   DAY_MS,
-  DEFAULT_PASS_THROUGH_WINDOW_DAYS,
   FOLLOW_DIRS,
   type BankInsightsPayload,
   type BankRateEvent,
@@ -22,6 +21,14 @@ export interface RbaDecisionRef {
    * miss earlier responses and days-to-follow is an upper bound on observed delay.
    */
   partialObservation: boolean;
+}
+
+export interface RbaResponseWindowRef {
+  decision: RbaDecisionRef;
+  windowEnd: string;
+  windowDays: number;
+  windowOpen: boolean;
+  tracked: boolean;
 }
 
 export type PassThroughStatus = 'full' | 'partial' | 'none' | 'over' | 'unscored';
@@ -48,9 +55,9 @@ export interface PassThroughRow {
 export interface PassThroughModel {
   decision: RbaDecisionRef;
   rows: PassThroughRow[];
-  /** Nominal response window length used for this score (days). */
+  /** Observed response-window span in days (at least one for chart layout). */
   windowDays: number;
-  /** Inclusive end of the response window (may be capped by the next decision). */
+  /** Inclusive observed end: day before the next rate change, or latest tracked day. */
   windowEnd: string;
   /** Latest bank-history day available for observation. */
   observedThrough: string;
@@ -78,7 +85,6 @@ export interface PassThroughOpts {
   /** Score this announcement date instead of the latest scorable decision. */
   decisionDate?: string;
   section?: SectionKey;
-  windowDays?: number;
 }
 
 function ymdFromUtcMs(ms: number): string | null {
@@ -115,17 +121,17 @@ function passStatusFor(passedBps: number, decisionBps: number): PassThroughStatu
 
 function windowEndForDecision(
   decision: Pick<PassThroughSourceDecision, 'date'>,
-  policyDates: readonly string[],
-  windowDays: number,
-): string | null {
-  let windowEnd = addDaysYmd(decision.date, windowDays);
-  if (!windowEnd) return null;
-  const nextDate = policyDates.find((date) => date > decision.date);
+  rateChangeDates: readonly string[],
+  observedThrough: string,
+): { windowEnd: string; windowOpen: boolean } | null {
+  const nextDate = rateChangeDates.find((date) => date > decision.date);
   if (nextDate) {
     const dayBeforeNext = addDaysYmd(nextDate, -1);
-    if (dayBeforeNext && dayBeforeNext < windowEnd) windowEnd = dayBeforeNext;
+    return dayBeforeNext ? { windowEnd: dayBeforeNext, windowOpen: false } : null;
   }
-  return windowEnd;
+  return parseYmd(observedThrough)
+    ? { windowEnd: observedThrough, windowOpen: true }
+    : null;
 }
 
 export interface PassThroughSourceDecision {
@@ -185,11 +191,12 @@ function calendarPassThroughDecisions(
   );
 }
 
-function policyBoundaryDates(
+function rateChangeBoundaryDates(
   calendar: RbaCalendar | null | undefined,
   fallback: readonly PassThroughSourceDecision[],
 ): string[] {
   const fromCalendar = calendar?.decisions
+    ?.filter((decision) => decision.outcome === 'hike' || decision.outcome === 'cut')
     ?.map((decision) => decision.date)
     .filter((date) => !!parseYmd(date));
   return [...new Set([
@@ -231,19 +238,18 @@ export function resolvePassThroughDecisions(
 
 function scoreDecisionsAgainstLedger(
   decisions: PassThroughSourceDecision[],
-  policyDates: readonly string[],
+  rateChangeDates: readonly string[],
   ledgerStart: string,
   ledgerEnd: string,
-  windowDays: number,
 ): RbaDecisionRef[] {
   const scored: RbaDecisionRef[] = [];
   for (let i = 0; i < decisions.length; i += 1) {
     const dec = decisions[i];
     if (!(FOLLOW_DIRS as readonly string[]).includes(dec.outcome)) continue;
-    const windowEnd = windowEndForDecision(dec, policyDates, windowDays);
-    if (!windowEnd) continue;
+    const window = windowEndForDecision(dec, rateChangeDates, ledgerEnd);
+    if (!window) continue;
     // Response window must overlap the ledger; announcement must not be after ledger end.
-    if (windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
+    if (window.windowEnd < ledgerStart || dec.date > ledgerEnd) continue;
     scored.push({
       date: dec.date,
       bps: dec.bps,
@@ -268,7 +274,6 @@ export function scorablePassThroughDecisions(
   if (!payload?.run_dates?.length) return [];
   const ledgerStart = payload.run_dates[0];
   const ledgerEnd = payload.run_date || payload.run_dates[payload.run_dates.length - 1];
-  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
   if (!parseYmd(ledgerStart) || !parseYmd(ledgerEnd)) return [];
 
   const fromCal = calendarPassThroughDecisions(opts.calendar);
@@ -279,9 +284,9 @@ export function scorablePassThroughDecisions(
   // Even when the calendar is the preferred decision source, its payload may
   // lag a newer core series step. Every scoring path must share that later
   // policy boundary so an older response window cannot remain open through it.
-  const boundaries = policyBoundaryDates(opts.calendar, seriesOnly);
+  const boundaries = rateChangeBoundaryDates(opts.calendar, seriesOnly);
 
-  let scored = scoreDecisionsAgainstLedger(primary, boundaries, ledgerStart, ledgerEnd, windowDays);
+  let scored = scoreDecisionsAgainstLedger(primary, boundaries, ledgerStart, ledgerEnd);
   // Stale calendar that still overlaps the ledger can hide a newer core.rba
   // decision — merge series-scored decisions dated after the calendar set.
   // Skip effective-date twins: live core.rba steps on effective dates while the
@@ -292,7 +297,6 @@ export function scorablePassThroughDecisions(
       boundaries,
       ledgerStart,
       ledgerEnd,
-      windowDays,
     );
     if (!scored.length) {
       scored = seriesScored;
@@ -309,6 +313,51 @@ export function scorablePassThroughDecisions(
     }
   }
   return scored;
+}
+
+/**
+ * Every known hike/cut window up to the latest tracked bank day, newest first.
+ * Windows without overlapping bank history remain navigable and are marked
+ * untracked instead of disappearing from the chronology.
+ */
+export function rbaResponseWindowList(
+  payload: BankInsightsPayload | null | undefined,
+  rba: RbaEntry[] | null | undefined,
+  opts: Pick<PassThroughOpts, 'calendar'> = {},
+): RbaResponseWindowRef[] {
+  if (!payload?.run_dates?.length) return [];
+  const observedThrough = payload.run_date || payload.run_dates[payload.run_dates.length - 1];
+  const ledgerStart = payload.run_dates[0];
+  if (!parseYmd(observedThrough) || !parseYmd(ledgerStart)) return [];
+  const calendarDecisions = calendarPassThroughDecisions(opts.calendar);
+  const seriesDecisions = decisionsFromRbaSeries(rba);
+  const seriesOnly = seriesDecisions.filter(
+    (decision) => !isCalendarEffectiveTwin(decision, calendarDecisions),
+  );
+  const primary = calendarDecisions.length ? calendarDecisions : seriesDecisions;
+  const merged = new Map(primary.map((decision) => [decision.date, decision]));
+  for (const decision of seriesOnly) merged.set(decision.date, decision);
+  const decisions = [...merged.values()]
+    .filter((decision) => decision.date <= observedThrough)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  const changeDates = decisions.map((decision) => decision.date);
+  return decisions.map((decision) => {
+    const window = windowEndForDecision(decision, changeDates, observedThrough)!;
+    const span = daysBetweenYmd(decision.date, window.windowEnd) ?? 0;
+    return {
+      decision: {
+        date: decision.date,
+        bps: decision.bps,
+        outcome: decision.outcome,
+        rate: decision.rate,
+        partialObservation: decision.date < ledgerStart,
+      },
+      windowEnd: window.windowEnd,
+      windowDays: Math.max(1, span),
+      windowOpen: window.windowOpen,
+      tracked: window.windowEnd >= ledgerStart,
+    };
+  }).reverse();
 }
 
 const PASS_STATUS_RANK: Record<PassThroughStatus, number> = {
@@ -479,37 +528,36 @@ function resolvePassThroughDecisionContext(
   rba: RbaEntry[] | null | undefined,
   opts: PassThroughOpts,
 ): PassThroughDecisionContext | null {
-  const windowDays = opts.windowDays ?? DEFAULT_PASS_THROUGH_WINDOW_DAYS;
   const scorable = scorablePassThroughDecisions(payload, rba, opts);
   if (!scorable.length) return null;
 
-  const decision =
-    (opts.decisionDate
-      ? scorable.find((d) => d.date === opts.decisionDate)
-      : null) ?? scorable[scorable.length - 1];
+  const decision = opts.decisionDate
+    ? scorable.find((d) => d.date === opts.decisionDate)
+    : scorable[scorable.length - 1];
   if (!decision) return null;
 
   const calendarDecisions = calendarPassThroughDecisions(opts.calendar);
   const seriesOnly = decisionsFromRbaSeries(rba).filter(
     (seriesDecision) => !isCalendarEffectiveTwin(seriesDecision, calendarDecisions),
   );
-  const windowEnd = windowEndForDecision(
-    decision,
-    policyBoundaryDates(opts.calendar, seriesOnly),
-    windowDays,
-  );
-  if (!windowEnd) return null;
-
   const observedThrough =
-    payload.run_date || payload.run_dates[payload.run_dates.length - 1] || windowEnd;
-  const observeEnd = windowEnd < observedThrough ? windowEnd : observedThrough;
+    payload.run_date || payload.run_dates[payload.run_dates.length - 1];
+  const window = windowEndForDecision(
+    decision,
+    rateChangeBoundaryDates(opts.calendar, seriesOnly),
+    observedThrough,
+  );
+  if (!window) return null;
+
+  const observeEnd = window.windowEnd < observedThrough ? window.windowEnd : observedThrough;
+  const elapsedDays = daysBetweenYmd(decision.date, observeEnd);
   return {
     decision,
-    windowDays,
-    windowEnd,
+    windowDays: Math.max(1, elapsedDays ?? 1),
+    windowEnd: window.windowEnd,
     observedThrough,
     observeEnd,
-    windowOpen: windowEnd > observedThrough,
+    windowOpen: window.windowOpen,
   };
 }
 

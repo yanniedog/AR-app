@@ -1,10 +1,16 @@
 import type {
+  BankInsightsPayload,
   MultiSectionPassThroughModel,
   MultiSectionPassThroughRow,
   PassThroughRow,
 } from './bankInsights';
-import { SECTION_ORDER, SECTIONS } from '../constants';
-import type { SectionKey } from '../types';
+import {
+  rbaPassThroughDecisionList,
+  rbaPassThroughMultiSection,
+} from './bankInsights';
+import type { RbaCalendar } from './rbaCalendar';
+import { SECTIONS } from '../constants';
+import type { RbaEntry, SectionKey } from '../types';
 
 export type PassThroughSort = 'response' | 'timing' | 'bank';
 
@@ -17,6 +23,33 @@ export interface SectionResponseSummary {
   medianDays: number | null;
   completeBaselines: number;
   fullOrOver: number;
+}
+
+export interface BankResponseProfile {
+  provider: string;
+  direction: 'hike' | 'cut';
+  /** Fully covered, closed windows used for the general tendency. */
+  windowsObserved: number;
+  currentWindowIncluded: boolean;
+  currentStatus: 'followed' | 'opposite' | 'waiting' | null;
+  currentBps: number | null;
+  currentDays: number | null;
+  movedWithRba: number;
+  movedOpposite: number;
+  unchanged: number;
+  responseRatePct: number | null;
+  medianDays: number | null;
+  medianPassPct: number | null;
+  confidence: 'one-window' | 'early' | 'developing' | 'established';
+}
+
+export function responseWindowSwipeDirection(
+  deltaX: number,
+  threshold = 44,
+): 'older' | 'newer' | null {
+  if (deltaX <= -threshold) return 'older';
+  if (deltaX >= threshold) return 'newer';
+  return null;
 }
 
 export interface ResponseScatterHitPoint {
@@ -230,16 +263,15 @@ export function responseTimingLabel(row: PassThroughRow, partial: boolean): stri
 
 export function lenderResponseAccessibilityLabel(
   row: Pick<MultiSectionPassThroughRow, 'provider' | 'sections'>,
+  section: SectionKey,
   partial: boolean,
 ): string {
+  const response = row.sections[section];
   return [
     row.provider,
-    ...SECTION_ORDER.map((section) => {
-      const response = row.sections[section];
-      if (!response) return `${SECTIONS[section].title}: no series`;
-      const net = response.netChangeBps ?? response.passedBps;
-      return `${SECTIONS[section].title}: ${responseBpsLabel(net)}, ${responseTimingLabel(response, partial)}`;
-    }),
+    !response
+      ? `${SECTIONS[section].title}: no series`
+      : `${SECTIONS[section].title}: ${responseBpsLabel(response.netChangeBps ?? response.passedBps)}, ${responseTimingLabel(response, partial)}`,
   ].join('. ');
 }
 
@@ -249,6 +281,123 @@ function median(values: number[]): number | null {
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2) return sorted[mid];
   return (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Build an honest per-bank pattern across every locally observable RBA
+ * rate-change window. The newest open window participates like any other
+ * observation, while incomplete pre-ledger baselines never contribute a
+ * pass-through percentage.
+ */
+export function buildBankResponseProfiles(
+  payload: BankInsightsPayload,
+  rba: RbaEntry[],
+  calendar: RbaCalendar | null,
+  section: SectionKey,
+  direction: 'hike' | 'cut',
+): BankResponseProfile[] {
+  const decisions = rbaPassThroughDecisionList(payload, rba, { calendar })
+    .filter((decision) => decision.outcome === direction);
+  const newestDate = decisions[0]?.date;
+  const byProvider = new Map<string, {
+    windows: number;
+    current: boolean;
+    withRba: number;
+    opposite: number;
+    unchanged: number;
+    days: number[];
+    ratios: number[];
+    currentStatus: BankResponseProfile['currentStatus'];
+    currentBps: number | null;
+    currentDays: number | null;
+  }>();
+
+  for (const decision of decisions) {
+    const model = rbaPassThroughMultiSection(payload, rba, {
+      calendar,
+      decisionDate: decision.date,
+    });
+    if (!model) continue;
+    for (const row of model.rows) {
+      const response = row.sections[section];
+      if (!response) continue;
+      const stats = byProvider.get(row.provider) ?? {
+        windows: 0,
+        current: false,
+        withRba: 0,
+        opposite: 0,
+        unchanged: 0,
+        days: [],
+        ratios: [],
+        currentStatus: null,
+        currentBps: null,
+        currentDays: null,
+      };
+      const isCurrent = model.windowOpen && decision.date === newestDate;
+      if (isCurrent) {
+        stats.current = true;
+        stats.currentBps = response.netChangeBps ?? response.passedBps;
+        stats.currentDays = response.daysToFirstMove;
+        stats.currentStatus = response.passedBps !== 0
+          ? 'followed'
+          : (response.netChangeBps ?? 0) !== 0
+            ? 'opposite'
+            : 'waiting';
+        byProvider.set(row.provider, stats);
+        continue;
+      }
+      // General tendencies use only complete, closed evidence. An open non-move
+      // is censored, and a missing pre-decision baseline is not a holdout.
+      if (model.decision.partialObservation || !response.baselineComplete) {
+        byProvider.set(row.provider, stats);
+        continue;
+      }
+      stats.windows += 1;
+      if (response.passedBps !== 0) {
+        stats.withRba += 1;
+        if (response.daysToFirstMove != null) stats.days.push(response.daysToFirstMove);
+        if (response.ratio != null) stats.ratios.push(response.ratio * 100);
+      } else if ((response.netChangeBps ?? 0) !== 0) {
+        stats.opposite += 1;
+      } else {
+        stats.unchanged += 1;
+      }
+      byProvider.set(row.provider, stats);
+    }
+  }
+
+  return [...byProvider.entries()]
+    .map(([provider, stats]): BankResponseProfile => ({
+      provider,
+      direction,
+      windowsObserved: stats.windows,
+      currentWindowIncluded: stats.current,
+      currentStatus: stats.currentStatus,
+      currentBps: stats.currentBps,
+      currentDays: stats.currentDays,
+      movedWithRba: stats.withRba,
+      movedOpposite: stats.opposite,
+      unchanged: stats.unchanged,
+      responseRatePct: stats.windows
+        ? Math.round((stats.withRba / stats.windows) * 100)
+        : null,
+      medianDays: median(stats.days),
+      medianPassPct: median(stats.ratios),
+      confidence: stats.windows >= 6
+        ? 'established'
+        : stats.windows >= 4
+          ? 'developing'
+          : stats.windows >= 2
+            ? 'early'
+            : 'one-window',
+    }))
+    .sort((a, b) =>
+      b.windowsObserved - a.windowsObserved ||
+      (b.responseRatePct ?? -1) - (a.responseRatePct ?? -1) ||
+      (a.medianDays ?? Number.POSITIVE_INFINITY) -
+        (b.medianDays ?? Number.POSITIVE_INFINITY) ||
+      a.provider.localeCompare(b.provider),
+    );
 }
 
 export function sectionRows(
