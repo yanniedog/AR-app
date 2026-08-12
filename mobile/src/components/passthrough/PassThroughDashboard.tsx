@@ -21,6 +21,7 @@ import {
   passThroughCustomerContext,
   responseBpsLabel,
   responseTimingLabel,
+  sectionRows,
   summarizeSectionResponse,
   type PassThroughSort,
 } from '../../data/passThroughModels';
