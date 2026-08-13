@@ -1,0 +1,32 @@
+{
+  "version": "1.0.150",
+  "releaseTag": "app-arm-v1.0.150",
+  "date": "2026-08-13",
+  "summaryBullets": [
+    "Overhaul rate comparison, scenarios and RBA experience (#188)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Overhaul rate comparison, scenarios and RBA experience (#188)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.150"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.149"
+        }
+      ]
+    }
+  ]
+}
