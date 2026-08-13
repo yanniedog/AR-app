@@ -1,5 +1,6 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { advertisedTermMonths, computeLvr, num } from './calc';
+import { percentageInputFraction } from './decisionInsights';
 import { toFraction } from './format';
 import { normalizedProductFacts } from './productFacts';
 import type { ProjectionFrequency } from './projectionScenario';
@@ -374,7 +375,7 @@ export function buildStaySwitchProjection({
   const asAt = isoDate(today);
   const fees = resolveSwitchCosts(scenario.mortgageSwitch, currentDetail, targetDetail);
   const balance = computeLvr(scenario.mortgage).loan ?? num(scenario.mortgage.loanBalance);
-  const currentRate = toFraction(scenario.mortgage.currentRate);
+  const currentRate = percentageInputFraction(scenario.mortgage.currentRate);
   // Projection cash flow always uses the target's advertised rate. Comparison
   // rate remains a ranking and disclosure measure elsewhere in the app.
   const targetRate = toFraction(target.rate);

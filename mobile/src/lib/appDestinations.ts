@@ -1,5 +1,6 @@
 import type { Href } from 'expo-router';
 
+import { SECTION_ORDER, sectionFromSlug } from '../constants';
 import type { SectionKey } from '../types';
 
 export type AppDestinationId =
@@ -132,6 +133,15 @@ export const APP_DESTINATION_GROUPS: readonly AppDestinationGroup[] = [
 
 export function destinationHref(destination: AppDestination, section: SectionKey): Href {
   return typeof destination.href === 'function' ? destination.href(section) : destination.href;
+}
+
+export function destinationSectionFromParam(
+  value: string | string[] | undefined,
+): SectionKey | undefined {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (!raw) return undefined;
+  if (SECTION_ORDER.includes(raw as SectionKey)) return raw as SectionKey;
+  return sectionFromSlug(raw);
 }
 
 export function destinationIsActive(id: AppDestinationId, pathname: string): boolean {

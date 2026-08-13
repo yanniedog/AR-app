@@ -1,11 +1,13 @@
 import {
   groupProductFacts,
+  factCriterionId,
   normalizedProductFacts,
   productFactDisplayModel,
   productFactSignature,
   productFactValue,
   productMatchesAllFactCriteria,
   publishedFactFilterOptions,
+  boundedPublishedFactFilterOptions,
 } from '../src/data/productFacts';
 import type { NormalizedProductFact, ProductDetail } from '../src/types';
 
@@ -96,6 +98,27 @@ describe('productFacts', () => {
       .toEqual(['eq', 'eq', 'eq', 'eq', 'eq']);
     expect(publishedFactFilterOptions(rows, lookup).find((option) => option.label === 'Offset account')?.criterion)
       .toEqual({ canonicalKey: 'feature.offset', sourceType: 'OFFSET', operator: 'eq', value: true, unit: 'boolean' });
+  });
+
+  test('keeps every selected fact option visible beyond the disclosure cap', () => {
+    const options = Array.from({ length: 40 }, (_, index) => {
+      const criterion = {
+        sourceType: `OPTION_${index}`,
+        operator: 'eq' as const,
+        value: index,
+        unit: 'count' as const,
+      };
+      return { id: factCriterionId(criterion), label: `Option ${index}`, criterion };
+    });
+    const selected = [options[39].criterion, {
+      sourceType: 'OFFSET', operator: 'eq' as const, value: true, unit: 'boolean' as const,
+    }];
+    const bounded = boundedPublishedFactFilterOptions(options, selected, 32);
+    expect(bounded).toHaveLength(32);
+    expect(bounded.slice(0, 2).map((option) => option.id)).toEqual([
+      factCriterionId(options[39].criterion),
+      factCriterionId(selected[1]),
+    ]);
   });
 
   test('keeps canonical identity when generic source types are shared', () => {

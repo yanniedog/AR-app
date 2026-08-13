@@ -1,5 +1,6 @@
 import {
   APP_DESTINATION_GROUPS,
+  destinationSectionFromParam,
   destinationHref,
   destinationIsActive,
 } from '../src/lib/appDestinations';
@@ -48,5 +49,11 @@ describe('app destination registry', () => {
     expect(destinationIsActive('market', '/(tabs)/trends')).toBe(true);
     expect(destinationIsActive('about', '/about')).toBe(true);
     expect(destinationIsActive('today', '/browse')).toBe(false);
+  });
+
+  it('resolves visible category route parameters in key and slug form', () => {
+    expect(destinationSectionFromParam('Savings')).toBe('Savings');
+    expect(destinationSectionFromParam(['term-deposits'])).toBe('TD');
+    expect(destinationSectionFromParam('not-a-section')).toBeUndefined();
   });
 });

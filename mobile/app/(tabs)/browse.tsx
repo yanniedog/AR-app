@@ -26,6 +26,7 @@ export default function Browse() {
   const drillPath = useMemo(() => parseBrowsePath(params.path), [params.path]);
   const interests = useStore((s) => s.prefs.interests);
   const defaultSection = useStore((s) => s.prefs.defaultSection);
+  const setActiveSection = useStore((s) => s.setActiveSection);
   const routeSectionSlug = scalarRouteParam(params.section);
   const routeRequest = scalarRouteParam(params.request) ??
     (routeSectionSlug ? `section:${routeSectionSlug}` : null);
@@ -57,6 +58,10 @@ export default function Browse() {
   useEffect(() => {
     setSection((current) => resolveInterestSection(interests, current));
   }, [interests]);
+
+  useEffect(() => {
+    setActiveSection(renderedSection);
+  }, [renderedSection, setActiveSection]);
 
   const changeSection = useCallback((next: typeof section) => {
     setSection(next);

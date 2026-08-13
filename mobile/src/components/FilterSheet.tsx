@@ -8,6 +8,7 @@ import { distinctEligibilityCriteria } from '../data/eligibility';
 import { distinctAccountFeatures } from '../data/features';
 import { humanizeEnum } from '../data/format';
 import {
+  boundedPublishedFactFilterOptions,
   factCriterionId,
   publishedFactFilterOptions,
 } from '../data/productFacts';
@@ -87,9 +88,17 @@ export function FilterSheet({
     () => distinctEligibilityCriteria(rows, detailsProducts).slice(0, 24),
     [rows, detailsProducts],
   );
-  const publishedDetails = useMemo(
-    () => publishedFactFilterOptions(rows, detailsProducts).slice(0, 32),
+  const availablePublishedDetails = useMemo(
+    () => publishedFactFilterOptions(rows, detailsProducts),
     [rows, detailsProducts],
+  );
+  const publishedDetails = useMemo(
+    () => boundedPublishedFactFilterOptions(
+      availablePublishedDetails,
+      draft.factCriteria,
+      32,
+    ),
+    [availablePublishedDetails, draft.factCriteria],
   );
 
   const toggle = (key: keyof Filters, value: string) => {

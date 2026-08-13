@@ -395,6 +395,46 @@ export function publishedFactFilterOptions(
   );
 }
 
+function selectedCriterionOption(criterion: FactCriterion): PublishedFactFilterOption {
+  const id = factCriterionId(criterion);
+  const rawLabel = criterion.sourceType
+    ?? criterion.canonicalKey?.split('.').filter(Boolean).at(-1)
+    ?? 'Published detail';
+  const label = humanizeEnum(rawLabel) || 'Published detail';
+  if (criterion.operator === 'exists' || criterion.value === true) return { id, label, criterion };
+  if (criterion.value === false) return { id, label: `No ${label.toLowerCase()}`, criterion };
+  const displayValue = productFactValue({
+    id,
+    kind: 'attribute',
+    canonicalKey: criterion.canonicalKey ?? criterion.sourceType ?? 'published.detail',
+    label,
+    value: criterion.value,
+    unit: criterion.unit,
+  });
+  return {
+    id,
+    label: displayValue ? `${label}: ${displayValue}` : label,
+    criterion,
+  };
+}
+
+/** Keep every applied criterion visible/removable, then fill the remaining
+ * bounded disclosure capacity with available unselected options. */
+export function boundedPublishedFactFilterOptions(
+  options: readonly PublishedFactFilterOption[],
+  selected: readonly FactCriterion[],
+  limit = 32,
+): PublishedFactFilterOption[] {
+  const available = new Map(options.map((option) => [option.id, option]));
+  const selectedOptions = selected.map((criterion) => {
+    const id = factCriterionId(criterion);
+    return available.get(id) ?? selectedCriterionOption(criterion);
+  });
+  const selectedIds = new Set(selectedOptions.map((option) => option.id));
+  const remaining = options.filter((option) => !selectedIds.has(option.id));
+  return [...selectedOptions, ...remaining.slice(0, Math.max(0, limit - selectedOptions.length))];
+}
+
 export interface ProductFactGroup {
   key: 'product' | 'features' | 'eligibility' | 'fees';
   title: string;

@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, usePathname } from 'expo-router';
+import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,6 +8,7 @@ import { resolveInterestSection } from '../data/interests';
 import { useStore } from '../data/store';
 import {
   APP_DESTINATION_GROUPS,
+  destinationSectionFromParam,
   destinationHref,
   destinationIsActive,
   type AppDestination,
@@ -63,11 +64,15 @@ export function AppNavigationMenu() {
   const theme = useTheme();
   const menu = useNavigationMenu();
   const pathname = usePathname();
+  const params = useGlobalSearchParams<{ section?: string | string[] }>();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const section = useStore((state) =>
-    resolveInterestSection(state.prefs.interests, state.activeSection));
+  const activeSection = useStore((state) => state.activeSection);
   const interests = useStore((state) => state.prefs.interests);
+  const section = resolveInterestSection(
+    interests,
+    destinationSectionFromParam(params.section) ?? activeSection,
+  );
   const drawerWidth = Math.min(360, Math.max(280, width * 0.88));
 
   const openDestination = useCallback((destination: AppDestination) => {

@@ -117,6 +117,18 @@ describe('published switch fee extraction', () => {
 });
 
 describe('stay versus switch projection', () => {
+  it.each([
+    ['0.50', 0.005],
+    ['1', 0.01],
+    ['0', 0],
+  ])('parses entered current rate %s as a percentage', (input, expected) => {
+    const value = scenario();
+    value.mortgage.currentRate = input;
+    const result = buildStaySwitchProjection({ scenario: value, target: TARGET, targetDetail: OFFSET_DETAIL, now: NOW });
+    expect(result.ready).toBe(true);
+    expect(result.stay?.advertisedRate).toBe(expected);
+  });
+
   it('uses advertised target rate, never comparison rate, and moves repayment saving into offset', () => {
     const result = buildStaySwitchProjection({ scenario: scenario(), target: TARGET, targetDetail: OFFSET_DETAIL, now: NOW });
     expect(result.ready).toBe(true);
