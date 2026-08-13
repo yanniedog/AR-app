@@ -540,7 +540,7 @@ export default function ProductDetail() {
           </AppText>
         ) : null}
 
-        <ProductSpecs row={row} section={section} />
+        <ProductSpecs row={row} section={section} detail={detail} />
 
         <Button
           title={favorite ? 'Saved to My rates' : 'Save exact rate to My rates'}

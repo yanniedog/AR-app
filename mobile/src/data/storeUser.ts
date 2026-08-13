@@ -21,19 +21,16 @@ import {
   makeLegacySavedRateRef,
   toggleSavedRateRefs,
 } from './savedRates';
-import { normalizeTrackedRates, saveTrackedRatesSecure, setTrackedRateDate } from './trackedRates';
-
-let trackedRatesPersistQueue: Promise<void> = Promise.resolve();
+import {
+  normalizeTrackedRates,
+  queueTrackedRatesSecureSave,
+  setTrackedRateDate,
+} from './trackedRates';
 
 function persistTrackedRates(value: AppState['trackedRates']): void {
-  // Preserve action order: rapid date edits/removals must not let an older
-  // SecureStore write finish last and resurrect stale private metadata.
-  trackedRatesPersistQueue = trackedRatesPersistQueue
-    .catch(() => undefined)
-    .then(() => saveTrackedRatesSecure(value))
-    .catch((error) => {
+  void queueTrackedRatesSecureSave(value).catch((error) => {
       debugLog.error('tracked-rates', `secure metadata save failed: ${String((error as Error)?.message ?? error)}`);
-    });
+  });
 }
 
 function setPreferences(
@@ -153,10 +150,18 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       persistTrackedRates(trackedRates);
     },
 
-    setTrackedRateRelevantDate(id: string, relevantDate: string | null, kind: Parameters<AppState['setTrackedRateRelevantDate']>[2]) {
-      const trackedRates = setTrackedRateDate(get().trackedRates, id, relevantDate, kind);
+    async setTrackedRateRelevantDate(id: string, relevantDate: string | null, kind: Parameters<AppState['setTrackedRateRelevantDate']>[2]) {
+      const previous = get().trackedRates;
+      const trackedRates = setTrackedRateDate(previous, id, relevantDate, kind);
       set({ trackedRates });
-      persistTrackedRates(trackedRates);
+      try {
+        await queueTrackedRatesSecureSave(trackedRates);
+      } catch (error) {
+        // Only undo this optimistic edit if no newer tracked-rate action has
+        // replaced it while the native write was pending.
+        if (get().trackedRates === trackedRates) set({ trackedRates: previous });
+        throw error;
+      }
     },
 
     isRateSaved(productKey: string, rateIndex: number | null) {

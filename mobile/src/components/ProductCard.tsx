@@ -106,7 +106,7 @@ export function ProductCard({
   const showingComparisonRate = displayedRateLabel === 'Comparison rate';
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
-  const openLender = onLongPress ?? (() => openBank(row.provider));
+  const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
     row.comparison_rate && !showingComparisonRate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
   }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${

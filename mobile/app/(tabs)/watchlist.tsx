@@ -31,6 +31,7 @@ import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import {
   normalizeTrackedRates,
+  queueTrackedRatesSecureSave,
   type TrackedRate,
   type TrackedRateDateKind,
 } from '../../src/data/trackedRates';
@@ -279,6 +280,7 @@ export default function MyRates() {
         favorites: [...new Set(next.map((ref) => ref.productKey))],
       };
     });
+    return queueTrackedRatesSecureSave(useStore.getState().trackedRates);
   }, [findExactRow]);
   const restoreSavedFixture = useCallback(() => {
     const snapshot = auditSavedFixtureSnapshot;
@@ -291,6 +293,7 @@ export default function MyRates() {
     auditSavedFixtureSnapshot = null;
     setSelectMode(false);
     setSelected([]);
+    return queueTrackedRatesSecureSave(useStore.getState().trackedRates);
   }, []);
   const selectAuditToken = useCallback((...args: unknown[]) => {
     const token = auditActionString(args, 'selectionToken');
@@ -382,17 +385,22 @@ export default function MyRates() {
     });
   }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
 
-  const saveRelevantDate = useCallback(() => {
+  const saveRelevantDate = useCallback(async () => {
     if (!dateEditor) return;
     try {
-      setTrackedRateRelevantDate(
+      await setTrackedRateRelevantDate(
         dateEditor.id,
         dateEditor.value.trim() || null,
         dateEditor.value.trim() ? dateEditor.kind : null,
       );
       setDateEditor(null);
-    } catch {
-      Alert.alert('Check the date', 'Enter a real date as YYYY-MM-DD.');
+    } catch (error) {
+      Alert.alert(
+        error instanceof RangeError ? 'Check the date' : 'Date not saved',
+        error instanceof RangeError
+          ? 'Enter a real date as YYYY-MM-DD.'
+          : 'Secure device storage was unavailable. Your previous date is unchanged.',
+      );
     }
   }, [dateEditor, setTrackedRateRelevantDate]);
 
@@ -679,6 +687,10 @@ export default function MyRates() {
               placeholder="2027-06-30"
               placeholderTextColor={theme.colors.textFaint}
               autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+              inputMode="numeric"
+              maxLength={10}
               accessibilityLabel="Date in year month day format"
               style={{
                 minHeight: 48,

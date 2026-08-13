@@ -4,8 +4,14 @@ import { Platform } from 'react-native';
 import type { SavedRateRef } from './savedRates';
 
 export const TRACKED_RATE_SCHEMA_VERSION = 1 as const;
-const SECURE_STORAGE_KEY = 'ar-rates.tracked-rate-metadata.v1';
-let webMemory: TrackedRate[] = [];
+export const TRACKED_RATE_SECURE_STORAGE_KEY = 'ar-rates.tracked-rate-metadata.v1';
+export const TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY =
+  'ar-rates.performance-audit.tracked-rate-metadata.v1';
+const SECURE_RECORD_SCHEMA_VERSION = 2 as const;
+const MAX_SECURE_CHUNK_BYTES = 1_800;
+const webMemory = new Map<string, TrackedRate[]>();
+let secureWriteGeneration = 0;
+let trackedRatesPersistQueue: Promise<void> = Promise.resolve();
 
 export type TrackedRateDateKind = 'fixed-rate-end' | 'term-maturity';
 
@@ -27,6 +33,18 @@ export interface TrackedRate {
   /** Optional user-entered calendar date; no account data or provider login. */
   relevantDate: string | null;
   relevantDateKind: TrackedRateDateKind | null;
+}
+
+interface PrivateTrackedRate {
+  id: string;
+  relevantDate: string;
+  relevantDateKind: TrackedRateDateKind;
+}
+
+interface SecureRecordManifest {
+  schemaVersion: typeof SECURE_RECORD_SCHEMA_VERSION;
+  generation: string;
+  chunks: number;
 }
 
 function validCalendarDate(value: unknown): string | null {
@@ -89,7 +107,23 @@ export function normalizeTrackedRates(
       previous.set(item.id, item);
     }
   }
-  return savedRates.map((ref) => makeTrackedRate(ref, previous.get(ref.id)));
+  return savedRates.map((ref) => {
+    const item = previous.get(ref.id);
+    const identityContradicts = !!item && (
+      (item.scope !== undefined && item.scope !== ref.scope) ||
+      (item.productKey !== undefined && item.productKey !== ref.productKey) ||
+      (item.rateIndex !== undefined && item.rateIndex !== (ref.scope === 'rate' ? ref.rateIndex : null))
+    );
+    return makeTrackedRate(
+      ref,
+      identityContradicts
+        ? {
+            relevantDate: item?.relevantDate,
+            relevantDateKind: item?.relevantDateKind,
+          }
+        : item,
+    );
+  });
 }
 
 export function setTrackedRateDate(
@@ -114,28 +148,198 @@ export function setTrackedRateDate(
     : tracked);
 }
 
-/** User-entered dates never enter general AsyncStorage. */
-export async function loadTrackedRatesSecure(
-  savedRates: readonly SavedRateRef[],
-): Promise<TrackedRate[]> {
-  if (Platform.OS === 'web') return normalizeTrackedRates(webMemory, savedRates);
-  const raw = await SecureStore.getItemAsync(SECURE_STORAGE_KEY);
-  return normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates);
+function utf8ByteLength(value: string): number {
+  let bytes = 0;
+  for (const char of value) {
+    const codePoint = char.codePointAt(0) ?? 0;
+    bytes += codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+  }
+  return bytes;
 }
 
-export async function saveTrackedRatesSecure(value: readonly TrackedRate[]): Promise<void> {
+function privateDates(value: readonly TrackedRate[]): PrivateTrackedRate[] {
+  return value
+    .filter((item): item is TrackedRate & {
+      relevantDate: string;
+      relevantDateKind: TrackedRateDateKind;
+    } => !!item.relevantDate && !!item.relevantDateKind)
+    .map(({ id, relevantDate, relevantDateKind }) => ({ id, relevantDate, relevantDateKind }));
+}
+
+function secureChunks(value: readonly PrivateTrackedRate[]): string[] {
+  const chunks: string[] = [];
+  let current: PrivateTrackedRate[] = [];
+  for (const item of value) {
+    const candidate = JSON.stringify([...current, item]);
+    if (utf8ByteLength(candidate) <= MAX_SECURE_CHUNK_BYTES) {
+      current.push(item);
+      continue;
+    }
+    if (!current.length) {
+      throw new Error('A tracked-rate identity is too large for secure device storage');
+    }
+    chunks.push(JSON.stringify(current));
+    current = [item];
+    if (utf8ByteLength(JSON.stringify(current)) > MAX_SECURE_CHUNK_BYTES) {
+      throw new Error('A tracked-rate identity is too large for secure device storage');
+    }
+  }
+  if (current.length) chunks.push(JSON.stringify(current));
+  return chunks;
+}
+
+function parseManifest(raw: string | null): SecureRecordManifest | null {
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Partial<SecureRecordManifest>;
+    return value.schemaVersion === SECURE_RECORD_SCHEMA_VERSION &&
+      typeof value.generation === 'string' &&
+      /^[a-z0-9-]+$/i.test(value.generation) &&
+      Number.isInteger(value.chunks) &&
+      (value.chunks ?? 0) > 0 &&
+      (value.chunks ?? 0) <= 10_000
+      ? value as SecureRecordManifest
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function chunkKey(storageKey: string, generation: string, index: number): string {
+  return `${storageKey}.chunk.${generation}.${index}`;
+}
+
+async function loadTrackedRatesFromStorage(
+  savedRates: readonly SavedRateRef[],
+  storageKey: string,
+): Promise<TrackedRate[]> {
+  if (Platform.OS === 'web') {
+    return normalizeTrackedRates(webMemory.get(storageKey), savedRates);
+  }
+  try {
+    const raw = await SecureStore.getItemAsync(storageKey);
+    const manifest = parseManifest(raw);
+    if (!manifest) {
+      // Version 1 stored the compact private-date array directly at the base key.
+      return normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates);
+    }
+    const records: unknown[] = [];
+    for (let index = 0; index < manifest.chunks; index += 1) {
+      const chunk = await SecureStore.getItemAsync(chunkKey(storageKey, manifest.generation, index));
+      if (!chunk) throw new Error('Secure tracked-rate chunk is missing');
+      const parsed = JSON.parse(chunk);
+      if (!Array.isArray(parsed)) throw new Error('Secure tracked-rate chunk is invalid');
+      records.push(...parsed);
+    }
+    return normalizeTrackedRates(records, savedRates);
+  } catch {
+    // Keychain/Keystore resets and partial native records must not block app or
+    // interrupted-audit recovery. Public saved references remain available.
+    return normalizeTrackedRates(undefined, savedRates);
+  }
+}
+
+async function saveTrackedRatesToStorage(
+  value: readonly TrackedRate[],
+  storageKey: string,
+): Promise<void> {
   const copy = value.map((item) => ({ ...item }));
   if (Platform.OS === 'web') {
-    webMemory = copy;
+    webMemory.set(storageKey, copy);
     return;
   }
-  // Product identity and observed advertised rates are public catalogue data.
-  // Only user-entered dates need the encrypted record, keeping SecureStore
-  // small even for a long watchlist.
-  const privateDates = copy
-    .filter((item) => item.relevantDate && item.relevantDateKind)
-    .map(({ id, relevantDate, relevantDateKind }) => ({ id, relevantDate, relevantDateKind }));
-  await SecureStore.setItemAsync(SECURE_STORAGE_KEY, JSON.stringify(privateDates), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
+  const previousRaw = await SecureStore.getItemAsync(storageKey).catch(() => null);
+  const previousManifest = parseManifest(previousRaw);
+  const dates = privateDates(copy);
+  if (!dates.length) {
+    await SecureStore.setItemAsync(storageKey, '[]', {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  } else {
+    const chunks = secureChunks(dates);
+    const generation = `${Date.now().toString(36)}-${(++secureWriteGeneration).toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    let writtenChunks = 0;
+    try {
+      for (let index = 0; index < chunks.length; index += 1) {
+        await SecureStore.setItemAsync(chunkKey(storageKey, generation, index), chunks[index], {
+          keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+        });
+        writtenChunks += 1;
+      }
+      const manifest: SecureRecordManifest = {
+        schemaVersion: SECURE_RECORD_SCHEMA_VERSION,
+        generation,
+        chunks: chunks.length,
+      };
+      // Commit the manifest last. A failed chunk write leaves the previous
+      // generation readable rather than replacing it with a partial record.
+      await SecureStore.setItemAsync(storageKey, JSON.stringify(manifest), {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      });
+    } catch (error) {
+      for (let index = 0; index < writtenChunks; index += 1) {
+        await SecureStore.deleteItemAsync(chunkKey(storageKey, generation, index)).catch(() => undefined);
+      }
+      throw error;
+    }
+  }
+  if (previousManifest) {
+    for (let index = 0; index < previousManifest.chunks; index += 1) {
+      await SecureStore.deleteItemAsync(
+        chunkKey(storageKey, previousManifest.generation, index),
+      ).catch(() => undefined);
+    }
+  }
+}
+
+async function clearTrackedRatesStorage(storageKey: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    webMemory.delete(storageKey);
+    return;
+  }
+  const raw = await SecureStore.getItemAsync(storageKey).catch(() => null);
+  const manifest = parseManifest(raw);
+  if (manifest) {
+    for (let index = 0; index < manifest.chunks; index += 1) {
+      await SecureStore.deleteItemAsync(chunkKey(storageKey, manifest.generation, index));
+    }
+  }
+  await SecureStore.deleteItemAsync(storageKey);
+}
+
+/** User-entered dates never enter general AsyncStorage. */
+export function loadTrackedRatesSecure(
+  savedRates: readonly SavedRateRef[],
+): Promise<TrackedRate[]> {
+  return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_SECURE_STORAGE_KEY);
+}
+
+export function saveTrackedRatesSecure(value: readonly TrackedRate[]): Promise<void> {
+  return saveTrackedRatesToStorage(value, TRACKED_RATE_SECURE_STORAGE_KEY);
+}
+
+/** Serialize every live-key write so stale native promises cannot win a race. */
+export function queueTrackedRatesSecureSave(value: readonly TrackedRate[]): Promise<void> {
+  const snapshot = value.map((item) => ({ ...item }));
+  const pending = trackedRatesPersistQueue
+    .catch(() => undefined)
+    .then(() => saveTrackedRatesSecure(snapshot));
+  trackedRatesPersistQueue = pending;
+  return pending;
+}
+
+export function loadTrackedRatesAuditRollbackSecure(
+  savedRates: readonly SavedRateRef[],
+): Promise<TrackedRate[]> {
+  return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY);
+}
+
+export function saveTrackedRatesAuditRollbackSecure(
+  value: readonly TrackedRate[],
+): Promise<void> {
+  return saveTrackedRatesToStorage(value, TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY);
+}
+
+export function clearTrackedRatesAuditRollbackSecure(): Promise<void> {
+  return clearTrackedRatesStorage(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY);
 }

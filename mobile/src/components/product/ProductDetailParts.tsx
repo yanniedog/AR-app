@@ -10,9 +10,8 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
-  isNonStandard,
 } from '../../data/format';
-import { assessAccess } from '../../data/access';
+import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { rateQualifier } from '../../lib/rateQualifier';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -35,7 +34,7 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) bits.push(bal);
   }
-  const descriptor = bits.join(' · ') || (q.conditional ? '' : 'Widely available');
+  const descriptor = bits.join(' · ');
   return (
     <Row style={{ justifyContent: 'space-between', gap: 12 }}>
       <Row style={{ flex: 1, alignItems: 'center', gap: 6 }}>
@@ -313,7 +312,15 @@ export function ProductRatesList({
   );
 }
 
-export function ProductSpecs({ row, section }: { row: RateRow; section: SectionKey }) {
+export function ProductSpecs({
+  row,
+  section,
+  detail,
+}: {
+  row: RateRow;
+  section: SectionKey;
+  detail: ProductDetailData | null;
+}) {
   const [open, setOpen] = useState(false);
   const specs: { label: string; value: string }[] = [];
   const add = (label: string, value?: string | null) => {
@@ -334,7 +341,13 @@ export function ProductSpecs({ row, section }: { row: RateRow; section: SectionK
   }
   add('Term', formatTerm(row));
   add('Comparison rate', row.comparison_rate ? formatRate(row.comparison_rate) : null);
-  add('Availability', isNonStandard(row) ? 'Special eligibility' : 'Widely available');
+  const access = detail ? assessAccess(row.product_name, detail, row.provider) : null;
+  add(
+    'Availability',
+    access
+      ? accessExcludesFromStandard(access) ? 'Special eligibility' : 'Widely available'
+      : 'Checking availability',
+  );
 
   if (!specs.length) return null;
   return (

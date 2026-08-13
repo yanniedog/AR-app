@@ -51,7 +51,7 @@ export function SwipeableRow({
     >
       <Ionicons name="trash-outline" size={22} color={theme.colors.onPrimary} />
       <AppText variant="tiny" weight="700" style={{ color: theme.colors.onPrimary }}>
-        Remove
+        {deleteLabel}
       </AppText>
     </Pressable>
   );

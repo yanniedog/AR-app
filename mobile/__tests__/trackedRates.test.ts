@@ -5,6 +5,7 @@ import {
   normalizeTrackedRates,
   saveTrackedRatesSecure,
   setTrackedRateDate,
+  TRACKED_RATE_SECURE_STORAGE_KEY,
 } from '../src/data/trackedRates';
 import * as SecureStore from 'expo-secure-store';
 import type { RateRow } from '../src/types';
@@ -73,10 +74,18 @@ describe('tracked rate metadata', () => {
         rateIndex: 999,
         trackedAt: '2026-01-01',
         observedRate: 0.01,
+        relevantDate: '2027-01-31',
+        relevantDateKind: 'fixed-rate-end',
       },
     ], [saved]);
 
-    expect(tracked[0]).toMatchObject({ id: saved.id, rateIndex: 7, observedRate: 0.01 });
+    expect(tracked[0]).toMatchObject({
+      id: saved.id,
+      rateIndex: 7,
+      observedRate: 0.0599,
+      trackedAt: saved.savedAt,
+      relevantDate: '2027-01-31',
+    });
   });
 
   it('stores only user-entered date metadata in encrypted native storage', async () => {
@@ -90,14 +99,15 @@ describe('tracked rate metadata', () => {
 
     await saveTrackedRatesSecure(tracked);
 
-    const secureWrite = (SecureStore.setItemAsync as jest.Mock).mock.calls.at(-1)?.[1];
-    expect(JSON.parse(secureWrite)).toEqual([{
+    const chunkWrite = (SecureStore.setItemAsync as jest.Mock).mock.calls.find(
+      ([key]) => String(key).startsWith(`${TRACKED_RATE_SECURE_STORAGE_KEY}.chunk.`),
+    )?.[1];
+    expect(JSON.parse(chunkWrite)).toEqual([{
       id: saved.id,
       relevantDate: '2027-01-31',
       relevantDateKind: 'fixed-rate-end',
     }]);
 
-    (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce(secureWrite);
     await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([
       expect.objectContaining({
         id: saved.id,
@@ -105,6 +115,47 @@ describe('tracked rate metadata', () => {
         rateIndex: 7,
         relevantDate: '2027-01-31',
       }),
+    ]);
+  });
+
+  it('chunks a long private-date list below the native secure-value warning threshold', async () => {
+    const saved = Array.from({ length: 50 }, (_, index) => makeSavedRateRef({
+      ...row(index),
+      product_key: `EX|${index}|${'LONG'.repeat(12)}`,
+    }));
+    const tracked = saved.map((ref) => ({
+      ...makeTrackedRate(ref),
+      relevantDate: '2028-12-31',
+      relevantDateKind: 'fixed-rate-end' as const,
+    }));
+
+    await saveTrackedRatesSecure(tracked);
+
+    const writes = (SecureStore.setItemAsync as jest.Mock).mock.calls.filter(
+      ([key]) => String(key) === TRACKED_RATE_SECURE_STORAGE_KEY ||
+        String(key).startsWith(`${TRACKED_RATE_SECURE_STORAGE_KEY}.chunk.`),
+    );
+    expect(writes.length).toBeGreaterThan(2);
+    for (const [, value] of writes) {
+      expect(new TextEncoder().encode(String(value)).byteLength).toBeLessThanOrEqual(1_800);
+    }
+    await expect(loadTrackedRatesSecure(saved)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: saved[0].id, relevantDate: '2028-12-31' }),
+        expect.objectContaining({ id: saved[49].id, relevantDate: '2028-12-31' }),
+      ]),
+    );
+  });
+
+  it.each([
+    ['unreadable', () => (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error('reset'))],
+    ['malformed', () => (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce('{broken')],
+  ])('fails soft for %s private storage', async (_label, arrange) => {
+    const saved = makeSavedRateRef(row());
+    arrange();
+
+    await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([
+      expect.objectContaining({ id: saved.id, relevantDate: null }),
     ]);
   });
 });

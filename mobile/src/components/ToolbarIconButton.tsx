@@ -30,6 +30,7 @@ export function ToolbarIconButton({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         accessibilityState={active === undefined ? undefined : { selected: active }}
+        accessibilityValue={badge ? { text: `${badge} active filter${badge === 1 ? '' : 's'}` } : undefined}
         hitSlop={4}
         style={{
           backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surfaceAlt,

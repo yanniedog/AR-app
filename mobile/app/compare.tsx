@@ -230,7 +230,14 @@ export default function Compare() {
     },
     { label: 'LVR', get: (e) => humanizeEnum(e.row.lvr_tier) || '—' },
     { label: 'Balance', get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
-    { label: 'Availability', get: (e) => (isBroadlyAvailable(e.row, detailFor(e)) ? 'Widely available' : 'Special eligibility') },
+    {
+      label: 'Availability',
+      get: (e) => {
+        const detail = detailFor(e);
+        if (!detail) return 'Checking availability';
+        return isBroadlyAvailable(e.row, detail) ? 'Widely available' : 'Special eligibility';
+      },
+    },
     { label: 'Fees', get: (e) => detailSummary(detailFor(e)?.fees, e.section, 'None published', 'fees') },
     { label: 'Eligibility', get: (e) => detailSummary(detailFor(e)?.eligibility, e.section, 'No criteria published') },
     { label: 'Features', get: (e) => detailSummary(detailFor(e)?.features, e.section) },

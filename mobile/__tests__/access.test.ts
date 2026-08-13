@@ -100,6 +100,13 @@ describe('assessAccess', () => {
     });
     expect(optionalPath.categories).not.toContain('first-home');
     expect(optionalPath.restricted).toBe(false);
+
+    const explicitlyExcluded = assessAccess('Variable Home Loan', {
+      description: 'Not available to first home buyers.',
+      eligibility: [{ label: 'MIN_AGE' }],
+    });
+    expect(explicitlyExcluded.categories).not.toContain('first-home');
+    expect(explicitlyExcluded.restricted).toBe(false);
   });
 
   it('flags MAX_AGE eligibility as youth-restricted when the cap is a youth bound', () => {

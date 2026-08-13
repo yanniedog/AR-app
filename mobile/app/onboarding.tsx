@@ -217,6 +217,7 @@ export default function Onboarding() {
               title={item.label}
               icon={item.icon}
               variant={job === item.value ? 'primary' : 'secondary'}
+              accessibilityState={{ selected: job === item.value }}
               onPress={() => setJob(item.value)}
             />
           ))}

@@ -4,9 +4,11 @@ import { Platform } from 'react-native';
 
 import type { AppState } from '../data/storeTypes';
 import {
-  loadTrackedRatesSecure,
+  clearTrackedRatesAuditRollbackSecure,
+  loadTrackedRatesAuditRollbackSecure,
   normalizeTrackedRates,
-  saveTrackedRatesSecure,
+  queueTrackedRatesSecureSave,
+  saveTrackedRatesAuditRollbackSecure,
 } from '../data/trackedRates';
 import {
   normalizeUserRateScenario,
@@ -50,6 +52,7 @@ interface PersistedRollbackJournal {
   snapshot: Omit<PerformanceAuditUserSnapshot, 'userRateScenario' | 'trackedRates'> & {
     userRateScenario: null;
     userRateScenarioCaptured: boolean;
+    trackedRatesCaptured: boolean;
   };
 }
 
@@ -95,6 +98,7 @@ function toPersistedJournal(journal: PerformanceAuditRollbackJournal): Persisted
       activeSection: journal.snapshot.activeSection,
       userRateScenario: null,
       userRateScenarioCaptured: journal.snapshot.userRateScenario != null,
+      trackedRatesCaptured: journal.snapshot.trackedRates.some((item) => !!item.relevantDate),
     },
   };
 }
@@ -135,20 +139,23 @@ async function loadRollbackScenario(): Promise<UserRateScenario | null> {
 }
 
 async function clearRollbackArtifacts(): Promise<void> {
-  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
   await persistRollbackScenario(null);
+  await clearTrackedRatesAuditRollbackSecure();
+  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
 }
 
 function parseJournal(raw: string | null): {
   journal: PerformanceAuditRollbackJournal;
   legacyScenario: UserRateScenario | null;
   captured: boolean;
+  trackedRatesCaptured: boolean;
 } | null {
   if (!raw) return null;
   try {
     const journal = JSON.parse(raw) as Partial<PersistedRollbackJournal> & {
       snapshot?: Partial<PerformanceAuditUserSnapshot> & {
         userRateScenarioCaptured?: boolean;
+        trackedRatesCaptured?: boolean;
       };
     };
     const snapshot = journal.snapshot;
@@ -182,6 +189,7 @@ function parseJournal(raw: string | null): {
       },
       legacyScenario,
       captured: snapshot.userRateScenarioCaptured === true || legacyScenario != null,
+      trackedRatesCaptured: snapshot.trackedRatesCaptured === true,
     };
   } catch {
     return null;
@@ -192,11 +200,16 @@ async function readRollbackJournal(): Promise<PerformanceAuditRollbackJournal | 
   const parsed = parseJournal(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY));
   if (!parsed) return null;
   const secureScenario = await loadRollbackScenario();
-  const trackedRates = await loadTrackedRatesSecure(parsed.journal.snapshot.savedRates);
+  const trackedRates = await loadTrackedRatesAuditRollbackSecure(parsed.journal.snapshot.savedRates);
   const userRateScenario = secureScenario ?? parsed.legacyScenario ?? null;
   if (parsed.captured && !userRateScenario) {
     throw new Error(
       'Performance audit rollback scenario is missing from SecureStore; journal retained for recovery',
+    );
+  }
+  if (parsed.trackedRatesCaptured && !trackedRates.some((item) => !!item.relevantDate)) {
+    throw new Error(
+      'Performance audit rollback tracked-rate metadata is missing from SecureStore; journal retained for recovery',
     );
   }
   return {
@@ -223,7 +236,7 @@ export async function beginPerformanceAuditRollback(
     startedAt: new Date().toISOString(),
     snapshot,
   };
-  await saveTrackedRatesSecure(snapshot.trackedRates);
+  await saveTrackedRatesAuditRollbackSecure(snapshot.trackedRates);
   await persistRollbackScenario(snapshot.userRateScenario);
   await AsyncStorage.setItem(
     PERFORMANCE_AUDIT_ROLLBACK_KEY,
@@ -293,7 +306,7 @@ async function restoreSnapshot(
   const restored = clone(snapshot);
   // Complete the private write before changing the public saved references so
   // process death cannot strand an exact tier without its date metadata.
-  await saveTrackedRatesSecure(restored.trackedRates);
+  await queueTrackedRatesSecureSave(restored.trackedRates);
   store.setState({
     prefs: restored.prefs,
     savedRates: restored.savedRates,

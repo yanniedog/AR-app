@@ -187,7 +187,7 @@ export interface AppState {
     id: string,
     relevantDate: string | null,
     kind: TrackedRateDateKind | null,
-  ) => void;
+  ) => Promise<void>;
   isRateSaved: (productKey: string, rateIndex: number | null) => boolean;
   subscribeProduct: (productKey: string, rateIndex: number | null, labelRow: RateRow) => boolean;
   unsubscribeProduct: (productKey: string, rateIndex: number | null) => void;

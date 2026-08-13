@@ -73,7 +73,13 @@ export const useStore = create<AppState>()(
         const hasRecordedPrivacyChoice =
           hasCurrentPrivacyChoice || hasPreviousPrivacyChoice;
         const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
-        const trackedRates = normalizeTrackedRates(p?.trackedRates, savedRates);
+        // A background rehydrate must not erase private metadata while the
+        // SecureStore companion is being read. Initial hydration has no prior
+        // tracked state; later rehydrates retain the live state as the base.
+        const trackedRates = normalizeTrackedRates(
+          current.hydrated ? current.trackedRates : p?.trackedRates,
+          savedRates,
+        );
         const prefs = {
           ...DEFAULT_PREFS,
           ...persistedPrefs,
@@ -118,8 +124,18 @@ export const useStore = create<AppState>()(
         void recoverInterruptedPerformanceAudit(useStore)
           .then(async () => {
             const state = useStore.getState();
+            const savedRatesBeforeLoad = state.savedRates;
+            const trackedRatesBeforeLoad = state.trackedRates;
             const trackedRates = await loadTrackedRatesSecure(state.savedRates);
-            useStore.setState({ trackedRates });
+            const latest = useStore.getState();
+            // Preserve any save, date edit, or date clear performed while the
+            // native read was pending. Array identity changes on every action.
+            if (
+              latest.savedRates === savedRatesBeforeLoad &&
+              latest.trackedRates === trackedRatesBeforeLoad
+            ) {
+              useStore.setState({ trackedRates });
+            }
           })
           .catch((error) => {
             debugLog.error(
