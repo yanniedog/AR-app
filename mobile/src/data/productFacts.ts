@@ -341,9 +341,12 @@ export function normalizeFactCriterion(value: unknown): FactCriterion | null {
 function optionCriterion(fact: NormalizedProductFact): FactCriterion | null {
   const curatedKey = curatedFeatureIdentityKey(fact) ?? curatedEligibilityFactKey(fact);
   if (!curatedKey) return null;
-  const identity: FactCriterionIdentity = fact.sourceType?.trim()
-    ? { sourceType: fact.sourceType.trim().toUpperCase() }
-    : { canonicalKey: fact.canonicalKey };
+  // The canonical key is the curated identity. Generic source enums such as
+  // OTHER are useful qualifiers but are never specific enough on their own.
+  const identity: FactCriterionIdentity = {
+    canonicalKey: fact.canonicalKey,
+    ...(fact.sourceType?.trim() ? { sourceType: fact.sourceType.trim().toUpperCase() } : {}),
+  };
   if (fact.value !== undefined && (typeof fact.value === 'boolean' || isNumericLike(fact.value))) {
     return { ...identity, operator: 'eq', value: fact.value, unit: fact.unit };
   }

@@ -161,7 +161,7 @@ export default function Home() {
     // the default home path remains core-only after a new ingest.
     const timer = setTimeout(() => {
       interaction = InteractionManager.runAfterInteractions(() => {
-        if (!cancelled) void ensureDetails();
+        if (!cancelled) void ensureDetails({ force: switchProjectionNeedsDetails });
       });
     }, profileFeaturesPending ? 0 : 900);
     return () => {

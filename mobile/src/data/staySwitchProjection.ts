@@ -468,11 +468,13 @@ export function buildStaySwitchProjection({
     contractualPayoffDate: switchOpeningBalance <= 0.005 ? asAt : null,
   };
   const points: StaySwitchPoint[] = [];
-  let breakEvenDate = fees.netSwitchCost <= 0 ? asAt : null;
-  const pushPoint = (date: Date, elapsedMonths: number) => {
-    const cumulativeStayCost = stay.interest + fees.currentPeriodicFeesMonthly * elapsedMonths;
+  let breakEvenDate: string | null = null;
+  let stayFeeMonths = 0;
+  let switchFeeMonths = 0;
+  const pushPoint = (date: Date) => {
+    const cumulativeStayCost = stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths;
     const cumulativeSwitchCost = switching.interest + fees.netSwitchCost
-      + fees.targetPeriodicFeesMonthly * elapsedMonths;
+      + fees.targetPeriodicFeesMonthly * switchFeeMonths;
     const cumulativeSaving = cumulativeStayCost - cumulativeSwitchCost;
     points.push({
       date: isoDate(date),
@@ -488,20 +490,26 @@ export function buildStaySwitchProjection({
       cumulativeSwitchCost,
       cumulativeSaving,
     });
-    if (!breakEvenDate && cumulativeSaving >= 0) breakEvenDate = isoDate(date);
+    if (!breakEvenDate && cumulativeSaving > 0.005) {
+      // With no opening cost, the paths are equal at settlement. Treat that as
+      // break-even only after the switch proves it produces a positive saving.
+      breakEvenDate = fees.netSwitchCost === 0 ? asAt : isoDate(date);
+    }
   };
-  pushPoint(today, 0);
+  pushPoint(today);
   for (let month = 1; month <= modelMonths; month += 1) {
     const date = addUtcMonths(today, month);
+    if (!stay.contractualPayoffDate) stayFeeMonths += 1;
+    if (!switching.contractualPayoffDate) switchFeeMonths += 1;
     advanceLeg(stay, currentRate!, stayPrincipalPayment, stayOffsetContribution, date);
     advanceLeg(switching, targetRate!, targetPrincipalPayment, targetOffsetContribution, date);
-    pushPoint(date, month);
+    pushPoint(date);
     if (stay.contractualPayoffDate && switching.contractualPayoffDate) break;
   }
 
-  const modelledMonths = points.length - 1;
-  const stayTotalCost = stay.interest + fees.currentPeriodicFeesMonthly * modelledMonths;
-  const switchTotalCost = switching.interest + fees.netSwitchCost;
+  const stayTotalCost = stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths;
+  const switchTotalCost = switching.interest + fees.netSwitchCost
+    + fees.targetPeriodicFeesMonthly * switchFeeMonths;
   const warnings: string[] = [];
   if (targetAllocationShortfall > 0.005) {
     warnings.push(`The target minimum repayment is $${Math.round(targetAllocationShortfall).toLocaleString('en-AU')} per month above the current household allocation.`);
@@ -552,7 +560,7 @@ export function buildStaySwitchProjection({
       totalMonthlyAllocation: Math.max(householdAllocation, switchRequired),
       openingBalance: switchOpeningBalance,
       totalInterest: switching.interest,
-      totalCost: switchTotalCost + fees.targetPeriodicFeesMonthly * modelledMonths,
+      totalCost: switchTotalCost,
       effectiveDebtFreeDate: switching.effectiveDebtFreeDate,
       contractualPayoffDate: switching.contractualPayoffDate,
       endBalance: switching.balance,
@@ -561,7 +569,7 @@ export function buildStaySwitchProjection({
     points,
     breakEvenDate,
     totalInterestSaving: stay.interest - switching.interest,
-    totalCostSaving: stayTotalCost - switchTotalCost - fees.targetPeriodicFeesMonthly * modelledMonths,
+    totalCostSaving: stayTotalCost - switchTotalCost,
     assumptions: [
       'Both paths start with the same loan balance, remaining term and current offset balance.',
       'The target cash flow uses its advertised rate; comparison rate is not an amortisation rate.',

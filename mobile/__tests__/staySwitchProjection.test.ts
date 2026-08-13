@@ -210,6 +210,39 @@ describe('stay versus switch projection', () => {
     expect(withCurrentFee.totalCostSaving).toBeGreaterThan(withoutCurrentFee.totalCostSaving);
   });
 
+  it('does not report break-even for a zero-cost losing switch', () => {
+    const result = buildStaySwitchProjection({
+      scenario: scenario(),
+      target: { ...TARGET, rate: '0.09' },
+      targetDetail: OFFSET_DETAIL,
+      now: NOW,
+    });
+    expect(result.fees.netSwitchCost).toBe(0);
+    expect(result.points.at(-1)!.cumulativeSaving).toBeLessThan(0);
+    expect(result.breakEvenDate).toBeNull();
+  });
+
+  it('stops each periodic fee when that loan is contractually repaid', () => {
+    const short = scenario();
+    short.mortgage.loanBalance = '10000';
+    short.mortgage.currentRate = '12';
+    short.mortgage.years = '2';
+    short.projections.mortgage.offsetBalance = '0';
+    short.projections.mortgage.offsetContributionAmount = '0';
+    short.projections.mortgage.extraRepaymentAmount = '0';
+    const result = buildStaySwitchProjection({
+      scenario: short,
+      target: { ...TARGET, rate: '0.01' },
+      targetDetail: { fees: [{ label: 'PERIODIC', name: 'Monthly fee', value: '10', info: 'per month' }] },
+      now: NOW,
+    });
+    const payoffPoint = result.points.findIndex((point) => point.date === result.switching!.contractualPayoffDate);
+    expect(payoffPoint).toBeGreaterThan(0);
+    expect(payoffPoint).toBeLessThan(result.points.length - 1);
+    expect(result.switching!.totalCost - result.switching!.totalInterest - result.fees.netSwitchCost)
+      .toBeCloseTo(result.fees.targetPeriodicFeesMonthly * payoffPoint, 8);
+  });
+
   it('stops exact fixed-product comparisons at the published period without inventing reversion', () => {
     const fixed: RateRow = { ...TARGET, rate_type: 'FIXED', term: 'P2Y' };
     const result = buildStaySwitchProjection({ scenario: scenario(), target: fixed, targetDetail: OFFSET_DETAIL, now: NOW });

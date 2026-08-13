@@ -94,6 +94,21 @@ describe('productFacts', () => {
     ]);
     expect(publishedFactFilterOptions(rows, lookup).map((option) => option.criterion.operator))
       .toEqual(['eq', 'eq', 'eq', 'eq', 'eq']);
+    expect(publishedFactFilterOptions(rows, lookup).find((option) => option.label === 'Offset account')?.criterion)
+      .toEqual({ canonicalKey: 'feature.offset', sourceType: 'OFFSET', operator: 'eq', value: true, unit: 'boolean' });
+  });
+
+  test('keeps canonical identity when generic source types are shared', () => {
+    const rows = [{ product_key: 'A|1', provider: 'Bank', product_name: 'Loan', rate: '0.05' }];
+    const lookup: Record<string, ProductDetail> = { 'A|1': { facts: [
+      { id: 'offset', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OTHER', label: 'Offset account', value: true, unit: 'boolean' },
+      { id: 'redraw', kind: 'feature', canonicalKey: 'feature.redraw', sourceType: 'OTHER', label: 'Redraw', value: true, unit: 'boolean' },
+    ] } };
+    const option = publishedFactFilterOptions(rows, lookup).find((item) => item.label === 'Offset account')!;
+    expect(option.criterion).toEqual({
+      canonicalKey: 'feature.offset', sourceType: 'OTHER', operator: 'eq', value: true, unit: 'boolean',
+    });
+    expect(productMatchesAllFactCriteria({ facts: [lookup['A|1'].facts![1]] }, [option.criterion])).toBe(false);
   });
 
   test('applies deliberate customer-boundary direction for age and LVR', () => {
