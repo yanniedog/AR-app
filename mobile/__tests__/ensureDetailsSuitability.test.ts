@@ -145,6 +145,25 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details?.run_date).toBe(remoteCore.run_date);
   });
 
+  it('opens the fail-closed gate from bundled details when offline', async () => {
+    store.setState({
+      source: 'sample',
+      manifest: sampleManifest,
+      core: sampleCore,
+      details: null,
+    });
+    closeSuitabilityGateUntilRebuild();
+    mockReadMeta.mockResolvedValue(null);
+    mockReadDetails.mockResolvedValue(null);
+
+    await store.getState().ensureDetails({ force: true });
+
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(getSuitabilityIndex()?.detailsSha).toBe(sampleManifest.files.details.sha256);
+    expect(getSuitabilityIndex()?.allowed.size).toBeGreaterThan(0);
+    expect(store.getState().details?.run_date).toBe(sampleDetails.run_date);
+  });
+
   it('lets a second caller await the in-flight load instead of no-oping', async () => {
     closeSuitabilityGateUntilRebuild();
     let finishDownload!: (value: unknown) => void;

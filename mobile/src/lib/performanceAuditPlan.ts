@@ -387,14 +387,14 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     readiness: ['app', 'data', 'local-state', 'logos'],
     skipReason: missingCore,
     skipWhen: ['Core data is unavailable'],
-    skipExplanation: 'Preview only; the final onboarding commit and notification permission are never invoked.',
+    skipExplanation: 'The audit exercises each first-job preview; final onboarding commit and notification permission are never invoked.',
     unsafeActionsExcluded: ['onboarding.complete', 'notifications.enable'],
   }, [
     { depth: 0, semanticActionId: 'onboarding.open' },
     { depth: 1, semanticActionId: 'onboarding.section.toggle', stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'onboarding.step.next', stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'onboarding.notify.preview', stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'onboarding.step.back', stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'onboarding.job.find', stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'onboarding.job.follow', stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'onboarding.job.check', stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.today', {
@@ -593,7 +593,12 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     unsafeActionsExcluded: ['financial-input.edit', 'external-link.open', 'share.open'],
   }, [
     { depth: 0, semanticActionId: 'receipt.open', parameters: exactProductParameters },
-    { depth: 1, semanticActionId: 'receipt.scroll.evidence', stateImpact: 'local-only' },
+    {
+      depth: 1,
+      semanticActionId: 'receipt.scroll.evidence',
+      readiness: ['app', 'data', 'details', 'scenario-storage', 'list'],
+      stateImpact: 'local-only',
+    },
     {
       depth: 1,
       semanticActionId: 'receipt.back-to-product',

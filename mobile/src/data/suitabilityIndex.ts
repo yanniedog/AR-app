@@ -20,8 +20,10 @@ export type SuitabilityIndex = {
   allowed: Set<string>;
 };
 
+export const SUITABILITY_INDEX_SCHEMA_VERSION = 2 as const;
+
 export type PersistedSuitabilityIndex = {
-  schemaVersion: 1;
+  schemaVersion: typeof SUITABILITY_INDEX_SCHEMA_VERSION;
   runDate: string;
   coreSha: string;
   detailsSha: string;
@@ -81,7 +83,7 @@ export async function hydrateSuitabilityIndex(
   const saved = await cache.readSuitabilityIndex();
   if (
     !saved ||
-    saved.schemaVersion !== 1 ||
+    saved.schemaVersion !== SUITABILITY_INDEX_SCHEMA_VERSION ||
     saved.runDate !== runDate ||
     saved.coreSha !== coreSha ||
     saved.detailsSha !== detailsSha ||
@@ -196,7 +198,7 @@ export async function rebuildAndInstallSuitabilityIndex(
     installSuitabilityIndex(index);
     try {
       await cache.writeSuitabilityIndex({
-        schemaVersion: 1,
+        schemaVersion: SUITABILITY_INDEX_SCHEMA_VERSION,
         runDate: index.runDate,
         coreSha: index.coreSha,
         detailsSha: index.detailsSha,

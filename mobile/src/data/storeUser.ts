@@ -21,6 +21,17 @@ import {
   makeLegacySavedRateRef,
   toggleSavedRateRefs,
 } from './savedRates';
+import {
+  normalizeTrackedRates,
+  queueTrackedRatesSecureSave,
+  setTrackedRateDate,
+} from './trackedRates';
+
+function persistTrackedRates(value: AppState['trackedRates']): void {
+  void queueTrackedRatesSecureSave(value).catch((error) => {
+      debugLog.error('tracked-rates', `secure metadata save failed: ${String((error as Error)?.message ?? error)}`);
+  });
+}
 
 function setPreferences(
   set: StoreSet,
@@ -84,14 +95,16 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     toggleFavorite(key: string) {
       const favorites = get().favorites;
       const removing = favorites.includes(key);
+      const savedRates = removing
+        ? get().savedRates.filter((ref) => ref.productKey !== key)
+        : [...get().savedRates, makeLegacySavedRateRef(key)];
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
-        favorites: removing
-          ? favorites.filter((k) => k !== key)
-          : [...favorites, key],
-        savedRates: removing
-          ? get().savedRates.filter((ref) => ref.productKey !== key)
-          : [...get().savedRates, makeLegacySavedRateRef(key)],
+        favorites: removing ? favorites.filter((k) => k !== key) : [...favorites, key],
+        savedRates,
+        trackedRates,
       });
+      persistTrackedRates(trackedRates);
       hapticSelection();
     },
 
@@ -101,19 +114,54 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
 
     toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
       const savedRates = toggleSavedRateRefs(get().savedRates, row, scope);
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
         savedRates,
+        trackedRates,
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
+      persistTrackedRates(trackedRates);
       hapticSelection();
     },
 
     removeSavedRate(id: string) {
       const savedRates = get().savedRates.filter((item) => item.id !== id);
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
         savedRates,
+        trackedRates,
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
+      persistTrackedRates(trackedRates);
+    },
+
+    restoreSavedRate(ref: Parameters<AppState['restoreSavedRate']>[0], tracked?: Parameters<AppState['restoreSavedRate']>[1]) {
+      if (get().savedRates.some((item) => item.id === ref.id)) return;
+      const savedRates = [...get().savedRates, ref];
+      const trackedRates = normalizeTrackedRates(
+        tracked ? [...get().trackedRates, tracked] : get().trackedRates,
+        savedRates,
+      );
+      set({
+        savedRates,
+        trackedRates,
+        favorites: [...new Set(savedRates.map((item) => item.productKey))],
+      });
+      persistTrackedRates(trackedRates);
+    },
+
+    async setTrackedRateRelevantDate(id: string, relevantDate: string | null, kind: Parameters<AppState['setTrackedRateRelevantDate']>[2]) {
+      const previous = get().trackedRates;
+      const trackedRates = setTrackedRateDate(previous, id, relevantDate, kind);
+      set({ trackedRates });
+      try {
+        await queueTrackedRatesSecureSave(trackedRates);
+      } catch (error) {
+        // Only undo this optimistic edit if no newer tracked-rate action has
+        // replaced it while the native write was pending.
+        if (get().trackedRates === trackedRates) set({ trackedRates: previous });
+        throw error;
+      }
     },
 
     isRateSaved(productKey: string, rateIndex: number | null) {
@@ -224,6 +272,8 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'isFavorite'
     | 'toggleSavedRate'
     | 'removeSavedRate'
+    | 'restoreSavedRate'
+    | 'setTrackedRateRelevantDate'
     | 'isRateSaved'
     | 'subscribeProduct'
     | 'unsubscribeProduct'

@@ -179,6 +179,7 @@ export function Button({
   disabled,
   style,
   hapticOnPress,
+  accessibilityState,
 }: {
   title: string;
   onPress?: () => void;
@@ -189,6 +190,7 @@ export function Button({
   style?: ViewStyle;
   /** Light impact on press (e.g. filter Apply). */
   hapticOnPress?: boolean;
+  accessibilityState?: PressableProps['accessibilityState'];
 }) {
   const theme = useTheme();
   const bg =
@@ -204,7 +206,11 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={title}
-      accessibilityState={{ disabled: !!(disabled || loading), busy: !!loading }}
+      accessibilityState={{
+        ...accessibilityState,
+        disabled: !!(disabled || loading),
+        busy: !!loading,
+      }}
       onPress={() => {
         if (hapticOnPress) hapticLightImpact();
         onPress?.();

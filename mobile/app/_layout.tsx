@@ -59,6 +59,12 @@ import {
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 
+// Gives cold-start deep links a real back destination instead of relying on
+// the bottom bar that focused routes deliberately hide.
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
+
 let coldStartLogReset: Promise<void> | null = null;
 SplashScreen.preventAutoHideAsync().catch((err) => logSwallowedError('splash.preventAutoHide', err));
 
@@ -246,8 +252,8 @@ function RootNavigator() {
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
-  // Only reserve the tab-bar strip when the bar is actually on screen; it is
-  // hidden through onboarding, where the extra offset would leave a gap.
+  // Reserve the tab-bar strip only on the four destination roots. Focused
+  // stack routes and auxiliary settings use the full viewport.
   const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);
 
   useLayoutEffect(() => {
@@ -436,18 +442,18 @@ function RootNavigator() {
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="onboarding" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="node" options={{ title: 'Browse' }} />
+              <Stack.Screen name="node" options={{ title: 'Explore' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
               <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
               <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
-              <Stack.Screen name="calculator" options={{ title: 'Switch & save' }} />
-              <Stack.Screen name="projections" options={{ title: 'Lifecycle projections' }} />
-              <Stack.Screen name="rba-response" options={{ title: 'RBA response', headerBackTitle: 'Rate moves' }} />
+              <Stack.Screen name="calculator" options={{ title: 'My scenario' }} />
+              <Stack.Screen name="projections" options={{ title: 'What if rates change?' }} />
+              <Stack.Screen name="rba-response" options={{ title: 'RBA response', headerBackTitle: 'Changes' }} />
               <Stack.Screen
                 name="rate-receipt"
-                options={{ title: 'Rate receipt', headerBackTitle: 'Product' }}
+                options={{ title: 'Bank-call brief', headerBackTitle: 'Product' }}
               />
               <Stack.Screen
                 name="rba"

@@ -115,17 +115,17 @@ export function SwitcherEdgeChart({
 
   return (
     <View>
-      <Row gap={8} style={{ alignItems: 'flex-end', marginBottom: 6 }}>
-        <AppText variant="rateHero" style={{ color: ink }}>
-          {activeGapBps != null ? `${Math.round(activeGapBps)} bps` : '—'}
-        </AppText>
-        <View style={{ flex: 1, paddingBottom: 4 }}>
-          <AppText variant="tiny" color="textMuted">
-            {isHistorical ? 'selected-date observed gap' : 'latest observed gap'} between the typical rate and the best on the market
+      <View style={{ gap: 3, marginBottom: 8 }}>
+        <Row gap={8} style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+          <AppText variant="rateHero" style={{ color: ink }}>
+            {activeGapBps != null ? `${Math.round(activeGapBps)} bps` : '—'}
           </AppText>
-        </View>
-        {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
-      </Row>
+          {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
+        </Row>
+        <AppText variant="tiny" color="textMuted">
+          {isHistorical ? 'Selected-date gap' : 'Latest gap'} between the typical tracked rate and the best advertised rate
+        </AppText>
+      </View>
       <View
         accessible
         accessibilityRole="adjustable"

@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs, router } from 'expo-router';
 import React from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
 import { BrandLockup } from '../../src/components/BrandLockup';
@@ -10,8 +10,14 @@ import { resolveInterestSection } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
 import { openSearch } from '../../src/lib/nav';
 import { getTabIonicon } from '../../src/lib/tabIcons';
+import { primaryTabLabel } from '../../src/lib/tabRouting';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
+
+// Preserve Today behind direct links into a legacy tab route or Settings.
+export const unstable_settings = {
+  initialRouteName: 'index',
+};
 
 /**
  * Search is the app's primary verb, so it gets a permanent home in the Today
@@ -56,6 +62,7 @@ function HomeHeaderActions() {
 
 export default function TabsLayout() {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
   const isAndroid = Platform.OS === 'android';
   const tabPressListener = ({ navigation, route }: { navigation: { getState: () => { index: number; routes: { name: string }[] } }; route: { name: string } }) => ({ tabPress: () => { const state = navigation.getState(); if (state.routes[state.index]?.name === route.name) logTabNoOp(route.name); } });
   const showUpdateBanner = useAppUpdateBannerVisible();
@@ -63,8 +70,8 @@ export default function TabsLayout() {
   return (
     <>
     <Tabs
-      // Root AppTabBar owns chrome so stack screens outside this navigator
-      // keep the same always-visible bottom tabs.
+      // Root AppTabBar owns the four visible destinations. Legacy tab routes
+      // remain addressable but do not create duplicate top-level choices.
       tabBar={() => null}
       screenOptions={{
         // Mounted tabs contain expensive data models. Keep blurred tabs from
@@ -91,8 +98,8 @@ export default function TabsLayout() {
         name="index"
         listeners={tabPressListener}
         options={{
-          title: 'Today',
-          headerTitle: () => <BrandLockup markSize={28} />,
+          title: primaryTabLabel('index'),
+          headerTitle: () => <BrandLockup markSize={28} compact={width < 360} />,
           headerRight: () => <HomeHeaderActions />,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('index')!} size={size} color={color} />
@@ -103,7 +110,7 @@ export default function TabsLayout() {
         name="browse"
         listeners={tabPressListener}
         options={{
-          title: 'Products',
+          title: primaryTabLabel('browse'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('browse')!} size={size} color={color} />
           ),
@@ -113,7 +120,7 @@ export default function TabsLayout() {
         name="passthrough"
         listeners={tabPressListener}
         options={{
-          title: 'Rate moves',
+          title: primaryTabLabel('passthrough'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />
           ),
@@ -123,7 +130,7 @@ export default function TabsLayout() {
         name="trends"
         listeners={tabPressListener}
         options={{
-          title: 'Market',
+          title: 'Research',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />
           ),
@@ -133,7 +140,7 @@ export default function TabsLayout() {
         name="watchlist"
         listeners={tabPressListener}
         options={{
-          title: 'Saved',
+          title: primaryTabLabel('watchlist'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name={getTabIonicon('watchlist')!} size={size} color={color} />
           ),

@@ -1,5 +1,5 @@
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -16,7 +16,7 @@ import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../../src/data/historySelectors';
-import { orderedInterestSections, sectionSegmentOptions } from '../../src/data/interests';
+import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { bestRow, rankFraction } from '../../src/data/selectors';
@@ -58,8 +58,7 @@ export default function Market() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const showHistoryRibbon = useStore((s) => effectiveHistoryRibbon(s.prefs));
   const setPref = useStore((s) => s.setPref);
-  const activeSection = useStore((s) => s.activeSection);
-  const setActiveSection = useStore((s) => s.setActiveSection);
+  const defaultSection = useStore((s) => s.prefs.defaultSection);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const retryHistoryBanks = useStore((s) => s.retryHistoryBanks);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
@@ -67,6 +66,7 @@ export default function Market() {
   const ensureProductHistory = useStore((s) => s.ensureProductHistory);
   const suitabilityRevision = useSuitabilityRevision();
 
+  const [activeSection, setActiveSection] = useState(() => resolveInterestSection(interests, defaultSection));
   const [historyOpen, setHistoryOpen] = useState(true);
   const [advancedViews, setAdvancedViews] = useState(false);
   const [rbaOpen, setRbaOpen] = useState(focus === 'rba');
@@ -90,6 +90,10 @@ export default function Market() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const showBankInsights = effectiveBankInsights();
   const prebuiltHistoryEnabled = shouldEnsurePrebuiltBankHistory(showHistoryRibbon, includeNonStandard);
+
+  useEffect(() => {
+    setActiveSection((current) => resolveInterestSection(interests, current));
+  }, [interests]);
 
   useEffect(() => {
     if (!isFocused || !core) return;
@@ -347,7 +351,7 @@ export default function Market() {
 
       <Card variant="outlined" style={{ gap: 14 }}>
         <SectionHeading
-          title="Market now"
+          title="Market research"
           subtitle={`Observed ${formatRunDate(core.run_date)} · ${SECTIONS[activeSection].title}`}
         />
         {activeSnapshot ? (
@@ -376,8 +380,8 @@ export default function Market() {
       </Card>
 
       <Disclosure
-        title="Rate trend"
-        summary="Best advertised rate versus the typical tracked rate"
+        title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
+        summary="Best observed rate versus the typical tracked rate"
         open={historyOpen}
         onToggle={() => setHistoryOpen((open) => !open)}
       >
@@ -412,7 +416,7 @@ export default function Market() {
               showModePicker={advancedViews}
             />
             <Button
-              title={advancedViews ? 'Show only the rate trend' : 'Explore calendar, activity and leaders'}
+              title={advancedViews ? 'Show the simple trend' : 'Research views'}
               variant="ghost"
               onPress={() => {
                 setAdvancedViews((open) => !open);
@@ -481,22 +485,11 @@ export default function Market() {
         />
       </Disclosure>
 
-      <Card variant="outlined" style={{ gap: 10 }}>
-        <SectionHeading
-          title="Looking for recent changes?"
-          subtitle="Rate Moves has the chronological lender feed and RBA response analysis."
-        />
-        <Button title="Open Rate Moves" variant="secondary" onPress={() => router.navigate('/(tabs)/passthrough')} />
-      </Card>
-
       {bankInsightsError && explorerInsights ? (
         <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
           Market depth is cached · the latest intelligence check was unavailable.
         </AppText>
       ) : null}
-      <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-        Advertised CDR rates · general information only, not financial advice.
-      </AppText>
     </ScreenScrollView>
   );
 }

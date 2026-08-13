@@ -22,14 +22,14 @@ then upgrades to the live payload at `expo.extra.manifestUrl` (set in `app.json`
 
 ```
 app/                expo-router routes
-  (tabs)/           Home · Browse · Response · Outlook · Watchlist (Settings hidden)
+  (tabs)/           Today · Explore · Changes · My rates (Settings hidden)
   product/[key]     product detail        bank/[provider]  lender detail
   banks · compare · onboarding
 src/
   config.ts types.ts constants.ts
   data/             store (zustand) · payload fetch/inflate · cache · selectors
-                    · format · notifications (local + background refresh)
-  components/       ui primitives · ProductCard · market summaries · response/RBA charts
+                    · format · private rate tracking · notifications
+  components/       UI primitives · ProductCard · market summaries · RBA charts
                     · BankAvatar · …
   theme/            light/dark theme + provider
 assets/             icon/splash (scripts/make-icons.py) + sample/ payload

@@ -1,6 +1,7 @@
 import { SECTIONS } from '../constants';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
+import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 
@@ -154,6 +155,18 @@ export function isProductSubscribed(
       s.productKey === productKey &&
       (s.rateIndex === rateIndex || (s.rateIndex === null && rateIndex === null)),
   );
+}
+
+/** Saved tiers notify only when the user has explicitly enabled that exact alert. */
+export function savedRatesWithAlerts(
+  savedRates: readonly SavedRateRef[],
+  subscriptions: Subscription[],
+): SavedRateRef[] {
+  return savedRates.filter((ref) => isProductSubscribed(
+    subscriptions,
+    ref.productKey,
+    ref.scope === 'product' ? null : ref.rateIndex,
+  ));
 }
 
 export function findSearchSubscription(

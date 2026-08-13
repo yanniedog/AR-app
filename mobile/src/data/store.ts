@@ -19,6 +19,7 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
+import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
 import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
@@ -72,6 +73,13 @@ export const useStore = create<AppState>()(
         const hasRecordedPrivacyChoice =
           hasCurrentPrivacyChoice || hasPreviousPrivacyChoice;
         const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
+        // A background rehydrate must not erase private metadata while the
+        // SecureStore companion is being read. Initial hydration has no prior
+        // tracked state; later rehydrates retain the live state as the base.
+        const trackedRates = normalizeTrackedRates(
+          current.hydrated ? current.trackedRates : p?.trackedRates,
+          savedRates,
+        );
         const prefs = {
           ...DEFAULT_PREFS,
           ...persistedPrefs,
@@ -104,6 +112,7 @@ export const useStore = create<AppState>()(
           ...p,
           prefs,
           savedRates,
+          trackedRates,
           favorites: [...new Set(savedRates.map((ref) => ref.productKey))],
           activeSection,
         };
@@ -113,6 +122,28 @@ export const useStore = create<AppState>()(
         // starts. Recover that snapshot before declaring hydration complete so
         // process death cannot strand temporary settings or saved products.
         void recoverInterruptedPerformanceAudit(useStore)
+          .then(async () => {
+            const state = useStore.getState();
+            const savedRatesBeforeLoad = state.savedRates;
+            const trackedRatesBeforeLoad = state.trackedRates;
+            let secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
+            if (secureLoad.status === 'unavailable') {
+              // WHEN_UNLOCKED storage can be temporarily unavailable during a
+              // background wake. Retry once, then retain live metadata.
+              await new Promise((resolve) => setTimeout(resolve, 150));
+              secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
+            }
+            const latest = useStore.getState();
+            // Preserve any save, date edit, or date clear performed while the
+            // native read was pending. Array identity changes on every action.
+            if (
+              latest.savedRates === savedRatesBeforeLoad &&
+              latest.trackedRates === trackedRatesBeforeLoad &&
+              secureLoad.status === 'ready'
+            ) {
+              useStore.setState({ trackedRates: secureLoad.trackedRates });
+            }
+          })
           .catch((error) => {
             debugLog.error(
               'perf-audit',

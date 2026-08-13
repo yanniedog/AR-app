@@ -16,6 +16,7 @@ import {
   isoDurationMonths,
   isNonStandard,
   toFraction,
+  visibleAccountRows,
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 
@@ -181,9 +182,16 @@ export function buildRateReceipt(input: {
 
   const officialSources = officialReceiptSources(detail?.links);
   const explicitTermMonths = Number(row.term_months);
-  const ratePeriodMonths = Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
-    ? explicitTermMonths
-    : isoDurationMonths(row.term);
+  const publishedRateType = `${row.rate_type ?? ''} ${row.ribbon_rate_structure ?? ''}`.toUpperCase();
+  const hasPublishedRatePeriod = section === 'TD' ||
+    qualifier.kind === 'intro' ||
+    (section === 'Savings' && /\b(?:INTRODUCTORY|INTRO)\b/.test(publishedRateType)) ||
+    (section === 'Mortgage' && /\b(?:FIXED|INTRODUCTORY|INTRO)\b/.test(publishedRateType));
+  const ratePeriodMonths = !hasPublishedRatePeriod
+    ? null
+    : Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
+      ? explicitTermMonths
+      : isoDurationMonths(row.term);
   const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || `${ratePeriodMonths} months`;
   const limitations = [
     'This receipt records what the Australian Rates dataset observed; it is not a lender quote or approval.',
@@ -259,10 +267,15 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function buildComparables(rows: RateRow[], section: SectionKey, selected: RateReceipt): NegotiationComparable[] {
+function buildComparables(
+  rows: RateRow[],
+  section: SectionKey,
+  selected: RateReceipt,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): NegotiationComparable[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const eligible = rows
-    .filter((row) => !isNonStandard(row) && toFraction(row.rate) !== null)
+  const eligible = visibleAccountRows(rows, false, detailsProducts)
+    .filter((row) => toFraction(row.rate) !== null)
     .sort((a, b) => {
       const av = toFraction(a.rate)!;
       const bv = toFraction(b.rate)!;
@@ -294,15 +307,16 @@ export function buildNegotiationBrief(input: {
   receipt: RateReceipt;
   scenario: UserRateScenario;
   sectionRows: RateRow[];
+  detailsProducts?: Record<string, ProductDetail> | null;
 }): NegotiationBrief {
-  const { receipt, scenario, sectionRows } = input;
+  const { receipt, scenario, sectionRows, detailsProducts } = input;
   const scenarioData = scenarioForSection(scenario, receipt.section);
-  const standardRates = sectionRows
-    .filter((row) => !isNonStandard(row))
+  const broadlyAvailableRows = visibleAccountRows(sectionRows, false, detailsProducts);
+  const standardRates = broadlyAvailableRows
     .map((row) => toFraction(row.rate))
     .filter((rate): rate is number => rate !== null);
   const typical = median(standardRates);
-  const comparables = buildComparables(sectionRows, receipt.section, receipt);
+  const comparables = buildComparables(broadlyAvailableRows, receipt.section, receipt);
   const selectedRate = receipt.advertisedRateFraction;
   let illustration: NegotiationIllustration | null = null;
   if (
@@ -354,7 +368,7 @@ export function buildNegotiationBrief(input: {
   selectedProduct.push({ label: 'Evidence date', value: receipt.evidenceDate });
 
   const limitations = [
-    `Comparables are ${receipt.section} rows classified Standard in the ${receipt.evidenceDate} dataset; they are not matched to your eligibility or circumstances.`,
+    `Comparables are broadly available ${SECTIONS[receipt.section].title.toLowerCase()} rate tiers observed in the ${receipt.evidenceDate} dataset; they are not matched to your eligibility or circumstances.`,
     'Advertised rates can depend on LVR, balance, repayment type, term, bonus actions, packages and other conditions.',
     'Ask the lender to confirm the current rate, eligibility, fees and conditions in writing before making a decision.',
     ...receipt.limitations,
@@ -367,7 +381,7 @@ export function buildNegotiationBrief(input: {
     scenario: scenarioData.facts,
     selectedProduct,
     comparables,
-    cohortSummary: `${standardRates.length} Standard-classified ${receipt.section.toLowerCase()} rate rows observed`,
+    cohortSummary: `${standardRates.length} comparable ${SECTIONS[receipt.section].title.toLowerCase()} rate tiers observed`,
     typicalAdvertisedRate: typical == null ? null : formatRate(typical),
     illustration,
     prompts: [

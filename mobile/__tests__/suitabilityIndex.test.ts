@@ -150,7 +150,7 @@ describe('suitabilityIndex', () => {
 
   it('hydrates an exact core and details hash without loading details', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: 2,
       runDate: '2026-07-15',
       coreSha: 'core-sha',
       detailsSha: 'details-sha',
@@ -166,9 +166,24 @@ describe('suitabilityIndex', () => {
     expect(getSuitabilityAllowed()).toBe(hydrated?.allowed);
   });
 
-  it('rejects a persisted gate from another payload pair', async () => {
+  it('rejects a persisted gate built with older access-classification rules', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
       schemaVersion: 1,
+      runDate: '2026-07-15',
+      coreSha: 'core-sha',
+      detailsSha: 'details-sha',
+      allowed: ['first-home-product'],
+    } as never);
+
+    await expect(
+      hydrateSuitabilityIndex('2026-07-15', 'core-sha', 'details-sha'),
+    ).resolves.toBeNull();
+    expect(getSuitabilityAllowed()).toBeNull();
+  });
+
+  it('rejects a persisted gate from another payload pair', async () => {
+    jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
+      schemaVersion: 2,
       runDate: '2026-07-14',
       coreSha: 'old-core',
       detailsSha: 'old-details',
@@ -193,7 +208,7 @@ describe('suitabilityIndex', () => {
 
     expect(cache.writeSuitabilityIndex).toHaveBeenCalledTimes(2);
     expect(jest.mocked(cache.writeSuitabilityIndex).mock.calls[1][0]).toMatchObject({
-      schemaVersion: 1,
+      schemaVersion: 2,
       coreSha: 'core-2',
       detailsSha: 'details-2',
       allowed: ['c|1'],

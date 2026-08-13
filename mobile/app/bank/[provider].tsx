@@ -53,6 +53,12 @@ function bpsLabel(bps: number): string {
   return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bps`;
 }
 
+function percentagePointLabel(bps: number): string {
+  const points = Math.abs(bps / 100);
+  const sign = bps > 0 ? '+' : bps < 0 ? '−' : '';
+  return `${sign}${points.toFixed(2)} percentage points`;
+}
+
 function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
 }
@@ -256,6 +262,11 @@ export default function BankDetail() {
     [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision],
   );
 
+  const visibleBankEvents = useMemo(
+    () => recentBankEvents(visibleBankInsights, { provider }),
+    [provider, visibleBankInsights],
+  );
+
   const chartSections = useMemo(
     () =>
       SECTION_ORDER.filter((section) => !!visibleBankInsights?.banks?.[provider]?.[section]),
@@ -338,21 +349,20 @@ export default function BankDetail() {
   }, [catalogsBySection, focusBreakdown?.matched, focusEvent, focusSection, focusSourceEvent, productHistory]);
 
   const displayBankEvents = useMemo(
-    () => (productHistory ? bankEvents : rawBankEvents.slice(0, 8)),
-    [bankEvents, productHistory, rawBankEvents],
+    () => (productHistory ? bankEvents : visibleBankEvents.slice(0, 8)),
+    [bankEvents, productHistory, visibleBankEvents],
   );
 
   const bankEventContexts = useMemo(() => {
     const map = new Map<string, BankEventRateContext | null>();
-    const contextPayload = productHistory ? visibleBankInsights : bankInsights;
     for (const event of displayBankEvents) {
       map.set(
         `${event.date}:${event.section}`,
-        bankEventMedianContext(contextPayload, event),
+        bankEventMedianContext(visibleBankInsights, event),
       );
     }
     return map;
-  }, [bankInsights, displayBankEvents, productHistory, visibleBankInsights]);
+  }, [displayBankEvents, visibleBankInsights]);
 
   const focusRateCtx = useMemo(
     () => (focusEvent ? bankEventMedianContext(visibleBankInsights, focusEvent) : null),
@@ -412,7 +422,7 @@ export default function BankDetail() {
       actions['lender.history.date.previous'] = () =>
         historyAuditActionsRef.current?.selectPreviousDate();
     }
-    const firstMove = bankEvents[0] ?? rawBankEvents[0];
+    const firstMove = bankEvents[0] ?? visibleBankEvents[0];
     if (firstMove) {
       actions['lender.move.first'] = () => {
         handleMoveSelect(firstMove);
@@ -420,7 +430,7 @@ export default function BankDetail() {
       };
     }
     return actions;
-  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, rawBankEvents]);
+  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, visibleBankEvents]);
   const lenderLogoIds = useMemo(
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],
@@ -493,6 +503,30 @@ export default function BankDetail() {
 
   if (!core) return <ScreenSkeleton />;
 
+  const currentProducts = bySection.length === 0 ? (
+    <EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />
+  ) : (
+    bySection.map(({ section, rows }) => (
+      <View key={section} style={{ marginBottom: 12 }}>
+        <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
+          {SECTIONS[section].title.toUpperCase()}
+        </AppText>
+        {rows.map((r) => (
+          <ProductCard
+            key={r.product_key}
+            row={r}
+            section={section}
+            displayedRateLabel="Current rate"
+            showLenderAction={false}
+            logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
+            onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+            onPress={() => openProduct(r.product_key, r.rate_index)}
+          />
+        ))}
+      </View>
+    ))
+  );
+
   return (
     <>
       <Stack.Screen options={{ title: provider }} />
@@ -512,10 +546,23 @@ export default function BankDetail() {
             <AppText variant="h3">{provider}</AppText>
             <AppText variant="small" color="textMuted">
               {productCount} {productCount === 1 ? 'product' : 'products'}
-              {!includeNonStandard ? ' · broadly applicable' : ''}
+              {!includeNonStandard ? ' · widely available' : ''}
             </AppText>
           </View>
         </Row>
+
+        {showBankInsights && displayBankEvents[0] ? (
+          <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
+            <AppText variant="small" color="textMuted">Latest observed move</AppText>
+            <AppText variant="body" weight="700">
+              {SECTIONS[displayBankEvents[0].section].title} {moveVerb(displayBankEvents[0].section, displayBankEvents[0].dir)}{' '}
+              by an average {percentagePointLabel(displayBankEvents[0].avg_bps)} on {formatRunDate(displayBankEvents[0].date)}.
+            </AppText>
+          </Card>
+        ) : null}
+
+        <AppText variant="h3" style={{ marginBottom: 10 }}>Current products</AppText>
+        {currentProducts}
 
         {showBankInsights && focusEvent && focusSection ? (
           <Card
@@ -667,7 +714,7 @@ export default function BankDetail() {
                   <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
                     {productHistory
                       ? 'Counts reflect exact product matches under your settings.'
-                      : 'Counts cover all tracked products. Tap a move to identify the products under your settings.'}
+                      : 'Moves shown match the lender sections available under your settings.'}
                   </AppText>
                   {displayBankEvents.length ? (
                     displayBankEvents.map((event) => (
@@ -695,28 +742,6 @@ export default function BankDetail() {
           ) : null
         ) : null}
 
-        {bySection.length === 0 ? (
-          <EmptyState title="No products" subtitle="This lender has no rates in the current data set." />
-        ) : (
-          bySection.map(({ section, rows }) => (
-            <View key={section} style={{ marginBottom: 12 }}>
-              <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
-                {SECTIONS[section].title.toUpperCase()}
-              </AppText>
-              {rows.map((r) => (
-                <ProductCard
-                  key={r.product_key}
-                  row={r}
-                  section={section}
-                  displayedRateLabel="Current rate"
-                  logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
-                  onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-                  onPress={() => openProduct(r.product_key, r.rate_index)}
-                />
-              ))}
-            </View>
-          ))
-        )}
       </ScreenScrollView>
     </>
   );

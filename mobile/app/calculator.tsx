@@ -1,6 +1,6 @@
-import { router } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
 import { IndeterminateProgressBar, ScreenSkeleton } from '../src/components/feedback';
 import { BankAvatar } from '../src/components/BankAvatar';
@@ -11,7 +11,7 @@ import {
 import { ProfileEditor } from '../src/components/ProfileEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
-import { AppText, Badge, Button, Card, Row } from '../src/components/ui';
+import { AppText, Badge, Button, Card, Disclosure, Row } from '../src/components/ui';
 import { SECTIONS } from '../src/constants';
 import { assessAccess } from '../src/data/access';
 import {
@@ -43,7 +43,7 @@ import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
-import type { RateRow, SectionKey } from '../src/types';
+import { SECTION_KEYS, type RateRow, type SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function monthlyPayment(balance: number, annualRate: number, months: number): number {
@@ -65,6 +65,8 @@ interface Candidate {
 
 export default function Calculator() {
   const theme = useTheme();
+  const { width } = useWindowDimensions();
+  const compactFields = width < 380;
   const core = useStore((s) => s.core);
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
@@ -80,9 +82,15 @@ export default function Calculator() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const setPref = useStore((s) => s.setPref);
   const activeSection = useStore((s) => s.activeSection);
-  const [section, setSection] = useState<SectionKey>(activeSection);
+  const params = useLocalSearchParams<{ intent?: string; section?: string }>();
+  const requestedSection = SECTION_KEYS.includes(params.section as SectionKey)
+    ? params.section as SectionKey
+    : null;
+  const [section, setSection] = useState<SectionKey>(requestedSection ?? activeSection);
   const [layoutReady, setLayoutReady] = useState(false);
   const [detailsTerminalError, setDetailsTerminalError] = useState(false);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  const appliedCheckIntent = useRef('');
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const suitabilityRevision = useSuitabilityRevision();
   const suitabilityReady = useMemo(() => {
@@ -127,6 +135,27 @@ export default function Calculator() {
   const inputs = scenario.mortgage;
   const upd = (patch: Partial<CalcInputs>) =>
     updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
+
+  useEffect(() => {
+    if (requestedSection) setSection(requestedSection);
+  }, [requestedSection]);
+
+  useEffect(() => {
+    const intentKey = `${params.intent ?? ''}:${section}`;
+    if (
+      params.intent !== 'check'
+      || section !== 'Mortgage'
+      || scenarioStorageStatus !== 'ready'
+      || appliedCheckIntent.current === intentKey
+    ) return;
+    appliedCheckIntent.current = intentKey;
+    if (scenario.mortgage.mode !== 'refi') {
+      updateScenario((previous) => ({
+        ...previous,
+        mortgage: { ...previous.mortgage, mode: 'refi' },
+      }));
+    }
+  }, [params.intent, scenario.mortgage.mode, scenarioStorageStatus, section, updateScenario]);
 
   const lvrResult = useMemo(() => computeLvr(inputs), [inputs]);
   const lvr = isMortgage ? lvrResult.lvr : null;
@@ -445,9 +474,9 @@ export default function Calculator() {
     onChangeText: (t: string) => void,
     placeholder: string,
     a11y: string,
-    width?: number,
+    explicitWidth?: number,
   ) => (
-    <View style={width ? { width } : { flex: 1 }}>
+    <View style={explicitWidth && !compactFields ? { width: explicitWidth } : { flex: 1, width: compactFields ? '100%' : undefined }}>
       <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
         {label}
       </AppText>
@@ -492,11 +521,11 @@ export default function Calculator() {
             </View>
             {inputs.mode === 'buy' ? (
               <>
-                <Row gap={10}>
+                <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
                   {field('Property price ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '650,000', 'Property price in dollars')}
                   {field('Your savings ($)', inputs.deposit, (t) => upd({ deposit: t }), '130,000', 'Savings available as deposit')}
                 </Row>
-                <Row gap={10} style={{ marginTop: 10 }}>
+                <Row gap={10} style={{ marginTop: 10, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
                   {field('Upfront costs ($)', inputs.costs, (t) => upd({ costs: t }), 'stamp duty + fees', 'Upfront costs paid from savings')}
                   <View style={{ flex: 1, justifyContent: 'flex-end' }}>
                     <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
@@ -509,7 +538,7 @@ export default function Calculator() {
                 </Row>
               </>
             ) : (
-              <Row gap={10}>
+              <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
                 {field('Property value ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '800,000', 'Current property value')}
                 {field('Current loan ($)', inputs.loanBalance, (t) => upd({ loanBalance: t }), '600,000', 'Current loan balance')}
               </Row>
@@ -547,7 +576,7 @@ export default function Calculator() {
               </AppText>
             )}
 
-            <Row gap={10} style={{ marginTop: 12 }}>
+            <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
               {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', 'Current interest rate percent')}
               {field('Years left', inputs.years, (t) => upd({ years: t }), '25', 'Years remaining on loan', 86)}
             </Row>
@@ -562,7 +591,7 @@ export default function Calculator() {
             <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
               Your current balance
             </AppText>
-            <Row gap={10}>
+            <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
               {field(
                 section === 'TD' ? 'Deposit amount ($)' : 'Balance ($)',
                 depositInputs.balance,
@@ -595,12 +624,12 @@ export default function Calculator() {
       </Card>
 
       <Card style={{ marginBottom: 16, gap: 10 }}>
-        <AppText variant="h3">See the full lifecycle</AppText>
+        <AppText variant="h3">What if rates change?</AppText>
         <AppText variant="small" color="textMuted">
-          Continue from these inputs into an interactive balance, interest, principal and offset projection through the modelled end date.
+          See repayments, interest or maturity value under different rate scenarios.
         </AppText>
         <Button
-          title="Open lifecycle projection"
+          title="Explore rate scenarios"
           icon="analytics-outline"
           onPress={() => void openProjections()}
           disabled={scenarioStorageStatus !== 'ready'}
@@ -624,31 +653,34 @@ export default function Calculator() {
       </Card>
 
       {isMortgage ? (
-        <Card style={{ marginBottom: 16 }}>
-          <AppText variant="small" weight="700" style={{ marginBottom: 4 }}>
-            Comparison assumptions
-          </AppText>
-          <AppText variant="tiny" color="textFaint" style={{ marginBottom: 12 }}>
-            Tune the eligibility and loan features used to find comparable products. The calculated LVR
-            temporarily overrides the LVR filter for this scenario only.
-          </AppText>
-          <ProfileEditor
-            sections={['Mortgage']}
-            value={profileFilters}
-            onChange={(next) => setPref('profileFilters', next)}
-          />
-        </Card>
+        <View style={{ marginBottom: 16 }}>
+          <Disclosure
+            title="Match assumptions"
+            summary="Purpose, rate type, repayment, LVR and features"
+            open={assumptionsOpen}
+            onToggle={() => setAssumptionsOpen((open) => !open)}
+          >
+            <AppText variant="tiny" color="textFaint" style={{ marginBottom: 12 }}>
+              These settings find comparable products. Your calculated LVR applies to this scenario only.
+            </AppText>
+            <ProfileEditor
+              sections={['Mortgage']}
+              value={profileFilters}
+              onChange={(next) => setPref('profileFilters', next)}
+            />
+          </Disclosure>
+        </View>
       ) : null}
 
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
         {profileFeaturesPending
           ? detailsLoading
-            ? 'PREPARING PROFILE FEATURES…'
-            : 'COULD NOT LOAD PRODUCT FEATURES'
+            ? 'PREPARING YOUR MATCHES…'
+            : 'COULD NOT PREPARE YOUR MATCHES'
           : candidates.length
             ? isLoan
-              ? 'WHAT SWITCHING COULD SAVE'
-              : 'WHAT SWITCHING COULD EARN'
+              ? 'LOWER MATCHED RATES'
+              : 'HIGHER MATCHED RATES'
             : currentRate === null
               ? 'ENTER YOUR CURRENT RATE'
               : balance <= 0
@@ -752,12 +784,11 @@ export default function Calculator() {
         : null}
 
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-        Illustrative estimates use observed advertised CDR rates and exclude fees, tax, switching costs,
-        compounding differences, and unverified bonus conditions. {isMortgage
-          ? 'LVR is loan ÷ property value. Repayments assume principal and interest; fixed-rate savings stop at the published fixed period because the later rate is unknown.'
+        Illustrative; excludes fees, tax, switching costs and unverified bonus conditions. {isMortgage
+          ? 'LVR is loan ÷ property value. Fixed-rate estimates stop when the published fixed term ends.'
           : section === 'TD'
-            ? 'Term-deposit differences are projected only to each product’s published maturity; confirm interest-payment timing and early-withdrawal terms.'
-            : 'Savings comparisons use your selected base or headline ranking metric; confirm ongoing and bonus conditions before acting.'}
+            ? 'Projected to each published maturity; check payment timing and early-withdrawal terms.'
+            : 'Check ongoing and bonus conditions.'}
       </AppText>
     </ScreenScrollView>
   );

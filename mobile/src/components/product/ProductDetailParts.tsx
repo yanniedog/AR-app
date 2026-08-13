@@ -4,19 +4,18 @@ import { Linking, Pressable, View } from 'react-native';
 
 import { DetailLoadingLines } from '../feedback';
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
-import { AppText, Badge, Card, Divider, Row } from '../ui';
+import { AppText, Badge, Card, Disclosure, Divider, Row } from '../ui';
 import {
   formatBalanceRange,
   formatRate,
   formatTerm,
   humanizeEnum,
-  isNonStandard,
-  relativeDate,
 } from '../../data/format';
-import { assessAccess } from '../../data/access';
+import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { rateQualifier } from '../../lib/rateQualifier';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
+import { openProduct } from '../../lib/nav';
 
 export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
   const theme = useTheme();
@@ -35,7 +34,7 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) bits.push(bal);
   }
-  const descriptor = bits.join(' · ') || (q.conditional ? '' : 'Standard');
+  const descriptor = bits.join(' · ');
   return (
     <Row style={{ justifyContent: 'space-between', gap: 12 }}>
       <Row style={{ flex: 1, alignItems: 'center', gap: 6 }}>
@@ -67,7 +66,7 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
         </AppText>
         {row.comparison_rate ? (
           <AppText variant="tiny" color="textFaint">
-            {formatRate(row.comparison_rate)} cmp
+            {formatRate(row.comparison_rate)} comparison
           </AppText>
         ) : null}
       </Row>
@@ -77,7 +76,6 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
 
 export function DetailGroup({
   title,
-  icon,
   items,
   loading,
 }: {
@@ -86,11 +84,31 @@ export function DetailGroup({
   items?: DetailItem[];
   loading: boolean;
 }) {
+  const [open, setOpen] = useState(false);
   if ((!items || items.length === 0) && !loading) return null;
+  const displayValue = (item: DetailItem): string | null => {
+    if (item.value === undefined || item.value === null || String(item.value).trim() === '') return null;
+    const raw = String(item.value).trim();
+    const label = String(item.label ?? '').toUpperCase();
+    if (title === 'Fees' && /^\d+(?:\.\d+)?$/.test(raw)) {
+      return `$${Number(raw).toLocaleString('en-AU', { maximumFractionDigits: 2 })}`;
+    }
+    if (title === 'Eligibility' && (label === 'MIN_AGE' || label === 'MAX_AGE') && /^\d+$/.test(raw)) {
+      return `${raw} years`;
+    }
+    if (title === 'Constraints' && /(?:MIN|MAX)_(?:LIMIT|BALANCE|AMOUNT)/.test(label) && /^\d+(?:\.\d+)?$/.test(raw)) {
+      return `$${Number(raw).toLocaleString('en-AU', { maximumFractionDigits: 2 })}`;
+    }
+    return raw;
+  };
   return (
-    <View style={{ marginBottom: 16 }}>
-      <SectionTitle text={title} icon={icon} />
-      <Card>
+    <Disclosure
+      title={title}
+      summary={loading && !items ? 'Loading published details' : `${items?.length ?? 0} published item${items?.length === 1 ? '' : 's'}`}
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      <View>
         {loading && !items ? (
           <DetailLoadingLines />
         ) : (
@@ -101,9 +119,9 @@ export function DetailGroup({
                 <AppText variant="small" weight="600" style={{ flex: 1 }}>
                   {it.name || humanizeEnum(it.label)}
                 </AppText>
-                {it.value !== undefined ? (
+                {displayValue(it) ? (
                   <AppText variant="small" color="textMuted">
-                    {String(it.value)}
+                    {displayValue(it)}
                   </AppText>
                 ) : null}
               </Row>
@@ -115,8 +133,8 @@ export function DetailGroup({
             </View>
           ))
         )}
-      </Card>
-    </View>
+      </View>
+    </Disclosure>
   );
 }
 
@@ -166,6 +184,7 @@ export function AccessNotice({
 
 export function OfficialLinks({ links }: { links?: ProductDetailData['links'] }) {
   const theme = useTheme();
+  const [open, setOpen] = useState(false);
   if (!links) return null;
   const all: { label: string; url?: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { label: 'Product overview', url: links.overview, icon: 'document-text-outline' },
@@ -176,9 +195,13 @@ export function OfficialLinks({ links }: { links?: ProductDetailData['links'] })
   const items = all.filter((i) => !!i.url);
   if (!items.length) return null;
   return (
-    <View style={{ marginBottom: 16 }}>
-      <SectionTitle text="Official details" icon="link-outline" />
-      <Card>
+    <Disclosure
+      title="Official sources"
+      summary={`${items.length} lender link${items.length === 1 ? '' : 's'}`}
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      <View>
         {items.map((it, i) => (
           <View key={it.label}>
             {i > 0 ? <Divider style={{ marginVertical: 4 }} /> : null}
@@ -198,11 +221,11 @@ export function OfficialLinks({ links }: { links?: ProductDetailData['links'] })
             </Pressable>
           </View>
         ))}
-      </Card>
+      </View>
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginLeft: 4 }}>
-        Authoritative, up-to-date detail straight from the lender (CDR).
+        Published by the lender and observed through CDR.
       </AppText>
-    </View>
+    </Disclosure>
   );
 }
 
@@ -268,7 +291,19 @@ export function ProductRatesList({
           {rows.map((r, i) => (
             <View key={`${r.rate_index}-${i}`}>
               {i > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-              <RateRowLine row={r} section={section} accent={accent} />
+              <TouchTarget
+                fill
+                onPress={() => openProduct(r.product_key, r.rate_index)}
+                accessibilityRole="button"
+                accessibilityLabel={`Open exact rate ${formatRate(r.rate)}`}
+                style={({ pressed }) => ({
+                  minHeight: TOUCH_TARGET_MIN,
+                  justifyContent: 'center',
+                  opacity: pressed ? 0.72 : 1,
+                })}
+              >
+                <RateRowLine row={r} section={section} accent={accent} />
+              </TouchTarget>
             </View>
           ))}
         </Card>
@@ -277,7 +312,16 @@ export function ProductRatesList({
   );
 }
 
-export function ProductSpecs({ row, section }: { row: RateRow; section: SectionKey }) {
+export function ProductSpecs({
+  row,
+  section,
+  detail,
+}: {
+  row: RateRow;
+  section: SectionKey;
+  detail: ProductDetailData | null;
+}) {
+  const [open, setOpen] = useState(false);
   const specs: { label: string; value: string }[] = [];
   const add = (label: string, value?: string | null) => {
     const v = value == null ? '' : String(value).trim();
@@ -297,18 +341,23 @@ export function ProductSpecs({ row, section }: { row: RateRow; section: SectionK
   }
   add('Term', formatTerm(row));
   add('Comparison rate', row.comparison_rate ? formatRate(row.comparison_rate) : null);
-  add('Account type', humanizeEnum(row.account_type));
-  add('Features', humanizeEnum(row.feature_set));
-  add('Category', humanizeEnum(row.category));
-  add('Account class', isNonStandard(row) ? 'Non-standard' : 'Standard');
-  add('Product ID', row.product_id);
-  add('Data updated', row.last_updated ? relativeDate(row.last_updated) : null);
+  const access = detail ? assessAccess(row.product_name, detail, row.provider) : null;
+  add(
+    'Availability',
+    access
+      ? accessExcludesFromStandard(access) ? 'Special eligibility' : 'Widely available'
+      : 'Checking availability',
+  );
 
   if (!specs.length) return null;
   return (
-    <View style={{ marginBottom: 16 }}>
-      <SectionTitle text="Specifications" icon="list-outline" />
-      <Card>
+    <Disclosure
+      title="Rate details"
+      summary={`${specs.length} details for this exact tier`}
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      <View>
         {specs.map((s, i) => (
           <View key={s.label}>
             {i > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
@@ -322,8 +371,8 @@ export function ProductSpecs({ row, section }: { row: RateRow; section: SectionK
             </Row>
           </View>
         ))}
-      </Card>
-    </View>
+      </View>
+    </Disclosure>
   );
 }
 

@@ -2,19 +2,28 @@ import type { Href } from 'expo-router';
 
 import type { TabRouteName } from './tabIcons';
 
+export type PrimaryTabRouteName = Extract<
+  TabRouteName,
+  'index' | 'browse' | 'passthrough' | 'watchlist'
+>;
+
 /**
- * Bottom-tab display order: Today → Products → Rate moves → Market → Saved.
- * Settings is deliberately absent — it is a occasional destination, not a
- * primary one, and reaches the platform cap of five primary tabs otherwise.
- * It opens from the Today header instead.
+ * Four household-level destinations. The legacy Trends screen remains a route
+ * within Changes, while Settings remains an auxiliary destination.
  */
-export const TAB_BAR_ORDER: readonly TabRouteName[] = [
+export const TAB_BAR_ORDER: readonly PrimaryTabRouteName[] = [
   'index',
   'browse',
   'passthrough',
-  'trends',
   'watchlist',
 ];
+
+const PRIMARY_TAB_LABELS: Record<PrimaryTabRouteName, string> = {
+  index: 'Today',
+  browse: 'Explore',
+  passthrough: 'Changes',
+  watchlist: 'My rates',
+};
 
 const TAB_HREFS: Record<TabRouteName, Href> = {
   index: '/(tabs)',
@@ -29,41 +38,40 @@ export function tabHref(route: TabRouteName): Href {
   return TAB_HREFS[route];
 }
 
+export function primaryTabLabel(route: PrimaryTabRouteName): string {
+  return PRIMARY_TAB_LABELS[route];
+}
+
 /**
- * Routes where the persistent bottom tab bar is intentionally hidden.
- * Today (`/`) must still show tabs once onboarding is complete.
+ * The primary bar belongs only on destination roots. Focused search, product,
+ * comparison, planning, evidence and settings flows rely on stack navigation.
  */
 export function shouldShowAppTabBar(pathname: string, onboarded: boolean): boolean {
   if (!onboarded) return false;
   const path = normalizePath(pathname);
-  if (path === '/onboarding' || path.startsWith('/onboarding/')) return false;
-  return true;
+  return (
+    path === '/' ||
+    path === '/browse' ||
+    path === '/passthrough' ||
+    path === '/trends' ||
+    path === '/watchlist'
+  );
 }
 
 /** Which primary tab owns the current route for highlight state. */
-export function resolveActiveTab(pathname: string): TabRouteName {
+export function resolveActiveTab(pathname: string): PrimaryTabRouteName | null {
   const path = normalizePath(pathname);
-
-  if (
-    path === '/settings' ||
-    path.startsWith('/settings/') ||
-    path.startsWith('/performance-audit') ||
-    path.startsWith('/debug-log') ||
-    path.startsWith('/terms') ||
-    path.startsWith('/profile')
-  ) {
-    return 'settings';
-  }
 
   if (
     path === '/passthrough' ||
     path.startsWith('/passthrough/') ||
+    path === '/trends' ||
+    path.startsWith('/trends/') ||
     path === '/rba-response' ||
-    path.startsWith('/rba-response/')
+    path.startsWith('/rba-response/') ||
+    path === '/rba' ||
+    path.startsWith('/rba/')
   ) return 'passthrough';
-  if (path === '/trends' || path.startsWith('/trends/') || path.startsWith('/rba')) {
-    return 'trends';
-  }
   if (path === '/watchlist' || path.startsWith('/watchlist/')) return 'watchlist';
 
   if (
@@ -82,12 +90,28 @@ export function resolveActiveTab(pathname: string): TabRouteName {
     return 'browse';
   }
 
-  return 'index';
+  if (path === '/') return 'index';
+  return null;
+}
+
+/** True only for the canonical landing route of a visible destination. */
+export function isPrimaryTabRootPath(
+  pathname: string,
+  route: PrimaryTabRouteName,
+): boolean {
+  const path = normalizePath(pathname);
+  if (route === 'index') return path === '/';
+  return path === `/${route}`;
 }
 
 function normalizePath(pathname: string): string {
   if (!pathname) return '';
-  const trimmed = pathname.trim();
-  if (trimmed.length > 1 && trimmed.endsWith('/')) return trimmed.slice(0, -1);
-  return trimmed;
+  const trimmed = pathname.trim().split(/[?#]/, 1)[0] ?? '';
+  const withoutGroup = trimmed === '/(tabs)'
+    ? '/'
+    : trimmed.startsWith('/(tabs)/')
+      ? trimmed.slice('/(tabs)'.length)
+      : trimmed;
+  if (withoutGroup.length > 1 && withoutGroup.endsWith('/')) return withoutGroup.slice(0, -1);
+  return withoutGroup;
 }

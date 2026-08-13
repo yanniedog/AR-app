@@ -3,6 +3,16 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { DEFAULT_PREFS, type AppState } from '../src/data/storeTypes';
+import { makeSavedRateRef } from '../src/data/savedRates';
+import {
+  loadTrackedRatesSecure,
+  makeTrackedRate,
+  saveTrackedRatesSecure,
+  setTrackedRateDate,
+  TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY,
+  TRACKED_RATE_SECURE_STORAGE_KEY,
+} from '../src/data/trackedRates';
+import type { RateRow } from '../src/types';
 import {
   resetUserRateScenarioStoreForTests,
   ensureUserRateScenarioLoaded,
@@ -28,6 +38,7 @@ function makeState(): AppState {
   return {
     prefs: { ...DEFAULT_PREFS, onboarded: true },
     savedRates: [],
+    trackedRates: [],
     favorites: [],
     subscriptions: [],
     activeSection: 'Mortgage',
@@ -125,6 +136,56 @@ describe('performance audit rollback journal', () => {
       expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
     );
     expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/6\.25/);
+  });
+
+  it('keeps tracked dates in a dedicated rollback record and survives a live audit overwrite', async () => {
+    const row: RateRow = {
+      provider: 'Example Bank',
+      product_key: 'EX|TD',
+      product_name: 'Term Deposit 12 months',
+      rate_index: 4,
+      rate: '0.0475',
+    };
+    const saved = makeSavedRateRef(row, 'rate', '2026-08-13T00:00:00.000Z');
+    const tracked = {
+      ...makeTrackedRate(saved),
+      relevantDate: '2027-08-13',
+      relevantDateKind: 'term-maturity' as const,
+    };
+    const store = makeStore({
+      ...makeState(),
+      savedRates: [saved],
+      trackedRates: [tracked],
+      favorites: [saved.productKey],
+      activeSection: 'TD',
+    });
+
+    const before = await beginPerformanceAuditRollback(store);
+    const journalRaw = await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
+    expect(journalRaw).not.toContain('2027-08-13');
+    expect(JSON.parse(journalRaw as string).snapshot).not.toHaveProperty('trackedRates');
+    expect(secureStore.has(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY)).toBe(true);
+    expect(secureStore.has(TRACKED_RATE_SECURE_STORAGE_KEY)).toBe(false);
+
+    const auditTrackedRates = setTrackedRateDate(
+      before.trackedRates,
+      saved.id,
+      '2031-01-02',
+      'term-maturity',
+    );
+    store.setState({ trackedRates: auditTrackedRates });
+    await saveTrackedRatesSecure(auditTrackedRates);
+    await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([
+      expect.objectContaining({ relevantDate: '2031-01-02' }),
+    ]);
+
+    const restarted = makeStore(store.getState());
+    await expect(recoverInterruptedPerformanceAudit(restarted)).resolves.toBe(true);
+    expect(restarted.getState().trackedRates).toEqual(before.trackedRates);
+    await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([
+      expect.objectContaining({ relevantDate: '2027-08-13' }),
+    ]);
+    expect(secureStore.has(TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY)).toBe(false);
   });
 
   it('recovers an interrupted audit from its durable journal on the next launch', async () => {

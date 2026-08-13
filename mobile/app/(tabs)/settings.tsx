@@ -335,14 +335,6 @@ export default function Settings() {
       contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}
       onContentSizeChange={() => setLayoutReady(true)}
     >
-      <Section title="Rate insights (free beta)">
-        <InfoRow label="Access" value="Included" />
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 4, lineHeight: 16 }}>
-          Alerts, deep search, lender behaviour, and history are included while these features are in beta.
-          No purchase or subscription is required.
-        </AppText>
-      </Section>
-
       <View onLayout={(e) => { updateSectionY.current = e.nativeEvent.layout.y; }}>
         <AppUpdateSection onStatusChange={onUpdateStatusChange} />
       </View>
@@ -358,10 +350,12 @@ export default function Settings() {
           value={prefs.themeMode}
           onChange={changeTheme}
         />
-        <SettingsGap size={14} />
+      </Section>
+
+      <Section title="Rate display">
         <ToggleRow
           icon="people-outline"
-          label="Broadly applicable products"
+          label="Widely available products"
           sub="Show only rates without bonus, intro, age, region, staff, or other eligibility conditions"
           value={!prefs.includeNonStandard}
           onChange={(v) => setPref('includeNonStandard', !v)}
@@ -403,7 +397,7 @@ export default function Settings() {
         />
         <SettingsGap size={12} />
         <DisclosureGroup
-          title="Home sections"
+          title="Categories"
           summary={sectionsSummary || 'None'}
           open={homeSectionsOpen}
           onOpenChange={changeHomeSectionsOpen}
@@ -455,7 +449,7 @@ export default function Settings() {
         <ToggleRow
           icon="search-outline"
           label="Deep product search"
-          sub="Search fees, features, and eligibility · free beta"
+          sub="Search fees, features, and eligibility"
           value={effectiveDeepSearch(prefs)}
           onChange={onToggleDeepSearch}
         />
@@ -463,7 +457,7 @@ export default function Settings() {
         <ToggleRow
           icon="analytics-outline"
           label="History explorer"
-          sub="Charts, market history, and lender trends · free beta"
+          sub="Charts, market history, and lender trends"
           value={effectiveHistoryRibbon(prefs)}
           onChange={onToggleHistoryRibbon}
         />

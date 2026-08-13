@@ -142,6 +142,31 @@ describe('local negotiation brief', () => {
     expect(brief.disclaimer).toMatch(/generated locally/i);
   });
 
+  test('does not treat a variable mortgage loan term as a fixed rate period', () => {
+    const selected = row({ term: 'P30Y', term_months: 360 });
+    const receipt = buildRateReceipt({
+      row: selected,
+      section: 'Mortgage',
+      evidenceDate: '2026-08-04',
+    });
+    const scenario = normalizeUserRateScenario({
+      mortgage: {
+        mode: 'refi',
+        loanBalance: '500000',
+        currentRate: '6.00',
+      },
+    });
+    const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+
+    expect(receipt.ratePeriodMonths).toBeNull();
+    expect(brief.illustration).toMatchObject({
+      annualDifference: 2500,
+      periodDifference: 2500,
+      periodLabel: 'per year',
+    });
+    expect(brief.illustration?.monthlyDifference).toBeCloseTo(208.33, 1);
+  });
+
   test('models a deposit improvement and avoids inventing a monthly TD return', () => {
     const selected = row({
       product_key: 'td|1',
@@ -217,5 +242,62 @@ describe('local negotiation brief', () => {
     });
     expect(brief.scenario).toEqual([]);
     expect(brief.illustration).toBeNull();
+  });
+
+  test('uses the broad-availability gate for comparable mortgage rates', () => {
+    const selected = row({ product_key: 'selected|loan', rate: '0.05' });
+    const open = row({ product_key: 'open|loan', provider: 'Open Bank', rate: '0.051' });
+    const staff = row({ product_key: 'staff|loan', product_name: 'Staff Home Loan', rate: '0.01' });
+    const firstHomeOnly = row({ product_key: 'gated|loan', product_name: 'Variable Home Loan', rate: '0.02' });
+    const receipt = buildRateReceipt({
+      row: selected,
+      section: 'Mortgage',
+      evidenceDate: '2026-08-04',
+    });
+    const brief = buildNegotiationBrief({
+      receipt,
+      scenario: EMPTY_USER_RATE_SCENARIO,
+      sectionRows: [selected, open, staff, firstHomeOnly],
+      detailsProducts: {
+        [firstHomeOnly.product_key]: {
+          eligibility: [{ info: 'This loan is only available for first home buyers' }],
+        },
+      },
+    });
+
+    expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
+    expect(brief.cohortSummary).toMatch(/^2 comparable/);
+  });
+
+  test('does not call bonus or introductory savings tiers broadly available', () => {
+    const selected = row({
+      product_key: 'selected|save',
+      comparison_rate: undefined,
+      ribbon_deposit_kind: 'base',
+      rate: '0.04',
+    });
+    const open = row({
+      product_key: 'open|save',
+      comparison_rate: undefined,
+      ribbon_deposit_kind: 'base',
+      rate: '0.041',
+    });
+    const bonus = row({
+      product_key: 'bonus|save',
+      comparison_rate: undefined,
+      ribbon_deposit_kind: 'bonus',
+      rate_type: 'BONUS',
+      ongoing_rate: '0.01',
+      rate: '0.06',
+    });
+    const receipt = buildRateReceipt({ row: selected, section: 'Savings', evidenceDate: '2026-08-04' });
+    const brief = buildNegotiationBrief({
+      receipt,
+      scenario: EMPTY_USER_RATE_SCENARIO,
+      sectionRows: [selected, open, bonus],
+    });
+
+    expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
+    expect(brief.cohortSummary).toMatch(/^2 comparable/);
   });
 });

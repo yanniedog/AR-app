@@ -4,6 +4,13 @@ import { Platform } from 'react-native';
 
 import type { AppState } from '../data/storeTypes';
 import {
+  clearTrackedRatesAuditRollbackSecure,
+  loadTrackedRatesAuditRollbackSecure,
+  normalizeTrackedRates,
+  queueTrackedRatesSecureSave,
+  saveTrackedRatesAuditRollbackSecure,
+} from '../data/trackedRates';
+import {
   normalizeUserRateScenario,
   type UserRateScenario,
 } from '../data/userRateScenario';
@@ -24,6 +31,7 @@ const PERSISTENCE_TIMEOUT_MS = 3_000;
 export interface PerformanceAuditUserSnapshot {
   prefs: AppState['prefs'];
   savedRates: AppState['savedRates'];
+  trackedRates: AppState['trackedRates'];
   favorites: AppState['favorites'];
   subscriptions: AppState['subscriptions'];
   activeSection: AppState['activeSection'];
@@ -37,13 +45,14 @@ interface PerformanceAuditRollbackJournal {
   snapshot: PerformanceAuditUserSnapshot;
 }
 
-/** AsyncStorage shape: scenario payload is omitted; only a capture flag remains. */
+/** AsyncStorage shape: private scenario and tracked metadata are omitted. */
 interface PersistedRollbackJournal {
   schemaVersion: typeof ROLLBACK_SCHEMA_VERSION;
   startedAt: string;
-  snapshot: Omit<PerformanceAuditUserSnapshot, 'userRateScenario'> & {
+  snapshot: Omit<PerformanceAuditUserSnapshot, 'userRateScenario' | 'trackedRates'> & {
     userRateScenario: null;
     userRateScenarioCaptured: boolean;
+    trackedRatesCaptured: boolean;
   };
 }
 
@@ -57,12 +66,13 @@ function clone<T>(value: T): T {
 }
 
 export function capturePerformanceAuditUserSnapshot(
-  state: Pick<AppState, 'prefs' | 'savedRates' | 'favorites' | 'subscriptions' | 'activeSection'>,
+  state: Pick<AppState, 'prefs' | 'savedRates' | 'trackedRates' | 'favorites' | 'subscriptions' | 'activeSection'>,
   userRateScenario: UserRateScenario | null = captureUserRateScenarioForAudit(),
 ): PerformanceAuditUserSnapshot {
   return clone({
     prefs: state.prefs,
     savedRates: state.savedRates,
+    trackedRates: state.trackedRates,
     favorites: state.favorites,
     subscriptions: state.subscriptions,
     activeSection: state.activeSection,
@@ -88,6 +98,7 @@ function toPersistedJournal(journal: PerformanceAuditRollbackJournal): Persisted
       activeSection: journal.snapshot.activeSection,
       userRateScenario: null,
       userRateScenarioCaptured: journal.snapshot.userRateScenario != null,
+      trackedRatesCaptured: journal.snapshot.trackedRates.some((item) => !!item.relevantDate),
     },
   };
 }
@@ -128,20 +139,23 @@ async function loadRollbackScenario(): Promise<UserRateScenario | null> {
 }
 
 async function clearRollbackArtifacts(): Promise<void> {
-  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
   await persistRollbackScenario(null);
+  await clearTrackedRatesAuditRollbackSecure();
+  await AsyncStorage.removeItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
 }
 
 function parseJournal(raw: string | null): {
   journal: PerformanceAuditRollbackJournal;
   legacyScenario: UserRateScenario | null;
   captured: boolean;
+  trackedRatesCaptured: boolean;
 } | null {
   if (!raw) return null;
   try {
     const journal = JSON.parse(raw) as Partial<PersistedRollbackJournal> & {
       snapshot?: Partial<PerformanceAuditUserSnapshot> & {
         userRateScenarioCaptured?: boolean;
+        trackedRatesCaptured?: boolean;
       };
     };
     const snapshot = journal.snapshot;
@@ -165,6 +179,8 @@ function parseJournal(raw: string | null): {
         snapshot: {
           prefs: snapshot.prefs,
           savedRates: snapshot.savedRates,
+          // Loaded from the private companion after this public journal parses.
+          trackedRates: normalizeTrackedRates(undefined, snapshot.savedRates),
           favorites: snapshot.favorites,
           subscriptions: snapshot.subscriptions,
           activeSection: snapshot.activeSection,
@@ -173,6 +189,7 @@ function parseJournal(raw: string | null): {
       },
       legacyScenario,
       captured: snapshot.userRateScenarioCaptured === true || legacyScenario != null,
+      trackedRatesCaptured: snapshot.trackedRatesCaptured === true,
     };
   } catch {
     return null;
@@ -183,16 +200,23 @@ async function readRollbackJournal(): Promise<PerformanceAuditRollbackJournal | 
   const parsed = parseJournal(await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY));
   if (!parsed) return null;
   const secureScenario = await loadRollbackScenario();
+  const trackedRates = await loadTrackedRatesAuditRollbackSecure(parsed.journal.snapshot.savedRates);
   const userRateScenario = secureScenario ?? parsed.legacyScenario ?? null;
   if (parsed.captured && !userRateScenario) {
     throw new Error(
       'Performance audit rollback scenario is missing from SecureStore; journal retained for recovery',
     );
   }
+  if (parsed.trackedRatesCaptured && !trackedRates.some((item) => !!item.relevantDate)) {
+    throw new Error(
+      'Performance audit rollback tracked-rate metadata is missing from SecureStore; journal retained for recovery',
+    );
+  }
   return {
     ...parsed.journal,
     snapshot: {
       ...parsed.journal.snapshot,
+      trackedRates,
       userRateScenario,
     },
   };
@@ -212,6 +236,7 @@ export async function beginPerformanceAuditRollback(
     startedAt: new Date().toISOString(),
     snapshot,
   };
+  await saveTrackedRatesAuditRollbackSecure(snapshot.trackedRates);
   await persistRollbackScenario(snapshot.userRateScenario);
   await AsyncStorage.setItem(
     PERFORMANCE_AUDIT_ROLLBACK_KEY,
@@ -229,6 +254,8 @@ function persistedSnapshot(raw: string | null): PerformanceAuditUserSnapshot | n
     return capturePerformanceAuditUserSnapshot({
       prefs: state.prefs as AppState['prefs'],
       savedRates: state.savedRates ?? [],
+      // Private metadata is intentionally absent from Zustand's AsyncStorage record.
+      trackedRates: normalizeTrackedRates(undefined, state.savedRates ?? []),
       favorites: state.favorites ?? [],
       subscriptions: state.subscriptions ?? [],
       activeSection: state.activeSection ?? state.prefs.defaultSection,
@@ -277,9 +304,13 @@ async function restoreSnapshot(
   snapshot: PerformanceAuditUserSnapshot,
 ): Promise<void> {
   const restored = clone(snapshot);
+  // Complete the private write before changing the public saved references so
+  // process death cannot strand an exact tier without its date metadata.
+  await queueTrackedRatesSecureSave(restored.trackedRates);
   store.setState({
     prefs: restored.prefs,
     savedRates: restored.savedRates,
+    trackedRates: restored.trackedRates,
     favorites: restored.favorites,
     subscriptions: restored.subscriptions,
     activeSection: restored.activeSection,

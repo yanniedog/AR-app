@@ -106,7 +106,7 @@ export default function Home() {
   const [shareOpen, setShareOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
   const [heroLayoutRevision, setHeroLayoutRevision] = useState<string | null>(null);
-  const { scenario: userScenario } = useUserRateScenario();
+  const { scenario: userScenario, storageStatus: scenarioStatus } = useUserRateScenario();
   const filterPrepAttempts = useRef(0);
   // Browse shares the preferred section with Home. Keep the last rendered Home
   // model during a tab/back transition, then derive the new section after the
@@ -344,6 +344,14 @@ export default function Home() {
         : null,
     [loyaltyComparisonRate, scenarioSummary, section, stats.median],
   );
+  const observedGapRate = loyaltyComparisonRate != null && scenarioSummary.currentRate != null
+    ? Math.max(
+        0,
+        section === 'Mortgage'
+          ? scenarioSummary.currentRate - loyaltyComparisonRate
+          : loyaltyComparisonRate - scenarioSummary.currentRate,
+      )
+    : null;
   const shareMessage = useMemo(() => {
     if (!core) return null;
     if (heroRate == null) return null; // nothing worth sharing until rates are loaded
@@ -484,20 +492,91 @@ export default function Home() {
         <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
       ) : null}
 
+      {scenarioStatus === 'ready' && scenarioSummary.currentRate != null ? (
+        <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
+          <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <AppText variant="h3">Your rate today</AppText>
+            <Pressable
+              onPress={() => router.push('/calculator')}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
+              hitSlop={10}
+            >
+              <AppText variant="small" color="primary" weight="700">Edit</AppText>
+            </Pressable>
+          </Row>
+          <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+            <View>
+              <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
+              <AppText variant="h3">{formatRate(scenarioSummary.currentRate)}</AppText>
+            </View>
+            {ratesReady && loyaltyComparisonRate != null ? (
+              <View style={{ alignItems: 'flex-end' }}>
+                <AppText variant="tiny" color="textMuted">Matched observed rate</AppText>
+                <AppText
+                  variant="h3"
+                  style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}
+                >
+                  {formatRate(loyaltyComparisonRate)}
+                </AppText>
+              </View>
+            ) : null}
+          </Row>
+          <AppText variant="body" weight="700">
+            {!ratesReady
+              ? 'Matching today’s observed rates…'
+              : observedGapRate == null
+              ? 'No matched comparison is available today'
+              : observedGapRate <= 0
+                ? 'No better matched rate observed today'
+                : section === 'TD' || !loyaltyGap
+                  ? `${(observedGapRate * 100).toFixed(2)} percentage point gap`
+                  : section === 'Mortgage'
+                    ? `About $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month gap`
+                    : `About $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year gap`}
+          </AppText>
+          <AppText variant="tiny" color="textMuted">
+            Matched to your filters · observed {formatRunDate(core.run_date)}{scenarioSummary.principal > 0 ? ` · based on $${Math.round(scenarioSummary.principal).toLocaleString()}` : ''}.
+          </AppText>
+          {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
+            <AppText variant="tiny" color="textMuted">
+              Product matched by comparison rate; the gap uses its advertised rate.
+            </AppText>
+          ) : null}
+          {activeBest ? (
+            <Button title="View matched rate" variant="secondary" onPress={openBestProduct} />
+          ) : null}
+        </Card>
+      ) : scenarioStatus === 'ready' ? (
+        <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
+          <View>
+            <AppText variant="h3">Check my rate</AppText>
+            <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
+              See your observed gap without linking a bank account.
+            </AppText>
+          </View>
+          <Button
+            title="Add my rate"
+            onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section } })}
+          />
+          <AppText variant="tiny" color="textMuted">Entered amounts stay on this device.</AppText>
+        </Card>
+      ) : null}
+
       <SectionCrossfade section={section}>
       <Card variant="outlined" style={{ borderColor: `${sectionAccent}44` }}>
         {!ratesReady ? (
           <View style={{ gap: theme.spacing(3) }}>
             <View>
               <AppText variant="tiny" color="textFaint" weight="700">
-                BEST IN {meta.title.toUpperCase()}
+                MARKET REFERENCE
               </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
                 {filterPrepFailed
                   ? 'Could not prepare filtered rates for today.'
                   : profileFeaturesPending
                     ? 'Matching your profile…'
-                    : 'Finding today’s best rate…'}
+                    : 'Finding today’s observed rate…'}
               </AppText>
             </View>
             {filterPrepFailed ? (
@@ -506,7 +585,7 @@ export default function Home() {
               <>
                 <IndeterminateProgressBar
                   caption="Applying your filter settings to today’s rates."
-                  accessibilityLabel="Finding today’s best rate"
+                  accessibilityLabel="Finding today’s observed rate"
                 />
                 <LoadingRows count={1} />
               </>
@@ -515,7 +594,9 @@ export default function Home() {
         ) : (
           <>
             <View style={{ marginBottom: activeBest ? theme.spacing(4) : 0 }}>
-              <AppText variant="h3">Best match today</AppText>
+              <AppText variant="h3">
+                {meta.lowerIsBetter ? 'Lowest matched rate' : 'Highest matched rate'}
+              </AppText>
               <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
                 {meta.title}{profileCount > 0 ? ' · matched to your profile' : ' · broadly available'}
               </AppText>
@@ -576,55 +657,6 @@ export default function Home() {
         )}
       </Card>
       </SectionCrossfade>
-
-      {loyaltyGap && scenarioSummary.currentRate != null ? (
-        <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
-          <AppText variant="tiny" color="textFaint" weight="700">
-            MY LOYALTY GAP
-          </AppText>
-            <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <AppText variant="small" color="textMuted">My saved rate</AppText>
-                <AppText variant="h3">{formatRate(scenarioSummary.currentRate)}</AppText>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <AppText variant="small" color="textMuted">Best match today</AppText>
-                <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
-                  {formatRate(loyaltyComparisonRate)}
-                </AppText>
-              </View>
-            </Row>
-            <AppText variant="body" weight="700">
-              {loyaltyGap.gapRate > 0
-                ? section === 'TD'
-                  ? `Rate gap: ${(loyaltyGap.gapRate * 100).toFixed(2)} percentage points. Use the TD calculator for a term-specific maturity amount.`
-                  : `Illustrative gap: $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month · $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year`
-                : 'Your rate is already as good as today’s best match.'}
-            </AppText>
-            <AppText variant="tiny" color="textMuted">
-              Based on ${Math.round(scenarioSummary.principal).toLocaleString()} and the selected profile. Excludes fees, tax, switching costs and future rate changes; not financial advice.
-            </AppText>
-            {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
-              <AppText variant="tiny" color="textMuted">
-                Product selection follows your comparison-rate ranking; the dollar illustration uses its advertised interest rate.
-              </AppText>
-            ) : null}
-            {activeBest ? (
-              <Button
-                title="View supporting rate"
-                variant="secondary"
-                onPress={openBestProduct}
-              />
-            ) : null}
-        </Card>
-      ) : (
-        <TodayPrompt
-          icon="pricetag-outline"
-          label="Add my rate"
-          hint="See what you'd save by switching"
-          onPress={() => router.push('/calculator')}
-        />
-      )}
 
       <TodayPrompt
         icon="analytics-outline"

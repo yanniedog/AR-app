@@ -236,7 +236,7 @@ export default function Banks() {
           {filterPrepFailed ? (
             <>
               <AppText variant="small" color="textMuted">
-                Broadly applicable ranking needs the suitability index. Check your connection and retry.
+                Widely available ranking needs product eligibility data. Check your connection and retry.
               </AppText>
               <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
             </>

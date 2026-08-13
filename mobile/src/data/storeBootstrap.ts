@@ -288,6 +288,7 @@ export const bootstrapInitialState = {
   activeSection: DEFAULT_PREFS.defaultSection,
   prefs: DEFAULT_PREFS,
   savedRates: [],
+  trackedRates: [],
   favorites: [] as string[],
   subscriptions: [],
 };

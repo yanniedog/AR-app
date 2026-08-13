@@ -297,7 +297,7 @@ describe('store error recovery', () => {
       core: remoteCore,
     });
     mockReadSuitabilityIndex.mockResolvedValue({
-      schemaVersion: 1,
+      schemaVersion: 2,
       runDate: remoteCore.run_date,
       coreSha: remoteManifest.files.core.sha256,
       detailsSha: remoteManifest.files.details.sha256,

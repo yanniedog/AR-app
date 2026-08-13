@@ -365,7 +365,7 @@ export default function Search() {
         {showDeepSearchHint ? (
           <Pressable onPress={() => setPref('enableDeepSearch', true)}>
             <AppText variant="tiny" color="primary" style={{ lineHeight: 16 }}>
-              Deep product search (free beta) matches fees, features, and eligibility.
+              Search also matches published fees, features and eligibility.
             </AppText>
           </Pressable>
         ) : null}
