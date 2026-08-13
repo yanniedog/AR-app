@@ -16,6 +16,7 @@ import {
   isoDurationMonths,
   isNonStandard,
   toFraction,
+  visibleAccountRows,
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
 
@@ -259,10 +260,15 @@ function median(values: number[]): number | null {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
-function buildComparables(rows: RateRow[], section: SectionKey, selected: RateReceipt): NegotiationComparable[] {
+function buildComparables(
+  rows: RateRow[],
+  section: SectionKey,
+  selected: RateReceipt,
+  detailsProducts?: Record<string, ProductDetail> | null,
+): NegotiationComparable[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const eligible = rows
-    .filter((row) => !isNonStandard(row) && toFraction(row.rate) !== null)
+  const eligible = visibleAccountRows(rows, false, detailsProducts)
+    .filter((row) => toFraction(row.rate) !== null)
     .sort((a, b) => {
       const av = toFraction(a.rate)!;
       const bv = toFraction(b.rate)!;
@@ -294,15 +300,16 @@ export function buildNegotiationBrief(input: {
   receipt: RateReceipt;
   scenario: UserRateScenario;
   sectionRows: RateRow[];
+  detailsProducts?: Record<string, ProductDetail> | null;
 }): NegotiationBrief {
-  const { receipt, scenario, sectionRows } = input;
+  const { receipt, scenario, sectionRows, detailsProducts } = input;
   const scenarioData = scenarioForSection(scenario, receipt.section);
-  const standardRates = sectionRows
-    .filter((row) => !isNonStandard(row))
+  const broadlyAvailableRows = visibleAccountRows(sectionRows, false, detailsProducts);
+  const standardRates = broadlyAvailableRows
     .map((row) => toFraction(row.rate))
     .filter((rate): rate is number => rate !== null);
   const typical = median(standardRates);
-  const comparables = buildComparables(sectionRows, receipt.section, receipt);
+  const comparables = buildComparables(broadlyAvailableRows, receipt.section, receipt);
   const selectedRate = receipt.advertisedRateFraction;
   let illustration: NegotiationIllustration | null = null;
   if (

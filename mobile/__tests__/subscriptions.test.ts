@@ -1,4 +1,5 @@
 import { computeChanges } from '../src/data/notifications';
+import { makeSavedRateRef } from '../src/data/savedRates';
 import {
   addSubscription,
   buildSearchLabel,
@@ -9,6 +10,7 @@ import {
   normalizeFilterSnapshot,
   removeSubscription,
   rowsForSearchSubscription,
+  savedRatesWithAlerts,
 } from '../src/data/subscriptions';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -71,6 +73,16 @@ describe('subscription CRUD', () => {
     const withoutSub = removeSubscription(withSub, sub.id);
     expect(isProductSubscribed(withoutSub, 'P|1', 2)).toBe(false);
     expect(withoutSub).toHaveLength(0);
+  });
+
+  test('saved tiers are notification sources only while their exact alert is enabled', () => {
+    const exactRow = mk({ product_key: 'P|1', rate_index: 2 });
+    const otherRow = mk({ product_key: 'P|2', rate_index: 3 });
+    const saved = [makeSavedRateRef(exactRow, 'rate'), makeSavedRateRef(otherRow, 'rate')];
+    const alert = makeProductSubscription(exactRow, 2);
+
+    expect(savedRatesWithAlerts(saved, [alert])).toEqual([saved[0]]);
+    expect(savedRatesWithAlerts(saved, removeSubscription([alert], alert.id))).toEqual([]);
   });
 
   test('computeSubscriptionChanges silent when rate unchanged', () => {

@@ -133,6 +133,28 @@ describe('deep performance audit plan', () => {
     }
   });
 
+  test('audits semantic onboarding jobs and mounted receipt evidence', () => {
+    const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
+    const onboardingActions = steps
+      .filter((step) => step.scenarioId === 'route.onboarding')
+      .map((step) => step.semanticActionId);
+    expect(onboardingActions).toEqual([
+      'onboarding.open',
+      'onboarding.section.toggle',
+      'onboarding.job.find',
+      'onboarding.job.follow',
+      'onboarding.job.check',
+    ]);
+    expect(onboardingActions).not.toEqual(expect.arrayContaining([
+      'onboarding.step.next',
+      'onboarding.notify.preview',
+      'onboarding.step.back',
+    ]));
+
+    expect(steps.find((step) => step.semanticActionId === 'receipt.scroll.evidence')?.readiness)
+      .toContain('list');
+  });
+
   test('covers every steady route, compatibility redirect, and deep workflow family', () => {
     const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
     const scenarios = new Set(steps.map((step) => step.scenarioId));

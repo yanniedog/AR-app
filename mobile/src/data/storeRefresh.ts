@@ -24,6 +24,7 @@ import {
 import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
+import { savedRatesWithAlerts } from './subscriptions';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -158,7 +159,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             const messages = computeChanges(
               notifyCtx.previousCore,
               notifyCtx.core,
-              state.savedRates?.length ? state.savedRates : state.favorites,
+              savedRatesWithAlerts(state.savedRates ?? [], state.subscriptions),
               state.prefs.rateMoveThresholdBps,
               state.subscriptions,
               notifyCtx.previousDetailsProducts,

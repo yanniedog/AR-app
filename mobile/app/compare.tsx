@@ -15,7 +15,7 @@ import {
   humanizeEnum,
   isBroadlyAvailable,
 } from '../src/data/format';
-import { rankFraction } from '../src/data/selectors';
+import { rankFraction, rankedRateLabelForSection } from '../src/data/selectors';
 import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -243,10 +243,12 @@ export default function Compare() {
     if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
     return true;
   });
-  const rankedRateLabel = entries[0].section === 'Mortgage'
-    ? mortgageRateMetric === 'comparison' ? 'Comparison rate' : 'Advertised rate'
-    : depositRankMetric === 'base' ? 'Ongoing rate' : 'Advertised rate';
-  const detailRows = attrRows.filter((row) => row.label !== rankedRateLabel);
+  const rankedRateLabels = new Set(entries.map((entry) => rankedRateLabelForSection(
+    entry.section,
+    depositRankMetric,
+    mortgageRateMetric,
+  )));
+  const detailRows = attrRows.filter((row) => !rankedRateLabels.has(row.label as ReturnType<typeof rankedRateLabelForSection>));
   const differingRows = detailRows.filter((row) => valuesDiffer(row, entries));
   const sharedRows = detailRows.filter((row) => !valuesDiffer(row, entries));
 
@@ -327,7 +329,9 @@ export default function Compare() {
                 </Row>
 
                 <View style={styles.compactRateBlock}>
-                  <AppText variant="tiny" color="textFaint">{rankedRateLabel}</AppText>
+                  <AppText variant="tiny" color="textFaint">
+                    {rankedRateLabelForSection(entry.section, depositRankMetric, mortgageRateMetric)}
+                  </AppText>
                   <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
                     {fraction === null ? '—' : formatRate(fraction)}
                   </AppText>

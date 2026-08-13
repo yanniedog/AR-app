@@ -58,7 +58,8 @@ export default function RateReceiptScreen() {
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
   const validRateIndex = requestedRateIndex == null || Number.isInteger(requestedRateIndex);
   const core = useStore((state) => state.core);
-  const detail = useStore((state) => state.details?.products[productKey] ?? null);
+  const detailsProducts = useStore((state) => state.details?.products ?? null);
+  const detail = detailsProducts?.[productKey] ?? null;
   const ensureDetails = useStore((state) => state.ensureDetails);
   const { scenario, storageStatus } = useUserRateScenario();
   const scenarioLoaded = storageStatus === 'ready';
@@ -90,9 +91,10 @@ export default function RateReceiptScreen() {
           receipt,
           scenario,
           sectionRows: core?.sections[found.section].rates ?? [],
+          detailsProducts,
         })
       : null,
-    [core, found, receipt, scenario],
+    [core, detailsProducts, found, receipt, scenario],
   );
   const shareText = useMemo(() => {
     if (!receipt || !brief) return '';
@@ -119,7 +121,10 @@ export default function RateReceiptScreen() {
   }, [brief, receipt]);
   const auditActions = useMemo(() => ({
     'receipt.open': () => undefined,
-    'receipt.scroll.evidence': () => scrollRef.current?.scrollToEnd({ animated: true }),
+    'receipt.scroll.evidence': () => {
+      setEvidenceOpen(true);
+      requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
+    },
     'receipt.back-to-product': (parameters: unknown) => {
       const plannedKey = parameters && typeof parameters === 'object'
         ? (parameters as { productKey?: unknown }).productKey
@@ -147,7 +152,7 @@ export default function RateReceiptScreen() {
     id: 'receipt.evidence',
     routeKey: '/rate-receipt',
     datasetRevision: core?.run_date ?? null,
-    renderRevision: `${productKey}:${row?.rate_index ?? 'none'}:${receiptFactCount}`,
+    renderRevision: `${productKey}:${row?.rate_index ?? 'none'}:${receiptFactCount}:${evidenceOpen ? 'evidence-open' : 'evidence-closed'}`,
     actions: auditActions,
     probes: [
       {
@@ -164,9 +169,9 @@ export default function RateReceiptScreen() {
       {
         id: 'receipt.facts',
         kind: 'list',
-        status: receipt && brief ? 'ready' : 'pending',
+        status: receipt && brief && evidenceOpen ? 'ready' : 'pending',
         expectedCount: receiptFactCount,
-        actualCount: receiptFactCount,
+        actualCount: evidenceOpen ? receiptFactCount : 0,
       },
       {
         id: 'receipt.layout',

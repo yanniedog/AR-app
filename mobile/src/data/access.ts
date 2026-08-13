@@ -71,6 +71,8 @@ const MEMBERSHIP_RE = /\bmembers?\s+of\b|\bassociation\b|\bunion\b|\balumni\b|\b
 const BUSINESS_RE = /\b(business|commercial|corporate|company|smsf|self[-\s]?managed\s+super|trust)\b/i;
 const STUDENT_RE = /\bstudent[s]?\b/i;
 const FIRST_HOME_RE = /\bfirst[-\s]?home\s+(?:buyers?|owners?)\b/i;
+const FIRST_HOME_RESTRICTIVE_RE =
+  /\b(?:only\s+available|available\s+only|exclusively\s+available|restricted|limited)\s+(?:to|for)\s+(?:eligible\s+)?first[-\s]?home\s+(?:buyers?|owners?)\b|\bmust\s+be\s+(?:an?\s+)?first[-\s]?home\s+(?:buyer|owner)\b|\bfirst[-\s]?home\s+(?:buyers?|owners?)\s+only\b/i;
 // Name/description youth products. Deliberately omit bare "under 18/19" — that
 // phrasing usually means guardian rules on otherwise adult-open accounts.
 const YOUTH_RE =
@@ -179,7 +181,13 @@ export function assessAccess(
     if (MEMBERSHIP_RE.test(membershipParts.join(" "))) cats.add("membership");
   }
   if (STUDENT_RE.test(text)) cats.add('student');
-  if (FIRST_HOME_RE.test(text)) cats.add('first-home');
+  // Product names are allowed to classify an explicitly first-home product.
+  // Detail copy must actually gate access: lenders also mention first-home
+  // buyers as a target audience or as one optional high-LVR pathway.
+  if (
+    FIRST_HOME_RE.test(nameText) ||
+    FIRST_HOME_RESTRICTIVE_RE.test(textOf('', detail))
+  ) cats.add('first-home');
   // Youth: product name/description or a low MAX_AGE cap — not guardian copy in
   // eligibility ("customers under 18 need a parent").
   const youthSurface = `${nameText} ${detail?.description || ''}`;

@@ -138,6 +138,21 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       persistTrackedRates(trackedRates);
     },
 
+    restoreSavedRate(ref: Parameters<AppState['restoreSavedRate']>[0], tracked?: Parameters<AppState['restoreSavedRate']>[1]) {
+      if (get().savedRates.some((item) => item.id === ref.id)) return;
+      const savedRates = [...get().savedRates, ref];
+      const trackedRates = normalizeTrackedRates(
+        tracked ? [...get().trackedRates, tracked] : get().trackedRates,
+        savedRates,
+      );
+      set({
+        savedRates,
+        trackedRates,
+        favorites: [...new Set(savedRates.map((item) => item.productKey))],
+      });
+      persistTrackedRates(trackedRates);
+    },
+
     setTrackedRateRelevantDate(id: string, relevantDate: string | null, kind: Parameters<AppState['setTrackedRateRelevantDate']>[2]) {
       const trackedRates = setTrackedRateDate(get().trackedRates, id, relevantDate, kind);
       set({ trackedRates });
@@ -252,6 +267,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'isFavorite'
     | 'toggleSavedRate'
     | 'removeSavedRate'
+    | 'restoreSavedRate'
     | 'setTrackedRateRelevantDate'
     | 'isRateSaved'
     | 'subscribeProduct'

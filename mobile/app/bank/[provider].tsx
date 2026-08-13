@@ -513,6 +513,7 @@ export default function BankDetail() {
             row={r}
             section={section}
             displayedRateLabel="Current rate"
+            showLenderAction={false}
             logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
             onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
             onPress={() => openProduct(r.product_key, r.rate_index)}

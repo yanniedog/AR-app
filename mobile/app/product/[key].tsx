@@ -169,8 +169,9 @@ export default function ProductDetail() {
       receipt,
       scenario,
       sectionRows: core.sections[found.section].rates ?? [],
+      detailsProducts,
     });
-  }, [core, detail, found, row, scenario]);
+  }, [core, detail, detailsProducts, found, row, scenario]);
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;

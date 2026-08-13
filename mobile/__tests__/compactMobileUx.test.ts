@@ -28,7 +28,11 @@ describe('compact mobile UX contracts', () => {
     expect(source).toContain('Check a rate I have');
     expect(source).toContain('Find or plan');
     expect(source).toContain('Follow rate changes');
+    expect(source).toContain("'onboarding.job.find': () => setJob('find')");
+    expect(source).toContain("'onboarding.job.follow': () => setJob('follow')");
+    expect(source).toContain("'onboarding.job.check': () => setJob('check')");
     expect(source).not.toContain('ensurePermissions');
+    expect(source).not.toContain('onboarding.step.next');
     expect(source).not.toContain('Best rate today');
   });
 
@@ -58,5 +62,18 @@ describe('compact mobile UX contracts', () => {
     expect(source).toContain("flexWrap: 'wrap'");
     expect(source).toContain('typical tracked rate');
     expect(source).toContain('best advertised rate');
+  });
+
+  it('opens receipt evidence before the audit scroll and avoids redundant lender navigation', () => {
+    const receipt = read('../app/rate-receipt.tsx');
+    const productCard = read('../src/components/ProductCard.tsx');
+    const lender = read('../app/bank/[provider].tsx');
+
+    expect(receipt).toContain("'receipt.scroll.evidence': () => {");
+    expect(receipt).toContain('setEvidenceOpen(true)');
+    expect(receipt).toContain("evidenceOpen ? 'ready' : 'pending'");
+    expect(productCard).toContain('showLenderAction = true');
+    expect(productCard).toContain('{showLenderAction ? (');
+    expect(lender).toContain('showLenderAction={false}');
   });
 });

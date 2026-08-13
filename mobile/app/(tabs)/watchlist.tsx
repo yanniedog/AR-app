@@ -103,6 +103,7 @@ export default function MyRates() {
   const savedRates = useStore((s) => s.savedRates);
   const trackedRates = useStore((s) => s.trackedRates);
   const removeSavedRate = useStore((s) => s.removeSavedRate);
+  const restoreSavedRate = useStore((s) => s.restoreSavedRate);
   const subscriptions = useStore((s) => s.subscriptions);
   const notificationsEnabled = useStore((s) => s.prefs.notificationsEnabled);
   const subscribeProduct = useStore((s) => s.subscribeProduct);
@@ -377,20 +378,9 @@ export default function MyRates() {
     setSelected((prev) => prev.filter((token) =>
       token !== compareToken(item.row.product_key, item.row.rate_index ?? null)));
     showUndo(`Removed ${item.row.product_name}`, () => {
-      useStore.setState((state) => {
-        if (state.savedRates.some((ref) => ref.id === id)) return state;
-        const restored = [...state.savedRates, item.ref];
-        return {
-          savedRates: restored,
-          trackedRates: normalizeTrackedRates(
-            tracked ? [...state.trackedRates, tracked] : state.trackedRates,
-            restored,
-          ),
-          favorites: [...new Set(restored.map((ref) => ref.productKey))],
-        };
-      });
+      restoreSavedRate(item.ref, tracked);
     });
-  }, [items, removeSavedRate, showUndo, trackedById]);
+  }, [items, removeSavedRate, restoreSavedRate, showUndo, trackedById]);
 
   const saveRelevantDate = useCallback(() => {
     if (!dateEditor) return;

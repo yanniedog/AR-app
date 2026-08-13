@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 
 import { makeSavedRateRef } from '../src/data/savedRates';
 import { DEFAULT_PREFS, useStore } from '../src/data/store';
@@ -19,6 +20,7 @@ const row: RateRow = {
 
 describe('tracked rate store migration', () => {
   beforeEach(async () => {
+    jest.clearAllMocks();
     await AsyncStorage.clear();
     useStore.setState({
       prefs: { ...DEFAULT_PREFS, onboarded: true },
@@ -71,5 +73,25 @@ describe('tracked rate store migration', () => {
 
     useStore.getState().removeSavedRate(id);
     expect(useStore.getState().trackedRates).toEqual([]);
+  });
+
+  it('persists restored private date metadata after undo', async () => {
+    const saved = makeSavedRateRef(row, 'rate', '2026-08-13T00:00:00.000Z');
+    useStore.getState().restoreSavedRate(saved);
+    useStore.getState().setTrackedRateRelevantDate(saved.id, '2027-03-31', 'term-maturity');
+    const tracked = useStore.getState().trackedRates[0];
+
+    useStore.getState().removeSavedRate(saved.id);
+    useStore.getState().restoreSavedRate(saved, tracked);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(useStore.getState().trackedRates[0]).toMatchObject({
+      relevantDate: '2027-03-31',
+      relevantDateKind: 'term-maturity',
+    });
+    const secureWrite = jest.mocked(SecureStore.setItemAsync).mock.calls.at(-1)?.[1];
+    expect(JSON.parse(secureWrite ?? '[]')).toEqual([
+      { id: saved.id, relevantDate: '2027-03-31', relevantDateKind: 'term-maturity' },
+    ]);
   });
 });

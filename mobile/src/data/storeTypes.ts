@@ -182,6 +182,7 @@ export interface AppState {
   isFavorite: (key: string) => boolean;
   toggleSavedRate: (row: RateRow, scope?: SavedRateRef['scope']) => void;
   removeSavedRate: (id: string) => void;
+  restoreSavedRate: (ref: SavedRateRef, tracked?: TrackedRate | null) => void;
   setTrackedRateRelevantDate: (
     id: string,
     relevantDate: string | null,

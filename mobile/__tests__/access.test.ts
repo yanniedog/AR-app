@@ -84,6 +84,24 @@ describe('assessAccess', () => {
     expect(disclosed.categories).toContain('first-home');
   });
 
+  it('does not turn first-home marketing or an optional LVR pathway into a whole-product restriction', () => {
+    const marketed = assessAccess('Minimiser Home Loan', {
+      description: 'Perfect for First Home Buyers',
+      eligibility: [{ label: 'MIN_AGE' }],
+    });
+    expect(marketed.categories).not.toContain('first-home');
+    expect(marketed.restricted).toBe(false);
+
+    const optionalPath = assessAccess('Value Fixed Home Loan 12M', {
+      eligibility: [{
+        label: 'OTHER',
+        info: 'First home buyers may apply up to 95% LVR; the standard option is available up to 80% LVR.',
+      }],
+    });
+    expect(optionalPath.categories).not.toContain('first-home');
+    expect(optionalPath.restricted).toBe(false);
+  });
+
   it('flags MAX_AGE eligibility as youth-restricted when the cap is a youth bound', () => {
     const a = assessAccess(
       'Everyday Account',

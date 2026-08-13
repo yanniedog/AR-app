@@ -64,6 +64,7 @@ export function ProductCard({
   heroRate = false,
   displayedRate,
   displayedRateLabel,
+  showLenderAction = true,
   logoRenderStateId,
   onLogoRenderStateChange,
 }: {
@@ -81,6 +82,8 @@ export function ProductCard({
   displayedRate?: number | string | null;
   /** Metric-specific label for displayedRate, such as Ongoing or Comparison rate. */
   displayedRateLabel?: string;
+  /** Hide redundant lender navigation when already rendered on that lender's page. */
+  showLenderAction?: boolean;
   logoRenderStateId?: string;
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
@@ -264,22 +267,24 @@ export function ProductCard({
 
       {!selectMode ? (
         <View style={{ width: 48, alignItems: 'center' }}>
-          <Pressable
-            onPress={openLender}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${row.provider} lender history`}
-            android_ripple={androidRipple(theme.colors.primaryMuted, true)}
-            style={{
-              width: 48,
-              minHeight: 48,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: theme.radius.sm,
-              overflow: 'hidden',
-            }}
-          >
-            <Ionicons name="business-outline" size={19} color={theme.colors.textFaint} />
-          </Pressable>
+          {showLenderAction ? (
+            <Pressable
+              onPress={openLender}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${row.provider} lender history`}
+              android_ripple={androidRipple(theme.colors.primaryMuted, true)}
+              style={{
+                width: 48,
+                minHeight: 48,
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: theme.radius.sm,
+                overflow: 'hidden',
+              }}
+            >
+              <Ionicons name="business-outline" size={19} color={theme.colors.textFaint} />
+            </Pressable>
+          ) : null}
           <Pressable
             onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
             accessibilityRole="button"

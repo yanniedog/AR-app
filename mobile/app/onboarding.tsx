@@ -103,11 +103,9 @@ export default function Onboarding() {
         ?? SECTION_ORDER.find((key) => key !== section);
       if (next) toggle(next);
     },
-    // Retained as no-op audit aliases for older saved audit plans. Notification
-    // permission is now requested only after the user has entered the app.
-    'onboarding.step.next': () => undefined,
-    'onboarding.notify.preview': () => undefined,
-    'onboarding.step.back': () => undefined,
+    'onboarding.job.find': () => setJob('find'),
+    'onboarding.job.follow': () => setJob('follow'),
+    'onboarding.job.check': () => setJob('check'),
   }), [
     interests,
     section,

@@ -77,6 +77,18 @@ export type RankMetric = 'base' | 'max';
  *  fee-inclusive comparison rate (falling back to headline when unpublished). */
 export type MortgageRateMetric = 'headline' | 'comparison';
 
+export function rankedRateLabelForSection(
+  section: SectionKey,
+  depositMetric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'headline',
+): 'Advertised rate' | 'Comparison rate' | 'Ongoing rate' {
+  if (section === 'Mortgage') {
+    return mortgageMetric === 'comparison' ? 'Comparison rate' : 'Advertised rate';
+  }
+  if (section === 'Savings' && depositMetric === 'base') return 'Ongoing rate';
+  return 'Advertised rate';
+}
+
 export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
 
 /** True when a deposit row should stay after the token-rate floor.
