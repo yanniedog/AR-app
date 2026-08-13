@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-12T15:54:28.594Z",
+  "generated_at": "2026-08-13T10:12:35.517Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -741,6 +741,14 @@
         "Overhaul RBA response windows (#184)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.146"
+    },
+    {
+      "version": "1.0.148",
+      "date": "2026-08-13",
+      "summaryBullets": [
+        "Make Australian Rates a private rate guardian (#186)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.148"
     }
   ]
 }

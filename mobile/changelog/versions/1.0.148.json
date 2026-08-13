@@ -1,0 +1,32 @@
+{
+  "version": "1.0.148",
+  "releaseTag": "app-arm-v1.0.148",
+  "date": "2026-08-13",
+  "summaryBullets": [
+    "Make Australian Rates a private rate guardian (#186)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Make Australian Rates a private rate guardian (#186)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.148"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.147"
+        }
+      ]
+    }
+  ]
+}
