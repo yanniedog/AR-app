@@ -35,8 +35,20 @@ describe('compact bank response windows', () => {
     expect(hold?.rows.map((row) => row.provider)).toEqual(['Alpha', 'Zeta']);
     expect(hold?.rows[1]).toMatchObject({ movePp: 0.1, daysAfter: 1 });
     expect(hold?.windowEnd).toBe('2026-05-09');
+    expect(hold).toMatchObject({ partialHistory: false, observationStart: '2026-05-05' });
     expect(cut?.rows[0]).toMatchObject({ movePp: -0.15, daysAfter: 0 });
     expect(windows.some((window) => window.decision.date === '2026-03-01')).toBe(false);
+  });
+
+  it('marks an overlapping decision window as partial and searches only observed dates', () => {
+    const windows = buildCompactBankResponseWindows(payload, calendar, 'Mortgage');
+    const partial = windows.find((window) => window.decision.date === '2026-04-01');
+    expect(partial).toMatchObject({
+      observationStart: '2026-05-01',
+      partialHistory: true,
+      windowEnd: '2026-05-04',
+    });
+    expect(partial?.rows.every((row) => row.movePp === null)).toBe(true);
   });
 
   it('labels the cash target explicitly for holds and moves', () => {

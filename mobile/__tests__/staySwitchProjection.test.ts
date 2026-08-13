@@ -63,6 +63,20 @@ describe('published switch fee extraction', () => {
     expect(costs.financedAmount).toBe(0);
   });
 
+  it('prices a periodic fee from its structured CDR accrual frequency', () => {
+    const costs = resolveSwitchCosts(scenario().mortgageSwitch, null, { fees: [
+      {
+        label: 'PERIODIC',
+        name: 'Account service fee',
+        fixedAmount: { amount: '12' },
+        amountStatus: 'fixed',
+        accrualFrequency: 'P1M',
+      },
+    ] });
+    expect(costs.targetPeriodicFeesMonthly).toBe(12);
+    expect(costs.unpricedPeriodicFees).toEqual([]);
+  });
+
   it('prefers rich fixed amounts and rejects variable-method zero placeholders', () => {
     const target = { fees: [
       {

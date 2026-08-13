@@ -15,7 +15,7 @@ import {
   humanizeEnum,
   isBroadlyAvailable,
 } from '../src/data/format';
-import { rankFraction, rankedRateLabelForSection } from '../src/data/selectors';
+import { rankFraction, rankedRateLabelForRow } from '../src/data/selectors';
 import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -255,11 +255,16 @@ export default function Compare() {
     if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
     return true;
   });
-  const rankedRateLabels = entries.map((entry) => rankedRateLabelForSection(
+  const rankedRateLabels = entries.map((entry) => rankedRateLabelForRow(
+    entry.row,
     entry.section,
     depositRankMetric,
     mortgageRateMetric,
   ));
+  const commonRankedRateLabel = sameSection
+    && new Set(rankedRateLabels).size === 1
+    ? rankedRateLabels[0]
+    : 'Ranked rate';
   // A rate field is globally redundant only when it is the ranked metric for
   // every entry. Mixed categories suppress their ranked row per card instead.
   const detailRows = attrRows.filter((row) =>
@@ -323,7 +328,8 @@ export default function Compare() {
           {entries.map((entry, idx) => {
             const fraction = fractions[idx];
             const isBest = bestVal !== null && fraction === bestVal;
-            const rankedRateLabel = rankedRateLabelForSection(
+            const rankedRateLabel = rankedRateLabelForRow(
+              entry.row,
               entry.section,
               depositRankMetric,
               mortgageRateMetric,
@@ -427,7 +433,7 @@ export default function Compare() {
                 },
               ]}
             />
-             {labelCell(sameSection ? (rankedRateLabels[0] ?? 'Ranked rate') : 'Ranked rate', RATE_ROW_H, '700')}
+             {labelCell(commonRankedRateLabel ?? 'Ranked rate', RATE_ROW_H, '700')}
              {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
              {detailRows.map((r) => labelCell(r.label, ROW_H))}
           </View>

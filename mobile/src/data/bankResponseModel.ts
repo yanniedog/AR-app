@@ -13,9 +13,11 @@ export interface CompactBankResponseRow {
 
 export interface CompactBankResponseWindow {
   decision: RbaDecisionEntry;
+  observationStart: string;
   observedThrough: string;
   windowEnd: string;
   open: boolean;
+  partialHistory: boolean;
   rows: CompactBankResponseRow[];
 }
 
@@ -50,12 +52,14 @@ export function buildCompactBankResponseWindows(
   return decisions.map((decision, index) => {
     const next = decisions[index + 1];
     const windowEnd = next ? dayBefore(next.date) : payload.run_date;
+    const observationStart = decision.date < ledgerStart ? ledgerStart : decision.date;
+    const partialHistory = observationStart !== decision.date;
     const providers = Object.entries(payload.banks)
       .filter(([, sections]) => Boolean(sections[section]))
       .map(([provider]) => provider)
       .sort((a, b) => a.localeCompare(b));
     const rows = providers.map((provider) => {
-      const event = firstEvent(payload.events, provider, section, decision.date, windowEnd);
+      const event = firstEvent(payload.events, provider, section, observationStart, windowEnd);
       return {
         provider,
         movePp: event ? event.avg_bps / 100 : null,
@@ -63,7 +67,15 @@ export function buildCompactBankResponseWindows(
         direction: event?.dir ?? null,
       };
     });
-    return { decision, observedThrough: payload.run_date, windowEnd, open: !next, rows };
+    return {
+      decision,
+      observationStart,
+      observedThrough: payload.run_date,
+      windowEnd,
+      open: !next,
+      partialHistory,
+      rows,
+    };
   }).filter((window) => window.windowEnd >= ledgerStart).reverse();
 }
 

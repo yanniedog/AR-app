@@ -13,6 +13,7 @@ import {
   queryAndSort,
   rankFraction,
   rankedRateLabelForSection,
+  rankedRateLabelForRow,
   sortRankFraction,
   sortRows,
   type MortgageRateMetric,
@@ -356,6 +357,18 @@ describe('selectors', () => {
     expect(rankedRateLabelForSection('Savings', 'base', 'headline')).toBe('Ongoing rate');
     expect(rankedRateLabelForSection('Savings', 'max', 'headline')).toBe('Advertised rate');
     expect(rankedRateLabelForSection('TD', 'base', 'headline')).toBe('Advertised rate');
+    expect(rankedRateLabelForRow(
+      mk({ comparison_rate: undefined }),
+      'Mortgage',
+      'base',
+      'comparison',
+    )).toBe('Advertised rate');
+    expect(rankedRateLabelForRow(
+      mk({ comparison_rate: '0.065' }),
+      'Mortgage',
+      'base',
+      'comparison',
+    )).toBe('Comparison rate');
   });
 
   test('bestRow (savings) ignores conditional bonus rates by default', () => {

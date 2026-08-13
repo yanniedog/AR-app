@@ -164,7 +164,7 @@ export default function Search() {
   }, [mortgageRateMetric, section, sortRaw]);
 
   useEffect(() => {
-    if (compareRaw === '1') setSelectMode(true);
+    setSelectMode(compareRaw === '1');
   }, [compareRaw]);
 
   useEffect(() => {

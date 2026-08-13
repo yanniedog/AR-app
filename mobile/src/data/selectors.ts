@@ -99,6 +99,22 @@ export function rankedRateLabelForSection(
   return 'Advertised rate';
 }
 
+/** Label the actual value used for a row. Mortgage comparison ranking falls
+ * back to advertised rate when a comparison rate is not published. */
+export function rankedRateLabelForRow(
+  row: RateRow,
+  section: SectionKey,
+  depositMetric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+): 'Advertised rate' | 'Comparison rate' | 'Ongoing rate' {
+  if (section === 'Mortgage'
+    && mortgageMetric === 'comparison'
+    && toFraction(row.comparison_rate) === null) {
+    return 'Advertised rate';
+  }
+  return rankedRateLabelForSection(section, depositMetric, mortgageMetric);
+}
+
 export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
 
 /** True when a deposit row should stay after the token-rate floor.

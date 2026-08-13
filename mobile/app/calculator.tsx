@@ -151,7 +151,7 @@ export default function Calculator() {
 
   useEffect(() => {
     if (!currentProduct.productKey || details?.products?.[currentProduct.productKey] || detailsLoading) return;
-    void ensureDetails();
+    void ensureDetails({ forProductView: true });
   }, [currentProduct.productKey, details?.products, detailsLoading, ensureDetails]);
 
   useEffect(() => {

@@ -219,15 +219,51 @@ function ratesMap(
   section: SectionKey,
   depositRankMetric: RankMetric = 'base',
   mortgageRateMetric: MortgageRateMetric = 'comparison',
-): Map<string, { row: RateRow; fraction: number | null }> {
-  const out = new Map<string, { row: RateRow; fraction: number | null }>();
+): Map<string, TrackedRateValue> {
+  const out = new Map<string, TrackedRateValue>();
   for (const row of rows) {
-    out.set(rowIdentity(row), {
+    out.set(rowIdentity(row), trackedRateValue(
       row,
-      fraction: rankFraction(row, section, depositRankMetric, mortgageRateMetric),
-    });
+      section,
+      depositRankMetric,
+      mortgageRateMetric,
+    ));
   }
   return out;
+}
+
+export type TrackedRateMetric = 'advertised' | 'comparison' | 'ranked';
+
+export interface TrackedRateValue {
+  row: RateRow;
+  fraction: number | null;
+  metric?: TrackedRateMetric;
+}
+
+/** Keep the chosen metric attached to a notification comparison. Catalogue
+ * ranking may fall back from comparison to advertised rate, but a publish/
+ * unpublish transition must not be reported as though one metric moved. */
+export function trackedRateValue(
+  row: RateRow,
+  section: SectionKey,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+  depositValue: 'ranked' | 'advertised' = 'ranked',
+): TrackedRateValue {
+  if (section === 'Mortgage') {
+    const comparison = toFraction(row.comparison_rate);
+    if (mortgageRateMetric === 'comparison' && comparison !== null) {
+      return { row, fraction: comparison, metric: 'comparison' };
+    }
+    return { row, fraction: toFraction(row.rate), metric: 'advertised' };
+  }
+  return {
+    row,
+    fraction: depositValue === 'advertised'
+      ? toFraction(row.rate)
+      : rankFraction(row, section, depositRankMetric, mortgageRateMetric),
+    metric: depositValue,
+  };
 }
 
 function productRatesByIndex(
@@ -236,18 +272,19 @@ function productRatesByIndex(
   rateIndex: number | null,
   depositRankMetric: RankMetric = 'base',
   mortgageRateMetric: MortgageRateMetric = 'comparison',
-): Map<number, { row: RateRow; fraction: number | null }> {
-  const out = new Map<number, { row: RateRow; fraction: number | null }>();
+): Map<number, TrackedRateValue> {
+  const out = new Map<number, TrackedRateValue>();
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
-      out.set(row.rate_index ?? out.size, {
+      out.set(row.rate_index ?? out.size, trackedRateValue(
         row,
-        fraction: section === 'Mortgage'
-          ? rankFraction(row, section, depositRankMetric, mortgageRateMetric)
-          : toFraction(row.rate),
-      });
+        section,
+        depositRankMetric,
+        mortgageRateMetric,
+        'advertised',
+      ));
     }
   }
   return out;
@@ -261,8 +298,8 @@ export interface RateChangeHit {
 }
 
 export function largestRateChange(
-  before: Map<string | number, { row: RateRow; fraction: number | null }>,
-  after: Map<string | number, { row: RateRow; fraction: number | null }>,
+  before: Map<string | number, TrackedRateValue>,
+  after: Map<string | number, TrackedRateValue>,
   thresholdBps: number,
   keyOf: (k: string | number) => string | number = (k) => k,
 ): RateChangeHit | null {
@@ -270,6 +307,7 @@ export function largestRateChange(
   for (const [key, nw] of after) {
     const od = before.get(keyOf(key));
     if (!od || od.fraction === null || nw.fraction === null) continue;
+    if (od.metric && nw.metric && od.metric !== nw.metric) continue;
     const bps = Math.abs(bpsBetween(nw.fraction, od.fraction) ?? 0);
     if (bps >= thresholdBps && (!biggest || bps > biggest.bps)) {
       biggest = { row: nw.row, from: od.fraction, to: nw.fraction, bps };

@@ -96,7 +96,11 @@ export function BankResponseDashboard({
           <AppText variant="tiny" color="textMuted">{active.decision.date}</AppText>
           <AppText variant="h2" style={{ textAlign: 'center' }}>{bankResponseDecisionLabel(active.decision)}</AppText>
           <AppText variant="tiny" color="textMuted">
-            {active.open ? `Observed to ${active.observedThrough}` : `Window ended ${active.windowEnd}`}
+            {active.partialHistory
+              ? `Partial history from ${active.observationStart}`
+              : active.open
+                ? `Observed to ${active.observedThrough}`
+                : `Window ended ${active.windowEnd}`}
           </AppText>
         </View>
         <DecisionArrow newer onPress={() => setDecisionIndex((index) => Math.max(0, index - 1))} />

@@ -131,7 +131,7 @@ function publishedAmount(item: DetailItem): number | null {
 }
 
 function periodicCadenceMonths(item: DetailItem): number | null {
-  const text = `${item.name ?? ''} ${item.info ?? ''} ${item.value ?? ''} ${item.additionalValue ?? ''}`;
+  const text = `${item.name ?? ''} ${item.info ?? ''} ${item.value ?? ''} ${item.additionalValue ?? ''} ${item.accrualFrequency ?? ''}`;
   const iso = /\bP(\d+)([WMY])\b/i.exec(text);
   if (iso) {
     const count = Number(iso[1]);

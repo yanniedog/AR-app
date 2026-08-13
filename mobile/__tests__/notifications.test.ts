@@ -118,6 +118,17 @@ describe('computeChanges', () => {
     expect(computeChanges(before, after, ['A|1'], 5)).toEqual([]);
   });
 
+  test.each([
+    ['starts', undefined, '0.0650'],
+    ['stops', '0.0650', undefined],
+  ])('mortgage comparison-rate publication %s without creating a false rate move', (_label, oldComparison, newComparison) => {
+    const before = core('0.0600');
+    const after = core('0.0600');
+    before.sections.Mortgage.rates[0].comparison_rate = oldComparison;
+    after.sections.Mortgage.rates[0].comparison_rate = newComparison;
+    expect(computeChanges(before, after, ['A|1'], 5)).toEqual([]);
+  });
+
   function multiRowCore(rates: { rate_index: number; rate: string }[]): CorePayload {
     return {
       schema_version: 1,
