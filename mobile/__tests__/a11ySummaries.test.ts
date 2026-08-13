@@ -24,6 +24,8 @@ describe('a11ySummaries', () => {
     expect(s).toContain('23 basis points to median');
     expect(s).toContain('842 rates from 67 lenders');
     expect(s).toContain('RBA cash rate 4.35%');
+    expect(ribbonA11ySummary(stats, 'Mortgage', null, 'headline'))
+      .toContain('lowest advertised rate 5.89%');
   });
 
   it('builds RBA chart summary', () => {

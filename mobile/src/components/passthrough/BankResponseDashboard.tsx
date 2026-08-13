@@ -13,7 +13,7 @@ import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { SegmentedControl } from '../controls';
-import { AppText, Card, Row } from '../ui';
+import { AppText, Button, Card, Row } from '../ui';
 import { MortgageSavingsSpreadChart } from './MortgageSavingsSpreadChart';
 
 const SECTIONS = [
@@ -58,20 +58,24 @@ const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseR
 });
 
 export function BankResponseDashboard({
-  payload, spreadHistory, calendar, initialDecisionDate,
+  payload, spreadHistory, calendar, initialDecisionDate, initialSection = 'Mortgage', spreadError, onRetrySpread,
 }: {
   payload: BankInsightsPayload;
   spreadHistory: BankSpreadHistoryPayload | null;
   calendar: RbaCalendar | null;
   initialDecisionDate?: string | null;
+  initialSection?: SectionKey;
+  spreadError?: string | null;
+  onRetrySpread?: () => void;
 }) {
-  const [section, setSection] = useState<SectionKey>('Mortgage');
+  const [section, setSection] = useState<SectionKey>(initialSection);
   const windows = useMemo(() => buildCompactBankResponseWindows(payload, calendar, section), [calendar, payload, section]);
   const initialIndex = Math.max(0, windows.findIndex((window) => window.decision.date === initialDecisionDate));
   const [decisionIndex, setDecisionIndex] = useState(initialIndex);
   const active = windows[Math.min(decisionIndex, Math.max(0, windows.length - 1))];
   const spreadModel = useMemo(() => spreadHistory ? buildBankSpreadChartModel(spreadHistory, calendar) : null, [calendar, spreadHistory]);
   const [selectedProvider, setSelectedProvider] = useState('');
+  useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     if (!spreadModel?.lines.length) return;
     if (!spreadModel.lines.some((line) => line.provider === selectedProvider)) setSelectedProvider(spreadModel.lines[0].provider);
@@ -104,9 +108,14 @@ export function BankResponseDashboard({
         <AppText variant="tiny" color="textMuted">Provider means · percentage points</AppText>
       </View>
       <MortgageSavingsSpreadChart model={spreadModel} selectedProvider={selectedProvider} onSelectedProviderChange={setSelectedProvider} />
-    </> : <Card variant="outlined">
-      <AppText variant="small" weight="700">Mortgage–savings history is building</AppText>
+    </> : <Card variant="outlined" style={{ gap: 8 }}>
+      <AppText variant="small" weight="700">
+        {spreadError ? 'Mortgage–savings history unavailable' : 'Mortgage–savings history is building'}
+      </AppText>
       <AppText variant="tiny" color="textMuted">The bank response table remains available.</AppText>
+      {spreadError && onRetrySpread ? (
+        <Button title="Retry history" icon="refresh" variant="secondary" onPress={onRetrySpread} />
+      ) : null}
     </Card>}
     <Card variant="outlined">
       <AppText variant="small" weight="700">What this can show</AppText>

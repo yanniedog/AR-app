@@ -105,7 +105,9 @@ export function ProductCard({
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const presentation = ratePresentation(row, section, mortgageRateMetric);
   const hasDisplayedRateOverride = displayedRate !== undefined;
-  const rateLabel = displayedRateLabel ?? presentation.primaryLabel;
+  const rateLabel = hasDisplayedRateOverride
+    ? displayedRateLabel ?? presentation.primaryLabel
+    : presentation.primaryLabel;
   const rateValue = hasDisplayedRateOverride ? displayedRate : presentation.primary;
   const rateText = formatRate(rateValue);
   const showingComparisonRate = rateLabel === 'Comparison rate';

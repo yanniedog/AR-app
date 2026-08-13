@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import { bpsBetween, formatRate } from '../data/format';
+import { useStore } from '../data/store';
 import type { RateStats } from '../data/taxonomy';
 import { ribbonA11ySummary } from '../lib/a11ySummaries';
 import type { SectionKey } from '../types';
@@ -87,14 +88,17 @@ export const Ribbon = React.memo(function Ribbon({
   domain?: { min: number; max: number } | null;
 }) {
   const theme = useTheme();
+  const mortgageRateMetric = useStore((state) => state.prefs.mortgageRateMetric);
   const meta = SECTIONS[section];
   const best = meta.lowerIsBetter ? stats.min : stats.max;
   const typical = stats.median ?? stats.mean;
   const gap = gapBps(best, typical);
   const leadingLabel = meta.lowerIsBetter ? 'Lowest' : 'Highest';
-  const metricLabel = section === 'Mortgage' ? 'comparison rate' : 'rate';
+  const metricLabel = section === 'Mortgage'
+    ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+    : 'rate';
   const accent = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  const a11ySummary = ribbonA11ySummary(stats, section, rbaRate);
+  const a11ySummary = ribbonA11ySummary(stats, section, rbaRate, mortgageRateMetric);
 
   if (best == null) {
     return <AppText variant="small" color="textFaint">No rate data</AppText>;

@@ -23,6 +23,6 @@ describe('product rate-change copy', () => {
       fromRate: 0.06,
       toRate: 0.0595,
       bps: -5,
-    }, true)).toBe('↓ 5 bps · 1 Aug 2026');
+    }, true)).toBe('Advertised ↓ 5 bps · 1 Aug 2026');
   });
 });

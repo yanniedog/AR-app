@@ -83,8 +83,8 @@ export default function RateMovesTab() {
   // useful chronological feed rather than an advanced analytics landing page.
   useEffect(() => {
     if (!decisionDate) return;
-    router.replace({ pathname: '/rba-response', params: { date: decisionDate } } as never);
-  }, [decisionDate]);
+    router.replace({ pathname: '/rba-response', params: { date: decisionDate, section: activeSection } } as never);
+  }, [activeSection, decisionDate]);
 
   const payload = useMemo(() => {
     void suitabilityRevision;
@@ -205,7 +205,7 @@ export default function RateMovesTab() {
           title="Compare bank responses"
           variant="secondary"
           icon="analytics-outline"
-          onPress={() => router.push('/rba-response')}
+          onPress={() => router.push({ pathname: '/rba-response', params: { section: activeSection } })}
           disabled={!payload}
         />
       </Card>

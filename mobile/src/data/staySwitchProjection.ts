@@ -1,6 +1,7 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { advertisedTermMonths, computeLvr, num } from './calc';
 import { toFraction } from './format';
+import { normalizedProductFacts } from './productFacts';
 import type { ProjectionFrequency } from './projectionScenario';
 import type { MortgageSwitchInputs, UserRateScenario } from './userRateScenario';
 
@@ -114,7 +115,8 @@ function cleanAmount(value: string): number | null {
 }
 
 function publishedAmount(item: DetailItem): number | null {
-  if (item.amountStatus?.trim().toLowerCase() === 'variable'
+  const amountStatus = item.amountStatus?.trim().toLowerCase();
+  if ((amountStatus && amountStatus !== 'fixed')
     || /(?:variable|rate.?based)/i.test(item.feeMethodUType ?? '')) {
     return null;
   }
@@ -145,6 +147,8 @@ function periodicCadenceMonths(item: DetailItem): number | null {
 }
 
 function periodicFeeAmount(item: DetailItem): number | null {
+  const amountStatus = item.amountStatus?.trim().toLowerCase();
+  if (amountStatus && amountStatus !== 'fixed') return null;
   const fixed = publishedAmount(item);
   if (fixed != null) return fixed;
   if (item.amountStatus?.trim().toLowerCase() === 'variable'
@@ -282,9 +286,15 @@ function addUtcMonths(value: Date, months: number): Date {
 }
 
 function hasPublishedOffset(detail: ProductDetail | null | undefined): boolean {
-  return (detail?.features ?? []).some((item) =>
+  const legacy = (detail?.features ?? []).some((item) =>
     (item.label ?? item.name ?? '').trim().toUpperCase() === 'OFFSET',
   );
+  if (legacy) return true;
+  return normalizedProductFacts(detail).some((fact) => {
+    if (fact.kind !== 'feature' || fact.value !== true) return false;
+    const leaf = fact.canonicalKey.split(/[.:/]/).filter(Boolean).at(-1)?.toUpperCase();
+    return fact.sourceType?.trim().toUpperCase() === 'OFFSET' || leaf === 'OFFSET';
+  });
 }
 
 interface MutableLeg {
@@ -376,9 +386,16 @@ export function buildStaySwitchProjection({
   const modelMonths = targetIsFixed && publishedFixedMonths
     ? Math.min(months, publishedFixedMonths)
     : months;
+  const projectionInputs = scenario.projections.mortgage;
   const invalidSwitchValues = [
     ...FEE_KEYS.map((key) => [scenario.mortgageSwitch[key], key] as const),
     [scenario.mortgageSwitch.cashback, 'cashback'] as const,
+  ].filter(([value]) => value.trim() && cleanAmount(value) == null).map(([, label]) => label);
+  const invalidProjectionValues = [
+    [projectionInputs.periodicAmount, 'regular repayment'],
+    [projectionInputs.extraRepaymentAmount, 'extra repayment'],
+    [projectionInputs.offsetContributionAmount, 'offset contribution'],
+    [projectionInputs.offsetBalance, 'offset balance'],
   ].filter(([value]) => value.trim() && cleanAmount(value) == null).map(([, label]) => label);
   const missing = [
     ...(balance > 0 && balance <= MAX_AMOUNT ? [] : ['current loan balance']),
@@ -387,10 +404,10 @@ export function buildStaySwitchProjection({
     ...(months > 0 && months <= MAX_MONTHS ? [] : ['remaining term from 1 month to 50 years']),
     ...(targetIsFixed && !publishedFixedMonths ? ['published target fixed period'] : []),
     ...invalidSwitchValues.map((label) => `${label} from $0 to $1 trillion`),
+    ...invalidProjectionValues.map((label) => `${label} from $0 to $1 trillion`),
   ];
   if (missing.length) return emptyProjection(target, asAt, fees, missing);
 
-  const projectionInputs = scenario.projections.mortgage;
   const enteredRepayment = monthlyAmount(projectionInputs.periodicAmount, projectionInputs.periodicFrequency);
   const stayRequired = requiredMonthlyRepayment(balance, currentRate!, months);
   const stayScheduled = enteredRepayment || stayRequired;
@@ -414,7 +431,14 @@ export function buildStaySwitchProjection({
       : publishedTargetOffset ? 'published' : 'not-published'
     : 'entered';
 
-  const switchOpeningBalance = balance + fees.financedAmount;
+  const cashFundedSwitchCost = scenario.mortgageSwitch.fundingMethod === 'cash-or-offset'
+    ? Math.max(0, fees.netSwitchCost)
+    : 0;
+  const retainedOpeningOffset = Math.max(0, openingOffset - cashFundedSwitchCost);
+  const switchOpeningBalance = Math.max(
+    0,
+    balance + fees.financedAmount - (targetHasOffset ? 0 : retainedOpeningOffset),
+  );
   const switchRequired = requiredMonthlyRepayment(switchOpeningBalance, targetRate!, months);
   const targetAllocationShortfall = Math.max(0, switchRequired - householdAllocation);
   const targetPrincipalPayment = targetHasOffset
@@ -434,14 +458,14 @@ export function buildStaySwitchProjection({
     contractualPayoffDate: null,
   };
   const switchOpeningOffset = targetHasOffset
-    ? Math.max(0, openingOffset - (scenario.mortgageSwitch.fundingMethod === 'cash-or-offset' ? Math.max(0, fees.netSwitchCost) : 0))
+    ? retainedOpeningOffset
     : 0;
   const switching: MutableLeg = {
     balance: switchOpeningBalance,
     offset: switchOpeningOffset,
     interest: 0,
-    effectiveDebtFreeDate: targetHasOffset && switchOpeningOffset >= switchOpeningBalance ? asAt : null,
-    contractualPayoffDate: null,
+    effectiveDebtFreeDate: switchOpeningBalance <= 0.005 || (targetHasOffset && switchOpeningOffset >= switchOpeningBalance) ? asAt : null,
+    contractualPayoffDate: switchOpeningBalance <= 0.005 ? asAt : null,
   };
   const points: StaySwitchPoint[] = [];
   let breakEvenDate = fees.netSwitchCost <= 0 ? asAt : null;

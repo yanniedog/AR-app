@@ -67,6 +67,7 @@ export function AppNavigationMenu() {
   const insets = useSafeAreaInsets();
   const section = useStore((state) =>
     resolveInterestSection(state.prefs.interests, state.activeSection));
+  const interests = useStore((state) => state.prefs.interests);
   const drawerWidth = Math.min(360, Math.max(280, width * 0.88));
 
   const openDestination = useCallback((destination: AppDestination) => {
@@ -119,7 +120,12 @@ export function AppNavigationMenu() {
                 >
                   {group.label.toUpperCase()}
                 </AppText>
-                {group.destinations.map((destination) => {
+                {group.destinations.filter((destination) => {
+                  if (destination.id === 'home-loans') return interests.includes('Mortgage');
+                  if (destination.id === 'savings') return interests.includes('Savings');
+                  if (destination.id === 'term-deposits') return interests.includes('TD');
+                  return true;
+                }).map((destination) => {
                   const selected = destinationIsActive(destination.id, pathname);
                   return (
                     <Pressable

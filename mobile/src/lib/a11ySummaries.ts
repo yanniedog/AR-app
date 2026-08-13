@@ -1,6 +1,7 @@
 import { SECTIONS } from '../constants';
 import { formatRate } from '../data/format';
 import type { RateStats } from '../data/taxonomy';
+import type { MortgageRateMetric } from '../data/selectors';
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
 
 /** Visible label prefix so rate color is not the only cue. */
@@ -14,6 +15,7 @@ export function ribbonA11ySummary(
   stats: RateStats,
   section: SectionKey,
   rbaRate?: number | null,
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): string {
   const title = SECTIONS[section].title;
   if (stats.min === null || stats.max === null) {
@@ -23,7 +25,9 @@ export function ribbonA11ySummary(
   const typical = stats.median ?? stats.mean;
   const gap = best != null && typical != null ? Math.round(Math.abs(best - typical) * 10000) : null;
   const leading = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
-  const metric = section === 'Mortgage' ? 'comparison rate' : 'rate';
+  const metric = section === 'Mortgage'
+    ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+    : 'rate';
   const parts = [
     `${title} market summary`,
     best != null ? `${leading} ${metric} ${formatRate(best)}` : null,

@@ -58,7 +58,8 @@ function variableRange(item: DetailItem): string | null {
 export function formatFeeValue(item: DetailItem): string {
   const feeType = String(item.label ?? '').toUpperCase();
   const method = String(item.feeMethodUType ?? '').toLowerCase();
-  const isVariable = item.amountStatus === 'variable' || method === 'variable' || feeType === 'VARIABLE';
+  const amountStatus = item.amountStatus?.trim().toLowerCase();
+  const isVariable = amountStatus === 'variable' || method === 'variable' || feeType === 'VARIABLE';
   if (isVariable) return variableRange(item) ?? 'Amount not published';
 
   const rate = item.rateBased?.rate ?? item.balanceRate ?? item.transactionRate ?? item.accruedRate;
@@ -71,6 +72,8 @@ export function formatFeeValue(item: DetailItem): string {
     const period = cadence(item.rateBased?.accrualFrequency ?? item.accrualFrequency);
     return period ? `${rateValue}, ${period}` : rateValue;
   }
+
+  if (amountStatus && amountStatus !== 'fixed') return 'Amount not published';
 
   const fixed = money(item.amount ?? item.fixedAmount?.amount, item.currency);
   if (fixed) {

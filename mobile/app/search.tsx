@@ -88,6 +88,7 @@ export default function Search() {
     scope?: string | string[];
     query?: string | string[];
     sub?: string | string[];
+    compare?: string | string[];
   }>();
   const secRaw = scalarRouteParam(params.section);
   const pathRaw = scalarRouteParam(params.path);
@@ -95,6 +96,7 @@ export default function Search() {
   const scopeRaw = scalarRouteParam(params.scope);
   const queryRaw = scalarRouteParam(params.query);
   const subRaw = scalarRouteParam(params.sub);
+  const compareRaw = scalarRouteParam(params.compare);
   const section = (SECTION_ORDER.includes(secRaw as SectionKey) ? secRaw : 'Mortgage') as SectionKey;
   const path = useMemo(() => (pathRaw ?? '').split('.').filter(Boolean), [pathRaw]);
   const hierarchyScoped = scopeRaw === 'hierarchy';
@@ -154,12 +156,16 @@ export default function Search() {
       : profileToFilters(useStore.getState().prefs.profileFilters, section, EMPTY_FILTERS),
   );
   const [filterOpen, setFilterOpen] = useState(false);
-  const [selectMode, setSelectMode] = useState(false);
+  const [selectMode, setSelectMode] = useState(compareRaw === '1');
   const [selected, setSelected] = useState<string[]>([]);
 
   useEffect(() => {
     setSortKey(compatibleSortKey(sortRaw, section, mortgageRateMetric));
   }, [mortgageRateMetric, section, sortRaw]);
+
+  useEffect(() => {
+    if (compareRaw === '1') setSelectMode(true);
+  }, [compareRaw]);
 
   useEffect(() => {
     if (!restoredSub) return;

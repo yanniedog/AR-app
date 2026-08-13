@@ -32,5 +32,7 @@ describe('scenario catalogue options', () => {
   it('returns deduplicated optional exact tiers in product order', () => {
     expect(currentProductOptions(rows, 'West Bank').map((item) => `${item.product_name}:${item.rate_index}`))
       .toEqual(['Alpha loan:1', 'Zulu loan:2']);
+    expect(currentProductOptions(rows, 'ALPHA BANK').map((item) => item.product_name).sort())
+      .toEqual(['Saver 10', 'Saver 2']);
   });
 });

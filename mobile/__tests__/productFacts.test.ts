@@ -152,4 +152,15 @@ describe('productFacts', () => {
       'Balance over $50,000',
     ]);
   });
+
+  test('keeps a valid standalone tier visible when it has no association ids', () => {
+    const detail: ProductDetail = { facts: [{
+      id: 'standalone-tier', kind: 'tier', canonicalKey: 'tier.balance',
+      label: 'Balance tier', minValue: 1000, maxValue: 5000, unit: 'AUD',
+    }] };
+    const model = productFactDisplayModel(detail);
+    expect(model.rateClusters).toEqual([]);
+    expect(model.groups.flatMap((group) => group.facts).map((fact) => fact.id))
+      .toContain('standalone-tier');
+  });
 });

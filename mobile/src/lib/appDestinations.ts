@@ -83,7 +83,12 @@ export const APP_DESTINATION_GROUPS: readonly AppDestinationGroup[] = [
         href: (section) => ({ pathname: '/search', params: { section } }),
       },
       { id: 'banks', label: 'Banks', icon: 'business-outline', href: '/banks' },
-      { id: 'compare', label: 'Compare selected', icon: 'git-compare-outline', href: '/compare' },
+      {
+        id: 'compare',
+        label: 'Compare products',
+        icon: 'git-compare-outline',
+        href: (section) => ({ pathname: '/search', params: { section, compare: '1' } }),
+      },
     ],
   },
   {

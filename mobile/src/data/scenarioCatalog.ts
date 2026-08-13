@@ -20,8 +20,9 @@ export function alphabeticalScenarioProviders(rows: RateRow[]): string[] {
 /** Exact selectable tiers for a current-product match, sorted by product then rate index. */
 export function currentProductOptions(rows: RateRow[], provider: string): RateRow[] {
   const seen = new Set<string>();
+  const providerKey = provider.trim().toLocaleLowerCase('en-AU');
   return rows
-    .filter((row) => row.provider === provider)
+    .filter((row) => row.provider.trim().toLocaleLowerCase('en-AU') === providerKey)
     .filter((row) => {
       const token = `${row.product_key}:${row.rate_index ?? ''}`;
       if (seen.has(token)) return false;

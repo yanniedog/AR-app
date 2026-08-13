@@ -498,7 +498,7 @@ export function productFactDisplayModel(
       ...group,
       facts: group.facts.filter((fact) =>
         fact.kind !== 'rate' &&
-        fact.kind !== 'tier' &&
+        !(fact.kind === 'tier' && clusteredSignatures.has(productFactSignature(fact))) &&
         !clusteredSignatures.has(productFactSignature(fact)),
       ),
     }))

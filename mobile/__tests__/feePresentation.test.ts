@@ -29,5 +29,9 @@ describe('fee presentation', () => {
 
   it('labels missing fee pricing explicitly', () => {
     expect(formatFeeValue({ label: 'EVENT', name: 'Unpriced fee' })).toBe('Amount not published');
+    expect(formatFeeValue({ label: 'EVENT', amountStatus: 'unpublished', amount: '0.00' }))
+      .toBe('Amount not published');
+    expect(formatFeeValue({ label: 'EVENT', amountStatus: 'rate', amount: '0.00' }))
+      .toBe('Amount not published');
   });
 });

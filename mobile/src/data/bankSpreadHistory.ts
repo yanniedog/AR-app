@@ -140,18 +140,19 @@ export function buildBankSpreadChartModel(
   const lines = Object.entries(payload.banks)
     .map(([provider, series]) => {
       const points: BankSpreadPlotPoint[] = [];
+      let previousCompleteMembership = '';
       for (let index = 0; index < payload.run_dates.length; index += 1) {
         const gap = series.gap[index];
         const mortgage = series.mortgage_mean[index];
         const savings = series.savings_mean[index];
         if (series.quality[index] !== 'complete' || gap == null || mortgage == null || savings == null) continue;
-        const previous = index > 0 ? `${series.mortgage_hash[index - 1]}:${series.savings_hash[index - 1]}` : '';
         const current = `${series.mortgage_hash[index]}:${series.savings_hash[index]}`;
         points.push({
           date: payload.run_dates[index], runIndex: index, gapPp: gap * 100,
           mortgagePct: mortgage * 100, savingsPct: savings * 100,
-          membershipChanged: Boolean(previous && current !== previous),
+          membershipChanged: Boolean(previousCompleteMembership && current !== previousCompleteMembership),
         });
+        previousCompleteMembership = current;
       }
       return { provider, points };
     })

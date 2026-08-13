@@ -34,7 +34,7 @@ function firstEvent(
   events: BankRateEvent[], provider: string, section: SectionKey, start: string, end: string,
 ): BankRateEvent | null {
   return events
-    .filter((event) => event.provider === provider && event.section === section && event.date > start && event.date <= end)
+    .filter((event) => event.provider === provider && event.section === section && event.date >= start && event.date <= end)
     .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
 }
 
@@ -46,6 +46,7 @@ export function buildCompactBankResponseWindows(
   const decisions = (calendar?.decisions ?? [])
     .filter((decision) => decision.date <= payload.run_date)
     .sort((a, b) => a.date.localeCompare(b.date));
+  const ledgerStart = payload.run_dates[0] ?? payload.run_date;
   return decisions.map((decision, index) => {
     const next = decisions[index + 1];
     const windowEnd = next ? dayBefore(next.date) : payload.run_date;
@@ -63,7 +64,7 @@ export function buildCompactBankResponseWindows(
       };
     });
     return { decision, observedThrough: payload.run_date, windowEnd, open: !next, rows };
-  }).reverse();
+  }).filter((window) => window.windowEnd >= ledgerStart).reverse();
 }
 
 export function bankResponseDecisionLabel(decision: RbaDecisionEntry): string {

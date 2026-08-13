@@ -123,6 +123,8 @@ describe('stay versus switch projection', () => {
     expect(result.targetHasOffset).toBe(false);
     expect(result.switching!.offsetContribution).toBe(0);
     expect(result.switching!.principalPayment).toBeCloseTo(result.householdAllocation, 8);
+    expect(result.switching!.openingBalance).toBe(470000);
+    expect(result.points[0].switchNetDebt).toBe(result.points[0].stayNetDebt);
     expect(result.warnings.join(' ')).toMatch(/no target offset feature/i);
   });
 
@@ -131,6 +133,24 @@ describe('stay versus switch projection', () => {
     expect(result.offsetEvidence).toBe('unavailable');
     expect(result.targetHasOffset).toBe(false);
     expect(result.warnings.join(' ')).toMatch(/details are unavailable/i);
+  });
+
+  it('reads target offset support from normalized facts', () => {
+    const result = buildStaySwitchProjection({
+      scenario: scenario(),
+      target: TARGET,
+      targetDetail: {
+        facts: [{
+          id: 'offset', kind: 'feature', canonicalKey: 'feature.offset',
+          sourceType: 'OFFSET', value: true, unit: 'boolean',
+        }],
+      },
+      now: NOW,
+    });
+    expect(result.targetHasOffset).toBe(true);
+    expect(result.offsetEvidence).toBe('published');
+    expect(result.switching!.openingBalance).toBe(500000);
+    expect(result.points[0].switchOffset).toBe(30000);
   });
 
   it('reduces opening offset for cash-funded costs and increases principal for loan-funded costs', () => {
@@ -198,5 +218,18 @@ describe('stay versus switch projection', () => {
     expect(result.points).toHaveLength(25);
     expect(result.switching!.contractualPayoffDate).toBeNull();
     expect(result.warnings.join(' ')).toMatch(/no unknown reversion rate/i);
+  });
+
+  it.each([
+    ['periodicAmount', '-1'],
+    ['extraRepaymentAmount', 'not an amount'],
+    ['offsetContributionAmount', '1000000000001'],
+    ['offsetBalance', '-100'],
+  ] as const)('rejects invalid projection input %s', (field, value) => {
+    const invalid = scenario();
+    invalid.projections.mortgage[field] = value;
+    const result = buildStaySwitchProjection({ scenario: invalid, target: TARGET, targetDetail: OFFSET_DETAIL, now: NOW });
+    expect(result.ready).toBe(false);
+    expect(result.missing.join(' ')).toMatch(/from \$0 to \$1 trillion/i);
   });
 });

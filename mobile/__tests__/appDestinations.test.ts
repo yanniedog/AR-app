@@ -35,6 +35,12 @@ describe('app destination registry', () => {
       pathname: '/search',
       params: { section: 'Savings' },
     });
+    const compare = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations)
+      .find((destination) => destination.id === 'compare');
+    expect(destinationHref(compare!, 'Savings')).toEqual({
+      pathname: '/search',
+      params: { section: 'Savings', compare: '1' },
+    });
   });
 
   it('maps focused routes back to their menu destination', () => {

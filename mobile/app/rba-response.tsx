@@ -18,18 +18,28 @@ export default function RbaResponseScreen() {
   const calendar = useStore((state) => state.rbaCalendar);
   const rawPayload = useStore((state) => state.bankInsights);
   const spreadHistory = useStore((state) => state.bankSpreadHistory);
+  const spreadError = useStore((state) => state.bankSpreadHistoryError);
   const error = useStore((state) => state.bankInsightsError);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
   const ensureBankSpreadHistory = useStore((state) => state.ensureBankSpreadHistory);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
+  const retryBankSpreadHistory = useStore((state) => state.retryBankSpreadHistory);
   const ensureDetails = useStore((state) => state.ensureDetails);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const suitabilityRevision = useSuitabilityRevision();
   const [retrying, setRetrying] = useState(false);
-  const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
+  const activeSection = useStore((state) => state.activeSection);
+  const { date: decisionDateRaw, section: sectionRaw } = useLocalSearchParams<{
+    date?: string | string[];
+    section?: string | string[];
+  }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
+  const requestedSection = scalarRouteParam(sectionRaw);
+  const initialSection = requestedSection === 'Mortgage' || requestedSection === 'Savings' || requestedSection === 'TD'
+    ? requestedSection
+    : activeSection;
 
   useEffect(() => {
     if (!core) return;
@@ -103,6 +113,9 @@ export default function RbaResponseScreen() {
       spreadHistory={spreadHistory}
       calendar={calendar}
       initialDecisionDate={decisionDate}
+      initialSection={initialSection}
+      spreadError={spreadError}
+      onRetrySpread={() => void retryBankSpreadHistory()}
     />
   );
 }

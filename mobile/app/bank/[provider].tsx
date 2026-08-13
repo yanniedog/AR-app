@@ -516,7 +516,6 @@ export default function BankDetail() {
             key={r.product_key}
             row={r}
             section={section}
-            displayedRateLabel="Current rate"
             showLenderAction={false}
             logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
             onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}

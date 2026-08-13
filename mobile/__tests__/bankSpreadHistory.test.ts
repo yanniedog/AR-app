@@ -15,7 +15,7 @@ const raw = {
     Zeta: {
       mortgage_mean: [0.061, null, 0.06], savings_mean: [0.041, null, 0.04], gap: [0.02, null, 0.02],
       mortgage_count: [2, 0, 2], savings_count: [2, 0, 2],
-      mortgage_hash: ['m1', '', 'm2'], savings_hash: ['s1', '', 's2'],
+      mortgage_hash: ['m1', '', 'm1'], savings_hash: ['s1', '', 's1'],
       quality: ['complete', 'missing_both', 'complete'],
     },
     Alpha: {
@@ -52,6 +52,7 @@ describe('bank spread history', () => {
     const model = buildBankSpreadChartModel(payload, calendar);
     expect(model.lines.map((line) => line.provider)).toEqual(['Alpha', 'Zeta']);
     expect(model.lines[1].points.map((point) => point.runIndex)).toEqual([0, 2]);
+    expect(model.lines[1].points[1].membershipChanged).toBe(false);
     expect(model.lines[0].points[0].gapPp).toBeCloseTo(2);
     expect(model.decisions.map((decision) => decision.outcome)).toEqual(['hold', 'cut']);
     expect(model.minGapPp).toBeLessThan(2);

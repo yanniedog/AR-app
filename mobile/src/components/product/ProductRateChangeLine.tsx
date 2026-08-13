@@ -29,7 +29,7 @@ export function productRateChangeText(
   const verb = summary.bps > 0 ? 'rose' : 'fell';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? `${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
+    ? `Advertised ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
     : `Published rate ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
         summary.fromRate,
       )} → ${formatRate(summary.toRate)}`;
