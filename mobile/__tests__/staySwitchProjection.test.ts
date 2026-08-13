@@ -38,11 +38,13 @@ describe('published switch fee extraction', () => {
       { label: 'UPFRONT', name: 'Application fee', value: '600' },
       { label: 'UPFRONT', name: 'Valuation fee', info: 'At cost' },
       { label: 'UPFRONT', name: 'Establishment fee', value: '299', info: 'Currently waived' },
+      { label: 'UPFRONT', name: 'Package fee', value: '395', info: 'Waived for package customers' },
     ] };
     expect(extractPublishedSwitchFees(current, target)).toEqual([
       expect.objectContaining({ key: 'currentBankExitFees', amount: 350 }),
       expect.objectContaining({ key: 'applicationFees', amount: 600 }),
       expect.objectContaining({ key: 'applicationFees', amount: 0 }),
+      expect.objectContaining({ key: 'otherUpfrontFees', amount: 395 }),
     ]);
   });
 
@@ -74,6 +76,20 @@ describe('published switch fee extraction', () => {
       },
     ] });
     expect(costs.targetPeriodicFeesMonthly).toBe(12);
+    expect(costs.unpricedPeriodicFees).toEqual([]);
+  });
+
+  it('prices a day-based structured periodic fee', () => {
+    const costs = resolveSwitchCosts(scenario().mortgageSwitch, null, { fees: [
+      {
+        label: 'PERIODIC',
+        name: 'Daily service fee',
+        fixedAmount: { amount: '1' },
+        amountStatus: 'fixed',
+        accrualFrequency: 'P1D',
+      },
+    ] });
+    expect(costs.targetPeriodicFeesMonthly).toBeCloseTo(365 / 12, 8);
     expect(costs.unpricedPeriodicFees).toEqual([]);
   });
 

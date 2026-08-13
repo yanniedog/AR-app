@@ -127,15 +127,18 @@ function publishedAmount(item: DetailItem): number | null {
   const amount = Number(raw.replace(/[$,\s]/g, ''));
   if (!Number.isFinite(amount) || amount < 0 || amount > MAX_AMOUNT) return null;
   const text = `${item.name ?? ''} ${item.info ?? ''}`;
-  if (/\b(?:waived|no fee|fee[- ]free|nil)\b/i.test(text)) return 0;
+  const feeFree = /\b(?:waived|no fee|fee[- ]free|nil)\b/i.test(text);
+  const conditional = /\b(?:if|when|where|for|unless|provided|eligible|subject to)\b/i.test(text);
+  if (feeFree && !conditional) return 0;
   return amount;
 }
 
 function periodicCadenceMonths(item: DetailItem): number | null {
   const text = `${item.name ?? ''} ${item.info ?? ''} ${item.value ?? ''} ${item.additionalValue ?? ''} ${item.accrualFrequency ?? ''}`;
-  const iso = /\bP(\d+)([WMY])\b/i.exec(text);
+  const iso = /\bP(\d+)([DWMY])\b/i.exec(text);
   if (iso) {
     const count = Number(iso[1]);
+    if (iso[2].toUpperCase() === 'D') return count * 12 / 365;
     if (iso[2].toUpperCase() === 'W') return count * 12 / 52;
     if (iso[2].toUpperCase() === 'Y') return count * 12;
     return count;

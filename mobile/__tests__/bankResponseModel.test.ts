@@ -9,6 +9,7 @@ const payload = {
   banks: {
     Zeta: { Mortgage: { median: [0.06, 0.06, 0.059], best: [0.055, 0.055, 0.054], count: [2, 2, 2] } },
     Alpha: { Mortgage: { median: [0.061, 0.061, 0.06], best: [0.056, 0.056, 0.055], count: [3, 3, 3] } },
+    Snapshot: { Mortgage: { median: [null, null, 0.07], best: [null, null, 0.065], count: [null, null, 1] } },
   },
   events: [
     { date: '2026-05-06', provider: 'Zeta', section: 'Mortgage', dir: 'hike', moved: 1, total: 2, avg_bps: 10 },
@@ -37,6 +38,7 @@ describe('compact bank response windows', () => {
     expect(hold?.windowEnd).toBe('2026-05-09');
     expect(hold).toMatchObject({ partialHistory: false, observationStart: '2026-05-05' });
     expect(cut?.rows[0]).toMatchObject({ movePp: -0.15, daysAfter: 0 });
+    expect(cut?.rows.map((row) => row.provider)).toContain('Snapshot');
     expect(windows.some((window) => window.decision.date === '2026-03-01')).toBe(false);
   });
 

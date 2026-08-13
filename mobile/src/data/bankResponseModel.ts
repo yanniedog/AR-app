@@ -40,6 +40,21 @@ function firstEvent(
     .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
 }
 
+function hasSeriesObservation(
+  payload: BankInsightsPayload,
+  provider: string,
+  section: SectionKey,
+  start: string,
+  end: string,
+): boolean {
+  const series = payload.banks[provider]?.[section];
+  if (!series) return false;
+  return payload.run_dates.some((date, index) =>
+    date >= start
+    && date <= end
+    && [series.median[index], series.best[index], series.count[index]].some((value) => value != null));
+}
+
 export function buildCompactBankResponseWindows(
   payload: BankInsightsPayload,
   calendar: RbaCalendar | null | undefined,
@@ -55,7 +70,9 @@ export function buildCompactBankResponseWindows(
     const observationStart = decision.date < ledgerStart ? ledgerStart : decision.date;
     const partialHistory = observationStart !== decision.date;
     const providers = Object.entries(payload.banks)
-      .filter(([, sections]) => Boolean(sections[section]))
+      .filter(([provider]) =>
+        payload.events.some((event) => event.provider === provider && event.section === section)
+        || hasSeriesObservation(payload, provider, section, observationStart, windowEnd))
       .map(([provider]) => provider)
       .sort((a, b) => a.localeCompare(b));
     const rows = providers.map((provider) => {
