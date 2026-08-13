@@ -13,6 +13,7 @@ export const OPTIONAL_MANIFEST_KEYS = [
   'search_index',
   'history_banks',
   'bank_history',
+  'bank_spread_history',
   'rba_calendar',
 ] as const;
 

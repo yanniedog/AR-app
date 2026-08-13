@@ -15,7 +15,7 @@ import {
   humanizeEnum,
   isBroadlyAvailable,
 } from '../src/data/format';
-import { rankFraction, rankedRateLabelForSection } from '../src/data/selectors';
+import { rankFraction, rankedRateLabelForRow } from '../src/data/selectors';
 import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -255,11 +255,16 @@ export default function Compare() {
     if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
     return true;
   });
-  const rankedRateLabels = entries.map((entry) => rankedRateLabelForSection(
+  const rankedRateLabels = entries.map((entry) => rankedRateLabelForRow(
+    entry.row,
     entry.section,
     depositRankMetric,
     mortgageRateMetric,
   ));
+  const commonRankedRateLabel = sameSection
+    && new Set(rankedRateLabels).size === 1
+    ? rankedRateLabels[0]
+    : 'Ranked rate';
   // A rate field is globally redundant only when it is the ranked metric for
   // every entry. Mixed categories suppress their ranked row per card instead.
   const detailRows = attrRows.filter((row) =>
@@ -323,7 +328,8 @@ export default function Compare() {
           {entries.map((entry, idx) => {
             const fraction = fractions[idx];
             const isBest = bestVal !== null && fraction === bestVal;
-            const rankedRateLabel = rankedRateLabelForSection(
+            const rankedRateLabel = rankedRateLabelForRow(
+              entry.row,
               entry.section,
               depositRankMetric,
               mortgageRateMetric,
@@ -427,9 +433,9 @@ export default function Compare() {
                 },
               ]}
             />
-             {labelCell('Ranked rate', RATE_ROW_H, '700')}
-             {productHistoryAvailable ? labelCell('Best-rate move', CHANGE_ROW_H) : null}
-             {attrRows.map((r) => labelCell(r.label, ROW_H))}
+             {labelCell(commonRankedRateLabel ?? 'Ranked rate', RATE_ROW_H, '700')}
+             {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
+             {detailRows.map((r) => labelCell(r.label, ROW_H))}
           </View>
 
           {/* Horizontally scrollable product columns */}
@@ -502,7 +508,7 @@ export default function Compare() {
                        : null}
 
                      {/* Attribute rows */}
-                    {attrRows.map((r) =>
+                    {detailRows.map((r) =>
                       valueCell(
                         r.label,
                         ROW_H,
@@ -528,13 +534,13 @@ export default function Compare() {
       <Divider />
       <AppText variant="tiny" color="textFaint">
         {sameSection
-          ? `${entries.length} products · “Best” uses ${entries[0].section === 'Mortgage'
-            ? mortgageRateMetric === 'comparison' ? 'lowest comparison rate' : 'lowest advertised rate'
-            : depositRankMetric === 'base' ? 'highest published ongoing/base rate' : 'highest headline rate'}${compact ? '' : ' · scroll for more columns'}`
-          : `${entries.length} products · mixed categories — no best badge`}
+          ? `${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
+            ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+            : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`
+          : `${entries.length} products · mixed categories · no rate leader highlighted`}
       </AppText>
       <AppText variant="tiny" color="textFaint">
-        Missing means not published. Confirm current rates and conditions with the lender.
+        Missing means not published. Confirm current rates and conditions with the bank.
       </AppText>
       </ScrollView>
     </Screen>

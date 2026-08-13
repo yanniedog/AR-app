@@ -12,6 +12,7 @@ import type { PayloadProgressSnapshot } from './downloadProgress';
 import type { FilterSnapshot, Subscription } from './subscriptions';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
+import type { BankSpreadHistoryPayload } from './bankSpreadHistory';
 import type { RbaCalendar } from './rbaCalendar';
 import type { HistoryBanksPayload } from './historyPayload';
 import type { ProductHistoryPayload, ProductHistoryPurpose } from './productHistory';
@@ -46,6 +47,8 @@ export interface Prefs {
   /** How home-loan lists rank when sorting by rate: advertised headline vs
    *  fee-inclusive comparison rate. Mirrors MortgageRateMetric in data/selectors. */
   mortgageRateMetric: 'headline' | 'comparison';
+  /** Marks the one-time comparison-rate default migration. */
+  mortgageRatePreferenceVersion: number;
   /** Fulltext search across product info (off by default). */
   enableDeepSearch: boolean;
   /** Section market-history charts in Outlook (off by default). */
@@ -59,8 +62,6 @@ export interface Prefs {
   dismissedUpdateBuild: string | null;
   /** Require fingerprint/Face ID (with device-credential fallback) on app start. */
   appLockEnabled: boolean;
-  /** Unlocked by tapping the Settings version row; reveals audit/debug tools. */
-  developerToolsUnlocked: boolean;
   /** Saved product profile — default filters applied across the app. */
   profileFilters: ProfileFilters;
   /** Persisted mortgage/savings calculator inputs (so the calc remembers your situation). */
@@ -68,6 +69,21 @@ export interface Prefs {
 }
 
 export const CURRENT_PRIVACY_CHOICE_VERSION = 2;
+export const CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION = 1;
+
+export function migratedMortgageRatePreference(
+  persisted?: Partial<Prefs>,
+): Pick<Prefs, 'mortgageRateMetric' | 'mortgageRatePreferenceVersion'> {
+  const migrated =
+    persisted?.mortgageRatePreferenceVersion === CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION;
+  return {
+    mortgageRateMetric:
+      migrated && (persisted?.mortgageRateMetric === 'headline' || persisted.mortgageRateMetric === 'comparison')
+        ? persisted.mortgageRateMetric
+        : 'comparison',
+    mortgageRatePreferenceVersion: CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION,
+  };
+}
 
 export const DEFAULT_PREFS: Prefs = {
   themeMode: 'system',
@@ -83,7 +99,8 @@ export const DEFAULT_PREFS: Prefs = {
   apkUpdatesWifiOnly: true,
   includeNonStandard: false,
   depositRankMetric: 'base',
-  mortgageRateMetric: 'headline',
+  mortgageRateMetric: 'comparison',
+  mortgageRatePreferenceVersion: CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION,
   // Both are free. Ship them on so charts, history, and fee/feature search are
   // discoverable without a trip to Settings.
   enableDeepSearch: true,
@@ -94,7 +111,6 @@ export const DEFAULT_PREFS: Prefs = {
   rateMoveThresholdBps: RATE_MOVE_BPS_THRESHOLD,
   dismissedUpdateBuild: null,
   appLockEnabled: false,
-  developerToolsUnlocked: false,
   profileFilters: { ...EMPTY_PROFILE },
   calc: { ...EMPTY_CALC },
 };
@@ -117,6 +133,8 @@ export interface AppState {
   /** Per-bank history + rate-move events (Pro bank intelligence). */
   bankInsights: BankInsightsPayload | null;
   bankInsightsError: string | null;
+  bankSpreadHistory: BankSpreadHistoryPayload | null;
+  bankSpreadHistoryError: string | null;
   /** RBA decision calendar + forward schedule for the countdown (in-memory only). */
   rbaCalendar: RbaCalendar | null;
   rbaCalendarSha: string | null;
@@ -170,6 +188,7 @@ export interface AppState {
   ensureSearchIndex: () => Promise<void>;
   ensureHistoryBanks: (opts?: { force?: boolean }) => Promise<void>;
   ensureBankInsights: (opts?: { force?: boolean }) => Promise<void>;
+  ensureBankSpreadHistory: (opts?: { force?: boolean }) => Promise<void>;
   ensureRbaCalendar: () => Promise<void>;
   ensureProductHistory: (opts?: {
     force?: boolean;
@@ -177,6 +196,7 @@ export interface AppState {
   }) => Promise<void>;
   retryHistoryBanks: () => Promise<void>;
   retryBankInsights: () => Promise<void>;
+  retryBankSpreadHistory: () => Promise<void>;
   getDetail: (productKey: string) => ProductDetail | null;
   toggleFavorite: (key: string) => void;
   isFavorite: (key: string) => boolean;

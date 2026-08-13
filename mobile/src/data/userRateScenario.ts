@@ -15,16 +15,70 @@ export interface DepositScenario {
   currentRate: string;
 }
 
+export type ScenarioSection = 'mortgage' | 'savings' | 'termDeposit';
+
+/** Sentinel kept out of the CDR provider namespace for an unlisted institution. */
+export const NOT_LISTED_PROVIDER = '__not_listed__';
+
+export interface CurrentProductReference {
+  /** Exact CDR provider name, the not-listed sentinel, or empty until selected. */
+  provider: string;
+  /** Optional exact catalogue match. The entered balance/rate remain authoritative. */
+  productKey: string;
+  rateIndex: number | null;
+}
+
+export type CurrentProductReferences = Record<ScenarioSection, CurrentProductReference>;
+
+export type OffsetAvailabilityOverride = 'auto' | 'yes' | 'no';
+export type SwitchFundingMethod = 'cash-or-offset' | 'new-loan';
+
+/**
+ * User-editable switch assumptions. Empty fee fields defer to published CDR
+ * evidence for the selected current and target products.
+ */
+export interface MortgageSwitchInputs {
+  currentBankExitFees: string;
+  applicationFees: string;
+  valuationFees: string;
+  settlementFees: string;
+  governmentAndLegalFees: string;
+  otherUpfrontFees: string;
+  cashback: string;
+  fundingMethod: SwitchFundingMethod;
+  targetOffsetAvailable: OffsetAvailabilityOverride;
+}
+
 export interface UserRateScenario {
-  version: 2;
+  version: 3;
   mortgage: CalcInputs;
   savings: DepositScenario;
   termDeposit: DepositScenario;
   projections: ProjectionInputsBySection;
+  currentProducts: CurrentProductReferences;
+  mortgageSwitch: MortgageSwitchInputs;
 }
 
+const EMPTY_CURRENT_PRODUCT_REFERENCE: CurrentProductReference = {
+  provider: '',
+  productKey: '',
+  rateIndex: null,
+};
+
+export const EMPTY_MORTGAGE_SWITCH_INPUTS: MortgageSwitchInputs = {
+  currentBankExitFees: '',
+  applicationFees: '',
+  valuationFees: '',
+  settlementFees: '',
+  governmentAndLegalFees: '',
+  otherUpfrontFees: '',
+  cashback: '',
+  fundingMethod: 'cash-or-offset',
+  targetOffsetAvailable: 'auto',
+};
+
 export const EMPTY_USER_RATE_SCENARIO: UserRateScenario = {
-  version: 2,
+  version: 3,
   mortgage: { ...EMPTY_CALC },
   savings: { balance: '', currentRate: '' },
   termDeposit: { balance: '', currentRate: '' },
@@ -33,6 +87,12 @@ export const EMPTY_USER_RATE_SCENARIO: UserRateScenario = {
     savings: { ...EMPTY_PROJECTION_INPUTS_BY_SECTION.savings },
     termDeposit: { ...EMPTY_PROJECTION_INPUTS_BY_SECTION.termDeposit },
   },
+  currentProducts: {
+    mortgage: { ...EMPTY_CURRENT_PRODUCT_REFERENCE },
+    savings: { ...EMPTY_CURRENT_PRODUCT_REFERENCE },
+    termDeposit: { ...EMPTY_CURRENT_PRODUCT_REFERENCE },
+  },
+  mortgageSwitch: { ...EMPTY_MORTGAGE_SWITCH_INPUTS },
 };
 
 export function normalizeUserRateScenario(value: unknown): UserRateScenario {
@@ -44,12 +104,49 @@ export function normalizeUserRateScenario(value: unknown): UserRateScenario {
       currentRate: typeof item.currentRate === 'string' ? item.currentRate : '',
     };
   };
+  const productReference = (input: unknown): CurrentProductReference => {
+    const item = input && typeof input === 'object' ? input as Partial<CurrentProductReference> : {};
+    const provider = typeof item.provider === 'string' ? item.provider.trim() : '';
+    const productKey = provider && provider !== NOT_LISTED_PROVIDER && typeof item.productKey === 'string'
+      ? item.productKey
+      : '';
+    const rateIndex = productKey && Number.isInteger(item.rateIndex) && Number(item.rateIndex) >= 0
+      ? Number(item.rateIndex)
+      : null;
+    return { provider, productKey, rateIndex };
+  };
+  const references = obj.currentProducts && typeof obj.currentProducts === 'object'
+    ? obj.currentProducts as Partial<CurrentProductReferences>
+    : {};
+  const switchInput = obj.mortgageSwitch && typeof obj.mortgageSwitch === 'object'
+    ? obj.mortgageSwitch as Partial<MortgageSwitchInputs>
+    : {};
+  const switchString = (key: keyof Omit<MortgageSwitchInputs, 'targetOffsetAvailable' | 'fundingMethod'>): string =>
+    typeof switchInput[key] === 'string' ? switchInput[key] : '';
   return {
-    version: 2,
+    version: 3,
     mortgage: normalizeCalcInputs(obj.mortgage),
     savings: deposit(obj.savings),
     termDeposit: deposit(obj.termDeposit),
     projections: normalizeProjectionInputsBySection(obj.projections),
+    currentProducts: {
+      mortgage: productReference(references.mortgage),
+      savings: productReference(references.savings),
+      termDeposit: productReference(references.termDeposit),
+    },
+    mortgageSwitch: {
+      currentBankExitFees: switchString('currentBankExitFees'),
+      applicationFees: switchString('applicationFees'),
+      valuationFees: switchString('valuationFees'),
+      settlementFees: switchString('settlementFees'),
+      governmentAndLegalFees: switchString('governmentAndLegalFees'),
+      otherUpfrontFees: switchString('otherUpfrontFees'),
+      cashback: switchString('cashback'),
+      fundingMethod: switchInput.fundingMethod === 'new-loan' ? 'new-loan' : 'cash-or-offset',
+      targetOffsetAvailable: switchInput.targetOffsetAvailable === 'yes' || switchInput.targetOffsetAvailable === 'no'
+        ? switchInput.targetOffsetAvailable
+        : 'auto',
+    },
   };
 }
 

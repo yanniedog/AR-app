@@ -1,6 +1,7 @@
 import { SECTIONS } from '../constants';
 import { formatRate } from '../data/format';
 import type { RateStats } from '../data/taxonomy';
+import type { MortgageRateMetric } from '../data/selectors';
 import type { BankHistoryPoint, HistoryWindow, RbaEntry, SectionKey } from '../types';
 
 /** Visible label prefix so rate color is not the only cue. */
@@ -9,11 +10,12 @@ export function rateValueLabel(section: SectionKey, context: 'product' | 'best' 
   return SECTIONS[section].lowerIsBetter ? 'Interest rate' : 'Rate';
 }
 
-/** Plain-language TalkBack summary for the best-versus-typical market insight. */
+/** Plain-language TalkBack summary for the leading-versus-median market insight. */
 export function ribbonA11ySummary(
   stats: RateStats,
   section: SectionKey,
   rbaRate?: number | null,
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): string {
   const title = SECTIONS[section].title;
   if (stats.min === null || stats.max === null) {
@@ -22,11 +24,15 @@ export function ribbonA11ySummary(
   const best = SECTIONS[section].lowerIsBetter ? stats.min : stats.max;
   const typical = stats.median ?? stats.mean;
   const gap = best != null && typical != null ? Math.round(Math.abs(best - typical) * 10000) : null;
+  const leading = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
+  const metric = section === 'Mortgage'
+    ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+    : 'rate';
   const parts = [
-    `${title} market opportunity`,
-    best != null ? `best advertised ${formatRate(best)}` : null,
-    typical != null ? `typical advertised ${formatRate(typical)}` : null,
-    gap != null ? `${gap} basis points between best and typical` : null,
+    `${title} market summary`,
+    best != null ? `${leading} ${metric} ${formatRate(best)}` : null,
+    typical != null ? `median ${metric} ${formatRate(typical)}` : null,
+    gap != null ? `${gap} basis points to median` : null,
     `${stats.count} rates from ${stats.providers} lenders`,
   ].filter(Boolean) as string[];
   if (rbaRate != null) {

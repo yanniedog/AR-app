@@ -9,6 +9,8 @@ import {
   ProductRateChangeSummaryLine,
 } from '../src/components/product/ProductRateChangeLine';
 import { ProfileEditor } from '../src/components/ProfileEditor';
+import { CurrentBankPicker } from '../src/components/scenario/CurrentBankPicker';
+import { SwitchCostEditor } from '../src/components/scenario/SwitchCostEditor';
 import { ScreenScrollView } from '../src/components/Screen';
 import { SegmentedControl } from '../src/components/controls';
 import { AppText, Badge, Button, Card, Disclosure, Row } from '../src/components/ui';
@@ -25,6 +27,7 @@ import {
 } from '../src/data/calc';
 import { formatRate, humanizeEnum, toFraction, visibleAccountRows } from '../src/data/format';
 import { MAX_PROJECTION_YEARS } from '../src/data/projections';
+import type { CurrentProductReference, MortgageSwitchInputs } from '../src/data/userRateScenario';
 import { sectionSegmentOptions } from '../src/data/interests';
 import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
 import {
@@ -135,6 +138,21 @@ export default function Calculator() {
   const inputs = scenario.mortgage;
   const upd = (patch: Partial<CalcInputs>) =>
     updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
+  const scenarioSectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
+  const currentProduct = scenario.currentProducts[scenarioSectionKey];
+  const updateCurrentProduct = (value: CurrentProductReference) => updateScenario((prev) => ({
+    ...prev,
+    currentProducts: { ...prev.currentProducts, [scenarioSectionKey]: value },
+  }));
+  const updateSwitch = (patch: Partial<MortgageSwitchInputs>) => updateScenario((prev) => ({
+    ...prev,
+    mortgageSwitch: { ...prev.mortgageSwitch, ...patch },
+  }));
+
+  useEffect(() => {
+    if (!currentProduct.productKey || details?.products?.[currentProduct.productKey] || detailsLoading) return;
+    void ensureDetails({ forProductView: true });
+  }, [currentProduct.productKey, details?.products, detailsLoading, ensureDetails]);
 
   useEffect(() => {
     if (requestedSection) setSection(requestedSection);
@@ -262,6 +280,12 @@ export default function Calculator() {
     }
     return out.sort((a, b) => b.perMonth - a.perMonth).slice(0, 10);
   }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric]);
+  const currentProductDetail = currentProduct.productKey
+    ? details?.products?.[currentProduct.productKey] ?? null
+    : null;
+  const leadingTargetDetail = candidates[0]?.row.product_key
+    ? details?.products?.[candidates[0].row.product_key] ?? null
+    : null;
 
   const changeSection = useCallback((next: SectionKey) => setSection(next), []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
@@ -507,6 +531,15 @@ export default function Calculator() {
       ) : null}
 
       <Card style={{ marginBottom: 16 }}>
+        <View style={{ marginBottom: 14 }}>
+          <CurrentBankPicker
+            label={section === 'Mortgage' ? 'Current mortgage bank' : section === 'TD' ? 'Current term deposit bank' : 'Current savings bank'}
+            rows={core?.sections?.[section]?.rates ?? []}
+            value={currentProduct}
+            onChange={updateCurrentProduct}
+            editable={scenarioStorageStatus === 'ready'}
+          />
+        </View>
         {isMortgage ? (
           <>
             <View style={{ marginBottom: 10 }}>
@@ -585,6 +618,16 @@ export default function Calculator() {
                 Comparisons use a maximum of {MAX_PROJECTION_YEARS} years to match lifecycle projections.
               </AppText>
             ) : null}
+            <View style={{ marginTop: 14 }}>
+              <SwitchCostEditor
+                inputs={scenario.mortgageSwitch}
+                currentDetail={currentProductDetail}
+                targetDetail={leadingTargetDetail}
+                editable={scenarioStorageStatus === 'ready'}
+                compactFields={compactFields}
+                onChange={updateSwitch}
+              />
+            </View>
           </>
         ) : (
           <>
@@ -697,7 +740,7 @@ export default function Calculator() {
           ) : (
             <View style={{ gap: 12 }}>
               <AppText variant="small" color="textMuted">
-                Feature filters need the details payload. Retry once you are online, or clear account
+                Published product details are unavailable. Retry online, or clear account
                 features in your profile to compare without them.
               </AppText>
               <Button

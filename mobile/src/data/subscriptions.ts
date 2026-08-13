@@ -4,8 +4,12 @@ import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
+import { factCriterionId, normalizeFactCriterion } from './productFacts';
 
-export type FilterSnapshot = Omit<Filters, 'query'>;
+/** factCriteria is optional only for persisted snapshots created before this field existed. */
+export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
+  factCriteria?: Filters['factCriteria'];
+};
 
 export interface ProductSubscription {
   id: string;
@@ -68,6 +72,10 @@ export function normalizeFilterSnapshot(filters: FilterSnapshot): FilterSnapshot
     interestPayments: sort(filters?.interestPayments),
     accountFeatures: sort(filters?.accountFeatures),
     eligibilityCriteria: sort(filters?.eligibilityCriteria),
+    factCriteria: (filters?.factCriteria ?? [])
+      .map(normalizeFactCriterion)
+      .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== null)
+      .sort((a, b) => factCriterionId(a).localeCompare(factCriterionId(b))),
     includeNonStandard: !!filters?.includeNonStandard,
   };
 }
@@ -95,7 +103,7 @@ export function buildSearchLabel(
   }
   const q = query.trim();
   if (q) parts.push(`"${q}"`);
-  const n = activeFilterCount({ ...filters, query: '' });
+  const n = activeFilterCount({ ...filters, factCriteria: filters.factCriteria ?? [], query: '' });
   if (n) parts.push(`${n} filter${n === 1 ? '' : 's'}`);
   return parts.join(' · ');
 }
@@ -196,36 +204,87 @@ export function rowsForSearchSubscription(
 ): RateRow[] {
   const all = core.sections[sub.section]?.rates ?? [];
   const scoped = rowsForSearchScope(all, sub.section, sub.path, sub.hierarchyScoped);
-  return filterRows(scoped, { ...sub.filters, query: sub.query }, detailsProducts, null, sub.section);
+  const filters = normalizeFilterSnapshot(sub.filters);
+  return filterRows(
+    scoped,
+    { ...filters, factCriteria: filters.factCriteria ?? [], query: sub.query },
+    detailsProducts,
+    null,
+    sub.section,
+  );
 }
 
 function ratesMap(
   rows: RateRow[],
   section: SectionKey,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
-): Map<string, { row: RateRow; fraction: number | null }> {
-  const out = new Map<string, { row: RateRow; fraction: number | null }>();
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<string, TrackedRateValue> {
+  const out = new Map<string, TrackedRateValue>();
   for (const row of rows) {
-    out.set(rowIdentity(row), {
+    out.set(rowIdentity(row), trackedRateValue(
       row,
-      fraction: rankFraction(row, section, depositRankMetric, mortgageRateMetric),
-    });
+      section,
+      depositRankMetric,
+      mortgageRateMetric,
+    ));
   }
   return out;
+}
+
+export type TrackedRateMetric = 'advertised' | 'comparison' | 'ranked';
+
+export interface TrackedRateValue {
+  row: RateRow;
+  fraction: number | null;
+  metric?: TrackedRateMetric;
+}
+
+/** Keep the chosen metric attached to a notification comparison. Catalogue
+ * ranking may fall back from comparison to advertised rate, but a publish/
+ * unpublish transition must not be reported as though one metric moved. */
+export function trackedRateValue(
+  row: RateRow,
+  section: SectionKey,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+  depositValue: 'ranked' | 'advertised' = 'ranked',
+): TrackedRateValue {
+  if (section === 'Mortgage') {
+    const comparison = toFraction(row.comparison_rate);
+    if (mortgageRateMetric === 'comparison' && comparison !== null) {
+      return { row, fraction: comparison, metric: 'comparison' };
+    }
+    return { row, fraction: toFraction(row.rate), metric: 'advertised' };
+  }
+  return {
+    row,
+    fraction: depositValue === 'advertised'
+      ? toFraction(row.rate)
+      : rankFraction(row, section, depositRankMetric, mortgageRateMetric),
+    metric: depositValue,
+  };
 }
 
 function productRatesByIndex(
   core: CorePayload,
   productKey: string,
   rateIndex: number | null,
-): Map<number, { row: RateRow; fraction: number | null }> {
-  const out = new Map<number, { row: RateRow; fraction: number | null }>();
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<number, TrackedRateValue> {
+  const out = new Map<number, TrackedRateValue>();
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, trackedRateValue(
+        row,
+        section,
+        depositRankMetric,
+        mortgageRateMetric,
+        'advertised',
+      ));
     }
   }
   return out;
@@ -239,8 +298,8 @@ export interface RateChangeHit {
 }
 
 export function largestRateChange(
-  before: Map<string | number, { row: RateRow; fraction: number | null }>,
-  after: Map<string | number, { row: RateRow; fraction: number | null }>,
+  before: Map<string | number, TrackedRateValue>,
+  after: Map<string | number, TrackedRateValue>,
   thresholdBps: number,
   keyOf: (k: string | number) => string | number = (k) => k,
 ): RateChangeHit | null {
@@ -248,6 +307,7 @@ export function largestRateChange(
   for (const [key, nw] of after) {
     const od = before.get(keyOf(key));
     if (!od || od.fraction === null || nw.fraction === null) continue;
+    if (od.metric && nw.metric && od.metric !== nw.metric) continue;
     const bps = Math.abs(bpsBetween(nw.fraction, od.fraction) ?? 0);
     if (bps >= thresholdBps && (!biggest || bps > biggest.bps)) {
       biggest = { row: nw.row, from: od.fraction, to: nw.fraction, bps };
@@ -269,7 +329,7 @@ export function computeSubscriptionChanges(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   if (!oldCore || !subscriptions.length) return [];
   const messages: NotifyMessage[] = [];
@@ -279,8 +339,8 @@ export function computeSubscriptionChanges(
   for (const sub of subscriptions) {
     if (sub.kind === 'product') {
       const hit = largestRateChange(
-        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex),
-        productRatesByIndex(newCore, sub.productKey, sub.rateIndex),
+        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
+        productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         thresholdBps,
       );
       if (hit) {

@@ -1,4 +1,4 @@
-import { visibleAccountRows } from './format';
+import { toFraction, visibleAccountRows } from './format';
 import { rankFraction, type MortgageRateMetric, type RankMetric } from './selectors';
 import { statsFor, type RateStats } from './taxonomy';
 import type { ProductDetail, RateRow, Ribbon, SectionData, SectionKey } from '../types';
@@ -34,17 +34,24 @@ export function resolveSectionRibbonStats(
   section?: SectionKey | null,
   detailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): RateStats {
   const filtered = includeNonStandard
     ? hierarchyRows
     : visibleAccountRows(hierarchyRows, false, detailsProducts);
+  const rankedRows = section === 'Mortgage' && mortgageRateMetric === 'comparison'
+    ? filtered.filter((row) => toFraction(row.comparison_rate) !== null)
+    : filtered;
 
   const fractionOf = section
     ? (row: RateRow) => rankFraction(row, section, depositRankMetric, mortgageRateMetric)
     : undefined;
-  const computed = statsFor(filtered, true, section, fractionOf);
+  const computed = statsFor(rankedRows, true, section, fractionOf);
   if (computed.min != null) return computed;
+
+  // An advertised-rate payload ribbon cannot stand in for unpublished
+  // comparison-rate statistics.
+  if (section === 'Mortgage' && mortgageRateMetric === 'comparison') return computed;
 
   // Deposit flooring can empty client stats while the payload ribbon still
   // includes token near-zero rows — do not resurrect those for Savings/TD.

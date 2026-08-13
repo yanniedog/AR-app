@@ -14,6 +14,12 @@ import {
   visibleAccountRows,
 } from './format';
 import { rateConditionality } from '../lib/rateQualifier';
+import {
+  productMatchesAllFactCriteria,
+  type FactCriterion,
+} from './productFacts';
+
+export type { FactCriterion, FactCriterionOperator, FactCriterionScalar } from './productFacts';
 
 export type SortKey = 'rate' | 'comparison' | 'bank';
 
@@ -35,6 +41,8 @@ export interface Filters {
   accountFeatures: string[];
   /** CDR eligibilityType codes from details.eligibility (AND when multiple selected). */
   eligibilityCriteria: string[];
+  /** Structured normalized-fact predicates (AND across selected criteria). */
+  factCriteria: FactCriterion[];
   includeNonStandard: boolean;
 }
 
@@ -49,6 +57,7 @@ export const EMPTY_FILTERS: Filters = {
   interestPayments: [],
   accountFeatures: [],
   eligibilityCriteria: [],
+  factCriteria: [],
   includeNonStandard: false,
 };
 
@@ -62,7 +71,8 @@ export function activeFilterCount(f: Filters): number {
     f.depositKinds.length +
     f.interestPayments.length +
     f.accountFeatures.length +
-    f.eligibilityCriteria.length
+    f.eligibilityCriteria.length +
+    (f.factCriteria?.length ?? 0)
   );
 }
 
@@ -80,13 +90,29 @@ export type MortgageRateMetric = 'headline' | 'comparison';
 export function rankedRateLabelForSection(
   section: SectionKey,
   depositMetric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): 'Advertised rate' | 'Comparison rate' | 'Ongoing rate' {
   if (section === 'Mortgage') {
     return mortgageMetric === 'comparison' ? 'Comparison rate' : 'Advertised rate';
   }
   if (section === 'Savings' && depositMetric === 'base') return 'Ongoing rate';
   return 'Advertised rate';
+}
+
+/** Label the actual value used for a row. Mortgage comparison ranking falls
+ * back to advertised rate when a comparison rate is not published. */
+export function rankedRateLabelForRow(
+  row: RateRow,
+  section: SectionKey,
+  depositMetric: RankMetric = 'base',
+  mortgageMetric: MortgageRateMetric = 'comparison',
+): 'Advertised rate' | 'Comparison rate' | 'Ongoing rate' {
+  if (section === 'Mortgage'
+    && mortgageMetric === 'comparison'
+    && toFraction(row.comparison_rate) === null) {
+    return 'Advertised rate';
+  }
+  return rankedRateLabelForSection(section, depositMetric, mortgageMetric);
 }
 
 export { MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION, isMeaningfulDepositRate };
@@ -129,7 +155,7 @@ export function rankFraction(
   row: RateRow,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): number | null {
   if (section === 'Mortgage') {
     return mortgageMetric === 'headline' ? toFraction(row.rate) : effectiveFraction(row);
@@ -158,7 +184,7 @@ export function bestRow(
   includeNonStandard = false,
   metric: RankMetric = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): RateRow | null {
   const candidates = excludeTokenDepositRates(
     visibleAccountRows(rows, includeNonStandard, detailsProducts),
@@ -197,7 +223,7 @@ export function bestRow(
 }
 
 /** Fraction used when ordering a product list for a given sort chip.
- *  Mortgage "rate" (Browse + Search "Best rate") follows {@link MortgageRateMetric};
+ *  Mortgage "rate" follows {@link MortgageRateMetric};
  *  "comparison" always ranks by comparison-or-headline. Deposits keep
  *  {@link rankFraction} for both chips so bonus/intro rows never top a list on
  *  the promo headline unless the deposit metric is `max`. */
@@ -206,7 +232,7 @@ export function sortRankFraction(
   sortKey: SortKey,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): number | null {
   if (sortKey === 'rate' && section === 'Mortgage') {
     return rankFraction(row, section, metric, mortgageMetric);
@@ -281,7 +307,7 @@ export function sortRows(
   sortKey: SortKey,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): RateRow[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   return rows
@@ -355,6 +381,12 @@ export function filterRows(
     ) {
       return false;
     }
+    if (
+      filters.factCriteria?.length > 0 &&
+      !productMatchesAllFactCriteria(detailsProducts?.[row.product_key], filters.factCriteria)
+    ) {
+      return false;
+    }
     return true;
   });
 }
@@ -367,7 +399,7 @@ export function queryAndSort(
   detailsProducts?: Record<string, ProductDetail> | null,
   searchIndex?: SearchIndexPayload | null,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): RateRow[] {
   return sortRows(
     filterRows(rows, filters, detailsProducts, searchIndex, section),
@@ -418,7 +450,7 @@ export function compareProviderGroupsByRate(
   b: ProviderGroup,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): number {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const va = a.bestBySection[section]
@@ -452,7 +484,7 @@ export function groupByProvider(
   detailsProducts?: Record<string, ProductDetail> | null,
   /** When set, order lenders best→worst for this section; otherwise A–Z by name. */
   sortSection?: SectionKey | null,
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): ProviderGroup[] {
   // Bucket rows per provider AND per section in a single pass. The previous
   // implementation re-scanned every section's full row array (Array.includes)

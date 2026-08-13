@@ -1,4 +1,5 @@
 import type { ProductDetail } from '../types';
+import { productFactsSearchText } from './productFacts';
 
 export interface SearchIndexPayload {
   schema_version: number;
@@ -41,6 +42,7 @@ export function productDetailSearchText(detail: ProductDetail | null | undefined
   chunks.push(...detailItemsText(detail.features));
   chunks.push(...detailItemsText(detail.eligibility));
   chunks.push(...detailItemsText(detail.constraints));
+  chunks.push(...productFactsSearchText(detail));
   return normalizeBlob(chunks.join(' '));
 }
 

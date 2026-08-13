@@ -155,7 +155,7 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
             <AppText variant="tiny" color="textMuted" style={{ marginTop: 2 }}>
               {bias.leanLabel}
               {' · '}
-              {bias.signalBalance} signal balance · chronological official reads
+              {bias.signalBalance} signals · official releases
             </AppText>
           )}
         </View>

@@ -12,6 +12,15 @@ import {
   humanizeEnum,
 } from '../../data/format';
 import { accessExcludesFromStandard, assessAccess } from '../../data/access';
+import { ratePresentation } from '../../data/ratePresentation';
+import { feeCapLabel, feeDiscountLabel, formatFeeValue } from '../../data/feePresentation';
+import {
+  productFactDisplayModel,
+  productFactLabel,
+  productFactSignature,
+  productFactValue,
+} from '../../data/productFacts';
+import { useStore } from '../../data/store';
 import { rateQualifier } from '../../lib/rateQualifier';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
@@ -19,6 +28,8 @@ import { openProduct } from '../../lib/nav';
 
 export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
   const theme = useTheme();
+  const mortgageRateMetric = useStore((state) => state.prefs.mortgageRateMetric);
+  const presentation = ratePresentation(row, section, mortgageRateMetric);
   const q = rateQualifier(row, section);
   const bits: string[] = [];
   const rt = row.rate_type?.toUpperCase();
@@ -61,12 +72,17 @@ export function RateRowLine({ row, section, accent }: { row: RateRow; section: S
         ) : null}
       </Row>
       <Row gap={8}>
-        <AppText variant="body" weight="800" style={{ color: accent }}>
-          {formatRate(row.rate)}
-        </AppText>
-        {row.comparison_rate ? (
+        <View style={{ alignItems: 'flex-end' }}>
           <AppText variant="tiny" color="textFaint">
-            {formatRate(row.comparison_rate)} comparison
+            {presentation.primaryLabel}
+          </AppText>
+          <AppText variant="body" weight="800" style={{ color: accent }}>
+            {formatRate(presentation.primary)}
+          </AppText>
+        </View>
+        {presentation.secondary !== null && presentation.secondaryLabel ? (
+          <AppText variant="tiny" color="textFaint">
+            {formatRate(presentation.secondary)} {presentation.secondaryLabel.toLowerCase()}
           </AppText>
         ) : null}
       </Row>
@@ -87,12 +103,10 @@ export function DetailGroup({
   const [open, setOpen] = useState(false);
   if ((!items || items.length === 0) && !loading) return null;
   const displayValue = (item: DetailItem): string | null => {
+    if (title === 'Fees') return formatFeeValue(item);
     if (item.value === undefined || item.value === null || String(item.value).trim() === '') return null;
     const raw = String(item.value).trim();
     const label = String(item.label ?? '').toUpperCase();
-    if (title === 'Fees' && /^\d+(?:\.\d+)?$/.test(raw)) {
-      return `$${Number(raw).toLocaleString('en-AU', { maximumFractionDigits: 2 })}`;
-    }
     if (title === 'Eligibility' && (label === 'MIN_AGE' || label === 'MAX_AGE') && /^\d+$/.test(raw)) {
       return `${raw} years`;
     }
@@ -130,12 +144,118 @@ export function DetailGroup({
                   {it.info}
                 </AppText>
               ) : null}
+              {title === 'Fees' && feeCapLabel(it) ? (
+                <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
+                  {feeCapLabel(it)}
+                </AppText>
+              ) : null}
+              {title === 'Fees' ? (it.discounts ?? []).map((discount, discountIndex) => {
+                const label = feeDiscountLabel(discount);
+                return label ? (
+                  <AppText key={discountIndex} variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
+                    Discount · {label}
+                  </AppText>
+                ) : null;
+              }) : null}
             </View>
           ))
         )}
       </View>
     </Disclosure>
   );
+}
+
+function ProductFactRows({ facts }: { facts: ProductDetailData['facts'] }) {
+  return (
+    <View>
+      {(facts ?? []).map((fact, index) => {
+        const value = productFactValue(fact);
+        const appliesTo = fact.appliesTo?.filter(Boolean).map(humanizeEnum).join(', ');
+        return (
+          <View key={productFactSignature(fact)}>
+            {index > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
+            <Row style={{ justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+              <AppText variant="small" weight="600" style={{ flex: 1 }}>
+                {productFactLabel(fact)}
+              </AppText>
+              {value ? (
+                <AppText variant="small" color="textMuted" style={{ flexShrink: 1, textAlign: 'right' }}>
+                  {value}
+                </AppText>
+              ) : null}
+            </Row>
+            {appliesTo ? (
+              <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
+                Applies to {appliesTo}
+              </AppText>
+            ) : null}
+            {fact.condition?.trim() ? (
+              <AppText variant="tiny" color="textFaint" style={{ marginTop: 3, lineHeight: 16 }}>
+                {fact.condition.trim()}
+              </AppText>
+            ) : null}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+function ProductFactClusterDisclosure({
+  cluster,
+}: {
+  cluster: ReturnType<typeof productFactDisplayModel>['rateClusters'][number];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Disclosure
+      title={cluster.label}
+      summary={cluster.summary}
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      <ProductFactRows facts={cluster.facts} />
+    </Disclosure>
+  );
+}
+
+function ProductFactDisclosure({
+  group,
+  clusters = [],
+}: {
+  group: ReturnType<typeof productFactDisplayModel>['groups'][number];
+  clusters?: ReturnType<typeof productFactDisplayModel>['rateClusters'];
+}) {
+  const [open, setOpen] = useState(false);
+  const count = group.facts.length + clusters.length;
+  return (
+    <Disclosure
+      title={group.title}
+      summary={`${count} published detail${count === 1 ? '' : 's'}`}
+      open={open}
+      onToggle={() => setOpen((value) => !value)}
+    >
+      <View style={{ gap: 10 }}>
+        {group.facts.length ? <ProductFactRows facts={group.facts} /> : null}
+        {clusters.map((cluster) => (
+          <ProductFactClusterDisclosure key={cluster.id} cluster={cluster} />
+        ))}
+      </View>
+    </Disclosure>
+  );
+}
+
+/** Structured producer facts, with legacy rich fee rows taking precedence. */
+export function ProductFacts({ detail }: { detail: ProductDetailData | null }) {
+  const model = productFactDisplayModel(detail, { excludeFees: Boolean(detail?.fees?.length) });
+  if (!model.groups.length) return null;
+  return <>{model.groups.map((group) => (
+    <ProductFactDisclosure
+      key={group.key}
+      group={group}
+      clusters={group.key === 'product' ? model.rateClusters : undefined}
+    />
+  ))}</>;
 }
 
 export function AccessNotice({

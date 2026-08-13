@@ -1,5 +1,5 @@
 import type { CorePayload, Manifest } from '../src/types';
-import { shouldWarmDetails } from '../src/data/optionalPrefs';
+import { needsDetailsForNotifications, shouldWarmDetails } from '../src/data/optionalPrefs';
 import { loadSampleDetails, sampleCore, sampleManifest } from '../src/data/sample';
 import { DEFAULT_PREFS } from '../src/data/store';
 
@@ -226,6 +226,23 @@ describe('optional feature prefs', () => {
         [],
       ),
     ).toBe(true);
+  });
+
+  it('warms details for notification searches using normalized fact criteria', () => {
+    expect(needsDetailsForNotifications(
+      { notificationsEnabled: true },
+      [{
+        id: 'search:fact', kind: 'search', section: 'Mortgage', path: [], hierarchyScoped: false,
+        query: '', sort: 'rate',
+        filters: {
+          providers: [], rateTypes: [], lvrTiers: [], repaymentTypes: [], loanPurposes: [],
+          depositKinds: [], interestPayments: [], accountFeatures: [], eligibilityCriteria: [],
+          factCriteria: [{ sourceType: 'OFFSET', operator: 'eq', value: true, unit: 'boolean' }],
+          includeNonStandard: false,
+        },
+        label: 'Offset products', createdAt: '2026-08-13T00:00:00Z',
+      }],
+    )).toBe(true);
   });
 
   it('builds suitability after core install without warming unrelated optional assets', async () => {

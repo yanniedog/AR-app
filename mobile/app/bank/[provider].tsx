@@ -516,7 +516,6 @@ export default function BankDetail() {
             key={r.product_key}
             row={r}
             section={section}
-            displayedRateLabel="Current rate"
             showLenderAction={false}
             logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
             onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
@@ -650,7 +649,7 @@ export default function BankDetail() {
               Products that changed
             </AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              Exact product matches from available cached history
+              Exact product matches from available history
             </AppText>
             {recentMoveBreakdowns.map(({ event, moves }, bi) => (
               <View

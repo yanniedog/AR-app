@@ -25,6 +25,11 @@ import Animated, {
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AppLockGate } from '../src/components/AppLockGate';
+import {
+  AppNavigationMenu,
+  NavigationMenuButton,
+  NavigationMenuProvider,
+} from '../src/components/AppNavigationMenu';
 import { AppTabBar } from '../src/components/AppTabBar';
 import {
   AppUpdateBanner,
@@ -427,6 +432,7 @@ function RootNavigator() {
             }
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
+            <NavigationMenuProvider>
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
@@ -437,6 +443,7 @@ function RootNavigator() {
                   contentStyle: { backgroundColor: theme.colors.bg },
                   ...androidHeader,
                   ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+                  headerRight: () => <NavigationMenuButton />,
                 }}
               >
               <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -445,12 +452,12 @@ function RootNavigator() {
               <Stack.Screen name="node" options={{ title: 'Explore' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
-              <Stack.Screen name="bank/[provider]" options={{ title: 'Lender' }} />
-              <Stack.Screen name="banks" options={{ title: 'Lenders' }} />
+              <Stack.Screen name="bank/[provider]" options={{ title: 'Bank' }} />
+              <Stack.Screen name="banks" options={{ title: 'Banks' }} />
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
               <Stack.Screen name="calculator" options={{ title: 'My scenario' }} />
               <Stack.Screen name="projections" options={{ title: 'What if rates change?' }} />
-              <Stack.Screen name="rba-response" options={{ title: 'RBA response', headerBackTitle: 'Changes' }} />
+              <Stack.Screen name="rba-response" options={{ title: 'Bank response', headerBackTitle: 'Changes' }} />
               <Stack.Screen
                 name="rate-receipt"
                 options={{ title: 'Bank-call brief', headerBackTitle: 'Product' }}
@@ -460,12 +467,13 @@ function RootNavigator() {
                 options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
               />
               <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+              <Stack.Screen name="about" options={{ title: 'About' }} />
               <Stack.Screen
                 name="performance-audit"
-                options={{ title: 'Performance audit', headerBackTitle: 'Settings' }}
+                options={{ title: 'Performance audit', headerBackTitle: 'About' }}
               />
-              <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'Settings' }} />
-              <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'Settings' }} />
+              <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'About' }} />
+              <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'About' }} />
               </Stack>
               {appReady ? (
                 <BrandedSplashOverlay
@@ -477,6 +485,8 @@ function RootNavigator() {
               ) : null}
             </View>
             <AppTabBar />
+            <AppNavigationMenu />
+            </NavigationMenuProvider>
           </View>
           <PerformanceAuditRunner />
           <DiagnosticsConsentBanner

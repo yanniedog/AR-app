@@ -7,9 +7,14 @@ import { distinctProviders, distinctValues, type Filters } from '../data/selecto
 import { distinctEligibilityCriteria } from '../data/eligibility';
 import { distinctAccountFeatures } from '../data/features';
 import { humanizeEnum } from '../data/format';
+import {
+  boundedPublishedFactFilterOptions,
+  factCriterionId,
+  publishedFactFilterOptions,
+} from '../data/productFacts';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Button, Chip, Divider, Row } from './ui';
+import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 
 interface Group {
   title: string;
@@ -54,9 +59,13 @@ export function FilterSheet({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<Filters>(filters);
+  const [publishedOpen, setPublishedOpen] = useState(false);
 
   useEffect(() => {
-    if (visible) setDraft(filters);
+    if (visible) {
+      setDraft(filters);
+      setPublishedOpen(false);
+    }
   }, [visible, filters]);
 
   const groups = groupsFor(section);
@@ -79,12 +88,38 @@ export function FilterSheet({
     () => distinctEligibilityCriteria(rows, detailsProducts).slice(0, 24),
     [rows, detailsProducts],
   );
+  const availablePublishedDetails = useMemo(
+    () => publishedFactFilterOptions(rows, detailsProducts),
+    [rows, detailsProducts],
+  );
+  const publishedDetails = useMemo(
+    () => boundedPublishedFactFilterOptions(
+      availablePublishedDetails,
+      draft.factCriteria,
+      32,
+    ),
+    [availablePublishedDetails, draft.factCriteria],
+  );
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
       const list = (d[key] as string[]) ?? [];
       const next = list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
       return { ...d, [key]: next };
+    });
+  };
+
+  const toggleFactCriterion = (id: string) => {
+    const option = publishedDetails.find((item) => item.id === id);
+    if (!option) return;
+    setDraft((current) => {
+      const selected = current.factCriteria.some((criterion) => factCriterionId(criterion) === id);
+      return {
+        ...current,
+        factCriteria: selected
+          ? current.factCriteria.filter((criterion) => factCriterionId(criterion) !== id)
+          : [...current.factCriteria, option.criterion],
+      };
     });
   };
 
@@ -179,6 +214,30 @@ export function FilterSheet({
               </View>
             ) : null}
 
+            {publishedDetails.length ? (
+              <Disclosure
+                title="Published details"
+                summary={draft.factCriteria.length
+                  ? `${draft.factCriteria.length} selected`
+                  : 'Age, limits and account features'}
+                open={publishedOpen}
+                onToggle={() => setPublishedOpen((open) => !open)}
+              >
+                <Row gap={8} style={{ flexWrap: 'wrap' }}>
+                  {publishedDetails.map((option) => (
+                    <Chip
+                      key={option.id}
+                      label={option.label}
+                      selected={draft.factCriteria.some(
+                        (criterion) => factCriterionId(criterion) === option.id,
+                      )}
+                      onPress={() => toggleFactCriterion(option.id)}
+                    />
+                  ))}
+                </Row>
+              </Disclosure>
+            ) : null}
+
             <View>
               <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                 Lenders
@@ -229,5 +288,6 @@ function resetFilters() {
     interestPayments: [],
     accountFeatures: [],
     eligibilityCriteria: [],
+    factCriteria: [],
   };
 }

@@ -205,16 +205,16 @@ export default function Banks() {
   if (!core) return <ScreenSkeleton />;
 
   const direction = SECTIONS[section].lowerIsBetter ? 'lowest' : 'highest';
-  const metricNote =
+  const metricLabel =
     section === 'Mortgage'
       ? mortgageRateMetric === 'comparison'
-        ? ', comparison'
-        : ', headline'
+        ? 'comparison rate'
+        : 'advertised rate'
       : depositRankMetric === 'base'
-        ? ', base ongoing'
-        : ', headline';
-  const scopeNote = includeNonStandard ? '' : ', broadly applicable only';
-  const sortHint = `Best ${SECTIONS[section].short.toLowerCase()} rate first (${direction}${metricNote}${scopeNote})`;
+        ? 'ongoing rate'
+        : 'advertised rate';
+  const scopeNote = includeNonStandard ? '' : ' · broadly applicable only';
+  const sortHint = `Sorted by ${direction} ${metricLabel}${scopeNote}`;
 
   return (
     <Screen>

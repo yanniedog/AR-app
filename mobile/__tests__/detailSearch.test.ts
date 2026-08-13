@@ -56,6 +56,33 @@ describe('detailSearch', () => {
 
   });
 
+  test('indexes allowlisted normalized fact fields without ids, URLs or unknown text', () => {
+    const detail = {
+      facts: [{
+        id: 'internal-source-row-481',
+        kind: 'feature',
+        canonicalKey: 'OFFSET',
+        label: 'Linked offset account',
+        value: true,
+        unit: 'boolean',
+        appliesTo: ['OWNER_OCCUPIED'],
+        condition: 'Salary must be credited monthly',
+        searchTerms: ['linked offset', 'https://developer.example/raw'],
+        developerNote: 'private implementation detail',
+      }],
+    } as unknown as ProductDetail;
+
+    const text = productDetailSearchText(detail);
+    expect(text).toContain('offset');
+    expect(text).toContain('linked offset account');
+    expect(text).toContain('owner occupied');
+    expect(text).toContain('salary must be credited monthly');
+    expect(text).toContain('linked offset');
+    expect(text).not.toContain('internal-source-row');
+    expect(text).not.toContain('developer.example');
+    expect(text).not.toContain('private implementation');
+  });
+
 
 
   test('payload index can match detail-only text for a sampled product', () => {

@@ -272,7 +272,7 @@ export function EconomicExplorer({
   return (
     <View>
       <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-        Choose one evidence lens to focus below.
+        Choose a chart.
       </AppText>
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -295,8 +295,8 @@ export function EconomicExplorer({
         {momentum ? (
           <MiniTile
             title="Momentum"
-            subtitle={`${momentum.rows.length} series · recent Δ`}
-            valueLabel="Δ"
+            subtitle={`${momentum.rows.length} series · recent change`}
+            valueLabel="Trend"
             selected={expanded === 'momentum'}
             onPress={() => toggle('momentum')}
             color={theme.colors.rba}
@@ -340,7 +340,7 @@ export function EconomicExplorer({
 
       {expanded === 'compare' ? (
         comparison ? (
-          <ExpandedDetail title="Inflation vs expectations" detail="Same percent scale · scrub for exact readings">
+          <ExpandedDetail title="Inflation vs expectations" detail="Same percentage scale">
             <EconomicChartFrame
               series={[
                 {
@@ -369,7 +369,7 @@ export function EconomicExplorer({
 
       {expanded === 'momentum' ? (
         momentum ? (
-          <ExpandedDetail title="Momentum" detail="Percentage-point change across recent observations">
+          <ExpandedDetail title="Momentum" detail="Recent percentage-point change">
             <MomentumChart model={momentum} />
           </ExpandedDetail>
         ) : (
@@ -383,8 +383,8 @@ export function EconomicExplorer({
             title="Policy path"
             detail={
               policy.surveyDate
-                ? `Actual cash rate joined to economists' median · survey ${formatRunDate(policy.surveyDate)}`
-                : 'Actual cash rate joined to economists\' median forecast'
+                ? `Cash rate and economists' median forecast · survey ${formatRunDate(policy.surveyDate)}`
+                : 'Cash rate and economists\' median forecast'
             }
           >
             <EconomicChartFrame
@@ -440,7 +440,7 @@ function IndicatorExpanded({
   return (
     <ExpandedDetail
       title={indicator.label}
-      detail={`${indicator.shortLabel} · ${live.signal.label} · obs ${formatRunDate(indicator.latest.date)}`}
+      detail={`${indicator.shortLabel} · ${live.signal.label} · updated ${formatRunDate(indicator.latest.date)}`}
     >
       <EconomicChartFrame
         series={[{

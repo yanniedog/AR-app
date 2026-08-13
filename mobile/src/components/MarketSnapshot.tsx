@@ -60,7 +60,7 @@ export function MarketSnapshotList({
             <Pressable
               onPress={() => openBank(row.provider)}
               accessibilityRole="button"
-              accessibilityLabel={`${row.provider}, best ${SECTIONS[section].short} rate ${
+              accessibilityLabel={`${row.provider}, leading ${SECTIONS[section].short} rate ${
                 row.best != null ? formatRate(row.best) : 'unknown'
               } on ${formatRunDate(date)}`}
             >

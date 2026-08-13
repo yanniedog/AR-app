@@ -12,7 +12,7 @@ import type { CorePayload, RateRow, SectionKey } from '../src/types';
 const sample = core as CorePayload;
 
 function rankedFractionOf(section: SectionKey) {
-  return (row: RateRow) => rankFraction(row, section, 'base', 'headline');
+  return (row: RateRow) => rankFraction(row, section);
 }
 
 describe('ribbonStats', () => {
@@ -32,7 +32,7 @@ describe('ribbonStats', () => {
     const hierRows = rowsUnder(data.rates, section, []);
     const stats = resolveSectionRibbonStats(data, hierRows, false, section);
     const expected = statsFor(
-      visibleAccountRows(hierRows, false),
+      visibleAccountRows(hierRows, false).filter((row) => row.comparison_rate != null),
       true,
       section,
       rankedFractionOf(section),
@@ -46,9 +46,31 @@ describe('ribbonStats', () => {
     const data = sample.sections[section];
     const hierRows = rowsUnder(data.rates, section, []);
     const stats = resolveSectionRibbonStats(data, hierRows, true, section);
-    const expected = statsFor(hierRows, true, section, rankedFractionOf(section));
+    const expected = statsFor(
+      hierRows.filter((row) => row.comparison_rate != null),
+      true,
+      section,
+      rankedFractionOf(section),
+    );
     expect(stats.min).toBe(expected.min);
     expect(stats.max).toBe(expected.max);
+  });
+
+  it('uses only actually published comparison rates for mortgage statistics', () => {
+    const rows: RateRow[] = [
+      { provider: 'A', product_key: 'A|1', product_name: 'Fallback', rate: '0.04' },
+      { provider: 'B', product_key: 'B|1', product_name: 'Compared', rate: '0.05', comparison_rate: '0.06' },
+    ];
+    const stats = resolveSectionRibbonStats(undefined, rows, true, 'Mortgage', null, 'base', 'comparison');
+    expect(stats).toMatchObject({ min: 0.06, max: 0.06, median: 0.06, count: 1 });
+  });
+
+  it('does not relabel an advertised payload ribbon when no comparison rates are published', () => {
+    const rows: RateRow[] = [
+      { provider: 'A', product_key: 'A|1', product_name: 'Fallback', rate: '0.04' },
+    ];
+    const stats = resolveSectionRibbonStats(sample.sections.Mortgage, rows, true, 'Mortgage', null, 'base', 'comparison');
+    expect(stats).toMatchObject({ min: null, max: null, count: 0 });
   });
 
 

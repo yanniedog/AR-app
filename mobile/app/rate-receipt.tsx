@@ -197,7 +197,7 @@ export default function RateReceiptScreen() {
         <EmptyState
           icon="receipt-outline"
           title="Exact rate no longer available"
-          subtitle="The selected product tier is not present in this dataset. Return to the product and choose a current rate."
+          subtitle="This rate is no longer in the current catalogue. Return to the product and choose a current rate."
           fill
         />
       </>
@@ -339,7 +339,7 @@ export default function RateReceiptScreen() {
         <Card style={{ marginBottom: 16 }}>
           <Facts
             items={receipt.conditions}
-            empty="No detailed eligibility or constraint text was published in this dataset. Confirm directly with the lender."
+            empty="No detailed eligibility or constraint text was published. Confirm directly with the bank."
           />
         </Card>
 

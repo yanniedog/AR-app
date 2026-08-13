@@ -13,7 +13,7 @@ import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibilit
 import { AppText, Badge, Row } from '../ui';
 
 /**
- * Advertised spread: how far the best advertised rate sits from the median
+ * Advertised spread: how far the leading advertised rate sits from the median
  * advertised rate row. Product cohorts are mixed, so this is not a savings claim.
  */
 export function SwitcherEdgeChart({
@@ -123,7 +123,7 @@ export function SwitcherEdgeChart({
           {activeAtWidest ? <Badge label="widest in window" tone="primary" /> : null}
         </Row>
         <AppText variant="tiny" color="textMuted">
-          {isHistorical ? 'Selected-date gap' : 'Latest gap'} between the typical tracked rate and the best advertised rate
+          {isHistorical ? 'Selected-date gap' : 'Latest gap'} between the median and leading advertised rates
         </AppText>
       </View>
       <View
@@ -191,7 +191,7 @@ export function SwitcherEdgeChart({
           if (date) onDateSelect?.(date);
         }}
         valueLabel={activePoint?.gapBps != null ? `${Math.round(activePoint.gapBps * 10) / 10} bp spread` : '—'}
-        detail="best versus typical advertised"
+        detail="leading versus median advertised"
       />
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 4 }}>
         This spread mixes advertised products and tiers. Compare eligibility, fees, conditions, LVRs and terms before acting.

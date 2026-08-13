@@ -144,6 +144,23 @@ describe('filter matching helpers', () => {
     expect(sub.id).toBe(makeSearchSubscription({ ...input, sort: 'rate' }).id);
   });
 
+  test('normalizes and persists fact criteria deterministically', () => {
+    const normalized = normalizeFilterSnapshot({
+      providers: [], rateTypes: [], lvrTiers: [], repaymentTypes: [], loanPurposes: [],
+      depositKinds: [], interestPayments: [], accountFeatures: [], eligibilityCriteria: [],
+      factCriteria: [
+        { sourceType: 'min_age', operator: 'lte', value: 18, unit: 'year' },
+        { canonicalKey: 'feature.offset', operator: 'eq', value: true, unit: 'boolean' },
+      ],
+      includeNonStandard: false,
+    });
+
+    expect(normalized.factCriteria).toEqual([
+      { canonicalKey: 'feature.offset', operator: 'eq', value: true, unit: 'boolean' },
+      { sourceType: 'MIN_AGE', operator: 'lte', value: 18, unit: 'year' },
+    ]);
+  });
+
   test('buildSearchLabel is compact', () => {
     const label = buildSearchLabel('Mortgage', ['OO'], 'bonus', {
       providers: [],
@@ -168,6 +185,20 @@ describe('computeSubscriptionChanges', () => {
     const after = core([mk({ rate: '0.0550', rate_index: 1 })]);
     const sub = makeProductSubscription(mk({}), 1);
     expect(computeSubscriptionChanges(before, after, [sub], 5)[0].body).toContain('→');
+  });
+
+  test('mortgage product subscriptions use comparison-rate moves by default', () => {
+    const before = core([mk({ rate: '0.0600', comparison_rate: '0.0650', rate_index: 1 })]);
+    const after = core([mk({ rate: '0.0600', comparison_rate: '0.0640', rate_index: 1 })]);
+    const sub = makeProductSubscription(mk({}), 1);
+    expect(computeSubscriptionChanges(before, after, [sub], 5)[0].body).toContain('→');
+  });
+
+  test('mortgage product subscriptions ignore comparison-rate availability transitions', () => {
+    const before = core([mk({ rate: '0.0600', rate_index: 1 })]);
+    const after = core([mk({ rate: '0.0600', comparison_rate: '0.0650', rate_index: 1 })]);
+    const sub = makeProductSubscription(mk({}), 1);
+    expect(computeSubscriptionChanges(before, after, [sub], 5)).toEqual([]);
   });
 
   test('computeChanges includes subscription messages', () => {

@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Share, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
+import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
 import {
   BankHistoryChart,
   type BankHistoryChartAuditActions,
@@ -15,6 +16,7 @@ import {
   DetailGroup,
   HistoryLegend,
   OfficialLinks,
+  ProductFacts,
   ProductRatesList,
   ProductSpecs,
   SectionTitle,
@@ -24,6 +26,7 @@ import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui'
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
+import { normalizedProductFacts } from '../../src/data/productFacts';
 import { sortRows, findByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import {
@@ -39,6 +42,9 @@ import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditR
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
+import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
+import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
+import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
@@ -51,6 +57,7 @@ import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
 import { relativeDate } from '../../src/data/format';
+import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
 
 function money(value: number): string {
@@ -73,6 +80,10 @@ export default function ProductDetail() {
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
+  const normalizedFactKinds = useMemo(
+    () => new Set(normalizedProductFacts(detail).map((fact) => fact.kind)),
+    [detail],
+  );
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const savedRates = useStore((s) => s.savedRates);
@@ -172,6 +183,20 @@ export default function ProductDetail() {
       detailsProducts,
     });
   }, [core, detail, detailsProducts, found, row, scenario]);
+  const staySwitchProjection = useMemo(() => {
+    if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
+    const currentRef = scenario.currentProducts.mortgage;
+    return buildStaySwitchProjection({
+      scenario,
+      target: row,
+      currentDetail: currentRef.productKey ? detailsProducts[currentRef.productKey] : null,
+      targetDetail: detail,
+    });
+  }, [detail, detailsProducts, found?.section, row, scenario]);
+  const currentBankLabel = scenario.currentProducts.mortgage.provider
+    && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
+    ? scenario.currentProducts.mortgage.provider
+    : 'Current bank';
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
@@ -328,7 +353,7 @@ export default function ProductDetail() {
         <EmptyState
           icon="alert-circle-outline"
           title="Exact rate no longer available"
-          subtitle="This rate index is not present in the current dataset. Choose a current product tier instead."
+          subtitle="This rate is no longer in the current catalogue. Choose a current product tier instead."
           fill
         />
       </>
@@ -342,6 +367,7 @@ export default function ProductDetail() {
   const accent = meta.lowerIsBetter ? theme.colors.success : theme.colors.primary;
   const rateRows = sortRows(siblings, 'rate', section, depositRankMetric, mortgageRateMetric);
   const qualifier = rateQualifier(row, section);
+  const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   // Distinct from the market ribbon ink so the product line/marker stays readable.
@@ -374,7 +400,7 @@ export default function ProductDetail() {
 
   const onShare = () =>
     Share.share({
-      message: `${row.provider} — ${row.product_name}: ${formatRate(row.rate)} (${meta.title}, Australian Rates)`,
+      message: `${row.provider} — ${row.product_name}: ${formatRate(presentation.primary)} ${presentation.primaryLabel.toLowerCase()} (${meta.title}, Australian Rates)`,
     }).catch((err) => logSwallowedError('product.share', err));
 
   const onToggleNotify = async () => {
@@ -415,6 +441,7 @@ export default function ProductDetail() {
                 accessibilityLabel={favorite ? 'Remove this rate from My rates' : 'Save this exact rate to My rates'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
+              <NavigationMenuButton />
             </Row>
           ),
         }}
@@ -440,14 +467,14 @@ export default function ProductDetail() {
 
         <Card style={{ marginBottom: 16, alignItems: 'center' }}>
           <AppText variant="small" color="textMuted">
-            {meta.lowerIsBetter ? 'Advertised rate' : 'Interest rate'}
+            {presentation.primaryLabel}
           </AppText>
           <AppText variant="h1" weight="800" style={{ color: accent, marginVertical: 2 }}>
-            {formatRate(row.rate)}
+            {formatRate(presentation.primary)}
           </AppText>
-          {row.comparison_rate ? (
+          {presentation.secondary !== null && presentation.secondaryLabel ? (
             <AppText variant="small" color="textFaint">
-              {formatRate(row.comparison_rate)} comparison rate
+              {formatRate(presentation.secondary)} {presentation.secondaryLabel.toLowerCase()}
             </AppText>
           ) : null}
           <ProductRateChangeLine
@@ -500,7 +527,23 @@ export default function ProductDetail() {
           ) : null}
         </Card>
 
-        {personalBrief?.illustration ? (
+        {staySwitchProjection?.ready ? (
+          <View style={{ marginBottom: 16 }}>
+            <StaySwitchChart
+              projection={staySwitchProjection}
+              currentBank={currentBankLabel}
+              compact
+              onOpenFull={() => router.push({
+                pathname: '/projections',
+                params: {
+                  section: 'Mortgage',
+                  target: row.product_key,
+                  ri: row.rate_index != null ? String(row.rate_index) : undefined,
+                },
+              } as never)}
+            />
+          </View>
+        ) : personalBrief?.illustration ? (
           <Card
             style={{
               marginBottom: 16,
@@ -602,7 +645,7 @@ export default function ProductDetail() {
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                Rate history appears once more daily snapshots are collected.
+                Rate history appears once more daily observations are available.
               </AppText>
             )
           ) : (
@@ -620,10 +663,11 @@ export default function ProductDetail() {
           )}
         </Card>
 
-        <DetailGroup title="Features" icon="checkmark-circle-outline" items={detail?.features} loading={detailsLoading} />
+        <ProductFacts detail={detail} />
+        <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
-        <DetailGroup title="Eligibility" icon="person-outline" items={detail?.eligibility} loading={detailsLoading} />
-        <DetailGroup title="Constraints" icon="lock-closed-outline" items={detail?.constraints} loading={detailsLoading} />
+        <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
+        <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
 
         <OfficialLinks links={detail?.links} />
 

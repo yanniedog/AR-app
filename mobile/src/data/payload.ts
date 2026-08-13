@@ -13,6 +13,7 @@ import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
+import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
 import {
@@ -381,6 +382,17 @@ export async function downloadBankInsights(
     throw new Error('bank_history payload failed validation');
   }
   return { text, bankInsights };
+}
+
+export async function downloadBankSpreadHistory(
+  url: string,
+  expectedSha?: string,
+): Promise<{ text: string; bankSpreadHistory: import('./bankSpreadHistory').BankSpreadHistoryPayload }> {
+  const text = await downloadInflate(url, expectedSha);
+  const parsed = await parseJsonHeavy<unknown>(text);
+  const bankSpreadHistory = normalizeBankSpreadHistoryPayload(parsed);
+  if (!bankSpreadHistory) throw new Error('bank_spread_history payload failed validation');
+  return { text, bankSpreadHistory };
 }
 
 export interface HistoryBanksResult {

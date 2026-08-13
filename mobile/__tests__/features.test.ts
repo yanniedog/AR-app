@@ -43,4 +43,34 @@ describe('features', () => {
     expect(distinctAccountFeatures(rows, lookup)).toEqual(['DIGITAL_BANKING', 'OFFSET', 'REDRAW']);
     expect(productFeatureTypes(lookup['A|1'])).toEqual(new Set(['OFFSET', 'REDRAW']));
   });
+
+  test('promotes only curated normalized feature keys and still matches them', () => {
+    const lookup: Record<string, ProductDetail> = {
+      'A|1': { facts: [
+        { id: 'offset-1', kind: 'feature', canonicalKey: 'OFFSET', value: true, unit: 'boolean' },
+        { id: 'raw-1', kind: 'feature', canonicalKey: 'INTERNAL_PROVIDER_FLAG', value: true },
+        { id: 'condition-1', kind: 'condition', canonicalKey: 'REDRAW', condition: 'Ask the bank' },
+      ], features: [{ label: 'REDRAW' }] },
+    };
+    const rows = [{ product_key: 'A|1', provider: 'X', product_name: 'A', rate: '0.05' }];
+
+    expect(productFeatureTypes(lookup['A|1'])).toEqual(new Set(['OFFSET']));
+    expect(productHasAllFeatures('A|1', ['OFFSET'], lookup)).toBe(true);
+    expect(distinctAccountFeatures(rows, lookup)).toEqual(['OFFSET']);
+  });
+
+  test('resolves namespaced feature keys and excludes explicit negative facts', () => {
+    const lookup: Record<string, ProductDetail> = {
+      'A|1': { facts: [
+        { id: 'offset-true', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: true },
+        { id: 'redraw-false', kind: 'feature', canonicalKey: 'feature.redraw', sourceType: 'REDRAW', value: false },
+      ] },
+      'B|1': { facts: [
+        { id: 'offset-false', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: false },
+      ] },
+    };
+
+    expect(productFeatureTypes(lookup['A|1'])).toEqual(new Set(['OFFSET']));
+    expect(productFeatureTypes(lookup['B|1'])).toEqual(new Set());
+  });
 });

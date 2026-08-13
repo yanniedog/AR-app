@@ -305,7 +305,7 @@ export function formatRateChangeDate(
     Number(match[1]),
     Number(match[2]) - 1,
     Number(match[3]),
-  ).toLocaleDateString(undefined, {
+  ).toLocaleDateString('en-AU', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

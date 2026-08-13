@@ -8,14 +8,16 @@ import { debugLog } from '../lib/debugLog';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import type { SavedRateRef } from './savedRates';
 import { ongoingRateCaveat } from '../lib/rateQualifier';
-import { bpsBetween, formatRate, toFraction } from './format';
-import { bestRow, rankFraction, type MortgageRateMetric, type RankMetric } from './selectors';
+import { bpsBetween, formatRate } from './format';
+import { bestRow, type MortgageRateMetric, type RankMetric } from './selectors';
 import {
   computeSubscriptionChanges,
   largestRateChange,
   rowIdentity,
   rowsForSearchSubscription,
+  trackedRateValue,
   type Subscription,
+  type TrackedRateValue,
 } from './subscriptions';
 
 export const BACKGROUND_TASK = 'ar-rates-daily-refresh';
@@ -143,29 +145,37 @@ export function hrefFromNotificationData(
   return null;
 }
 
-function bestFraction(
+function bestTrackedRate(
   core: CorePayload,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
-): number | null {
+  mortgageMetric: MortgageRateMetric = 'comparison',
+): TrackedRateValue | null {
   const rows = core.sections[section]?.rates ?? [];
   const best = bestRow(rows, section, false, metric, null, mortgageMetric);
-  // Measure the move with the same metric bestRow ranks by (base ongoing rate for
-  // deposits, headline/comparison for loans), so the threshold and body text can't
-  // disagree with the winner.
-  return best ? rankFraction(best, section, metric, mortgageMetric) : null;
+  return best ? trackedRateValue(best, section, metric, mortgageMetric) : null;
 }
 
 /** All rate rows for a product, keyed by rate_index, so changes can be matched
  *  row-for-row (a product can have many rows; comparing only the first misses
  *  changes and a row-order change would create false alerts). */
-function ratesByIndex(core: CorePayload, productKey: string): Map<number, { row: RateRow; fraction: number | null }> {
-  const out = new Map<number, { row: RateRow; fraction: number | null }>();
+function ratesByIndex(
+  core: CorePayload,
+  productKey: string,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<number, TrackedRateValue> {
+  const out = new Map<number, TrackedRateValue>();
   for (const section of SECTION_ORDER) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, trackedRateValue(
+        row,
+        section,
+        depositRankMetric,
+        mortgageRateMetric,
+        'advertised',
+      ));
     }
   }
   return out;
@@ -175,13 +185,21 @@ function productRatesByIndex(
   core: CorePayload,
   productKey: string,
   rateIndex: number | null,
-): Map<number, { row: RateRow; fraction: number | null }> {
-  const out = new Map<number, { row: RateRow; fraction: number | null }>();
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<number, TrackedRateValue> {
+  const out = new Map<number, TrackedRateValue>();
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, trackedRateValue(
+        row,
+        section,
+        depositRankMetric,
+        mortgageRateMetric,
+        'advertised',
+      ));
     }
   }
   return out;
@@ -191,14 +209,16 @@ function ratesMap(
   rows: RateRow[],
   section: SectionKey,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
-): Map<string, { row: RateRow; fraction: number | null }> {
-  const out = new Map<string, { row: RateRow; fraction: number | null }>();
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<string, TrackedRateValue> {
+  const out = new Map<string, TrackedRateValue>();
   for (const row of rows) {
-    out.set(rowIdentity(row), {
+    out.set(rowIdentity(row), trackedRateValue(
       row,
-      fraction: rankFraction(row, section, depositRankMetric, mortgageRateMetric),
-    });
+      section,
+      depositRankMetric,
+      mortgageRateMetric,
+    ));
   }
   return out;
 }
@@ -211,13 +231,13 @@ function subscriptionWouldNotify(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): boolean {
   if (sub.kind === 'product') {
     return (
       largestRateChange(
-        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex),
-        productRatesByIndex(newCore, sub.productKey, sub.rateIndex),
+        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
+        productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         thresholdBps,
       ) != null
     );
@@ -244,7 +264,7 @@ function subscriptionWouldNotify(
 }
 
 function enrichSubscriptionRouting(
-  raw: Array<{ title: string; body: string }>,
+  raw: { title: string; body: string }[],
   subscriptions: Subscription[],
   oldCore: CorePayload,
   newCore: CorePayload,
@@ -252,7 +272,7 @@ function enrichSubscriptionRouting(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   const enriched: NotifyMessage[] = [];
   let rawIdx = 0;
@@ -323,7 +343,7 @@ export function computeChanges(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   if (!oldCore) return [];
   const subscriptionMessages = computeSubscriptionChanges(
@@ -340,29 +360,22 @@ export function computeChanges(
 
   // Per-category best-rate moves.
   for (const section of SECTION_ORDER) {
-    const before = bestFraction(oldCore, section, depositRankMetric, mortgageRateMetric);
-    const afterRow = bestRow(
-      newCore.sections[section]?.rates ?? [],
-      section,
-      false,
-      depositRankMetric,
-      null,
-      mortgageRateMetric,
-    );
-    const after = afterRow
-      ? rankFraction(afterRow, section, depositRankMetric, mortgageRateMetric)
-      : null;
-    if (before === null || after === null) continue;
-    const bps = Math.abs(bpsBetween(after, before) ?? 0);
+    const before = bestTrackedRate(oldCore, section, depositRankMetric, mortgageRateMetric);
+    const after = bestTrackedRate(newCore, section, depositRankMetric, mortgageRateMetric);
+    if (!before || !after || before.fraction === null || after.fraction === null) continue;
+    if (before.metric && after.metric && before.metric !== after.metric) continue;
+    const bps = Math.abs(bpsBetween(after.fraction, before.fraction) ?? 0);
     if (bps < thresholdBps) continue;
     const meta = SECTIONS[section];
-    const improved = meta.lowerIsBetter ? after < before : after > before;
+    const improved = meta.lowerIsBetter
+      ? after.fraction < before.fraction
+      : after.fraction > before.fraction;
     // When the new best is a bonus/intro headline, say what it reverts to so the
     // alert can't overstate the rate a typical customer keeps.
-    const caveat = ongoingRateCaveat(afterRow, section);
+    const caveat = ongoingRateCaveat(after.row, section);
     messages.push({
       title: `${meta.title}: best rate ${improved ? 'improved' : 'changed'}`,
-      body: `Now ${formatRate(after)} (was ${formatRate(before)}).${caveat ? ` ${caveat}` : ''}`,
+      body: `Now ${formatRate(after.fraction)} (was ${formatRate(before.fraction)}).${caveat ? ` ${caveat}` : ''}`,
       search: { section },
     });
   }
@@ -398,12 +411,17 @@ export function computeChanges(
   for (const saved of favorites) {
     const key = typeof saved === 'string' ? saved : saved.productKey;
     const exactIndex = typeof saved === 'string' || saved.scope === 'product' ? null : saved.rateIndex;
-    const before = exactIndex == null ? ratesByIndex(oldCore, key) : productRatesByIndex(oldCore, key, exactIndex);
-    const after = exactIndex == null ? ratesByIndex(newCore, key) : productRatesByIndex(newCore, key, exactIndex);
+    const before = exactIndex == null
+      ? ratesByIndex(oldCore, key, depositRankMetric, mortgageRateMetric)
+      : productRatesByIndex(oldCore, key, exactIndex, depositRankMetric, mortgageRateMetric);
+    const after = exactIndex == null
+      ? ratesByIndex(newCore, key, depositRankMetric, mortgageRateMetric)
+      : productRatesByIndex(newCore, key, exactIndex, depositRankMetric, mortgageRateMetric);
     let biggest: { row: RateRow; from: number; to: number; bps: number } | null = null;
     for (const [index, nw] of after) {
       const od = before.get(index);
       if (!od || od.fraction === null || nw.fraction === null) continue;
+      if (od.metric && nw.metric && od.metric !== nw.metric) continue;
       const bps = Math.abs(bpsBetween(nw.fraction, od.fraction) ?? 0);
       if (bps >= thresholdBps && (!biggest || bps > biggest.bps)) {
         biggest = { row: nw.row, from: od.fraction, to: nw.fraction, bps };

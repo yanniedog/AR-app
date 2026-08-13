@@ -41,6 +41,7 @@ export function needsDetailsForNotifications(
     (s) =>
       s.kind === 'search' &&
       ((s.filters?.accountFeatures?.length ?? 0) > 0 ||
-        (s.filters?.eligibilityCriteria?.length ?? 0) > 0),
+        (s.filters?.eligibilityCriteria?.length ?? 0) > 0 ||
+        (s.filters?.factCriteria?.length ?? 0) > 0),
   );
 }

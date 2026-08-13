@@ -127,11 +127,111 @@ export interface PayloadCoverage {
   limitations?: string[];
 }
 
+export interface FeeAmountRange {
+  feeMinimum?: string | number;
+  feeMaximum?: string | number;
+}
+
+export interface FeeRateBased {
+  rateType?: string;
+  rate?: string | number;
+  accrualFrequency?: string;
+  amountRange?: FeeAmountRange;
+}
+
+export interface FeeDiscountEligibility {
+  discountEligibilityType?: string;
+  additionalValue?: string | number;
+  additionalInfo?: string;
+}
+
+export interface FeeDiscount {
+  description?: string;
+  discountType?: string;
+  amount?: string | number;
+  balanceRate?: string | number;
+  feeRate?: string | number;
+  transactionRate?: string | number;
+  accruedRate?: string | number;
+  additionalValue?: string | number;
+  additionalInfo?: string;
+  fixedAmount?: { amount?: string | number };
+  rateBased?: FeeRateBased;
+  eligibility?: FeeDiscountEligibility[];
+}
+
 export interface DetailItem {
+    label?: string;
+    name?: string;
+    value?: string | number;
+    info?: string;
+    /** Structured CDR fee evidence. Additive so older cached payloads remain valid. */
+    amountStatus?: 'fixed' | 'variable' | 'rate' | 'unpublished';
+    amount?: string | number;
+    currency?: string;
+    additionalValue?: string | number;
+    balanceRate?: string | number;
+    transactionRate?: string | number;
+    accruedRate?: string | number;
+    accrualFrequency?: string;
+    feeCap?: string | number;
+    feeCapPeriod?: string;
+    feeMethodUType?: string;
+    fixedAmount?: { amount?: string | number };
+    variable?: FeeAmountRange;
+    rateBased?: FeeRateBased;
+    discounts?: FeeDiscount[];
+  }
+
+export type NormalizedProductFactKind =
+  | 'fee'
+  | 'rate'
+  | 'tier'
+  | 'bundle'
+  | 'attribute'
+  | 'feature'
+  | 'eligibility'
+  | 'constraint'
+  | 'condition';
+
+export type NormalizedProductFactUnit =
+  | 'AUD'
+  | 'fraction'
+  | 'duration'
+  | 'day'
+  | 'month'
+  | 'year'
+  | 'count'
+  | 'boolean'
+  | 'text'
+  | 'enum'
+  /** Other ISO 4217 currency codes, for example USD. */
+  | (string & {});
+
+/** Lossless, source-stable product fact emitted by the payload producer. */
+export interface NormalizedProductFact {
+  id: string;
+  /** Stable semantic association without exposing a raw source/object path. */
+  groupId?: string;
+  /** Parent fact id for tier/condition/discount relationships. */
+  parentId?: string;
+  kind: NormalizedProductFactKind;
+  canonicalKey: string;
+  /** Concise customer-facing name; preferred over a humanized canonical key. */
   label?: string;
-  name?: string;
-  value?: string | number;
-  info?: string;
+  /** Original CDR enum, when one exists. Never free-form producer commentary. */
+  sourceType?: string;
+  value?: string | number | boolean;
+  minValue?: string | number;
+  maxValue?: string | number;
+  unit?: NormalizedProductFactUnit;
+  /** ISO-8601 duration, for example P1M. */
+  cadence?: string;
+  appliesTo?: string[];
+  /** Customer-facing source condition; distinct conditions remain distinct facts. */
+  condition?: string;
+  /** Curated aliases only; descriptions and URLs are excluded by contract. */
+  searchTerms?: string[];
 }
 
 /** Authoritative lender document URIs (CDR additionalInformation). */
@@ -150,6 +250,8 @@ export interface ProductDetail {
   features?: DetailItem[];
   eligibility?: DetailItem[];
   constraints?: DetailItem[];
+  /** Additive normalized facts; legacy arrays remain supported for old payloads. */
+  facts?: NormalizedProductFact[];
   /** Links to the lender's official overview / eligibility / fees / terms pages. */
   links?: ProductLinks;
 }
@@ -190,6 +292,8 @@ export interface Manifest {
     history_banks?: ManifestFile;
     /** Per-bank daily series + rate-move events (bank intelligence asset). */
     bank_history?: ManifestFile;
+    /** Variable-mortgage minus at-call-savings provider mean history. */
+    bank_spread_history?: ManifestFile;
     /** RBA decision calendar + forward meeting schedule (countdown asset). */
     rba_calendar?: ManifestFile;
   };
@@ -223,7 +327,7 @@ export interface BankHistoryChartModel {
  */
 export interface BankHistoryCache {
   run_dates: string[];
-  rates: Array<RateRow & { run_date?: string }>;
+  rates: (RateRow & { run_date?: string })[];
   section?: SectionKey;
   carry_forward_count?: number;
   current_only?: boolean;

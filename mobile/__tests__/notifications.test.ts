@@ -102,6 +102,33 @@ describe('computeChanges', () => {
     expect(msgs.some((m) => m.body.includes('→'))).toBe(true);
   });
 
+  test('mortgage watchlist alerts follow comparison rate by default', () => {
+    const before = core('0.0600');
+    const after = core('0.0600');
+    before.sections.Mortgage.rates[0].comparison_rate = '0.0650';
+    after.sections.Mortgage.rates[0].comparison_rate = '0.0640';
+    expect(computeChanges(before, after, ['A|1'], 5).some((m) => m.body.includes('→'))).toBe(true);
+  });
+
+  test('mortgage watchlist does not announce an advertised move when comparison is unchanged', () => {
+    const before = core('0.0600');
+    const after = core('0.0550');
+    before.sections.Mortgage.rates[0].comparison_rate = '0.0650';
+    after.sections.Mortgage.rates[0].comparison_rate = '0.0650';
+    expect(computeChanges(before, after, ['A|1'], 5)).toEqual([]);
+  });
+
+  test.each([
+    ['starts', undefined, '0.0650'],
+    ['stops', '0.0650', undefined],
+  ])('mortgage comparison-rate publication %s without creating a false rate move', (_label, oldComparison, newComparison) => {
+    const before = core('0.0600');
+    const after = core('0.0600');
+    before.sections.Mortgage.rates[0].comparison_rate = oldComparison;
+    after.sections.Mortgage.rates[0].comparison_rate = newComparison;
+    expect(computeChanges(before, after, ['A|1'], 5)).toEqual([]);
+  });
+
   function multiRowCore(rates: { rate_index: number; rate: string }[]): CorePayload {
     return {
       schema_version: 1,

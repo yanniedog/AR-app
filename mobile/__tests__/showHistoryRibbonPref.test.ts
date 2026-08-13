@@ -60,6 +60,46 @@ describe('showHistoryRibbon pref', () => {
     expect(useStore.getState().prefs.enableDeepSearch).toBe(true);
   });
 
+  it('migrates a legacy mortgage-rate preference to comparison once', async () => {
+    await useStore.persist.clearStorage();
+    const { mortgageRatePreferenceVersion: _marker, ...legacyPrefs } = DEFAULT_PREFS;
+    await AsyncStorage.setItem(
+      'ar-rates',
+      JSON.stringify({
+        state: {
+          prefs: { ...legacyPrefs, mortgageRateMetric: 'headline' },
+          favorites: [],
+          subscriptions: [],
+        },
+        version: 0,
+      }),
+    );
+    await useStore.persist.rehydrate();
+    expect(useStore.getState().prefs.mortgageRateMetric).toBe('comparison');
+    expect(useStore.getState().prefs.mortgageRatePreferenceVersion).toBe(1);
+  });
+
+  it('keeps an advertised-rate choice after the migration marker is stored', async () => {
+    await useStore.persist.clearStorage();
+    await AsyncStorage.setItem(
+      'ar-rates',
+      JSON.stringify({
+        state: {
+          prefs: {
+            ...DEFAULT_PREFS,
+            mortgageRateMetric: 'headline',
+            mortgageRatePreferenceVersion: 1,
+          },
+          favorites: [],
+          subscriptions: [],
+        },
+        version: 0,
+      }),
+    );
+    await useStore.persist.rehydrate();
+    expect(useStore.getState().prefs.mortgageRateMetric).toBe('headline');
+  });
+
   it('never turns a collector on without a recorded consent choice', async () => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
