@@ -15,6 +15,7 @@ import { createUserActions } from './storeUser';
 import {
   CURRENT_PRIVACY_CHOICE_VERSION,
   DEFAULT_PREFS,
+  migratedMortgageRatePreference,
   type AppState,
 } from './storeTypes';
 import type { SectionKey } from '../types';
@@ -56,7 +57,10 @@ export const useStore = create<AppState>()(
       partialize: (s) => ({
         prefs: Object.fromEntries(
           Object.entries(s.prefs).filter(([key]) =>
-            key !== 'calc' && key !== 'diagnosticsEnabled' && key !== 'rateIntelligencePro'),
+            key !== 'calc' &&
+            key !== 'diagnosticsEnabled' &&
+            key !== 'developerToolsUnlocked' &&
+            key !== 'rateIntelligencePro'),
         ) as AppState['prefs'],
         savedRates: s.savedRates,
         // Kept for one compatibility cycle so older builds still see product-wide saves.
@@ -96,6 +100,7 @@ export const useStore = create<AppState>()(
             : 0,
           diagnosticsEnabled: false,
           apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
+          ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),
           calc: normalizeCalcInputs(persistedPrefs?.calc),

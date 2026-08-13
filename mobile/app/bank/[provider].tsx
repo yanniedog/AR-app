@@ -650,7 +650,7 @@ export default function BankDetail() {
               Products that changed
             </AppText>
             <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-              Exact product matches from available cached history
+              Exact product matches from available history
             </AppText>
             {recentMoveBreakdowns.map(({ event, moves }, bi) => (
               <View

@@ -70,7 +70,7 @@ function Insight({
 
 /**
  * Actionable market summary replacing the former min/median/mean/max range bar.
- * It contrasts the best rate with the median advertised rate row. The latter is
+ * It contrasts the leading rate with the median row for the active ranking metric. The latter is
  * not provider-weighted, so the UI deliberately calls this a spread, not savings.
  */
 export const Ribbon = React.memo(function Ribbon({
@@ -91,6 +91,8 @@ export const Ribbon = React.memo(function Ribbon({
   const best = meta.lowerIsBetter ? stats.min : stats.max;
   const typical = stats.median ?? stats.mean;
   const gap = gapBps(best, typical);
+  const leadingLabel = meta.lowerIsBetter ? 'Lowest' : 'Highest';
+  const metricLabel = section === 'Mortgage' ? 'comparison rate' : 'rate';
   const accent = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
   const a11ySummary = ribbonA11ySummary(stats, section, rbaRate);
 
@@ -102,21 +104,21 @@ export const Ribbon = React.memo(function Ribbon({
     <View accessible accessibilityRole="text" accessibilityLabel={a11ySummary}>
       <Row gap={compact ? 8 : 10} style={{ alignItems: 'stretch', flexWrap: compact ? 'nowrap' : 'wrap' }}>
         <Insight
-          label="Best"
+          label={leadingLabel}
           value={formatRate(best)}
-          detail="best advertised"
-          footnote={gap == null || compact ? undefined : `${gap} bp from typical`}
+          detail={metricLabel}
+          footnote={gap == null || compact ? undefined : `${gap} bp to median`}
           compact={compact}
           accent={accent}
         />
-        <Insight label="Typical" value={formatRate(typical)} detail="median advertised rate" compact={compact} />
+        <Insight label="Median" value={formatRate(typical)} detail={`median ${metricLabel}`} compact={compact} />
       </Row>
       {compact && gap != null ? (
-        <AppText variant="tiny" color="textFaint" style={{ marginTop: 3 }}>Best is {gap} bp from typical</AppText>
+        <AppText variant="tiny" color="textFaint" style={{ marginTop: 3 }}>{gap} bp to median</AppText>
       ) : null}
       {!compact ? (
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 7 }}>
-          {stats.count} advertised rates · {stats.providers} lenders
+          {stats.count} rates · {stats.providers} lenders
           {section === 'Mortgage' && rbaRate != null
             ? ` · RBA cash rate ${formatRate(rbaRate > 1 ? rbaRate / 100 : rbaRate)}`
             : ''}

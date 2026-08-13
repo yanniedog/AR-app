@@ -12,7 +12,7 @@ import type { CorePayload, RateRow, SectionKey } from '../src/types';
 const sample = core as CorePayload;
 
 function rankedFractionOf(section: SectionKey) {
-  return (row: RateRow) => rankFraction(row, section, 'base', 'headline');
+  return (row: RateRow) => rankFraction(row, section);
 }
 
 describe('ribbonStats', () => {

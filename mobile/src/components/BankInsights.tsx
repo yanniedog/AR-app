@@ -209,7 +209,7 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
     if (error) return null;
     return (
       <AppText variant="small" color="textMuted">
-        Loading bank intelligence…
+        Loading bank changes…
       </AppText>
     );
   }

@@ -7,6 +7,7 @@ import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../ty
 import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
+import type { BankSpreadHistoryPayload } from './bankSpreadHistory';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
@@ -21,6 +22,7 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
+const BANK_SPREAD_HISTORY = `${DIR}bank-spread-history.json`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
@@ -41,6 +43,7 @@ export interface OptionalMeta {
   searchIndexSha?: string | null;
   historyBanksSha?: string | null;
   bankInsightsSha?: string | null;
+  bankSpreadHistorySha?: string | null;
 }
 
 export interface CacheMeta {
@@ -358,6 +361,19 @@ export const cache = {
 
   async clearBankInsights(): Promise<void> {
     await deletePath(BANK_INSIGHTS);
+  },
+
+  async readBankSpreadHistory(): Promise<BankSpreadHistoryPayload | null> {
+    return readJson<BankSpreadHistoryPayload>(BANK_SPREAD_HISTORY);
+  },
+
+  async writeBankSpreadHistory(json: string): Promise<void> {
+    await ensureDir();
+    await writeText(BANK_SPREAD_HISTORY, json);
+  },
+
+  async clearBankSpreadHistory(): Promise<void> {
+    await deletePath(BANK_SPREAD_HISTORY);
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {

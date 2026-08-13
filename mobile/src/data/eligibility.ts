@@ -1,5 +1,6 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { sortByDisplayLabel } from './format';
+import { curatedEligibilityFactKey, normalizedProductFacts } from './productFacts';
 
 /** CDR eligibilityType code from a details payload eligibility row (label or name). */
 export function eligibilityTypeKey(item: DetailItem): string {
@@ -8,6 +9,16 @@ export function eligibilityTypeKey(item: DetailItem): string {
 
 export function productEligibilityTypes(detail: ProductDetail | null | undefined): Set<string> {
   const out = new Set<string>();
+  const facts = normalizedProductFacts(detail).filter(
+    (fact) => fact.kind === 'eligibility' || fact.kind === 'constraint',
+  );
+  if (facts.length > 0) {
+    for (const fact of facts) {
+      const key = curatedEligibilityFactKey(fact);
+      if (key) out.add(key);
+    }
+    return out;
+  }
   for (const it of detail?.eligibility ?? []) {
     const key = eligibilityTypeKey(it);
     if (key) out.add(key);

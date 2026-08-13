@@ -23,23 +23,14 @@ export function productRateChangeText(
   compact = false,
 ): string | null {
   if (!summary) return null;
-  if (summary.kind === 'tracking') {
-    return compact
-      ? `Best rate tracked since ${formatRateChangeDate(summary.trackedSince)}`
-      : `Tracking best rate since ${formatRateChangeDate(summary.trackedSince)}`;
-  }
-  if (summary.kind === 'unchanged') {
-    return compact
-      ? `Best rate unchanged since ${formatRateChangeDate(summary.trackedSince)}`
-      : `No best-rate change observed since ${formatRateChangeDate(summary.trackedSince)}`;
-  }
+  if (summary.kind === 'tracking' || summary.kind === 'unchanged') return null;
 
   const arrow = summary.bps > 0 ? '↑' : '↓';
   const verb = summary.bps > 0 ? 'rose' : 'fell';
   const when = formatRateChangeDate(summary.observedOn);
   return compact
-    ? `Best-rate change ${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
-    : `Best rate last ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
+    ? `${arrow} ${bpsMagnitude(summary.bps)} · ${when}`
+    : `Published rate ${verb} ${bpsMagnitude(summary.bps)} · ${when} · ${formatRate(
         summary.fromRate,
       )} → ${formatRate(summary.toRate)}`;
 }

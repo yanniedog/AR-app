@@ -2,7 +2,7 @@ import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
-import { PassThroughDashboard } from '../src/components/passthrough/PassThroughDashboard';
+import { BankResponseDashboard } from '../src/components/passthrough/BankResponseDashboard';
 import { ScreenSkeleton } from '../src/components/feedback';
 import { AppText, Button, Card } from '../src/components/ui';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
@@ -17,16 +17,15 @@ export default function RbaResponseScreen() {
   const core = useStore((state) => state.core);
   const calendar = useStore((state) => state.rbaCalendar);
   const rawPayload = useStore((state) => state.bankInsights);
+  const spreadHistory = useStore((state) => state.bankSpreadHistory);
   const error = useStore((state) => state.bankInsightsError);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
-  const interests = useStore((state) => state.prefs.interests);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
+  const ensureBankSpreadHistory = useStore((state) => state.ensureBankSpreadHistory);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
   const ensureDetails = useStore((state) => state.ensureDetails);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
-  const activeSection = useStore((state) => state.activeSection);
-  const setActiveSection = useStore((state) => state.setActiveSection);
   const suitabilityRevision = useSuitabilityRevision();
   const [retrying, setRetrying] = useState(false);
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
@@ -35,8 +34,9 @@ export default function RbaResponseScreen() {
   useEffect(() => {
     if (!core) return;
     void ensureBankInsights();
+    void ensureBankSpreadHistory();
     void ensureRbaCalendar();
-  }, [core, ensureBankInsights, ensureRbaCalendar]);
+  }, [core, ensureBankInsights, ensureBankSpreadHistory, ensureRbaCalendar]);
 
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
@@ -69,10 +69,10 @@ export default function RbaResponseScreen() {
           </AppText>
           <AppText variant="small" color="textMuted">
             {suitabilityWarming
-              ? 'Checking which products are broadly available before showing lender response windows.'
+              ? 'Checking which products are broadly available before showing bank response windows.'
               : filteredEmpty
-                ? 'No observed lender response windows match the products currently included in your settings.'
-              : error ?? 'Preparing the observed lender response windows…'}
+                ? 'No observed bank response windows match the products currently included in your settings.'
+              : error ?? 'Preparing observed bank response windows…'}
           </AppText>
           {suitabilityWarming ? (
             <Button
@@ -98,14 +98,11 @@ export default function RbaResponseScreen() {
   }
 
   return (
-    <PassThroughDashboard
+    <BankResponseDashboard
       payload={payload}
-      rba={core.rba}
+      spreadHistory={spreadHistory}
       calendar={calendar}
       initialDecisionDate={decisionDate}
-      section={activeSection}
-      onSectionChange={setActiveSection}
-      interests={interests}
     />
   );
 }

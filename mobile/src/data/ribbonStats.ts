@@ -34,7 +34,7 @@ export function resolveSectionRibbonStats(
   section?: SectionKey | null,
   detailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): RateStats {
   const filtered = includeNonStandard
     ? hierarchyRows

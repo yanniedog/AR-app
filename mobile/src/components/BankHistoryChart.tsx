@@ -27,7 +27,7 @@ import { useReducedMotion } from '../hooks/useReducedMotion';
 import { withAlpha } from '../theme/colors';
 import { useTheme } from '../theme/ThemeProvider';
 import { ChartSliceControls } from './charts/ChartSliceControls';
-import { Chip, Row } from './ui';
+import { AppText, Chip, Row } from './ui';
 
 const WINDOW_OPTIONS: { value: HistoryWindow; label: string }[] = [
   { value: '30D', label: '30D' },
@@ -264,6 +264,8 @@ export function BankHistoryChart({
     highlightValues && isFiniteNumber(highlightValues[activeIndex])
       ? highlightValues[activeIndex]
       : null;
+  const activeRbaRate =
+    showRba && isFiniteNumber(rbaSteps[activeIndex]) ? rbaSteps[activeIndex] : null;
 
   const setHoverFromPlotX = (plotLocalX: number) => {
     const idx = sliceIndexFromPlotX(plotLocalX, innerW, plotDates.length);
@@ -615,6 +617,24 @@ export function BankHistoryChart({
           />
         ) : null}
       </View>
+
+      {activeRbaRate != null ? (
+        <Row
+          accessible
+          accessibilityLabel={`RBA cash rate ${pct(activeRbaRate)}`}
+          gap={7}
+          style={{ marginTop: 6 }}
+        >
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ width: 18, height: 2, borderRadius: 1, backgroundColor: rbaInk }}
+          />
+          <AppText variant="tiny" color="textMuted">
+            RBA cash rate {pct(activeRbaRate)}
+          </AppText>
+        </Row>
+      ) : null}
 
       {plotDates.length ? (
         <ChartSliceControls

@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Tabs, router } from 'expo-router';
+import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 
 import { useAppUpdateBannerVisible } from '../../src/components/AppUpdateBanner';
+import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
 import { BrandLockup } from '../../src/components/BrandLockup';
 import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { resolveInterestSection } from '../../src/data/interests';
@@ -42,20 +43,6 @@ function HomeHeaderActions() {
       >
         <Ionicons name="search" size={22} color={theme.colors.text} />
       </Pressable>
-      <Pressable
-        onPress={() => router.push('/settings')}
-        accessibilityRole="button"
-        accessibilityLabel="Settings"
-        style={({ pressed }) => ({
-          minWidth: 48,
-          minHeight: 48,
-          alignItems: 'center',
-          justifyContent: 'center',
-          opacity: pressed ? 0.6 : 1,
-        })}
-      >
-        <Ionicons name="settings-outline" size={22} color={theme.colors.text} />
-      </Pressable>
     </View>
   );
 }
@@ -92,6 +79,7 @@ export default function TabsLayout() {
         headerTitleAlign: isAndroid ? 'center' : 'left',
         headerShadowVisible: false,
         sceneStyle: { backgroundColor: theme.colors.bg },
+        headerLeft: () => <NavigationMenuButton />,
       }}
     >
       <Tabs.Screen

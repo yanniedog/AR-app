@@ -61,7 +61,7 @@ function Mover({ event, payload, core, history, historyError, onRetryHistory }: 
       {expanded ? (
         <View style={{ paddingLeft: 40, paddingBottom: 8 }}>
           <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
-            Reconstructed product-best movements from dated observations; these are not exact tier histories.
+            Published product movements. Exact tier history may vary.
           </AppText>
           {historyError && !history ? (
             <View>
@@ -88,7 +88,7 @@ function Mover({ event, payload, core, history, historyError, onRetryHistory }: 
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <AppText variant="tiny" weight="700">{move.productName}</AppText>
                     <AppText variant="tiny" color="textFaint">
-                      Observed best {formatRate(move.fromRate)} → {formatRate(move.toRate)}
+                      {formatRate(move.fromRate)} → {formatRate(move.toRate)}
                       {move.rateIndex == null ? ' · exact current tier unavailable' : ''}
                     </AppText>
                   </View>
@@ -100,7 +100,7 @@ function Mover({ event, payload, core, history, historyError, onRetryHistory }: 
             </View>
           )) : (
             <AppText variant="tiny" color="textFaint">
-              {history ? 'No reconstructed product-best movement met the detection threshold.' : 'Loading product history for this move…'}
+              {history ? 'No product changes found in the available history.' : 'Loading product history…'}
             </AppText>
           )}
           <Pressable

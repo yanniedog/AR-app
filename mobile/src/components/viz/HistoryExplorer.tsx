@@ -15,7 +15,7 @@ import { SwitcherEdgeChart } from './SwitcherEdgeChart';
 export type HistoryViewMode = 'edge' | 'calendar' | 'pulse' | 'race';
 
 const MODE_META: Record<HistoryViewMode, { label: string; icon: keyof typeof Ionicons.glyphMap; blurb: string }> = {
-  edge: { label: 'Spread', icon: 'flash-outline', blurb: 'Best advertised rate versus the median advertised rate row' },
+  edge: { label: 'Spread', icon: 'flash-outline', blurb: 'Leading advertised rate versus the median' },
   calendar: { label: 'Calendar', icon: 'calendar-outline', blurb: 'Every day, coloured by which way rates moved' },
   pulse: { label: 'Pulse', icon: 'pulse-outline', blurb: 'Daily rate-move activity across all lenders' },
   race: { label: 'Leaders', icon: 'podium-outline', blurb: "Today's leading rates, traced back through the rankings" },
@@ -131,8 +131,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       (activeMode === 'calendar' || activeMode === 'edge') &&
       (historyModel?.dates.length ?? 0) <= 1 ? (
         <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-          Multi-day Spread and Calendar need bank intelligence for standard
-          products. Pull to refresh on Home, or check Pulse and Leaders meanwhile.
+          More history is needed for Spread and Calendar. Pulse and Leaders are available now.
         </AppText>
       ) : null}
 
@@ -150,11 +149,11 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
         </AppText>
       ) : needsInsights && !insightsAvailable ? (
         <AppText variant="small" color="textMuted">
-          This lens uses the per-bank intelligence feed — included with Pro.
+          This view compares bank-level rate movements — included with Pro.
         </AppText>
       ) : needsInsights && !insights ? (
         <AppText variant="small" color="textMuted">
-          Loading bank intelligence…
+          Loading bank history…
         </AppText>
       ) : (
         <>
@@ -211,7 +210,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
           ) : null}
           {(activeMode === 'calendar' || activeMode === 'edge') && !historyModel ? (
             <AppText variant="small" color="textMuted">
-              History loads after Market explorer is enabled and bank intelligence is ready.
+              Bank history is still loading.
             </AppText>
           ) : null}
         </>

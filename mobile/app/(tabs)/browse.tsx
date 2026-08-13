@@ -93,19 +93,14 @@ export default function Browse() {
             />
           </Row>
           <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
-            <Chip label="Lenders" icon="business-outline" onPress={() => router.push('/banks')} />
+            <Chip label="Banks" icon="business-outline" onPress={() => router.push('/banks')} />
             <Chip
               label="My scenario"
               icon="calculator-outline"
               onPress={() => router.push({ pathname: '/calculator', params: { section: renderedSection } })}
             />
           </Row>
-          <View style={{ gap: theme.spacing(1) }}>
-            <AppText variant="body" weight="700">Browse by category</AppText>
-            <AppText variant="small" color="textMuted">
-              Use this when you know the product type. Search is faster for a lender or feature.
-            </AppText>
-          </View>
+          <AppText variant="body" weight="700">Browse by category</AppText>
         </View>
       </View>
       <View style={{ flex: 1 }}>

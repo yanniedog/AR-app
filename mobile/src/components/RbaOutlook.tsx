@@ -16,7 +16,7 @@ import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
 import type { EconomicExplorerLens } from './economy/EconomicExplorer';
-import { AppText, Button, Card, Row } from './ui';
+import { AppText, Button, Row } from './ui';
 
 function OutlookContent({
   data,
@@ -59,8 +59,8 @@ function OutlookContent({
     { higher: 0, lower: 0, balanced: 0 },
   );
   const pressureLine = [
-    counts.higher ? `${counts.higher} higher` : null,
-    counts.lower ? `${counts.lower} lower` : null,
+    counts.higher ? `${counts.higher} point higher` : null,
+    counts.lower ? `${counts.lower} point lower` : null,
     counts.balanced ? `${counts.balanced} mixed` : null,
   ]
     .filter(Boolean)
@@ -71,7 +71,7 @@ function OutlookContent({
     <View style={{ marginTop: 12 }}>
       {pressureLine ? (
         <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-          {pressureLine} rate-pressure signals · official series with app interpretation
+          {pressureLine} · not a rate forecast
         </AppText>
       ) : null}
       <EconomicReleasesList data={data} />
@@ -242,8 +242,8 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   }, [data, error, graphic?.pointCount, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
 
   return (
-    <Card
-      style={{ marginBottom: 16, borderColor: `${theme.colors.rba}55` }}
+    <View
+      style={{ marginBottom: 8 }}
       onLayout={(event) => {
         if (revision && event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
           setLayoutRevision(revision);
@@ -252,9 +252,9 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
     >
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1, paddingRight: 8 }}>
-          <AppText variant="h2">RBA outlook</AppText>
+          <AppText variant="h2">Decision context</AppText>
           <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-            Economic signals that shape the next rate decision
+            Inflation, jobs, housing and policy expectations
           </AppText>
         </View>
         <Pressable
@@ -273,7 +273,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       {loading && !data ? (
         <View style={{ minHeight: 120, alignItems: 'center', justifyContent: 'center' }}>
           <ActivityIndicator color={theme.colors.rba} />
-          <AppText variant="tiny" color="textMuted" style={{ marginTop: 8 }}>Loading RBA tables…</AppText>
+          <AppText variant="tiny" color="textMuted" style={{ marginTop: 8 }}>Loading official data…</AppText>
         </View>
       ) : data ? (
         <>
@@ -305,6 +305,6 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
           </View>
         </View>
       )}
-    </Card>
+    </View>
   );
 });

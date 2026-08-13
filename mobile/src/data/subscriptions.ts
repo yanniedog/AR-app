@@ -4,8 +4,12 @@ import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
+import { factCriterionId, normalizeFactCriterion } from './productFacts';
 
-export type FilterSnapshot = Omit<Filters, 'query'>;
+/** factCriteria is optional only for persisted snapshots created before this field existed. */
+export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
+  factCriteria?: Filters['factCriteria'];
+};
 
 export interface ProductSubscription {
   id: string;
@@ -68,6 +72,10 @@ export function normalizeFilterSnapshot(filters: FilterSnapshot): FilterSnapshot
     interestPayments: sort(filters?.interestPayments),
     accountFeatures: sort(filters?.accountFeatures),
     eligibilityCriteria: sort(filters?.eligibilityCriteria),
+    factCriteria: (filters?.factCriteria ?? [])
+      .map(normalizeFactCriterion)
+      .filter((criterion): criterion is NonNullable<typeof criterion> => criterion !== null)
+      .sort((a, b) => factCriterionId(a).localeCompare(factCriterionId(b))),
     includeNonStandard: !!filters?.includeNonStandard,
   };
 }
@@ -95,7 +103,7 @@ export function buildSearchLabel(
   }
   const q = query.trim();
   if (q) parts.push(`"${q}"`);
-  const n = activeFilterCount({ ...filters, query: '' });
+  const n = activeFilterCount({ ...filters, factCriteria: filters.factCriteria ?? [], query: '' });
   if (n) parts.push(`${n} filter${n === 1 ? '' : 's'}`);
   return parts.join(' · ');
 }
@@ -196,14 +204,21 @@ export function rowsForSearchSubscription(
 ): RateRow[] {
   const all = core.sections[sub.section]?.rates ?? [];
   const scoped = rowsForSearchScope(all, sub.section, sub.path, sub.hierarchyScoped);
-  return filterRows(scoped, { ...sub.filters, query: sub.query }, detailsProducts, null, sub.section);
+  const filters = normalizeFilterSnapshot(sub.filters);
+  return filterRows(
+    scoped,
+    { ...filters, factCriteria: filters.factCriteria ?? [], query: sub.query },
+    detailsProducts,
+    null,
+    sub.section,
+  );
 }
 
 function ratesMap(
   rows: RateRow[],
   section: SectionKey,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): Map<string, { row: RateRow; fraction: number | null }> {
   const out = new Map<string, { row: RateRow; fraction: number | null }>();
   for (const row of rows) {
@@ -219,13 +234,20 @@ function productRatesByIndex(
   core: CorePayload,
   productKey: string,
   rateIndex: number | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): Map<number, { row: RateRow; fraction: number | null }> {
   const out = new Map<number, { row: RateRow; fraction: number | null }>();
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, {
+        row,
+        fraction: section === 'Mortgage'
+          ? rankFraction(row, section, depositRankMetric, mortgageRateMetric)
+          : toFraction(row.rate),
+      });
     }
   }
   return out;
@@ -269,7 +291,7 @@ export function computeSubscriptionChanges(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   if (!oldCore || !subscriptions.length) return [];
   const messages: NotifyMessage[] = [];
@@ -279,8 +301,8 @@ export function computeSubscriptionChanges(
   for (const sub of subscriptions) {
     if (sub.kind === 'product') {
       const hit = largestRateChange(
-        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex),
-        productRatesByIndex(newCore, sub.productKey, sub.rateIndex),
+        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
+        productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         thresholdBps,
       );
       if (hit) {

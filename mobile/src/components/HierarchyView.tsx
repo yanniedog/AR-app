@@ -47,7 +47,7 @@ function computeHierarchyView(
   includeNonStandard: boolean,
   depositRankMetric: RankMetric = 'base',
   detailsProducts?: Record<string, ProductDetail> | null,
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ) {
   const under = rowsUnder(all, section, path);
   const nodeRows = excludeTokenDepositRates(

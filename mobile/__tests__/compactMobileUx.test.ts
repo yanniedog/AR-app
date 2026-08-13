@@ -60,8 +60,7 @@ describe('compact mobile UX contracts', () => {
     const source = read('../src/components/viz/SwitcherEdgeChart.tsx');
 
     expect(source).toContain("flexWrap: 'wrap'");
-    expect(source).toContain('typical tracked rate');
-    expect(source).toContain('best advertised rate');
+    expect(source).toContain('median and leading advertised rates');
   });
 
   it('opens receipt evidence before the audit scroll and avoids redundant lender navigation', () => {

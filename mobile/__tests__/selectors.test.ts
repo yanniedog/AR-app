@@ -445,23 +445,21 @@ describe('selectors', () => {
     ];
     // The legacy "comparison" sort must not reintroduce bonus-first ordering.
     expect(sortRows(rows, 'comparison', 'Savings').map((r) => r.product_key)).toEqual(['A|S', 'B|S']);
-    // Loans: "comparison" ranks by comparison rate; "rate" ranks by headline.
+    // Loans: both default chips rank by comparison rate.
     const loans = [
       mk({ product_key: 'L1', rate: '0.061', comparison_rate: '0.059' }),
       mk({ product_key: 'L2', rate: '0.058', comparison_rate: '0.060' }),
     ];
     expect(sortRows(loans, 'comparison', 'Mortgage').map((r) => r.product_key)).toEqual(['L1', 'L2']);
-    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual(['L2', 'L1']);
-    // Opting into comparison ranking for the rate chip mirrors comparison sort.
+    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual(['L1', 'L2']);
+    // Explicit comparison ranking mirrors the default.
     expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'comparison').map((r) => r.product_key)).toEqual([
       'L1',
       'L2',
     ]);
   });
 
-  test('sortRows mortgage rate key follows advertised headline rates on cards', () => {
-    // Mirrors Browse leaf ordering: big green rate must ascend even when
-    // comparison rates would scramble that sequence.
+  test('sortRows mortgage rate key can follow an explicit advertised-rate preference', () => {
     // Also asserts tie-breaking when rate and comparison_rate are equal:
     // falls back to provider, then product_name (same identity order as bank sort).
     const loans = [
@@ -492,7 +490,7 @@ describe('selectors', () => {
         comparison_rate: '0.0610',
       }),
     ];
-    expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
+    expect(sortRows(loans, 'rate', 'Mortgage', 'base', 'headline').map((r) => r.product_key)).toEqual([
       'BEN',
       'GO',
       'ALL',
@@ -515,7 +513,7 @@ describe('selectors', () => {
     ]);
   });
 
-  test('sortRows mortgage rate key puts missing comparison rates last among headline ties', () => {
+  test('sortRows mortgage rate key uses advertised fallback when comparison is missing', () => {
     const loans = [
       mk({ product_key: 'HAS', product_name: 'Has Cmp', rate: '0.060', comparison_rate: '0.061' }),
       mk({ product_key: 'MISS', product_name: 'Missing Cmp', rate: '0.060' }),
@@ -523,8 +521,8 @@ describe('selectors', () => {
     ];
     expect(sortRows(loans, 'rate', 'Mortgage').map((r) => r.product_key)).toEqual([
       'BETTER',
-      'HAS',
       'MISS',
+      'HAS',
     ]);
     // Comparison metric ranks purely by comparison/effective rate (no headline tie-break).
     // MISS falls back to its headline (6.0%), so it sorts between BETTER (5.9%) and HAS (6.1%).
@@ -656,6 +654,31 @@ describe('selectors', () => {
 
   test('activeFilterCount includes accountFeatures', () => {
     expect(activeFilterCount({ ...EMPTY_FILTERS, accountFeatures: ['OFFSET', 'REDRAW'] })).toBe(2);
+  });
+
+  test('filterRows applies typed normalized fact criteria with AND logic', () => {
+    const rows = [
+      mk({ product_key: 'A|1', rate: '0.05' }),
+      mk({ product_key: 'B|1', rate: '0.06' }),
+    ];
+    const details = {
+      'A|1': { facts: [
+        { id: 'offset-a', kind: 'feature' as const, canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: true, unit: 'boolean' },
+        { id: 'age-a', kind: 'eligibility' as const, canonicalKey: 'eligibility.min_age', sourceType: 'MIN_AGE', value: 18, unit: 'year' },
+      ] },
+      'B|1': { facts: [
+        { id: 'offset-b', kind: 'feature' as const, canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: false, unit: 'boolean' },
+        { id: 'age-b', kind: 'eligibility' as const, canonicalKey: 'eligibility.min_age', sourceType: 'MIN_AGE', value: 21, unit: 'year' },
+      ] },
+    };
+    const filters = { ...EMPTY_FILTERS, factCriteria: [
+      { sourceType: 'OFFSET', operator: 'eq' as const, value: true, unit: 'boolean' },
+      { sourceType: 'MIN_AGE', operator: 'lte' as const, value: 18, unit: 'year' },
+    ] };
+
+    expect(filterRows(rows, filters, details).map((row) => row.product_key)).toEqual(['A|1']);
+    expect(filterRows(rows, filters, null)).toHaveLength(0);
+    expect(activeFilterCount(filters)).toBe(2);
   });
 
   test('queryAndSort end-to-end', () => {

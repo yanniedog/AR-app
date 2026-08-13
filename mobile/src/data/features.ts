@@ -1,5 +1,6 @@
 import type { DetailItem, ProductDetail, RateRow } from '../types';
 import { sortByDisplayLabel } from './format';
+import { curatedFeatureFactKey, normalizedProductFacts } from './productFacts';
 
 /** CDR featureType code from a details payload feature row (label or name). */
 export function featureTypeKey(item: DetailItem): string {
@@ -8,6 +9,14 @@ export function featureTypeKey(item: DetailItem): string {
 
 export function productFeatureTypes(detail: ProductDetail | null | undefined): Set<string> {
   const out = new Set<string>();
+  const facts = normalizedProductFacts(detail).filter((fact) => fact.kind === 'feature');
+  if (facts.length > 0) {
+    for (const fact of facts) {
+      const key = curatedFeatureFactKey(fact);
+      if (key) out.add(key);
+    }
+    return out;
+  }
   for (const it of detail?.features ?? []) {
     const key = featureTypeKey(it);
     if (key) out.add(key);

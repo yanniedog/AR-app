@@ -147,7 +147,7 @@ function bestFraction(
   core: CorePayload,
   section: SectionKey,
   metric: RankMetric = 'base',
-  mortgageMetric: MortgageRateMetric = 'headline',
+  mortgageMetric: MortgageRateMetric = 'comparison',
 ): number | null {
   const rows = core.sections[section]?.rates ?? [];
   const best = bestRow(rows, section, false, metric, null, mortgageMetric);
@@ -160,12 +160,22 @@ function bestFraction(
 /** All rate rows for a product, keyed by rate_index, so changes can be matched
  *  row-for-row (a product can have many rows; comparing only the first misses
  *  changes and a row-order change would create false alerts). */
-function ratesByIndex(core: CorePayload, productKey: string): Map<number, { row: RateRow; fraction: number | null }> {
+function ratesByIndex(
+  core: CorePayload,
+  productKey: string,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
+): Map<number, { row: RateRow; fraction: number | null }> {
   const out = new Map<number, { row: RateRow; fraction: number | null }>();
   for (const section of SECTION_ORDER) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, {
+        row,
+        fraction: section === 'Mortgage'
+          ? rankFraction(row, section, depositRankMetric, mortgageRateMetric)
+          : toFraction(row.rate),
+      });
     }
   }
   return out;
@@ -175,13 +185,20 @@ function productRatesByIndex(
   core: CorePayload,
   productKey: string,
   rateIndex: number | null,
+  depositRankMetric: RankMetric = 'base',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): Map<number, { row: RateRow; fraction: number | null }> {
   const out = new Map<number, { row: RateRow; fraction: number | null }>();
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
-      out.set(row.rate_index ?? out.size, { row, fraction: toFraction(row.rate) });
+      out.set(row.rate_index ?? out.size, {
+        row,
+        fraction: section === 'Mortgage'
+          ? rankFraction(row, section, depositRankMetric, mortgageRateMetric)
+          : toFraction(row.rate),
+      });
     }
   }
   return out;
@@ -191,7 +208,7 @@ function ratesMap(
   rows: RateRow[],
   section: SectionKey,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): Map<string, { row: RateRow; fraction: number | null }> {
   const out = new Map<string, { row: RateRow; fraction: number | null }>();
   for (const row of rows) {
@@ -211,13 +228,13 @@ function subscriptionWouldNotify(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): boolean {
   if (sub.kind === 'product') {
     return (
       largestRateChange(
-        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex),
-        productRatesByIndex(newCore, sub.productKey, sub.rateIndex),
+        productRatesByIndex(oldCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
+        productRatesByIndex(newCore, sub.productKey, sub.rateIndex, depositRankMetric, mortgageRateMetric),
         thresholdBps,
       ) != null
     );
@@ -244,7 +261,7 @@ function subscriptionWouldNotify(
 }
 
 function enrichSubscriptionRouting(
-  raw: Array<{ title: string; body: string }>,
+  raw: { title: string; body: string }[],
   subscriptions: Subscription[],
   oldCore: CorePayload,
   newCore: CorePayload,
@@ -252,7 +269,7 @@ function enrichSubscriptionRouting(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   const enriched: NotifyMessage[] = [];
   let rawIdx = 0;
@@ -323,7 +340,7 @@ export function computeChanges(
   oldDetailsProducts?: Record<string, ProductDetail> | null,
   newDetailsProducts?: Record<string, ProductDetail> | null,
   depositRankMetric: RankMetric = 'base',
-  mortgageRateMetric: MortgageRateMetric = 'headline',
+  mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   if (!oldCore) return [];
   const subscriptionMessages = computeSubscriptionChanges(
@@ -398,8 +415,12 @@ export function computeChanges(
   for (const saved of favorites) {
     const key = typeof saved === 'string' ? saved : saved.productKey;
     const exactIndex = typeof saved === 'string' || saved.scope === 'product' ? null : saved.rateIndex;
-    const before = exactIndex == null ? ratesByIndex(oldCore, key) : productRatesByIndex(oldCore, key, exactIndex);
-    const after = exactIndex == null ? ratesByIndex(newCore, key) : productRatesByIndex(newCore, key, exactIndex);
+    const before = exactIndex == null
+      ? ratesByIndex(oldCore, key, depositRankMetric, mortgageRateMetric)
+      : productRatesByIndex(oldCore, key, exactIndex, depositRankMetric, mortgageRateMetric);
+    const after = exactIndex == null
+      ? ratesByIndex(newCore, key, depositRankMetric, mortgageRateMetric)
+      : productRatesByIndex(newCore, key, exactIndex, depositRankMetric, mortgageRateMetric);
     let biggest: { row: RateRow; from: number; to: number; bps: number } | null = null;
     for (const [index, nw] of after) {
       const od = before.get(index);

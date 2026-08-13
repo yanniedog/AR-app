@@ -427,9 +427,9 @@ export default function Compare() {
                 },
               ]}
             />
-             {labelCell('Ranked rate', RATE_ROW_H, '700')}
-             {productHistoryAvailable ? labelCell('Best-rate move', CHANGE_ROW_H) : null}
-             {attrRows.map((r) => labelCell(r.label, ROW_H))}
+             {labelCell(sameSection ? (rankedRateLabels[0] ?? 'Ranked rate') : 'Ranked rate', RATE_ROW_H, '700')}
+             {productHistoryAvailable ? labelCell('Recent move', CHANGE_ROW_H) : null}
+             {detailRows.map((r) => labelCell(r.label, ROW_H))}
           </View>
 
           {/* Horizontally scrollable product columns */}
@@ -502,7 +502,7 @@ export default function Compare() {
                        : null}
 
                      {/* Attribute rows */}
-                    {attrRows.map((r) =>
+                    {detailRows.map((r) =>
                       valueCell(
                         r.label,
                         ROW_H,
@@ -528,13 +528,13 @@ export default function Compare() {
       <Divider />
       <AppText variant="tiny" color="textFaint">
         {sameSection
-          ? `${entries.length} products · “Best” uses ${entries[0].section === 'Mortgage'
-            ? mortgageRateMetric === 'comparison' ? 'lowest comparison rate' : 'lowest advertised rate'
-            : depositRankMetric === 'base' ? 'highest published ongoing/base rate' : 'highest headline rate'}${compact ? '' : ' · scroll for more columns'}`
-          : `${entries.length} products · mixed categories — no best badge`}
+          ? `${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
+            ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+            : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`
+          : `${entries.length} products · mixed categories · no rate leader highlighted`}
       </AppText>
       <AppText variant="tiny" color="textFaint">
-        Missing means not published. Confirm current rates and conditions with the lender.
+        Missing means not published. Confirm current rates and conditions with the bank.
       </AppText>
       </ScrollView>
     </Screen>

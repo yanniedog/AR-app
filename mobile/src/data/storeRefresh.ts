@@ -38,6 +38,7 @@ type NotifyContext = {
 type OptionalRefreshWork = {
   historyBanks: boolean;
   bankInsights: boolean;
+  bankSpreadHistory: boolean;
   rbaCalendar: boolean;
 };
 
@@ -52,6 +53,8 @@ function optionalRefreshWork(
       previous?.files.history_banks?.sha256 !== next?.files.history_banks?.sha256,
     bankInsights:
       previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
+    bankSpreadHistory:
+      previous?.files.bank_spread_history?.sha256 !== next?.files.bank_spread_history?.sha256,
     rbaCalendar: !!nextRbaSha && (
       previous?.files.rba_calendar?.sha256 !== nextRbaSha ||
       !state.rbaCalendar ||
@@ -98,6 +101,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             await Promise.all([
               optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
               optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
+              optionalWork.bankSpreadHistory ? get().ensureBankSpreadHistory() : Promise.resolve(),
             ]);
           }
           // The calendar is tiny and drives decision alerts/countdowns. Keep it
@@ -204,6 +208,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       let optionalWork: OptionalRefreshWork = {
         historyBanks: false,
         bankInsights: false,
+        bankSpreadHistory: false,
         rbaCalendar: false,
       };
       try {

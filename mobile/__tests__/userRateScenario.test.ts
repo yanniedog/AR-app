@@ -25,8 +25,10 @@ describe('UserRateScenario', () => {
     expect(value.mortgage.currentRate).toBe('6.1');
     expect(value.savings).toEqual({ balance: '20000', currentRate: '4.2' });
     expect(value.termDeposit).toEqual({ balance: '50000', currentRate: '4.8' });
-    expect(value.version).toBe(2);
+    expect(value.version).toBe(3);
     expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
+    expect(value.currentProducts.mortgage).toEqual({ provider: '', productKey: '', rateIndex: null });
+    expect(value.mortgageSwitch.fundingMethod).toBe('cash-or-offset');
   });
 
   it('migrates optional projection inputs and rejects invalid enum values', () => {
@@ -40,10 +42,37 @@ describe('UserRateScenario', () => {
         },
       },
     });
-    expect(value.version).toBe(2);
+    expect(value.version).toBe(3);
     expect(value.projections.mortgage.offsetBalance).toBe('32000');
     expect(value.projections.mortgage.offsetContributionFrequency).toBe('weekly');
     expect(value.projections.mortgage.periodicFrequency).toBe('monthly');
+  });
+
+  it('migrates v2 values and normalizes section bank and optional product references', () => {
+    const value = normalizeUserRateScenario({
+      version: 2,
+      mortgage: { loanBalance: '480000', currentRate: '6.21' },
+      projections: { mortgage: { offsetBalance: '40000' } },
+      currentProducts: {
+        mortgage: { provider: '  Bank Australia  ', productKey: 'loan-key', rateIndex: 3 },
+        savings: { provider: '__not_listed__', productKey: 'must-clear', rateIndex: 2 },
+      },
+      mortgageSwitch: {
+        currentBankExitFees: '350',
+        fundingMethod: 'new-loan',
+        targetOffsetAvailable: 'yes',
+      },
+    });
+    expect(value.version).toBe(3);
+    expect(value.mortgage.loanBalance).toBe('480000');
+    expect(value.projections.mortgage.offsetBalance).toBe('40000');
+    expect(value.currentProducts.mortgage).toEqual({ provider: 'Bank Australia', productKey: 'loan-key', rateIndex: 3 });
+    expect(value.currentProducts.savings).toEqual({ provider: '__not_listed__', productKey: '', rateIndex: null });
+    expect(value.mortgageSwitch).toEqual(expect.objectContaining({
+      currentBankExitFees: '350',
+      fundingMethod: 'new-loan',
+      targetOffsetAvailable: 'yes',
+    }));
   });
 
   it('uses encrypted native storage and round-trips normalized data', async () => {

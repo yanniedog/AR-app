@@ -14,17 +14,15 @@ import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from 
 import { HistoryExplorer, type HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { formatRankedFraction, formatRate, formatRunDate } from '../../src/data/format';
+import { formatRate, formatRunDate } from '../../src/data/format';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../../src/data/historySelectors';
 import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
-import { bestRow, rankFraction } from '../../src/data/selectors';
 import { useStore } from '../../src/data/store';
 import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { rateValueLabel } from '../../src/lib/a11ySummaries';
 import { runStoreRetry } from '../../src/lib/degradationLog';
 import { openBrowse, scalarRouteParam } from '../../src/lib/nav';
 import { auditActionString } from '../../src/lib/performanceAuditActionParams';
@@ -180,9 +178,7 @@ export default function Market() {
         mortgageRateMetric,
       );
       if (stats.min === null) return [];
-      const best = bestRow(data.rates, key, includeNonStandard, depositRankMetric, detailsProducts, mortgageRateMetric);
-      const rankedBest = best ? rankFraction(best, key, depositRankMetric, mortgageRateMetric) : null;
-      return [{ key, stats, bestLabel: rateValueLabel(key, 'best'), bestRate: formatRankedFraction(rankedBest) }];
+      return [{ key, stats }];
     });
   }, [core, depositRankMetric, detailsProducts, includeNonStandard, interestSections, mortgageRateMetric, suitabilityRevision]);
 
@@ -356,21 +352,6 @@ export default function Market() {
         />
         {activeSnapshot ? (
           <>
-            <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-              <View>
-                <AppText variant="small" color="textMuted">{activeSnapshot.bestLabel}</AppText>
-                <AppText
-                  variant="rateHero"
-                  style={{ color: SECTIONS[activeSection].lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}
-                >
-                  {activeSnapshot.bestRate}
-                </AppText>
-              </View>
-              <View style={{ alignItems: 'flex-end' }}>
-                <AppText variant="small" color="textMuted">Typical advertised</AppText>
-                <AppText variant="h3">{formatRate(activeSnapshot.stats.median)}</AppText>
-              </View>
-            </Row>
             <Ribbon stats={activeSnapshot.stats} section={activeSection} />
             <Button title="Browse these products" variant="ghost" onPress={() => openBrowse(activeSection)} />
           </>
@@ -381,7 +362,7 @@ export default function Market() {
 
       <Disclosure
         title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
-        summary="Best observed rate versus the typical tracked rate"
+        summary="Leading advertised rate versus the median"
         open={historyOpen}
         onToggle={() => setHistoryOpen((open) => !open)}
       >
@@ -487,7 +468,7 @@ export default function Market() {
 
       {bankInsightsError && explorerInsights ? (
         <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-          Market depth is cached · the latest intelligence check was unavailable.
+          Showing saved market history · the latest update was unavailable.
         </AppText>
       ) : null}
     </ScreenScrollView>

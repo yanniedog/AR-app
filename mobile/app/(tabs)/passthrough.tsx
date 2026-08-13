@@ -186,7 +186,7 @@ export default function RateMovesTab() {
       {payload ? (
         <Disclosure
           title="Biggest 30-day movers"
-          summary="See which lenders changed the most"
+          summary="See which banks changed the most"
           open={moversOpen}
           onToggle={() => setMoversOpen((open) => !open)}
         >
@@ -198,11 +198,11 @@ export default function RateMovesTab() {
         <SectionHeading
           title="Since the latest RBA decision"
           subtitle={currentRbaSummary && currentRbaSummary.eligible > 0
-            ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} observed lenders moved in the same direction`
-            : 'See how lenders moved after current and previous cash-rate decisions'}
+            ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} observed banks moved in the same direction`
+            : 'See how banks moved after current and previous cash-rate decisions'}
         />
         <Button
-          title="Compare lender responses"
+          title="Compare bank responses"
           variant="secondary"
           icon="analytics-outline"
           onPress={() => router.push('/rba-response')}

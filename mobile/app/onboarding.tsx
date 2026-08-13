@@ -11,7 +11,8 @@ import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import { DEFAULT_INTERESTS, toggleInterest } from '../src/data/interests';
 import { formatRankedFraction, formatRate, formatRunDate } from '../src/data/format';
 import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
-import { bestRow, rankFraction } from '../src/data/selectors';
+import { bestRow, rankedRateLabelForSection, rankFraction } from '../src/data/selectors';
+import { ratePresentation } from '../src/data/ratePresentation';
 import { useStore } from '../src/data/store';
 import { rowsUnder } from '../src/data/taxonomy';
 import type { SectionKey } from '../src/types';
@@ -189,6 +190,14 @@ export default function Onboarding() {
     : source === 'cache'
       ? 'Saved rate'
       : 'Sample rate';
+  const snapshotRateLabel = rankedRateLabelForSection(
+    section,
+    depositRankMetric,
+    mortgageRateMetric,
+  );
+  const bestRatePresentation = snapshot?.best
+    ? ratePresentation(snapshot.best, section, mortgageRateMetric)
+    : null;
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
@@ -243,7 +252,7 @@ export default function Onboarding() {
             {meta.title.toUpperCase()}
           </AppText>
           <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
-            {snapshotLabel} · {formatRunDate(snapshot?.runDate)}
+            {snapshotLabel} · {snapshotRateLabel} · {formatRunDate(snapshot?.runDate)}
           </AppText>
           <AppText variant="h1" weight="800" style={{ color: accent, marginTop: 6 }}>
             {snapshot?.heroRate != null ? formatRankedFraction(snapshot.heroRate) : '—'}
@@ -259,10 +268,9 @@ export default function Onboarding() {
               <View style={{ flex: 1 }}>
                 <AppText variant="body" weight="700">{snapshot.best.provider}</AppText>
                 <AppText variant="tiny" color="textMuted">
-                  {formatRate(snapshot.best.rate)}
-                  {snapshot.best.comparison_rate
-                    ? ` · comparison ${formatRate(snapshot.best.comparison_rate)}`
-                    : ''}
+                  {bestRatePresentation?.secondary !== null && bestRatePresentation?.secondaryLabel
+                    ? `${bestRatePresentation.secondaryLabel} ${formatRate(bestRatePresentation.secondary)}`
+                    : snapshot.best.product_name}
                 </AppText>
               </View>
             </Row>

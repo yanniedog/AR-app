@@ -7,6 +7,7 @@ import {
   LifecycleChart,
   type LifecycleChartController,
 } from '../src/components/projections/LifecycleChart';
+import { StaySwitchChart } from '../src/components/scenario/StaySwitchChart';
 import { ScreenScrollView } from '../src/components/Screen';
 import { CompactToggle, SegmentedControl } from '../src/components/controls';
 import { AppText, Badge, Button, Card, Chip, Row } from '../src/components/ui';
@@ -26,6 +27,9 @@ import { useStore } from '../src/data/store';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { openBrowse } from '../src/lib/nav';
+import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
+import { findByKey } from '../src/data/selectors';
+import { NOT_LISTED_PROVIDER } from '../src/data/userRateScenario';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { OpaquePerformanceAuditRenderRevision } from '../src/lib/performanceAuditReadiness';
 
@@ -237,11 +241,13 @@ function ProjectionSummary({
 
 export default function Projections() {
   const theme = useTheme();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const params = useLocalSearchParams<{ section?: string; target?: string; ri?: string }>();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
+  const detailsProducts = useStore((s) => s.details?.products ?? null);
+  const ensureDetails = useStore((s) => s.ensureDetails);
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 860 && fontScale < 1.5;
   const [section, setSection] = useState<SectionKey>(() => requestedSection(params.section));
@@ -291,6 +297,33 @@ export default function Projections() {
     () => buildLifecycleProjection(section, deferredScenario),
     [deferredScenario, section],
   );
+  const targetRow = useMemo(() => {
+    if (!core || section !== 'Mortgage' || !params.target) return null;
+    const found = findByKey(core.sections, params.target);
+    if (!found || found.section !== 'Mortgage') return null;
+    const parsedIndex = params.ri != null && params.ri !== '' ? Number(params.ri) : null;
+    return Number.isInteger(parsedIndex)
+      ? found.siblings.find((row) => row.rate_index === parsedIndex) ?? null
+      : found.row;
+  }, [core, params.ri, params.target, section]);
+  useEffect(() => {
+    if (!targetRow || detailsProducts) return;
+    void ensureDetails({ forProductView: true });
+  }, [detailsProducts, ensureDetails, targetRow]);
+  const staySwitch = useMemo(() => {
+    if (!targetRow) return null;
+    const currentRef = deferredScenario.currentProducts.mortgage;
+    return buildStaySwitchProjection({
+      scenario: deferredScenario,
+      target: targetRow,
+      currentDetail: currentRef.productKey ? detailsProducts?.[currentRef.productKey] : null,
+      targetDetail: detailsProducts?.[targetRow.product_key],
+    });
+  }, [deferredScenario, detailsProducts, targetRow]);
+  const currentBankLabel = scenario.currentProducts.mortgage.provider
+    && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
+    ? scenario.currentProducts.mortgage.provider
+    : 'Current bank';
   useEffect(() => {
     setMetric(result.defaultMetric);
     if (section !== 'Mortgage') setDimension('rates');
@@ -960,6 +993,9 @@ export default function Projections() {
             Illustrative. Check fees, product conditions and lender calculations before acting.
           </AppText>
         </Card>
+      ) : null}
+      {staySwitch?.ready ? (
+        <StaySwitchChart projection={staySwitch} currentBank={currentBankLabel} />
       ) : null}
       <Card style={{ gap: 10 }}>
         <AppText variant="h3">Compare this scenario</AppText>

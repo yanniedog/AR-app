@@ -2,6 +2,7 @@ import type { DetailsPayload } from '../types';
 import { cache } from './cache';
 import {
   downloadBankInsights,
+  downloadBankSpreadHistory,
   downloadDetails,
   downloadHistoryBanks,
   downloadRbaCalendar,
@@ -12,6 +13,7 @@ import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeBankInsightsPayload } from './bankInsights';
+import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import {
   normalizeProductHistoryPayload,
   syncProductHistoryFromDailyPayloads,
@@ -536,6 +538,45 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       }
     },
 
+    async ensureBankSpreadHistory(opts: { force?: boolean } = {}) {
+      const { force = false } = opts;
+      const { core, manifest, source, bankSpreadHistory } = get();
+      if (!core) return;
+      if (source !== 'remote' || !manifest) {
+        set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Bank spread history needs the latest online dataset.' });
+        return;
+      }
+      const asset = manifest.files.bank_spread_history;
+      if (!asset) {
+        set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Mortgage and savings spread history is not available yet.' });
+        return;
+      }
+      if (force) set({ bankSpreadHistoryError: null });
+      const coreSha = manifest.files.core.sha256;
+      const meta = await cache.readOptionalMeta();
+      const fresh = (payload: ReturnType<StoreGet>['bankSpreadHistory']) => Boolean(
+        payload && payload.run_date === core.run_date && meta?.coreSha === coreSha &&
+        meta.bankSpreadHistorySha === asset.sha256,
+      );
+      if (!force && fresh(bankSpreadHistory)) return;
+      const cached = force ? null : normalizeBankSpreadHistoryPayload(await cache.readBankSpreadHistory());
+      if (!force && fresh(cached)) {
+        set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
+        return;
+      }
+      try {
+        const { bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
+        const live = get();
+        if (live.manifest?.files.bank_spread_history?.sha256 !== asset.sha256 || live.core?.run_date !== downloaded.run_date) return;
+        await cache.writeBankSpreadHistory(JSON.stringify(downloaded));
+        await cache.writeOptionalMeta({ coreSha, bankSpreadHistorySha: asset.sha256 });
+        set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
+      } catch (error) {
+        const message = String((error as Error)?.message ?? error);
+        set({ bankSpreadHistory: cached ?? bankSpreadHistory ?? null, bankSpreadHistoryError: message });
+      }
+    },
+
     async ensureRbaCalendar() {
       const { core, manifest, source, rbaCalendar, rbaCalendarSha } = get();
       if (!core || source !== 'remote' || !manifest) {
@@ -617,6 +658,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         await get().refresh({ manual: true });
       }
       await get().ensureBankInsights({ force: true });
+    },
+
+    async retryBankSpreadHistory() {
+      set({ bankSpreadHistoryError: null });
+      if (!get().manifest?.files.bank_spread_history) await get().refresh({ manual: true });
+      await get().ensureBankSpreadHistory({ force: true });
     },
 
     async ensureProductHistory(
@@ -774,9 +821,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     | 'ensureSearchIndex'
     | 'ensureHistoryBanks'
     | 'ensureBankInsights'
+    | 'ensureBankSpreadHistory'
     | 'ensureRbaCalendar'
     | 'ensureProductHistory'
     | 'retryHistoryBanks'
     | 'retryBankInsights'
+    | 'retryBankSpreadHistory'
   >;
 }

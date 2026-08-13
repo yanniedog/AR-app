@@ -44,11 +44,35 @@ import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
 import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'rate', label: 'Best rate' },
-  { key: 'comparison', label: 'Comparison' },
-  { key: 'bank', label: 'Bank A-Z' },
-];
+function availableSortOptions(
+  section: SectionKey,
+  mortgageMetric: 'headline' | 'comparison',
+  depositMetric: 'base' | 'max',
+): { key: SortKey; label: string }[] {
+  if (section === 'Mortgage') {
+    return mortgageMetric === 'comparison'
+      ? [{ key: 'rate', label: 'Comparison rate' }, { key: 'bank', label: 'Bank A-Z' }]
+      : [
+          { key: 'rate', label: 'Advertised rate' },
+          { key: 'comparison', label: 'Comparison rate' },
+          { key: 'bank', label: 'Bank A-Z' },
+        ];
+  }
+  return [
+    { key: 'rate', label: depositMetric === 'base' ? 'Ongoing rate' : 'Headline rate' },
+    { key: 'bank', label: 'Bank A-Z' },
+  ];
+}
+
+function compatibleSortKey(
+  value: string | undefined,
+  section: SectionKey,
+  mortgageMetric: 'headline' | 'comparison',
+): SortKey {
+  const normalized = normalizeSortKey(value);
+  if (normalized !== 'comparison') return normalized;
+  return section === 'Mortgage' && mortgageMetric === 'headline' ? normalized : 'rate';
+}
 
 const rowToken = (r: { rate_index?: number | string; product_key: string }) =>
   r.rate_index == null ? r.product_key : `${r.rate_index}#${r.product_key}`;
@@ -116,7 +140,12 @@ export default function Search() {
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
-  const [sortKey, setSortKey] = useState<SortKey>(() => normalizeSortKey(restoredSub?.sort ?? sortRaw));
+  const [sortKey, setSortKey] = useState<SortKey>(() =>
+    compatibleSortKey(restoredSub?.sort ?? sortRaw, section, mortgageRateMetric));
+  const sortOptions = useMemo(
+    () => availableSortOptions(section, mortgageRateMetric, depositRankMetric),
+    [depositRankMetric, mortgageRateMetric, section],
+  );
   // Seed from the saved product profile so users don't re-select the same
   // attributes on every screen; still fully overridable here.
   const [filters, setFilters] = useState<Filters>(() =>
@@ -128,14 +157,16 @@ export default function Search() {
   const [selectMode, setSelectMode] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
 
-  useEffect(() => setSortKey(normalizeSortKey(sortRaw)), [sortRaw]);
+  useEffect(() => {
+    setSortKey(compatibleSortKey(sortRaw, section, mortgageRateMetric));
+  }, [mortgageRateMetric, section, sortRaw]);
 
   useEffect(() => {
     if (!restoredSub) return;
     setQuery(restoredSub.query);
-    setSortKey(normalizeSortKey(restoredSub.sort));
+    setSortKey(compatibleSortKey(restoredSub.sort, section, mortgageRateMetric));
     setFilters({ ...EMPTY_FILTERS, ...restoredSub.filters });
-  }, [restoredSub]);
+  }, [mortgageRateMetric, restoredSub, section]);
 
   const baseRows = useMemo(() => {
     const all = core?.sections[section]?.rates ?? [];
@@ -192,6 +223,7 @@ export default function Search() {
         interestPayments: effectiveFilters.interestPayments,
         accountFeatures: effectiveFilters.accountFeatures,
         eligibilityCriteria: effectiveFilters.eligibilityCriteria,
+        factCriteria: effectiveFilters.factCriteria,
         includeNonStandard: effectiveFilters.includeNonStandard,
       },
     }),
@@ -202,7 +234,8 @@ export default function Search() {
   const searchIndexLoading = deepSearchActive && !searchIndex;
   const detailFiltersPending =
     (effectiveFilters.accountFeatures.length > 0 ||
-      effectiveFilters.eligibilityCriteria.length > 0) &&
+      effectiveFilters.eligibilityCriteria.length > 0 ||
+      effectiveFilters.factCriteria.length > 0) &&
     !details?.products;
 
   const onToggleSearchAlert = async () => {
@@ -239,8 +272,8 @@ export default function Search() {
     },
     'search.query.clear': () => setQuery(''),
     'search.sort.next': () => setSortKey((current) => {
-      const index = SORT_OPTIONS.findIndex((option) => option.key === current);
-      return SORT_OPTIONS[(index + 1) % SORT_OPTIONS.length].key;
+      const index = sortOptions.findIndex((option) => option.key === current);
+      return sortOptions[(index + 1) % sortOptions.length].key;
     }),
     'search.filters.open': () => setFilterOpen(true),
     'search.filter.provider.first': (...args: unknown[]) => {
@@ -262,7 +295,7 @@ export default function Search() {
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [baseRows, selected, toggleCompareMode, toggleSelect]);
+  }), [baseRows, selected, sortOptions, toggleCompareMode, toggleSelect]);
   const searchPending = detailFiltersPending || searchIndexLoading;
   const listRevision = JSON.stringify([
     coreSha ?? core?.run_date ?? 'none',
@@ -348,7 +381,7 @@ export default function Search() {
           />
         </Row>
         <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
-          {SORT_OPTIONS.map((o) => (
+          {sortOptions.map((o) => (
             <Chip key={o.key} label={o.label} selected={sortKey === o.key} onPress={() => setSortKey(o.key)} />
           ))}
           <Chip
@@ -416,7 +449,7 @@ export default function Search() {
                   <View style={{ gap: theme.spacing(3) }}>
                     <EmptyState
                       title="Could not load product features"
-                      subtitle="Feature and eligibility filters need the details payload. Retry when online, or clear those filters."
+                      subtitle="Connect and retry, or clear the feature filters."
                     />
                     <Button
                       title="Retry"

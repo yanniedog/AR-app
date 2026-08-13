@@ -17,7 +17,7 @@ import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decis
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { lvrTierForValue, profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
-import { bestRow, rankFraction } from '../../src/data/selectors';
+import { bestRow, rankedRateLabelForSection, rankFraction } from '../../src/data/selectors';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { conditionalNote } from '../../src/lib/rateQualifier';
 import { ShareQrModal } from '../../src/components/ShareQrModal';
@@ -31,6 +31,9 @@ import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditR
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
+import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
+import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
+import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 
 /**
  * Slim one-line entry point to a secondary tool. Keeps Today's supporting
@@ -139,6 +142,10 @@ export default function Home() {
   const profileFeaturesPending =
     profileFeaturesForSection(profileFilters, section).length > 0 && !detailsProducts;
   const ratesReady = filterReady && !profileFeaturesPending;
+  const switchProjectionNeedsDetails = section === 'Mortgage'
+    && !!userScenario.mortgage.currentRate.trim()
+    && !!userScenario.mortgage.years.trim()
+    && (!!userScenario.mortgage.loanBalance.trim() || !!userScenario.mortgage.propertyValue.trim());
 
   useEffect(() => {
     filterPrepAttempts.current = 0;
@@ -146,7 +153,7 @@ export default function Home() {
   }, [coreRevision]);
 
   useEffect(() => {
-    if (!coreRevision || refreshing || (!warmDetails && !profileFeaturesPending)) return;
+    if (!coreRevision || refreshing || (!warmDetails && !profileFeaturesPending && !switchProjectionNeedsDetails)) return;
     let cancelled = false;
     let interaction: ReturnType<typeof InteractionManager.runAfterInteractions> | null = null;
     // Details are optional and expensive. Warm them after first paint only for
@@ -162,7 +169,7 @@ export default function Home() {
       clearTimeout(timer);
       interaction?.cancel();
     };
-  }, [coreRevision, refreshing, warmDetails, profileFeaturesPending, ensureDetails]);
+  }, [coreRevision, refreshing, warmDetails, profileFeaturesPending, switchProjectionNeedsDetails, ensureDetails]);
 
   // Standard-only Home needs the details-derived suitability index. Refresh /
   // bootstrap already force-rebuild, but kick ensureDetails here too so the
@@ -352,14 +359,30 @@ export default function Home() {
           : loyaltyComparisonRate - scenarioSummary.currentRate,
       )
     : null;
+  const staySwitchProjection = useMemo(() => {
+    if (section !== 'Mortgage' || !activeBest) return null;
+    const currentRef = userScenario.currentProducts.mortgage;
+    return buildStaySwitchProjection({
+      scenario: userScenario,
+      target: activeBest,
+      currentDetail: currentRef.productKey ? detailsProducts?.[currentRef.productKey] : null,
+      targetDetail: detailsProducts?.[activeBest.product_key],
+    });
+  }, [activeBest, detailsProducts, section, userScenario]);
+  const currentBankLabel = userScenario.currentProducts.mortgage.provider
+    && userScenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
+    ? userScenario.currentProducts.mortgage.provider
+    : 'Current bank';
   const shareMessage = useMemo(() => {
     if (!core) return null;
     if (heroRate == null) return null; // nothing worth sharing until rates are loaded
+    const direction = meta.lowerIsBetter ? 'Lowest' : 'Highest';
+    const rateLabel = rankedRateLabelForSection(section, depositRankMetric, mortgageRateMetric).toLowerCase();
     return [
-      `Best ${meta.title.toLowerCase()} rate today: ${formatRate(heroRate)} (${formatRunDate(core.run_date)})`,
-      `Tracked daily across ${Object.keys(core.brands ?? {}).length} Australian lenders.`,
+      `${direction} ${rateLabel} today: ${formatRate(heroRate)} (${formatRunDate(core.run_date)})`,
+      `Observed across ${Object.keys(core.brands ?? {}).length} Australian banks and lenders.`,
     ].join('\n');
-  }, [core, meta, heroRate]);
+  }, [core, depositRankMetric, heroRate, meta.lowerIsBetter, mortgageRateMetric, section]);
   const shareToday = useCallback(() => setShareOpen(true), []);
 
   const auditSelectSection = useCallback((...args: unknown[]) => {
@@ -561,6 +584,22 @@ export default function Home() {
           />
           <AppText variant="tiny" color="textMuted">Entered amounts stay on this device.</AppText>
         </Card>
+      ) : null}
+
+      {staySwitchProjection?.ready ? (
+        <StaySwitchChart
+          projection={staySwitchProjection}
+          currentBank={currentBankLabel}
+          compact
+          onOpenFull={() => router.push({
+            pathname: '/projections',
+            params: {
+              section: 'Mortgage',
+              target: activeBest?.product_key,
+              ri: activeBest?.rate_index != null ? String(activeBest.rate_index) : undefined,
+            },
+          } as never)}
+        />
       ) : null}
 
       <SectionCrossfade section={section}>

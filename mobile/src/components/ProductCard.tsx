@@ -9,10 +9,11 @@ import {
   formatTerm,
   humanizeEnum,
   isNonStandard,
+  toFraction,
 } from '../data/format';
 import { useStore } from '../data/store';
 import { assessAccess } from '../data/access';
-import { rateValueLabel } from '../lib/a11ySummaries';
+import { ratePresentation } from '../data/ratePresentation';
 import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
 import { openBank } from '../lib/nav';
 import type { LogoRenderState } from '../lib/logoReadiness';
@@ -93,6 +94,7 @@ export function ProductCard({
   const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
+  const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const nonStandard = isNonStandard(row);
   const qualifier = rateQualifier(row, section);
   const access = React.useMemo(
@@ -101,14 +103,31 @@ export function ProductCard({
   );
   const tags = chips(row, section, qualifier);
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  const rateLabel = displayedRateLabel ?? rateValueLabel(section);
-  const rateText = formatRate(displayedRate ?? row.rate);
-  const showingComparisonRate = displayedRateLabel === 'Comparison rate';
+  const presentation = ratePresentation(row, section, mortgageRateMetric);
+  const hasDisplayedRateOverride = displayedRate !== undefined;
+  const rateLabel = displayedRateLabel ?? presentation.primaryLabel;
+  const rateValue = hasDisplayedRateOverride ? displayedRate : presentation.primary;
+  const rateText = formatRate(rateValue);
+  const showingComparisonRate = rateLabel === 'Comparison rate';
+  const secondaryRate = section === 'Mortgage'
+    ? showingComparisonRate
+      ? toFraction(row.rate)
+      : toFraction(row.comparison_rate)
+    : presentation.secondary;
+  const secondaryLabel = section === 'Mortgage'
+    ? showingComparisonRate
+      ? 'Advertised rate'
+      : secondaryRate !== null
+        ? 'Comparison rate'
+        : null
+    : presentation.secondaryLabel;
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
   const openLender = onLongPress ?? (() => openBank(row.provider, { section }));
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
-    row.comparison_rate && !showingComparisonRate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
+    secondaryRate !== null && secondaryLabel
+      ? `, ${secondaryLabel.toLowerCase()} ${formatRate(secondaryRate)}`
+      : ''
   }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
     rateChangeText ? `, ${rateChangeText.replace('↑', 'up').replace('↓', 'down')}` : ''
   }`;
@@ -136,7 +155,7 @@ export function ProductCard({
         delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
-        accessibilityHint={onLongPress ? 'Long press also opens this lender' : undefined}
+        accessibilityHint={onLongPress ? 'Long press also opens this bank' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
@@ -257,9 +276,9 @@ export function ProductCard({
           >
             {rateText}
           </AppText>
-          {row.comparison_rate && !showingComparisonRate ? (
+          {secondaryRate !== null && secondaryLabel ? (
             <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-              {formatRate(row.comparison_rate)} comparison
+              {formatRate(secondaryRate)} {secondaryLabel.toLowerCase()}
             </AppText>
           ) : null}
         </View>
@@ -271,7 +290,7 @@ export function ProductCard({
             <Pressable
               onPress={openLender}
               accessibilityRole="button"
-              accessibilityLabel={`View ${row.provider} lender history`}
+              accessibilityLabel={`View ${row.provider} bank history`}
               android_ripple={androidRipple(theme.colors.primaryMuted, true)}
               style={{
                 width: 48,
