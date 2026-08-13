@@ -400,7 +400,7 @@ export default function ProductDetail() {
           title: row.provider,
           headerRight: () => (
             <Row gap={2}>
-              {favorite ? (
+              {favorite || subscribed ? (
                 <IconButton
                   icon={subscribed ? 'notifications' : 'notifications-outline'}
                   color={subscribed ? 'primary' : 'text'}

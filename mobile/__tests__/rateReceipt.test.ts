@@ -142,6 +142,31 @@ describe('local negotiation brief', () => {
     expect(brief.disclaimer).toMatch(/generated locally/i);
   });
 
+  test('does not treat a variable mortgage loan term as a fixed rate period', () => {
+    const selected = row({ term: 'P30Y', term_months: 360 });
+    const receipt = buildRateReceipt({
+      row: selected,
+      section: 'Mortgage',
+      evidenceDate: '2026-08-04',
+    });
+    const scenario = normalizeUserRateScenario({
+      mortgage: {
+        mode: 'refi',
+        loanBalance: '500000',
+        currentRate: '6.00',
+      },
+    });
+    const brief = buildNegotiationBrief({ receipt, scenario, sectionRows: [selected] });
+
+    expect(receipt.ratePeriodMonths).toBeNull();
+    expect(brief.illustration).toMatchObject({
+      annualDifference: 2500,
+      periodDifference: 2500,
+      periodLabel: 'per year',
+    });
+    expect(brief.illustration?.monthlyDifference).toBeCloseTo(208.33, 1);
+  });
+
   test('models a deposit improvement and avoids inventing a monthly TD return', () => {
     const selected = row({
       product_key: 'td|1',

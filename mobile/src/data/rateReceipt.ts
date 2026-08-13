@@ -182,9 +182,16 @@ export function buildRateReceipt(input: {
 
   const officialSources = officialReceiptSources(detail?.links);
   const explicitTermMonths = Number(row.term_months);
-  const ratePeriodMonths = Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
-    ? explicitTermMonths
-    : isoDurationMonths(row.term);
+  const publishedRateType = `${row.rate_type ?? ''} ${row.ribbon_rate_structure ?? ''}`.toUpperCase();
+  const hasPublishedRatePeriod = section === 'TD' ||
+    qualifier.kind === 'intro' ||
+    (section === 'Savings' && /\b(?:INTRODUCTORY|INTRO)\b/.test(publishedRateType)) ||
+    (section === 'Mortgage' && /\b(?:FIXED|INTRODUCTORY|INTRO)\b/.test(publishedRateType));
+  const ratePeriodMonths = !hasPublishedRatePeriod
+    ? null
+    : Number.isFinite(explicitTermMonths) && explicitTermMonths > 0
+      ? explicitTermMonths
+      : isoDurationMonths(row.term);
   const ratePeriodLabel = ratePeriodMonths == null ? null : formatTerm(row) || `${ratePeriodMonths} months`;
   const limitations = [
     'This receipt records what the Australian Rates dataset observed; it is not a lender quote or approval.',

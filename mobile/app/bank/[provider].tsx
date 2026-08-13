@@ -262,6 +262,11 @@ export default function BankDetail() {
     [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision],
   );
 
+  const visibleBankEvents = useMemo(
+    () => recentBankEvents(visibleBankInsights, { provider }),
+    [provider, visibleBankInsights],
+  );
+
   const chartSections = useMemo(
     () =>
       SECTION_ORDER.filter((section) => !!visibleBankInsights?.banks?.[provider]?.[section]),
@@ -344,21 +349,20 @@ export default function BankDetail() {
   }, [catalogsBySection, focusBreakdown?.matched, focusEvent, focusSection, focusSourceEvent, productHistory]);
 
   const displayBankEvents = useMemo(
-    () => (productHistory ? bankEvents : rawBankEvents.slice(0, 8)),
-    [bankEvents, productHistory, rawBankEvents],
+    () => (productHistory ? bankEvents : visibleBankEvents.slice(0, 8)),
+    [bankEvents, productHistory, visibleBankEvents],
   );
 
   const bankEventContexts = useMemo(() => {
     const map = new Map<string, BankEventRateContext | null>();
-    const contextPayload = productHistory ? visibleBankInsights : bankInsights;
     for (const event of displayBankEvents) {
       map.set(
         `${event.date}:${event.section}`,
-        bankEventMedianContext(contextPayload, event),
+        bankEventMedianContext(visibleBankInsights, event),
       );
     }
     return map;
-  }, [bankInsights, displayBankEvents, productHistory, visibleBankInsights]);
+  }, [displayBankEvents, visibleBankInsights]);
 
   const focusRateCtx = useMemo(
     () => (focusEvent ? bankEventMedianContext(visibleBankInsights, focusEvent) : null),
@@ -418,7 +422,7 @@ export default function BankDetail() {
       actions['lender.history.date.previous'] = () =>
         historyAuditActionsRef.current?.selectPreviousDate();
     }
-    const firstMove = bankEvents[0] ?? rawBankEvents[0];
+    const firstMove = bankEvents[0] ?? visibleBankEvents[0];
     if (firstMove) {
       actions['lender.move.first'] = () => {
         handleMoveSelect(firstMove);
@@ -426,7 +430,7 @@ export default function BankDetail() {
       };
     }
     return actions;
-  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, rawBankEvents]);
+  }, [activeChartSection, bankEvents, chartModel, chartSections, core, handleMoveSelect, provider, visibleBankEvents]);
   const lenderLogoIds = useMemo(
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],
@@ -547,12 +551,12 @@ export default function BankDetail() {
           </View>
         </Row>
 
-        {showBankInsights && rawBankEvents[0] ? (
+        {showBankInsights && displayBankEvents[0] ? (
           <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
             <AppText variant="small" color="textMuted">Latest observed move</AppText>
             <AppText variant="body" weight="700">
-              {SECTIONS[rawBankEvents[0].section].title} {moveVerb(rawBankEvents[0].section, rawBankEvents[0].dir)}{' '}
-              by an average {percentagePointLabel(rawBankEvents[0].avg_bps)} on {formatRunDate(rawBankEvents[0].date)}.
+              {SECTIONS[displayBankEvents[0].section].title} {moveVerb(displayBankEvents[0].section, displayBankEvents[0].dir)}{' '}
+              by an average {percentagePointLabel(displayBankEvents[0].avg_bps)} on {formatRunDate(displayBankEvents[0].date)}.
             </AppText>
           </Card>
         ) : null}
@@ -710,7 +714,7 @@ export default function BankDetail() {
                   <AppText variant="tiny" color="textFaint" style={{ marginBottom: 4 }}>
                     {productHistory
                       ? 'Counts reflect exact product matches under your settings.'
-                      : 'Counts cover all tracked products. Tap a move to identify the products under your settings.'}
+                      : 'Moves shown match the lender sections available under your settings.'}
                   </AppText>
                   {displayBankEvents.length ? (
                     displayBankEvents.map((event) => (
