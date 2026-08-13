@@ -19,6 +19,7 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
+import { loadTrackedRatesSecure, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
 import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
@@ -72,6 +73,7 @@ export const useStore = create<AppState>()(
         const hasRecordedPrivacyChoice =
           hasCurrentPrivacyChoice || hasPreviousPrivacyChoice;
         const savedRates = normalizeSavedRates(p?.savedRates, p?.favorites);
+        const trackedRates = normalizeTrackedRates(p?.trackedRates, savedRates);
         const prefs = {
           ...DEFAULT_PREFS,
           ...persistedPrefs,
@@ -104,6 +106,7 @@ export const useStore = create<AppState>()(
           ...p,
           prefs,
           savedRates,
+          trackedRates,
           favorites: [...new Set(savedRates.map((ref) => ref.productKey))],
           activeSection,
         };
@@ -113,6 +116,11 @@ export const useStore = create<AppState>()(
         // starts. Recover that snapshot before declaring hydration complete so
         // process death cannot strand temporary settings or saved products.
         void recoverInterruptedPerformanceAudit(useStore)
+          .then(async () => {
+            const state = useStore.getState();
+            const trackedRates = await loadTrackedRatesSecure(state.savedRates);
+            useStore.setState({ trackedRates });
+          })
           .catch((error) => {
             debugLog.error(
               'perf-audit',

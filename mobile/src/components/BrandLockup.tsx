@@ -56,9 +56,11 @@ function isHomeHeaderPath(pathname: string) {
 /** Header brand row aligned with dashboard `.site-brand` + `.site-brand-inline-logo`. */
 export function BrandLockup({
   markSize = 36,
+  compact = false,
   style,
 }: {
   markSize?: number;
+  compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
@@ -99,7 +101,7 @@ export function BrandLockup({
         <ArMarkLogo size={markSize - 4} />
       </View>
       <AppText variant="h3" weight="700" style={{ letterSpacing: -0.3 }}>
-        AustralianRates
+        {compact ? 'Rates' : 'AustralianRates'}
       </AppText>
     </View>
   );

@@ -32,11 +32,13 @@ import {
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { ensurePermissions } from '../../src/data/notifications';
+import { buildNegotiationBrief, buildRateReceipt } from '../../src/data/rateReceipt';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
 import { logSwallowedError } from '../../src/lib/degradationLog';
@@ -50,6 +52,14 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { relativeDate } from '../../src/data/format';
 import { useTheme } from '../../src/theme/ThemeProvider';
+
+function money(value: number): string {
+  return value.toLocaleString('en-AU', {
+    style: 'currency',
+    currency: 'AUD',
+    maximumFractionDigits: 0,
+  });
+}
 
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -88,6 +98,7 @@ export default function ProductDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const { scenario } = useUserRateScenario();
 
   useEffect(() => {
     void ensureDetails({ forProductView: true });
@@ -146,6 +157,20 @@ export default function ProductDetail() {
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
+  const personalBrief = useMemo(() => {
+    if (!row || !found || !core) return null;
+    const receipt = buildRateReceipt({
+      row,
+      section: found.section,
+      evidenceDate: core.run_date,
+      detail,
+    });
+    return buildNegotiationBrief({
+      receipt,
+      scenario,
+      sectionRows: core.sections[found.section].rates ?? [],
+    });
+  }, [core, detail, found, row, scenario]);
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
@@ -374,17 +399,19 @@ export default function ProductDetail() {
           title: row.provider,
           headerRight: () => (
             <Row gap={2}>
-              <IconButton
-                icon={subscribed ? 'notifications' : 'notifications-outline'}
-                color={subscribed ? 'primary' : 'text'}
-                onPress={() => void onToggleNotify()}
-                accessibilityLabel={subscribed ? 'Remove rate alert' : 'Notify on rate change'}
-              />
+              {favorite ? (
+                <IconButton
+                  icon={subscribed ? 'notifications' : 'notifications-outline'}
+                  color={subscribed ? 'primary' : 'text'}
+                  onPress={() => void onToggleNotify()}
+                  accessibilityLabel={subscribed ? 'Remove rate alert' : 'Notify on rate change'}
+                />
+              ) : null}
               <IconButton
                 icon={favorite ? 'star' : 'star-outline'}
                 color={favorite ? 'warning' : 'text'}
                 onPress={() => toggleSavedRate(row)}
-                accessibilityLabel={favorite ? 'Remove this rate from saved' : 'Save this exact rate'}
+                accessibilityLabel={favorite ? 'Remove this rate from My rates' : 'Save this exact rate to My rates'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
             </Row>
@@ -427,6 +454,9 @@ export default function ProductDetail() {
             section={section}
             current={{ date: core?.run_date, rate: currentBest }}
           />
+          <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
+            Exact published tier · observed {core?.run_date}
+          </AppText>
           {isNonStandard(row) ? (
             <View
               style={{
@@ -438,7 +468,7 @@ export default function ProductDetail() {
               }}
             >
               <AppText variant="tiny" weight="700" style={{ color: theme.colors.warning }}>
-                Non-standard account
+                Special eligibility
               </AppText>
             </View>
           ) : null}
@@ -469,6 +499,38 @@ export default function ProductDetail() {
           ) : null}
         </Card>
 
+        {personalBrief?.illustration ? (
+          <Card
+            style={{
+              marginBottom: 16,
+              borderLeftWidth: 3,
+              borderLeftColor: theme.colors.success,
+            }}
+          >
+            <AppText variant="small" color="textMuted">What this rate could mean</AppText>
+            <AppText variant="h2" style={{ color: theme.colors.success, marginTop: 3 }}>
+              {money(personalBrief.illustration.periodDifference)} {personalBrief.illustration.periodLabel}
+            </AppText>
+            {personalBrief.illustration.monthlyDifference != null ? (
+              <AppText variant="body" weight="700">
+                about {money(personalBrief.illustration.monthlyDifference)} per month
+              </AppText>
+            ) : null}
+            <AppText variant="tiny" color="textMuted" style={{ marginTop: 6, lineHeight: 16 }}>
+              Compared with your entered {personalBrief.illustration.currentRate} rate. Illustrative; fees not included.
+            </AppText>
+          </Card>
+        ) : (
+          <Card variant="outlined" style={{ marginBottom: 16, gap: 10 }}>
+            <AppText variant="body" weight="700">See what this rate means for your amount</AppText>
+            <Button
+              title="Add my rate"
+              variant="secondary"
+              onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section } })}
+            />
+          </Card>
+        )}
+
         <AccessNotice name={row.product_name} provider={row.provider} detail={detail} loading={detailsLoading} />
 
         {detail?.description ? (
@@ -480,18 +542,17 @@ export default function ProductDetail() {
         <ProductSpecs row={row} section={section} />
 
         <Button
-          title="Rate receipt & conversation brief"
+          title={favorite ? 'Saved to My rates' : 'Save exact rate to My rates'}
+          icon={favorite ? 'star' : 'star-outline'}
+          style={{ marginBottom: 10 }}
+          onPress={() => toggleSavedRate(row)}
+        />
+        <Button
+          title="Prepare a bank call"
           icon="receipt-outline"
           variant="secondary"
           style={{ marginBottom: 16 }}
           onPress={() => openRateReceipt(productKey, row.rate_index)}
-        />
-        <Button
-          title={productWideSaved ? 'Remove all variants from Saved' : 'Save all product variants'}
-          icon={productWideSaved ? 'star' : 'star-outline'}
-          variant="secondary"
-          style={{ marginBottom: 16 }}
-          onPress={() => toggleSavedRate(row, 'product')}
         />
 
         <SectionTitle text="Rate history" icon="trending-up-outline" />
@@ -574,6 +635,14 @@ export default function ProductDetail() {
         />
 
         <ProductRatesList rows={rateRows} section={section} accent={accent} />
+
+        <Button
+          title={productWideSaved ? 'Stop watching all tiers' : 'Watch every tier for this product'}
+          icon={productWideSaved ? 'star' : 'star-outline'}
+          variant="ghost"
+          style={{ marginBottom: 16 }}
+          onPress={() => toggleSavedRate(row, 'product')}
+        />
 
         {row.last_updated ? (
           <AppText variant="tiny" color="textFaint" style={{ textAlign: 'center', marginTop: 14 }}>

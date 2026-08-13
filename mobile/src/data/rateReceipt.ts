@@ -354,7 +354,7 @@ export function buildNegotiationBrief(input: {
   selectedProduct.push({ label: 'Evidence date', value: receipt.evidenceDate });
 
   const limitations = [
-    `Comparables are ${receipt.section} rows classified Standard in the ${receipt.evidenceDate} dataset; they are not matched to your eligibility or circumstances.`,
+    `Comparables are broadly available ${SECTIONS[receipt.section].title.toLowerCase()} rate tiers observed in the ${receipt.evidenceDate} dataset; they are not matched to your eligibility or circumstances.`,
     'Advertised rates can depend on LVR, balance, repayment type, term, bonus actions, packages and other conditions.',
     'Ask the lender to confirm the current rate, eligibility, fees and conditions in writing before making a decision.',
     ...receipt.limitations,
@@ -367,7 +367,7 @@ export function buildNegotiationBrief(input: {
     scenario: scenarioData.facts,
     selectedProduct,
     comparables,
-    cohortSummary: `${standardRates.length} Standard-classified ${receipt.section.toLowerCase()} rate rows observed`,
+    cohortSummary: `${standardRates.length} comparable ${SECTIONS[receipt.section].title.toLowerCase()} rate tiers observed`,
     typicalAdvertisedRate: typical == null ? null : formatRate(typical),
     illustration,
     prompts: [

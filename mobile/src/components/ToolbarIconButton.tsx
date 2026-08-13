@@ -5,7 +5,7 @@ import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText } from './ui';
 
-/** 44×44 toolbar icon control — Browse and Search chrome. */
+/** Accessible toolbar icon control for Browse and Search chrome. */
 export function ToolbarIconButton({
   icon,
   onPress,
@@ -26,13 +26,18 @@ export function ToolbarIconButton({
     <View>
       <Pressable
         onPress={onPress}
+        accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
+        accessibilityState={active === undefined ? undefined : { selected: active }}
+        hitSlop={4}
         style={{
           backgroundColor: active ? theme.colors.primaryMuted : theme.colors.surfaceAlt,
           borderRadius: theme.radius.md,
           paddingHorizontal: theme.spacing(3),
-          height: 44,
+          minWidth: 48,
+          minHeight: 48,
+          alignItems: 'center',
           justifyContent: 'center',
         }}
       >
@@ -40,6 +45,8 @@ export function ToolbarIconButton({
       </Pressable>
       {badge ? (
         <View
+          accessible={false}
+          importantForAccessibility="no-hide-descendants"
           style={{
             position: 'absolute',
             top: -theme.spacing(1),

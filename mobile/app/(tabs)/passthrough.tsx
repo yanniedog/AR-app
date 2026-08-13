@@ -14,7 +14,7 @@ import {
   rbaPassThroughMultiSection,
 } from '../../src/data/bankInsights';
 import { summarizeSectionResponse } from '../../src/data/passThroughModels';
-import { sectionSegmentOptions } from '../../src/data/interests';
+import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
@@ -50,14 +50,18 @@ export default function RateMovesTab() {
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
   const interests = useStore((state) => state.prefs.interests);
-  const activeSection = useStore((state) => state.activeSection);
-  const setActiveSection = useStore((state) => state.setActiveSection);
+  const defaultSection = useStore((state) => state.prefs.defaultSection);
+  const [activeSection, setActiveSection] = useState(() => resolveInterestSection(interests, defaultSection));
   const [retrying, setRetrying] = useState(false);
   const [moversOpen, setMoversOpen] = useState(false);
   const suitabilityRevision = useSuitabilityRevision();
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
+
+  useEffect(() => {
+    setActiveSection((current) => resolveInterestSection(interests, current));
+  }, [interests]);
 
   useEffect(() => {
     if (!core) return;
@@ -192,13 +196,13 @@ export default function RateMovesTab() {
 
       <Card variant="outlined" style={{ gap: 10 }}>
         <SectionHeading
-          title="RBA response · Current window"
+          title="Since the latest RBA decision"
           subtitle={currentRbaSummary && currentRbaSummary.eligible > 0
-            ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} banks have moved with the RBA direction since the latest cash-rate change`
-            : 'Explore bank responses across current and previous cash-rate changes'}
+            ? `${currentRbaSummary.movedWithRba} of ${currentRbaSummary.eligible} observed lenders moved in the same direction`
+            : 'See how lenders moved after current and previous cash-rate decisions'}
         />
         <Button
-          title="View response window"
+          title="Compare lender responses"
           variant="secondary"
           icon="analytics-outline"
           onPress={() => router.push('/rba-response')}
@@ -206,9 +210,18 @@ export default function RateMovesTab() {
         />
       </Card>
 
-      <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-        Advertised rates are observations, not proof of causation or the rate an individual customer received.
-      </AppText>
+      <Card variant="outlined" style={{ gap: 10 }}>
+        <SectionHeading
+          title="Market and RBA research"
+          subtitle="Rate history, RBA decisions and the economic signals shaping rates"
+        />
+        <Button
+          title="Explore the data"
+          icon="analytics-outline"
+          variant="secondary"
+          onPress={() => router.navigate('/(tabs)/trends')}
+        />
+      </Card>
     </ScreenScrollView>
   );
 }

@@ -7,19 +7,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../data/store';
 import { getTabBarContentHeight } from '../lib/androidChrome';
 import { hapticSelection } from '../lib/haptics';
-import { getTabIonicon, getTabLabel, getTabMaterialSymbol, type TabRouteName } from '../lib/tabIcons';
+import { getTabIonicon, getTabMaterialSymbol } from '../lib/tabIcons';
 import {
+  isPrimaryTabRootPath,
+  primaryTabLabel,
   resolveActiveTab,
   shouldShowAppTabBar,
   TAB_BAR_ORDER,
   tabHref,
+  type PrimaryTabRouteName,
 } from '../lib/tabRouting';
 import { useTheme } from '../theme/ThemeProvider';
 import { MaterialSymbol } from './MaterialSymbol';
 
 /**
- * Persistent bottom navigation rendered at the root so stack screens
- * (product, search, lenders, …) never hide the primary tabs.
+ * Root-level primary navigation. Focused stack routes deliberately hide this
+ * bar so their native back action preserves the journey that launched them.
  */
 export function AppTabBar() {
   const theme = useTheme();
@@ -29,8 +32,8 @@ export function AppTabBar() {
   const active = resolveActiveTab(pathname);
   const isAndroid = Platform.OS === 'android';
 
-  const onPressTab = useCallback((route: TabRouteName) => {
-    if (resolveActiveTab(pathname) === route && isTabRootPath(pathname, route)) {
+  const onPressTab = useCallback((route: PrimaryTabRouteName) => {
+    if (resolveActiveTab(pathname) === route && isPrimaryTabRootPath(pathname, route)) {
       hapticSelection();
       return;
     }
@@ -54,7 +57,7 @@ export function AppTabBar() {
     >
       {TAB_BAR_ORDER.map((route) => {
         const focused = active === route;
-        const label = getTabLabel(route);
+        const label = primaryTabLabel(route);
         const symbol = getTabMaterialSymbol(route);
         const ionicon = getTabIonicon(route);
         const tint = focused ? theme.colors.primary : theme.colors.textMuted;
@@ -103,11 +106,4 @@ export function AppTabBar() {
       })}
     </View>
   );
-}
-
-/** True when the current path is already the tab's root (not a pushed stack screen). */
-function isTabRootPath(pathname: string, route: TabRouteName): boolean {
-  const path = pathname.endsWith('/') && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
-  if (route === 'index') return path === '/' || path === '' || path === '/(tabs)';
-  return path === `/${route}`;
 }

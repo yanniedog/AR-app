@@ -79,7 +79,7 @@ export function AccountSecurityRows({
         />
       ) : (
         <AppText variant="tiny" color="textFaint" style={{ lineHeight: 16 }}>
-          Account sign-in is not enabled for this build yet.
+          No account required. Your rates stay on this device.
         </AppText>
       )}
       <SettingsGap size={10} />

@@ -184,8 +184,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             await rebuildAndInstallSuitabilityIndex(
               core,
               seeded,
-              '',
-              () => datasetStillCurrent(runDate, coreSha, '', seeded.run_date),
+              detailsSha,
+              () => datasetStillCurrent(runDate, coreSha, detailsSha, seeded.run_date),
               coreSha,
             );
           }

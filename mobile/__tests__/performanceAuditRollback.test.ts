@@ -3,6 +3,9 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { DEFAULT_PREFS, type AppState } from '../src/data/storeTypes';
+import { makeSavedRateRef } from '../src/data/savedRates';
+import { makeTrackedRate } from '../src/data/trackedRates';
+import type { RateRow } from '../src/types';
 import {
   resetUserRateScenarioStoreForTests,
   ensureUserRateScenarioLoaded,
@@ -28,6 +31,7 @@ function makeState(): AppState {
   return {
     prefs: { ...DEFAULT_PREFS, onboarded: true },
     savedRates: [],
+    trackedRates: [],
     favorites: [],
     subscriptions: [],
     activeSection: 'Mortgage',
@@ -125,6 +129,40 @@ describe('performance audit rollback journal', () => {
       expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
     );
     expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/6\.25/);
+  });
+
+  it('keeps tracked date metadata out of AsyncStorage and recovers it from SecureStore', async () => {
+    const row: RateRow = {
+      provider: 'Example Bank',
+      product_key: 'EX|TD',
+      product_name: 'Term Deposit 12 months',
+      rate_index: 4,
+      rate: '0.0475',
+    };
+    const saved = makeSavedRateRef(row, 'rate', '2026-08-13T00:00:00.000Z');
+    const tracked = {
+      ...makeTrackedRate(saved),
+      relevantDate: '2027-08-13',
+      relevantDateKind: 'term-maturity' as const,
+    };
+    const store = makeStore({
+      ...makeState(),
+      savedRates: [saved],
+      trackedRates: [tracked],
+      favorites: [saved.productKey],
+      activeSection: 'TD',
+    });
+
+    const before = await beginPerformanceAuditRollback(store);
+    const journalRaw = await AsyncStorage.getItem(PERFORMANCE_AUDIT_ROLLBACK_KEY);
+    expect(journalRaw).not.toContain('2027-08-13');
+    expect(JSON.parse(journalRaw as string).snapshot).not.toHaveProperty('trackedRates');
+    expect([...secureStore.values()].some((value) => value.includes('2027-08-13'))).toBe(true);
+
+    store.setState({ trackedRates: [] });
+    const restarted = makeStore(store.getState());
+    await expect(recoverInterruptedPerformanceAudit(restarted)).resolves.toBe(true);
+    expect(restarted.getState().trackedRates).toEqual(before.trackedRates);
   });
 
   it('recovers an interrupted audit from its durable journal on the next launch', async () => {

@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'rea
 import { Swipeable } from 'react-native-gesture-handler';
 
 import { useTheme } from '../theme/ThemeProvider';
+import { AppText } from './ui';
 
 function marginBottomFromStyle(style?: StyleProp<ViewStyle>): number {
   const flat = StyleSheet.flatten(style);
@@ -40,13 +41,17 @@ export function SwipeableRow({
         backgroundColor: theme.colors.danger,
         justifyContent: 'center',
         alignItems: 'center',
-        width: 80,
+        gap: 4,
+        width: 96,
         marginBottom: marginBottomFromStyle(style),
         borderTopRightRadius: theme.radius.lg,
         borderBottomRightRadius: theme.radius.lg,
       }}
     >
       <Ionicons name="trash-outline" size={22} color={theme.colors.onPrimary} />
+      <AppText variant="tiny" weight="700" style={{ color: theme.colors.onPrimary }}>
+        Remove
+      </AppText>
     </Pressable>
   );
 
@@ -61,7 +66,6 @@ export function SwipeableRow({
       overshootRight={false}
       friction={2}
       rightThreshold={40}
-      onSwipeableOpen={handleDelete}
     >
       <View style={style}>{children}</View>
     </Swipeable>

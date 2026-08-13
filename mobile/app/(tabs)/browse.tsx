@@ -1,11 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { HierarchyView } from '../../src/components/HierarchyView';
 import { Screen, screenEdgeStyle } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
-import { Button, Chip, Row } from '../../src/components/ui';
+import { AppText, Button, Chip, Row } from '../../src/components/ui';
 import { sectionFromSlug } from '../../src/constants';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { profileSectionCount } from '../../src/data/profile';
@@ -25,8 +25,7 @@ export default function Browse() {
   }>();
   const drillPath = useMemo(() => parseBrowsePath(params.path), [params.path]);
   const interests = useStore((s) => s.prefs.interests);
-  const storedSection = useStore((s) => s.activeSection);
-  const setActiveSection = useStore((s) => s.setActiveSection);
+  const defaultSection = useStore((s) => s.prefs.defaultSection);
   const routeSectionSlug = scalarRouteParam(params.section);
   const routeRequest = scalarRouteParam(params.request) ??
     (routeSectionSlug ? `section:${routeSectionSlug}` : null);
@@ -37,14 +36,13 @@ export default function Browse() {
     return parsed ? resolveInterestSection(interests, parsed) : null;
   }, [interests, routeSectionSlug]);
   const pendingRouteRequest = routeRequest != null && consumedRouteRequest.current !== routeRequest;
-  // Route params are the immediate navigation contract. Rendering them directly
-  // avoids changing the still-visible source tab before Browse has mounted.
-  const section = pendingRouteRequest && requestedSection
-    ? requestedSection
-    : resolveInterestSection(interests, storedSection);
+  // Explore owns its category. Changing a market or Today category must not
+  // silently move this screen to another product type.
+  const [section, setSection] = useState(() => resolveInterestSection(interests, defaultSection));
+  const renderedSection = pendingRouteRequest && requestedSection ? requestedSection : section;
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
-  const profileCount = profileSectionCount(profileFilters, section);
+  const profileCount = profileSectionCount(profileFilters, renderedSection);
 
   useEffect(() => {
     if (!pendingRouteRequest) return;
@@ -53,19 +51,21 @@ export default function Browse() {
       logNavParamDrop({ screen: 'browse', param: 'section', actual: slug });
     }
     consumedRouteRequest.current = routeRequest;
-    if (requestedSection && storedSection !== requestedSection) {
-      setActiveSection(requestedSection);
-    }
-  }, [pendingRouteRequest, requestedSection, routeRequest, routeSectionSlug, setActiveSection, storedSection]);
-
-  const changeSection = useCallback((next: typeof section) => {
-    setActiveSection(next);
-    openBrowse(next);
-  }, [setActiveSection]);
+    if (requestedSection) setSection(requestedSection);
+  }, [pendingRouteRequest, requestedSection, routeRequest, routeSectionSlug]);
 
   useEffect(() => {
-    checkDrillOutcome(section, drillPath);
-  }, [section, drillPath]);
+    setSection((current) => resolveInterestSection(interests, current));
+  }, [interests]);
+
+  const changeSection = useCallback((next: typeof section) => {
+    setSection(next);
+    openBrowse(next);
+  }, []);
+
+  useEffect(() => {
+    checkDrillOutcome(renderedSection, drillPath);
+  }, [renderedSection, drillPath]);
 
   if (!core) return <ScreenSkeleton />;
 
@@ -75,36 +75,40 @@ export default function Browse() {
         <View style={{ gap: theme.spacing(3) }}>
           <View>
             {sectionOptions.length > 1 ? (
-              <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
+              <SegmentedControl options={sectionOptions} value={renderedSection} onChange={changeSection} />
             ) : null}
           </View>
           <Row gap={theme.spacing(2)}>
             <Button
-              title="Search products"
+              title="Search rates"
               icon="search"
               style={{ flex: 1 }}
-              onPress={() => openSearch(section)}
+              onPress={() => openSearch(renderedSection)}
             />
             <Button
-              title={profileCount ? `Profile · ${profileCount}` : 'My profile'}
+              title={profileCount ? `Matched · ${profileCount}` : 'Match settings'}
               icon="person-circle-outline"
               variant="secondary"
               onPress={() => router.push('/profile')}
             />
           </Row>
           <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
-            <Chip label="Browse lenders" icon="business-outline" onPress={() => router.push('/banks')} />
-            {section === 'Mortgage' ? (
-              <Chip label="Calculator" icon="calculator-outline" onPress={() => router.push('/calculator')} />
-            ) : null}
+            <Chip label="Lenders" icon="business-outline" onPress={() => router.push('/banks')} />
+            <Chip label="My scenario" icon="calculator-outline" onPress={() => router.push('/calculator')} />
           </Row>
+          <View style={{ gap: theme.spacing(1) }}>
+            <AppText variant="body" weight="700">Browse by category</AppText>
+            <AppText variant="small" color="textMuted">
+              Use this when you know the product type. Search is faster for a lender or feature.
+            </AppText>
+          </View>
         </View>
       </View>
       <View style={{ flex: 1 }}>
         {/* Key on the drill path only — switching SECTION updates HierarchyView in
             place (FlashList recycles, no teardown/blank), so section changes are
             instant. Drilling still remounts to reset list/scroll cleanly. */}
-        <HierarchyView key={drillPath.join('.') || 'root'} section={section} path={drillPath} />
+        <HierarchyView key={drillPath.join('.') || 'root'} section={renderedSection} path={drillPath} />
       </View>
     </Screen>
   );

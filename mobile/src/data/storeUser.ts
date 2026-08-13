@@ -21,6 +21,20 @@ import {
   makeLegacySavedRateRef,
   toggleSavedRateRefs,
 } from './savedRates';
+import { normalizeTrackedRates, saveTrackedRatesSecure, setTrackedRateDate } from './trackedRates';
+
+let trackedRatesPersistQueue: Promise<void> = Promise.resolve();
+
+function persistTrackedRates(value: AppState['trackedRates']): void {
+  // Preserve action order: rapid date edits/removals must not let an older
+  // SecureStore write finish last and resurrect stale private metadata.
+  trackedRatesPersistQueue = trackedRatesPersistQueue
+    .catch(() => undefined)
+    .then(() => saveTrackedRatesSecure(value))
+    .catch((error) => {
+      debugLog.error('tracked-rates', `secure metadata save failed: ${String((error as Error)?.message ?? error)}`);
+    });
+}
 
 function setPreferences(
   set: StoreSet,
@@ -84,14 +98,16 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     toggleFavorite(key: string) {
       const favorites = get().favorites;
       const removing = favorites.includes(key);
+      const savedRates = removing
+        ? get().savedRates.filter((ref) => ref.productKey !== key)
+        : [...get().savedRates, makeLegacySavedRateRef(key)];
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
-        favorites: removing
-          ? favorites.filter((k) => k !== key)
-          : [...favorites, key],
-        savedRates: removing
-          ? get().savedRates.filter((ref) => ref.productKey !== key)
-          : [...get().savedRates, makeLegacySavedRateRef(key)],
+        favorites: removing ? favorites.filter((k) => k !== key) : [...favorites, key],
+        savedRates,
+        trackedRates,
       });
+      persistTrackedRates(trackedRates);
       hapticSelection();
     },
 
@@ -101,19 +117,31 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
 
     toggleSavedRate(row: Parameters<AppState['toggleSavedRate']>[0], scope: Parameters<AppState['toggleSavedRate']>[1] = 'rate') {
       const savedRates = toggleSavedRateRefs(get().savedRates, row, scope);
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
         savedRates,
+        trackedRates,
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
+      persistTrackedRates(trackedRates);
       hapticSelection();
     },
 
     removeSavedRate(id: string) {
       const savedRates = get().savedRates.filter((item) => item.id !== id);
+      const trackedRates = normalizeTrackedRates(get().trackedRates, savedRates);
       set({
         savedRates,
+        trackedRates,
         favorites: [...new Set(savedRates.map((item) => item.productKey))],
       });
+      persistTrackedRates(trackedRates);
+    },
+
+    setTrackedRateRelevantDate(id: string, relevantDate: string | null, kind: Parameters<AppState['setTrackedRateRelevantDate']>[2]) {
+      const trackedRates = setTrackedRateDate(get().trackedRates, id, relevantDate, kind);
+      set({ trackedRates });
+      persistTrackedRates(trackedRates);
     },
 
     isRateSaved(productKey: string, rateIndex: number | null) {
@@ -224,6 +252,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
     | 'isFavorite'
     | 'toggleSavedRate'
     | 'removeSavedRate'
+    | 'setTrackedRateRelevantDate'
     | 'isRateSaved'
     | 'subscribeProduct'
     | 'unsubscribeProduct'

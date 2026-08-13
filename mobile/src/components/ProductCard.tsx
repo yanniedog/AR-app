@@ -14,6 +14,7 @@ import { useStore } from '../data/store';
 import { assessAccess } from '../data/access';
 import { rateValueLabel } from '../lib/a11ySummaries';
 import { rateQualifier, type RateQualifier } from '../lib/rateQualifier';
+import { openBank } from '../lib/nav';
 import type { LogoRenderState } from '../lib/logoReadiness';
 import type { RateRow, SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -49,7 +50,7 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) out.push(bal);
   }
-  return out.slice(0, 3);
+  return out.slice(0, 2);
 }
 
 export function ProductCard({
@@ -102,6 +103,7 @@ export function ProductCard({
   const showingComparisonRate = displayedRateLabel === 'Comparison rate';
   const rateChange = useProductRateChangeSummary(row.product_key);
   const rateChangeText = productRateChangeText(rateChange, true);
+  const openLender = onLongPress ?? (() => openBank(row.provider));
   const cardA11yLabel = `${row.product_name}, ${row.provider}, ${rateLabel} ${rateText}${
     row.comparison_rate && !showingComparisonRate ? `, comparison ${formatRate(row.comparison_rate)}` : ''
   }${qualifier.conditional ? `, ${qualifier.label}, conditions apply` : ''}${
@@ -131,7 +133,7 @@ export function ProductCard({
         delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
-        accessibilityHint={onLongPress ? 'Long press to open lender profile' : undefined}
+        accessibilityHint={onLongPress ? 'Long press also opens this lender' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
@@ -223,7 +225,7 @@ export function ProductCard({
                 }}
               >
                 <AppText variant="tiny" style={{ color: theme.colors.warning }} weight="700">
-                  Non-standard
+                  Special eligibility
                 </AppText>
               </View>
             ) : null}
@@ -254,39 +256,56 @@ export function ProductCard({
           </AppText>
           {row.comparison_rate && !showingComparisonRate ? (
             <AppText variant="tiny" color="textFaint" numberOfLines={1}>
-              {formatRate(row.comparison_rate)} cmp
+              {formatRate(row.comparison_rate)} comparison
             </AppText>
           ) : null}
         </View>
       </Pressable>
 
       {!selectMode ? (
-        <Pressable
-          onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
-          hitSlop={10}
-          accessibilityRole="button"
-          accessibilityLabel={favorite
-            ? 'Remove this rate from saved'
-            : Number.isInteger(row.rate_index)
-              ? 'Save this exact rate'
-              : 'Save all product variants'}
-          accessibilityState={{ selected: favorite }}
-          android_ripple={androidRipple(theme.colors.primaryMuted, true)}
-          style={{
-            minWidth: 48,
-            minHeight: 48,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: theme.radius.sm,
-            overflow: 'hidden',
-          }}
-        >
-          <Ionicons
-            name={favorite ? 'star' : 'star-outline'}
-            size={20}
-            color={favorite ? theme.colors.warning : theme.colors.textFaint}
-          />
-        </Pressable>
+        <View style={{ width: 48, alignItems: 'center' }}>
+          <Pressable
+            onPress={openLender}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${row.provider} lender history`}
+            android_ripple={androidRipple(theme.colors.primaryMuted, true)}
+            style={{
+              width: 48,
+              minHeight: 48,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: theme.radius.sm,
+              overflow: 'hidden',
+            }}
+          >
+            <Ionicons name="business-outline" size={19} color={theme.colors.textFaint} />
+          </Pressable>
+          <Pressable
+            onPress={() => toggleSavedRate(row, Number.isInteger(row.rate_index) ? 'rate' : 'product')}
+            accessibilityRole="button"
+            accessibilityLabel={favorite
+              ? 'Remove this rate from saved'
+              : Number.isInteger(row.rate_index)
+                ? 'Save this exact rate'
+                : 'Save all product variants'}
+            accessibilityState={{ selected: favorite }}
+            android_ripple={androidRipple(theme.colors.primaryMuted, true)}
+            style={{
+              width: 48,
+              minHeight: 48,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: theme.radius.sm,
+              overflow: 'hidden',
+            }}
+          >
+            <Ionicons
+              name={favorite ? 'star' : 'star-outline'}
+              size={20}
+              color={favorite ? theme.colors.warning : theme.colors.textFaint}
+            />
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );

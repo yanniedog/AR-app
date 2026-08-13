@@ -21,6 +21,7 @@ import { EMPTY_CALC, type CalcInputs } from './calc';
 import type { ThemeMode } from '../theme/theme';
 import type { RefreshOutcomeKind } from '../components/bannerState';
 import type { SavedRateRef } from './savedRates';
+import type { TrackedRate, TrackedRateDateKind } from './trackedRates';
 import type { SortKey } from './selectors';
 
 export interface Prefs {
@@ -144,6 +145,8 @@ export interface AppState {
   prefs: Prefs;
   /** Versioned saved variants. `favorites` is retained only for persisted-state compatibility. */
   savedRates: SavedRateRef[];
+  /** Versioned local metadata for saved product/tier identities. */
+  trackedRates: TrackedRate[];
   /** @deprecated Use savedRates. */
   favorites: string[];
   subscriptions: Subscription[];
@@ -179,6 +182,11 @@ export interface AppState {
   isFavorite: (key: string) => boolean;
   toggleSavedRate: (row: RateRow, scope?: SavedRateRef['scope']) => void;
   removeSavedRate: (id: string) => void;
+  setTrackedRateRelevantDate: (
+    id: string,
+    relevantDate: string | null,
+    kind: TrackedRateDateKind | null,
+  ) => void;
   isRateSaved: (productKey: string, rateIndex: number | null) => boolean;
   subscribeProduct: (productKey: string, rateIndex: number | null, labelRow: RateRow) => boolean;
   unsubscribeProduct: (productKey: string, rateIndex: number | null) => void;

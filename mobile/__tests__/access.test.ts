@@ -71,6 +71,19 @@ describe('assessAccess', () => {
     expect(assessAccess('Teen Transaction Account', null).restricted).toBe(true);
   });
 
+  it('does not present first-home-buyer products as open to everyone', () => {
+    const named = assessAccess('First Home Buyer Loan', elig(['MIN_AGE', 'NATURAL_PERSON']));
+    expect(named.categories).toContain('first-home');
+    expect(named.badge).toBe('First-home buyers');
+    expect(accessExcludesFromStandard(named)).toBe(true);
+
+    const disclosed = assessAccess(
+      'Variable Home Loan',
+      elig(['MIN_AGE'], [{ info: 'This loan is only available for first home buyers' }]),
+    );
+    expect(disclosed.categories).toContain('first-home');
+  });
+
   it('flags MAX_AGE eligibility as youth-restricted when the cap is a youth bound', () => {
     const a = assessAccess(
       'Everyday Account',

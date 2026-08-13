@@ -53,6 +53,12 @@ function bpsLabel(bps: number): string {
   return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)} bps`;
 }
 
+function percentagePointLabel(bps: number): string {
+  const points = Math.abs(bps / 100);
+  const sign = bps > 0 ? '+' : bps < 0 ? '−' : '';
+  return `${sign}${points.toFixed(2)} percentage points`;
+}
+
 function isSectionKey(value: string | undefined): value is SectionKey {
   return !!value && (SECTION_KEYS as readonly string[]).includes(value);
 }
@@ -493,6 +499,29 @@ export default function BankDetail() {
 
   if (!core) return <ScreenSkeleton />;
 
+  const currentProducts = bySection.length === 0 ? (
+    <EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />
+  ) : (
+    bySection.map(({ section, rows }) => (
+      <View key={section} style={{ marginBottom: 12 }}>
+        <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
+          {SECTIONS[section].title.toUpperCase()}
+        </AppText>
+        {rows.map((r) => (
+          <ProductCard
+            key={r.product_key}
+            row={r}
+            section={section}
+            displayedRateLabel="Current rate"
+            logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
+            onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+            onPress={() => openProduct(r.product_key, r.rate_index)}
+          />
+        ))}
+      </View>
+    ))
+  );
+
   return (
     <>
       <Stack.Screen options={{ title: provider }} />
@@ -512,10 +541,23 @@ export default function BankDetail() {
             <AppText variant="h3">{provider}</AppText>
             <AppText variant="small" color="textMuted">
               {productCount} {productCount === 1 ? 'product' : 'products'}
-              {!includeNonStandard ? ' · broadly applicable' : ''}
+              {!includeNonStandard ? ' · widely available' : ''}
             </AppText>
           </View>
         </Row>
+
+        {showBankInsights && rawBankEvents[0] ? (
+          <Card variant="outlined" style={{ marginBottom: 16, gap: 4 }}>
+            <AppText variant="small" color="textMuted">Latest observed move</AppText>
+            <AppText variant="body" weight="700">
+              {SECTIONS[rawBankEvents[0].section].title} {moveVerb(rawBankEvents[0].section, rawBankEvents[0].dir)}{' '}
+              by an average {percentagePointLabel(rawBankEvents[0].avg_bps)} on {formatRunDate(rawBankEvents[0].date)}.
+            </AppText>
+          </Card>
+        ) : null}
+
+        <AppText variant="h3" style={{ marginBottom: 10 }}>Current products</AppText>
+        {currentProducts}
 
         {showBankInsights && focusEvent && focusSection ? (
           <Card
@@ -695,28 +737,6 @@ export default function BankDetail() {
           ) : null
         ) : null}
 
-        {bySection.length === 0 ? (
-          <EmptyState title="No products" subtitle="This lender has no rates in the current data set." />
-        ) : (
-          bySection.map(({ section, rows }) => (
-            <View key={section} style={{ marginBottom: 12 }}>
-              <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
-                {SECTIONS[section].title.toUpperCase()}
-              </AppText>
-              {rows.map((r) => (
-                <ProductCard
-                  key={r.product_key}
-                  row={r}
-                  section={section}
-                  displayedRateLabel="Current rate"
-                  logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
-                  onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-                  onPress={() => openProduct(r.product_key, r.rate_index)}
-                />
-              ))}
-            </View>
-          ))
-        )}
       </ScreenScrollView>
     </>
   );

@@ -19,6 +19,7 @@ export type AccessCategory =
   | 'membership'
   | 'business'
   | 'student'
+  | 'first-home'
   | 'youth'
   | 'pension'
   | 'geographic'
@@ -42,6 +43,7 @@ const CATEGORY_LABEL: Record<AccessCategory, string> = {
   membership: 'Members only',
   business: 'Business / SMSF',
   student: 'Students',
+  'first-home': 'First-home buyers',
   youth: 'Youth only',
   pension: 'Pensioners',
   geographic: 'Region-restricted',
@@ -68,6 +70,7 @@ const STAFF_RE = /\b(staff|employees?|employers?|colleagues?)\b/i;
 const MEMBERSHIP_RE = /\bmembers?\s+of\b|\bassociation\b|\bunion\b|\balumni\b|\bdiocese\b|\bparish\b/i;
 const BUSINESS_RE = /\b(business|commercial|corporate|company|smsf|self[-\s]?managed\s+super|trust)\b/i;
 const STUDENT_RE = /\bstudent[s]?\b/i;
+const FIRST_HOME_RE = /\bfirst[-\s]?home\s+(?:buyers?|owners?)\b/i;
 // Name/description youth products. Deliberately omit bare "under 18/19" — that
 // phrasing usually means guardian rules on otherwise adult-open accounts.
 const YOUTH_RE =
@@ -176,6 +179,7 @@ export function assessAccess(
     if (MEMBERSHIP_RE.test(membershipParts.join(" "))) cats.add("membership");
   }
   if (STUDENT_RE.test(text)) cats.add('student');
+  if (FIRST_HOME_RE.test(text)) cats.add('first-home');
   // Youth: product name/description or a low MAX_AGE cap — not guardian copy in
   // eligibility ("customers under 18 need a parent").
   const youthSurface = `${nameText} ${detail?.description || ''}`;
@@ -205,6 +209,7 @@ export function assessAccess(
     MEMBERSHIP_RE.test(nameText) ||
     YOUTH_RE.test(nameText) ||
     STUDENT_RE.test(nameText) ||
+    FIRST_HOME_RE.test(nameText) ||
     geoRestricts(nameText) ||
     PACKAGE_RE.test(nameText) ||
     PENSION_NAME_RE.test(nameText);
@@ -262,6 +267,7 @@ export function nameRestrictsAccess(name: string | null | undefined): boolean {
     OCCUPATION_RE.test(text) ||
     MEMBERSHIP_RE.test(text) ||
     STUDENT_RE.test(text) ||
+    FIRST_HOME_RE.test(text) ||
     YOUTH_RE.test(text) ||
     PENSION_NAME_RE.test(text) ||
     geoRestricts(text) ||
@@ -302,6 +308,7 @@ export function nameRestrictionCategories(name: string | null | undefined): Acce
   if (MEMBERSHIP_RE.test(text)) cats.push('membership');
   if (BUSINESS_RE.test(text)) cats.push('business');
   if (STUDENT_RE.test(text)) cats.push('student');
+  if (FIRST_HOME_RE.test(text)) cats.push('first-home');
   if (YOUTH_RE.test(text)) cats.push('youth');
   if (PENSION_NAME_RE.test(text)) cats.push('pension');
   if (geoRestricts(text)) cats.push('geographic');

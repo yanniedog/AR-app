@@ -643,7 +643,7 @@ export default function Projections() {
       <View>
         <AppText variant="h3">Start with today</AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-          These values are shared with Today and Switch & save. Editing them updates your encrypted local scenario, not your browsing profile.
+          These values are shared with Today and My scenario. Editing them updates only your private local scenario.
         </AppText>
       </View>
       {section === 'Mortgage' ? (
@@ -758,8 +758,8 @@ export default function Projections() {
         style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}
       >
         <View style={{ flex: 1 }}>
-          <AppText variant="body" weight="700">Optional history and scenarios</AppText>
-          <AppText variant="tiny" color="textMuted">Add only what is relevant to your product</AppText>
+          <AppText variant="body" weight="700">More assumptions</AppText>
+          <AppText variant="tiny" color="textMuted">History, contributions and alternative rates</AppText>
         </View>
         <Ionicons name={advanced ? 'chevron-up' : 'chevron-down'} size={20} color={theme.colors.primary} />
       </Pressable>
@@ -840,12 +840,12 @@ export default function Projections() {
       <View>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 180 }}>
-            <AppText variant="h3">Your lifecycle projection</AppText>
+            <AppText variant="h3">Your rate scenario</AppText>
             <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
               From {result.history.length > 1 ? 'your optional starting point' : 'today'} through the modelled end date
             </AppText>
           </View>
-          <Badge label="Illustrative · free beta" tone="primary" />
+          <Badge label="Illustrative" tone="primary" />
         </Row>
       </View>
       {!result.ready ? (
@@ -854,7 +854,7 @@ export default function Projections() {
             Fix or add {result.missing.join(', ')} above to build this projection.
           </AppText>
           <Button
-            title="Use Switch & save details"
+            title="Edit My scenario"
             variant="secondary"
             onPress={() => { void flush().then((saved) => { if (saved) router.push('/calculator'); }); }}
           />
@@ -902,9 +902,9 @@ export default function Projections() {
       <Card style={{ gap: 8, borderColor: `${theme.colors.primary}55` }}>
         <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <View style={{ flex: 1, minWidth: 220 }}>
-            <AppText variant="h2">See the whole financial journey</AppText>
+            <AppText variant="h2">What if rates change?</AppText>
             <AppText variant="body" color="textMuted" style={{ marginTop: 5 }}>
-              Explore approximate history and forward scenarios without changing your saved product profile or implying a forecast.
+              Test repayments, interest and balances under different rates.
             </AppText>
           </View>
           <Ionicons name="analytics-outline" size={32} color={theme.colors.primary} />
@@ -957,14 +957,14 @@ export default function Projections() {
             </Row>
           ))}
           <AppText variant="tiny" color="textFaint">
-            Illustrative only. Excludes tax, fees, redraw restrictions, offset eligibility, changing product conditions and personal advice. Confirm repayment rules, interest calculation and maturity instructions with the provider.
+            Illustrative. Check fees, product conditions and lender calculations before acting.
           </AppText>
         </Card>
       ) : null}
       <Card style={{ gap: 10 }}>
-        <AppText variant="h3">Take the next evidence-backed step</AppText>
+        <AppText variant="h3">Compare this scenario</AppText>
         <AppText variant="small" color="textMuted">
-          Use this range to browse profile-matched products, then open an exact rate receipt before contacting a provider.
+          Browse matching rates, then prepare a bank-call brief for an exact tier.
         </AppText>
         <Button
           title="Browse matching products"
