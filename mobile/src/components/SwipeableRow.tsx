@@ -37,6 +37,7 @@ export function SwipeableRow({
       onPress={handleDelete}
       accessibilityRole="button"
       accessibilityLabel={deleteLabel}
+      accessibilityHint="Removes this item"
       style={{
         backgroundColor: theme.colors.danger,
         justifyContent: 'center',

@@ -45,6 +45,9 @@ describe('compact mobile UX contracts', () => {
     const source = read('../src/components/SwipeableRow.tsx');
 
     expect(source).toContain('onPress={handleDelete}');
+    expect(source).toContain('accessibilityRole="button"');
+    expect(source).toContain('accessibilityLabel={deleteLabel}');
+    expect(source).toContain('accessibilityHint="Removes this item"');
     expect(source).toContain('Remove');
     expect(source).not.toContain('onSwipeableOpen={handleDelete}');
   });
