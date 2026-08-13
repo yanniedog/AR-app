@@ -19,7 +19,7 @@ import {
 } from './storeTypes';
 import type { SectionKey } from '../types';
 import { normalizeSavedRates } from './savedRates';
-import { loadTrackedRatesSecure, normalizeTrackedRates } from './trackedRates';
+import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRates';
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
 import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
@@ -126,15 +126,22 @@ export const useStore = create<AppState>()(
             const state = useStore.getState();
             const savedRatesBeforeLoad = state.savedRates;
             const trackedRatesBeforeLoad = state.trackedRates;
-            const trackedRates = await loadTrackedRatesSecure(state.savedRates);
+            let secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
+            if (secureLoad.status === 'unavailable') {
+              // WHEN_UNLOCKED storage can be temporarily unavailable during a
+              // background wake. Retry once, then retain live metadata.
+              await new Promise((resolve) => setTimeout(resolve, 150));
+              secureLoad = await loadTrackedRatesSecureResult(state.savedRates);
+            }
             const latest = useStore.getState();
             // Preserve any save, date edit, or date clear performed while the
             // native read was pending. Array identity changes on every action.
             if (
               latest.savedRates === savedRatesBeforeLoad &&
-              latest.trackedRates === trackedRatesBeforeLoad
+              latest.trackedRates === trackedRatesBeforeLoad &&
+              secureLoad.status === 'ready'
             ) {
-              useStore.setState({ trackedRates });
+              useStore.setState({ trackedRates: secureLoad.trackedRates });
             }
           })
           .catch((error) => {

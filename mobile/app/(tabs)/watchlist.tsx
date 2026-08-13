@@ -114,6 +114,7 @@ export default function MyRates() {
   const setTrackedRateRelevantDate = useStore((s) => s.setTrackedRateRelevantDate);
   const setActiveSection = useStore((s) => s.setActiveSection);
   const ensureDetails = useStore((s) => s.ensureDetails);
+  const detailsLoading = useStore((s) => s.detailsLoading);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
@@ -502,6 +503,20 @@ export default function MyRates() {
         <AppText variant="tiny" color="textMuted">
           Entered amounts stay on this device. Illustrations exclude fees, tax and switching costs.
         </AppText>
+
+        {profileDetailsPending && !detailsLoading ? (
+          <Card variant="outlined" style={{ gap: theme.spacing(2) }}>
+            <AppText variant="small" weight="700">Matching details unavailable</AppText>
+            <AppText variant="tiny" color="textMuted">
+              Account-feature matching needs the product details file.
+            </AppText>
+            <Button
+              title="Retry matching"
+              variant="secondary"
+              onPress={() => void ensureDetails({ force: true, abandonInFlight: true })}
+            />
+          </Card>
+        ) : null}
 
         <SectionHeading
           title="Watched tiers"

@@ -47,6 +47,11 @@ interface SecureRecordManifest {
   chunks: number;
 }
 
+export interface TrackedRatesSecureLoadResult {
+  status: 'ready' | 'unavailable';
+  trackedRates: TrackedRate[];
+}
+
 function validCalendarDate(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -212,31 +217,50 @@ function chunkKey(storageKey: string, generation: string, index: number): string
 async function loadTrackedRatesFromStorage(
   savedRates: readonly SavedRateRef[],
   storageKey: string,
-): Promise<TrackedRate[]> {
+): Promise<TrackedRatesSecureLoadResult> {
+  const empty = () => normalizeTrackedRates(undefined, savedRates);
   if (Platform.OS === 'web') {
-    return normalizeTrackedRates(webMemory.get(storageKey), savedRates);
+    return {
+      status: 'ready',
+      trackedRates: normalizeTrackedRates(webMemory.get(storageKey), savedRates),
+    };
   }
+  let raw: string | null;
   try {
-    const raw = await SecureStore.getItemAsync(storageKey);
-    const manifest = parseManifest(raw);
-    if (!manifest) {
-      // Version 1 stored the compact private-date array directly at the base key.
-      return normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates);
-    }
-    const records: unknown[] = [];
-    for (let index = 0; index < manifest.chunks; index += 1) {
-      const chunk = await SecureStore.getItemAsync(chunkKey(storageKey, manifest.generation, index));
-      if (!chunk) throw new Error('Secure tracked-rate chunk is missing');
-      const parsed = JSON.parse(chunk);
-      if (!Array.isArray(parsed)) throw new Error('Secure tracked-rate chunk is invalid');
-      records.push(...parsed);
-    }
-    return normalizeTrackedRates(records, savedRates);
+    raw = await SecureStore.getItemAsync(storageKey);
   } catch {
-    // Keychain/Keystore resets and partial native records must not block app or
-    // interrupted-audit recovery. Public saved references remain available.
-    return normalizeTrackedRates(undefined, savedRates);
+    return { status: 'unavailable', trackedRates: empty() };
   }
+  const manifest = parseManifest(raw);
+  if (!manifest) {
+    try {
+      // Version 1 stored the compact private-date array directly at the base key.
+      return {
+        status: 'ready',
+        trackedRates: normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates),
+      };
+    } catch {
+      return { status: 'ready', trackedRates: empty() };
+    }
+  }
+  const records: unknown[] = [];
+  for (let index = 0; index < manifest.chunks; index += 1) {
+    let chunk: string | null;
+    try {
+      chunk = await SecureStore.getItemAsync(chunkKey(storageKey, manifest.generation, index));
+    } catch {
+      return { status: 'unavailable', trackedRates: empty() };
+    }
+    if (!chunk) return { status: 'ready', trackedRates: empty() };
+    try {
+      const parsed = JSON.parse(chunk);
+      if (!Array.isArray(parsed)) return { status: 'ready', trackedRates: empty() };
+      records.push(...parsed);
+    } catch {
+      return { status: 'ready', trackedRates: empty() };
+    }
+  }
+  return { status: 'ready', trackedRates: normalizeTrackedRates(records, savedRates) };
 }
 
 async function saveTrackedRatesToStorage(
@@ -311,6 +335,13 @@ async function clearTrackedRatesStorage(storageKey: string): Promise<void> {
 export function loadTrackedRatesSecure(
   savedRates: readonly SavedRateRef[],
 ): Promise<TrackedRate[]> {
+  return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_SECURE_STORAGE_KEY)
+    .then((result) => result.trackedRates);
+}
+
+export function loadTrackedRatesSecureResult(
+  savedRates: readonly SavedRateRef[],
+): Promise<TrackedRatesSecureLoadResult> {
   return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_SECURE_STORAGE_KEY);
 }
 
@@ -331,7 +362,8 @@ export function queueTrackedRatesSecureSave(value: readonly TrackedRate[]): Prom
 export function loadTrackedRatesAuditRollbackSecure(
   savedRates: readonly SavedRateRef[],
 ): Promise<TrackedRate[]> {
-  return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY);
+  return loadTrackedRatesFromStorage(savedRates, TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY)
+    .then((result) => result.trackedRates);
 }
 
 export function saveTrackedRatesAuditRollbackSecure(

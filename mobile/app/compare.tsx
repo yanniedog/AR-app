@@ -20,6 +20,11 @@ import { resolveCompareSelections } from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
+import {
+  isRateDetailLabel,
+  isRateLabelRankedForEveryEntry,
+  showCompactDetailRow,
+} from '../src/lib/comparePresentation';
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -250,14 +255,18 @@ export default function Compare() {
     if (item.label === 'Ongoing rate') return entries.some((entry) => entry.section === 'Savings');
     return true;
   });
-  const rankedRateLabels = new Set(entries.map((entry) => rankedRateLabelForSection(
+  const rankedRateLabels = entries.map((entry) => rankedRateLabelForSection(
     entry.section,
     depositRankMetric,
     mortgageRateMetric,
-  )));
-  const detailRows = attrRows.filter((row) => !rankedRateLabels.has(row.label as ReturnType<typeof rankedRateLabelForSection>));
+  ));
+  // A rate field is globally redundant only when it is the ranked metric for
+  // every entry. Mixed categories suppress their ranked row per card instead.
+  const detailRows = attrRows.filter((row) =>
+    !isRateLabelRankedForEveryEntry(row.label, rankedRateLabels));
   const differingRows = detailRows.filter((row) => valuesDiffer(row, entries));
-  const sharedRows = detailRows.filter((row) => !valuesDiffer(row, entries));
+  const sharedRows = detailRows.filter((row) =>
+    !isRateDetailLabel(row.label) && !valuesDiffer(row, entries));
 
   const labelCell = (label: string, height: number, weight: '600' | '700' = '600') => (
     <View
@@ -314,6 +323,13 @@ export default function Compare() {
           {entries.map((entry, idx) => {
             const fraction = fractions[idx];
             const isBest = bestVal !== null && fraction === bestVal;
+            const rankedRateLabel = rankedRateLabelForSection(
+              entry.section,
+              depositRankMetric,
+              mortgageRateMetric,
+            );
+            const compactDetailRows = detailRows.filter((row) =>
+              showCompactDetailRow(row.label, rankedRateLabel, differingRows.includes(row)));
             return (
               <Card
                 key={`${entry.row.product_key}#${entry.row.rate_index ?? idx}`}
@@ -337,7 +353,7 @@ export default function Compare() {
 
                 <View style={styles.compactRateBlock}>
                   <AppText variant="tiny" color="textFaint">
-                    {rankedRateLabelForSection(entry.section, depositRankMetric, mortgageRateMetric)}
+                    {rankedRateLabel}
                   </AppText>
                   <AppText variant="rateHero" style={{ color: rateColorFor(entry.section) }}>
                     {fraction === null ? '—' : formatRate(fraction)}
@@ -351,9 +367,9 @@ export default function Compare() {
                   ) : null}
                 </View>
 
-                {differingRows.length ? (
+                {compactDetailRows.length ? (
                   <View style={styles.compactFacts}>
-                    {differingRows.map((row, rowIndex) => (
+                    {compactDetailRows.map((row, rowIndex) => (
                       <View key={row.label}>
                         {rowIndex > 0 ? <Divider style={styles.compactDivider} /> : null}
                         <AppText variant="tiny" color="textFaint">{row.label}</AppText>

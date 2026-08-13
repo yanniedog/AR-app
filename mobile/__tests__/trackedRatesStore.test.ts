@@ -173,4 +173,31 @@ describe('tracked rate store migration', () => {
       relevantDateKind: 'term-maturity',
     });
   });
+
+  it('retains live private dates when a background secure read stays unavailable', async () => {
+    const saved = makeSavedRateRef(row, 'rate', '2026-08-13T00:00:00.000Z');
+    const tracked = {
+      ...makeTrackedRate(saved),
+      relevantDate: '2029-04-30',
+      relevantDateKind: 'term-maturity' as const,
+    };
+    useStore.setState({
+      savedRates: [saved],
+      trackedRates: [tracked],
+      favorites: [saved.productKey],
+      hydrated: true,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    jest.mocked(SecureStore.getItemAsync)
+      .mockRejectedValueOnce(new Error('device locked'))
+      .mockRejectedValueOnce(new Error('device still locked'));
+
+    await useStore.persist.rehydrate();
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(useStore.getState().trackedRates[0]).toMatchObject({
+      relevantDate: '2029-04-30',
+      relevantDateKind: 'term-maturity',
+    });
+  });
 });

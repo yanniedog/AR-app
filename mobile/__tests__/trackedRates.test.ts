@@ -1,6 +1,7 @@
 import { makeSavedRateRef, makeLegacySavedRateRef } from '../src/data/savedRates';
 import {
   loadTrackedRatesSecure,
+  loadTrackedRatesSecureResult,
   makeTrackedRate,
   normalizeTrackedRates,
   saveTrackedRatesSecure,
@@ -157,5 +158,15 @@ describe('tracked rate metadata', () => {
     await expect(loadTrackedRatesSecure([saved])).resolves.toEqual([
       expect.objectContaining({ id: saved.id, relevantDate: null }),
     ]);
+  });
+
+  it('reports a transient native read failure separately from an empty record', async () => {
+    const saved = makeSavedRateRef(row());
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error('device locked'));
+
+    await expect(loadTrackedRatesSecureResult([saved])).resolves.toEqual({
+      status: 'unavailable',
+      trackedRates: [expect.objectContaining({ id: saved.id, relevantDate: null })],
+    });
   });
 });
