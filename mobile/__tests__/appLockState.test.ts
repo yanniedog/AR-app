@@ -134,22 +134,24 @@ describe('app lock state machine', () => {
     expect(shouldAutomaticallyPrompt(state)).toBe(false);
   });
 
-  it('keeps an in-flight biometric prompt current when active resumes first', () => {
+  it('invalidates an unresolved prompt when active resumes before its result', () => {
     let state = createAppLockState(true, 'active');
     state = reduceAppLockState(state, { type: 'prompt_started', kind: 'automatic' });
-    const attemptId = state.promptAttempt!.id;
+    const staleAttemptId = state.promptAttempt!.id;
 
     state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'inactive' });
     state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'active' });
-    expect(state.promptAttempt?.id).toBe(attemptId);
-    expect(shouldAutomaticallyPrompt(state)).toBe(false);
+    expect(state.promptAttempt).toBeNull();
+    expect(state.locked).toBe(true);
+    expect(shouldAutomaticallyPrompt(state)).toBe(true);
 
-    state = reduceAppLockState(state, {
+    const afterStaleSuccess = reduceAppLockState(state, {
       type: 'prompt_resolved',
-      attemptId,
+      attemptId: staleAttemptId,
       success: true,
     });
-    expect(state.locked).toBe(false);
+    expect(afterStaleSuccess).toBe(state);
+    expect(afterStaleSuccess.locked).toBe(true);
   });
 
   it('does not loop after a biometric prompt is cancelled while inactive', () => {

@@ -69,8 +69,9 @@ export function shouldAutomaticallyPrompt(state: AppLockMachineState): boolean {
  * configuration change advances an epoch, so an authentication result that
  * returns after a real background transition or lock disablement can never
  * unlock a newer foreground session. A lifecycle interruption that occurs
- * while the OS prompt is live retains the attempt until that prompt settles;
- * a cancelled real app switch therefore stays locked, while Android's
+ * while the OS prompt is live retains the attempt only until the foreground
+ * boundary. A result already settled while backgrounded can cross that
+ * boundary; an unresolved or cancelled attempt is invalidated, while Android's
  * device-credential activity can still return its authenticated result.
  */
 export function reduceAppLockState(
@@ -111,10 +112,32 @@ export function reduceAppLockState(
       }
 
       if (event.lifecycle === 'active' && state.promptInterruption) {
+        if (state.pendingAuthentication) {
+          return {
+            ...state,
+            lifecycle: 'active',
+            locked: false,
+            promptAttempt: null,
+            promptInterruption: false,
+            pendingAuthentication: false,
+          };
+        }
+        if (state.promptAttempt) {
+          return {
+            ...state,
+            lifecycle: 'active',
+            locked: state.required,
+            epoch: state.epoch + 1,
+            autoPromptedEpoch: null,
+            promptAttempt: null,
+            promptInterruption: false,
+            pendingAuthentication: false,
+          };
+        }
         return {
           ...state,
           lifecycle: 'active',
-          locked: state.required ? !state.pendingAuthentication : false,
+          locked: state.required,
           promptInterruption: false,
           pendingAuthentication: false,
         };
