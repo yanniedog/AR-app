@@ -1,9 +1,7 @@
 import type { CorePayload } from '../types';
 import type {
   AssetDescriptorV3,
-  CapabilityV3,
   GenerationHeadV3,
-  GenerationManifestV3,
   ValidatedGenerationV3,
 } from '../contracts/v3/types';
 import {
@@ -14,6 +12,9 @@ import {
   validateCorePayloadV3,
   validateGenerationManifestV3,
   validateGenerationPointerV3,
+  validateOptionalAssetTextV3,
+  v3AssetCacheKey,
+  type OptionalAssetValidatorsV3,
 } from '../contracts/v3/validators';
 import { parseJsonHeavy } from '../lib/yieldToUi';
 import { downloadInflate, type DownloadOpts } from './payload';
@@ -34,20 +35,6 @@ export type V3TextDownloader = (
   opts: DownloadOpts,
 ) => Promise<string>;
 
-export type OptionalAssetValidatorV3 = (
-  value: Readonly<Record<string, unknown>>,
-  descriptor: AssetDescriptorV3,
-  manifest: GenerationManifestV3,
-) => void;
-
-function parseJson(text: string, label: string): unknown {
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error(`${label} is not valid JSON`);
-  }
-}
-
 function descriptorOptions(asset: AssetDescriptorV3): DownloadOpts {
   const limits = V3_ASSET_LIMITS[asset.capability];
   return {
@@ -66,41 +53,12 @@ function descriptorMatchesBase(asset: AssetDescriptorV3, generationDigest: strin
   return !asset.base_generation_digest || asset.base_generation_digest === generationDigest;
 }
 
-function assetCacheKey(asset: AssetDescriptorV3): string {
-  if (asset.cohort) return `${asset.capability}:${asset.cohort}`;
-  if (asset.capability === 'details-shard') return `${asset.capability}:${asset.sha256}`;
-  return asset.capability;
-}
-
-function validateOptionalJson(
-  text: string,
-  descriptor: AssetDescriptorV3,
-  manifest: GenerationManifestV3,
-  validator: OptionalAssetValidatorV3,
-): void {
-  const parsed = parseJson(text, descriptor.capability);
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    throw new Error(`${descriptor.capability} must contain a JSON object`);
-  }
-  const obj = parsed as Record<string, unknown>;
-  if (obj.schema_id !== descriptor.schema_id) {
-    throw new Error(`${descriptor.capability} schema_id does not match its descriptor`);
-  }
-  if (obj.schema_version !== 3) {
-    throw new Error(`${descriptor.capability} schema_version must be 3`);
-  }
-  if (obj.generation_digest !== manifest.generation_digest) {
-    throw new Error(`${descriptor.capability} generation_digest does not match its manifest`);
-  }
-  validator(obj, descriptor, manifest);
-}
-
 export async function loadValidatedV3Generation(
   pointerUrl: string,
   opts: {
     head?: 'latest_complete' | 'latest_observation';
     download?: V3TextDownloader;
-    optionalValidators?: Partial<Record<Exclude<CapabilityV3, 'core'>, OptionalAssetValidatorV3>>;
+    optionalValidators?: OptionalAssetValidatorsV3;
   } = {},
 ): Promise<ValidatedGenerationV3> {
   const download = opts.download ?? downloadInflate;
@@ -127,7 +85,7 @@ export async function loadValidatedV3Generation(
   let attemptedOptionalBytes = 0;
 
   for (const asset of manifest.assets) {
-    const assetKey = assetCacheKey(asset);
+    const assetKey = v3AssetCacheKey(asset);
     if (!descriptorMatchesBase(asset, manifest.generation_digest)) {
       const message = `${asset.capability} base generation does not match ${manifest.generation_digest}`;
       if (asset.required) throw new Error(message);
@@ -160,7 +118,7 @@ export async function loadValidatedV3Generation(
       else {
         const validator = opts.optionalValidators?.[asset.capability];
         if (!validator) throw new Error(`${asset.capability} has no registered capability validator`);
-        validateOptionalJson(text, asset, manifest, validator);
+        validateOptionalAssetTextV3(text, asset, manifest, validator);
         optionalAssets[assetKey] = text;
       }
     } catch (error) {

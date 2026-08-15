@@ -98,7 +98,9 @@ describe('Bank response trust state', () => {
     });
 
     expect(tree.root.findAllByType('Screen')).toHaveLength(1);
-    expect(tree.root.findByProps({ testID: 'bank-response-cached-error' })).toBeDefined();
+    const cachedError = tree.root.findByProps({ testID: 'bank-response-cached-error' });
+    expect(cachedError.props.accessible).toBeUndefined();
+    expect(tree.root.findAllByProps({ accessibilityRole: 'alert' })).toHaveLength(1);
     expect(tree.root.findAllByType('BankResponseDashboard')).toHaveLength(1);
 
     await act(async () => {

@@ -121,13 +121,13 @@ export default function RbaResponseScreen() {
     <Screen>
       {rawPayload && error ? (
         <View
-          accessible
-          accessibilityRole="alert"
           style={{ paddingHorizontal: 16, paddingTop: 12 }}
           testID="bank-response-cached-error"
         >
           <Card variant="outlined" style={{ gap: 8 }}>
-            <AppText variant="small" weight="700">Showing saved Bank response data</AppText>
+            <AppText accessibilityRole="alert" variant="small" weight="700">
+              Showing saved Bank response data
+            </AppText>
             <AppText variant="tiny" color="textMuted">
               The latest refresh failed. These observed results may be out of date.
             </AppText>

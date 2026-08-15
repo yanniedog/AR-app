@@ -271,7 +271,6 @@ export const cache = {
     const sidecar = await readCoreMetaSidecar();
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
-      generationDigest: b.meta.coreSha,
     });
     if (sidecar && sidecar.coreSha === b.meta.coreSha) {
       return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };

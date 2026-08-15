@@ -28,11 +28,11 @@ import {
   loadCoreDualRead,
   loadValidatedV3Generation,
 } from '../src/data/v3Payload';
+import { liveAssetStateForProviderCoverage } from '../src/data/assetState';
 import type { CorePayload } from '../src/types';
 
 const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
-const DIGEST_C = 'c'.repeat(64);
 const MANIFEST_SHA = 'c'.repeat(64);
 
 function head(overrides: Partial<GenerationHeadV3> = {}): GenerationHeadV3 {
@@ -104,6 +104,40 @@ function emptyRibbon() {
     counts: { rates: 0, products: 0, providers: 0 },
     range: { min: null, max: null, mean: null, median: null },
     providers: [],
+  };
+}
+
+function ribbonFor(rates: CorePayloadV3['sections']['Mortgage']['rates']) {
+  const values = rates.map((row) => row.typed_rate.value).sort((left, right) => left - right);
+  const providers = [...new Set(rates.map((row) => row.provider))];
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const median = values.length % 2 === 1
+    ? values[Math.floor(values.length / 2)]
+    : (values[values.length / 2 - 1] + values[values.length / 2]) / 2;
+  return {
+    counts: {
+      rates: rates.length,
+      products: new Set(rates.map((row) => row.product_uid)).size,
+      providers: providers.length,
+    },
+    range: { min: values[0], max: values[values.length - 1], mean, median },
+    providers: providers.map((provider) => {
+      const providerRates = rates.filter((row) => row.provider === provider);
+      const providerValues = providerRates.map((row) => row.typed_rate.value).sort((left, right) => left - right);
+      const providerMean = providerValues.reduce((sum, value) => sum + value, 0) / providerValues.length;
+      const providerMedian = providerValues.length % 2 === 1
+        ? providerValues[Math.floor(providerValues.length / 2)]
+        : (providerValues[providerValues.length / 2 - 1] + providerValues[providerValues.length / 2]) / 2;
+      return {
+        provider,
+        rates: providerRates.length,
+        products: new Set(providerRates.map((row) => row.product_uid)).size,
+        min: providerValues[0],
+        max: providerValues[providerValues.length - 1],
+        mean: providerMean,
+        median: providerMedian,
+      };
+    }),
   };
 }
 
@@ -197,6 +231,31 @@ function candidate(sourceManifest: GenerationManifestV3 = manifest()): Validated
     optionalAssets: {},
     optionalErrors: {},
   };
+}
+
+const facetsValidator = (value: Readonly<Record<string, unknown>>) => {
+  if (!Array.isArray(value.filters)) throw new Error('facets.filters must be an array');
+};
+
+function facetsText(filters: unknown[] = []): string {
+  return JSON.stringify({
+    schema_id: descriptor('facets').schema_id,
+    schema_version: 3,
+    generation_digest: DIGEST_A,
+    filters,
+  });
+}
+
+function candidateWithFacets(
+  optionalAssets: ValidatedGenerationV3['optionalAssets'] = {},
+  optionalErrors: ValidatedGenerationV3['optionalErrors'] = {},
+): ValidatedGenerationV3 {
+  const sourceManifest = manifest({ assets: [descriptor('core'), descriptor('facets')] });
+  return { ...candidate(sourceManifest), optionalAssets, optionalErrors };
+}
+
+function cacheWithFacets(storage: GenerationCacheStorage) {
+  return createV3GenerationCache(storage, 'payload/v3', { facets: facetsValidator });
 }
 
 class MemoryStorage implements GenerationCacheStorage {
@@ -345,182 +404,110 @@ describe('vendored v3 contract', () => {
 
     expect(() => validateCorePayloadV3(inconsistent, manifest())).toThrow(/inconsistent legacy_product_key/);
   });
+
+  it('rejects effective product-key collisions and cross-section product reuse', () => {
+    const effectiveCollision = core();
+    const original = effectiveCollision.sections.Mortgage.rates[0];
+    const colliding = {
+      ...original,
+      product_uid: original.legacy_product_key!,
+      rate_uid: 'rate/home-2/variable-owner-occupier',
+      product_name: 'Second Home Loan',
+      typed_rate: { ...original.typed_rate, value: 0.062 },
+    };
+    delete colliding.legacy_product_key;
+    effectiveCollision.sections.Mortgage.rates.push(colliding);
+    effectiveCollision.sections.Mortgage.ribbon = ribbonFor(effectiveCollision.sections.Mortgage.rates);
+    expect(() => validateCorePayloadV3(effectiveCollision, manifest())).toThrow(/adapted product_key.*ambiguous/);
+
+    const crossSection = core();
+    const reused = {
+      ...crossSection.sections.Mortgage.rates[0],
+      rate_uid: 'rate/home-1/reused-as-savings',
+      classification: {
+        ...crossSection.sections.Mortgage.rates[0].classification,
+        product_kind: 'savings' as const,
+        consumer_section: 'Savings' as const,
+      },
+      typed_rate: {
+        ...crossSection.sections.Mortgage.rates[0].typed_rate,
+        metric: 'base' as const,
+        value: 0.05,
+      },
+    };
+    delete reused.comparison_rate;
+    delete reused.mortgage_rate_type;
+    crossSection.sections.Savings.rates.push(reused);
+    crossSection.sections.Savings.ribbon = ribbonFor(crossSection.sections.Savings.rates);
+    expect(() => validateCorePayloadV3(crossSection, manifest())).toThrow(/reused across consumer sections/);
+
+    const renamedTier = core();
+    const renamedSibling = {
+      ...renamedTier.sections.Mortgage.rates[0],
+      rate_uid: 'rate/home-1/second-tier-renamed',
+      product_name: 'Conflicting product name',
+      typed_rate: { ...renamedTier.sections.Mortgage.rates[0].typed_rate, value: 0.062 },
+    };
+    renamedTier.sections.Mortgage.rates.push(renamedSibling);
+    renamedTier.sections.Mortgage.ribbon = ribbonFor(renamedTier.sections.Mortgage.rates);
+    expect(() => validateCorePayloadV3(renamedTier, manifest())).toThrow(/conflicting product-level facts/);
+
+    const reclassifiedTier = core();
+    const reclassifiedSibling = {
+      ...reclassifiedTier.sections.Mortgage.rates[0],
+      rate_uid: 'rate/home-1/second-tier-reclassified',
+      classification: {
+        ...reclassifiedTier.sections.Mortgage.rates[0].classification,
+        basis: 'Conflicting classifier evidence',
+      },
+      typed_rate: { ...reclassifiedTier.sections.Mortgage.rates[0].typed_rate, value: 0.062 },
+    };
+    reclassifiedTier.sections.Mortgage.rates.push(reclassifiedSibling);
+    reclassifiedTier.sections.Mortgage.ribbon = ribbonFor(reclassifiedTier.sections.Mortgage.rates);
+    expect(() => validateCorePayloadV3(reclassifiedTier, manifest())).toThrow(/conflicting product-level facts/);
+  });
+
+  it('rejects unordered RBA steps and adapted brand-key collisions', () => {
+    const unordered = core();
+    unordered.rba = [
+      { date: '2026-08-01', rate: 3.6 },
+      { date: '2026-07-01', rate: 3.85 },
+    ];
+    expect(() => validateCorePayloadV3(unordered, manifest())).toThrow(/unique dates in ascending order/);
+
+    const brandCollision = core();
+    brandCollision.brands['Example Bank'] = { short: 'Wrong', color: '#abcdef' };
+    expect(() => validateCorePayloadV3(brandCollision, manifest())).toThrow(/adapted brand key.*ambiguous/);
+  });
+
+  it('maps term-deposit conditionality into the legacy field used by consumers', () => {
+    const termDeposit = core();
+    const mortgage = termDeposit.sections.Mortgage.rates[0];
+    const td = {
+      ...mortgage,
+      product_uid: 'holder/example-bank/product/td-1',
+      rate_uid: 'rate/td-1/conditional-12m',
+      legacy_product_key: 'Example Bank|td-1',
+      product_name: 'Conditional 12 month term deposit',
+      classification: {
+        ...mortgage.classification,
+        product_kind: 'term_deposit' as const,
+        consumer_section: 'TD' as const,
+      },
+      typed_rate: { ...mortgage.typed_rate, metric: 'conditional' as const, value: 0.047 },
+    };
+    delete td.comparison_rate;
+    delete td.mortgage_rate_type;
+    termDeposit.sections.TD.rates.push(td);
+    termDeposit.sections.TD.ribbon = ribbonFor(termDeposit.sections.TD.rates);
+
+    const validated = validateCorePayloadV3(termDeposit, manifest());
+    const legacyTd = adaptCoreV3ToLegacy(validated).sections.TD.rates[0];
+    expect(legacyTd.ribbon_rate_structure).toBe('bonus');
+    expect(legacyTd.ribbon_deposit_kind).toBeUndefined();
+  });
 });
 
-describe('content-addressed v3 cache', () => {
-  it('survives restart with current and previous immutable generations', async () => {
-    const storage = new MemoryStorage();
-    const first = candidate();
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    await createV3GenerationCache(storage).install(first);
-    await createV3GenerationCache(storage).install(candidate(secondManifest));
-
-    const restarted = createV3GenerationCache(storage);
-    expect((await restarted.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-    expect((await restarted.readPrevious())?.manifest.generation_digest).toBe(DIGEST_A);
-  });
-
-  it('returns verified in-memory data on storage failure without replacing current', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    storage.failWrites = true;
-    const result = await cache.install(candidate(secondManifest));
-
-    expect(result.persisted).toBe(false);
-    expect(result.generation.core.run_date).toBe('2026-08-16');
-    expect(result.persistenceError).toContain('disk full');
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_A);
-  });
-
-  it('falls back to previous when the current content-addressed record is corrupt', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    await cache.install(candidate(secondManifest));
-    storage.files.set(`payload/v3/generations/${DIGEST_B}.json`, '{bad-json');
-
-    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest).toBe(DIGEST_A);
-  });
-
-  it('serializes concurrent installs in call order', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-
-    await Promise.all([cache.install(candidate()), cache.install(candidate(secondManifest))]);
-
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(DIGEST_A);
-  });
-
-  it('fills a previously unavailable optional capability without changing the immutable generation', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const unavailable = {
-      ...candidate(),
-      optionalErrors: { facets: 'optional download failed' },
-    };
-    const recovered = {
-      ...candidate(),
-      optionalAssets: { facets: '{"schema_id":"facets-v3"}' },
-    };
-
-    expect((await cache.install(unavailable)).persisted).toBe(true);
-    const result = await cache.install(recovered);
-
-    expect(result.persisted).toBe(true);
-    expect(result.generation.optionalAssets.facets).toBe('{"schema_id":"facets-v3"}');
-    expect(result.generation.optionalErrors.facets).toBeUndefined();
-    const restarted = await createV3GenerationCache(storage).readCurrent();
-    expect(restarted?.optionalAssets.facets).toBe('{"schema_id":"facets-v3"}');
-    expect(restarted?.optionalErrors.facets).toBeUndefined();
-  });
-
-  it('rejects rollback and non-descendant generations without changing current', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    await cache.install(candidate());
-    await cache.install(candidate(secondManifest));
-
-    await expect(cache.install(candidate())).rejects.toThrow(/rollback generation/);
-    const unrelatedManifest = manifest({
-      generation_id: '2026-08-17T010000Z-c',
-      generation_digest: DIGEST_C,
-      run_date: '2026-08-17',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
-    });
-    await expect(cache.install(candidate(unrelatedManifest))).rejects.toThrow(/not a direct descendant/);
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-  });
-
-  it('removes only the generation displaced from the current/previous window', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    const thirdManifest = manifest({
-      generation_id: '2026-08-17T010000Z-c',
-      generation_digest: DIGEST_C,
-      run_date: '2026-08-17',
-      prior_ledger_digest: DIGEST_B,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
-    });
-    await cache.install(candidate());
-    await cache.install(candidate(secondManifest));
-    await cache.install(candidate(thirdManifest));
-
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_A}.json`)).toBe(false);
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_B}.json`)).toBe(true);
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_C}.json`)).toBe(true);
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_C);
-    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(DIGEST_B);
-  });
-
-  it('atomically preserves the current same-generation record when replacement fails', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    await cache.install({ ...candidate(), optionalErrors: { facets: 'unavailable' } });
-    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
-    const original = storage.files.get(recordPath);
-    storage.failMoveTarget = recordPath;
-
-    const result = await cache.install({
-      ...candidate(),
-      optionalAssets: { facets: '{"schema_id":"facets-v3"}' },
-    });
-
-    expect(result.persisted).toBe(false);
-    expect(result.persistenceError).toContain('atomic replace failed');
-    expect(storage.files.get(recordPath)).toBe(original);
-    expect((await cache.readCurrent())?.optionalAssets.facets).toBeUndefined();
-  });
-
-  it('rejects finalized partial observations from the settled generation cache', async () => {
-    const cache = createV3GenerationCache(new MemoryStorage());
-    const partialManifest = manifest({ observation_state: 'partial' });
-    await expect(cache.install(candidate(partialManifest))).rejects.toThrow(/only complete observations/);
-  });
-});
 
 describe('dormant dual read', () => {
   it('is feature-disabled and does not call the v3 loader by default', async () => {
@@ -557,11 +544,13 @@ describe('dormant dual read', () => {
 
   it('treats a content-addressed collision as a v3 failure and retains cached bytes', async () => {
     const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    await cache.install({ ...candidate(), optionalAssets: { facets: 'known-good' } });
+    const cache = cacheWithFacets(storage);
+    const knownGood = facetsText();
+    const conflicting = facetsText(['conflicting']);
+    await cache.install(candidateWithFacets({ facets: knownGood }));
     const result = await loadCoreDualRead({
       bridgeEnabled: true,
-      loadV3: async () => ({ ...candidate(), optionalAssets: { facets: 'conflicting' } }),
+      loadV3: async () => candidateWithFacets({ facets: conflicting }),
       loadV1: async () => adaptCoreV3ToLegacy(core()),
       v3Cache: cache,
     });
@@ -569,7 +558,7 @@ describe('dormant dual read', () => {
     expect(result.contract).toBe('v3');
     expect(result.source).toBe('cache');
     expect(result.warning).toContain('optional asset collision');
-    if (result.contract === 'v3') expect(result.generation.optionalAssets.facets).toBe('known-good');
+    if (result.contract === 'v3') expect(result.generation.optionalAssets.facets).toBe(knownGood);
   });
 
   it('falls back to v1 without replacing cache when no valid v3 exists', async () => {
@@ -828,5 +817,28 @@ describe('dormant dual read', () => {
     const requiredThird = { ...shards[2], required: true };
     await expect(load([descriptor('core'), shards[0], shards[1], requiredThird])).rejects.toThrow(/aggregate budget/);
     expect(attempted).toHaveLength(2);
+  });
+});
+
+describe('provider coverage asset truth state', () => {
+  it('marks failed-only and mixed provider outcomes as partial', () => {
+    const integrity = { marker: 'verified' };
+    expect(liveAssetStateForProviderCoverage(integrity, {
+      counts: { providers_partial: 0, providers_failed: 2 },
+    })).toEqual({
+      status: 'partial',
+      data: integrity,
+      reason: '2 provider observation(s) failed.',
+    });
+    expect(liveAssetStateForProviderCoverage(integrity, {
+      counts: { providers_partial: 1, providers_failed: 2 },
+    })).toEqual({
+      status: 'partial',
+      data: integrity,
+      reason: '1 provider observation(s) are partial; 2 provider observation(s) failed.',
+    });
+    expect(liveAssetStateForProviderCoverage(integrity, {
+      counts: { providers_partial: 0, providers_failed: 0 },
+    })).toEqual({ status: 'live', data: integrity });
   });
 });

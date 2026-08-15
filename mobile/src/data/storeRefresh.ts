@@ -25,6 +25,7 @@ import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedMan
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
 import { savedRatesWithAlerts } from './subscriptions';
+import { liveAssetStateForProviderCoverage } from './assetState';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -461,13 +462,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         set({
           core,
           coreIntegrity: integrity,
-          coreAssetState: core.coverage?.counts?.providers_partial
-            ? {
-                status: 'partial',
-                data: integrity,
-                reason: `${core.coverage.counts.providers_partial} provider observation(s) are partial.`,
-              }
-            : { status: 'live', data: integrity },
+          coreAssetState: liveAssetStateForProviderCoverage(integrity, core.coverage),
           manifest: remote,
           source: 'remote',
           status: 'ready',

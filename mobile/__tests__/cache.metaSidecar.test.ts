@@ -183,6 +183,8 @@ describe('cache core-meta sidecar', () => {
     await cache.updateMeta(sidecarMeta);
     const withSidecar = await cache.readBundle();
     expect(withSidecar?.meta.detailsSha).toBe('sidecar-details-sha-1234');
+    expect(withSidecar?.integrity.generationDigest).toBeNull();
+    expect(withSidecar?.integrity.coreSha256).toBe(sampleManifest.files.core.sha256);
 
     const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
     // updateMeta no-ops on coreSha mismatch, so plant a stale sidecar directly.
@@ -196,6 +198,7 @@ describe('cache core-meta sidecar', () => {
     const withStale = await cache.readBundle();
     expect(withStale?.meta.detailsSha).toBeNull();
     expect(withStale?.meta.coreSha).toBe(sampleManifest.files.core.sha256);
+    expect(withStale?.integrity.generationDigest).toBeNull();
   });
 
   it('atomically writes product-history checkpoints and recovers a complete tmp file', async () => {

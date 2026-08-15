@@ -29,3 +29,22 @@ export function replaceAssetData<T>(state: AssetState<T>, data: T): AssetState<T
     case 'unavailable': return { status: 'cached', data };
   }
 }
+
+export function liveAssetStateForProviderCoverage<T>(
+  data: T,
+  coverage: {
+    counts?: {
+      providers_partial?: number;
+      providers_failed?: number;
+    };
+  } | null | undefined,
+): AssetState<T> {
+  const partial = coverage?.counts?.providers_partial ?? 0;
+  const failed = coverage?.counts?.providers_failed ?? 0;
+  if (partial + failed === 0) return { status: 'live', data };
+  const reasons = [
+    partial > 0 ? `${partial} provider observation(s) are partial` : null,
+    failed > 0 ? `${failed} provider observation(s) failed` : null,
+  ].filter((reason): reason is string => reason !== null);
+  return { status: 'partial', data, reason: `${reasons.join('; ')}.` };
+}

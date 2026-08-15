@@ -1,9 +1,15 @@
+import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes } from '@noble/hashes/utils';
+
 import type { ValidatedGenerationV3 } from '../contracts/v3/types';
 import {
   V3ContractError,
   validateCorePayloadV3,
   validateGenerationHeadV3,
   validateGenerationManifestV3,
+  validateOptionalAssetTextV3,
+  v3AssetCacheKey,
+  type OptionalAssetValidatorsV3,
 } from '../contracts/v3/validators';
 
 export interface GenerationCacheStorage {
@@ -52,33 +58,106 @@ function parseHead(raw: string | null): GenerationCacheHead | null {
   }
 }
 
+function sha256Text(value: string): string {
+  return Array.from(sha256(utf8ToBytes(value)))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+function contentHashes(candidate: ValidatedGenerationV3) {
+  return {
+    core_sha256: sha256Text(candidate.coreText),
+    optional_assets: Object.fromEntries(
+      Object.entries(candidate.optionalAssets)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, value]) => [key, sha256Text(value)]),
+    ),
+  };
+}
+
 function serializeCandidate(candidate: ValidatedGenerationV3, savedAt: string): string {
   return JSON.stringify({
-    schema_version: 1,
+    schema_version: 2,
     saved_at: savedAt,
     head: candidate.head,
     manifest: candidate.manifest,
     core_text: candidate.coreText,
     optional_assets: candidate.optionalAssets,
     optional_errors: candidate.optionalErrors,
+    content_hashes: contentHashes(candidate),
   });
 }
 
-function parseCandidate(raw: string | null): CachedGenerationV3 | null {
+function validatedOptionalAssets(
+  rawAssets: unknown,
+  rawErrors: unknown,
+  manifest: ValidatedGenerationV3['manifest'],
+  validators: OptionalAssetValidatorsV3,
+): Pick<ValidatedGenerationV3, 'optionalAssets' | 'optionalErrors'> {
+  if (!rawAssets || typeof rawAssets !== 'object' || Array.isArray(rawAssets)) {
+    throw new V3ContractError('cache optional_assets must be an object');
+  }
+  if (!rawErrors || typeof rawErrors !== 'object' || Array.isArray(rawErrors)) {
+    throw new V3ContractError('cache optional_errors must be an object');
+  }
+  const descriptors = new Map(
+    manifest.assets
+      .filter((asset) => asset.capability !== 'core')
+      .map((asset) => [v3AssetCacheKey(asset), asset]),
+  );
+  const optionalAssets: ValidatedGenerationV3['optionalAssets'] = {};
+  for (const [key, value] of Object.entries(rawAssets as Record<string, unknown>)) {
+    if (typeof value !== 'string') throw new V3ContractError(`cache optional asset ${key} must be text`);
+    const descriptor = descriptors.get(key);
+    if (!descriptor) throw new V3ContractError(`cache optional asset ${key} has no manifest descriptor`);
+    const validator = validators[descriptor.capability as Exclude<typeof descriptor.capability, 'core'>];
+    if (!validator) throw new V3ContractError(`cache optional asset ${key} has no registered capability validator`);
+    validateOptionalAssetTextV3(value, descriptor, manifest, validator);
+    optionalAssets[key] = value;
+  }
+  const optionalErrors: ValidatedGenerationV3['optionalErrors'] = {};
+  for (const [key, value] of Object.entries(rawErrors as Record<string, unknown>)) {
+    if (typeof value !== 'string') throw new V3ContractError(`cache optional error ${key} must be text`);
+    if (!descriptors.has(key)) throw new V3ContractError(`cache optional error ${key} has no manifest descriptor`);
+    optionalErrors[key] = value;
+  }
+  for (const descriptor of descriptors.values()) {
+    const key = v3AssetCacheKey(descriptor);
+    if (descriptor.required && optionalAssets[key] === undefined) {
+      throw new V3ContractError(`required cache capability ${key} is unavailable`);
+    }
+  }
+  return { optionalAssets, optionalErrors };
+}
+
+function parseCandidate(
+  raw: string | null,
+  validators: OptionalAssetValidatorsV3,
+): CachedGenerationV3 | null {
   if (!raw) return null;
   try {
     const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (obj.schema_version !== 1 || typeof obj.saved_at !== 'string' || typeof obj.core_text !== 'string') return null;
+    if (obj.schema_version !== 2 || typeof obj.saved_at !== 'string' || typeof obj.core_text !== 'string') return null;
+    if (!obj.content_hashes || typeof obj.content_hashes !== 'object' || Array.isArray(obj.content_hashes)) return null;
+    const hashes = obj.content_hashes as Record<string, unknown>;
+    if (typeof hashes.core_sha256 !== 'string' || hashes.core_sha256 !== sha256Text(obj.core_text)) return null;
+    if (!hashes.optional_assets || typeof hashes.optional_assets !== 'object' || Array.isArray(hashes.optional_assets)) return null;
     const head = validateGenerationHeadV3(obj.head, 'cache.head');
     const manifest = validateGenerationManifestV3(obj.manifest, head);
     if (manifest.observation_state !== 'complete') return null;
     const core = validateCorePayloadV3(JSON.parse(obj.core_text), manifest);
-    const optionalAssets = obj.optional_assets && typeof obj.optional_assets === 'object'
-      ? obj.optional_assets as ValidatedGenerationV3['optionalAssets']
-      : {};
-    const optionalErrors = obj.optional_errors && typeof obj.optional_errors === 'object'
-      ? obj.optional_errors as ValidatedGenerationV3['optionalErrors']
-      : {};
+    const { optionalAssets, optionalErrors } = validatedOptionalAssets(
+      obj.optional_assets,
+      obj.optional_errors,
+      manifest,
+      validators,
+    );
+    const optionalHashes = hashes.optional_assets as Record<string, unknown>;
+    const assetKeys = Object.keys(optionalAssets).sort();
+    if (Object.keys(optionalHashes).sort().join('\0') !== assetKeys.join('\0')) return null;
+    for (const [key, value] of Object.entries(optionalAssets)) {
+      if (typeof optionalHashes[key] !== 'string' || optionalHashes[key] !== sha256Text(value)) return null;
+    }
     return {
       head,
       manifest,
@@ -96,6 +175,7 @@ function parseCandidate(raw: string | null): CachedGenerationV3 | null {
 export function createV3GenerationCache(
   storage: GenerationCacheStorage,
   root = 'payload/v3',
+  optionalValidators: OptionalAssetValidatorsV3 = {},
 ) {
   let installChain: Promise<void> = Promise.resolve();
   const headPath = `${root}/head.json`;
@@ -109,7 +189,7 @@ export function createV3GenerationCache(
 
   async function readDigest(digest: string | null): Promise<CachedGenerationV3 | null> {
     if (!digest) return null;
-    const generation = parseCandidate(await storage.read(generationPath(digest)));
+    const generation = parseCandidate(await storage.read(generationPath(digest)), optionalValidators);
     return generation?.manifest.generation_digest === digest ? generation : null;
   }
 
@@ -134,7 +214,20 @@ export function createV3GenerationCache(
       throw new V3ContractError('only complete observations can enter the settled generation cache');
     }
     const core = validateCorePayloadV3(JSON.parse(candidate.coreText), manifest);
-    const verified: ValidatedGenerationV3 = { ...candidate, head, manifest, core };
+    const { optionalAssets, optionalErrors } = validatedOptionalAssets(
+      candidate.optionalAssets,
+      candidate.optionalErrors,
+      manifest,
+      optionalValidators,
+    );
+    const verified: ValidatedGenerationV3 = {
+      ...candidate,
+      head,
+      manifest,
+      core,
+      optionalAssets,
+      optionalErrors,
+    };
     const savedAt = new Date().toISOString();
     const digest = manifest.generation_digest;
     const recordPath = generationPath(digest);
@@ -144,7 +237,7 @@ export function createV3GenerationCache(
     try {
       const previousHead = await readHead();
       const current = previousHead ? await readDigest(previousHead.current) : null;
-      if (previousHead && !current) {
+      if (previousHead && !current && previousHead.current !== digest) {
         throw new V3ContractError('current cache generation is unavailable or invalid');
       }
       if (current && current.manifest.generation_digest !== digest) {
@@ -158,28 +251,35 @@ export function createV3GenerationCache(
 
       const existing = await storage.read(recordPath);
       if (existing) {
-        const parsed = parseCandidate(existing);
+        const parsed = parseCandidate(existing, optionalValidators);
         if (
-          !parsed ||
+          parsed && (
           parsed.manifest.generation_digest !== digest ||
           parsed.coreText !== verified.coreText ||
           JSON.stringify(parsed.head) !== JSON.stringify(verified.head) ||
           JSON.stringify(parsed.manifest) !== JSON.stringify(verified.manifest)
+          )
         ) {
           throw new V3ContractError(`content-addressed cache collision for ${digest}`);
         }
 
-        for (const [key, value] of Object.entries(verified.optionalAssets)) {
-          const cachedValue = parsed.optionalAssets[key];
-          if (cachedValue !== undefined && cachedValue !== value) {
-            throw new V3ContractError(`content-addressed optional asset collision for ${digest}:${key}`);
-          }
+        if (!parsed && previousHead?.current !== digest) {
+          throw new V3ContractError(`content-addressed cache collision for ${digest}`);
         }
 
-        const optionalAssets = { ...parsed.optionalAssets, ...verified.optionalAssets };
-        const optionalErrors = { ...parsed.optionalErrors, ...verified.optionalErrors };
-        for (const key of Object.keys(optionalAssets)) delete optionalErrors[key];
-        installed = { ...verified, optionalAssets, optionalErrors };
+        if (parsed) {
+          for (const [key, value] of Object.entries(verified.optionalAssets)) {
+            const cachedValue = parsed.optionalAssets[key];
+            if (cachedValue !== undefined && cachedValue !== value) {
+              throw new V3ContractError(`content-addressed optional asset collision for ${digest}:${key}`);
+            }
+          }
+
+          const mergedAssets = { ...parsed.optionalAssets, ...verified.optionalAssets };
+          const mergedErrors = { ...parsed.optionalErrors, ...verified.optionalErrors };
+          for (const key of Object.keys(mergedAssets)) delete mergedErrors[key];
+          installed = { ...verified, optionalAssets: mergedAssets, optionalErrors: mergedErrors };
+        }
         await storage.write(recordTmpPath, serializeCandidate(installed, savedAt));
         await storage.move(recordTmpPath, recordPath);
       } else {

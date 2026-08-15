@@ -66,6 +66,16 @@ export class V3ContractError extends Error {
   }
 }
 
+export type OptionalAssetValidatorV3 = (
+  value: Readonly<Record<string, unknown>>,
+  descriptor: AssetDescriptorV3,
+  manifest: GenerationManifestV3,
+) => void;
+
+export type OptionalAssetValidatorsV3 = Partial<
+  Record<Exclude<CapabilityV3, 'core'>, OptionalAssetValidatorV3>
+>;
+
 function reject(message: string): never {
   throw new V3ContractError(message);
 }
@@ -132,6 +142,38 @@ function enumValue<T extends string>(value: unknown, values: readonly T[], path:
     reject(`${path} must be one of ${values.join(', ')}`);
   }
   return value as T;
+}
+
+export function v3AssetCacheKey(asset: AssetDescriptorV3): string {
+  return asset.capability === 'details-shard'
+    ? `${asset.capability}:${asset.cohort}`
+    : asset.capability;
+}
+
+export function validateOptionalAssetTextV3(
+  raw: string,
+  descriptor: AssetDescriptorV3,
+  manifest: GenerationManifestV3,
+  validator: OptionalAssetValidatorV3,
+): Readonly<Record<string, unknown>> {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    return reject(`${descriptor.capability} is not valid JSON`);
+  }
+  const obj = record(value, descriptor.capability);
+  if (obj.schema_id !== descriptor.schema_id) {
+    reject(`${descriptor.capability} schema_id does not match its descriptor`);
+  }
+  if (obj.schema_version !== 3) {
+    reject(`${descriptor.capability} schema_version must be 3`);
+  }
+  if (obj.generation_digest !== manifest.generation_digest) {
+    reject(`${descriptor.capability} generation_digest does not match its manifest`);
+  }
+  validator(obj, descriptor, manifest);
+  return obj;
 }
 
 export function validateGenerationHeadV3(
@@ -501,7 +543,9 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
   const sections = {} as CorePayloadV3['sections'];
   const rateIds = new Set<string>();
   const productOwners = new Map<string, string>();
-  const legacyProductOwners = new Map<string, string>();
+  const productSections = new Map<string, SectionKey>();
+  const productFactsByUid = new Map<string, string>();
+  const effectiveProductOwners = new Map<string, string>();
   const legacyKeyByProduct = new Map<string, string | null>();
   const legacyIndexesByProduct = new Map<string, Map<number, string>>();
   const providerNamesByUid = new Map<string, string>();
@@ -517,16 +561,36 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
       const owner = productOwners.get(row.product_uid);
       if (owner && owner !== row.provider_uid) reject(`product_uid ${row.product_uid} changes provider identity`);
       productOwners.set(row.product_uid, row.provider_uid);
+      const productSection = productSections.get(row.product_uid);
+      if (productSection && productSection !== section) {
+        reject(`product_uid ${row.product_uid} is reused across consumer sections`);
+      }
+      productSections.set(row.product_uid, section);
+      const productFacts = JSON.stringify([
+        row.provider_uid,
+        row.product_name,
+        row.classification.product_kind,
+        row.classification.consumer_section,
+        row.classification.status,
+        row.classification.basis,
+        row.classification.version,
+      ]);
+      const existingProductFacts = productFactsByUid.get(row.product_uid);
+      if (existingProductFacts && existingProductFacts !== productFacts) {
+        reject(`product_uid ${row.product_uid} has conflicting product-level facts`);
+      }
+      productFactsByUid.set(row.product_uid, productFacts);
       const legacyKey = row.legacy_product_key ?? null;
       if (legacyKeyByProduct.has(row.product_uid) && legacyKeyByProduct.get(row.product_uid) !== legacyKey) {
         reject(`product_uid ${row.product_uid} has inconsistent legacy_product_key tiers`);
       }
       legacyKeyByProduct.set(row.product_uid, legacyKey);
-      if (row.legacy_product_key) {
-        const legacyOwner = legacyProductOwners.get(row.legacy_product_key);
-        if (legacyOwner && legacyOwner !== row.product_uid) reject(`legacy_product_key ${row.legacy_product_key} is ambiguous`);
-        legacyProductOwners.set(row.legacy_product_key, row.product_uid);
+      const effectiveProductKey = row.legacy_product_key ?? row.product_uid;
+      const effectiveOwner = effectiveProductOwners.get(effectiveProductKey);
+      if (effectiveOwner && effectiveOwner !== row.product_uid) {
+        reject(`adapted product_key ${effectiveProductKey} is ambiguous`);
       }
+      effectiveProductOwners.set(effectiveProductKey, row.product_uid);
       const legacyIndex = legacyRateIndex(row.rate_uid);
       const productIndexes = legacyIndexesByProduct.get(row.product_uid) ?? new Map<number, string>();
       const existingRateUid = productIndexes.get(legacyIndex);
@@ -558,13 +622,28 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
   for (const providerUid of providerNamesByUid.keys()) {
     if (!brands[providerUid]) reject(`core.brands is missing provider_uid ${providerUid}`);
   }
+  const adaptedBrandOwners = new Map<string, string>();
+  for (const providerUid of Object.keys(brands)) {
+    const adaptedKey = providerNamesByUid.get(providerUid) ?? providerUid;
+    const adaptedOwner = adaptedBrandOwners.get(adaptedKey);
+    if (adaptedOwner && adaptedOwner !== providerUid) {
+      reject(`adapted brand key ${adaptedKey} is ambiguous`);
+    }
+    adaptedBrandOwners.set(adaptedKey, providerUid);
+  }
   if (!Array.isArray(obj.rba)) reject('core.rba must be an array');
+  let previousRbaDate: string | null = null;
   const rba = obj.rba.map((raw, index) => {
     const entry = record(raw, `core.rba[${index}]`);
     exactKeys(entry, ['date', 'rate'], [], `core.rba[${index}]`);
     const rate = entry.rate;
     if (typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100) reject(`core.rba[${index}].rate must be percentage points`);
-    return { date: date(entry.date, `core.rba[${index}].date`), rate };
+    const stepDate = date(entry.date, `core.rba[${index}].date`);
+    if (previousRbaDate !== null && stepDate <= previousRbaDate) {
+      reject('core.rba must contain unique dates in ascending order');
+    }
+    previousRbaDate = stepDate;
+    return { date: stepDate, rate };
   });
   const holds = obj.rba_holds === undefined
     ? undefined
@@ -624,9 +703,13 @@ export function adaptCoreV3ToLegacy(core: CorePayloadV3): CorePayload {
               ? 'standard'
               : 'non_standard',
           ...(row.typed_rate.metric === 'conditional'
-            ? { ribbon_deposit_kind: 'bonus' }
+            ? section === 'TD'
+              ? { ribbon_rate_structure: 'bonus' }
+              : { ribbon_deposit_kind: 'bonus' }
             : row.typed_rate.metric === 'introductory'
-              ? { ribbon_deposit_kind: 'intro' }
+              ? section === 'TD'
+                ? { ribbon_rate_structure: 'introductory' }
+                : { ribbon_deposit_kind: 'intro' }
               : {}),
           taxonomy_path: roots[section],
         })),
