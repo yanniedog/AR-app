@@ -1,6 +1,7 @@
 import {
   isSavedRate,
   makeSavedRateRef,
+  migrateSavedRateProductAliases,
   normalizeSavedRates,
   resolveSavedRates,
   toggleSavedRateRefs,
@@ -94,6 +95,31 @@ describe('saved rate references', () => {
     const refs = toggleSavedRateRefs([exact], row(1, '0.055'), 'product');
     expect(refs).toEqual([
       expect.objectContaining({ id: 'product:EX|HOME', scope: 'product' }),
+    ]);
+  });
+
+  it('migrates legacy aliases without rebinding an unauthenticated exact tier', () => {
+    const exact = makeSavedRateRef(row(2, '0.06'), 'rate', '2026-08-04T00:00:00.000Z');
+    const product = makeSavedRateRef(row(1, '0.055'), 'product', '2026-08-05T00:00:00.000Z');
+    const aliases = new Map([['EX|HOME', { productKey: 'product:v1:canonical' }]]);
+
+    expect(migrateSavedRateProductAliases([exact], aliases)).toEqual([{
+      ...exact,
+      id: 'product:product:v1:canonical',
+      scope: 'product',
+      productKey: 'product:v1:canonical',
+      rateIndex: null,
+      savedRate: null,
+    }]);
+    expect(migrateSavedRateProductAliases([exact, product], aliases)).toEqual([
+      {
+        ...product,
+        id: 'product:product:v1:canonical',
+        scope: 'product',
+        productKey: 'product:v1:canonical',
+        rateIndex: null,
+        savedRate: null,
+      },
     ]);
   });
 });

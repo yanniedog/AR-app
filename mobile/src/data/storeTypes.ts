@@ -24,6 +24,8 @@ import type { RefreshOutcomeKind } from '../components/bannerState';
 import type { SavedRateRef } from './savedRates';
 import type { TrackedRate, TrackedRateDateKind } from './trackedRates';
 import type { SortKey } from './selectors';
+import type { AssetState } from './assetState';
+import type { CoreIntegrityContext } from './sectionIntegrity';
 
 export interface Prefs {
   themeMode: ThemeMode;
@@ -128,6 +130,9 @@ export interface AppState {
   source: PayloadSource;
   manifest: Manifest | null;
   core: CorePayload | null;
+  /** Explicit trust/provenance carried with the exact normalized core object. */
+  coreIntegrity: CoreIntegrityContext | null;
+  coreAssetState: AssetState<CoreIntegrityContext>;
   details: DetailsPayload | null;
   searchIndex: SearchIndexPayload | null;
   historyBanks: HistoryBanksPayload | null;

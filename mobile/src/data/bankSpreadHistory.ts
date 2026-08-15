@@ -1,4 +1,9 @@
 import type { RbaCalendar, RbaOutcome } from './rbaCalendar';
+import {
+  bankHistoryPairKey,
+  quarantinedBankHistoryPairs,
+  type CoreIntegrityContext,
+} from './sectionIntegrity';
 
 export type BankSpreadQuality =
   | 'complete'
@@ -114,7 +119,7 @@ function normalizeSeries(value: unknown, length: number): BankSpreadSeries | nul
 export function normalizeBankSpreadHistoryPayload(value: unknown): BankSpreadHistoryPayload | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
-  const runDate = typeof raw.run_date === 'string' ? raw.run_date.slice(0, 10) : '';
+  const runDate = typeof raw.run_date === 'string' && YMD.test(raw.run_date) ? raw.run_date : '';
   const dates = Array.isArray(raw.run_dates) ? raw.run_dates : [];
   if (raw.schema_version !== 1 || !YMD.test(runDate) || !dates.length) return null;
   if (dates.some((date) => typeof date !== 'string' || !YMD.test(date) || date > runDate)) return null;
@@ -131,6 +136,32 @@ export function normalizeBankSpreadHistoryPayload(value: unknown): BankSpreadHis
   }
   if (!Object.keys(banks).length) return null;
   return { schema_version: 1, run_date: runDate, run_dates: dates as string[], method: raw.method, cohorts: cohorts as BankSpreadHistoryPayload['cohorts'], banks };
+}
+
+/**
+ * Pre-aggregated spread rows cannot be repaired after a provider/section cohort
+ * has been quarantined. Fail closed without matching core provenance and remove
+ * the whole provider line when either side of its advertised gap is tainted.
+ */
+export function filterBankSpreadHistoryForIntegrity(
+  payload: BankSpreadHistoryPayload | null | undefined,
+  integrity: CoreIntegrityContext | null | undefined,
+): BankSpreadHistoryPayload | null {
+  if (
+    !payload ||
+    !integrity ||
+    integrity.runDate !== payload.run_date ||
+    integrity.core.run_date !== payload.run_date
+  ) return null;
+  const quarantined = quarantinedBankHistoryPairs(integrity);
+  if (!quarantined.size) return payload;
+  const banks = Object.fromEntries(
+    Object.entries(payload.banks).filter(([provider]) =>
+      !quarantined.has(bankHistoryPairKey(provider, 'Mortgage')) &&
+      !quarantined.has(bankHistoryPairKey(provider, 'Savings')),
+    ),
+  );
+  return Object.keys(banks).length ? { ...payload, banks } : null;
 }
 
 export function buildBankSpreadChartModel(

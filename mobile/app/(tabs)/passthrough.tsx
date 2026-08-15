@@ -40,6 +40,7 @@ function weeklySummary(
 
 export default function RateMovesTab() {
   const core = useStore((state) => state.core);
+  const coreIntegrity = useStore((state) => state.coreIntegrity);
   const rawPayload = useStore((state) => state.bankInsights);
   const calendar = useStore((state) => state.rbaCalendar);
   const error = useStore((state) => state.bankInsightsError);
@@ -93,8 +94,10 @@ export default function RateMovesTab() {
       core,
       includeNonStandard,
       detailsProducts,
+      suitabilityRevision,
+      coreIntegrity,
     );
-  }, [core, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+  }, [core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
   const pulse = useMemo(() => marketPulse(payload, 7, [activeSection]), [activeSection, payload]);
   const currentRbaWindow = useMemo(
     () => payload && core ? rbaPassThroughMultiSection(payload, core.rba, { calendar }) : null,

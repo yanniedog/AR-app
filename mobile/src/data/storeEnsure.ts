@@ -13,7 +13,6 @@ import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeBankInsightsPayload } from './bankInsights';
-import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import {
   normalizeProductHistoryPayload,
   syncProductHistoryFromDailyPayloads,
@@ -44,6 +43,8 @@ import {
   integrateRbaCalendarIntoCore,
   refreshRbaCalendarFromOfficial,
 } from './rbaOfficialLive';
+import { replaceAssetData } from './assetState';
+import { rebindCoreIntegrity } from './sectionIntegrity';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -540,7 +541,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
     async ensureBankSpreadHistory(opts: { force?: boolean } = {}) {
       const { force = false } = opts;
-      const { core, manifest, source, bankSpreadHistory } = get();
+      const { core, manifest, source } = get();
       if (!core) return;
       if (source !== 'remote' || !manifest) {
         set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Bank spread history needs the latest online dataset.' });
@@ -552,28 +553,88 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         return;
       }
       if (force) set({ bankSpreadHistoryError: null });
-      const coreSha = manifest.files.core.sha256;
-      const meta = await cache.readOptionalMeta();
-      const fresh = (payload: ReturnType<StoreGet>['bankSpreadHistory']) => Boolean(
-        payload && payload.run_date === core.run_date && meta?.coreSha === coreSha &&
-        meta.bankSpreadHistorySha === asset.sha256,
-      );
-      if (!force && fresh(bankSpreadHistory)) return;
-      const cached = force ? null : normalizeBankSpreadHistoryPayload(await cache.readBankSpreadHistory());
-      if (!force && fresh(cached)) {
-        set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
-        return;
+      const snapshot = {
+        runDate: core.run_date,
+        coreSha: manifest.files.core.sha256,
+        spreadSha: asset.sha256,
+      };
+      const currentMatches = (expected = snapshot) => {
+        const live = get();
+        return (
+          live.source === 'remote' &&
+          live.core?.run_date === expected.runDate &&
+          live.manifest?.files.core.sha256 === expected.coreSha &&
+          live.manifest?.files.bank_spread_history?.sha256 === expected.spreadSha
+        );
+      };
+      const liveSnapshot = () => {
+        const live = get();
+        const liveAsset = live.manifest?.files.bank_spread_history;
+        if (live.source !== 'remote' || !live.core || !live.manifest || !liveAsset) return null;
+        return {
+          runDate: live.core.run_date,
+          coreSha: live.manifest.files.core.sha256,
+          spreadSha: liveAsset.sha256,
+        };
+      };
+      if (!force) {
+        const cached = await cache.readBankSpreadHistoryFor(
+          snapshot.coreSha,
+          snapshot.spreadSha,
+          snapshot.runDate,
+          () => currentMatches(snapshot),
+        )
+          .catch(() => null);
+        if (!currentMatches()) return;
+        if (cached?.run_date === snapshot.runDate) {
+          set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
+          return;
+        }
       }
       try {
-        const { bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
-        const live = get();
-        if (live.manifest?.files.bank_spread_history?.sha256 !== asset.sha256 || live.core?.run_date !== downloaded.run_date) return;
-        await cache.writeBankSpreadHistory(JSON.stringify(downloaded));
-        await cache.writeOptionalMeta({ coreSha, bankSpreadHistorySha: asset.sha256 });
+        const { bankSpreadHistory: downloaded, verifiedBytes } = await downloadBankSpreadHistory(
+          asset.url,
+          asset.sha256,
+          {
+            fileName: asset.name,
+            expectedBytes: asset.bytes,
+            requireExactBytes: true,
+          },
+        );
+        if (!currentMatches()) return;
+        if (downloaded.run_date !== snapshot.runDate) {
+          throw new Error('bank_spread_history run_date does not match the live core');
+        }
+        await cache.writeBankSpreadHistoryFor(
+          snapshot.coreSha,
+          snapshot.spreadSha,
+          snapshot.runDate,
+          verifiedBytes,
+          () => currentMatches(snapshot),
+        );
+        if (!currentMatches()) return;
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
         const message = String((error as Error)?.message ?? error);
-        set({ bankSpreadHistory: cached ?? bankSpreadHistory ?? null, bankSpreadHistoryError: message });
+        const live = liveSnapshot();
+        if (!live) return;
+        const failedGenerationStillCurrent = currentMatches(snapshot);
+        const fallback = await cache.readBankSpreadHistoryFor(
+          live.coreSha,
+          live.spreadSha,
+          live.runDate,
+          () => currentMatches(live),
+        )
+          .catch(() => null);
+        if (!currentMatches(live)) return;
+        if (fallback?.run_date === live.runDate) {
+          set({
+            bankSpreadHistory: fallback,
+            bankSpreadHistoryError: failedGenerationStillCurrent ? message : null,
+          });
+        } else if (failedGenerationStillCurrent) {
+          set({ bankSpreadHistory: null, bankSpreadHistoryError: message });
+        }
       }
     },
 
@@ -603,8 +664,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           live.manifest?.files.core.sha256 !== manifest.files.core.sha256
         ) return;
         const nextCore = live.core ? integrateRbaCalendarIntoCore(live.core, reconciled) : live.core;
+        const nextIntegrity = nextCore && live.coreIntegrity
+          ? rebindCoreIntegrity(live.coreIntegrity, nextCore)
+          : live.coreIntegrity;
         set({
           core: nextCore,
+          coreIntegrity: nextIntegrity,
+          ...(nextIntegrity
+            ? { coreAssetState: replaceAssetData(live.coreAssetState, nextIntegrity) }
+            : {}),
           rbaCalendar: reconciled,
           rbaCalendarSha: asset.sha256,
           rbaCalendarError: null,

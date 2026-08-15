@@ -1,3 +1,4 @@
+import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
 
@@ -36,7 +37,7 @@ export function makeSavedRateRef(
   scope: SavedRateRef['scope'] = 'rate',
   savedAt = new Date().toISOString(),
 ): SavedRateRef {
-  if (scope === 'rate' && !Number.isInteger(row.rate_index)) {
+  if (scope === 'rate' && (row.exact_alert_eligible === false || !Number.isInteger(row.rate_index))) {
     throw new RangeError('An exact saved rate requires an integer rate_index');
   }
   const exact = scope === 'rate';
@@ -99,6 +100,41 @@ export function normalizeSavedRates(raw: unknown, legacyFavorites: unknown = [])
   return [...out.values()];
 }
 
+/**
+ * Move product-scoped v1 identities onto canonical v3 product UIDs. The v3
+ * contract does not carry a proof linking legacy rate indexes to canonical
+ * rate UIDs, so exact legacy saves deliberately downgrade to a product save
+ * instead of attaching the user's saved value to an unrelated tier.
+ */
+export function migrateSavedRateProductAliases(
+  refs: readonly SavedRateRef[],
+  aliases: LegacyProductAliasMap,
+): SavedRateRef[] {
+  const migrated = new Map<string, SavedRateRef>();
+  for (const ref of refs) {
+    const target = aliases.get(ref.productKey);
+    const next = target
+      ? {
+          ...ref,
+          id: savedRateId(target.productKey, null, 'product'),
+          scope: 'product' as const,
+          productKey: target.productKey,
+          rateIndex: null,
+          savedRate: null,
+        }
+      : ref;
+    if (next.scope === 'product') {
+      for (const [id, existing] of migrated) {
+        if (existing.productKey === next.productKey) migrated.delete(id);
+      }
+      if (!migrated.has(next.id)) migrated.set(next.id, next);
+    } else if (!migrated.has(savedRateId(next.productKey, null, 'product'))) {
+      migrated.set(next.id, next);
+    }
+  }
+  return [...migrated.values()];
+}
+
 export function isSavedRate(
   refs: readonly SavedRateRef[],
   productKey: string,
@@ -140,7 +176,11 @@ export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef
       for (const row of data?.rates ?? []) {
         if (row.product_key !== ref.productKey) continue;
         const candidate = { ref, row, section };
-        if (ref.scope === 'rate' && row.rate_index === ref.rateIndex) {
+        if (
+          ref.scope === 'rate' &&
+          row.exact_alert_eligible !== false &&
+          row.rate_index === ref.rateIndex
+        ) {
           resolved.push(candidate);
           fallback = null;
           break;

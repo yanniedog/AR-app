@@ -25,6 +25,10 @@ import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedMan
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
 import { savedRatesWithAlerts } from './subscriptions';
+import {
+  cachedAssetStateForProviderCoverage,
+  liveAssetStateForProviderCoverage,
+} from './assetState';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -54,6 +58,7 @@ function optionalRefreshWork(
     bankInsights:
       previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
     bankSpreadHistory:
+      previous?.files.core.sha256 !== next?.files.core.sha256 ||
       previous?.files.bank_spread_history?.sha256 !== next?.files.bank_spread_history?.sha256,
     rbaCalendar: !!nextRbaSha && (
       previous?.files.rba_calendar?.sha256 !== nextRbaSha ||
@@ -376,7 +381,23 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
-              ...(bundle ? { core: bundle.core } : {}),
+              ...(bundle || optionalWork.bankSpreadHistory ? {
+                bankSpreadHistory: null,
+                bankSpreadHistoryError: null,
+              } : {}),
+              ...(bundle ? {
+                core: bundle.core,
+                coreIntegrity: bundle.integrity,
+                coreAssetState: cachedAssetStateForProviderCoverage(
+                  bundle.integrity,
+                  bundle.core.coverage,
+                ),
+              } : live.coreIntegrity ? {
+                coreAssetState: liveAssetStateForProviderCoverage(
+                  live.coreIntegrity,
+                  live.core?.coverage,
+                ),
+              } : {}),
             });
             deferWarm = true;
             set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
@@ -399,7 +420,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             if (!get().details) set({ details: cachedDetails });
           }
         }
-        const { text, core } = await downloadCore(
+        const { text, core, integrity } = await downloadCore(
           remote.files.core.url,
           remote.files.core.sha256,
           {
@@ -454,12 +475,18 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         }
         set({
           core,
+          coreIntegrity: integrity,
+          coreAssetState: liveAssetStateForProviderCoverage(integrity, core.coverage),
           manifest: remote,
           source: 'remote',
           status: 'ready',
           error: null,
           pendingIngestRunDate,
           details: detailsUnchanged ? get().details : null,
+          ...(optionalWork.bankSpreadHistory ? {
+            bankSpreadHistory: null,
+            bankSpreadHistoryError: null,
+          } : {}),
         });
         notifyCtx = {
           previousCore,
@@ -479,10 +506,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `refresh failed: ${msg}`);
         const hasData = !!get().core;
+        const retainedIntegrity = get().coreIntegrity;
         set({
           offline: true,
           status: hasData ? 'ready' : 'error',
           error: hasData ? null : msg,
+          coreAssetState: { status: 'error', data: retainedIntegrity, error: msg },
           lastCheckedAt: new Date().toISOString(),
           refreshOutcome: 'failure',
         });

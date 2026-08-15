@@ -108,10 +108,15 @@ jest.mock('../src/data/suitabilityIndex', () => ({
   installSuitabilityIndex: jest.fn(),
 }));
 
-// eslint-disable-next-line import/first -- store import must follow jest mocks
-import { useStore as store } from '../src/data/store';
-import { historyBanksSyncState, productHistorySyncState } from '../src/data/storeHelpers';
-import { debugLog } from '../src/lib/debugLog';
+const { useStore: store } = jest.requireActual<typeof import('../src/data/store')>(
+  '../src/data/store',
+);
+const { historyBanksSyncState, productHistorySyncState } = jest.requireActual<
+  typeof import('../src/data/storeHelpers')
+>('../src/data/storeHelpers');
+const { debugLog } = jest.requireActual<typeof import('../src/lib/debugLog')>(
+  '../src/lib/debugLog',
+);
 
 const remoteManifest: Manifest = {
   ...sampleManifest,
