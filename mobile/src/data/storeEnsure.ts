@@ -13,7 +13,6 @@ import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeBankInsightsPayload } from './bankInsights';
-import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import {
   normalizeProductHistoryPayload,
   syncProductHistoryFromDailyPayloads,
@@ -542,7 +541,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
     async ensureBankSpreadHistory(opts: { force?: boolean } = {}) {
       const { force = false } = opts;
-      const { core, manifest, source, bankSpreadHistory } = get();
+      const { core, manifest, source } = get();
       if (!core) return;
       if (source !== 'remote' || !manifest) {
         set({ bankSpreadHistory: null, bankSpreadHistoryError: 'Bank spread history needs the latest online dataset.' });
@@ -554,69 +553,64 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         return;
       }
       if (force) set({ bankSpreadHistoryError: null });
-      const coreSha = manifest.files.core.sha256;
-      const meta = await cache.readOptionalMeta();
-      const matchesGeneration = (
-        payload: ReturnType<StoreGet>['bankSpreadHistory'],
-        candidateMeta: Awaited<ReturnType<typeof cache.readOptionalMeta>>,
-        expectedRunDate: string | undefined,
-        expectedCoreSha: string | undefined,
-        expectedSpreadSha: string | undefined,
-      ) => Boolean(
-        payload &&
-        expectedRunDate &&
-        expectedCoreSha &&
-        expectedSpreadSha &&
-        payload.run_date === expectedRunDate &&
-        candidateMeta?.coreSha === expectedCoreSha &&
-        candidateMeta.bankSpreadHistorySha === expectedSpreadSha
-      );
-      const fresh = (payload: ReturnType<StoreGet>['bankSpreadHistory']) =>
-        matchesGeneration(payload, meta, core.run_date, coreSha, asset.sha256);
-      if (!force && fresh(bankSpreadHistory)) return;
-      const cached = force ? null : normalizeBankSpreadHistoryPayload(await cache.readBankSpreadHistory());
-      if (!force && fresh(cached)) {
-        set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
-        return;
+      const snapshot = {
+        runDate: core.run_date,
+        coreSha: manifest.files.core.sha256,
+        spreadSha: asset.sha256,
+      };
+      const currentMatches = (expected = snapshot) => {
+        const live = get();
+        return (
+          live.source === 'remote' &&
+          live.core?.run_date === expected.runDate &&
+          live.manifest?.files.core.sha256 === expected.coreSha &&
+          live.manifest?.files.bank_spread_history?.sha256 === expected.spreadSha
+        );
+      };
+      const liveSnapshot = () => {
+        const live = get();
+        const liveAsset = live.manifest?.files.bank_spread_history;
+        if (live.source !== 'remote' || !live.core || !live.manifest || !liveAsset) return null;
+        return {
+          runDate: live.core.run_date,
+          coreSha: live.manifest.files.core.sha256,
+          spreadSha: liveAsset.sha256,
+        };
+      };
+      if (!force) {
+        const cached = await cache.readBankSpreadHistoryFor(snapshot.coreSha, snapshot.spreadSha)
+          .catch(() => null);
+        if (!currentMatches()) return;
+        if (cached?.run_date === snapshot.runDate) {
+          set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
+          return;
+        }
       }
       try {
-        const { bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
-        const live = get();
-        if (
-          live.manifest?.files.core.sha256 !== coreSha ||
-          live.manifest?.files.bank_spread_history?.sha256 !== asset.sha256 ||
-          live.core?.run_date !== downloaded.run_date
-        ) return;
-        await cache.writeBankSpreadHistory(JSON.stringify(downloaded));
-        await cache.writeOptionalMeta({ coreSha, bankSpreadHistorySha: asset.sha256 });
+        const { text, bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
+        if (!currentMatches()) return;
+        if (downloaded.run_date !== snapshot.runDate) {
+          throw new Error('bank_spread_history run_date does not match the live core');
+        }
+        await cache.writeBankSpreadHistoryFor(snapshot.coreSha, snapshot.spreadSha, text);
+        if (!currentMatches()) return;
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
         const message = String((error as Error)?.message ?? error);
-        const latestMeta = await cache.readOptionalMeta().catch(() => null);
-        const live = get();
-        const liveCoreSha = live.manifest?.files.core.sha256;
-        const liveSpreadSha = live.manifest?.files.bank_spread_history?.sha256;
-        const liveSpread = live.bankSpreadHistory;
-        const concurrentLive = liveSpread !== bankSpreadHistory && matchesGeneration(
-          liveSpread,
-          latestMeta,
-          live.core?.run_date,
-          liveCoreSha,
-          liveSpreadSha,
-        );
-        if (concurrentLive) return;
-        const sameGeneration =
-          live.core?.run_date === core.run_date &&
-          liveCoreSha === coreSha &&
-          liveSpreadSha === asset.sha256;
-        const originalFallback = sameGeneration
-          ? fresh(bankSpreadHistory)
-            ? bankSpreadHistory
-            : fresh(cached)
-              ? cached
-              : null
-          : null;
-        set({ bankSpreadHistory: originalFallback, bankSpreadHistoryError: message });
+        const live = liveSnapshot();
+        if (!live) return;
+        const failedGenerationStillCurrent = currentMatches(snapshot);
+        const fallback = await cache.readBankSpreadHistoryFor(live.coreSha, live.spreadSha)
+          .catch(() => null);
+        if (!currentMatches(live)) return;
+        if (fallback?.run_date === live.runDate) {
+          set({
+            bankSpreadHistory: fallback,
+            bankSpreadHistoryError: failedGenerationStillCurrent ? message : null,
+          });
+        } else if (failedGenerationStillCurrent) {
+          set({ bankSpreadHistory: null, bankSpreadHistoryError: message });
+        }
       }
     },
 

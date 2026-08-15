@@ -11,6 +11,7 @@ const mockReadDetails = jest.fn();
 const mockFetchDatesIndexJson = jest.fn();
 const mockEnsureHistoryBanks = jest.fn(async () => {});
 const mockEnsureBankInsights = jest.fn(async () => {});
+const mockEnsureBankSpreadHistory = jest.fn(async () => {});
 const mockEnsureRbaCalendar = jest.fn(async () => {});
 const mockEnsureDetails = jest.fn(async () => {});
 const mockYieldToUi = jest.fn(async () => {});
@@ -69,6 +70,7 @@ import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
 
 const originalEnsureHistoryBanks = useStore.getState().ensureHistoryBanks;
 const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
+const originalEnsureBankSpreadHistory = useStore.getState().ensureBankSpreadHistory;
 const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
 const originalEnsureDetails = useStore.getState().ensureDetails;
 const originalPrefs = useStore.getState().prefs;
@@ -101,8 +103,11 @@ function resetStore() {
     favorites: [],
     ensureHistoryBanks: originalEnsureHistoryBanks,
     ensureBankInsights: originalEnsureBankInsights,
+    ensureBankSpreadHistory: originalEnsureBankSpreadHistory,
     ensureRbaCalendar: originalEnsureRbaCalendar,
     ensureDetails: originalEnsureDetails,
+    bankSpreadHistory: null,
+    bankSpreadHistoryError: null,
   });
 }
 
@@ -402,6 +407,67 @@ describe('store refresh lifecycle', () => {
     // Refresh closes the stale allowlist before publish, then post-warm rebuilds
     // a fresh gate. The previous payload's product must not remain allowed.
     expect(getSuitabilityAllowed()?.has('previously-allowed-product')).toBe(false);
+  });
+
+  it('atomically clears same-day spread state when installing a replacement core', async () => {
+    const spreadAsset = (sha256: string) => ({
+      name: 'bank-spread-history.json.gz',
+      bytes: 100,
+      sha256,
+      url: 'https://example.com/bank-spread-history.json.gz',
+    });
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'a'.repeat(64) },
+        bank_spread_history: spreadAsset('c'.repeat(64)),
+      },
+    };
+    const replacementManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        core: { ...remoteManifest.files.core, sha256: 'b'.repeat(64) },
+        bank_spread_history: spreadAsset('d'.repeat(64)),
+      },
+    };
+    const oldSpread = {
+      schema_version: 1 as const,
+      run_date: remoteCore.run_date,
+      run_dates: [remoteCore.run_date],
+      method: 'mean_rate_rows_per_product_then_mean_products_per_provider' as const,
+      cohorts: { mortgage: 'old-mortgage', savings: 'old-savings' },
+      banks: {},
+    };
+    useStore.setState({
+      source: 'remote',
+      manifest: previousManifest,
+      core: remoteCore,
+      bankSpreadHistory: oldSpread,
+      bankSpreadHistoryError: 'old error',
+      ensureBankSpreadHistory: mockEnsureBankSpreadHistory,
+    });
+    mockFetchManifest.mockResolvedValue(replacementManifest);
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-08-14T00:00:00Z',
+      coreSha: previousManifest.files.core.sha256,
+      detailsSha: previousManifest.files.details.sha256,
+    });
+    mockDownloadCore.mockResolvedValue({
+      text: JSON.stringify(remoteCore),
+      core: remoteCore,
+      integrity: sampleCoreIntegrity,
+    });
+
+    await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
+
+    expect(useStore.getState().manifest?.files.core.sha256).toBe('b'.repeat(64));
+    expect(useStore.getState().bankSpreadHistory).toBeNull();
+    expect(useStore.getState().bankSpreadHistoryError).toBeNull();
+    expect(mockEnsureBankSpreadHistory).not.toHaveBeenCalled();
   });
 
   it('holds the prior day while rolling ingest is ahead of dates-index', async () => {

@@ -58,6 +58,7 @@ function optionalRefreshWork(
     bankInsights:
       previous?.files.bank_history?.sha256 !== next?.files.bank_history?.sha256,
     bankSpreadHistory:
+      previous?.files.core.sha256 !== next?.files.core.sha256 ||
       previous?.files.bank_spread_history?.sha256 !== next?.files.bank_spread_history?.sha256,
     rbaCalendar: !!nextRbaSha && (
       previous?.files.rba_calendar?.sha256 !== nextRbaSha ||
@@ -380,6 +381,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
+              ...(bundle || optionalWork.bankSpreadHistory ? {
+                bankSpreadHistory: null,
+                bankSpreadHistoryError: null,
+              } : {}),
               ...(bundle ? {
                 core: bundle.core,
                 coreIntegrity: bundle.integrity,
@@ -478,6 +483,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           error: null,
           pendingIngestRunDate,
           details: detailsUnchanged ? get().details : null,
+          ...(optionalWork.bankSpreadHistory ? {
+            bankSpreadHistory: null,
+            bankSpreadHistoryError: null,
+          } : {}),
         });
         notifyCtx = {
           previousCore,
