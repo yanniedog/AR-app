@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T03:52:34.539Z",
+  "generated_at": "2026-08-15T12:55:14.478Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -816,6 +816,16 @@
         "Remove duplicate Settings data banner (#202)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.164"
+    },
+    {
+      "version": "1.0.166",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "Eliminate mobile CI warnings (#207)",
+        "Add dormant v3 integrity cache foundation (#208)",
+        "fix faint text contrast across themes (#206)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.166"
     }
   ]
 }

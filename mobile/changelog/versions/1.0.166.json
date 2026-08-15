@@ -1,0 +1,40 @@
+{
+  "version": "1.0.166",
+  "releaseTag": "app-arm-v1.0.166",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "Eliminate mobile CI warnings (#207)",
+    "Add dormant v3 integrity cache foundation (#208)",
+    "fix faint text contrast across themes (#206)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Eliminate mobile CI warnings (#207)"
+        },
+        {
+          "text": "Add dormant v3 integrity cache foundation (#208)"
+        },
+        {
+          "text": "fix faint text contrast across themes (#206)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.166"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.165"
+        }
+      ]
+    }
+  ]
+}
