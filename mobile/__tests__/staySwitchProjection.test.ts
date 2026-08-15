@@ -327,12 +327,15 @@ describe('stay versus switch projection', () => {
   it.each<[string, ProductDetail, ProductDetail]>([
     ['a missing upfront amount', {}, {}],
     ['a variable upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Variable valuation fee', amountStatus: 'variable' }] }],
+    ['a structured ranged upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Ranged valuation fee', amount: '300', variable: { feeMinimum: '300', feeMaximum: '500' } }] }],
     ['an unpriced periodic fee', {}, { fees: [{ label: 'PERIODIC', name: 'Package fee', amountStatus: 'variable' }] }],
     ['a conditional fixed upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Application fee', amountStatus: 'fixed', amount: '395', info: 'Payable if the loan settles within 30 days' }] }],
     ['a conditional fixed periodic fee', {}, { fees: [{ label: 'PERIODIC', name: 'Offset package fee', amountStatus: 'fixed', amount: '10', info: 'per month if offset is enabled' }] }],
   ])('withholds net claims for %s', (_label, currentDetail, targetDetail) => {
     const value = scenarioWithKnownUpfrontFees();
-    if (_label === 'a missing upfront amount' || _label === 'a variable upfront fee') {
+    if (_label === 'a missing upfront amount'
+      || _label === 'a variable upfront fee'
+      || _label === 'a structured ranged upfront fee') {
       value.mortgageSwitch.valuationFees = '';
     }
     if (_label === 'a conditional fixed upfront fee') value.mortgageSwitch.applicationFees = '';

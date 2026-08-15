@@ -124,9 +124,20 @@ function hasConditionalApplicability(item: DetailItem): boolean {
   return /\b(?:if|when|where|for|unless|provided|eligible|subject to|depending on|up to)\b/i.test(text);
 }
 
+function hasUncertainFeeStructure(item: DetailItem): boolean {
+  return item.variable != null
+    || item.rateBased != null
+    || (item.discounts?.length ?? 0) > 0
+    || item.balanceRate != null
+    || item.transactionRate != null
+    || item.accruedRate != null
+    || item.feeCap != null;
+}
+
 function publishedAmount(item: DetailItem): number | null {
   const amountStatus = item.amountStatus?.trim().toLowerCase();
   if ((amountStatus && amountStatus !== 'fixed')
+    || hasUncertainFeeStructure(item)
     || /(?:variable|rate.?based)/i.test(item.feeMethodUType ?? '')) {
     return null;
   }
@@ -164,7 +175,7 @@ function periodicFeeAmount(item: DetailItem): number | null {
   if (amountStatus && amountStatus !== 'fixed') return null;
   const fixed = publishedAmount(item);
   if (fixed != null) return fixed;
-  if (hasConditionalApplicability(item)) return null;
+  if (hasConditionalApplicability(item) || hasUncertainFeeStructure(item)) return null;
   if (item.amountStatus?.trim().toLowerCase() === 'variable'
     || /(?:variable|rate.?based)/i.test(item.feeMethodUType ?? '')) {
     return null;
