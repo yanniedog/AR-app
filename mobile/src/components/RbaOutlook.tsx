@@ -1,6 +1,6 @@
 import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, Linking, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 
 import {
   ABS_CPI_RELEASE_URL,
@@ -15,6 +15,7 @@ import { yieldToPaintFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
+import { useTrustedExternalUrl } from './ExternalLinkConfirmation';
 import type { EconomicExplorerLens } from './economy/EconomicExplorer';
 import { AppText, Button, Row } from './ui';
 
@@ -40,6 +41,7 @@ function OutlookContent({
   onGraphicReady: (result: { revision: string; pointCount: number }) => void;
 }) {
   const theme = useTheme();
+  const { requestExternalUrl } = useTrustedExternalUrl();
   const isFocused = useIsFocused();
   const revision = data.checkedAt || data.fetchedAt;
   const [explorerRevision, setExplorerRevision] = useState<string | null>(null);
@@ -116,7 +118,11 @@ function OutlookContent({
         {usesAbsCpi ? (
           <>
             <Pressable
-              onPress={() => void Linking.openURL(ABS_CPI_RELEASE_URL)}
+              onPress={() => requestExternalUrl({
+                url: ABS_CPI_RELEASE_URL,
+                purpose: 'official_economic_source',
+                label: 'ABS CPI release',
+              })}
               accessibilityRole="link"
               accessibilityLabel="Open ABS CPI release"
               hitSlop={6}
@@ -131,7 +137,11 @@ function OutlookContent({
           </>
         ) : null}
         <Pressable
-          onPress={() => void Linking.openURL(RBA_ECONOMIC_TABLE_URL)}
+          onPress={() => requestExternalUrl({
+            url: RBA_ECONOMIC_TABLE_URL,
+            purpose: 'official_economic_source',
+            label: 'RBA statistics tables',
+          })}
           accessibilityRole="link"
           accessibilityLabel="Open RBA statistics tables"
           hitSlop={6}

@@ -83,14 +83,21 @@ export function getInstalledAppInfo(): InstalledAppInfo {
   };
 }
 
+export interface AppUpdateCheckOptions {
+  /** Test or alternate trusted manifest channel. */
+  url?: string;
+  /** Bypass the short shared cache for an explicit user-requested check. */
+  force?: boolean;
+}
+
 export async function checkForAppUpdate(
-  url?: string,
+  options: AppUpdateCheckOptions = {},
 ): Promise<UpdateCheckResult> {
   if (Platform.OS !== 'android') {
     return { status: 'error', message: 'In-app APK updates are Android-only' };
   }
-  const urls = url
-    ? [url]
+  const urls = options.url
+    ? [options.url]
     : apkManifestUrlsForDevice(
         Device.supportedCpuArchitectures,
         APK_MANIFEST_URL,
@@ -99,6 +106,7 @@ export async function checkForAppUpdate(
   const cacheKey = urls.join('|');
   const now = Date.now();
   if (
+    !options.force &&
     updateCheckCache &&
     updateCheckCache.url === cacheKey &&
     now - updateCheckCache.startedAt < UPDATE_CHECK_TTL_MS

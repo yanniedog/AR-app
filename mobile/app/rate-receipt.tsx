@@ -2,8 +2,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Linking, Pressable, Share, type ScrollView, View } from 'react-native';
+import { Pressable, Share, type ScrollView, View } from 'react-native';
 
+import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../src/components/Screen';
@@ -53,6 +54,7 @@ function money(value: number): string {
 
 export default function RateReceiptScreen() {
   const theme = useTheme();
+  const { requestExternalUrl } = useTrustedExternalUrl();
   const { key, ri } = useLocalSearchParams<{ key?: string; ri?: string }>();
   const productKey = key ?? '';
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
@@ -358,7 +360,11 @@ export default function RateReceiptScreen() {
               <Pressable
                 accessibilityRole="link"
                 accessibilityLabel={`${source.label} on ${source.hostname}, opens external website`}
-                onPress={() => void Linking.openURL(source.url)}
+                onPress={() => requestExternalUrl({
+                  url: source.url,
+                  purpose: 'lender_source',
+                  label: source.label,
+                })}
                 style={({ pressed }) => ({
                   minHeight: TOUCH_TARGET_MIN,
                   flexDirection: 'row',

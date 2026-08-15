@@ -47,13 +47,14 @@ export function useAppUpdateBannerVisible(): boolean {
 }
 
 /**
- * Root-scoped update check. It starts a system-managed background download when
- * a newer build is published and checks again whenever the app becomes active.
+ * Root-scoped update check. It checks again whenever the app becomes active and
+ * starts a background download only when the user enabled standing consent.
  * Banner dismissal is per build_number, so a later release is shown again.
  */
 export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const dismissedBuild = useStore((s) => s.prefs.dismissedUpdateBuild);
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
+  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
@@ -72,9 +73,7 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
           if (cancelled) return;
           setResult(r);
           availableManifest = r.status === 'available' ? r.remote : null;
-          // The saved network preference is the user's standing consent. Keep
-          // the update moving without another per-release confirmation.
-          if (r.status === 'available') {
+          if (autoDownload && r.status === 'available') {
             void ensureApkBackgroundDownload(r.remote, { wifiOnly }).catch(() => {
               // ensureApkBackgroundDownload persists phase=error for Retry.
             });
@@ -82,7 +81,7 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
         })
         .catch(() => {});
     const reconcileActiveDownload = () => {
-      if (!availableManifest || AppState.currentState !== 'active') return;
+      if (!autoDownload || !availableManifest || AppState.currentState !== 'active') return;
       void ensureApkBackgroundDownload(availableManifest, { wifiOnly }).catch(() => {
         // Reconciliation persists an actionable error state for Retry.
       });
@@ -98,7 +97,7 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
       clearInterval(reconcileTimer);
       appStateSubscription.remove();
     };
-  }, [enabled, wifiOnly]);
+  }, [autoDownload, enabled, wifiOnly]);
 
   const available = result?.status === 'available' ? result : null;
   return {
@@ -124,6 +123,7 @@ export function AppUpdateBanner({
   const theme = useTheme();
   const insets = useSafeAreaInsets();
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
+  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const [busy, setBusy] = useState(false);
   const forThisBuild =
     download.buildNumber != null && String(download.buildNumber) === String(remote.build_number);
@@ -142,6 +142,21 @@ export function AppUpdateBanner({
     } finally {
       setBusy(false);
     }
+  };
+
+  const requestUpgrade = () => {
+    if (phase === 'ready' || autoDownload) {
+      void onUpgrade();
+      return;
+    }
+    Alert.alert(
+      'Download app update?',
+      `Version ${remote.version} will download a verified APK from GitHub${wifiOnly ? ' when Wi-Fi is available' : ' using the current network'}. Android will ask again before installation.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Download', onPress: () => void onUpgrade() },
+      ],
+    );
   };
 
   return (
@@ -171,7 +186,7 @@ export function AppUpdateBanner({
         {copy.title}
       </AppText>
       <Pressable
-        onPress={() => void onUpgrade()}
+        onPress={requestUpgrade}
         disabled={!copy.actionEnabled || busy}
         accessibilityRole="button"
         accessibilityLabel={

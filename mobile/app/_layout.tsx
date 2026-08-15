@@ -41,6 +41,7 @@ import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/B
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
 import { ErrorScreen } from '../src/components/ErrorScreen';
+import { TrustedExternalUrlProvider } from '../src/components/ExternalLinkConfirmation';
 import {
   PerformanceAuditRunner,
   usePerformanceAuditActiveState,
@@ -520,7 +521,9 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <AppLockGate>
-            <RootNavigator />
+            <TrustedExternalUrlProvider>
+              <RootNavigator />
+            </TrustedExternalUrlProvider>
           </AppLockGate>
         </ThemeProvider>
       </SafeAreaProvider>
