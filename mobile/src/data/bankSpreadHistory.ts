@@ -119,7 +119,7 @@ function normalizeSeries(value: unknown, length: number): BankSpreadSeries | nul
 export function normalizeBankSpreadHistoryPayload(value: unknown): BankSpreadHistoryPayload | null {
   if (!value || typeof value !== 'object') return null;
   const raw = value as Record<string, unknown>;
-  const runDate = typeof raw.run_date === 'string' ? raw.run_date.slice(0, 10) : '';
+  const runDate = typeof raw.run_date === 'string' && YMD.test(raw.run_date) ? raw.run_date : '';
   const dates = Array.isArray(raw.run_dates) ? raw.run_dates : [];
   if (raw.schema_version !== 1 || !YMD.test(runDate) || !dates.length) return null;
   if (dates.some((date) => typeof date !== 'string' || !YMD.test(date) || date > runDate)) return null;

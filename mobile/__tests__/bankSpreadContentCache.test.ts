@@ -19,6 +19,7 @@ class MemoryStorage implements BankSpreadContentStorage {
   blockWriteTarget: string | null = null;
   failWriteTarget: string | null = null;
   failMoveTargetAfterDestinationDelete: string | null = null;
+  afterRemove: ((path: string) => void) | null = null;
   private blocked: (() => void) | null = null;
   private releaseBlock: (() => void) | null = null;
 
@@ -33,7 +34,10 @@ class MemoryStorage implements BankSpreadContentStorage {
     }
     this.files.set(path, value);
   }
-  async remove(path: string) { this.files.delete(path); }
+  async remove(path: string) {
+    this.files.delete(path);
+    this.afterRemove?.(path);
+  }
   async move(from: string, to: string) {
     const value = this.files.get(from);
     if (value === undefined) throw new Error(`missing ${from}`);
@@ -252,6 +256,43 @@ describe('content-addressed bank spread cache', () => {
     expect(storage.files.has(recordPath(b.identity))).toBe(true);
     expect(storage.files.has(recordPath(c.identity))).toBe(true);
     expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
+  });
+
+  it('never restores an index entry after its record is deleted during a stale cleanup', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(b.identity, b.raw, () => true);
+    await cache.install(c.identity, c.raw, () => true);
+    let aStillCurrent = true;
+    storage.afterRemove = (path) => {
+      if (path === recordPath(b.identity)) aStillCurrent = false;
+    };
+
+    await expect(cache.install(a.identity, a.raw, () => aStillCurrent)).resolves.toBe(false);
+
+    const entries = indexEntries(storage);
+    expect(entries.map((entry) => entry.core_sha256)).toEqual([CORE_A, CORE_C]);
+    for (const entry of entries) {
+      expect(storage.files.has(recordPath({
+        coreSha: entry.core_sha256,
+        spreadSha: entry.bank_spread_history_sha256,
+        runDate: sampleCore.run_date,
+      }))).toBe(true);
+    }
+    expect(storage.files.has(recordPath(b.identity))).toBe(false);
+  });
+
+  it('rejects an authenticated spread whose raw run_date has a valid-date prefix only', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    const malformed = { ...a.value, run_date: `${a.value.run_date}garbage` };
+    const raw = gzipSync(strToU8(JSON.stringify(malformed)));
+    const identity = { ...a.identity, spreadSha: sha256Bytes(raw) };
+
+    await expect(cache.install(identity, raw, () => true)).rejects.toThrow(
+      /unverified or oversized raw bytes/,
+    );
+    expect(storage.files.has(recordPath(identity))).toBe(false);
   });
 
   it('cleans a crash orphan on the next verified C load and never deletes indexed B/C', async () => {

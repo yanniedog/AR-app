@@ -104,6 +104,16 @@ async function downloadBytes(
   url: string,
   opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
 ): Promise<ArrayBuffer> {
+  if (
+    opts.requireExactBytes &&
+    (
+      typeof opts.expectedBytes !== 'number' ||
+      !Number.isSafeInteger(opts.expectedBytes) ||
+      opts.expectedBytes <= 0
+    )
+  ) {
+    throw new Error('exact compressed asset size requires a positive safe-integer expectedBytes');
+  }
   const fileName = opts.fileName ?? fileNameFromUrl(url);
   const phase = opts.phase ?? 'download';
   const startedAt = Date.now();
@@ -156,7 +166,7 @@ async function downloadBytes(
           reject(new Error(`compressed asset exceeds ${opts.maxCompressedBytes} byte limit`));
           return;
         }
-        if (opts.requireExactBytes && opts.expectedBytes != null && buf.byteLength !== opts.expectedBytes) {
+        if (opts.requireExactBytes && buf.byteLength !== opts.expectedBytes) {
           reject(new Error(`compressed asset size mismatch (expected ${opts.expectedBytes}, got ${buf.byteLength})`));
           return;
         }

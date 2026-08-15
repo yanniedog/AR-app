@@ -248,7 +248,12 @@ export function createBankSpreadContentCache(
       return false;
     }
     if (!(await cleanupOrphans(nextIndex, stillCurrent))) {
-      await replaceIndex(previousIndex);
+      // Cleanup may already have deleted records excluded from nextIndex.  At
+      // that point the previous index is no longer safe to restore because it
+      // may reference one of those deleted records.  Leave the already
+      // committed nextIndex in place; it contains only records that cleanup
+      // deliberately retained, and the live generation will reorder it on
+      // its next exact-key load/install.
       return false;
     }
     return true;
