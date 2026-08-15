@@ -185,15 +185,16 @@ export function makeProduct(options: {
 }
 
 export function coverageFor(products: CanonicalProductV3[], overrides: Partial<CoverageV2> = {}): CoverageV2 {
+  const providerCount = new Set(products.map((product) => product.identity.provider_uid)).size;
   const base: CoverageV2 = {
     products_discovered: products.length,
     products_priced: products.length,
     products_consumer_eligible: products.length,
     rate_tiers_eligible: products.reduce((sum, product) => sum + product.rates.length, 0),
-    providers_registered: 1,
-    providers_attempted: 1,
-    providers_responded: 1,
-    providers_complete: 1,
+    providers_registered: providerCount,
+    providers_attempted: providerCount,
+    providers_responded: providerCount,
+    providers_complete: providerCount,
     providers_empty: 0,
     providers_partial: 0,
     providers_failed: 0,

@@ -1,4 +1,5 @@
 import type { GenerationManifestV3 } from '../src/contracts/v3/types';
+import { InteractionManager } from 'react-native';
 import {
   createV3GenerationCache,
   type GenerationCacheStorage,
@@ -9,6 +10,7 @@ import {
   buildGeneration,
   makeProduct,
 } from '../testUtils/v3TestData';
+import { HEAVY_JSON_BYTES } from '../src/lib/yieldToUi';
 
 const LEDGER_C = 'c'.repeat(64);
 
@@ -20,6 +22,7 @@ class MemoryStorage implements GenerationCacheStorage {
   failMoveTarget: string | null = null;
   deleteThenFailMoveTarget: string | null = null;
   failRemoveTarget: string | null = null;
+  rejectMoveOverwrite = false;
 
   async read(path: string) { return this.files.get(path) ?? null; }
   async write(path: string, value: string) {
@@ -36,6 +39,7 @@ class MemoryStorage implements GenerationCacheStorage {
     if (this.failMoveTarget === to) throw new Error('atomic replace failed');
     const value = this.files.get(from);
     if (value === undefined) throw new Error('source missing');
+    if (this.rejectMoveOverwrite && this.files.has(to)) throw new Error('destination exists');
     if (this.deleteThenFailMoveTarget === to) {
       this.files.delete(to);
       throw new Error('iOS move crashed after destination removal');
@@ -108,6 +112,76 @@ describe('content-addressed v3 generation cache', () => {
       .toBe(first.manifest.generation_digest);
   });
 
+  test('advances from the last verified predecessor when the committed current record is corrupt', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    const third = thirdGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    storage.files.set(generationRecordPath(second.manifest.generation_digest), '{bad-json');
+
+    await expect(cache.install(third)).resolves.toMatchObject({ persisted: true });
+    const restarted = createV3GenerationCache(storage);
+    expect((await restarted.readCurrent())?.manifest.generation_digest)
+      .toBe(third.manifest.generation_digest);
+    expect((await restarted.readPrevious())?.manifest.generation_digest)
+      .toBe(first.manifest.generation_digest);
+    expect(storage.files.has(generationRecordPath(second.manifest.generation_digest))).toBe(false);
+  });
+
+  test('rejects a disconnected successor when current bytes are corrupt', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    storage.files.set(generationRecordPath(second.manifest.generation_digest), '{bad-json');
+    const disconnected = buildGeneration({
+      date: '2026-08-16',
+      priorLedgerDigest: LEDGER_A,
+      ledgerEventDigest: LEDGER_C,
+    });
+
+    await expect(cache.install(disconnected)).rejects.toThrow(/direct ledger descendant/);
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(first.manifest.generation_digest);
+  });
+
+  test('does not use a legacy head without validated lineage metadata to skip corrupt current', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    storage.files.set(generationRecordPath(second.manifest.generation_digest), '{bad-json');
+    storage.files.set('payload/v3/head.json', JSON.stringify({
+      schema_version: 1,
+      current: second.manifest.generation_digest,
+      previous: first.manifest.generation_digest,
+    }));
+
+    await expect(cache.install(thirdGeneration())).rejects.toThrow(/lineage is unavailable/);
+  });
+
+  test('repairs redundant head lineage metadata from an exact verified generation', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const generation = buildGeneration();
+    await cache.install(generation);
+    const headPath = 'payload/v3/head.json';
+    const head = JSON.parse(storage.files.get(headPath)!) as Record<string, unknown>;
+    head.current_ledger_event_digest = 'f'.repeat(64);
+    storage.files.set(headPath, JSON.stringify(head));
+
+    await expect(cache.install(generation)).resolves.toMatchObject({ persisted: true });
+    expect(JSON.parse(storage.files.get(headPath)!).current_ledger_event_digest)
+      .toBe(generation.manifest.ledger_event_digest);
+  });
+
   test('serializes concurrent installs in call order', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
@@ -152,6 +226,22 @@ describe('content-addressed v3 generation cache', () => {
     storage.files.set(path, JSON.stringify(record));
 
     expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+  });
+
+  test('yields before parsing a large authenticated cache envelope', async () => {
+    const storage = new MemoryStorage();
+    const generation = buildGeneration();
+    await createV3GenerationCache(storage).install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const record = JSON.parse(storage.files.get(path)!) as Record<string, unknown>;
+    record.cache_padding = 'x'.repeat(HEAVY_JSON_BYTES);
+    storage.files.set(path, JSON.stringify(record));
+    const interactions = jest.spyOn(InteractionManager, 'runAfterInteractions');
+
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(generation.manifest.generation_digest);
+    expect(interactions).toHaveBeenCalled();
+    interactions.mockRestore();
   });
 
   test('rejects a locally rehashed expanded core because it must equal the authenticated asset bytes', async () => {
@@ -241,7 +331,7 @@ describe('content-addressed v3 generation cache', () => {
     expect((await cache.readCurrent())?.manifest.generation_digest).toBe(third.manifest.generation_digest);
   });
 
-  test('preserves the old head when atomic head replacement fails', async () => {
+  test('recovers the authenticated temporary head when replacement move fails', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
     const first = buildGeneration();
@@ -253,7 +343,25 @@ describe('content-addressed v3 generation cache', () => {
 
     expect(result.persisted).toBe(false);
     expect(result.persistenceError).toContain('atomic replace failed');
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(second.manifest.generation_digest);
+    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
+  });
+
+  test('replaces existing records and heads on Android-style no-overwrite moves', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    storage.rejectMoveOverwrite = true;
+
+    const result = await cache.install(second);
+
+    expect(result.persisted).toBe(true);
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(second.manifest.generation_digest);
+    expect((await createV3GenerationCache(storage).readPrevious())?.manifest.generation_digest)
+      .toBe(first.manifest.generation_digest);
   });
 
   test('does not rewrite an already authenticated same-generation record', async () => {
@@ -328,7 +436,9 @@ describe('content-addressed v3 generation cache', () => {
       observationState: 'partial',
       coverage: {
         ...buildGeneration({ products: [product] }).manifest.coverage,
-        providers_complete: 0,
+        providers_registered: 2,
+        providers_attempted: 2,
+        providers_responded: 2,
         providers_partial: 1,
       },
     });

@@ -22,13 +22,17 @@ class MemoryStorage implements BankSpreadContentStorage {
   readonly files = new Map<string, string>();
   blockWriteTarget: string | null = null;
   failWriteTarget: string | null = null;
+  failReadTarget: string | null = null;
   failRemoveTargetOnce: string | null = null;
   failMoveTargetAfterDestinationDelete: string | null = null;
   afterRemove: ((path: string) => void) | null = null;
   private blocked: (() => void) | null = null;
   private releaseBlock: (() => void) | null = null;
 
-  async read(path: string) { return this.files.get(path) ?? null; }
+  async read(path: string) {
+    if (this.failReadTarget === path) throw new Error(`read failed: ${path}`);
+    return this.files.get(path) ?? null;
+  }
   async write(path: string, value: string) {
     if (this.failWriteTarget === path) throw new Error(`write failed: ${path}`);
     if (this.blockWriteTarget === path) {
@@ -238,6 +242,40 @@ describe('fixed-slot bank spread content cache', () => {
     expect(storage.files.has(`${ROOT}/index.json.tmp`)).toBe(false);
   });
 
+  it('uses a valid authenticated temporary index when the primary index is corrupt', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(b.identity, b.raw, () => true);
+    await cache.install(c.identity, c.raw, () => true);
+    storage.files.set(`${ROOT}/index.json.tmp`, storage.files.get(`${ROOT}/index.json`)!);
+    storage.files.set(`${ROOT}/index.json`, '{corrupt-primary');
+
+    await expect(createBankSpreadContentCache(storage, ROOT).load(c.identity, () => true))
+      .resolves.toEqual(c.value);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
+    expect(storage.files.has(`${ROOT}/index.json.tmp`)).toBe(false);
+  });
+
+  it('falls back to an older verified primary when a newer temporary index has corrupt slots', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(b.identity, b.raw, () => true);
+    await cache.install(c.identity, c.raw, () => true);
+    const newer = retentionIndex(storage);
+    newer.transaction_sequence += 1;
+    newer.entries[0] = {
+      ...newer.entries[0],
+      core_sha256: CORE_A,
+      bank_spread_history_sha256: a.identity.spreadSha,
+    };
+    storage.files.set(`${ROOT}/index.json.tmp`, JSON.stringify(newer));
+
+    await expect(createBankSpreadContentCache(storage, ROOT).load(b.identity, () => true))
+      .resolves.toEqual(b.value);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_B, CORE_C]);
+    expect(storage.files.has(`${ROOT}/index.json.tmp`)).toBe(false);
+  });
+
   it('recovers authenticated temporary bytes in the unreferenced scratch slot', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
@@ -359,6 +397,58 @@ describe('fixed-slot bank spread content cache', () => {
     await expect(cache.install(c.identity, c.raw, () => current)).resolves.toBe(false);
     expect(indexEntries(storage)).toEqual([]);
     await expect(cache.load(c.identity, () => true)).resolves.toBeNull();
+  });
+
+  it('retains every salvaged predecessor when a verified repair becomes stale after commit', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    await cache.install(b.identity, b.raw, () => true);
+    storage.files.set(indexedPath(storage, b.identity), '{corrupt-current');
+    let current = true;
+    storage.afterRemove = (path) => {
+      if (path === `${ROOT}/index.json` && current) current = false;
+    };
+
+    await expect(cache.install(b.identity, b.raw, () => current)).resolves.toBe(false);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_A]);
+    storage.afterRemove = null;
+    await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
+    await expect(cache.load(b.identity, () => true)).resolves.toBeNull();
+  });
+
+  it('treats an exhausted transaction sequence as corrupt and repairs it from verified bytes', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    const exhausted = retentionIndex(storage);
+    exhausted.transaction_sequence = Number.MAX_SAFE_INTEGER;
+    storage.files.set(`${ROOT}/index.json`, JSON.stringify(exhausted));
+
+    await expect(cache.load(a.identity, () => true)).rejects.toThrow(/index is corrupt/);
+    await expect(cache.install(a.identity, a.raw, () => true)).resolves.toBe(true);
+    await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
+    expect(retentionIndex(storage).transaction_sequence).toBeLessThan(Number.MAX_SAFE_INTEGER - 1);
+  });
+
+  it('does not rewrite the index when the requested current entry is already first', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    const sequence = retentionIndex(storage).transaction_sequence;
+
+    await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
+    await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
+    expect(retentionIndex(storage).transaction_sequence).toBe(sequence);
+  });
+
+  it('propagates storage read failures instead of treating retained authority as missing', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    storage.failReadTarget = `${ROOT}/index.json`;
+
+    await expect(cache.load(a.identity, () => true)).rejects.toThrow(/read failed/);
   });
 
   it('bounds repeated failed index commits by reusing the one scratch slot', async () => {

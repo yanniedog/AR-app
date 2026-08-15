@@ -14,6 +14,7 @@ import {
   V3_MANIFEST_LIMIT_BYTES,
   V3_POINTER_LIMIT_BYTES,
   adaptCoreV3ToLegacy,
+  type LegacyProductAliasMap,
   canonicalFeeUid,
   canonicalJsonForContract,
   canonicalRateUid,
@@ -29,6 +30,7 @@ import {
   validateGenerationPointerV3,
 } from '../src/contracts/v3/validators';
 import { assetStateForV3Coverage } from '../src/data/assetState';
+import { sampleCore } from '../src/data/sample';
 import { createV3GenerationCache, type GenerationCacheStorage } from '../src/data/v3GenerationCache';
 import {
   V3_PAYLOAD_BRIDGE_ENABLED,
@@ -65,6 +67,10 @@ function memoryStorage(): GenerationCacheStorage {
       values.delete(from);
     },
   };
+}
+
+function adapt(core: CorePayloadV3) {
+  return adaptCoreV3ToLegacy(core, { ...sampleCore, run_date: core.observation_date });
 }
 
 describe('authoritative AR-local v3 contract parity', () => {
@@ -124,7 +130,14 @@ describe('producer pointer, manifest, and coverage semantics', () => {
         manifest_sha256: 'f'.repeat(64),
         manifest_url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-gen/${'f'.repeat(64)}.json`,
       },
-    })).toThrow(/equal-coordinate/);
+    })).toThrow(/latest_complete must equal|equal-coordinate/);
+  });
+
+  test('requires a complete latest observation to be the exact latest-complete head', () => {
+    const older = buildGeneration();
+    const newer = buildGeneration({ date: '2026-08-15', ledgerEventDigest: 'b'.repeat(64) });
+    expect(() => validateGenerationPointerV3(pointerFor(newer.head, older.head)))
+      .toThrow(/latest_complete must equal/);
   });
 
   test('accepts only the exact rolling or candidate manifest URL forms', () => {
@@ -143,14 +156,16 @@ describe('producer pointer, manifest, and coverage semantics', () => {
     }
   });
 
-  test('accepts only exact rolling or same-generation candidate core URL forms', () => {
+  test('accepts only exact shared content-addressed core URL forms', () => {
     const generation = buildGeneration();
     const descriptor = generation.manifest.capabilities.core;
     const candidateDescriptor: AssetDescriptorV3 = {
       ...descriptor,
       url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-v3-candidate-${generation.head.generation_id}/${descriptor.sha256}.json`,
     };
-    expect(validateAssetDescriptorV3(candidateDescriptor, generation.head.generation_id)).toEqual(candidateDescriptor);
+    expect(() => validateAssetDescriptorV3(candidateDescriptor, generation.head.generation_id))
+      .toThrow(/canonical AR-local/);
+    expect(validateAssetDescriptorV3(descriptor, generation.head.generation_id)).toEqual(descriptor);
 
     const gzipSha = 'f'.repeat(64);
     const gzipDescriptor: AssetDescriptorV3 = {
@@ -158,15 +173,14 @@ describe('producer pointer, manifest, and coverage semantics', () => {
       encoding: 'gzip',
       compressed_bytes: 64,
       sha256: gzipSha,
-      url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-v3-candidate-${generation.head.generation_id}/${gzipSha}.json.gz`,
+      url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-gen/${gzipSha}.json.gz`,
     };
     expect(validateAssetDescriptorV3(gzipDescriptor, generation.head.generation_id)).toEqual(gzipDescriptor);
     for (const forged of [
       `${gzipDescriptor.url}?cache=1`,
       `${gzipDescriptor.url}#fragment`,
       gzipDescriptor.url.replace('.json.gz', '.json.gz.bak'),
-      gzipDescriptor.url.replace(generation.head.generation_id, 'gen-2026-08-14-r0001-000000000000'),
-      gzipDescriptor.url.replace('app-payload-v3-candidate-', 'app-payload-other-'),
+      gzipDescriptor.url.replace('app-payload-gen', 'app-payload-other'),
     ]) {
       expect(() => validateAssetDescriptorV3({ ...gzipDescriptor, url: forged }, generation.head.generation_id))
         .toThrow(/canonical AR-local/);
@@ -234,23 +248,54 @@ describe('canonical core validation and legacy adaptation', () => {
       products: [makeProduct({ observedAt: '2026-08-14T09:30:00.1234567890+10:00' })],
     })).toThrow(/RFC3339/);
     expect(buildGeneration({
-      products: [makeProduct({ observedAt: '2026-08-14T09:30:00.123456789+10:00' })],
-    }).core.products[0].evidence.observed_at).toBe('2026-08-14T09:30:00.123456789+10:00');
+      products: [makeProduct({ observedAt: '2026-08-14T09:29:00.123456789+10:00' })],
+    }).core.products[0].evidence.observed_at).toBe('2026-08-14T09:29:00.123456789+10:00');
     expect(compareRfc3339Instants(
       '2026-08-14T09:30:00.1+10:00',
       '2026-08-13T23:30:00.100000000Z',
     )).toBe(0);
 
-    const futureEffective = makeProduct({ observedAt: '2026-08-14T09:30:00.000000001Z' });
-    futureEffective.evidence.effective_date = '2026-08-14T09:30:00.000000002Z';
+    const futureEffective = makeProduct({ observedAt: '2026-08-14T09:29:00.000000001+10:00' });
+    futureEffective.evidence.effective_date = '2026-08-14T09:29:00.000000002+10:00';
     futureEffective.evidence_refs[0].effective_date = futureEffective.evidence.effective_date;
     expect(() => buildGeneration({ products: [futureEffective] })).toThrow(/cannot precede effective_date/);
 
-    const active = makeProduct({ observedAt: '2026-08-14T09:30:00.000000001Z' });
-    active.evidence.effective_to = '2026-08-14T09:30:00.000000002Z';
+    const active = makeProduct({ observedAt: '2026-08-14T09:29:00.000000001+10:00' });
+    active.evidence.effective_to = '2026-08-14T09:29:00.000000002+10:00';
     active.evidence_refs[0].effective_to = active.evidence.effective_to;
     expect(buildGeneration({ products: [active] }).core.products[0].evidence.effective_to)
-      .toBe('2026-08-14T09:30:00.000000002Z');
+      .toBe('2026-08-14T09:29:00.000000002+10:00');
+
+    expect(() => buildGeneration({
+      products: [makeProduct({ observedAt: '2026-08-14T09:30:00.000000001+10:00' })],
+    })).toThrow(/cannot post-date the generation observation/);
+
+    const futureSourceUpdate = makeProduct();
+    futureSourceUpdate.evidence.source_updated_at = '2026-08-14T09:30:00.000000001+10:00';
+    futureSourceUpdate.evidence_refs[0].source_updated_at = futureSourceUpdate.evidence.source_updated_at;
+    expect(() => buildGeneration({ products: [futureSourceUpdate] }))
+      .toThrow(/source_updated_at cannot post-date/);
+  });
+
+  test('rejects zero rates and comparison rates outside mortgage products', () => {
+    const zeroAdvertised = makeProduct();
+    zeroAdvertised.rates[0].advertised.value = '0';
+    expect(() => buildGeneration({ products: [zeroAdvertised] })).toThrow(/greater than zero/);
+
+    const zeroComparison = makeProduct();
+    zeroComparison.rates[0].comparison!.value = '0.000';
+    expect(() => buildGeneration({ products: [zeroComparison] })).toThrow(/greater than zero/);
+
+    const savings = makeProduct({ kind: 'savings_account', productId: 'deposit-comparison' });
+    savings.rates[0].comparison = {
+      value: '0.041',
+      unit: 'fraction_per_annum',
+      metric: 'comparison_interest',
+      basis: 'comparison',
+      evidence_status: 'published',
+      evidence_ids: savings.evidence.evidence_ids,
+    };
+    expect(() => buildGeneration({ products: [savings] })).toThrow(/only valid for mortgage/);
   });
 
   test('compares tier and fee decimal bounds without IEEE-754 rounding', () => {
@@ -335,7 +380,7 @@ describe('canonical core validation and legacy adaptation', () => {
     duplicate.advertised.value = '0.061';
     product.rates.push(duplicate);
 
-    const rows = adaptCoreV3ToLegacy(buildGeneration({ products: [product] }).core).sections.Mortgage.rates;
+    const rows = adapt(buildGeneration({ products: [product] }).core).sections.Mortgage.rates;
     expect(rows).toHaveLength(2);
     expect(rows.map((row) => row.exact_alert_eligible)).toEqual([false, false]);
     expect(rows.map((row) => row.rate_index)).toEqual([undefined, undefined]);
@@ -356,12 +401,13 @@ describe('canonical core validation and legacy adaptation', () => {
       duration: null,
     });
     const generation = buildGeneration({ products: [known, unknown] });
-    const rows = adaptCoreV3ToLegacy(generation.core).sections.TD.rates;
+    const rows = adapt(generation.core).sections.TD.rates;
     expect(rows[0]).toMatchObject({
       product_key: known.identity.product_uid,
-      product_id: known.identity.product_uid,
+      product_id: 'td-known',
       term_months: 12,
       term: 'P12M',
+      last_updated: known.evidence.observed_at,
     });
     expect(rows[1].term_months).toBeUndefined();
     expect(rows[1].term).toBeUndefined();
@@ -373,10 +419,82 @@ describe('canonical core validation and legacy adaptation', () => {
       { unit: 'DOLLAR', method: 'PER_TIER', minimum: '10000', maximum: null, additional_info: null, conditions: [] },
     ];
     const product = makeProduct({ kind: 'savings_account', productId: 'tiered', tiers });
-    const row = adaptCoreV3ToLegacy(buildGeneration({ products: [product] }).core).sections.Savings.rates[0];
+    product.rates[0].exact_alert_eligible = false;
+    const row = adapt(buildGeneration({ products: [product] }).core).sections.Savings.rates[0];
     expect(row.balance_min).toBeUndefined();
     expect(row.balance_max).toBeUndefined();
     expect(row.account_class).toBe('non_standard');
+
+    const percent = makeProduct({
+      kind: 'savings_account',
+      productId: 'percentage-tier',
+      tiers: [{
+        unit: 'PERCENT',
+        method: 'PER_TIER',
+        minimum: '0',
+        maximum: '0.5',
+        additional_info: null,
+        conditions: [],
+      }],
+    });
+    const percentRow = adapt(buildGeneration({ products: [percent] }).core).sections.Savings.rates[0];
+    expect(percentRow.balance_min).toBeUndefined();
+    expect(percentRow.balance_max).toBeUndefined();
+  });
+
+  test('requires settled identity evidence for standard rows and exact alerts', () => {
+    const partial = makeProduct();
+    partial.rates[0].advertised.evidence_status = 'partial';
+    expect(() => buildGeneration({ products: [partial] })).toThrow(/exact alerts require settled evidence/);
+
+    partial.rates[0].exact_alert_eligible = false;
+    const partialRow = adapt(buildGeneration({ products: [partial] }).core).sections.Mortgage.rates[0];
+    expect(partialRow).toMatchObject({ exact_alert_eligible: false, account_class: 'non_standard' });
+    expect(partialRow.rate_index).toBeUndefined();
+
+    const observed = makeProduct({ productId: 'observed-rate' });
+    observed.rates[0].advertised.evidence_status = 'observed';
+    expect(() => buildGeneration({ products: [observed] })).toThrow(/exact alerts require settled evidence/);
+    observed.rates[0].exact_alert_eligible = false;
+    expect(adapt(buildGeneration({ products: [observed] }).core).sections.Mortgage.rates[0])
+      .toMatchObject({ exact_alert_eligible: false, account_class: 'non_standard' });
+
+    const conditional = makeProduct({
+      kind: 'savings_account',
+      productId: 'conditional-alert',
+      metric: 'conditional_interest',
+      conditions: [{ type: 'MONTHLY_DEPOSIT', value: '1000', additional_info: null }],
+    });
+    expect(() => buildGeneration({ products: [conditional] })).toThrow(/unambiguous applicability/);
+  });
+
+  test('maps Savings semantics, base rows, and an exact trusted ongoing-base sibling', () => {
+    const savings = makeProduct({
+      kind: 'savings_account',
+      productId: 'bonus-with-base',
+      metric: 'conditional_interest',
+      conditions: [{ type: 'MONTHLY_DEPOSIT', value: '1000', additional_info: null }],
+    });
+    savings.rates[0].exact_alert_eligible = false;
+    const base = clone(savings.rates[0]);
+    base.advertised = { ...base.advertised, value: '0.01', metric: 'base_interest', basis: 'base' };
+    base.semantic_tier = { ...base.semantic_tier, conditions: [] };
+    base.identity.rate_uid = canonicalRateUid(savings.identity.product_uid, base.semantic_tier);
+    base.exact_alert_eligible = true;
+    base.source_index = 1;
+    savings.rates.push(base);
+
+    const rows = adapt(buildGeneration({ products: [savings] }).core).sections.Savings.rates;
+    expect(rows[0]).toMatchObject({
+      product_id: 'bonus-with-base',
+      taxonomy_path: 'SAVINGS',
+      ribbon_deposit_kind: 'bonus',
+      ongoing_rate: '0.01',
+    });
+    expect(rows[1]).toMatchObject({
+      taxonomy_path: 'SAVINGS',
+      ribbon_deposit_kind: 'base',
+    });
   });
 
   test('rejects product/rate identity drift and product-count disagreement', () => {
@@ -391,6 +509,46 @@ describe('canonical core validation and legacy adaptation', () => {
 
     const wrongCount = { ...generation.manifest, coverage: { ...generation.manifest.coverage, products_consumer_eligible: 2 } };
     expect(() => validateCorePayloadV3(generation.core, wrongCount)).toThrow(/product count/);
+
+    const secondProvider = makeProduct({
+      providerUid: SECOND_PROVIDER_UID,
+      providerName: 'Second Bank',
+      productId: 'second-provider-product',
+    });
+    const products = [makeProduct(), secondProvider];
+    const undercounted = coverageFor(products, { providers_complete: 1, providers_empty: 1 });
+    expect(() => buildGeneration({ products, coverage: undercounted }))
+      .toThrow(/provider population exceeds complete-or-partial provider coverage/);
+  });
+
+  test('rejects legacy aliases that collide with canonical or other product identities', () => {
+    const first = makeProduct({ productId: 'alias-first' });
+    const second = makeProduct({ productId: 'alias-second' });
+    first.identity.legacy_aliases = [second.identity.product_uid];
+    first.rates[0].identity.legacy_aliases = [...first.identity.legacy_aliases];
+    expect(() => buildGeneration({ products: [first, second] })).toThrow(/legacy product key.*ambiguous/);
+
+    const selfAliased = makeProduct({ productId: 'self-alias' });
+    selfAliased.identity.legacy_aliases = [selfAliased.identity.product_uid];
+    selfAliased.rates[0].identity.legacy_aliases = [...selfAliased.identity.legacy_aliases];
+    expect(() => buildGeneration({ products: [selfAliased] })).toThrow(/canonical UID as a legacy alias/);
+  });
+
+  test('preserves the trusted legacy RBA ledger and fails closed when it is absent', () => {
+    const generation = buildGeneration();
+    const trusted = {
+      run_date: generation.core.observation_date,
+      rba: [{ date: '2026-08-12', rate: 3.85 }],
+      rba_holds: ['2026-07-08'],
+    };
+    const legacy = adaptCoreV3ToLegacy(generation.core, trusted);
+    expect(legacy.rba).toEqual(trusted.rba);
+    expect(legacy.rba_holds).toEqual(trusted.rba_holds);
+    expect(legacy.rba).not.toBe(trusted.rba);
+    expect(() => adaptCoreV3ToLegacy(generation.core, { ...trusted, rba: [] }))
+      .toThrow(/trusted legacy RBA ledger/);
+    expect(() => adaptCoreV3ToLegacy(generation.core, { ...trusted, run_date: '2026-08-13' }))
+      .toThrow(/same-observation/);
   });
 
   test('rejects mixed units and taxonomy leakage before adaptation', () => {
@@ -413,7 +571,7 @@ describe('canonical core validation and legacy adaptation', () => {
       productId: 'proto-product',
     });
     const generation = buildGeneration({ products: [constructorBank, protoBank] });
-    const brands = adaptCoreV3ToLegacy(generation.core).brands;
+    const brands = adapt(generation.core).brands;
     expect(Object.getPrototypeOf(brands)).toBeNull();
     expect(Object.prototype.hasOwnProperty.call(brands, 'constructor')).toBe(true);
     expect(Object.prototype.hasOwnProperty.call(brands, '__proto__')).toBe(true);
@@ -433,7 +591,7 @@ describe('canonical core validation and legacy adaptation', () => {
     const normal = buildGeneration({ products: [first, second] }).core;
     const reversed = buildGeneration({ products: [second, first] }).core;
     const indexes = (core: CorePayloadV3) => Object.fromEntries(
-      adaptCoreV3ToLegacy(core).sections.Mortgage.rates.map((row) => [row.product_key, row.rate_index]),
+      adapt(core).sections.Mortgage.rates.map((row) => [row.product_key, row.rate_index]),
     );
     expect(indexes(normal)).toEqual(indexes(reversed));
     expect(canonicalRateUid(first.identity.product_uid, first.rates[0].semantic_tier)).toBe(first.rates[0].identity.rate_uid);
@@ -491,7 +649,7 @@ describe('dormant loader and dual-read behavior', () => {
 
   test('keeps v3 compile-time disabled and uses v1 when the bridge is off', async () => {
     expect(V3_PAYLOAD_BRIDGE_ENABLED).toBe(false);
-    const legacy = adaptCoreV3ToLegacy(buildGeneration().core);
+    const legacy = adapt(buildGeneration().core);
     const loadV3 = jest.fn(async () => buildGeneration());
     const result = await loadCoreDualRead({
       bridgeEnabled: false,
@@ -511,7 +669,7 @@ describe('dormant loader and dual-read behavior', () => {
       observationState: 'partial',
       coverage: coverageFor([product], { providers_complete: 0, providers_partial: 1 }),
     });
-    const legacy = adaptCoreV3ToLegacy(buildGeneration().core);
+    const legacy = adapt(buildGeneration().core);
     const result = await loadCoreDualRead({
       bridgeEnabled: true,
       loadV3: async () => partial,
@@ -521,6 +679,48 @@ describe('dormant loader and dual-read behavior', () => {
     expect(result.contract).toBe('v1');
   });
 
+  test('gates v3 surfacing on alias migration and preserves the trusted v1 RBA ledger', async () => {
+    const generation = buildGeneration();
+    const legacy = adapt(generation.core);
+    const seenAliases: LegacyProductAliasMap[] = [];
+    const migrateAliases = jest.fn(async (aliases: LegacyProductAliasMap) => {
+      seenAliases.push(aliases);
+    });
+    const result = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => generation,
+      loadV1: async () => legacy,
+      migrateLegacyProductAliases: migrateAliases,
+      v3Cache: createV3GenerationCache(memoryStorage()),
+    });
+    expect(result.contract).toBe('v3');
+    expect(result.core.rba).toEqual(legacy.rba);
+    expect(migrateAliases).toHaveBeenCalledTimes(1);
+    const aliases = seenAliases[0];
+    const legacyAlias = generation.core.products[0].identity.legacy_aliases[0];
+    expect(aliases?.get(legacyAlias)).toEqual({
+      productKey: generation.core.products[0].identity.product_uid,
+    });
+
+    const noMigration = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => generation,
+      loadV1: async () => legacy,
+      v3Cache: createV3GenerationCache(memoryStorage()),
+    });
+    expect(noMigration.contract).toBe('v1');
+
+    const noLedger = { ...legacy, rba: [] };
+    const missingLedger = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => generation,
+      loadV1: async () => noLedger,
+      migrateLegacyProductAliases: async () => undefined,
+      v3Cache: createV3GenerationCache(memoryStorage()),
+    });
+    expect(missingLedger.contract).toBe('v1');
+  });
+
   test('returns verified in-memory v3 data when persistence fails', async () => {
     const generation = buildGeneration();
     const storage = memoryStorage();
@@ -528,7 +728,8 @@ describe('dormant loader and dual-read behavior', () => {
     const result = await loadCoreDualRead({
       bridgeEnabled: true,
       loadV3: async () => generation,
-      loadV1: async () => adaptCoreV3ToLegacy(generation.core),
+      loadV1: async () => adapt(generation.core),
+      migrateLegacyProductAliases: async () => undefined,
       v3Cache: createV3GenerationCache(storage),
     });
     expect(result.contract).toBe('v3');

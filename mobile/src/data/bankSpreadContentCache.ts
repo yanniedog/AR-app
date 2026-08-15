@@ -101,6 +101,7 @@ function parseIndex(raw: string | null, limits: BankSpreadCacheLimits): Retentio
       value.schema_version !== 3 ||
       !Number.isSafeInteger(value.transaction_sequence) ||
       (value.transaction_sequence as number) < 0 ||
+      (value.transaction_sequence as number) > Number.MAX_SAFE_INTEGER - 2 ||
       !Array.isArray(value.entries)
     ) return null;
     if (value.entries.length > limits.maxEntries) return null;
@@ -205,36 +206,29 @@ export function createBankSpreadContentCache(
     const temporaryRaw = await storage.read(indexTmpPath);
     const primary = parseIndex(primaryRaw, limits);
     const temporary = parseIndex(temporaryRaw, limits);
-    if (primaryRaw !== null && !primary) {
-      throw new CorruptRetentionIndexError('Bank spread retention primary index is corrupt');
-    }
     if (primaryRaw === null && temporaryRaw === null) {
       return { index: emptyIndex(), records: new Map(), source: 'empty' };
     }
 
-    let selected: { index: RetentionIndex; source: 'primary' | 'temporary' } | null = null;
-    if (primary && temporary) {
-      if (primary.transaction_sequence === temporary.transaction_sequence) {
-        if (!sameIndex(primary, temporary)) {
+    const verified = (
+      await Promise.all([
+        primary ? verifyIndex(primary, 'primary') : Promise.resolve(null),
+        temporary ? verifyIndex(temporary, 'temporary') : Promise.resolve(null),
+      ])
+    ).filter((candidate): candidate is VerifiedIndex => candidate !== null);
+    if (verified.length === 2) {
+      const [left, right] = verified;
+      if (left.index.transaction_sequence === right.index.transaction_sequence) {
+        if (!sameIndex(left.index, right.index)) {
           throw new CorruptRetentionIndexError(
             'Bank spread retention index has an ambiguous transaction sequence',
           );
         }
-        selected = { index: primary, source: 'primary' };
-      } else {
-        selected = primary.transaction_sequence > temporary.transaction_sequence
-          ? { index: primary, source: 'primary' }
-          : { index: temporary, source: 'temporary' };
+        return left.source === 'primary' ? left : right;
       }
-    } else if (primary) {
-      selected = { index: primary, source: 'primary' };
-    } else if (temporary) {
-      selected = { index: temporary, source: 'temporary' };
+      return left.index.transaction_sequence > right.index.transaction_sequence ? left : right;
     }
-    if (selected) {
-      const verified = await verifyIndex(selected.index, selected.source);
-      if (verified) return verified;
-    }
+    if (verified.length === 1) return verified[0];
     throw new CorruptRetentionIndexError(
       'Bank spread retention index is corrupt or references invalid slots',
     );
@@ -408,9 +402,8 @@ export function createBankSpreadContentCache(
     if (stillCurrent()) return true;
 
     await replaceIndex({
-      schema_version: 3,
+      ...repairedBase.index,
       transaction_sequence: nextSequence(repaired),
-      entries: [],
     });
     return false;
   }
@@ -433,6 +426,7 @@ export function createBankSpreadContentCache(
       if (!record) return null;
       await healSlot(entry.slot, record);
       if (!stillCurrent()) return null;
+      if (previous.index.entries[0]?.slot === entry.slot) return record.payload;
       const next = await buildNextIndex(entry.slot, record, previous);
       if (!(await commitIndex(previous, next, stillCurrent))) return null;
       return record.payload;

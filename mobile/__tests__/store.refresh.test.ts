@@ -937,6 +937,11 @@ describe('store refresh lifecycle', () => {
     expect(state.offline).toBe(true);
     expect(state.source).toBe('sample');
     expect(state.refreshOutcome).toBe('failure');
+    expect(state.coreAssetState).toEqual({
+      status: 'error',
+      data: sampleCoreIntegrity,
+      error: 'network error',
+    });
   });
 
   it('clears refreshing and flags offline on downloadCore failure', async () => {
@@ -951,6 +956,11 @@ describe('store refresh lifecycle', () => {
     expect(state.offline).toBe(true);
     expect(state.source).toBe('sample');
     expect(state.refreshOutcome).toBe('failure');
+    expect(state.coreAssetState).toEqual({
+      status: 'error',
+      data: sampleCoreIntegrity,
+      error: 'download failure',
+    });
   });
 
   it('sets wifi-skip outcome when wifi-only pref blocks background refresh', async () => {

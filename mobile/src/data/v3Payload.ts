@@ -5,6 +5,8 @@ import {
   V3_MANIFEST_LIMIT_BYTES,
   V3_POINTER_LIMIT_BYTES,
   adaptCoreV3ToLegacy,
+  legacyProductAliasMap,
+  type LegacyProductAliasMap,
   validateCorePayloadTextV3,
   validateGenerationManifestTextV3,
   validateGenerationPointerTextV3,
@@ -101,8 +103,8 @@ export type DualReadResult =
       warning: string | null;
     };
 
-function migratedV3Core(generation: ValidatedGenerationV3) {
-  const core = adaptCoreV3ToLegacy(generation.core);
+function migratedV3Core(generation: ValidatedGenerationV3, trustedLegacy: CorePayload) {
+  const core = adaptCoreV3ToLegacy(generation.core, trustedLegacy);
   return normalizeCoreWithIntegrity(core, {
     contract: 'v3',
     generationDigest: generation.manifest.generation_digest,
@@ -120,8 +122,24 @@ export async function loadCoreDualRead(opts: {
   bridgeEnabled?: boolean;
   loadV3?: () => Promise<ValidatedGenerationV3>;
   loadV1: () => Promise<CorePayload>;
+  /** Required before any v3 core can surface, so persisted v1 identities move atomically with the bridge. */
+  migrateLegacyProductAliases?: (aliases: LegacyProductAliasMap) => void | Promise<void>;
   v3Cache: V3GenerationCache;
 }): Promise<DualReadResult> {
+  let trustedLegacyPromise: Promise<ReturnType<typeof normalizeCoreWithIntegrity>> | null = null;
+  const loadTrustedLegacy = () => {
+    trustedLegacyPromise ??= opts.loadV1().then((core) => normalizeCoreWithIntegrity(core));
+    return trustedLegacyPromise;
+  };
+  const migrate = async (generation: ValidatedGenerationV3) => {
+    const legacy = await loadTrustedLegacy();
+    const migrated = migratedV3Core(generation, legacy.core);
+    if (!opts.migrateLegacyProductAliases) {
+      throw new Error('v3 bridge requires a persisted legacy product-alias migration');
+    }
+    await opts.migrateLegacyProductAliases(legacyProductAliasMap(generation.core));
+    return migrated;
+  };
   if (opts.bridgeEnabled === true && opts.loadV3) {
     try {
       const candidate = await opts.loadV3();
@@ -129,7 +147,7 @@ export async function loadCoreDualRead(opts: {
         throw new Error('partial v3 observations cannot replace the settled app core');
       }
       const installed = await opts.v3Cache.install(candidate);
-      const migrated = migratedV3Core(installed.generation);
+      const migrated = await migrate(installed.generation);
       return {
         contract: 'v3',
         source: 'live',
@@ -145,27 +163,31 @@ export async function loadCoreDualRead(opts: {
         warning: installed.persistenceError,
       };
     } catch (error) {
-      const cached = await opts.v3Cache.readCurrent();
-      if (cached?.manifest.observation_state === 'complete') {
-        const migrated = migratedV3Core(cached);
-        return {
-          contract: 'v3',
-          source: 'cache',
-          core: migrated.core,
-          assetState: assetStateForV3Coverage(
-            migrated.core,
-            cached.manifest.coverage,
-            cached.manifest.observation_state,
-            'cache',
-          ),
-          integrity: migrated.integrity,
-          generation: cached,
-          warning: String((error as Error)?.message ?? error),
-        };
+      try {
+        const cached = await opts.v3Cache.readCurrent();
+        if (cached?.manifest.observation_state === 'complete') {
+          const migrated = await migrate(cached);
+          return {
+            contract: 'v3',
+            source: 'cache',
+            core: migrated.core,
+            assetState: assetStateForV3Coverage(
+              migrated.core,
+              cached.manifest.coverage,
+              cached.manifest.observation_state,
+              'cache',
+            ),
+            integrity: migrated.integrity,
+            generation: cached,
+            warning: String((error as Error)?.message ?? error),
+          };
+        }
+      } catch {
+        // A cached v3 generation must meet the same ledger and migration gates.
       }
     }
   }
-  const legacy = normalizeCoreWithIntegrity(await opts.loadV1());
+  const legacy = await loadTrustedLegacy();
   return {
     contract: 'v1',
     source: 'live',

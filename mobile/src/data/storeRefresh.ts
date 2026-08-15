@@ -506,10 +506,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `refresh failed: ${msg}`);
         const hasData = !!get().core;
+        const retainedIntegrity = get().coreIntegrity;
         set({
           offline: true,
           status: hasData ? 'ready' : 'error',
           error: hasData ? null : msg,
+          coreAssetState: { status: 'error', data: retainedIntegrity, error: msg },
           lastCheckedAt: new Date().toISOString(),
           refreshOutcome: 'failure',
         });

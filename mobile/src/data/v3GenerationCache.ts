@@ -14,6 +14,7 @@ import {
   validateGenerationManifestTextV3,
 } from '../contracts/v3/validators';
 import { gunzipCooperatively } from './payload';
+import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 
 export interface GenerationCacheStorage {
   read(path: string): Promise<string | null>;
@@ -22,11 +23,22 @@ export interface GenerationCacheStorage {
   move(from: string, to: string): Promise<void>;
 }
 
-interface GenerationCacheHead {
+interface GenerationCacheHeadV1 {
   schema_version: 1;
   current: string;
   previous: string | null;
 }
+
+interface GenerationCacheHeadV2 {
+  schema_version: 2;
+  current: string;
+  previous: string | null;
+  current_observation_date: string;
+  current_generation_revision: number;
+  current_ledger_event_digest: string;
+}
+
+type GenerationCacheHead = GenerationCacheHeadV1 | GenerationCacheHeadV2;
 
 export interface CachedGenerationV3 extends ValidatedGenerationV3 {
   savedAt: string;
@@ -48,13 +60,23 @@ function safeDigest(value: string): string {
 function parseHead(raw: string | null): GenerationCacheHead | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw) as Partial<GenerationCacheHead>;
+    const value = JSON.parse(raw) as Partial<Omit<GenerationCacheHeadV2, 'schema_version'>> & {
+      schema_version?: 1 | 2;
+    };
     if (
-      value.schema_version !== 1 ||
+      (value.schema_version !== 1 && value.schema_version !== 2) ||
       typeof value.current !== 'string' ||
       !SHA256.test(value.current) ||
       !(value.previous === null || (typeof value.previous === 'string' && SHA256.test(value.previous)))
     ) return null;
+    if (value.schema_version === 2 && (
+      typeof value.current_observation_date !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.current_observation_date) ||
+      !Number.isSafeInteger(value.current_generation_revision) ||
+      (value.current_generation_revision as number) < 1 ||
+      typeof value.current_ledger_event_digest !== 'string' ||
+      !SHA256.test(value.current_ledger_event_digest)
+    )) return null;
     return value as GenerationCacheHead;
   } catch {
     return null;
@@ -123,7 +145,9 @@ async function verifyCoreAssetBytes(
 async function parseCandidate(raw: string | null): Promise<CachedGenerationV3 | null> {
   if (!raw) return null;
   try {
-    const obj = JSON.parse(raw) as Record<string, unknown>;
+    const obj = raw.length >= HEAVY_JSON_BYTES
+      ? await parseJsonHeavy<Record<string, unknown>>(raw)
+      : JSON.parse(raw) as Record<string, unknown>;
     if (
       obj.schema_version !== 5 ||
       typeof obj.saved_at !== 'string' ||
@@ -194,6 +218,15 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
   const generationPath = (digest: string) => `${root}/generations/${safeDigest(digest)}.json`;
   const generationTmpPath = (digest: string) => `${generationPath(digest)}.tmp`;
 
+  async function replaceWithTemporary(temporaryPath: string, destinationPath: string): Promise<void> {
+    // Expo's legacy Android adapter delegates to File.renameTo, which cannot
+    // replace an existing destination. Remove explicitly on every platform;
+    // an interrupted move leaves the authenticated temporary file for the
+    // primary-then-temporary readers below to recover.
+    await storage.remove(destinationPath);
+    await storage.move(temporaryPath, destinationPath);
+  }
+
   async function readHead(): Promise<GenerationCacheHead | null> {
     return parseHead(await storage.read(headPath)) ?? parseHead(await storage.read(headTmpPath));
   }
@@ -226,8 +259,23 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     try {
       const previousHead = await readHead();
       const current = previousHead ? await readDigest(previousHead.current) : null;
+      const previous = previousHead ? await readDigest(previousHead.previous) : null;
       if (previousHead && !current && previousHead.current !== digest) {
-        throw new V3ContractError('current cache generation is unavailable or invalid');
+        if (!previous || previousHead.schema_version !== 2) {
+          throw new V3ContractError('current cache lineage is unavailable or invalid');
+        }
+        const cachedCurrentOrder: [string, number] = [
+          previousHead.current_observation_date,
+          previousHead.current_generation_revision,
+        ];
+        const candidateOrder = generationOrder(verified);
+        const order = candidateOrder[0].localeCompare(cachedCurrentOrder[0]) || candidateOrder[1] - cachedCurrentOrder[1];
+        if (order <= 0) {
+          throw new V3ContractError('replacement generation does not advance the unavailable current generation');
+        }
+        if (verified.manifest.prior_ledger_digest !== previousHead.current_ledger_event_digest) {
+          throw new V3ContractError('replacement generation is not a direct ledger descendant of unavailable current');
+        }
       }
       if (current && current.manifest.generation_digest !== digest) {
         const order = compareOrder(verified, current);
@@ -259,29 +307,34 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
       }
       if (!parsed) {
         await storage.write(recordTmpPath, serializeCandidate(verified, savedAt));
-        await storage.move(recordTmpPath, recordPath);
+        await replaceWithTemporary(recordTmpPath, recordPath);
       }
 
-      const nextHead: GenerationCacheHead = {
-        schema_version: 1,
+      const retainedPrevious = current?.manifest.generation_digest ?? previous?.manifest.generation_digest ?? null;
+      const nextHead: GenerationCacheHeadV2 = {
+        schema_version: 2,
         current: digest,
-        previous: previousHead?.current && previousHead.current !== digest
-          ? previousHead.current
-          : previousHead?.previous ?? null,
+        previous: retainedPrevious && retainedPrevious !== digest ? retainedPrevious : previousHead?.previous ?? null,
+        current_observation_date: verified.manifest.observation_date,
+        current_generation_revision: verified.manifest.generation_revision,
+        current_ledger_event_digest: verified.manifest.ledger_event_digest,
       };
       if (!previousHead || !equivalent(previousHead, nextHead)) {
         await storage.write(headTmpPath, JSON.stringify(nextHead));
-        await storage.move(headTmpPath, headPath);
+        await replaceWithTemporary(headTmpPath, headPath);
       }
 
       let cleanupError: string | null = null;
-      const displaced = previousHead?.previous;
-      if (displaced && displaced !== nextHead.current && displaced !== nextHead.previous) {
+      const displaced = new Set([previousHead?.current, previousHead?.previous].filter(
+        (candidate): candidate is string => !!candidate && candidate !== nextHead.current && candidate !== nextHead.previous,
+      ));
+      for (const candidate of displaced) {
         try {
-          await storage.remove(generationPath(displaced));
-          await storage.remove(generationTmpPath(displaced));
+          await storage.remove(generationPath(candidate));
+          await storage.remove(generationTmpPath(candidate));
         } catch (error) {
           cleanupError = `cache cleanup failed: ${String((error as Error)?.message ?? error)}`;
+          break;
         }
       }
       return {

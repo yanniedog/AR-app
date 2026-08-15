@@ -34,13 +34,24 @@ export {
   canonicalProductUid,
   canonicalRateUid,
 } from './canonicalCoreFields';
-export { adaptCoreV3ToLegacy } from './canonicalCoreAdapter';
+export {
+  adaptCoreV3ToLegacy,
+  legacyProductAliasMap,
+  type LegacyProductAliasMap,
+  type LegacyProductMigrationTarget,
+  type TrustedLegacyLedger,
+} from './canonicalCoreAdapter';
 
 function nullableInstant(value: unknown, path: string): string | null {
   return value === null ? null : instant(value, path);
 }
 
-function validateCanonicalProduct(value: unknown, index: number, normalizationVersion: string): CanonicalProductV3 {
+function validateCanonicalProduct(
+  value: unknown,
+  index: number,
+  normalizationVersion: string,
+  generationObservedAt: string,
+): CanonicalProductV3 {
   const path = `core.products[${index}]`;
   const obj = record(value, path);
   exactKeys(obj, [
@@ -122,10 +133,25 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
   if (eligibilityDisclosureStatus !== 'complete') {
     reject(`${path}.evidence public availability requires complete eligibility evidence`);
   }
+  const feeDisclosureStatus = validateDisclosureStatus(
+    evidence.fee_disclosure_status,
+    `${path}.evidence.fee_disclosure_status`,
+  );
+  const pricingStatus = enumValue(
+    evidence.pricing_status,
+    ['complete', 'partial', 'unpriced', 'unknown'],
+    `${path}.evidence.pricing_status`,
+  );
   const observedAt = instant(evidence.observed_at, `${path}.evidence.observed_at`);
   const effectiveDate = nullableInstant(evidence.effective_date, `${path}.evidence.effective_date`);
   const effectiveTo = nullableInstant(evidence.effective_to, `${path}.evidence.effective_to`);
   const sourceUpdatedAt = nullableInstant(evidence.source_updated_at, `${path}.evidence.source_updated_at`);
+  if (compareRfc3339Instants(observedAt, generationObservedAt) > 0) {
+    reject(`${path}.evidence.observed_at cannot post-date the generation observation`);
+  }
+  if (sourceUpdatedAt !== null && compareRfc3339Instants(sourceUpdatedAt, generationObservedAt) > 0) {
+    reject(`${path}.evidence.source_updated_at cannot post-date the generation observation`);
+  }
   for (const ref of evidenceRefs) {
     if (
       ref.observed_at !== observedAt ||
@@ -151,6 +177,7 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
     identity,
     kind,
     evidenceIds,
+    { pricingStatus, eligibilityDisclosureStatus },
   ));
   const sourceIndexes = new Set<number>();
   const uidCounts = new Map<string, number>();
@@ -209,13 +236,9 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
     },
     evidence: {
       availability: 'public',
-      fee_disclosure_status: validateDisclosureStatus(evidence.fee_disclosure_status, `${path}.evidence.fee_disclosure_status`),
+      fee_disclosure_status: feeDisclosureStatus,
       eligibility_disclosure_status: eligibilityDisclosureStatus,
-      pricing_status: enumValue(
-        evidence.pricing_status,
-        ['complete', 'partial', 'unpriced', 'unknown'],
-        `${path}.evidence.pricing_status`,
-      ),
+      pricing_status: pricingStatus,
       evidence_ids: productEvidenceIds,
       observed_at: observedAt,
       effective_date: effectiveDate,
@@ -239,17 +262,28 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
     reject('core identity disagrees with generation manifest');
   }
   const products = arrayValue(obj.products, 'core.products')
-    .map((item, index) => validateCanonicalProduct(item, index, normalization));
+    .map((item, index) => validateCanonicalProduct(item, index, normalization, manifest.observed_at));
   if (products.length !== manifest.coverage.products_consumer_eligible) {
     reject('core product count disagrees with consumer-eligible coverage');
   }
   const productUids = new Set<string>();
+  const effectiveProductKeys = new Map<string, string>();
   const providerNamesByUid = new Map<string, string>();
   const providerUidsByName = new Map<string, string>();
   let rateCount = 0;
   for (const item of products) {
     if (productUids.has(item.identity.product_uid)) reject(`core contains duplicate product_uid ${item.identity.product_uid}`);
     productUids.add(item.identity.product_uid);
+    if (item.identity.legacy_aliases.includes(item.identity.product_uid)) {
+      reject(`core product ${item.identity.product_uid} cannot use its canonical UID as a legacy alias`);
+    }
+    for (const key of [item.identity.product_uid, ...item.identity.legacy_aliases]) {
+      const owner = effectiveProductKeys.get(key);
+      if (owner && owner !== item.identity.product_uid) {
+        reject(`core legacy product key ${key} is ambiguous`);
+      }
+      effectiveProductKeys.set(key, item.identity.product_uid);
+    }
     const previousName = providerNamesByUid.get(item.identity.provider_uid);
     if (previousName && previousName !== item.provider_display_name) {
       reject(`core provider_uid ${item.identity.provider_uid} has conflicting display names`);
@@ -264,6 +298,9 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
   }
   if (rateCount !== manifest.coverage.rate_tiers_eligible) {
     reject('core rate-tier count disagrees with eligible coverage');
+  }
+  if (providerNamesByUid.size > manifest.coverage.providers_complete + manifest.coverage.providers_partial) {
+    reject('core provider population exceeds complete-or-partial provider coverage');
   }
   return deepFreeze({ schema_version: 3, normalization_version: normalization, observation_date: observationDate, products });
 }

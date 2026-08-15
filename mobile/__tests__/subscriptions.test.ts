@@ -7,6 +7,7 @@ import {
   isProductSubscribed,
   makeProductSubscription,
   makeSearchSubscription,
+  migrateProductSubscriptionAliases,
   normalizeFilterSnapshot,
   removeSubscription,
   rowsForSearchSubscription,
@@ -91,6 +92,36 @@ describe('subscription CRUD', () => {
     const after = core([{ ...row, rate: '0.05' }]);
     const subs = addSubscription([], makeProductSubscription(row, 0));
     expect(computeSubscriptionChanges(before, after, subs, 5)).toEqual([]);
+  });
+
+  test('migrates product-wide aliases and drops unauthenticated exact subscriptions', () => {
+    const productWide = makeProductSubscription(mk({ product_key: 'OLD|HOME' }), null);
+    const exact = makeProductSubscription(mk({ product_key: 'OLD|HOME', rate_index: 7 }), 7);
+    const search = makeSearchSubscription({
+      section: 'Mortgage',
+      path: [],
+      hierarchyScoped: false,
+      query: '',
+      filters: normalizeFilterSnapshot({
+        providers: [], rateTypes: [], lvrTiers: [], repaymentTypes: [], loanPurposes: [],
+        depositKinds: [], interestPayments: [], accountFeatures: [], eligibilityCriteria: [],
+        includeNonStandard: false,
+      }),
+    });
+    const migrated = migrateProductSubscriptionAliases(
+      [productWide, exact, search],
+      new Map([['OLD|HOME', { productKey: 'product:v1:canonical' }]]),
+    );
+
+    expect(migrated.subscriptions).toEqual([
+      {
+        ...productWide,
+        id: 'product:product:v1:canonical:all',
+        productKey: 'product:v1:canonical',
+      },
+      search,
+    ]);
+    expect(migrated.droppedExactSubscriptionIds).toEqual([exact.id]);
   });
 
 });

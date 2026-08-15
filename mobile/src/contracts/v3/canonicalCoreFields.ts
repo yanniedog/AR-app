@@ -250,8 +250,10 @@ function advertisedRate(value: unknown, path: string): TypedProductRateV3 {
   };
   const basis = enumValue(obj.basis, [expectedBasis[metric]], `${path}.basis`);
   if (obj.unit !== 'fraction_per_annum') reject(`${path}.unit must be fraction_per_annum`);
+  const rateValue = fractionString(obj.value, `${path}.value`);
+  if (compareDecimalStrings(rateValue, '0') === 0) reject(`${path}.value must be greater than zero`);
   return {
-    value: fractionString(obj.value, `${path}.value`),
+    value: rateValue,
     unit: 'fraction_per_annum',
     metric,
     basis,
@@ -267,8 +269,10 @@ function comparisonRate(value: unknown, path: string): TypedComparisonRateV3 | n
   if (obj.unit !== 'fraction_per_annum' || obj.metric !== 'comparison_interest' || obj.basis !== 'comparison') {
     reject(`${path} must use comparison_interest/fraction_per_annum/comparison semantics`);
   }
+  const rateValue = fractionString(obj.value, `${path}.value`);
+  if (compareDecimalStrings(rateValue, '0') === 0) reject(`${path}.value must be greater than zero`);
   return {
-    value: fractionString(obj.value, `${path}.value`),
+    value: rateValue,
     unit: 'fraction_per_annum',
     metric: 'comparison_interest',
     basis: 'comparison',
@@ -283,6 +287,10 @@ export function validateCanonicalRate(
   productIdentity: CanonicalIdentityV3,
   productKind: CanonicalProductV3['classification']['product_kind'],
   evidenceIds: ReadonlySet<string>,
+  productEvidence: {
+    pricingStatus: CanonicalProductV3['evidence']['pricing_status'];
+    eligibilityDisclosureStatus: CanonicalProductV3['evidence']['eligibility_disclosure_status'];
+  },
 ): CanonicalRateV3 {
   const obj = record(value, path);
   exactKeys(obj, ['identity', 'advertised', 'comparison', 'semantic_tier', 'exact_alert_eligible', 'source_index'], [], path);
@@ -295,6 +303,9 @@ export function validateCanonicalRate(
   }
   const advertised = advertisedRate(obj.advertised, `${path}.advertised`);
   const comparison = comparisonRate(obj.comparison, `${path}.comparison`);
+  if (productKind !== 'mortgage' && comparison !== null) {
+    reject(`${path}.comparison is only valid for mortgage products`);
+  }
   for (const id of [...advertised.evidence_ids, ...(comparison?.evidence_ids ?? [])]) {
     if (!evidenceIds.has(id)) reject(`${path} references unknown evidence ${id}`);
   }
@@ -304,9 +315,16 @@ export function validateCanonicalRate(
   }
   if (exactAlertEligible && (
     identityValue.rate_identity_status !== 'confirmed' ||
-    productIdentity.provider_identity_status !== 'confirmed'
+    productIdentity.provider_identity_status !== 'confirmed' ||
+    productEvidence.pricingStatus !== 'complete' ||
+    productEvidence.eligibilityDisclosureStatus !== 'complete' ||
+    !['verified', 'published'].includes(advertised.evidence_status) ||
+    (comparison !== null && !['verified', 'published'].includes(comparison.evidence_status)) ||
+    semantics.conditions.length > 0 ||
+    semantics.tiers.length !== 1 ||
+    semantics.tiers[0].conditions.length > 0
   )) {
-    reject(`${path} exact alerts require confirmed provider and rate identities`);
+    reject(`${path} exact alerts require settled evidence, confirmed identities, and unambiguous applicability`);
   }
   return {
     identity: identityValue as CanonicalRateV3['identity'],

@@ -1,6 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
-import { cache, type CacheMeta } from '../src/data/cache';
+import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
 
 const files = new Map<string, string>();
@@ -141,6 +141,31 @@ describe('cache core-meta sidecar', () => {
 
     const read = await cache.readMeta();
     expect(read?.detailsSha).toBe('tmp-sidecar-details');
+  });
+
+  it('propagates native bank-spread cache read failures instead of treating them as a miss', async () => {
+    const indexPath = `${FileSystem.documentDirectory}payload/bank-spread-history-v2/index.json`;
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === indexPath) throw new Error('native read failed');
+      return { exists: files.has(path) || path.endsWith('payload/'), isDirectory: path.endsWith('payload/') };
+    });
+
+    await expect(cache.readBankSpreadHistoryFor(
+      'a'.repeat(64),
+      'b'.repeat(64),
+      sampleCore.run_date,
+      () => true,
+    )).rejects.toThrow(/native read failed/);
+  });
+
+  it('propagates native v3 cache read failures instead of treating them as an empty cache', async () => {
+    const headPath = `${FileSystem.documentDirectory}payload/v3/head.json`;
+    (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => {
+      if (path === headPath) throw new Error('native v3 read failed');
+      return { exists: files.has(path) || path.endsWith('payload/'), isDirectory: path.endsWith('payload/') };
+    });
+
+    await expect(v3GenerationCache.readCurrent()).rejects.toThrow(/native v3 read failed/);
   });
 
   it('writeBundle still succeeds when the core-meta sidecar write fails', async () => {

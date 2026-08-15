@@ -1,3 +1,4 @@
+import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { SectionKey } from '../types';
 import { cache } from './cache';
 import { resetDetailSearchIndexCache } from './detailSearch';
@@ -7,6 +8,7 @@ import {
   isProductSubscribed as productIsSubscribed,
   makeProductSubscription,
   makeSearchSubscription,
+  migrateProductSubscriptionAliases,
   productSubscriptionId,
   removeSubscription as dropSubscription,
   type Subscription,
@@ -19,6 +21,7 @@ import type { AppState, Prefs, StoreGet, StoreSet } from './storeTypes';
 import {
   isSavedRate as savedRateExists,
   makeLegacySavedRateRef,
+  migrateSavedRateProductAliases,
   toggleSavedRateRefs,
 } from './savedRates';
 import {
@@ -31,6 +34,22 @@ function persistTrackedRates(value: AppState['trackedRates']): void {
   void queueTrackedRatesSecureSave(value).catch((error) => {
       debugLog.error('tracked-rates', `secure metadata save failed: ${String((error as Error)?.message ?? error)}`);
   });
+}
+
+/** Pure persisted-state migration used by the dormant v3 bridge coordinator. */
+export function migrateLegacyUserProductKeys(
+  savedRates: AppState['savedRates'],
+  subscriptions: AppState['subscriptions'],
+  aliases: LegacyProductAliasMap,
+) {
+  const migratedSavedRates = migrateSavedRateProductAliases(savedRates, aliases);
+  const migratedSubscriptions = migrateProductSubscriptionAliases(subscriptions, aliases);
+  return {
+    savedRates: migratedSavedRates,
+    favorites: [...new Set(migratedSavedRates.map((ref) => ref.productKey))],
+    subscriptions: migratedSubscriptions.subscriptions,
+    droppedExactSubscriptionIds: migratedSubscriptions.droppedExactSubscriptionIds,
+  };
 }
 
 function setPreferences(

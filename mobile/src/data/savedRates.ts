@@ -1,3 +1,4 @@
+import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, RateRow, SectionKey } from '../types';
 import { toFraction } from './format';
 
@@ -97,6 +98,41 @@ export function normalizeSavedRates(raw: unknown, legacyFavorites: unknown = [])
     }
   }
   return [...out.values()];
+}
+
+/**
+ * Move product-scoped v1 identities onto canonical v3 product UIDs. The v3
+ * contract does not carry a proof linking legacy rate indexes to canonical
+ * rate UIDs, so exact legacy saves deliberately downgrade to a product save
+ * instead of attaching the user's saved value to an unrelated tier.
+ */
+export function migrateSavedRateProductAliases(
+  refs: readonly SavedRateRef[],
+  aliases: LegacyProductAliasMap,
+): SavedRateRef[] {
+  const migrated = new Map<string, SavedRateRef>();
+  for (const ref of refs) {
+    const target = aliases.get(ref.productKey);
+    const next = target
+      ? {
+          ...ref,
+          id: savedRateId(target.productKey, null, 'product'),
+          scope: 'product' as const,
+          productKey: target.productKey,
+          rateIndex: null,
+          savedRate: null,
+        }
+      : ref;
+    if (next.scope === 'product') {
+      for (const [id, existing] of migrated) {
+        if (existing.productKey === next.productKey) migrated.delete(id);
+      }
+      if (!migrated.has(next.id)) migrated.set(next.id, next);
+    } else if (!migrated.has(savedRateId(next.productKey, null, 'product'))) {
+      migrated.set(next.id, next);
+    }
+  }
+  return [...migrated.values()];
 }
 
 export function isSavedRate(

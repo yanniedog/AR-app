@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
@@ -150,6 +151,42 @@ export function addSubscription(list: Subscription[], next: Subscription): Subsc
 
 export function removeSubscription(list: Subscription[], id: string): Subscription[] {
   return list.filter((s) => s.id !== id);
+}
+
+export interface ProductSubscriptionAliasMigration {
+  subscriptions: Subscription[];
+  /** Exact v1 rate indexes have no authenticated mapping to v3 rate UIDs. */
+  droppedExactSubscriptionIds: string[];
+}
+
+export function migrateProductSubscriptionAliases(
+  list: readonly Subscription[],
+  aliases: LegacyProductAliasMap,
+): ProductSubscriptionAliasMigration {
+  const subscriptions = new Map<string, Subscription>();
+  const droppedExactSubscriptionIds: string[] = [];
+  for (const subscription of list) {
+    if (subscription.kind !== 'product') {
+      subscriptions.set(subscription.id, subscription);
+      continue;
+    }
+    const target = aliases.get(subscription.productKey);
+    if (!target) {
+      subscriptions.set(subscription.id, subscription);
+      continue;
+    }
+    if (subscription.rateIndex !== null) {
+      droppedExactSubscriptionIds.push(subscription.id);
+      continue;
+    }
+    const migrated: ProductSubscription = {
+      ...subscription,
+      id: productSubscriptionId(target.productKey, null),
+      productKey: target.productKey,
+    };
+    subscriptions.set(migrated.id, migrated);
+  }
+  return { subscriptions: [...subscriptions.values()], droppedExactSubscriptionIds };
 }
 
 export function isProductSubscribed(

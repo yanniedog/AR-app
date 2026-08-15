@@ -37,6 +37,8 @@ export {
   canonicalFeeUid,
   canonicalProductUid,
   canonicalRateUid,
+  legacyProductAliasMap,
+  type LegacyProductAliasMap,
   validateCorePayloadV3,
 } from './canonicalCore';
 
@@ -219,6 +221,12 @@ export function validateGenerationPointerV3(value: unknown): GenerationPointerV3
   if (latestComplete.observation_state !== 'complete') reject('pointer.latest_complete must reference a complete observation');
   const coordinateOrder = compareCoordinate(latestObservation, latestComplete);
   if (coordinateOrder < 0) reject('pointer.latest_observation cannot predate latest_complete');
+  if (
+    latestObservation.observation_state === 'complete' &&
+    !sameCanonicalValue(latestObservation, latestComplete)
+  ) {
+    reject('pointer.latest_complete must equal a complete latest_observation');
+  }
   if (coordinateOrder === 0 && !sameCanonicalValue(latestObservation, latestComplete)) {
     reject('pointer equal-coordinate generation heads must be byte-equivalent');
   }
@@ -323,7 +331,7 @@ export function validateCoverageV2(value: unknown): CoverageV2 {
   return deepFreeze(coverage);
 }
 
-export function validateAssetDescriptorV3(value: unknown, generationId: string): AssetDescriptorV3 {
+export function validateAssetDescriptorV3(value: unknown, _generationId: string): AssetDescriptorV3 {
   const obj = record(value, 'manifest.capabilities.core');
   exactKeys(obj, [
     'schema_id',
@@ -362,7 +370,6 @@ export function validateAssetDescriptorV3(value: unknown, generationId: string):
       'manifest.capabilities.core.url',
       [
         `/yanniedog/AR-local/releases/download/app-payload-gen/${sha}.${encoding === 'gzip' ? 'json.gz' : 'json'}`,
-        `/yanniedog/AR-local/releases/download/app-payload-v3-candidate-${generationId}/${sha}.${encoding === 'gzip' ? 'json.gz' : 'json'}`,
       ],
     ),
     cohort: 'confirmed-consumer-products',

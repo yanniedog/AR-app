@@ -296,11 +296,7 @@ async function atomicWriteBundle(contents: string): Promise<void> {
 const bankSpreadContentCache = createBankSpreadContentCache(
   {
     async read(path) {
-      try {
-        return (await pathExists(path)) ? await readText(path) : null;
-      } catch {
-        return null;
-      }
+      return (await pathExists(path)) ? await readText(path) : null;
     },
     async write(path, value) {
       await ensureDir();
@@ -538,11 +534,7 @@ export const cache = {
 export const v3GenerationCache = createV3GenerationCache(
   {
     async read(path) {
-      try {
-        return (await pathExists(path)) ? await readText(path) : null;
-      } catch {
-        return null;
-      }
+      return (await pathExists(path)) ? await readText(path) : null;
     },
     async write(path, value) {
       await ensureDir();
