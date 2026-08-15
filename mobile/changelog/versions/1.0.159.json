@@ -1,0 +1,32 @@
+{
+  "version": "1.0.159",
+  "releaseTag": "app-arm-v1.0.159",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "Secure external links and APK download consent (#197)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Secure external links and APK download consent (#197)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.159"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.158"
+        }
+      ]
+    }
+  ]
+}
