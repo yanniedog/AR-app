@@ -1,5 +1,5 @@
 import type { CorePayload, Manifest } from '../src/types';
-import { sampleCore, sampleManifest } from '../src/data/sample';
+import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -83,6 +83,8 @@ function resetStore() {
     source: 'sample',
     manifest: remoteManifest,
     core: remoteCore,
+    coreIntegrity: sampleCoreIntegrity,
+    coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
     details: null,
     detailsLoading: false,
     error: null,
@@ -151,6 +153,61 @@ describe('store refresh lifecycle', () => {
     expect(state.payloadProgress).toBeNull();
     expect(state.offline).toBe(false);
     expect(state.refreshOutcome).toBe('success');
+  });
+
+  it('preserves failed-provider partial truth on unchanged live and cached cores', async () => {
+    const incompleteCore: CorePayload = {
+      ...remoteCore,
+      coverage: {
+        ...remoteCore.coverage,
+        counts: {
+          ...remoteCore.coverage?.counts,
+          providers_partial: 0,
+          providers_failed: 2,
+        },
+      },
+    };
+    const matchingMeta = {
+      manifest: remoteManifest,
+      source: 'remote' as const,
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: null,
+    };
+    mockReadMeta.mockResolvedValue(matchingMeta);
+    useStore.setState({
+      source: 'remote',
+      core: incompleteCore,
+      coreIntegrity: sampleCoreIntegrity,
+      coreAssetState: { status: 'partial', data: sampleCoreIntegrity, reason: 'existing' },
+    });
+
+    await useStore.getState().refresh({});
+    expect(useStore.getState().coreAssetState).toEqual({
+      status: 'partial',
+      data: sampleCoreIntegrity,
+      reason: '2 provider observation(s) failed.',
+    });
+    expect(mockReadBundle).not.toHaveBeenCalled();
+
+    useStore.setState({
+      core: null,
+      coreIntegrity: null,
+      coreAssetState: { status: 'loading', data: null },
+      manifest: null,
+    });
+    mockReadBundle.mockResolvedValue({
+      meta: matchingMeta,
+      core: incompleteCore,
+      integrity: sampleCoreIntegrity,
+    });
+    await useStore.getState().refresh({});
+    expect(mockReadBundle).toHaveBeenCalledTimes(1);
+    expect(useStore.getState().coreAssetState).toEqual({
+      status: 'partial',
+      data: sampleCoreIntegrity,
+      reason: '2 provider observation(s) failed.',
+    });
   });
 
   it('refreshes optional assets when a same-core manifest revises their hashes', async () => {

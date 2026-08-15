@@ -25,7 +25,10 @@ import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedMan
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
 import { savedRatesWithAlerts } from './subscriptions';
-import { liveAssetStateForProviderCoverage } from './assetState';
+import {
+  cachedAssetStateForProviderCoverage,
+  liveAssetStateForProviderCoverage,
+} from './assetState';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -380,9 +383,15 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               ...(bundle ? {
                 core: bundle.core,
                 coreIntegrity: bundle.integrity,
-                coreAssetState: { status: 'cached' as const, data: bundle.integrity },
+                coreAssetState: cachedAssetStateForProviderCoverage(
+                  bundle.integrity,
+                  bundle.core.coverage,
+                ),
               } : live.coreIntegrity ? {
-                coreAssetState: { status: 'live' as const, data: live.coreIntegrity },
+                coreAssetState: liveAssetStateForProviderCoverage(
+                  live.coreIntegrity,
+                  live.core?.coverage,
+                ),
               } : {}),
             });
             deferWarm = true;

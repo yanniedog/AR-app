@@ -76,6 +76,8 @@ export interface DownloadOpts {
   expectedEncoding?: 'gzip' | 'identity';
   /** Legacy v1 may use ARE1; v3 descriptors currently may not. */
   allowEncrypted?: boolean;
+  /** Receives a copy of the exact downloaded bytes after descriptor SHA verification. */
+  onVerifiedBytes?: (bytes: Uint8Array) => void;
   onProgress?: PayloadProgressHandler;
 }
 
@@ -256,6 +258,7 @@ export async function downloadInflate(
       throw new Error(`asset sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`);
     }
   }
+  opts.onVerifiedBytes?.(new Uint8Array(buf).slice());
   emit(opts.onProgress, {
     phase: 'verify',
     fileName,

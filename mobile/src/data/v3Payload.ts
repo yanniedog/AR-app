@@ -1,33 +1,30 @@
 import type { CorePayload } from '../types';
-import type {
-  AssetDescriptorV3,
-  GenerationHeadV3,
-  ValidatedGenerationV3,
-} from '../contracts/v3/types';
+import type { AssetDescriptorV3, GenerationHeadV3, ValidatedGenerationV3 } from '../contracts/v3/types';
 import {
   V3_ASSET_LIMITS,
   V3_MANIFEST_LIMIT_BYTES,
   V3_POINTER_LIMIT_BYTES,
   adaptCoreV3ToLegacy,
-  validateCorePayloadV3,
+  validateCorePayloadTextV3,
   validateGenerationManifestTextV3,
-  validateGenerationPointerV3,
-  validateOptionalAssetTextV3,
-  v3AssetCacheKey,
-  type OptionalAssetValidatorsV3,
+  validateGenerationPointerTextV3,
 } from '../contracts/v3/validators';
-import { parseJsonHeavy } from '../lib/yieldToUi';
+import { bytesToHex } from '../contracts/v3/contractPrimitives';
 import { downloadInflate, type DownloadOpts } from './payload';
 import type { V3GenerationCache } from './v3GenerationCache';
 import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import {
+  assetStateForV3Coverage,
+  liveAssetStateForProviderCoverage,
+  type AssetState,
+} from './assetState';
 
 /**
- * Deliberately dormant until AR-local publishes a reviewed bridge candidate.
- * There is no baked v3 URL and production store code does not enable this.
+ * Deliberately dormant until AR-local publishes and separately approves a v3
+ * bridge pointer. There is no baked v3 URL and production store code cannot
+ * enable this constant.
  */
 export const V3_PAYLOAD_BRIDGE_ENABLED = false as const;
-export const V3_OPTIONAL_EAGER_MAX_COUNT = 8;
-export const V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
 
 export type V3TextDownloader = (
   url: string,
@@ -35,22 +32,18 @@ export type V3TextDownloader = (
   opts: DownloadOpts,
 ) => Promise<string>;
 
-function descriptorOptions(asset: AssetDescriptorV3): DownloadOpts {
-  const limits = V3_ASSET_LIMITS[asset.capability];
+function descriptorOptions(asset: AssetDescriptorV3, onVerifiedBytes: (bytes: Uint8Array) => void): DownloadOpts {
   return {
     fileName: asset.capability,
     expectedBytes: asset.compressed_bytes,
-    maxCompressedBytes: limits.compressed,
-    maxInflatedBytes: limits.inflated,
+    maxCompressedBytes: V3_ASSET_LIMITS.core.compressed,
+    maxInflatedBytes: V3_ASSET_LIMITS.core.inflated,
     expectedInflatedBytes: asset.uncompressed_bytes,
     requireExactBytes: true,
     expectedEncoding: asset.encoding,
     allowEncrypted: false,
+    onVerifiedBytes,
   };
-}
-
-function descriptorMatchesBase(asset: AssetDescriptorV3, generationDigest: string): boolean {
-  return !asset.base_generation_digest || asset.base_generation_digest === generationDigest;
 }
 
 export async function loadValidatedV3Generation(
@@ -58,100 +51,70 @@ export async function loadValidatedV3Generation(
   opts: {
     head?: 'latest_complete' | 'latest_observation';
     download?: V3TextDownloader;
-    optionalValidators?: OptionalAssetValidatorsV3;
   } = {},
 ): Promise<ValidatedGenerationV3> {
   const download = opts.download ?? downloadInflate;
   const pointerText = await download(pointerUrl, undefined, {
-    fileName: 'manifest-v3.json',
+    fileName: 'generation-pointer-v3.json',
     maxCompressedBytes: V3_POINTER_LIMIT_BYTES,
     maxInflatedBytes: V3_POINTER_LIMIT_BYTES,
+    allowEncrypted: false,
   });
-  const pointer = validateGenerationPointerV3(await parseJsonHeavy<unknown>(pointerText));
+  const pointer = validateGenerationPointerTextV3(pointerText);
   const head: GenerationHeadV3 = pointer[opts.head ?? 'latest_complete'];
   const manifestText = await download(head.manifest_url, head.manifest_sha256, {
     fileName: 'generation-manifest-v3.json',
-    expectedBytes: head.manifest_bytes,
     maxCompressedBytes: V3_MANIFEST_LIMIT_BYTES,
     maxInflatedBytes: V3_MANIFEST_LIMIT_BYTES,
-    requireExactBytes: true,
+    allowEncrypted: false,
   });
   const manifest = validateGenerationManifestTextV3(manifestText, head);
-
-  const optionalAssets: Record<string, string> = {};
-  const optionalErrors: Record<string, string> = {};
-  let coreText: string | null = null;
-  let attemptedOptionalCount = 0;
-  let attemptedOptionalBytes = 0;
-
-  for (const asset of manifest.assets) {
-    const assetKey = v3AssetCacheKey(asset);
-    if (!descriptorMatchesBase(asset, manifest.generation_digest)) {
-      const message = `${asset.capability} base generation does not match ${manifest.generation_digest}`;
-      if (asset.required) throw new Error(message);
-      optionalErrors[assetKey] = message;
-      continue;
-    }
-    if (asset.capability !== 'core') {
-      const validator = opts.optionalValidators?.[asset.capability];
-      if (!validator) {
-        const message = `${asset.capability} has no registered capability validator`;
-        if (asset.required) throw new Error(message);
-        optionalErrors[assetKey] = message;
-        continue;
-      }
-      if (
-        attemptedOptionalCount >= V3_OPTIONAL_EAGER_MAX_COUNT ||
-        attemptedOptionalBytes + asset.uncompressed_bytes > V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES
-      ) {
-        const message = `${asset.capability} exceeds the eager optional-asset aggregate budget`;
-        if (asset.required) throw new Error(message);
-        optionalErrors[assetKey] = message;
-        continue;
-      }
-      attemptedOptionalCount += 1;
-      attemptedOptionalBytes += asset.uncompressed_bytes;
-    }
-    try {
-      const text = await download(asset.url, asset.sha256, descriptorOptions(asset));
-      if (asset.capability === 'core') coreText = text;
-      else {
-        const validator = opts.optionalValidators?.[asset.capability];
-        if (!validator) throw new Error(`${asset.capability} has no registered capability validator`);
-        validateOptionalAssetTextV3(text, asset, manifest, validator);
-        optionalAssets[assetKey] = text;
-      }
-    } catch (error) {
-      const message = String((error as Error)?.message ?? error);
-      if (asset.required) throw new Error(`${asset.capability} validation failed: ${message}`);
-      optionalErrors[assetKey] = message;
-    }
+  const descriptor = manifest.capabilities.core;
+  let coreAssetBytesHex: string | null = null;
+  const coreText = await download(descriptor.url, descriptor.sha256, descriptorOptions(
+    descriptor,
+    (bytes) => { coreAssetBytesHex = bytesToHex(bytes); },
+  ));
+  if (coreAssetBytesHex === null) {
+    throw new Error('v3 downloader did not return authenticated core asset bytes');
   }
-
-  if (!coreText) throw new Error('required v3 core asset is unavailable');
-  const core = validateCorePayloadV3(await parseJsonHeavy<unknown>(coreText), manifest);
-  return { head, manifest, manifestText, core, coreText, optionalAssets, optionalErrors };
+  const core = validateCorePayloadTextV3(coreText, manifest);
+  return { head, manifest, manifestText, core, coreText, coreAssetBytesHex };
 }
 
 export type DualReadResult =
-  | { contract: 'v3'; source: 'live' | 'cache'; core: CorePayload; integrity: CoreIntegrityContext; generation: ValidatedGenerationV3; warning: string | null }
-  | { contract: 'v1'; source: 'live'; core: CorePayload; integrity: CoreIntegrityContext; warning: string | null };
+  | {
+      contract: 'v3';
+      source: 'live' | 'cache';
+      core: CorePayload;
+      assetState: AssetState<CorePayload>;
+      integrity: CoreIntegrityContext;
+      generation: ValidatedGenerationV3;
+      warning: string | null;
+    }
+  | {
+      contract: 'v1';
+      source: 'live';
+      core: CorePayload;
+      assetState: AssetState<CorePayload>;
+      integrity: CoreIntegrityContext;
+      warning: string | null;
+    };
 
 function migratedV3Core(generation: ValidatedGenerationV3) {
   const core = adaptCoreV3ToLegacy(generation.core);
-  const coreDescriptor = generation.manifest.assets.find((asset) => asset.capability === 'core');
   return normalizeCoreWithIntegrity(core, {
     contract: 'v3',
     generationDigest: generation.manifest.generation_digest,
-    coreSha256: coreDescriptor?.sha256 ?? null,
+    coreSha256: generation.manifest.capabilities.core.sha256,
     normalizationVersion: generation.manifest.normalization_version,
   });
 }
 
 /**
  * Feature-gated migration coordinator. Any v3 failure is fail-closed: a valid
- * current v3 generation is retained, otherwise the caller's legacy v1 loader
- * runs. Neither path mutates the other contract's cache.
+ * current complete v3 generation is retained, otherwise the caller's legacy v1
+ * loader runs. Neither path mutates the other contract's cache.
  */
 export async function loadCoreDualRead(opts: {
   bridgeEnabled?: boolean;
@@ -171,18 +134,30 @@ export async function loadCoreDualRead(opts: {
         contract: 'v3',
         source: 'live',
         core: migrated.core,
+        assetState: assetStateForV3Coverage(
+          migrated.core,
+          installed.generation.manifest.coverage,
+          installed.generation.manifest.observation_state,
+          'live',
+        ),
         integrity: migrated.integrity,
         generation: installed.generation,
         warning: installed.persistenceError,
       };
     } catch (error) {
       const cached = await opts.v3Cache.readCurrent();
-      if (cached) {
+      if (cached?.manifest.observation_state === 'complete') {
         const migrated = migratedV3Core(cached);
         return {
           contract: 'v3',
           source: 'cache',
           core: migrated.core,
+          assetState: assetStateForV3Coverage(
+            migrated.core,
+            cached.manifest.coverage,
+            cached.manifest.observation_state,
+            'cache',
+          ),
           integrity: migrated.integrity,
           generation: cached,
           warning: String((error as Error)?.message ?? error),
@@ -195,6 +170,7 @@ export async function loadCoreDualRead(opts: {
     contract: 'v1',
     source: 'live',
     core: legacy.core,
+    assetState: liveAssetStateForProviderCoverage(legacy.core, legacy.core.coverage),
     integrity: legacy.integrity,
     warning: null,
   };

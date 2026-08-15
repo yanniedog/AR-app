@@ -48,3 +48,48 @@ export function liveAssetStateForProviderCoverage<T>(
   ].filter((reason): reason is string => reason !== null);
   return { status: 'partial', data, reason: `${reasons.join('; ')}.` };
 }
+
+export function cachedAssetStateForProviderCoverage<T>(
+  data: T,
+  coverage: Parameters<typeof liveAssetStateForProviderCoverage<T>>[1],
+): AssetState<T> {
+  const state = liveAssetStateForProviderCoverage(data, coverage);
+  return state.status === 'live' ? { status: 'cached', data } : state;
+}
+
+/** Preserve producer CoverageV2 truth without squeezing it into the v1 shape. */
+export function assetStateForV3Coverage<T>(
+  data: T,
+  coverage: {
+    reconciliation_status: 'reconciled' | 'partial' | 'failed';
+    providers_partial: number;
+    providers_failed: number;
+    providers_not_attempted: number;
+    corrupt_failure_records: number;
+    register_provenance_complete: boolean;
+  },
+  observationState: 'complete' | 'partial',
+  source: 'live' | 'cache',
+): AssetState<T> {
+  const incomplete =
+    observationState === 'partial' ||
+    coverage.reconciliation_status !== 'reconciled' ||
+    coverage.providers_partial > 0 ||
+    coverage.providers_failed > 0 ||
+    coverage.providers_not_attempted > 0 ||
+    coverage.corrupt_failure_records > 0 ||
+    !coverage.register_provenance_complete;
+  if (!incomplete) return { status: source === 'live' ? 'live' : 'cached', data };
+  const reasons = [
+    observationState === 'partial' ? 'The observation is partial' : null,
+    coverage.providers_partial > 0 ? `${coverage.providers_partial} provider observation(s) are partial` : null,
+    coverage.providers_failed > 0 ? `${coverage.providers_failed} provider observation(s) failed` : null,
+    coverage.providers_not_attempted > 0 ? `${coverage.providers_not_attempted} provider observation(s) were not attempted` : null,
+    coverage.corrupt_failure_records > 0 ? `${coverage.corrupt_failure_records} failure record(s) are corrupt` : null,
+    !coverage.register_provenance_complete ? 'Register provenance is incomplete' : null,
+    coverage.reconciliation_status !== 'reconciled'
+      ? `Coverage reconciliation is ${coverage.reconciliation_status}`
+      : null,
+  ].filter((reason): reason is string => reason !== null);
+  return { status: 'partial', data, reason: `${reasons.join('; ')}.` };
+}

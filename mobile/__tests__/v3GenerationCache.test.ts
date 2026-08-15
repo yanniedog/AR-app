@@ -1,490 +1,290 @@
-import { createHash } from 'node:crypto';
-
-import type {
-  CapabilityV3,
-  CorePayloadV3,
-  GenerationHeadV3,
-  GenerationManifestV3,
-  ValidatedGenerationV3,
-} from '../src/contracts/v3/types';
+import type { GenerationManifestV3 } from '../src/contracts/v3/types';
 import {
   createV3GenerationCache,
   type GenerationCacheStorage,
 } from '../src/data/v3GenerationCache';
+import {
+  LEDGER_A,
+  LEDGER_B,
+  buildGeneration,
+  makeProduct,
+} from '../testUtils/v3TestData';
 
-const DIGEST_A = 'a'.repeat(64);
-const DIGEST_B = 'b'.repeat(64);
-const DIGEST_C = 'c'.repeat(64);
-const MANIFEST_SHA = 'c'.repeat(64);
-
-function head(overrides: Partial<GenerationHeadV3> = {}): GenerationHeadV3 {
-  return {
-    generation_id: '2026-08-15T010000Z-a',
-    generation_digest: DIGEST_A,
-    run_date: '2026-08-15',
-    observation_state: 'complete',
-    manifest_url: 'https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-08-15/generation-manifest-v3.json',
-    manifest_sha256: MANIFEST_SHA,
-    manifest_bytes: 4096,
-    ...overrides,
-  };
-}
-
-function descriptor(
-  capability: CapabilityV3,
-  overrides: Partial<GenerationManifestV3['assets'][number]> = {},
-): GenerationManifestV3['assets'][number] {
-  return {
-    capability,
-    schema_id: capability === 'core'
-      ? 'https://australianrates.app/schemas/core-v3.json'
-      : `https://australianrates.app/schemas/${capability}-v3.json`,
-    media_type: 'application/json',
-    encoding: 'gzip',
-    compressed_bytes: 1024,
-    uncompressed_bytes: 4096,
-    sha256: 'd'.repeat(64),
-    url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-08-15/${capability}.json.gz`,
-    required: capability === 'core',
-    base_generation_digest: DIGEST_A,
-    ...overrides,
-  };
-}
-
-function manifest(overrides: Partial<GenerationManifestV3> = {}): GenerationManifestV3 {
-  return {
-    schema_id: 'https://australianrates.app/schemas/generation-manifest-v3.json',
-    schema_version: 3,
-    generation_id: '2026-08-15T010000Z-a',
-    generation_digest: DIGEST_A,
-    ledger_digest: overrides.generation_digest ?? DIGEST_A,
-    run_date: '2026-08-15',
-    ledger_state: 'finalized',
-    observation_state: 'complete',
-    normalization_version: 'canonical-v3.0.0',
-    prior_ledger_digest: null,
-    coverage: {
-      reconciliation_status: 'reconciled',
-      discovered_products: 1,
-      priced_products: 1,
-      consumer_eligible_products: 1,
-      eligible_rate_tiers: 3,
-      providers_registered: 1,
-      providers_attempted: 1,
-      providers_complete: 1,
-      providers_partial: 0,
-      providers_failed: 0,
-      exclusions_by_reason: {},
-    },
-    assets: [descriptor('core')],
-    ...overrides,
-  };
-}
-
-function emptyRibbon() {
-  return {
-    counts: { rates: 0, products: 0, providers: 0 },
-    range: { min: null, max: null, mean: null, median: null },
-    providers: [],
-  };
-}
-
-function core(
-  sourceManifest: GenerationManifestV3 = manifest(),
-  overrides: Partial<CorePayloadV3> = {},
-): CorePayloadV3 {
-  const mortgageRate: CorePayloadV3['sections']['Mortgage']['rates'][number] = {
-    provider: 'Example Bank',
-    provider_uid: 'holder/example-bank',
-    product_uid: 'holder/example-bank/product/home-1',
-    rate_uid: 'rate/home-1/variable-owner-occupier',
-    legacy_product_key: 'Example Bank|home-1',
-    product_name: 'Example Variable Home Loan',
-    classification: {
-      product_kind: 'mortgage',
-      consumer_section: 'Mortgage',
-      status: 'confirmed',
-      basis: 'CDR product category and lending-rate facets',
-      version: 'classifier-v3',
-    },
-    typed_rate: {
-      value: 0.061,
-      unit: 'fraction_per_annum',
-      metric: 'advertised',
-      evidence_status: 'published',
-    },
-    mortgage_rate_type: 'variable',
-    comparison_rate: {
-      value: 0.062,
-      unit: 'fraction_per_annum',
-      metric: 'comparison',
-      evidence_status: 'published',
-    },
-    evidence: {
-      availability: 'public',
-      broadly_applicable: true,
-      pricing_status: 'published',
-      fee_disclosure_status: 'unknown',
-      eligibility_disclosure_status: 'partial',
-      source_url: 'https://api.example-bank.test/cds-au/v1/banking/products/home-1',
-      observed_at: '2026-08-15T01:00:00Z',
-      effective_date: null,
-    },
-  };
-  return {
-    schema_id: 'https://australianrates.app/schemas/core-v3.json',
-    schema_version: 3,
-    generation_id: sourceManifest.generation_id,
-    generation_digest: sourceManifest.generation_digest,
-    run_date: sourceManifest.run_date,
-    sections: {
-      Mortgage: {
-        rates: [mortgageRate],
-        ribbon: {
-          counts: { rates: 1, products: 1, providers: 1 },
-          range: { min: 0.061, max: 0.061, mean: 0.061, median: 0.061 },
-          providers: [{
-            provider: 'Example Bank',
-            rates: 1,
-            products: 1,
-            min: 0.061,
-            max: 0.061,
-            mean: 0.061,
-            median: 0.061,
-          }],
-        },
-      },
-      Savings: { rates: [], ribbon: emptyRibbon() },
-      TD: { rates: [], ribbon: emptyRibbon() },
-    },
-    brands: { 'holder/example-bank': { short: 'Example', color: '#123456' } },
-    rba: [{ date: '2026-08-01', rate: 3.6 }],
-    ...overrides,
-  };
-}
-
-function candidate(sourceManifest: GenerationManifestV3 = manifest()): ValidatedGenerationV3 {
-  const manifestText = JSON.stringify(sourceManifest);
-  const sourceHead = head({
-    generation_id: sourceManifest.generation_id,
-    generation_digest: sourceManifest.generation_digest,
-    run_date: sourceManifest.run_date,
-    observation_state: sourceManifest.observation_state,
-    manifest_sha256: createHash('sha256').update(manifestText).digest('hex'),
-    manifest_bytes: Buffer.byteLength(manifestText, 'utf8'),
-  });
-  const sourceCore = core(sourceManifest);
-  return {
-    head: sourceHead,
-    manifest: sourceManifest,
-    manifestText,
-    core: sourceCore,
-    coreText: JSON.stringify(sourceCore),
-    optionalAssets: {},
-    optionalErrors: {},
-  };
-}
-
-const facetsValidator = (value: Readonly<Record<string, unknown>>) => {
-  if (!Array.isArray(value.filters)) throw new Error('facets.filters must be an array');
-};
-
-function facetsText(filters: unknown[] = []): string {
-  return JSON.stringify({
-    schema_id: descriptor('facets').schema_id,
-    schema_version: 3,
-    generation_digest: DIGEST_A,
-    filters,
-  });
-}
-
-function candidateWithFacets(
-  optionalAssets: ValidatedGenerationV3['optionalAssets'] = {},
-  optionalErrors: ValidatedGenerationV3['optionalErrors'] = {},
-): ValidatedGenerationV3 {
-  const sourceManifest = manifest({ assets: [descriptor('core'), descriptor('facets')] });
-  return { ...candidate(sourceManifest), optionalAssets, optionalErrors };
-}
-
-function cacheWithFacets(storage: GenerationCacheStorage) {
-  return createV3GenerationCache(storage, 'payload/v3', { facets: facetsValidator });
-}
+const LEDGER_C = 'c'.repeat(64);
 
 class MemoryStorage implements GenerationCacheStorage {
   readonly files = new Map<string, string>();
+  readonly removed: string[] = [];
   failWrites = false;
   failMoveTarget: string | null = null;
+  failRemoveTarget: string | null = null;
 
   async read(path: string) { return this.files.get(path) ?? null; }
   async write(path: string, value: string) {
     if (this.failWrites) throw new Error('disk full');
     this.files.set(path, value);
   }
-  async remove(path: string) { this.files.delete(path); }
+  async remove(path: string) {
+    if (this.failRemoveTarget === path) throw new Error('cleanup failed');
+    this.removed.push(path);
+    this.files.delete(path);
+  }
   async move(from: string, to: string) {
     if (this.failWrites) throw new Error('move failed');
     if (this.failMoveTarget === to) throw new Error('atomic replace failed');
     const value = this.files.get(from);
-    if (value == null) throw new Error('source missing');
+    if (value === undefined) throw new Error('source missing');
     this.files.set(to, value);
     this.files.delete(from);
   }
 }
 
-describe('content-addressed v3 cache', () => {
-  it('survives restart with current and previous immutable generations', async () => {
+function secondGeneration() {
+  return buildGeneration({
+    date: '2026-08-15',
+    priorLedgerDigest: LEDGER_A,
+    ledgerEventDigest: LEDGER_B,
+  });
+}
+
+function thirdGeneration() {
+  return buildGeneration({
+    date: '2026-08-16',
+    priorLedgerDigest: LEDGER_B,
+    ledgerEventDigest: LEDGER_C,
+  });
+}
+
+function generationRecordPath(digest: string): string {
+  return `payload/v3/generations/${digest}.json`;
+}
+
+describe('content-addressed v3 generation cache', () => {
+  test('survives restart with a verified current and previous window', async () => {
     const storage = new MemoryStorage();
-    const first = candidate();
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
+    const first = buildGeneration();
+    const second = secondGeneration();
     await createV3GenerationCache(storage).install(first);
-    await createV3GenerationCache(storage).install(candidate(secondManifest));
+    await createV3GenerationCache(storage).install(second);
 
     const restarted = createV3GenerationCache(storage);
-    expect((await restarted.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-    expect((await restarted.readPrevious())?.manifest.generation_digest).toBe(DIGEST_A);
+    expect((await restarted.readCurrent())?.manifest.generation_digest).toBe(second.manifest.generation_digest);
+    expect((await restarted.readPrevious())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
-  it('returns verified in-memory data on storage failure without replacing current', async () => {
+  test('returns verified in-memory data on storage failure without replacing current', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
     storage.failWrites = true;
-    const result = await cache.install(candidate(secondManifest));
+
+    const result = await cache.install(second);
 
     expect(result.persisted).toBe(false);
-    expect(result.generation.core.run_date).toBe('2026-08-16');
+    expect(result.generation.manifest.generation_digest).toBe(second.manifest.generation_digest);
     expect(result.persistenceError).toContain('disk full');
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_A);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
-  it('falls back to previous when the current content-addressed record is corrupt', async () => {
+  test('falls back to the previous verified generation when current is corrupt', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    await cache.install(candidate(secondManifest));
-    storage.files.set(`payload/v3/generations/${DIGEST_B}.json`, '{bad-json');
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    storage.files.set(generationRecordPath(second.manifest.generation_digest), '{bad-json');
 
-    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest).toBe(DIGEST_A);
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(first.manifest.generation_digest);
   });
 
-  it('serializes concurrent installs in call order', async () => {
+  test('serializes concurrent installs in call order', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
+    const first = buildGeneration();
+    const second = secondGeneration();
 
-    await Promise.all([cache.install(candidate()), cache.install(candidate(secondManifest))]);
+    await Promise.all([cache.install(first), cache.install(second)]);
 
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(DIGEST_A);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(second.manifest.generation_digest);
+    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
-  it('fills a previously unavailable optional capability without changing the immutable generation', async () => {
+  test.each([1, 2, 3, 4])('treats legacy envelope v%i as unavailable without deleting it and permits exact repair', async (version) => {
     const storage = new MemoryStorage();
-    const cache = cacheWithFacets(storage);
-    const unavailable = candidateWithFacets({}, { facets: 'optional download failed' });
-    const recovered = candidateWithFacets({ facets: facetsText() });
+    const generation = buildGeneration();
+    const cache = createV3GenerationCache(storage);
+    await cache.install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const legacy = JSON.parse(storage.files.get(path)!) as Record<string, unknown>;
+    legacy.schema_version = version;
+    const legacyText = JSON.stringify(legacy);
+    storage.files.set(path, legacyText);
 
-    expect((await cache.install(unavailable)).persisted).toBe(true);
-    const result = await cache.install(recovered);
+    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+    expect(storage.files.get(path)).toBe(legacyText);
+
+    expect((await cache.install(generation)).persisted).toBe(true);
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(generation.manifest.generation_digest);
+  });
+
+  test('re-verifies persisted gzip bytes against the authenticated descriptor on restart', async () => {
+    const storage = new MemoryStorage();
+    const generation = buildGeneration({ coreEncoding: 'gzip' });
+    const cache = createV3GenerationCache(storage);
+    await cache.install(generation);
+    expect((await createV3GenerationCache(storage).readCurrent())?.core).toEqual(generation.core);
+
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const record = JSON.parse(storage.files.get(path)!) as { core_asset_bytes_hex: string };
+    record.core_asset_bytes_hex = `${record.core_asset_bytes_hex[0] === '0' ? '1' : '0'}${record.core_asset_bytes_hex.slice(1)}`;
+    storage.files.set(path, JSON.stringify(record));
+
+    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+  });
+
+  test('rejects a locally rehashed expanded core because it must equal the authenticated asset bytes', async () => {
+    const storage = new MemoryStorage();
+    const generation = buildGeneration({ coreEncoding: 'gzip' });
+    const cache = createV3GenerationCache(storage);
+    await cache.install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const record = JSON.parse(storage.files.get(path)!) as { core_text: string };
+    record.core_text = record.core_text.replace('Example variable', 'Changed variable');
+    storage.files.set(path, JSON.stringify(record));
+
+    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+  });
+
+  test('binds persisted and candidate manifest objects to authenticated raw manifest bytes', async () => {
+    const storage = new MemoryStorage();
+    const generation = buildGeneration();
+    const cache = createV3GenerationCache(storage);
+    await cache.install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const record = JSON.parse(storage.files.get(path)!) as { manifest: GenerationManifestV3 };
+    record.manifest.normalization_version = 'locally-mutated-v3';
+    storage.files.set(path, JSON.stringify(record));
+    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+
+    await expect(cache.install({
+      ...generation,
+      manifest: { ...generation.manifest, normalization_version: 'network-mismatch-v3' },
+    })).rejects.toThrow(/does not match its authenticated manifest bytes/);
+  });
+
+  test('rejects rollback, equal-coordinate replacement, and disconnected lineage', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    await cache.install(second);
+
+    await expect(cache.install(first)).rejects.toThrow(/rollback generation/);
+    const sameCoordinate = buildGeneration({
+      date: '2026-08-15',
+      products: [makeProduct({ productId: 'different-product' })],
+      priorLedgerDigest: LEDGER_A,
+      ledgerEventDigest: LEDGER_C,
+    });
+    await expect(cache.install(sameCoordinate)).rejects.toThrow(/coordinate is immutable/);
+    const disconnected = buildGeneration({
+      date: '2026-08-16',
+      priorLedgerDigest: LEDGER_A,
+      ledgerEventDigest: LEDGER_C,
+    });
+    await expect(cache.install(disconnected)).rejects.toThrow(/not a direct ledger descendant/);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(second.manifest.generation_digest);
+  });
+
+  test('removes only the generation displaced from the current/previous window', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    const third = thirdGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    await cache.install(third);
+
+    expect(storage.files.has(generationRecordPath(first.manifest.generation_digest))).toBe(false);
+    expect(storage.files.has(generationRecordPath(second.manifest.generation_digest))).toBe(true);
+    expect(storage.files.has(generationRecordPath(third.manifest.generation_digest))).toBe(true);
+  });
+
+  test('reports cleanup failure without rolling back the committed new head', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    const third = thirdGeneration();
+    await cache.install(first);
+    await cache.install(second);
+    storage.failRemoveTarget = generationRecordPath(first.manifest.generation_digest);
+
+    const result = await cache.install(third);
 
     expect(result.persisted).toBe(true);
-    expect(result.generation.optionalAssets.facets).toBe(facetsText());
-    expect(result.generation.optionalErrors.facets).toBeUndefined();
-    const restarted = await cacheWithFacets(storage).readCurrent();
-    expect(restarted?.optionalAssets.facets).toBe(facetsText());
-    expect(restarted?.optionalErrors.facets).toBeUndefined();
+    expect(result.persistenceError).toContain('cache cleanup failed');
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(third.manifest.generation_digest);
   });
 
-  it('fails closed on unhashed or altered persisted content and repairs an exact current retry', async () => {
+  test('preserves the old head when atomic head replacement fails', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
-    const legacyRecord = JSON.parse(storage.files.get(recordPath)!) as Record<string, unknown>;
-    legacyRecord.schema_version = 2;
-    delete legacyRecord.manifest_text;
-    const legacyBytes = JSON.stringify(legacyRecord);
-    storage.files.set(recordPath, legacyBytes);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    storage.failMoveTarget = 'payload/v3/head.json';
 
-    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
-    expect(storage.files.get(recordPath)).toBe(legacyBytes);
-
-    await cache.install(candidate());
-    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest).toBe(DIGEST_A);
-
-    const altered = JSON.parse(storage.files.get(recordPath)!) as {
-      core_text: string;
-    };
-    const alteredCore = JSON.parse(altered.core_text) as CorePayloadV3;
-    alteredCore.sections.Mortgage.rates[0].product_name = 'Altered after persistence';
-    altered.core_text = JSON.stringify(alteredCore);
-    storage.files.set(recordPath, JSON.stringify(altered));
-    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
-  });
-
-  it('binds persisted and candidate manifest objects to authenticated raw bytes', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    await cache.install(candidate());
-    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
-    const record = JSON.parse(storage.files.get(recordPath)!) as {
-      manifest: GenerationManifestV3;
-      manifest_text: string;
-    };
-
-    record.manifest.normalization_version = 'locally-mutated-v3';
-    storage.files.set(recordPath, JSON.stringify(record));
-    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
-
-    await cache.install(candidate());
-    const authenticated = candidate();
-    const changedManifest = {
-      ...authenticated.manifest,
-      normalization_version: 'network-mismatch-v3',
-    };
-    await expect(cache.install({
-      ...authenticated,
-      manifest: changedManifest,
-    })).rejects.toThrow(/does not match its authenticated manifest bytes/);
-
-    await expect(cache.install({
-      ...authenticated,
-      manifest: changedManifest,
-      manifestText: JSON.stringify(changedManifest),
-    })).rejects.toThrow(/manifest (UTF-8 byte length|SHA-256) does not match pointer head/);
-  });
-
-  it('checks persisted optional hashes and reruns capability validation on restart', async () => {
-    const storage = new MemoryStorage();
-    const cache = cacheWithFacets(storage);
-    await cache.install(candidateWithFacets({ facets: facetsText() }));
-    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
-    const record = JSON.parse(storage.files.get(recordPath)!) as {
-      optional_assets: Record<string, string>;
-      content_hashes: { optional_assets: Record<string, string> };
-    };
-
-    record.optional_assets.facets = facetsText(['tampered']);
-    storage.files.set(recordPath, JSON.stringify(record));
-    expect(await cacheWithFacets(storage).readCurrent()).toBeNull();
-
-    record.content_hashes.optional_assets.facets = createHash('sha256')
-      .update(record.optional_assets.facets)
-      .digest('hex');
-    record.optional_assets.facets = JSON.stringify({
-      schema_id: descriptor('facets').schema_id,
-      schema_version: 3,
-      generation_digest: DIGEST_A,
-      filters: {},
-    });
-    record.content_hashes.optional_assets.facets = createHash('sha256')
-      .update(record.optional_assets.facets)
-      .digest('hex');
-    storage.files.set(recordPath, JSON.stringify(record));
-    expect(await cacheWithFacets(storage).readCurrent()).toBeNull();
-  });
-
-  it('rejects rollback and non-descendant generations without changing current', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    await cache.install(candidate());
-    await cache.install(candidate(secondManifest));
-
-    await expect(cache.install(candidate())).rejects.toThrow(/rollback generation/);
-    const unrelatedManifest = manifest({
-      generation_id: '2026-08-17T010000Z-c',
-      generation_digest: DIGEST_C,
-      run_date: '2026-08-17',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
-    });
-    await expect(cache.install(candidate(unrelatedManifest))).rejects.toThrow(/not a direct descendant/);
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
-  });
-
-  it('removes only the generation displaced from the current/previous window', async () => {
-    const storage = new MemoryStorage();
-    const cache = createV3GenerationCache(storage);
-    const secondManifest = manifest({
-      generation_id: '2026-08-16T010000Z-b',
-      generation_digest: DIGEST_B,
-      run_date: '2026-08-16',
-      prior_ledger_digest: DIGEST_A,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
-    });
-    const thirdManifest = manifest({
-      generation_id: '2026-08-17T010000Z-c',
-      generation_digest: DIGEST_C,
-      run_date: '2026-08-17',
-      prior_ledger_digest: DIGEST_B,
-      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
-    });
-    await cache.install(candidate());
-    await cache.install(candidate(secondManifest));
-    await cache.install(candidate(thirdManifest));
-
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_A}.json`)).toBe(false);
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_B}.json`)).toBe(true);
-    expect(storage.files.has(`payload/v3/generations/${DIGEST_C}.json`)).toBe(true);
-    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_C);
-    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(DIGEST_B);
-  });
-
-  it('atomically preserves the current same-generation record when replacement fails', async () => {
-    const storage = new MemoryStorage();
-    const cache = cacheWithFacets(storage);
-    await cache.install(candidateWithFacets({}, { facets: 'unavailable' }));
-    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
-    const original = storage.files.get(recordPath);
-    storage.failMoveTarget = recordPath;
-
-    const result = await cache.install({
-      ...candidateWithFacets(),
-      optionalAssets: { facets: facetsText() },
-    });
+    const result = await cache.install(second);
 
     expect(result.persisted).toBe(false);
     expect(result.persistenceError).toContain('atomic replace failed');
-    expect(storage.files.get(recordPath)).toBe(original);
-    expect((await cache.readCurrent())?.optionalAssets.facets).toBeUndefined();
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
-  it('rejects finalized partial observations from the settled generation cache', async () => {
+  test('preserves an existing same-generation record when its atomic rewrite fails', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const generation = buildGeneration();
+    await cache.install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    const original = storage.files.get(path);
+    storage.failMoveTarget = path;
+
+    const result = await cache.install(generation);
+
+    expect(result.persisted).toBe(false);
+    expect(storage.files.get(path)).toBe(original);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(generation.manifest.generation_digest);
+  });
+
+  test('rejects an invalid pre-existing non-current record as a content-address collision', async () => {
+    const storage = new MemoryStorage();
+    const generation = buildGeneration();
+    storage.files.set(generationRecordPath(generation.manifest.generation_digest), '{not-valid');
+
+    await expect(createV3GenerationCache(storage).install(generation)).rejects.toThrow(/content-addressed cache collision/);
+  });
+
+  test('rejects finalized partial observations from the settled generation cache', async () => {
     const cache = createV3GenerationCache(new MemoryStorage());
-    const partialManifest = manifest({ observation_state: 'partial' });
-    await expect(cache.install(candidate(partialManifest))).rejects.toThrow(/only complete observations/);
+    const product = makeProduct();
+    const partial = buildGeneration({
+      products: [product],
+      observationState: 'partial',
+      coverage: {
+        ...buildGeneration({ products: [product] }).manifest.coverage,
+        providers_complete: 0,
+        providers_partial: 1,
+      },
+    });
+    await expect(cache.install(partial)).rejects.toThrow(/only complete observations/);
   });
 });
