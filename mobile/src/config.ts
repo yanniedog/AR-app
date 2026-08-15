@@ -13,8 +13,6 @@ type Extra = {
   apkArmReleaseTag?: string;
   apkArmManifestUrl?: string;
   payloadDecKeyHex?: string;
-  googleWebClientId?: string;
-  keyServiceUrl?: string;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
@@ -65,26 +63,11 @@ export const APK_ARM_MANIFEST_URL =
 export const SUPPORTED_SCHEMA = 1;
 
 /**
- * AES-256-GCM key (64 hex chars) for encrypted payload assets — Phase B of
- * docs/SECURITY_CDR_PIPELINE.md. Interim static key (obfuscation, not security);
- * Phase D replaces this with auth-gated key issuance. Empty = decryption
- * unavailable; the Pi must keep AR_LOCAL_PAYLOAD_ENC off until this is set in a
- * shipped build. Override via app.json extra.payloadDecKeyHex.
+ * AES-256-GCM key (64 hex chars) retained only for compatibility with legacy
+ * encrypted payload assets. Empty means legacy decryption is unavailable.
+ * New payload contracts must not depend on an account or remote key service.
  */
 export const PAYLOAD_DEC_KEY_HEX: string = extra.payloadDecKeyHex ?? '';
-
-/**
- * Web client ID from the Firebase console (Authentication → Google provider)
- * enabling Google sign-in. Empty = the Account section shows sign-in as not
- * configured for this build.
- */
-export const GOOGLE_WEB_CLIENT_ID: string = extra.googleWebClientId ?? '';
-
-/**
- * issueContentKeys callable URL (Phase D key service, firebase/README.md).
- * Empty = keys come from SecureStore/bundled config only.
- */
-export const KEY_SERVICE_URL: string = extra.keyServiceUrl ?? '';
 
 /** Local-notification defaults. */
 export const RATE_MOVE_BPS_THRESHOLD = 5; // notify when a category best rate moves >= 5bps

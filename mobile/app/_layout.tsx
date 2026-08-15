@@ -53,8 +53,6 @@ import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { shouldShowAppTabBar } from '../src/lib/tabRouting';
-import { isSignInConfigured, subscribeAuth } from '../src/lib/auth';
-import { syncContentKeys } from '../src/lib/keyService';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
@@ -329,15 +327,6 @@ function RootNavigator() {
     });
     return () => sub.remove();
   }, [performanceAuditActive]);
-
-  // Refresh tier-issued content keys on app start / sign-in (Phase D; no-op
-  // until the key service URL is configured).
-  useEffect(() => {
-    if (!isSignInConfigured()) return;
-    return subscribeAuth((user) => {
-      if (user) void syncContentKeys();
-    });
-  }, []);
 
   useEffect(() => {
     if (!appReady) return;
