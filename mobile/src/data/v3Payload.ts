@@ -1,7 +1,6 @@
 import type { CorePayload } from '../types';
 import type {
   AssetDescriptorV3,
-  CapabilityV3,
   GenerationHeadV3,
   ValidatedGenerationV3,
 } from '../contracts/v3/types';

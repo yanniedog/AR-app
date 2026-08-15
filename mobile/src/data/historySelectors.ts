@@ -59,7 +59,7 @@ function accumulate(slot: AggSlot | undefined, rate: number): AggSlot {
 
 /** Build aggregate ribbon points from retained history rows (dashboard buildAggregateRibbon). */
 export function buildAggregateRibbonFromHistory(
-  historyRows: Array<RateRow & { run_date?: string }>,
+  historyRows: (RateRow & { run_date?: string })[],
   retainedRunDates: string[],
   window: HistoryWindow,
 ): { dates: string[]; points: BankHistoryPoint[]; allDates: string[] } {
