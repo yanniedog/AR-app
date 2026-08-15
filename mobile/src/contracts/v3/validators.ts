@@ -45,6 +45,20 @@ export const V3_ASSET_LIMITS: Readonly<Record<CapabilityV3, {
   economy: { compressed: 2 * MIB, inflated: 16 * MIB },
 };
 
+export const V3_CAPABILITY_SCHEMA_IDS: Readonly<Record<CapabilityV3, string>> = {
+  core: 'https://australianrates.app/schemas/core-v3.json',
+  facets: 'https://australianrates.app/schemas/facets-v3.json',
+  search: 'https://australianrates.app/schemas/search-v3.json',
+  'details-index': 'https://australianrates.app/schemas/details-index-v3.json',
+  'details-shard': 'https://australianrates.app/schemas/details-shard-v3.json',
+  'history-summary': 'https://australianrates.app/schemas/history-summary-v3.json',
+  'bank-response': 'https://australianrates.app/schemas/bank-response-v3.json',
+  spread: 'https://australianrates.app/schemas/spread-v3.json',
+  rba: 'https://australianrates.app/schemas/rba-v3.json',
+  'product-history': 'https://australianrates.app/schemas/product-history-v3.json',
+  economy: 'https://australianrates.app/schemas/economy-v3.json',
+};
+
 export class V3ContractError extends Error {
   constructor(message: string) {
     super(`v3 contract rejected: ${message}`);
@@ -195,9 +209,15 @@ function assetDescriptor(value: unknown, index: number): AssetDescriptorV3 {
   if (inflated < 1 || inflated > limits.inflated) reject(`${path}.uncompressed_bytes exceeds ${capability} cap`);
   if (obj.media_type !== 'application/json') reject(`${path}.media_type must be application/json`);
   if (typeof obj.required !== 'boolean') reject(`${path}.required must be boolean`);
+  const schemaId = httpsUrl(obj.schema_id, `${path}.schema_id`);
+  if (schemaId !== V3_CAPABILITY_SCHEMA_IDS[capability]) {
+    reject(`${path}.schema_id is unsupported for ${capability}`);
+  }
+  const cohort = obj.cohort === undefined ? undefined : text(obj.cohort, `${path}.cohort`, 160);
+  if (capability === 'details-shard' && !cohort) reject(`${path}.cohort is required for details-shard`);
   return {
     capability,
-    schema_id: httpsUrl(obj.schema_id, `${path}.schema_id`),
+    schema_id: schemaId,
     media_type: 'application/json',
     encoding: enumValue(obj.encoding, ['gzip', 'identity'], `${path}.encoding`),
     compressed_bytes: compressed,
@@ -205,7 +225,7 @@ function assetDescriptor(value: unknown, index: number): AssetDescriptorV3 {
     sha256: digest(obj.sha256, `${path}.sha256`),
     url: httpsUrl(obj.url, `${path}.url`),
     required: obj.required,
-    ...(obj.cohort === undefined ? {} : { cohort: text(obj.cohort, `${path}.cohort`, 160) }),
+    ...(cohort === undefined ? {} : { cohort }),
     ...(obj.base_generation_digest === undefined ? {} : { base_generation_digest: digest(obj.base_generation_digest, `${path}.base_generation_digest`) }),
   };
 }
@@ -215,11 +235,12 @@ export function validateGenerationManifestV3(
   expectedHead?: GenerationHeadV3,
 ): GenerationManifestV3 {
   const obj = record(value, 'manifest');
-  exactKeys(obj, ['schema_id', 'schema_version', 'generation_id', 'generation_digest', 'run_date', 'ledger_state', 'observation_state', 'normalization_version', 'prior_ledger_digest', 'coverage', 'assets'], [], 'manifest');
+  exactKeys(obj, ['schema_id', 'schema_version', 'generation_id', 'generation_digest', 'ledger_digest', 'run_date', 'ledger_state', 'observation_state', 'normalization_version', 'prior_ledger_digest', 'coverage', 'assets'], [], 'manifest');
   if (obj.schema_id !== 'https://australianrates.app/schemas/generation-manifest-v3.json') reject('manifest.schema_id is unsupported');
   if (obj.schema_version !== 3) reject('manifest.schema_version must be 3');
   const generationId = text(obj.generation_id, 'manifest.generation_id', 160);
   const generationDigest = digest(obj.generation_digest, 'manifest.generation_digest');
+  const ledgerDigest = digest(obj.ledger_digest, 'manifest.ledger_digest');
   const runDate = date(obj.run_date, 'manifest.run_date');
   const observationState = enumValue(obj.observation_state, ['complete', 'partial', 'failed'], 'manifest.observation_state');
   const ledgerState = enumValue(obj.ledger_state, ['provisional', 'finalized'], 'manifest.ledger_state');
@@ -234,7 +255,7 @@ export function validateGenerationManifestV3(
   const identities = new Set<string>();
   const singletonCapabilities = new Set<CapabilityV3>();
   for (const asset of assets) {
-    const identity = `${asset.capability}\u0000${asset.cohort ?? ''}\u0000${asset.url}`;
+    const identity = `${asset.capability}\u0000${asset.cohort ?? ''}`;
     if (identities.has(identity)) reject(`duplicate asset descriptor for ${asset.capability}`);
     identities.add(identity);
     if (asset.capability !== 'details-shard') {
@@ -252,6 +273,7 @@ export function validateGenerationManifestV3(
     schema_version: 3,
     generation_id: generationId,
     generation_digest: generationDigest,
+    ledger_digest: ledgerDigest,
     run_date: runDate,
     ledger_state: ledgerState,
     observation_state: observationState,
@@ -267,13 +289,22 @@ function finiteFraction(value: unknown, path: string): number {
   return value;
 }
 
+function legacyRateIndex(rateUid: string): number {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < rateUid.length; index += 1) {
+    hash ^= rateUid.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
 function validateCanonicalRate(value: unknown, section: SectionKey, index: number): CanonicalRateRowV3 {
   const path = `core.sections.${section}.rates[${index}]`;
   const obj = record(value, path);
   exactKeys(
     obj,
     ['provider', 'provider_uid', 'product_uid', 'rate_uid', 'product_name', 'classification', 'typed_rate', 'evidence'],
-    ['legacy_product_key', 'comparison_rate'],
+    ['legacy_product_key', 'comparison_rate', 'mortgage_rate_type', 'fixed_term_months'],
     path,
   );
   const classification = record(obj.classification, `${path}.classification`);
@@ -292,6 +323,19 @@ function validateCanonicalRate(value: unknown, section: SectionKey, index: numbe
   );
   if (section === 'Mortgage' && metric !== 'advertised') reject(`${path}.typed_rate must be advertised for a mortgage`);
   if (section !== 'Mortgage' && metric === 'advertised') reject(`${path}.typed_rate must declare deposit rate semantics`);
+  let mortgageRateType: CanonicalRateRowV3['mortgage_rate_type'];
+  let fixedTermMonths: number | undefined;
+  if (section === 'Mortgage') {
+    mortgageRateType = enumValue(obj.mortgage_rate_type, ['fixed', 'variable'] as const, `${path}.mortgage_rate_type`);
+    if (mortgageRateType === 'fixed') {
+      fixedTermMonths = integer(obj.fixed_term_months, `${path}.fixed_term_months`);
+      if (fixedTermMonths < 1 || fixedTermMonths > 360) reject(`${path}.fixed_term_months must be between 1 and 360`);
+    } else if (obj.fixed_term_months !== undefined) {
+      reject(`${path}.fixed_term_months is valid only for fixed mortgages`);
+    }
+  } else if (obj.mortgage_rate_type !== undefined || obj.fixed_term_months !== undefined) {
+    reject(`${path} deposit rows must not carry mortgage rate semantics`);
+  }
   let comparisonRate: CanonicalRateRowV3['comparison_rate'];
   if (obj.comparison_rate !== undefined) {
     if (section !== 'Mortgage') reject(`${path}.comparison_rate is valid only for mortgages`);
@@ -333,6 +377,8 @@ function validateCanonicalRate(value: unknown, section: SectionKey, index: numbe
       evidence_status: 'published',
     },
     ...(comparisonRate ? { comparison_rate: comparisonRate } : {}),
+    ...(mortgageRateType ? { mortgage_rate_type: mortgageRateType } : {}),
+    ...(fixedTermMonths === undefined ? {} : { fixed_term_months: fixedTermMonths }),
     evidence: {
       availability: enumValue(evidence.availability, ['public', 'restricted', 'unknown'], `${path}.evidence.availability`),
       broadly_applicable: evidence.broadly_applicable,
@@ -454,6 +500,8 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
   const sections = {} as CorePayloadV3['sections'];
   const rateIds = new Set<string>();
   const productOwners = new Map<string, string>();
+  const legacyProductOwners = new Map<string, string>();
+  const legacyIndexesByProduct = new Map<string, Map<number, string>>();
   const providerNamesByUid = new Map<string, string>();
   const providerUidsByName = new Map<string, string>();
   for (const section of SECTION_KEYS) {
@@ -467,6 +515,17 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
       const owner = productOwners.get(row.product_uid);
       if (owner && owner !== row.provider_uid) reject(`product_uid ${row.product_uid} changes provider identity`);
       productOwners.set(row.product_uid, row.provider_uid);
+      if (row.legacy_product_key) {
+        const legacyOwner = legacyProductOwners.get(row.legacy_product_key);
+        if (legacyOwner && legacyOwner !== row.product_uid) reject(`legacy_product_key ${row.legacy_product_key} is ambiguous`);
+        legacyProductOwners.set(row.legacy_product_key, row.product_uid);
+      }
+      const legacyIndex = legacyRateIndex(row.rate_uid);
+      const productIndexes = legacyIndexesByProduct.get(row.product_uid) ?? new Map<number, string>();
+      const existingRateUid = productIndexes.get(legacyIndex);
+      if (existingRateUid && existingRateUid !== row.rate_uid) reject(`rate_uid legacy index collision for product_uid ${row.product_uid}`);
+      productIndexes.set(legacyIndex, row.rate_uid);
+      legacyIndexesByProduct.set(row.product_uid, productIndexes);
       const providerName = providerNamesByUid.get(row.provider_uid);
       if (providerName && providerName !== row.provider) reject(`provider_uid ${row.provider_uid} has conflicting display names`);
       providerNamesByUid.set(row.provider_uid, row.provider);
@@ -542,8 +601,15 @@ export function adaptCoreV3ToLegacy(core: CorePayloadV3): CorePayload {
           product_key: row.legacy_product_key ?? row.product_uid,
           product_name: row.product_name,
           rate: String(row.typed_rate.value),
+          rate_index: legacyRateIndex(row.rate_uid),
           ...(row.comparison_rate ? { comparison_rate: String(row.comparison_rate.value) } : {}),
-          rate_type: row.typed_rate.metric.toUpperCase(),
+          rate_type: (row.mortgage_rate_type ?? row.typed_rate.metric).toUpperCase(),
+          ...(row.mortgage_rate_type
+            ? { ribbon_rate_structure: row.mortgage_rate_type.toUpperCase() }
+            : {}),
+          ...(row.fixed_term_months === undefined
+            ? {}
+            : { ribbon_fixed_term: row.fixed_term_months / 12, term_months: row.fixed_term_months }),
           account_class:
             row.evidence.availability === 'public' &&
             row.evidence.broadly_applicable &&

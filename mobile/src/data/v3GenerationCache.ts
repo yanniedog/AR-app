@@ -100,6 +100,7 @@ export function createV3GenerationCache(
   const headPath = `${root}/head.json`;
   const headTmpPath = `${headPath}.tmp`;
   const generationPath = (digest: string) => `${root}/generations/${safeDigest(digest)}.json`;
+  const generationTmpPath = (digest: string) => `${generationPath(digest)}.tmp`;
 
   async function readHead(): Promise<GenerationCacheHead | null> {
     return parseHead(await storage.read(headPath)) ?? parseHead(await storage.read(headTmpPath));
@@ -133,9 +134,24 @@ export function createV3GenerationCache(
     const savedAt = new Date().toISOString();
     const digest = manifest.generation_digest;
     const recordPath = generationPath(digest);
+    const recordTmpPath = generationTmpPath(digest);
     let installed = verified;
 
     try {
+      const previousHead = await readHead();
+      const current = previousHead ? await readDigest(previousHead.current) : null;
+      if (previousHead && !current) {
+        throw new V3ContractError('current cache generation is unavailable or invalid');
+      }
+      if (current && current.manifest.generation_digest !== digest) {
+        if (manifest.run_date < current.manifest.run_date) {
+          throw new V3ContractError(`rollback generation ${digest} predates current ${current.manifest.generation_digest}`);
+        }
+        if (manifest.prior_ledger_digest !== current.manifest.ledger_digest) {
+          throw new V3ContractError(`generation ${digest} is not a direct descendant of current ${current.manifest.generation_digest}`);
+        }
+      }
+
       const existing = await storage.read(recordPath);
       if (existing) {
         const parsed = parseCandidate(existing);
@@ -160,12 +176,13 @@ export function createV3GenerationCache(
         const optionalErrors = { ...parsed.optionalErrors, ...verified.optionalErrors };
         for (const key of Object.keys(optionalAssets)) delete optionalErrors[key];
         installed = { ...verified, optionalAssets, optionalErrors };
-        await storage.write(recordPath, serializeCandidate(installed, savedAt));
+        await storage.write(recordTmpPath, serializeCandidate(installed, savedAt));
+        await storage.move(recordTmpPath, recordPath);
       } else {
-        await storage.write(recordPath, serializeCandidate(installed, savedAt));
+        await storage.write(recordTmpPath, serializeCandidate(installed, savedAt));
+        await storage.move(recordTmpPath, recordPath);
       }
 
-      const previousHead = await readHead();
       const nextHead: GenerationCacheHead = {
         schema_version: 1,
         current: digest,
@@ -176,12 +193,27 @@ export function createV3GenerationCache(
       await storage.write(headTmpPath, JSON.stringify(nextHead));
       await storage.remove(headPath);
       await storage.move(headTmpPath, headPath);
+      let cleanupError: string | null = null;
+      const displaced = previousHead?.previous;
+      if (displaced && displaced !== nextHead.current && displaced !== nextHead.previous) {
+        try {
+          await storage.remove(generationPath(displaced));
+        } catch (error) {
+          cleanupError = `cache cleanup failed: ${String((error as Error)?.message ?? error)}`;
+        }
+      }
       return {
         generation: { ...installed, savedAt },
         persisted: true,
-        persistenceError: null,
+        persistenceError: cleanupError,
       };
     } catch (error) {
+      try {
+        await storage.remove(recordTmpPath);
+      } catch {
+        // Best-effort cleanup only; the committed record remains authoritative.
+      }
+      if (error instanceof V3ContractError) throw error;
       return {
         generation: { ...installed, savedAt },
         persisted: false,

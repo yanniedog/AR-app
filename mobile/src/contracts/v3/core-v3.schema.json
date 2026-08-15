@@ -81,6 +81,8 @@
             "evidence_status": { "const": "published" }
           }
         },
+        "mortgage_rate_type": { "enum": ["fixed", "variable"] },
+        "fixed_term_months": { "type": "integer", "minimum": 1, "maximum": 360 },
         "evidence": {
           "type": "object",
           "additionalProperties": false,
@@ -96,7 +98,43 @@
             "effective_date": { "type": ["string", "null"], "format": "date" }
           }
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "classification": {
+                "properties": { "product_kind": { "const": "mortgage" } },
+                "required": ["product_kind"]
+              }
+            },
+            "required": ["classification"]
+          },
+          "then": { "required": ["mortgage_rate_type"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["mortgage_rate_type"] },
+                { "required": ["fixed_term_months"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "mortgage_rate_type": { "const": "fixed" } },
+            "required": ["mortgage_rate_type"]
+          },
+          "then": { "required": ["fixed_term_months"] }
+        },
+        {
+          "if": {
+            "properties": { "mortgage_rate_type": { "const": "variable" } },
+            "required": ["mortgage_rate_type"]
+          },
+          "then": { "not": { "required": ["fixed_term_months"] } }
+        }
+      ]
     },
     "brand": {
       "type": "object",

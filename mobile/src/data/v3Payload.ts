@@ -1,7 +1,9 @@
 import type { CorePayload } from '../types';
 import type {
   AssetDescriptorV3,
+  CapabilityV3,
   GenerationHeadV3,
+  GenerationManifestV3,
   ValidatedGenerationV3,
 } from '../contracts/v3/types';
 import {
@@ -23,12 +25,20 @@ import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './section
  * There is no baked v3 URL and production store code does not enable this.
  */
 export const V3_PAYLOAD_BRIDGE_ENABLED = false as const;
+export const V3_OPTIONAL_EAGER_MAX_COUNT = 8;
+export const V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
 
 export type V3TextDownloader = (
   url: string,
   expectedSha: string | undefined,
   opts: DownloadOpts,
 ) => Promise<string>;
+
+export type OptionalAssetValidatorV3 = (
+  value: Readonly<Record<string, unknown>>,
+  descriptor: AssetDescriptorV3,
+  manifest: GenerationManifestV3,
+) => void;
 
 function parseJson(text: string, label: string): unknown {
   try {
@@ -62,15 +72,27 @@ function assetCacheKey(asset: AssetDescriptorV3): string {
   return asset.capability;
 }
 
-function validateOptionalJson(text: string, descriptor: AssetDescriptorV3): void {
+function validateOptionalJson(
+  text: string,
+  descriptor: AssetDescriptorV3,
+  manifest: GenerationManifestV3,
+  validator: OptionalAssetValidatorV3,
+): void {
   const parsed = parseJson(text, descriptor.capability);
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     throw new Error(`${descriptor.capability} must contain a JSON object`);
   }
-  const schemaId = (parsed as Record<string, unknown>).schema_id;
-  if (schemaId !== undefined && schemaId !== descriptor.schema_id) {
+  const obj = parsed as Record<string, unknown>;
+  if (obj.schema_id !== descriptor.schema_id) {
     throw new Error(`${descriptor.capability} schema_id does not match its descriptor`);
   }
+  if (obj.schema_version !== 3) {
+    throw new Error(`${descriptor.capability} schema_version must be 3`);
+  }
+  if (obj.generation_digest !== manifest.generation_digest) {
+    throw new Error(`${descriptor.capability} generation_digest does not match its manifest`);
+  }
+  validator(obj, descriptor, manifest);
 }
 
 export async function loadValidatedV3Generation(
@@ -78,6 +100,7 @@ export async function loadValidatedV3Generation(
   opts: {
     head?: 'latest_complete' | 'latest_observation';
     download?: V3TextDownloader;
+    optionalValidators?: Partial<Record<Exclude<CapabilityV3, 'core'>, OptionalAssetValidatorV3>>;
   } = {},
 ): Promise<ValidatedGenerationV3> {
   const download = opts.download ?? downloadInflate;
@@ -100,6 +123,8 @@ export async function loadValidatedV3Generation(
   const optionalAssets: Record<string, string> = {};
   const optionalErrors: Record<string, string> = {};
   let coreText: string | null = null;
+  let retainedOptionalCount = 0;
+  let retainedOptionalBytes = 0;
 
   for (const asset of manifest.assets) {
     const assetKey = assetCacheKey(asset);
@@ -109,12 +134,30 @@ export async function loadValidatedV3Generation(
       optionalErrors[assetKey] = message;
       continue;
     }
+    if (asset.capability !== 'core') {
+      const validator = opts.optionalValidators?.[asset.capability];
+      if (!validator) {
+        optionalErrors[assetKey] = `${asset.capability} has no registered capability validator`;
+        continue;
+      }
+      if (
+        retainedOptionalCount >= V3_OPTIONAL_EAGER_MAX_COUNT ||
+        retainedOptionalBytes + asset.uncompressed_bytes > V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES
+      ) {
+        optionalErrors[assetKey] = `${asset.capability} exceeds the eager optional-asset aggregate budget`;
+        continue;
+      }
+    }
     try {
       const text = await download(asset.url, asset.sha256, descriptorOptions(asset));
       if (asset.capability === 'core') coreText = text;
       else {
-        validateOptionalJson(text, asset);
+        const validator = opts.optionalValidators?.[asset.capability];
+        if (!validator) throw new Error(`${asset.capability} has no registered capability validator`);
+        validateOptionalJson(text, asset, manifest, validator);
         optionalAssets[assetKey] = text;
+        retainedOptionalCount += 1;
+        retainedOptionalBytes += asset.uncompressed_bytes;
       }
     } catch (error) {
       const message = String((error as Error)?.message ?? error);
@@ -157,6 +200,9 @@ export async function loadCoreDualRead(opts: {
   if (opts.bridgeEnabled === true && opts.loadV3) {
     try {
       const candidate = await opts.loadV3();
+      if (candidate.manifest.observation_state !== 'complete') {
+        throw new Error('partial v3 observations cannot replace the settled app core');
+      }
       const installed = await opts.v3Cache.install(candidate);
       const migrated = migratedV3Core(installed.generation);
       return {

@@ -23,6 +23,7 @@ import {
   type GenerationCacheStorage,
 } from '../src/data/v3GenerationCache';
 import {
+  V3_OPTIONAL_EAGER_MAX_COUNT,
   V3_PAYLOAD_BRIDGE_ENABLED,
   loadCoreDualRead,
   loadValidatedV3Generation,
@@ -31,6 +32,7 @@ import type { CorePayload } from '../src/types';
 
 const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
+const DIGEST_C = 'c'.repeat(64);
 const MANIFEST_SHA = 'c'.repeat(64);
 
 function head(overrides: Partial<GenerationHeadV3> = {}): GenerationHeadV3 {
@@ -73,6 +75,7 @@ function manifest(overrides: Partial<GenerationManifestV3> = {}): GenerationMani
     schema_version: 3,
     generation_id: '2026-08-15T010000Z-a',
     generation_digest: DIGEST_A,
+    ledger_digest: overrides.generation_digest ?? DIGEST_A,
     run_date: '2026-08-15',
     ledger_state: 'finalized',
     observation_state: 'complete',
@@ -128,6 +131,7 @@ function core(
       metric: 'advertised',
       evidence_status: 'published',
     },
+    mortgage_rate_type: 'variable',
     comparison_rate: {
       value: 0.062,
       unit: 'fraction_per_annum',
@@ -198,6 +202,7 @@ function candidate(sourceManifest: GenerationManifestV3 = manifest()): Validated
 class MemoryStorage implements GenerationCacheStorage {
   readonly files = new Map<string, string>();
   failWrites = false;
+  failMoveTarget: string | null = null;
 
   async read(path: string) { return this.files.get(path) ?? null; }
   async write(path: string, value: string) {
@@ -207,6 +212,7 @@ class MemoryStorage implements GenerationCacheStorage {
   async remove(path: string) { this.files.delete(path); }
   async move(from: string, to: string) {
     if (this.failWrites) throw new Error('move failed');
+    if (this.failMoveTarget === to) throw new Error('atomic replace failed');
     const value = this.files.get(from);
     if (value == null) throw new Error('source missing');
     this.files.set(to, value);
@@ -267,6 +273,47 @@ describe('vendored v3 contract', () => {
     expect(() => validateGenerationManifestV3(manifest(), head({ generation_digest: DIGEST_B }))).toThrow(/does not match pointer/);
     expect(() => validateGenerationManifestV3(manifest({ ledger_state: 'provisional' }), head())).toThrow(/only finalized/);
   });
+
+  it('preserves mortgage structure and stable rate-tier identity in the legacy adapter', () => {
+    const fixedCore = core();
+    fixedCore.sections.Mortgage.rates[0].mortgage_rate_type = 'fixed';
+    fixedCore.sections.Mortgage.rates[0].fixed_term_months = 24;
+    const sibling = {
+      ...fixedCore.sections.Mortgage.rates[0],
+      rate_uid: 'rate/home-1/fixed-owner-occupier-lvr-80',
+      typed_rate: { ...fixedCore.sections.Mortgage.rates[0].typed_rate, value: 0.062 },
+    };
+    fixedCore.sections.Mortgage.rates.push(sibling);
+    const first = adaptCoreV3ToLegacy(fixedCore).sections.Mortgage.rates;
+    fixedCore.sections.Mortgage.rates.reverse();
+    const reordered = adaptCoreV3ToLegacy(fixedCore).sections.Mortgage.rates;
+
+    expect(first[0].rate_type).toBe('FIXED');
+    expect(first[0].ribbon_fixed_term).toBe(2);
+    expect(first[0].term_months).toBe(24);
+    expect(first[0].rate_index).not.toBe(first[1].rate_index);
+    for (const row of first) {
+      expect(reordered.find((candidateRow) => candidateRow.rate === row.rate)?.rate_index).toBe(row.rate_index);
+    }
+
+    const missingStructure = core();
+    delete missingStructure.sections.Mortgage.rates[0].mortgage_rate_type;
+    expect(() => validateCorePayloadV3(missingStructure, manifest())).toThrow(/mortgage_rate_type/);
+  });
+
+  it('rejects duplicate details-shard cohorts even when URLs differ', () => {
+    expect(() => validateGenerationManifestV3(manifest({
+      assets: [
+        descriptor('core'),
+        descriptor('details-shard', { cohort: 'provider-a', sha256: 'e'.repeat(64) }),
+        descriptor('details-shard', {
+          cohort: 'provider-a',
+          sha256: 'f'.repeat(64),
+          url: 'https://github.com/yanniedog/AR-local/releases/download/example/other.json.gz',
+        }),
+      ],
+    }), head())).toThrow(/duplicate asset descriptor/);
+  });
 });
 
 describe('content-addressed v3 cache', () => {
@@ -296,6 +343,7 @@ describe('content-addressed v3 cache', () => {
       generation_id: '2026-08-16T010000Z-b',
       generation_digest: DIGEST_B,
       run_date: '2026-08-16',
+      prior_ledger_digest: DIGEST_A,
       assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
     });
     storage.failWrites = true;
@@ -315,6 +363,7 @@ describe('content-addressed v3 cache', () => {
       generation_id: '2026-08-16T010000Z-b',
       generation_digest: DIGEST_B,
       run_date: '2026-08-16',
+      prior_ledger_digest: DIGEST_A,
       assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
     });
     await cache.install(candidate(secondManifest));
@@ -362,6 +411,78 @@ describe('content-addressed v3 cache', () => {
     expect(restarted?.optionalAssets.facets).toBe('{"schema_id":"facets-v3"}');
     expect(restarted?.optionalErrors.facets).toBeUndefined();
   });
+
+  it('rejects rollback and non-descendant generations without changing current', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const secondManifest = manifest({
+      generation_id: '2026-08-16T010000Z-b',
+      generation_digest: DIGEST_B,
+      run_date: '2026-08-16',
+      prior_ledger_digest: DIGEST_A,
+      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
+    });
+    await cache.install(candidate());
+    await cache.install(candidate(secondManifest));
+
+    await expect(cache.install(candidate())).rejects.toThrow(/rollback generation/);
+    const unrelatedManifest = manifest({
+      generation_id: '2026-08-17T010000Z-c',
+      generation_digest: DIGEST_C,
+      run_date: '2026-08-17',
+      prior_ledger_digest: DIGEST_A,
+      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
+    });
+    await expect(cache.install(candidate(unrelatedManifest))).rejects.toThrow(/not a direct descendant/);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_B);
+  });
+
+  it('removes only the generation displaced from the current/previous window', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const secondManifest = manifest({
+      generation_id: '2026-08-16T010000Z-b',
+      generation_digest: DIGEST_B,
+      run_date: '2026-08-16',
+      prior_ledger_digest: DIGEST_A,
+      assets: [descriptor('core', { base_generation_digest: DIGEST_B })],
+    });
+    const thirdManifest = manifest({
+      generation_id: '2026-08-17T010000Z-c',
+      generation_digest: DIGEST_C,
+      run_date: '2026-08-17',
+      prior_ledger_digest: DIGEST_B,
+      assets: [descriptor('core', { base_generation_digest: DIGEST_C })],
+    });
+    await cache.install(candidate());
+    await cache.install(candidate(secondManifest));
+    await cache.install(candidate(thirdManifest));
+
+    expect(storage.files.has(`payload/v3/generations/${DIGEST_A}.json`)).toBe(false);
+    expect(storage.files.has(`payload/v3/generations/${DIGEST_B}.json`)).toBe(true);
+    expect(storage.files.has(`payload/v3/generations/${DIGEST_C}.json`)).toBe(true);
+    expect((await cache.readCurrent())?.manifest.generation_digest).toBe(DIGEST_C);
+    expect((await cache.readPrevious())?.manifest.generation_digest).toBe(DIGEST_B);
+  });
+
+  it('atomically preserves the current same-generation record when replacement fails', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    await cache.install({ ...candidate(), optionalErrors: { facets: 'unavailable' } });
+    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
+    const original = storage.files.get(recordPath);
+    storage.failMoveTarget = recordPath;
+
+    const result = await cache.install({
+      ...candidate(),
+      optionalAssets: { facets: '{"schema_id":"facets-v3"}' },
+    });
+
+    expect(result.persisted).toBe(false);
+    expect(result.persistenceError).toContain('atomic replace failed');
+    expect(storage.files.get(recordPath)).toBe(original);
+    expect((await cache.readCurrent())?.optionalAssets.facets).toBeUndefined();
+  });
 });
 
 describe('dormant dual read', () => {
@@ -397,6 +518,23 @@ describe('dormant dual read', () => {
     expect(loadV1).not.toHaveBeenCalled();
   });
 
+  it('treats a content-addressed collision as a v3 failure and retains cached bytes', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    await cache.install({ ...candidate(), optionalAssets: { facets: 'known-good' } });
+    const result = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => ({ ...candidate(), optionalAssets: { facets: 'conflicting' } }),
+      loadV1: async () => adaptCoreV3ToLegacy(core()),
+      v3Cache: cache,
+    });
+
+    expect(result.contract).toBe('v3');
+    expect(result.source).toBe('cache');
+    expect(result.warning).toContain('optional asset collision');
+    if (result.contract === 'v3') expect(result.generation.optionalAssets.facets).toBe('known-good');
+  });
+
   it('falls back to v1 without replacing cache when no valid v3 exists', async () => {
     const storage = new MemoryStorage();
     const legacy = adaptCoreV3ToLegacy(core());
@@ -408,6 +546,21 @@ describe('dormant dual read', () => {
     });
     expect(result.contract).toBe('v1');
     expect(result.core).toBe(legacy);
+    expect(storage.files.size).toBe(0);
+  });
+
+  it('does not promote a partial observation into the settled app core', async () => {
+    const storage = new MemoryStorage();
+    const partialManifest = manifest({ observation_state: 'partial' });
+    const legacy = adaptCoreV3ToLegacy(core());
+    const result = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => candidate(partialManifest),
+      loadV1: async () => legacy,
+      v3Cache: createV3GenerationCache(storage),
+    });
+
+    expect(result.contract).toBe('v1');
     expect(storage.files.size).toBe(0);
   });
 
@@ -438,11 +591,18 @@ describe('dormant dual read', () => {
       ['https://bridge.test/manifest-v3.json', JSON.stringify(pointer)],
       [sourceHead.manifest_url, JSON.stringify(sourceManifest)],
       [descriptor('core').url, JSON.stringify(sourceCore)],
-      [shardA.url, JSON.stringify({ schema_id: shardA.schema_id, products: {} })],
-      [shardB.url, JSON.stringify({ schema_id: shardB.schema_id, products: {} })],
+      [shardA.url, JSON.stringify({ schema_id: shardA.schema_id, schema_version: 3, generation_digest: DIGEST_A, products: {} })],
+      [shardB.url, JSON.stringify({ schema_id: shardB.schema_id, schema_version: 3, generation_digest: DIGEST_A, products: {} })],
     ]);
     const downloaded: string[] = [];
     const result = await loadValidatedV3Generation('https://bridge.test/manifest-v3.json', {
+      optionalValidators: {
+        'details-shard': (value) => {
+          if (!value.products || typeof value.products !== 'object') throw new Error('details shard products are invalid');
+        },
+        facets: () => undefined,
+        search: () => undefined,
+      },
       download: async (url) => {
         downloaded.push(url);
         if (url === facets.url) throw new Error('optional hash mismatch');
@@ -460,5 +620,97 @@ describe('dormant dual read', () => {
       'details-shard:provider-b',
     ]);
     expect(downloaded).not.toContain(search.url);
+  });
+
+  it('requires the locked envelope and capability validator for every optional asset', async () => {
+    const facets = descriptor('facets');
+    const sourceManifest = manifest({ assets: [descriptor('core'), facets] });
+    const sourceHead = head();
+    const pointer: GenerationPointerV3 = {
+      schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
+      schema_version: 3,
+      generated_at: '2026-08-15T01:05:00Z',
+      latest_observation: sourceHead,
+      latest_complete: sourceHead,
+    };
+    const baseResponses = new Map<string, string>([
+      ['https://bridge.test/manifest-v3.json', JSON.stringify(pointer)],
+      [sourceHead.manifest_url, JSON.stringify(sourceManifest)],
+      [descriptor('core').url, JSON.stringify(core(sourceManifest))],
+    ]);
+    const run = (optionalText: string, withValidator = true) => loadValidatedV3Generation(
+      'https://bridge.test/manifest-v3.json',
+      {
+        ...(withValidator ? {
+          optionalValidators: {
+            facets: (value: Readonly<Record<string, unknown>>) => {
+              if (!Array.isArray(value.filters)) throw new Error('facets.filters must be an array');
+            },
+          },
+        } : {}),
+        download: async (url) => {
+          if (url === facets.url) return optionalText;
+          const value = baseResponses.get(url);
+          if (value == null) throw new Error(`unexpected download ${url}`);
+          return value;
+        },
+      },
+    );
+
+    const missingEnvelope = await run(JSON.stringify({ filters: [] }));
+    expect(missingEnvelope.optionalErrors.facets).toContain('schema_id');
+    const invalidShape = await run(JSON.stringify({
+      schema_id: facets.schema_id,
+      schema_version: 3,
+      generation_digest: DIGEST_A,
+      filters: {},
+    }));
+    expect(invalidShape.optionalErrors.facets).toContain('facets.filters');
+    const unregistered = await run(JSON.stringify({
+      schema_id: facets.schema_id,
+      schema_version: 3,
+      generation_digest: DIGEST_A,
+      filters: [],
+    }), false);
+    expect(unregistered.optionalErrors.facets).toContain('no registered capability validator');
+  });
+
+  it('bounds the aggregate number of eagerly retained optional assets', async () => {
+    const shards = Array.from({ length: V3_OPTIONAL_EAGER_MAX_COUNT + 1 }, (_, index) => descriptor('details-shard', {
+      cohort: `provider-${index}`,
+      sha256: index.toString(16).padStart(64, '0'),
+      url: `https://github.com/yanniedog/AR-local/releases/download/example/details-${index}.json.gz`,
+    }));
+    const sourceManifest = manifest({ assets: [descriptor('core'), ...shards] });
+    const sourceHead = head();
+    const pointer: GenerationPointerV3 = {
+      schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
+      schema_version: 3,
+      generated_at: '2026-08-15T01:05:00Z',
+      latest_observation: sourceHead,
+      latest_complete: sourceHead,
+    };
+    const optionalDownloads: string[] = [];
+    const result = await loadValidatedV3Generation('https://bridge.test/manifest-v3.json', {
+      optionalValidators: { 'details-shard': () => undefined },
+      download: async (url) => {
+        if (url === 'https://bridge.test/manifest-v3.json') return JSON.stringify(pointer);
+        if (url === sourceHead.manifest_url) return JSON.stringify(sourceManifest);
+        if (url === descriptor('core').url) return JSON.stringify(core(sourceManifest));
+        const shard = shards.find((candidateShard) => candidateShard.url === url);
+        if (!shard) throw new Error(`unexpected download ${url}`);
+        optionalDownloads.push(url);
+        return JSON.stringify({
+          schema_id: shard.schema_id,
+          schema_version: 3,
+          generation_digest: DIGEST_A,
+          products: {},
+        });
+      },
+    });
+
+    expect(Object.keys(result.optionalAssets)).toHaveLength(V3_OPTIONAL_EAGER_MAX_COUNT);
+    expect(optionalDownloads).toHaveLength(V3_OPTIONAL_EAGER_MAX_COUNT);
+    expect(result.optionalErrors[`details-shard:provider-${V3_OPTIONAL_EAGER_MAX_COUNT}`]).toContain('aggregate budget');
   });
 });

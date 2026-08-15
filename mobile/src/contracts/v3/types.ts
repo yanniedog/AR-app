@@ -69,6 +69,7 @@ export interface GenerationManifestV3 {
   schema_version: 3;
   generation_id: string;
   generation_digest: string;
+  ledger_digest: string;
   run_date: string;
   ledger_state: LedgerStateV3;
   observation_state: ObservationStateV3;
@@ -104,6 +105,10 @@ export interface CanonicalRateRowV3 {
     metric: 'comparison';
     evidence_status: 'published';
   };
+  /** Required for mortgages; deposit rows must not carry mortgage semantics. */
+  mortgage_rate_type?: 'fixed' | 'variable';
+  /** Required only for fixed mortgages so legacy projections retain their horizon. */
+  fixed_term_months?: number;
   evidence: {
     availability: 'public' | 'restricted' | 'unknown';
     broadly_applicable: boolean;
