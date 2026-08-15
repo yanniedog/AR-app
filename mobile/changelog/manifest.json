@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-13T16:05:15.686Z",
+  "generated_at": "2026-08-15T00:35:59.261Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -757,6 +757,14 @@
         "Overhaul rate comparison, scenarios and RBA experience (#188)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.150"
+    },
+    {
+      "version": "1.0.152",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "feat(mobile): preserve mortgage offset impact (#190)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.152"
     }
   ]
 }

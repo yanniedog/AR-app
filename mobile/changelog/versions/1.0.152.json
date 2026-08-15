@@ -1,0 +1,32 @@
+{
+  "version": "1.0.152",
+  "releaseTag": "app-arm-v1.0.152",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "feat(mobile): preserve mortgage offset impact (#190)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "feat(mobile): preserve mortgage offset impact (#190)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.152"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.151"
+        }
+      ]
+    }
+  ]
+}
