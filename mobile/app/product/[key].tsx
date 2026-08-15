@@ -35,7 +35,6 @@ import {
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { ensurePermissions } from '../../src/data/notifications';
-import { buildNegotiationBrief, buildRateReceipt } from '../../src/data/rateReceipt';
 import { useStore } from '../../src/data/store';
 import { isSavedRate } from '../../src/data/savedRates';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
@@ -59,14 +58,6 @@ import {
 import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
-
-function money(value: number): string {
-  return value.toLocaleString('en-AU', {
-    style: 'currency',
-    currency: 'AUD',
-    maximumFractionDigits: 0,
-  });
-}
 
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -169,21 +160,6 @@ export default function ProductDetail() {
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
-  const personalBrief = useMemo(() => {
-    if (!row || !found || !core) return null;
-    const receipt = buildRateReceipt({
-      row,
-      section: found.section,
-      evidenceDate: core.run_date,
-      detail,
-    });
-    return buildNegotiationBrief({
-      receipt,
-      scenario,
-      sectionRows: core.sections[found.section].rates ?? [],
-      detailsProducts,
-    });
-  }, [core, detail, detailsProducts, found, row, scenario]);
   const staySwitchProjection = useMemo(() => {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     const currentRef = scenario.currentProducts.mortgage;
@@ -552,30 +528,12 @@ export default function ProductDetail() {
               } as never)}
             />
           </View>
-        ) : personalBrief?.illustration ? (
-          <Card
-            style={{
-              marginBottom: 16,
-              borderLeftWidth: 3,
-              borderLeftColor: theme.colors.success,
-            }}
-          >
-            <AppText variant="small" color="textMuted">What this rate could mean</AppText>
-            <AppText variant="h2" style={{ color: theme.colors.success, marginTop: 3 }}>
-              {money(personalBrief.illustration.periodDifference)} {personalBrief.illustration.periodLabel}
-            </AppText>
-            {personalBrief.illustration.monthlyDifference != null ? (
-              <AppText variant="body" weight="700">
-                about {money(personalBrief.illustration.monthlyDifference)} per month
-              </AppText>
-            ) : null}
-            <AppText variant="tiny" color="textMuted" style={{ marginTop: 6, lineHeight: 16 }}>
-              Compared with your entered {personalBrief.illustration.currentRate} rate. Illustrative; fees not included.
-            </AppText>
-          </Card>
         ) : (
           <Card variant="outlined" style={{ marginBottom: 16, gap: 10 }}>
-            <AppText variant="body" weight="700">See what this rate means for your amount</AppText>
+            <AppText variant="body" weight="700">Compare this observed rate with your scenario</AppText>
+            <AppText variant="tiny" color="textMuted">
+              Full projections keep assumptions, unknown fees and unavailable results visible.
+            </AppText>
             <Button
               title="Add my rate"
               variant="secondary"
