@@ -1,0 +1,119 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://australianrates.app/schemas/core-v3.json",
+  "title": "AustralianRates lean visible-rate core v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_id", "schema_version", "generation_id", "generation_digest", "run_date", "sections", "brands", "rba"],
+  "properties": {
+    "schema_id": { "const": "https://australianrates.app/schemas/core-v3.json" },
+    "schema_version": { "const": 3 },
+    "generation_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "run_date": { "type": "string", "format": "date" },
+    "sections": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["Mortgage", "Savings", "TD"],
+      "properties": {
+        "Mortgage": { "$ref": "#/$defs/section" },
+        "Savings": { "$ref": "#/$defs/section" },
+        "TD": { "$ref": "#/$defs/section" }
+      }
+    },
+    "brands": { "type": "object", "additionalProperties": { "$ref": "#/$defs/brand" } },
+    "rba": { "type": "array", "items": { "$ref": "#/$defs/rba" } },
+    "rba_holds": { "type": "array", "items": { "type": "string", "format": "date" } },
+    "coverage": { "type": "object" }
+  },
+  "$defs": {
+    "section": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rates", "ribbon"],
+      "properties": {
+        "rates": { "type": "array", "items": { "$ref": "#/$defs/rate" } },
+        "ribbon": { "type": "object" }
+      }
+    },
+    "rate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "provider_uid", "product_uid", "rate_uid", "product_name", "classification", "typed_rate", "evidence"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "provider_uid": { "type": "string", "minLength": 1 },
+        "product_uid": { "type": "string", "minLength": 1 },
+        "rate_uid": { "type": "string", "minLength": 1 },
+        "product_name": { "type": "string", "minLength": 1 },
+        "legacy_product_key": { "type": "string", "minLength": 1 },
+        "classification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["product_kind", "consumer_section", "status", "basis", "version"],
+          "properties": {
+            "product_kind": { "enum": ["mortgage", "savings", "term_deposit"] },
+            "consumer_section": { "enum": ["Mortgage", "Savings", "TD"] },
+            "status": { "const": "confirmed" },
+            "basis": { "type": "string", "minLength": 1 },
+            "version": { "type": "string", "minLength": 1 }
+          }
+        },
+        "typed_rate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit", "metric", "evidence_status"],
+          "properties": {
+            "value": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+            "unit": { "const": "fraction_per_annum" },
+            "metric": { "enum": ["advertised", "base", "conditional", "introductory", "reversion"] },
+            "evidence_status": { "const": "published" }
+          }
+        },
+        "comparison_rate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "unit", "metric", "evidence_status"],
+          "properties": {
+            "value": { "type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 1 },
+            "unit": { "const": "fraction_per_annum" },
+            "metric": { "const": "comparison" },
+            "evidence_status": { "const": "published" }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["availability", "broadly_applicable", "pricing_status", "fee_disclosure_status", "eligibility_disclosure_status", "source_url", "observed_at", "effective_date"],
+          "properties": {
+            "availability": { "enum": ["public", "restricted", "unknown"] },
+            "broadly_applicable": { "type": "boolean" },
+            "pricing_status": { "enum": ["published", "partial", "unknown"] },
+            "fee_disclosure_status": { "enum": ["complete", "partial", "unknown"] },
+            "eligibility_disclosure_status": { "enum": ["complete", "partial", "unknown"] },
+            "source_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+            "observed_at": { "type": "string", "format": "date-time" },
+            "effective_date": { "type": ["string", "null"], "format": "date" }
+          }
+        }
+      }
+    },
+    "brand": {
+      "type": "object",
+      "required": ["short", "color"],
+      "properties": {
+        "short": { "type": "string", "minLength": 1 },
+        "color": { "type": "string", "minLength": 1 }
+      }
+    },
+    "rba": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "rate"],
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "rate": { "type": "number" }
+      }
+    }
+  }
+}

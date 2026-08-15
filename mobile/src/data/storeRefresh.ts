@@ -376,7 +376,13 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
-              ...(bundle ? { core: bundle.core } : {}),
+              ...(bundle ? {
+                core: bundle.core,
+                coreIntegrity: bundle.integrity,
+                coreAssetState: { status: 'cached' as const, data: bundle.integrity },
+              } : live.coreIntegrity ? {
+                coreAssetState: { status: 'live' as const, data: live.coreIntegrity },
+              } : {}),
             });
             deferWarm = true;
             set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
@@ -399,7 +405,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             if (!get().details) set({ details: cachedDetails });
           }
         }
-        const { text, core } = await downloadCore(
+        const { text, core, integrity } = await downloadCore(
           remote.files.core.url,
           remote.files.core.sha256,
           {
@@ -454,6 +460,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         }
         set({
           core,
+          coreIntegrity: integrity,
+          coreAssetState: core.coverage?.counts?.providers_partial
+            ? {
+                status: 'partial',
+                data: integrity,
+                reason: `${core.coverage.counts.providers_partial} provider observation(s) are partial.`,
+              }
+            : { status: 'live', data: integrity },
           manifest: remote,
           source: 'remote',
           status: 'ready',

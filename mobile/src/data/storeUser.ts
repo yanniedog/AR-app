@@ -247,6 +247,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       clearSuitabilityIndex();
       set({
         core: null,
+        coreIntegrity: null,
+        coreAssetState: {
+          status: 'unavailable',
+          data: null,
+          reason: 'The local cache was cleared.',
+        },
         details: null,
         searchIndex: null,
         historyBanks: null,

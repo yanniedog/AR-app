@@ -12,7 +12,8 @@ import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
-import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { createV3GenerationCache } from './v3GenerationCache';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -60,6 +61,7 @@ export interface CacheMeta {
 export interface CoreBundle {
   meta: CacheMeta;
   core: CorePayload;
+  integrity: CoreIntegrityContext;
 }
 
 async function ensureDir(): Promise<void> {
@@ -172,6 +174,15 @@ async function writeText(path: string, value: string): Promise<void> {
   await FileSystem.writeAsStringAsync(path, value);
 }
 
+async function ensureParentDirectory(path: string): Promise<void> {
+  if (IS_WEB) return;
+  const separator = path.lastIndexOf('/');
+  if (separator < 0) return;
+  const parent = path.slice(0, separator + 1);
+  const info = await FileSystem.getInfoAsync(parent);
+  if (!info.exists) await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
+}
+
 async function deletePath(path: string): Promise<void> {
   if (IS_WEB) {
     await webDelete(path);
@@ -258,11 +269,14 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
-    const core = normalizeCoreSectionIntegrity(b.core);
+    const normalized = normalizeCoreWithIntegrity(b.core, {
+      coreSha256: b.meta.coreSha,
+      generationDigest: b.meta.coreSha,
+    });
     if (sidecar && sidecar.coreSha === b.meta.coreSha) {
-      return { meta: sidecar, core };
+      return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
-    return { ...b, core };
+    return { ...b, core: normalized.core, integrity: normalized.integrity };
   },
 
   async readMeta(): Promise<CacheMeta | null> {
@@ -452,3 +466,29 @@ export const cache = {
     await deletePath(DIR);
   },
 };
+
+/** Dormant v3 content-addressed cache; no production network path writes it. */
+export const v3GenerationCache = createV3GenerationCache(
+  {
+    async read(path) {
+      try {
+        return (await pathExists(path)) ? await readText(path) : null;
+      } catch {
+        return null;
+      }
+    },
+    async write(path, value) {
+      await ensureDir();
+      await ensureParentDirectory(path);
+      await writeText(path, value);
+    },
+    async remove(path) {
+      await deletePath(path);
+    },
+    async move(from, to) {
+      await ensureParentDirectory(to);
+      await movePath(from, to);
+    },
+  },
+  `${DIR}v3`,
+);

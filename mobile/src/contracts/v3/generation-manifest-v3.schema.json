@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://australianrates.app/schemas/generation-manifest-v3.json",
+  "title": "AustralianRates immutable generation manifest v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_id", "schema_version", "generation_id", "generation_digest", "run_date", "ledger_state", "observation_state", "normalization_version", "prior_ledger_digest", "coverage", "assets"],
+  "properties": {
+    "schema_id": { "const": "https://australianrates.app/schemas/generation-manifest-v3.json" },
+    "schema_version": { "const": 3 },
+    "generation_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "run_date": { "type": "string", "format": "date" },
+    "ledger_state": { "enum": ["provisional", "finalized"] },
+    "observation_state": { "enum": ["complete", "partial", "failed"] },
+    "normalization_version": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "prior_ledger_digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reconciliation_status", "discovered_products", "priced_products", "consumer_eligible_products", "eligible_rate_tiers", "providers_registered", "providers_attempted", "providers_complete", "providers_partial", "providers_failed", "exclusions_by_reason"],
+      "properties": {
+        "reconciliation_status": { "enum": ["reconciled", "unreconciled"] },
+        "discovered_products": { "type": "integer", "minimum": 0 },
+        "priced_products": { "type": "integer", "minimum": 0 },
+        "consumer_eligible_products": { "type": "integer", "minimum": 0 },
+        "eligible_rate_tiers": { "type": "integer", "minimum": 0 },
+        "providers_registered": { "type": "integer", "minimum": 0 },
+        "providers_attempted": { "type": "integer", "minimum": 0 },
+        "providers_complete": { "type": "integer", "minimum": 0 },
+        "providers_partial": { "type": "integer", "minimum": 0 },
+        "providers_failed": { "type": "integer", "minimum": 0 },
+        "exclusions_by_reason": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["capability", "schema_id", "media_type", "encoding", "compressed_bytes", "uncompressed_bytes", "sha256", "url", "required"],
+        "properties": {
+          "capability": { "enum": ["core", "facets", "search", "details-index", "details-shard", "history-summary", "bank-response", "spread", "rba", "product-history", "economy"] },
+          "schema_id": { "type": "string", "format": "uri" },
+          "media_type": { "const": "application/json" },
+          "encoding": { "enum": ["gzip", "identity"] },
+          "compressed_bytes": { "type": "integer", "minimum": 1 },
+          "uncompressed_bytes": { "type": "integer", "minimum": 1 },
+          "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "required": { "type": "boolean" },
+          "cohort": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "base_generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" }
+        }
+      }
+    }
+  }
+}

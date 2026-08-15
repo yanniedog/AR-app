@@ -33,4 +33,13 @@ describe('cooperative payload inflate', () => {
     await expect(gunzipCooperatively(compressed, 1_024)).resolves.toEqual(original);
     expect(yieldToUi).not.toHaveBeenCalled();
   });
+
+  it('stops streaming inflate at the declared output ceiling', async () => {
+    const original = new TextEncoder().encode('x'.repeat(64 * 1024));
+    const compressed = gzipSync(original);
+
+    await expect(gunzipCooperatively(compressed, 128, 1024)).rejects.toThrow(
+      'inflated asset exceeds 1024 byte limit',
+    );
+  });
 });

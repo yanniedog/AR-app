@@ -44,6 +44,8 @@ import {
   integrateRbaCalendarIntoCore,
   refreshRbaCalendarFromOfficial,
 } from './rbaOfficialLive';
+import { replaceAssetData } from './assetState';
+import { rebindCoreIntegrity } from './sectionIntegrity';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -603,8 +605,15 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           live.manifest?.files.core.sha256 !== manifest.files.core.sha256
         ) return;
         const nextCore = live.core ? integrateRbaCalendarIntoCore(live.core, reconciled) : live.core;
+        const nextIntegrity = nextCore && live.coreIntegrity
+          ? rebindCoreIntegrity(live.coreIntegrity, nextCore)
+          : live.coreIntegrity;
         set({
           core: nextCore,
+          coreIntegrity: nextIntegrity,
+          ...(nextIntegrity
+            ? { coreAssetState: replaceAssetData(live.coreAssetState, nextIntegrity) }
+            : {}),
           rbaCalendar: reconciled,
           rbaCalendarSha: asset.sha256,
           rbaCalendarError: null,

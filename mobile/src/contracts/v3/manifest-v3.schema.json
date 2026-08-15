@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://australianrates.app/schemas/manifest-v3.json",
+  "title": "AustralianRates generation pointer v3",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_id", "schema_version", "generated_at", "latest_observation", "latest_complete"],
+  "properties": {
+    "schema_id": { "const": "https://australianrates.app/schemas/manifest-v3.json" },
+    "schema_version": { "const": 3 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "latest_observation": { "$ref": "#/$defs/head" },
+    "latest_complete": { "$ref": "#/$defs/head" }
+  },
+  "$defs": {
+    "head": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["generation_id", "generation_digest", "run_date", "observation_state", "manifest_url", "manifest_sha256", "manifest_bytes"],
+      "properties": {
+        "generation_id": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "generation_digest": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "run_date": { "type": "string", "format": "date" },
+        "observation_state": { "enum": ["complete", "partial", "failed"] },
+        "manifest_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "manifest_sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+        "manifest_bytes": { "type": "integer", "minimum": 1, "maximum": 65536 }
+      }
+    }
+  }
+}

@@ -1,14 +1,36 @@
 import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, SectionKey } from '../types';
 
-const bankHistoryQuarantine = new WeakMap<CorePayload, ReadonlySet<string>>();
+export interface CoreIntegrityContext {
+  schemaVersion: 1;
+  /** The exact normalized object consumed by selectors and aggregates. */
+  core: CorePayload;
+  contract: 'v1' | 'v3';
+  runDate: string;
+  generationDigest: string | null;
+  coreSha256: string | null;
+  normalizationVersion: string;
+  quarantines: {
+    bankHistoryPairs: ReadonlySet<string>;
+    rowsByReason: Readonly<Record<string, number>>;
+  };
+}
+
+export interface CoreIntegrityProvenance {
+  contract?: CoreIntegrityContext['contract'];
+  generationDigest?: string | null;
+  coreSha256?: string | null;
+  normalizationVersion?: string;
+}
 
 export function bankHistoryPairKey(provider: string, section: SectionKey): string {
   return `${section}\u0000${provider}`;
 }
 
 /** Provider/section aggregates that cannot be separated safely after download. */
-export function quarantinedBankHistoryPairs(core: CorePayload): ReadonlySet<string> {
-  return bankHistoryQuarantine.get(core) ?? new Set<string>();
+export function quarantinedBankHistoryPairs(
+  integrity: CoreIntegrityContext | null | undefined,
+): ReadonlySet<string> {
+  return integrity?.quarantines.bankHistoryPairs ?? new Set<string>();
 }
 
 /**
@@ -93,30 +115,71 @@ export function rebuildSectionRibbon(rows: readonly RateRow[]): Ribbon {
  * Returns the original object when no correction is needed. This keeps the hot
  * path cheap and makes repeated normalization idempotent by reference.
  */
-export function normalizeCoreSectionIntegrity(core: CorePayload): CorePayload {
+export function normalizeCoreWithIntegrity(
+  core: CorePayload,
+  provenance: CoreIntegrityProvenance = {},
+): { core: CorePayload; integrity: CoreIntegrityContext } {
   const savings = core?.sections?.Savings;
-  if (!savings || !Array.isArray(savings.rates)) return core;
+  const contaminated = savings && Array.isArray(savings.rates)
+    ? savings.rates.filter(isExplicitTermDepositProduct)
+    : [];
+  const rates = savings && Array.isArray(savings.rates)
+    ? savings.rates.filter((row) => !isExplicitTermDepositProduct(row))
+    : null;
 
-  const rates = savings.rates.filter((row) => !isExplicitTermDepositProduct(row));
-  if (rates.length === savings.rates.length) return core;
-
-  const quarantinedPairs = new Set(
-    savings.rates
-      .filter(isExplicitTermDepositProduct)
+  const quarantinedPairs = new Set<string>(
+    contaminated
       .map((row) => bankHistoryPairKey(row.provider, 'Savings')),
   );
 
-  const normalized: CorePayload = {
-    ...core,
-    sections: {
-      ...core.sections,
-      Savings: {
-        ...savings,
-        rates,
-        ribbon: rebuildSectionRibbon(rates),
-      },
+  const normalized: CorePayload = savings && rates && rates.length !== savings.rates.length
+    ? {
+        ...core,
+        sections: {
+          ...core.sections,
+          Savings: {
+            ...savings,
+            rates,
+            ribbon: rebuildSectionRibbon(rates),
+          },
+        },
+      }
+    : core;
+  const integrity: CoreIntegrityContext = {
+    schemaVersion: 1,
+    core: normalized,
+    contract: provenance.contract ?? 'v1',
+    runDate: normalized.run_date,
+    generationDigest: provenance.generationDigest ?? null,
+    coreSha256: provenance.coreSha256 ?? null,
+    normalizationVersion: provenance.normalizationVersion ?? 'app-section-integrity-v1',
+    quarantines: {
+      bankHistoryPairs: quarantinedPairs,
+      rowsByReason: Object.freeze({
+        explicit_term_deposit_in_savings: contaminated.length,
+      }),
     },
   };
-  bankHistoryQuarantine.set(normalized, quarantinedPairs);
-  return normalized;
+  return { core: normalized, integrity };
+}
+
+/**
+ * Legacy adapter retained for fixtures and callers that only need normalized
+ * rows. Trust-sensitive consumers must use `normalizeCoreWithIntegrity` and
+ * carry its context explicitly.
+ */
+export function normalizeCoreSectionIntegrity(core: CorePayload): CorePayload {
+  return normalizeCoreWithIntegrity(core).core;
+}
+
+/** Preserve trust evidence when a non-catalogue field creates a new core object. */
+export function rebindCoreIntegrity(
+  integrity: CoreIntegrityContext,
+  core: CorePayload,
+): CoreIntegrityContext {
+  return {
+    ...integrity,
+    core,
+    runDate: core.run_date,
+  };
 }

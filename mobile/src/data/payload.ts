@@ -11,7 +11,7 @@ import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
 import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
-import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
@@ -35,13 +35,17 @@ const INFLATE_CHUNK_BYTES = 64 * 1024;
 export async function gunzipCooperatively(
   bytes: Uint8Array,
   chunkBytes: number = INFLATE_CHUNK_BYTES,
+  maxOutputBytes: number = Number.POSITIVE_INFINITY,
 ): Promise<Uint8Array> {
   const safeChunkBytes = Math.max(1, Math.floor(chunkBytes));
   const outputs: Uint8Array[] = [];
   let outputBytes = 0;
   const stream = new Gunzip((chunk) => {
-    outputs.push(chunk);
     outputBytes += chunk.length;
+    if (outputBytes > maxOutputBytes) {
+      throw new Error(`inflated asset exceeds ${maxOutputBytes} byte limit`);
+    }
+    outputs.push(chunk);
   });
   for (let offset = 0; offset < bytes.length; offset += safeChunkBytes) {
     const end = Math.min(bytes.length, offset + safeChunkBytes);
@@ -60,6 +64,18 @@ export async function gunzipCooperatively(
 export interface DownloadOpts {
   fileName?: string;
   expectedBytes?: number;
+  /** Hard ceiling for bytes received before hash verification. */
+  maxCompressedBytes?: number;
+  /** Hard ceiling enforced while inflating, not after allocation. */
+  maxInflatedBytes?: number;
+  /** Immutable descriptor's exact expanded byte count, when declared. */
+  expectedInflatedBytes?: number;
+  /** V3 immutable descriptors require exact compressed and inflated sizes. */
+  requireExactBytes?: boolean;
+  /** Optional immutable contract encoding assertion. */
+  expectedEncoding?: 'gzip' | 'identity';
+  /** Legacy v1 may use ARE1; v3 descriptors currently may not. */
+  allowEncrypted?: boolean;
   onProgress?: PayloadProgressHandler;
 }
 
@@ -103,6 +119,11 @@ async function downloadBytes(
     xhr.responseType = 'arraybuffer';
     xhr.ontimeout = () => reject(new Error('network timeout'));
     xhr.onprogress = (event) => {
+      if (opts.maxCompressedBytes != null && event.loaded > opts.maxCompressedBytes) {
+        xhr.abort();
+        reject(new Error(`compressed asset exceeds ${opts.maxCompressedBytes} byte limit`));
+        return;
+      }
       const now = Date.now();
       const totalBytes = event.lengthComputable
         ? event.total
@@ -125,6 +146,14 @@ async function downloadBytes(
         const buf = xhr.response as ArrayBuffer;
         if (!buf) {
           reject(new Error('empty response'));
+          return;
+        }
+        if (opts.maxCompressedBytes != null && buf.byteLength > opts.maxCompressedBytes) {
+          reject(new Error(`compressed asset exceeds ${opts.maxCompressedBytes} byte limit`));
+          return;
+        }
+        if (opts.requireExactBytes && opts.expectedBytes != null && buf.byteLength !== opts.expectedBytes) {
+          reject(new Error(`compressed asset size mismatch (expected ${opts.expectedBytes}, got ${buf.byteLength})`));
           return;
         }
         emit(opts.onProgress, {
@@ -252,12 +281,25 @@ export async function downloadInflate(
   // Encrypted assets (ARE1 magic) are decrypted to the gzip layer first; the
   // sha256 above was computed over the ciphertext, matching the manifest.
   if (isEncryptedAsset(bytes)) {
+    if (opts.allowEncrypted === false) throw new Error('encrypted asset is not allowed by this contract');
     bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
   }
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.
   const looksGzipped = bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+  if (opts.expectedEncoding === 'gzip' && !looksGzipped) {
+    throw new Error('asset encoding mismatch (expected gzip)');
+  }
+  if (opts.expectedEncoding === 'identity' && looksGzipped) {
+    throw new Error('asset encoding mismatch (expected identity)');
+  }
   if (!looksGzipped) {
+    if (opts.maxInflatedBytes != null && bytes.length > opts.maxInflatedBytes) {
+      throw new Error(`inflated asset exceeds ${opts.maxInflatedBytes} byte limit`);
+    }
+    if (opts.requireExactBytes && opts.expectedInflatedBytes != null && bytes.length !== opts.expectedInflatedBytes) {
+      throw new Error(`inflated asset size mismatch (expected ${opts.expectedInflatedBytes}, got ${bytes.length})`);
+    }
     emit(opts.onProgress, {
       phase: 'inflate',
       fileName,
@@ -268,9 +310,12 @@ export async function downloadInflate(
     });
     return strFromU8(bytes);
   }
-  const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES
-    ? await gunzipCooperatively(bytes)
+  const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES || opts.maxInflatedBytes != null
+    ? await gunzipCooperatively(bytes, INFLATE_CHUNK_BYTES, opts.maxInflatedBytes)
     : gunzipSync(bytes);
+  if (opts.requireExactBytes && opts.expectedInflatedBytes != null && inflated.length !== opts.expectedInflatedBytes) {
+    throw new Error(`inflated asset size mismatch (expected ${opts.expectedInflatedBytes}, got ${inflated.length})`);
+  }
   emit(opts.onProgress, {
     phase: 'inflate',
     fileName,
@@ -285,6 +330,7 @@ export async function downloadInflate(
 export interface CoreResult {
   text: string;
   core: CorePayload;
+  integrity: CoreIntegrityContext;
 }
 
 export async function downloadCore(
@@ -303,7 +349,10 @@ export async function downloadCore(
     startedAt: parseStarted,
     phaseComplete: false,
   });
-  const core = normalizeCoreSectionIntegrity(await parseJsonHeavy<CorePayload>(text));
+  const normalized = normalizeCoreWithIntegrity(
+    await parseJsonHeavy<CorePayload>(text),
+    { coreSha256: expectedSha ?? null },
+  );
   // Leave parse incomplete until the caller finishes cache install — otherwise
   // the bar hits 100% while writeBundle is still flushing multi-MB JSON.
   emit(opts.onProgress, {
@@ -314,7 +363,7 @@ export async function downloadCore(
     startedAt: Date.now(),
     phaseComplete: false,
   });
-  return { text, core };
+  return { text, core: normalized.core, integrity: normalized.integrity };
 }
 
 export interface DetailsResult {

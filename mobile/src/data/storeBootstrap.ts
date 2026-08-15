@@ -11,6 +11,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import {
   sampleCore,
+  sampleCoreIntegrity,
   sampleFallbackIsUsable,
   sampleManifestIsUsable,
   sampleManifest,
@@ -50,7 +51,11 @@ export function createBootstrapActions(
     async bootstrap(opts: { skipRefresh?: boolean } = {}) {
       if (get().status === 'ready' || get().status === 'loading') return;
       debugLog.info('store', 'bootstrap');
-      set({ status: 'loading', error: null });
+      set({
+        status: 'loading',
+        error: null,
+        coreAssetState: { status: 'loading', data: get().coreIntegrity },
+      });
 
       try {
         await getStore().persist?.rehydrate?.();
@@ -125,6 +130,10 @@ export function createBootstrapActions(
           }
           set({
             core: bundle.core,
+            coreIntegrity: bundle.integrity,
+            coreAssetState: bundle.meta.source === 'sample'
+              ? { status: 'sample', data: bundle.integrity }
+              : { status: 'cached', data: bundle.integrity },
             manifest: bundle.meta.manifest,
             source: bundle.meta.source,
             status: 'ready',
@@ -147,6 +156,8 @@ export function createBootstrapActions(
           await installSampleSeed();
           set({
             core: sampleCore,
+            coreIntegrity: sampleCoreIntegrity,
+            coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
             manifest: sampleManifest,
             source: 'sample',
             status: 'ready',
@@ -177,7 +188,11 @@ export function createBootstrapActions(
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `bootstrap failed: ${msg}`);
-        set({ status: 'error', error: msg });
+        set({
+          status: 'error',
+          error: msg,
+          coreAssetState: { status: 'error', data: get().coreIntegrity, error: msg },
+        });
         return;
       }
 
@@ -213,6 +228,8 @@ export function createBootstrapActions(
         clearSuitabilityIndex();
         set({
           core: sampleCore,
+          coreIntegrity: sampleCoreIntegrity,
+          coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
           manifest: sampleManifest,
           source: 'sample',
           status: 'ready',
@@ -236,7 +253,11 @@ export function createBootstrapActions(
       } catch (err) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `loadSampleFallback failed: ${msg}`);
-        set({ status: 'error', error: msg });
+        set({
+          status: 'error',
+          error: msg,
+          coreAssetState: { status: 'error', data: get().coreIntegrity, error: msg },
+        });
       }
     },
 
@@ -252,7 +273,15 @@ export function createBootstrapActions(
           bundle.core.run_date === sampleCore.run_date
         );
       if (bundle && sampleIsCurrent) {
-        set({ core: bundle.core, manifest: bundle.meta.manifest, source: bundle.meta.source });
+        set({
+          core: bundle.core,
+          coreIntegrity: bundle.integrity,
+          coreAssetState: bundle.meta.source === 'sample'
+            ? { status: 'sample', data: bundle.integrity }
+            : { status: 'cached', data: bundle.integrity },
+          manifest: bundle.meta.manifest,
+          source: bundle.meta.source,
+        });
       }
     },
   } satisfies Pick<
@@ -268,6 +297,12 @@ export const bootstrapInitialState = {
   source: 'sample' as const,
   manifest: null,
   core: null,
+  coreIntegrity: null,
+  coreAssetState: {
+    status: 'unavailable' as const,
+    data: null,
+    reason: 'No validated core has been loaded.',
+  },
   details: null,
   searchIndex: null,
   historyBanks: null,

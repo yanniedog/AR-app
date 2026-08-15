@@ -4,9 +4,13 @@
 // shim (with a matching sample.d.ts) so TypeScript never parses the multi-MB
 // JSON literals — Metro still bundles them at build time.
 const sampleManifest = require('../../assets/sample/manifest.json');
-const { normalizeCoreSectionIntegrity } = require('./sectionIntegrity');
+const { normalizeCoreWithIntegrity } = require('./sectionIntegrity');
 const SAMPLE_MAX_AGE_DAYS = 180;
-const sampleCore = normalizeCoreSectionIntegrity(require('../../assets/sample/core.json'));
+const normalizedSample = normalizeCoreWithIntegrity(require('../../assets/sample/core.json'), {
+  coreSha256: sampleManifest.files.core.sha256,
+});
+const sampleCore = normalizedSample.core;
+const sampleCoreIntegrity = normalizedSample.integrity;
 
 function sampleManifestIsUsable(manifest, now = new Date()) {
   // generated_at is an absolute instant; run_date is a Hobart calendar date
@@ -20,6 +24,7 @@ module.exports = {
   sampleManifest,
   SAMPLE_MAX_AGE_DAYS,
   sampleCore,
+  sampleCoreIntegrity,
   loadSampleDetails: () => require('../../assets/sample/details.json'),
   sampleManifestIsUsable,
   sampleFallbackIsUsable: (now = new Date()) => sampleManifestIsUsable(sampleManifest, now),

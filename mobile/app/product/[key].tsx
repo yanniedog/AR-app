@@ -77,6 +77,7 @@ export default function ProductDetail() {
   const parsedRateIndex = exactRateRequested ? Number(ri) : null;
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
+  const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
@@ -205,8 +206,10 @@ export default function ProductDetail() {
       core,
       includeNonStandard,
       detailsProducts,
+      suitabilityRevision,
+      coreIntegrity,
     );
-  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+  }, [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
 
   const historyModel = useMemo(() => {
     void suitabilityRevision;
@@ -214,6 +217,7 @@ export default function ProductDetail() {
     return selectBankHistoryChartModel(
       {
         core,
+        coreIntegrity,
         historyBanks,
         bankInsights: explorerInsights,
         includeNonStandard,
@@ -224,6 +228,7 @@ export default function ProductDetail() {
     );
   }, [
     core,
+    coreIntegrity,
     detailsProducts,
     explorerInsights,
     found,
