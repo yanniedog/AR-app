@@ -1,11 +1,11 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, usePathname } from 'expo-router';
 import React, { useCallback } from 'react';
-import { Platform, Pressable, Text, View } from 'react-native';
+import { Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
-import { getTabBarContentHeight } from '../lib/androidChrome';
+import { getTabBarLayout, TAB_BAR_LABEL_LINE_HEIGHT } from '../lib/androidChrome';
 import { hapticSelection } from '../lib/haptics';
 import { getTabIonicon, getTabMaterialSymbol } from '../lib/tabIcons';
 import {
@@ -31,6 +31,8 @@ export function AppTabBar() {
   const onboarded = useStore((s) => s.prefs.onboarded);
   const active = resolveActiveTab(pathname);
   const isAndroid = Platform.OS === 'android';
+  const { fontScale } = useWindowDimensions();
+  const tabBarLayout = getTabBarLayout(fontScale);
 
   const onPressTab = useCallback((route: PrimaryTabRouteName) => {
     if (resolveActiveTab(pathname) === route && isPrimaryTabRootPath(pathname, route)) {
@@ -48,7 +50,7 @@ export function AppTabBar() {
       style={{
         flexDirection: 'row',
         backgroundColor: isAndroid ? theme.colors.surfaceAlt : theme.colors.surface,
-        height: getTabBarContentHeight() + insets.bottom,
+        height: tabBarLayout.contentHeight + insets.bottom,
         paddingBottom: insets.bottom,
         paddingTop: isAndroid ? 8 : 4,
         borderTopWidth: isAndroid ? 0 : 1,
@@ -89,13 +91,16 @@ export function AppTabBar() {
               ) : null}
               </View>
               <Text
-                numberOfLines={1}
+                numberOfLines={tabBarLayout.labelLines}
                 style={{
                   marginTop: 2,
                   fontSize: 11,
+                  lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
                   fontWeight: focused ? '600' : '500',
                   color: tint,
                   textAlign: 'center',
+                  width: '100%',
+                  paddingHorizontal: 2,
                 }}
               >
                 {label}
