@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useMemo, useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import {
   meetingBiasModel,
@@ -10,6 +10,7 @@ import {
 import type { EconomicOutlookPayload } from '../../data/economicOutlook';
 import { formatRunDate } from '../../data/format';
 import { useTheme } from '../../theme/ThemeProvider';
+import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Divider, Row } from '../ui';
 
@@ -41,6 +42,7 @@ function ReleaseRow({
   onToggle: () => void;
 }) {
   const theme = useTheme();
+  const { requestExternalUrl } = useTrustedExternalUrl();
   const leanTone = leanColor(row.meetingLean, theme);
 
   return (
@@ -98,7 +100,11 @@ function ReleaseRow({
           </AppText>
           {row.sourceUrl ? (
             <Pressable
-              onPress={() => void Linking.openURL(row.sourceUrl!)}
+              onPress={() => requestExternalUrl({
+                url: row.sourceUrl!,
+                purpose: 'official_economic_source',
+                label: `${row.sourceAgency === 'abs' ? 'ABS' : 'RBA'} source for ${row.label}`,
+              })}
               accessibilityRole="link"
               accessibilityLabel={`Open source for ${row.label}`}
               hitSlop={6}

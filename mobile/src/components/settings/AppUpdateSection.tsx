@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Linking, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 
+import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { AppText, Button, Row } from '../ui';
 import { useStore } from '../../data/store';
 import {
@@ -31,6 +32,7 @@ export function AppUpdateSection({
 } = {}) {
   const installed = getInstalledAppInfo();
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
+  const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
@@ -44,13 +46,13 @@ export function AppUpdateSection({
 
   useEffect(() => subscribeApkDownload(setDownload), []);
 
-  const onCheck = useCallback(async () => {
+  const runCheck = useCallback(async (force = false) => {
     setChecking(true);
     setError(null);
     setCheckResult(null);
     setChangelogs([]);
     try {
-      const result = await checkForAppUpdate();
+      const result = await checkForAppUpdate({ force });
       setCheckResult(result);
       if (
         result.status === 'available' ||
@@ -61,9 +63,11 @@ export function AppUpdateSection({
       }
       if (result.status === 'available') {
         setChangelogs(result.changelogs);
-        void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
-          setError(err instanceof Error ? err.message : String(err));
-        });
+        if (autoDownload) {
+          void ensureApkBackgroundDownload(result.remote, { wifiOnly }).catch((err) => {
+            setError(err instanceof Error ? err.message : String(err));
+          });
+        }
       }
       if (result.status === 'error') {
         setError(result.message);
@@ -73,11 +77,11 @@ export function AppUpdateSection({
     } finally {
       setChecking(false);
     }
-  }, [wifiOnly]);
+  }, [autoDownload, wifiOnly]);
 
   useEffect(() => {
-    void onCheck();
-  }, [onCheck]);
+    void runCheck(false);
+  }, [runCheck]);
 
   const performUpgrade = useCallback(async () => {
     if (!remote) return;
@@ -93,10 +97,6 @@ export function AppUpdateSection({
       setUpgrading(false);
     }
   }, [remote, wifiOnly]);
-
-  const onUpgrade = useCallback(() => {
-    void performUpgrade();
-  }, [performUpgrade]);
 
   const updateAvailable = checkResult?.status === 'available';
   const isCurrent = checkResult?.status === 'current';
@@ -145,6 +145,22 @@ export function AppUpdateSection({
           ? 'Install update'
           : 'Download & install';
 
+  const requestUpgrade = useCallback(() => {
+    if (!remote) return;
+    if (phase === 'ready' || autoDownload) {
+      void performUpgrade();
+      return;
+    }
+    Alert.alert(
+      'Download app update?',
+      `Version ${remote.version} will download a verified APK from GitHub${wifiOnly ? ' when Wi-Fi is available' : ' using the current network'}. Android will ask again before installation.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Download', onPress: () => void performUpgrade() },
+      ],
+    );
+  }, [autoDownload, performUpgrade, phase, remote, wifiOnly]);
+
   useEffect(() => {
     onStatusChange?.({
       terminal: Platform.OS !== 'android' || (!checking && (checkResult != null || error != null)),
@@ -159,6 +175,14 @@ export function AppUpdateSection({
 
   return (
     <Section title="App update">
+      <ToggleRow
+        icon="cloud-download-outline"
+        label="Download app updates automatically"
+        sub="Optional standing consent after automatic checks; verified APKs only"
+        value={autoDownload}
+        onChange={(value) => setPref('apkUpdatesAutoDownload', value)}
+      />
+      <SettingsGap size={8} />
       <ToggleRow
         icon="wifi-outline"
         label="Download APKs on Wi-Fi only"
@@ -183,9 +207,11 @@ export function AppUpdateSection({
       ) : null}
       {updateAvailable ? (
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, lineHeight: 16 }}>
-          {wifiOnly
-            ? 'The verified APK downloads automatically on Wi-Fi, including in the background.'
-            : 'Your saved preference allows this verified APK to download automatically on Wi-Fi or mobile data.'}
+          {autoDownload
+            ? wifiOnly
+              ? 'Standing consent is on, so the verified APK downloads automatically when Wi-Fi is available.'
+              : 'Standing consent is on, so the verified APK may download automatically using Wi-Fi or mobile data.'
+            : 'Automatic checks stay on. The APK downloads only after you approve this update.'}
           {' '}When it is ready, Install opens any one-time Android permission and resumes automatically when you return.
         </AppText>
       ) : null}
@@ -213,7 +239,7 @@ export function AppUpdateSection({
           style={{ flex: 1 }}
           loading={checking}
           disabled={upgrading}
-          onPress={() => void onCheck()}
+          onPress={() => void runCheck(true)}
         />
         {updateAvailable ? (
           <Button
@@ -222,7 +248,7 @@ export function AppUpdateSection({
             style={{ flex: 1 }}
             loading={upgrading}
             disabled={checking || upgrading}
-            onPress={() => void onUpgrade()}
+            onPress={requestUpgrade}
           />
         ) : null}
       </Row>
@@ -237,6 +263,7 @@ export function UpdateChangelogList({
   entries: VersionChangelogSummary[];
   bare?: boolean;
 }) {
+  const { requestExternalUrl } = useTrustedExternalUrl();
   const list = (
     <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
       {entries.map((entry) => (
@@ -255,8 +282,12 @@ export function UpdateChangelogList({
             </AppText>
           ))}
           <Pressable
-            onPress={() => void Linking.openURL(entry.releaseUrl)}
-            accessibilityRole="button"
+            onPress={() => requestExternalUrl({
+              url: entry.releaseUrl,
+              purpose: 'app_release',
+              label: `AustralianRates ${entry.version} changelog`,
+            })}
+            accessibilityRole="link"
             accessibilityLabel={`Full changelog for version ${entry.version}`}
           >
             <AppText variant="tiny" color="primary" style={{ marginTop: 4 }}>

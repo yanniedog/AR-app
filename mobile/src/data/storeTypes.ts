@@ -40,6 +40,8 @@ export interface Prefs {
   wifiOnly: boolean;
   /** APK downloads are Wi-Fi only by default, independent of daily rates refreshes. */
   apkUpdatesWifiOnly: boolean;
+  /** Explicit standing consent to download verified APK updates after an automatic check. */
+  apkUpdatesAutoDownload: boolean;
   includeNonStandard: boolean;
   /** How savings & term-deposit lists rank: 'base' ongoing rate (default, honest)
    *  vs 'max' headline/bonus rate. Mirrors RankMetric in data/selectors. */
@@ -97,6 +99,7 @@ export const DEFAULT_PREFS: Prefs = {
   diagnosticsEnabled: false,
   wifiOnly: false,
   apkUpdatesWifiOnly: true,
+  apkUpdatesAutoDownload: false,
   includeNonStandard: false,
   depositRankMetric: 'base',
   mortgageRateMetric: 'comparison',

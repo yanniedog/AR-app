@@ -100,6 +100,9 @@ export const useStore = create<AppState>()(
             : 0,
           diagnosticsEnabled: false,
           apkUpdatesWifiOnly: persistedPrefs?.apkUpdatesWifiOnly !== false,
+          // Automatic APK downloads are opt-in. Older persisted stores never
+          // silently acquire standing consent during migration.
+          apkUpdatesAutoDownload: persistedPrefs?.apkUpdatesAutoDownload === true,
           ...migratedMortgageRatePreference(persistedPrefs),
           interests: normalizeInterests(persistedPrefs?.interests ?? DEFAULT_INTERESTS),
           profileFilters: normalizeProfileFilters(persistedPrefs?.profileFilters),

@@ -1,7 +1,8 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useState } from 'react';
-import { Linking, Pressable, View } from 'react-native';
+import { Pressable, View } from 'react-native';
 
+import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { DetailLoadingLines } from '../feedback';
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Badge, Card, Disclosure, Divider, Row } from '../ui';
@@ -270,6 +271,7 @@ export function AccessNotice({
   provider?: string | null;
 }) {
   const theme = useTheme();
+  const { requestExternalUrl } = useTrustedExternalUrl();
   if (loading && !detail) return null;
   const a = assessAccess(name, detail, provider);
   if (!a.restricted && !a.verify) return null;
@@ -286,7 +288,11 @@ export function AccessNotice({
       </AppText>
       {detail?.links?.eligibility ? (
         <Pressable
-          onPress={() => void Linking.openURL(detail.links!.eligibility!)}
+          onPress={() => requestExternalUrl({
+            url: detail.links!.eligibility!,
+            purpose: 'lender_source',
+            label: `${provider ?? 'Lender'} eligibility criteria`,
+          })}
           accessibilityRole="link"
           style={{ marginTop: 8 }}
         >
@@ -304,6 +310,7 @@ export function AccessNotice({
 
 export function OfficialLinks({ links }: { links?: ProductDetailData['links'] }) {
   const theme = useTheme();
+  const { requestExternalUrl } = useTrustedExternalUrl();
   const [open, setOpen] = useState(false);
   if (!links) return null;
   const all: { label: string; url?: string; icon: keyof typeof Ionicons.glyphMap }[] = [
@@ -326,7 +333,11 @@ export function OfficialLinks({ links }: { links?: ProductDetailData['links'] })
           <View key={it.label}>
             {i > 0 ? <Divider style={{ marginVertical: 4 }} /> : null}
             <Pressable
-              onPress={() => void Linking.openURL(it.url!)}
+              onPress={() => requestExternalUrl({
+                url: it.url!,
+                purpose: 'lender_source',
+                label: it.label,
+              })}
               accessibilityRole="link"
               accessibilityLabel={`${it.label} (opens lender website)`}
               style={{ paddingVertical: 8 }}
