@@ -6,7 +6,11 @@ const {
   versionTag,
   releaseTitle,
   extractChangelogSection,
-} = require('../scripts/app-release-meta-pure.cjs');
+} = jest.requireActual<{
+  versionTag: (version: string) => string;
+  releaseTitle: (version: string) => string;
+  extractChangelogSection: (content: string, version: string) => string | null;
+}>('../scripts/app-release-meta-pure.cjs');
 
 const {
   CHANGELOG_SUMMARY_ASSET,
@@ -15,7 +19,21 @@ const {
   renderGithubReleaseBody,
   selectCumulativeSummaries,
   versionGt,
-} = require('../scripts/changelog-lib.cjs');
+} = jest.requireActual<{
+  CHANGELOG_SUMMARY_ASSET: string;
+  buildChangelogManifest: (options: unknown) => { versions: { releaseUrl: string }[] };
+  ensureVersionEntry: (options: unknown) => {
+    updated: boolean;
+    entry: { releaseTag: string };
+  };
+  renderGithubReleaseBody: (options: unknown) => string;
+  selectCumulativeSummaries: (
+    manifest: unknown,
+    fromVersion: string,
+    toVersion: string,
+  ) => { summaryBullets: string[] }[];
+  versionGt: (left: string, right: string) => boolean;
+}>('../scripts/changelog-lib.cjs');
 
 describe('app-release-meta', () => {
   it('versionTag uses app-v prefix', () => {

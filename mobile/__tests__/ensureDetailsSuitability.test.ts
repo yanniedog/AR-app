@@ -258,7 +258,7 @@ describe('ensureDetails suitability unblock', () => {
 
   it('abandonInFlight starts a fresh ensure instead of joining a hung load', async () => {
     closeSuitabilityGateUntilRebuild();
-    const downloads: Array<{ finish: (value: unknown) => void }> = [];
+    const downloads: { finish: (value: unknown) => void }[] = [];
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'remote',

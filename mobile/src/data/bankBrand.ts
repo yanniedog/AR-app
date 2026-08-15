@@ -220,14 +220,14 @@ function slugFromIcon(icon: string): string {
   return icon.replace(/\.png$/i, '');
 }
 
-function pushUnique(out: Array<string | number>, seen: Set<string>, value: string | number) {
+function pushUnique(out: (string | number)[], seen: Set<string>, value: string | number) {
   const key = typeof value === 'number' ? `n:${value}` : value;
   if (seen.has(key)) return;
   seen.add(key);
   out.push(value);
 }
 
-function pushIconFile(out: Array<string | number>, seen: Set<string>, iconFile: string) {
+function pushIconFile(out: (string | number)[], seen: Set<string>, iconFile: string) {
   const slug = slugFromIcon(iconFile);
   const bundled = BUNDLED_BANK_LOGOS[slug];
   if (bundled != null) pushUnique(out, seen, bundled);
@@ -243,8 +243,8 @@ export function resolveBankLogoSources(
   provider: string,
   embeddedLogo?: string,
   registerLogoUri?: string,
-): Array<string | number> {
-  const out: Array<string | number> = [];
+): (string | number)[] {
+  const out: (string | number)[] = [];
   const seen = new Set<string>();
   const embedded = String(embeddedLogo ?? '').trim();
   if (embedded) pushUnique(out, seen, embedded);

@@ -1,4 +1,6 @@
-const { bumpPatchVersion } = require('../scripts/bump-app-patch-version-pure.cjs');
+const { bumpPatchVersion } = jest.requireActual<{
+  bumpPatchVersion: (version: string) => string;
+}>('../scripts/bump-app-patch-version-pure.cjs');
 
 describe('bumpPatchVersion', () => {
   it('increments patch segment', () => {

@@ -12,7 +12,7 @@ describe('nextIngest', () => {
   });
 
   test('nextDailyDueUtcMs matches ar_local_ingest_schedule.py vectors', () => {
-    const cases: Array<{ now: string; nextIso: string; remainingSec: number }> = [
+    const cases: { now: string; nextIso: string; remainingSec: number }[] = [
       { now: '2026-06-09T14:00:00Z', nextIso: '2026-06-09T15:00:00.000Z', remainingSec: 3600 },
       { now: '2026-06-09T15:30:00Z', nextIso: '2026-06-10T15:00:00.000Z', remainingSec: 84600 },
       { now: '2026-06-10T00:30:00Z', nextIso: '2026-06-10T15:00:00.000Z', remainingSec: 52200 },
