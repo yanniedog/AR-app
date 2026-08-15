@@ -1,5 +1,5 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getTabBarContentHeight } from '../lib/androidChrome';
@@ -20,11 +20,12 @@ export function DiagnosticsConsentBanner({
 }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
 
   if (!visible) return null;
 
   const bottomOffset = aboveTabBar
-    ? getTabBarContentHeight() + insets.bottom + 8
+    ? getTabBarContentHeight(fontScale) + insets.bottom + 8
     : Math.max(8, insets.bottom + 4);
 
   const action = (label: string, accessibilityLabel: string, onPress: () => void) => (

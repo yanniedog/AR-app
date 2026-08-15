@@ -1,9 +1,9 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { M3_NAV_BAR_HEIGHT } from '../lib/androidChrome';
+import { getTabBarLayout, TAB_BAR_LABEL_LINE_HEIGHT } from '../lib/androidChrome';
 import { hapticSelection } from '../lib/haptics';
 import { getTabLabel, getTabMaterialSymbol } from '../lib/tabIcons';
 import { useTheme } from '../theme/ThemeProvider';
@@ -13,13 +13,15 @@ import { MaterialSymbol } from './MaterialSymbol';
 export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { fontScale } = useWindowDimensions();
+  const tabBarLayout = getTabBarLayout(fontScale, 'android');
 
   return (
     <View
       style={{
         flexDirection: 'row',
         backgroundColor: theme.colors.surfaceAlt,
-        height: M3_NAV_BAR_HEIGHT + insets.bottom,
+        height: tabBarLayout.contentHeight + insets.bottom,
         paddingBottom: insets.bottom,
         paddingTop: 8,
       }}
@@ -81,13 +83,16 @@ export function M3NavigationBar({ state, descriptors, navigation }: BottomTabBar
                 />
               ) : null}
               <Text
-                numberOfLines={1}
+                numberOfLines={tabBarLayout.labelLines}
                 style={{
                   marginTop: 4,
                   fontSize: 11,
+                  lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
                   fontWeight: focused ? '600' : '500',
                   color: focused ? theme.colors.primary : theme.colors.textMuted,
                   textAlign: 'center',
+                  width: '100%',
+                  paddingHorizontal: 2,
                 }}
               >
                 {label}
