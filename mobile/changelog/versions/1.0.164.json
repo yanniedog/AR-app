@@ -1,0 +1,40 @@
+{
+  "version": "1.0.164",
+  "releaseTag": "app-arm-v1.0.164",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "Enforce safe comparison selection (#204)",
+    "chore(mobile): auto-release bump to v1.0.163 (after 1751409) (#203)",
+    "Remove duplicate Settings data banner (#202)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Enforce safe comparison selection (#204)"
+        },
+        {
+          "text": "chore(mobile): auto-release bump to v1.0.163 (after 1751409) (#203)"
+        },
+        {
+          "text": "Remove duplicate Settings data banner (#202)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.164"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.163"
+        }
+      ]
+    }
+  ]
+}

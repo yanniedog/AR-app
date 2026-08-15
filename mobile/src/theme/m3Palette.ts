@@ -1,6 +1,6 @@
 import type { Material3Scheme } from '@pchmn/expo-material3-theme';
 
-import { DARK, LIGHT, type Palette } from './colors';
+import { DARK, ensureTextContrast, LIGHT, type Palette } from './colors';
 
 /** Brand seed when Material You / dynamic color is unavailable (iOS, older Android, Expo Go). */
 export const BRAND_SOURCE_COLOR = '#2563eb';
@@ -35,6 +35,12 @@ const SEMANTIC = {
  */
 export function paletteFromM3Scheme(scheme: Material3Scheme, dark: boolean): Palette {
   const semantic = dark ? SEMANTIC.dark : SEMANTIC.light;
+  const appSurfaces = [
+    scheme.background,
+    scheme.surface,
+    scheme.surfaceContainerLow,
+    scheme.surfaceContainerHigh,
+  ];
   return {
     bg: scheme.background,
     surface: scheme.surface,
@@ -43,7 +49,7 @@ export function paletteFromM3Scheme(scheme: Material3Scheme, dark: boolean): Pal
     border: scheme.outlineVariant,
     text: scheme.onSurface,
     textMuted: scheme.onSurfaceVariant,
-    textFaint: scheme.outline,
+    textFaint: ensureTextContrast(scheme.outline, appSurfaces, dark),
     primary: scheme.primary,
     primaryMuted: scheme.primaryContainer,
     onPrimary: scheme.onPrimary,
