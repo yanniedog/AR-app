@@ -20,7 +20,7 @@ import {
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
 import { toFraction, visibleAccountRows } from './format';
-import { quarantinedBankHistoryPairs } from './sectionIntegrity';
+import { quarantinedBankHistoryPairs, type CoreIntegrityContext } from './sectionIntegrity';
 import { getSuitabilityAllowed } from './suitabilityGate';
 import { rowsUnder } from './taxonomy';
 
@@ -59,7 +59,7 @@ function accumulate(slot: AggSlot | undefined, rate: number): AggSlot {
 
 /** Build aggregate ribbon points from retained history rows (dashboard buildAggregateRibbon). */
 export function buildAggregateRibbonFromHistory(
-  historyRows: Array<RateRow & { run_date?: string }>,
+  historyRows: (RateRow & { run_date?: string })[],
   retainedRunDates: string[],
   window: HistoryWindow,
 ): { dates: string[]; points: BankHistoryPoint[]; allDates: string[] } {
@@ -130,6 +130,7 @@ function currentRibbonFallback(
 
 export interface HistorySelectorState {
   core: CorePayload | null;
+  coreIntegrity?: CoreIntegrityContext | null;
   historyBanks?: HistoryBanksPayload | null;
   historyCache?: BankHistoryCache | null;
   /**
@@ -228,6 +229,7 @@ export function selectBankHistoryChartModel(
   try {
     const {
       core,
+      coreIntegrity,
       historyBanks,
       historyCache,
       bankInsights,
@@ -239,7 +241,7 @@ export function selectBankHistoryChartModel(
 
     // Prebuilt section history contains the full catalogue and no product keys.
     // It is therefore safe only when the user explicitly includes non-standard products.
-    const sectionHistoryQuarantined = [...quarantinedBankHistoryPairs(core)]
+    const sectionHistoryQuarantined = [...quarantinedBankHistoryPairs(coreIntegrity)]
       .some((key) => key.startsWith(`${section}\u0000`));
     const prebuilt = includeNonStandard && !sectionHistoryQuarantined
       ? chartModelFromPrebuiltHistory(historyBanks, section, window)

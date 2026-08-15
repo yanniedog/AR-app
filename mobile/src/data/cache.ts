@@ -7,12 +7,13 @@ import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../ty
 import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
-import type { BankSpreadHistoryPayload } from './bankSpreadHistory';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
-import { normalizeCoreSectionIntegrity } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { createV3GenerationCache } from './v3GenerationCache';
+import { createBankSpreadContentCache } from './bankSpreadContentCache';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -22,7 +23,7 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
-const BANK_SPREAD_HISTORY = `${DIR}bank-spread-history.json`;
+const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
@@ -43,7 +44,6 @@ export interface OptionalMeta {
   searchIndexSha?: string | null;
   historyBanksSha?: string | null;
   bankInsightsSha?: string | null;
-  bankSpreadHistorySha?: string | null;
 }
 
 export interface CacheMeta {
@@ -60,6 +60,7 @@ export interface CacheMeta {
 export interface CoreBundle {
   meta: CacheMeta;
   core: CorePayload;
+  integrity: CoreIntegrityContext;
 }
 
 async function ensureDir(): Promise<void> {
@@ -150,6 +151,28 @@ async function webDelete(path: string): Promise<void> {
   });
 }
 
+async function webList(path: string): Promise<string[]> {
+  const prefix = path.endsWith('/') ? path : `${path}/`;
+  const keys = new Set<string>(webMemory.keys());
+  const db = await webDb();
+  if (db) {
+    const persisted = await new Promise<IDBValidKey[]>((resolve) => {
+      const request = db.transaction('files').objectStore('files').getAllKeys();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve([]);
+    });
+    for (const key of persisted) if (typeof key === 'string') keys.add(key);
+  }
+  const children = new Set<string>();
+  for (const key of keys) {
+    if (!key.startsWith(prefix)) continue;
+    const remainder = key.slice(prefix.length);
+    const child = remainder.split('/')[0];
+    if (child) children.add(child);
+  }
+  return [...children];
+}
+
 async function pathExists(path: string): Promise<boolean> {
   if (IS_WEB) return (await webGet(path)) != null;
   return (await FileSystem.getInfoAsync(path)).exists;
@@ -172,6 +195,15 @@ async function writeText(path: string, value: string): Promise<void> {
   await FileSystem.writeAsStringAsync(path, value);
 }
 
+async function ensureParentDirectory(path: string): Promise<void> {
+  if (IS_WEB) return;
+  const separator = path.lastIndexOf('/');
+  if (separator < 0) return;
+  const parent = path.slice(0, separator + 1);
+  const info = await FileSystem.getInfoAsync(parent);
+  if (!info.exists) await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
+}
+
 async function deletePath(path: string): Promise<void> {
   if (IS_WEB) {
     await webDelete(path);
@@ -189,6 +221,17 @@ async function movePath(from: string, to: string): Promise<void> {
     return;
   }
   await FileSystem.moveAsync({ from, to });
+}
+
+async function listPath(path: string): Promise<string[]> {
+  if (IS_WEB) return webList(path);
+  try {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists || !info.isDirectory) return [];
+    return await FileSystem.readDirectoryAsync(path);
+  } catch {
+    return [];
+  }
 }
 
 async function readJson<T>(path: string): Promise<T | null> {
@@ -250,6 +293,28 @@ async function atomicWriteBundle(contents: string): Promise<void> {
   await movePath(BUNDLE_TMP, BUNDLE);
 }
 
+const bankSpreadContentCache = createBankSpreadContentCache(
+  {
+    async read(path) {
+      return (await pathExists(path)) ? await readText(path) : null;
+    },
+    async write(path, value) {
+      await ensureDir();
+      await ensureParentDirectory(path);
+      await writeText(path, value);
+    },
+    async remove(path) {
+      await deletePath(path);
+    },
+    async move(from, to) {
+      await ensureParentDirectory(to);
+      await movePath(from, to);
+    },
+    list: listPath,
+  },
+  BANK_SPREAD_CONTENT_CACHE,
+);
+
 export const cache = {
   async readBundle(): Promise<CoreBundle | null> {
     let b = await readJson<CoreBundle>(BUNDLE);
@@ -258,11 +323,13 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
-    const core = normalizeCoreSectionIntegrity(b.core);
+    const normalized = normalizeCoreWithIntegrity(b.core, {
+      coreSha256: b.meta.coreSha,
+    });
     if (sidecar && sidecar.coreSha === b.meta.coreSha) {
-      return { meta: sidecar, core };
+      return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
-    return { ...b, core };
+    return { ...b, core: normalized.core, integrity: normalized.integrity };
   },
 
   async readMeta(): Promise<CacheMeta | null> {
@@ -363,17 +430,27 @@ export const cache = {
     await deletePath(BANK_INSIGHTS);
   },
 
-  async readBankSpreadHistory(): Promise<BankSpreadHistoryPayload | null> {
-    return readJson<BankSpreadHistoryPayload>(BANK_SPREAD_HISTORY);
+  async readBankSpreadHistoryFor(
+    coreSha: string,
+    spreadSha: string,
+    runDate: string,
+    stillCurrent: () => boolean,
+  ) {
+    return bankSpreadContentCache.load({ coreSha, spreadSha, runDate }, stillCurrent);
   },
 
-  async writeBankSpreadHistory(json: string): Promise<void> {
-    await ensureDir();
-    await writeText(BANK_SPREAD_HISTORY, json);
-  },
-
-  async clearBankSpreadHistory(): Promise<void> {
-    await deletePath(BANK_SPREAD_HISTORY);
+  async writeBankSpreadHistoryFor(
+    coreSha: string,
+    spreadSha: string,
+    runDate: string,
+    verifiedRawBytes: Uint8Array,
+    stillCurrent: () => boolean,
+  ) {
+    return bankSpreadContentCache.install(
+      { coreSha, spreadSha, runDate },
+      verifiedRawBytes,
+      stillCurrent,
+    );
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {
@@ -452,3 +529,25 @@ export const cache = {
     await deletePath(DIR);
   },
 };
+
+/** Dormant v3 content-addressed cache; no production network path writes it. */
+export const v3GenerationCache = createV3GenerationCache(
+  {
+    async read(path) {
+      return (await pathExists(path)) ? await readText(path) : null;
+    },
+    async write(path, value) {
+      await ensureDir();
+      await ensureParentDirectory(path);
+      await writeText(path, value);
+    },
+    async remove(path) {
+      await deletePath(path);
+    },
+    async move(from, to) {
+      await ensureParentDirectory(to);
+      await movePath(from, to);
+    },
+  },
+  `${DIR}v3`,
+);

@@ -7,7 +7,11 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, parseYmd } from './bankHistoryTransform';
 import { toFraction, visibleAccountRows } from './format';
 import { getSuitabilityAllowed, getSuitabilityRevision } from './suitabilityGate';
-import { bankHistoryPairKey, quarantinedBankHistoryPairs } from './sectionIntegrity';
+import {
+  bankHistoryPairKey,
+  quarantinedBankHistoryPairs,
+  type CoreIntegrityContext,
+} from './sectionIntegrity';
 import {
   DEFAULT_PASS_THROUGH_WINDOW_DAYS,
   MOVE_DIRS,
@@ -122,15 +126,16 @@ let suitabilityFilterCache: {
   payload: BankInsightsPayload;
   core: CorePayload;
   detailsProducts: Record<string, ProductDetail> | null | undefined;
+  integrity: CoreIntegrityContext | null | undefined;
   revision: number;
   result: BankInsightsPayload | null;
 } | null = null;
 
 function filterBankInsightsForSectionIntegrity(
   payload: BankInsightsPayload,
-  core: CorePayload,
+  integrity: CoreIntegrityContext | null | undefined,
 ): BankInsightsPayload {
-  const quarantinedPairs = quarantinedBankHistoryPairs(core);
+  const quarantinedPairs = quarantinedBankHistoryPairs(integrity);
   if (!quarantinedPairs.size) return payload;
 
   const banks: BankInsightsPayload['banks'] = {};
@@ -171,15 +176,17 @@ export function filterBankInsightsForSuitability(
   includeNonStandard: boolean,
   detailsProducts?: Record<string, ProductDetail> | null,
   suitabilityRevision = getSuitabilityRevision(),
+  integrity?: CoreIntegrityContext | null,
 ): BankInsightsPayload | null {
   if (!payload) return null;
   if (!core) return null;
-  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, core);
+  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, integrity);
   if (includeNonStandard) return integrityPayload;
   if (
     suitabilityFilterCache?.payload === payload &&
     suitabilityFilterCache.core === core &&
     suitabilityFilterCache.detailsProducts === detailsProducts &&
+    suitabilityFilterCache.integrity === integrity &&
     suitabilityFilterCache.revision === suitabilityRevision
   ) return suitabilityFilterCache.result;
   if (getSuitabilityAllowed()?.size === 0) {
@@ -187,6 +194,7 @@ export function filterBankInsightsForSuitability(
       payload,
       core,
       detailsProducts,
+      integrity,
       revision: suitabilityRevision,
       result: null,
     };
@@ -280,6 +288,7 @@ export function filterBankInsightsForSuitability(
     payload,
     core,
     detailsProducts,
+    integrity,
     revision: suitabilityRevision,
     result,
   };

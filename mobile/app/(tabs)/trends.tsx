@@ -40,6 +40,7 @@ export default function Market() {
   useScrollToTop(scrollRef);
 
   const core = useStore((s) => s.core);
+  const coreIntegrity = useStore((s) => s.coreIntegrity);
   const calendar = useStore((s) => s.rbaCalendar);
   const calendarError = useStore((s) => s.rbaCalendarError);
   const hasCalendarAsset = useStore((s) => !!s.manifest?.files.rba_calendar);
@@ -144,18 +145,18 @@ export default function Market() {
 
   const explorerInsights = useMemo(() => {
     void suitabilityRevision;
-    return filterBankInsightsForSuitability(bankInsights, core, includeNonStandard, detailsProducts);
-  }, [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision]);
+    return filterBankInsightsForSuitability(bankInsights, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
+  }, [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
 
   const historyModel = useMemo(() => {
     void suitabilityRevision;
     if (!core || !historyReady) return null;
     return selectBankHistoryChartModel(
-      { core, historyBanks, bankInsights: explorerInsights, includeNonStandard, detailsProducts },
+      { core, coreIntegrity, historyBanks, bankInsights: explorerInsights, includeNonStandard, detailsProducts },
       activeSection,
       'All',
     );
-  }, [activeSection, core, detailsProducts, explorerInsights, historyBanks, historyReady, includeNonStandard, suitabilityRevision]);
+  }, [activeSection, core, coreIntegrity, detailsProducts, explorerInsights, historyBanks, historyReady, includeNonStandard, suitabilityRevision]);
 
   const standardFilterWarming = useMemo(() => {
     void suitabilityRevision;

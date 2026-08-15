@@ -132,6 +132,7 @@ export default function BankDetail() {
 
   const router = useRouter();
   const core = useStore((s) => s.core);
+  const coreIntegrity = useStore((s) => s.coreIntegrity);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -258,8 +259,9 @@ export default function BankDetail() {
         includeNonStandard,
         detailsProducts,
         suitabilityRevision,
+        coreIntegrity,
       ),
-    [bankInsights, core, detailsProducts, includeNonStandard, suitabilityRevision],
+    [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision],
   );
 
   const visibleBankEvents = useMemo(
