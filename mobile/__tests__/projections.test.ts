@@ -2,6 +2,7 @@ import {
   buildLifecycleProjection,
   MAX_PROJECTION_YEARS,
   metricValue,
+  mortgageOffsetImpact,
   projectionMetricLabel,
 } from '../src/data/projections';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
@@ -33,11 +34,40 @@ describe('lifecycle projections', () => {
     const result = buildLifecycleProjection('Mortgage', scenario, NOW);
     expect(result.ready).toBe(true);
     expect(result.rateSeries).toHaveLength(3);
-    expect(result.offsetSeries).toHaveLength(3);
+    expect(result.offsetSeries.map((item) => item.id)).toEqual([
+      'offset-none',
+      'offset-steady',
+      'offset-plan',
+      'offset-boost',
+    ]);
     expect(result.rateSeries[0].totalInterest).toBeLessThan(result.rateSeries[2].totalInterest);
     expect(result.offsetSeries[2].totalInterest).toBeLessThan(result.offsetSeries[1].totalInterest);
     expect(result.rateSeries[1].payoffDate).toMatch(/^20\d\d-\d\d-\d\d$/);
     expect(result.availableMetrics).toContain('cumulativeRatio');
+    const impact = mortgageOffsetImpact(result)!;
+    expect(impact.effectiveInterestBearingBalance).toBe(475000);
+    expect(impact.interestDifference).toBeGreaterThan(0);
+    expect(impact.payoffMonthsEarlier).toBeGreaterThan(0);
+    expect(impact.netDifference).toBeNull();
+    expect(impact.netDifferenceUnavailableReason).toMatch(/fees are not available/i);
+  });
+
+  it('preserves the constant-balance offset calculation from AR-local PR #427', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: {
+        mode: 'refi',
+        loanBalance: '500000',
+        currentRate: '6',
+        years: '25',
+      },
+      projections: { mortgage: { offsetBalance: '50000' } },
+    });
+    const result = buildLifecycleProjection('Mortgage', scenario, NOW);
+    const impact = mortgageOffsetImpact(result)!;
+    expect(impact.effectiveInterestBearingBalance).toBe(450000);
+    expect(impact.interestDifference).toBeCloseTo(142160.77, 2);
+    expect(impact.payoffMonthsEarlier).toBe(44);
+    expect(impact.netDifference).toBeNull();
   });
 
   it('adds an explicitly approximate historical segment and re-anchors future points to today', () => {
@@ -170,7 +200,7 @@ describe('lifecycle projections', () => {
     });
     const result = buildLifecycleProjection('Mortgage', scenario, NOW);
     expect(result.rateSeries[0].annualRate).toBe(0);
-    expect(result.offsetSeries).toHaveLength(2);
+    expect(result.offsetSeries).toHaveLength(3);
   });
 
   it('blocks incomplete history and invalid directional scenarios instead of silently replacing them', () => {
@@ -193,7 +223,7 @@ describe('lifecycle projections', () => {
     });
     const result = buildLifecycleProjection('Savings', scenario, NOW);
     expect(result.ready).toBe(false);
-    expect(result.missing).toContain('regular amount from $0 to $1 trillion');
+    expect(result.missing).toContain('regular amount from $0 to $1 million per selected period');
   });
 
   it('preserves month-end dates and uses section-correct savings labels', () => {
@@ -212,7 +242,7 @@ describe('lifecycle projections', () => {
     const result = buildLifecycleProjection('Mortgage', normalizeUserRateScenario({}), NOW);
     expect(result.ready).toBe(false);
     expect(result.missing).toEqual([
-      'current loan balance up to $1 trillion',
+      'current loan balance up to $100 million',
       'current interest rate from 0% to 100%',
       `remaining term from 1 month to ${MAX_PROJECTION_YEARS} years`,
     ]);
@@ -248,6 +278,34 @@ describe('lifecycle projections', () => {
     const blocked = buildLifecycleProjection('Mortgage', aboveMax, NOW);
     expect(blocked.ready).toBe(false);
     expect(blocked.missing).toContain(`remaining term from 1 month to ${MAX_PROJECTION_YEARS} years`);
+  });
+
+  it('rejects an offset above the current loan instead of silently presenting a clamped result', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
+      projections: { mortgage: { offsetBalance: '500001' } },
+    });
+    const result = buildLifecycleProjection('Mortgage', scenario, NOW);
+    expect(result.ready).toBe(false);
+    expect(result.missing).toContain('offset balance from $0 to the current loan balance');
+    expect(mortgageOffsetImpact(result)).toBeNull();
+  });
+
+  it('keeps a fixed-period offset comparison interest-only and withholds a payoff delta', () => {
+    const scenario = normalizeUserRateScenario({
+      mortgage: { mode: 'refi', loanBalance: '500000', currentRate: '6', years: '25' },
+      projections: {
+        mortgage: {
+          mortgageRateStructure: 'fixed',
+          fixedPeriodMonths: '24',
+          offsetBalance: '50000',
+        },
+      },
+    });
+    const impact = mortgageOffsetImpact(buildLifecycleProjection('Mortgage', scenario, NOW))!;
+    expect(impact.interestDifference).toBeGreaterThan(0);
+    expect(impact.payoffMonthsEarlier).toBeNull();
+    expect(impact.comparisonWindow).toBe('over the 24-month fixed-rate projection');
   });
 
   it('carries historical offset into forward scenarios and warns on mismatch', () => {

@@ -7,6 +7,7 @@ import {
   LifecycleChart,
   type LifecycleChartController,
 } from '../src/components/projections/LifecycleChart';
+import { ProjectionSummary } from '../src/components/scenario/ProjectionSummary';
 import { StaySwitchChart } from '../src/components/scenario/StaySwitchChart';
 import { ScreenScrollView } from '../src/components/Screen';
 import { CompactToggle, SegmentedControl } from '../src/components/controls';
@@ -15,9 +16,11 @@ import { computeLvr, type CalcInputs } from '../src/data/calc';
 import type { ProjectionFrequency, ProjectionInputs } from '../src/data/projectionScenario';
 import {
   buildLifecycleProjection,
+  MAX_DEPOSIT_BALANCE,
+  MAX_MORTGAGE_BALANCE,
+  MAX_PERIODIC_AMOUNT,
   MAX_PROJECTION_YEARS,
   projectionMetricLabel,
-  projectionCurrency,
   type ProjectionDimension,
   type ProjectionMetric,
 } from '../src/data/projections';
@@ -62,19 +65,25 @@ function rateError(value: string, required: boolean): string | undefined {
   return parsed < 0 || parsed > 100 ? 'Use a rate from 0% to 100%.' : undefined;
 }
 
-function positiveAmountError(value: string, label: string, required = false): string | undefined {
+function positiveAmountError(
+  value: string,
+  label: string,
+  maximum: number,
+  maximumLabel: string,
+  required = false,
+): string | undefined {
   const parsed = enteredNumber(value);
   if (parsed == null) return required || value.trim() ? `Enter ${label}.` : undefined;
   if (parsed <= 0) return `Enter ${label}.`;
-  if (parsed > 1_000_000_000_000) return 'Use an amount no greater than $1 trillion.';
+  if (parsed > maximum) return `Use ${label} no greater than ${maximumLabel}.`;
   return undefined;
 }
 
-function optionalAmountError(value: string): string | undefined {
+function optionalAmountError(value: string, maximum: number, maximumLabel: string): string | undefined {
   if (!value.trim()) return undefined;
   const parsed = enteredNumber(value);
-  if (parsed == null || parsed < 0 || parsed > 1_000_000_000_000) {
-    return 'Use an amount from $0 to $1 trillion.';
+  if (parsed == null || parsed < 0 || parsed > maximum) {
+    return `Use an amount from $0 to ${maximumLabel}.`;
   }
   return undefined;
 }
@@ -180,61 +189,6 @@ function FrequencyField({
     <View style={{ gap: 8 }}>
       <NumericField label={label} value={amount} onChangeText={onAmount} placeholder="0" prefix="$" editable={editable} error={error} />
       <SegmentedControl options={FREQUENCY_OPTIONS} value={value} onChange={(next) => { if (editable) onFrequency(next); }} />
-    </View>
-  );
-}
-
-function ProjectionSummary({
-  section,
-  result,
-}: {
-  section: SectionKey;
-  result: ReturnType<typeof buildLifecycleProjection>;
-}) {
-  const theme = useTheme();
-  const base = result.rateSeries[1];
-  if (!base) return null;
-  const optimistic = result.rateSeries[0];
-  const higher = result.rateSeries[2];
-  const offsetBoost = result.offsetSeries.find((item) => item.id === 'offset-boost');
-  const cards = section === 'Mortgage'
-    ? [
-      {
-        label: result.projectionScope === 'fixed-period' ? 'Balance at fixed-period end' : 'Projected payoff',
-        value: result.projectionScope === 'fixed-period'
-          ? projectionCurrency(base.endBalance)
-          : base.payoffDate ?? 'Balance remains',
-        detail: `${projectionCurrency(base.projectedInterest)} forward modelled interest`,
-      },
-      { label: 'Higher-rate cost', value: projectionCurrency(Math.max(0, (higher?.totalInterest ?? 0) - base.totalInterest)), detail: 'extra interest versus current-rate scenario' },
-      ...(offsetBoost ? [{ label: 'Boosted offset', value: projectionCurrency(Math.max(0, base.totalInterest - offsetBoost.totalInterest)), detail: 'modelled interest avoided versus your offset plan' }] : []),
-    ]
-    : [
-      { label: section === 'TD' ? 'Total maturity value' : 'Projected balance', value: projectionCurrency(section === 'TD' ? base.totalValue : base.endBalance), detail: `${projectionCurrency(base.projectedInterest)} forward modelled interest` },
-      { label: 'Lower-rate outcome', value: projectionCurrency(section === 'TD' ? optimistic?.totalValue ?? 0 : optimistic?.endBalance ?? 0), detail: `${((optimistic?.annualRate ?? 0) * 100).toFixed(2)}% scenario` },
-      { label: 'Higher-rate outcome', value: projectionCurrency(section === 'TD' ? higher?.totalValue ?? 0 : higher?.endBalance ?? 0), detail: `${((higher?.annualRate ?? 0) * 100).toFixed(2)}% scenario` },
-    ];
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-      {cards.map((item) => (
-        <View
-          key={item.label}
-          style={{
-            flexGrow: 1,
-            flexBasis: 150,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            borderRadius: theme.radius.md,
-            backgroundColor: theme.colors.surfaceAlt,
-            padding: 12,
-            gap: 3,
-          }}
-        >
-          <AppText variant="tiny" color="textFaint" weight="700">{item.label.toUpperCase()}</AppText>
-          <AppText variant="body" weight="800">{item.value}</AppText>
-          <AppText variant="tiny" color="textMuted">{item.detail}</AppText>
-        </View>
-      ))}
     </View>
   );
 }
@@ -349,9 +303,15 @@ export default function Projections() {
   const hasHistoryInput = historyValues.some((value) => value.trim().length > 0);
   const startDateValid = validPastIsoDate(projectionInputs.startDate);
   const errors: Record<string, string | undefined> = {
-    mortgageBalance: section === 'Mortgage' ? positiveAmountError(currentMortgageBalance, 'the current loan balance') : undefined,
-    savingsBalance: section === 'Savings' ? positiveAmountError(scenario.savings.balance, 'the current balance') : undefined,
-    tdBalance: section === 'TD' ? positiveAmountError(scenario.termDeposit.balance, 'the deposit amount') : undefined,
+    mortgageBalance: section === 'Mortgage'
+      ? positiveAmountError(currentMortgageBalance, 'the current loan balance', MAX_MORTGAGE_BALANCE, '$100 million')
+      : undefined,
+    savingsBalance: section === 'Savings'
+      ? positiveAmountError(scenario.savings.balance, 'the current balance', MAX_DEPOSIT_BALANCE, '$20 million')
+      : undefined,
+    tdBalance: section === 'TD'
+      ? positiveAmountError(scenario.termDeposit.balance, 'the deposit amount', MAX_DEPOSIT_BALANCE, '$20 million')
+      : undefined,
     currentRate: rateError(
       section === 'Mortgage' ? scenario.mortgage.currentRate : section === 'TD' ? scenario.termDeposit.currentRate : scenario.savings.currentRate,
       false,
@@ -391,7 +351,15 @@ export default function Projections() {
       ? 'Use a whole number from 0 to 10.'
       : undefined,
     startDate: hasHistoryInput && !startDateValid ? 'Use a valid past date in YYYY-MM-DD format.' : undefined,
-    startBalance: hasHistoryInput ? positiveAmountError(projectionInputs.startBalance, 'a starting balance', true) : undefined,
+    startBalance: hasHistoryInput
+      ? positiveAmountError(
+        projectionInputs.startBalance,
+        'a starting balance',
+        section === 'Mortgage' ? MAX_MORTGAGE_BALANCE : MAX_DEPOSIT_BALANCE,
+        section === 'Mortgage' ? '$100 million' : '$20 million',
+        true,
+      )
+      : undefined,
     startRate: hasHistoryInput ? rateError(projectionInputs.startRate, true) : undefined,
     lowerRate: projectionInputs.lowerRate.trim()
       && (rateError(projectionInputs.lowerRate, false) || enteredNumber(projectionInputs.lowerRate)! > (rangeBaseRateNumber ?? -1))
@@ -401,13 +369,17 @@ export default function Projections() {
       && (rateError(projectionInputs.higherRate, false) || enteredNumber(projectionInputs.higherRate)! < (rangeBaseRateNumber ?? 101))
       ? 'Use a rate from the current or ongoing rate up to 100%.'
       : undefined,
-    periodicAmount: optionalAmountError(projectionInputs.periodicAmount),
-    withdrawalAmount: optionalAmountError(projectionInputs.withdrawalAmount),
-    offsetBalance: optionalAmountError(projectionInputs.offsetBalance),
-    startOffsetBalance: optionalAmountError(projectionInputs.startOffsetBalance),
-    offsetContributionAmount: optionalAmountError(projectionInputs.offsetContributionAmount),
-    offsetBoostAmount: optionalAmountError(projectionInputs.offsetBoostAmount),
-    extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount),
+    periodicAmount: optionalAmountError(projectionInputs.periodicAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    withdrawalAmount: optionalAmountError(projectionInputs.withdrawalAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    offsetBalance: optionalAmountError(
+      projectionInputs.offsetBalance,
+      Math.min(enteredNumber(currentMortgageBalance) ?? MAX_MORTGAGE_BALANCE, MAX_MORTGAGE_BALANCE),
+      'the current loan balance',
+    ),
+    startOffsetBalance: optionalAmountError(projectionInputs.startOffsetBalance, MAX_MORTGAGE_BALANCE, '$100 million'),
+    offsetContributionAmount: optionalAmountError(projectionInputs.offsetContributionAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    offsetBoostAmount: optionalAmountError(projectionInputs.offsetBoostAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
+    extraRepaymentAmount: optionalAmountError(projectionInputs.extraRepaymentAmount, MAX_PERIODIC_AMOUNT, '$1 million per selected period'),
   };
   const coreRevision = core ? `${core.run_date}:${coreSha}` : null;
   const activeBaseScenario = section === 'Mortgage'

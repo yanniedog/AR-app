@@ -57,9 +57,24 @@ export interface LifecycleProjection {
   projectionScope: 'full-term' | 'fixed-period' | 'savings-horizon' | 'term-deposit-maturity';
 }
 
+export interface MortgageOffsetImpact {
+  /** Opening loan balance after the entered offset is applied for interest. */
+  effectiveInterestBearingBalance: number;
+  /** Modelled interest difference against the same loan with no offset. */
+  interestDifference: number;
+  /** Earlier payoff in whole simulated months; unavailable for bounded/incomplete projections. */
+  payoffMonthsEarlier: number | null;
+  /** A net saving cannot be stated until applicable offset/package fees are known. */
+  netDifference: null;
+  netDifferenceUnavailableReason: string;
+  comparisonWindow: string;
+}
+
 export const MAX_PROJECTION_YEARS = 50;
 const MAX_MONTHS = MAX_PROJECTION_YEARS * 12;
-const MAX_AMOUNT = 1_000_000_000_000;
+export const MAX_MORTGAGE_BALANCE = 100_000_000;
+export const MAX_DEPOSIT_BALANCE = 20_000_000;
+export const MAX_PERIODIC_AMOUNT = 1_000_000;
 
 function cleanNumber(value: string): number {
   const parsed = Number(String(value ?? '').replace(/[$,%\s,]/g, ''));
@@ -362,6 +377,7 @@ function optionalInputErrors(
   inputs: ProjectionInputs,
   currentRate: number,
   today: Date,
+  mortgageBalance?: number,
 ): string[] {
   const errors: string[] = [];
   const hasSomeHistory = [inputs.startDate, inputs.startBalance, inputs.startRate]
@@ -377,19 +393,24 @@ function optionalInputErrors(
   if (inputs.higherRate.trim() && (higher == null || higher < currentRate)) {
     errors.push('higher-rate scenario from the current rate to 100%');
   }
-  const amountFields: [string, string][] = [
-    [inputs.periodicAmount, 'regular amount'],
-    [inputs.withdrawalAmount, 'withdrawal amount'],
-    [inputs.offsetBalance, 'offset balance'],
-    [inputs.startOffsetBalance, 'starting offset balance'],
-    [inputs.offsetContributionAmount, 'offset contribution'],
-    [inputs.offsetBoostAmount, 'offset boost'],
-    [inputs.extraRepaymentAmount, 'extra repayment'],
+  const amountFields: [string, string, number, string][] = [
+    [inputs.periodicAmount, 'regular amount', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
+    [inputs.withdrawalAmount, 'withdrawal amount', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
+    [
+      inputs.offsetBalance,
+      'offset balance',
+      mortgageBalance ?? MAX_MORTGAGE_BALANCE,
+      mortgageBalance ? 'the current loan balance' : '$100 million',
+    ],
+    [inputs.startOffsetBalance, 'starting offset balance', MAX_MORTGAGE_BALANCE, '$100 million'],
+    [inputs.offsetContributionAmount, 'offset contribution', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
+    [inputs.offsetBoostAmount, 'offset boost', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
+    [inputs.extraRepaymentAmount, 'extra repayment', MAX_PERIODIC_AMOUNT, '$1 million per selected period'],
   ];
-  amountFields.forEach(([value, label]) => {
+  amountFields.forEach(([value, label, maximum, maximumLabel]) => {
     const parsed = rawNumber(value);
-    if (value.trim() && (parsed == null || parsed < 0 || parsed > MAX_AMOUNT)) {
-      errors.push(`${label} from $0 to $1 trillion`);
+    if (value.trim() && (parsed == null || parsed < 0 || parsed > maximum)) {
+      errors.push(`${label} from $0 to ${maximumLabel}`);
     }
   });
   return errors;
@@ -420,6 +441,44 @@ export function metricValue(pointValue: ProjectionPoint, metric: ProjectionMetri
   return pointValue[metric];
 }
 
+/**
+ * Compare the user's entered offset plan with the same loan, rate, repayments,
+ * term and extra repayments but no offset. The result is deliberately an
+ * interest-only difference: applicable offset/package fees are not present in
+ * the projection contract, so a net saving must remain unavailable.
+ */
+export function mortgageOffsetImpact(result: LifecycleProjection): MortgageOffsetImpact | null {
+  if (!result.ready || result.section !== 'Mortgage') return null;
+  const withoutOffset = result.offsetSeries.find((item) => item.id === 'offset-none');
+  const offsetPlan = result.offsetSeries.find((item) => item.id === 'offset-plan');
+  const opening = offsetPlan?.points[0];
+  if (!withoutOffset || !offsetPlan || !opening) return null;
+  const interestDifference = Math.max(0, withoutOffset.projectedInterest - offsetPlan.projectedInterest);
+  if (opening.offsetBalance <= 0 && interestDifference <= 0.005) return null;
+  const payoffIndex = (series: ProjectionSeries): number | null => {
+    const index = series.points.findIndex((pointValue, pointIndex) => pointIndex > 0 && pointValue.balance <= 0.005);
+    return index >= 0 ? index : null;
+  };
+  const withoutOffsetPayoff = payoffIndex(withoutOffset);
+  const offsetPlanPayoff = payoffIndex(offsetPlan);
+  const payoffMonthsEarlier = result.projectionScope === 'full-term'
+    && withoutOffsetPayoff != null
+    && offsetPlanPayoff != null
+    ? Math.max(0, withoutOffsetPayoff - offsetPlanPayoff)
+    : null;
+  const projectedMonths = Math.max(0, offsetPlan.points.length - 1);
+  return {
+    effectiveInterestBearingBalance: Math.max(0, opening.balance - opening.offsetBalance),
+    interestDifference,
+    payoffMonthsEarlier,
+    netDifference: null,
+    netDifferenceUnavailableReason: 'Applicable offset or package fees are not available in this model.',
+    comparisonWindow: result.projectionScope === 'fixed-period'
+      ? `over the ${projectedMonths}-month fixed-rate projection`
+      : 'over the entered remaining term',
+  };
+}
+
 export function buildLifecycleProjection(
   section: SectionKey,
   scenario: UserRateScenario,
@@ -443,7 +502,7 @@ export function buildLifecycleProjection(
     const fixedPeriodMonths = Math.round(cleanNumber(inputs.fixedPeriodMonths));
     const months = fixedRate ? Math.min(remainingMonths, fixedPeriodMonths) : remainingMonths;
     const missing = [
-      ...(balance > 0 && balance <= MAX_AMOUNT ? [] : ['current loan balance up to $1 trillion']),
+      ...(balance > 0 && balance <= MAX_MORTGAGE_BALANCE ? [] : ['current loan balance up to $100 million']),
       ...(annualRate != null ? [] : ['current interest rate from 0% to 100%']),
       ...(remainingMonths > 0 && enteredYears <= MAX_PROJECTION_YEARS
         ? []
@@ -452,7 +511,7 @@ export function buildLifecycleProjection(
         ? ['fixed period no longer than the remaining term']
         : []),
     ];
-    if (annualRate != null) missing.push(...optionalInputErrors(inputs, annualRate, today));
+    if (annualRate != null) missing.push(...optionalInputErrors(inputs, annualRate, today, balance));
     if (missing.length) return emptyProjection(section, today, missing);
 
     const enteredRepayment = monthlyAmount(inputs.periodicAmount, inputs.periodicFrequency);
@@ -536,6 +595,7 @@ export function buildLifecycleProjection(
       mortgageSeries('rate-higher', 'Higher rate', `${(higherRate * 100).toFixed(2)}% with your offset plan`, higherRate, forwardOpeningOffset, offsetGrowth),
     ];
     const offsetSeries = [
+      mortgageSeries('offset-none', 'No offset', 'Same rate and repayments with no offset balance or contributions', baseRate, 0, 0),
       mortgageSeries('offset-steady', 'Offset stays level', `$${Math.round(forwardOpeningOffset).toLocaleString('en-AU')} offset with no added savings`, baseRate, forwardOpeningOffset, 0),
       mortgageSeries('offset-plan', 'Your offset plan', `$${Math.round(offsetGrowth).toLocaleString('en-AU')} added per month on average`, baseRate, forwardOpeningOffset, offsetGrowth),
       ...(offsetBoost > 0
@@ -570,7 +630,7 @@ export function buildLifecycleProjection(
   const balance = cleanNumber(deposit.balance);
   const annualRate = percentageFraction(deposit.currentRate);
   const missing = [
-    ...(balance > 0 && balance <= MAX_AMOUNT ? [] : [section === 'TD' ? 'deposit amount up to $1 trillion' : 'current balance up to $1 trillion']),
+    ...(balance > 0 && balance <= MAX_DEPOSIT_BALANCE ? [] : [section === 'TD' ? 'deposit amount up to $20 million' : 'current balance up to $20 million']),
     ...(annualRate != null ? [] : ['current interest rate from 0% to 100%']),
   ];
   const enteredTermMonths = cleanNumber(inputs.termMonths);
