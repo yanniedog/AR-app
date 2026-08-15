@@ -1,0 +1,32 @@
+{
+  "version": "1.0.154",
+  "releaseTag": "app-arm-v1.0.154",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "fix(mobile): relock private data on app switch (#192)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): relock private data on app switch (#192)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.154"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.153"
+        }
+      ]
+    }
+  ]
+}
