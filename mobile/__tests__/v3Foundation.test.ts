@@ -216,21 +216,29 @@ function core(
 }
 
 function candidate(sourceManifest: GenerationManifestV3 = manifest()): ValidatedGenerationV3 {
+  const manifestText = JSON.stringify(sourceManifest);
   const sourceHead = head({
     generation_id: sourceManifest.generation_id,
     generation_digest: sourceManifest.generation_digest,
     run_date: sourceManifest.run_date,
     observation_state: sourceManifest.observation_state,
+    manifest_sha256: createHash('sha256').update(manifestText).digest('hex'),
+    manifest_bytes: Buffer.byteLength(manifestText, 'utf8'),
   });
   const sourceCore = core(sourceManifest);
   return {
     head: sourceHead,
     manifest: sourceManifest,
+    manifestText,
     core: sourceCore,
     coreText: JSON.stringify(sourceCore),
     optionalAssets: {},
     optionalErrors: {},
   };
+}
+
+function headForManifest(sourceManifest: GenerationManifestV3): GenerationHeadV3 {
+  return candidate(sourceManifest).head;
 }
 
 const facetsValidator = (value: Readonly<Record<string, unknown>>) => {
@@ -288,8 +296,9 @@ describe('vendored v3 contract', () => {
   });
 
   it('accepts a reconciled finalized generation and adapts typed units explicitly', () => {
-    const sourceHead = head();
-    const sourceManifest = validateGenerationManifestV3(manifest(), sourceHead);
+    const rawManifest = manifest();
+    const sourceHead = headForManifest(rawManifest);
+    const sourceManifest = validateGenerationManifestV3(rawManifest, sourceHead);
     const sourceCore = validateCorePayloadV3(core(sourceManifest), sourceManifest);
     const legacy = adaptCoreV3ToLegacy(sourceCore);
 
@@ -633,7 +642,7 @@ describe('dormant dual read', () => {
     });
     const sourceManifest = manifest({ assets: [descriptor('core'), facets, search, shardA, shardB] });
     const sourceCore = core(sourceManifest);
-    const sourceHead = head();
+    const sourceHead = headForManifest(sourceManifest);
     const pointer: GenerationPointerV3 = {
       schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
       schema_version: 3,
@@ -679,7 +688,7 @@ describe('dormant dual read', () => {
   it('requires the locked envelope and capability validator for every optional asset', async () => {
     const facets = descriptor('facets');
     const sourceManifest = manifest({ assets: [descriptor('core'), facets] });
-    const sourceHead = head();
+    const sourceHead = headForManifest(sourceManifest);
     const pointer: GenerationPointerV3 = {
       schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
       schema_version: 3,
@@ -729,7 +738,13 @@ describe('dormant dual read', () => {
     expect(unregistered.optionalErrors.facets).toContain('no registered capability validator');
 
     const requiredManifest = manifest({ assets: [descriptor('core'), descriptor('facets', { required: true })] });
-    baseResponses.set(sourceHead.manifest_url, JSON.stringify(requiredManifest));
+    const requiredHead = headForManifest(requiredManifest);
+    baseResponses.set('https://bridge.test/manifest-v3.json', JSON.stringify({
+      ...pointer,
+      latest_observation: requiredHead,
+      latest_complete: requiredHead,
+    }));
+    baseResponses.set(requiredHead.manifest_url, JSON.stringify(requiredManifest));
     await expect(run(JSON.stringify({
       schema_id: facets.schema_id,
       schema_version: 3,
@@ -746,7 +761,7 @@ describe('dormant dual read', () => {
       url: `https://github.com/yanniedog/AR-local/releases/download/example/details-${index}.json.gz`,
     }));
     const sourceManifest = manifest({ assets: [descriptor('core'), ...shards] });
-    const sourceHead = head();
+    const sourceHead = headForManifest(sourceManifest);
     const pointer: GenerationPointerV3 = {
       schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
       schema_version: 3,
@@ -786,28 +801,28 @@ describe('dormant dual read', () => {
       url: `https://github.com/yanniedog/AR-local/releases/download/example/large-details-${index}.json.gz`,
     }));
     const sourceManifest = manifest({ assets: [descriptor('core'), ...shards] });
-    const sourceHead = head();
-    const pointer: GenerationPointerV3 = {
-      schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
-      schema_version: 3,
-      generated_at: '2026-08-15T01:05:00Z',
-      latest_observation: sourceHead,
-      latest_complete: sourceHead,
-    };
     const attempted: string[] = [];
-    const load = (assets: GenerationManifestV3['assets']) => loadValidatedV3Generation(
-      'https://bridge.test/manifest-v3.json',
-      {
+    const load = (assets: GenerationManifestV3['assets']) => {
+      const runManifest = { ...sourceManifest, assets };
+      const runHead = headForManifest(runManifest);
+      const pointer: GenerationPointerV3 = {
+        schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
+        schema_version: 3,
+        generated_at: '2026-08-15T01:05:00Z',
+        latest_observation: runHead,
+        latest_complete: runHead,
+      };
+      return loadValidatedV3Generation('https://bridge.test/manifest-v3.json', {
         optionalValidators: { 'details-shard': () => undefined },
         download: async (url) => {
           if (url === 'https://bridge.test/manifest-v3.json') return JSON.stringify(pointer);
-          if (url === sourceHead.manifest_url) return JSON.stringify({ ...sourceManifest, assets });
-          if (url === descriptor('core').url) return JSON.stringify(core({ ...sourceManifest, assets }));
+          if (url === runHead.manifest_url) return JSON.stringify(runManifest);
+          if (url === descriptor('core').url) return JSON.stringify(core(runManifest));
           attempted.push(url);
           throw new Error('invalid shard');
         },
-      },
-    );
+      });
+    };
 
     const result = await load([descriptor('core'), ...shards]);
     expect(attempted).toHaveLength(2);

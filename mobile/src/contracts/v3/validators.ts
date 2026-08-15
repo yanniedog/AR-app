@@ -1,3 +1,6 @@
+import { sha256 } from '@noble/hashes/sha256';
+import { utf8ToBytes } from '@noble/hashes/utils';
+
 import { SECTION_KEYS, type CorePayload, type Ribbon, type SectionKey } from '../../types';
 import type {
   AssetDescriptorV3,
@@ -109,6 +112,16 @@ function integer(value: unknown, path: string): number {
 function digest(value: unknown, path: string): string {
   if (typeof value !== 'string' || !HEX_256.test(value)) reject(`${path} must be a lowercase SHA-256`);
   return value;
+}
+
+export function sha256Utf8(value: string): string {
+  return Array.from(sha256(utf8ToBytes(value)))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export function utf8ByteLength(value: string): number {
+  return utf8ToBytes(value).byteLength;
 }
 
 function date(value: unknown, path: string): string {
@@ -325,6 +338,25 @@ export function validateGenerationManifestV3(
     coverage,
     assets,
   };
+}
+
+export function validateGenerationManifestTextV3(
+  raw: string,
+  expectedHead: GenerationHeadV3,
+): GenerationManifestV3 {
+  if (utf8ByteLength(raw) !== expectedHead.manifest_bytes) {
+    reject('generation manifest UTF-8 byte length does not match pointer head');
+  }
+  if (sha256Utf8(raw) !== expectedHead.manifest_sha256) {
+    reject('generation manifest SHA-256 does not match pointer head');
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(raw) as unknown;
+  } catch {
+    return reject('generation manifest is not valid JSON');
+  }
+  return validateGenerationManifestV3(value, expectedHead);
 }
 
 function finiteFraction(value: unknown, path: string): number {

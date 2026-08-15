@@ -10,7 +10,7 @@ import {
   V3_POINTER_LIMIT_BYTES,
   adaptCoreV3ToLegacy,
   validateCorePayloadV3,
-  validateGenerationManifestV3,
+  validateGenerationManifestTextV3,
   validateGenerationPointerV3,
   validateOptionalAssetTextV3,
   v3AssetCacheKey,
@@ -76,7 +76,7 @@ export async function loadValidatedV3Generation(
     maxInflatedBytes: V3_MANIFEST_LIMIT_BYTES,
     requireExactBytes: true,
   });
-  const manifest = validateGenerationManifestV3(await parseJsonHeavy<unknown>(manifestText), head);
+  const manifest = validateGenerationManifestTextV3(manifestText, head);
 
   const optionalAssets: Record<string, string> = {};
   const optionalErrors: Record<string, string> = {};
@@ -130,7 +130,7 @@ export async function loadValidatedV3Generation(
 
   if (!coreText) throw new Error('required v3 core asset is unavailable');
   const core = validateCorePayloadV3(await parseJsonHeavy<unknown>(coreText), manifest);
-  return { head, manifest, core, coreText, optionalAssets, optionalErrors };
+  return { head, manifest, manifestText, core, coreText, optionalAssets, optionalErrors };
 }
 
 export type DualReadResult =

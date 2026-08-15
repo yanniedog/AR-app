@@ -164,16 +164,20 @@ function core(
 }
 
 function candidate(sourceManifest: GenerationManifestV3 = manifest()): ValidatedGenerationV3 {
+  const manifestText = JSON.stringify(sourceManifest);
   const sourceHead = head({
     generation_id: sourceManifest.generation_id,
     generation_digest: sourceManifest.generation_digest,
     run_date: sourceManifest.run_date,
     observation_state: sourceManifest.observation_state,
+    manifest_sha256: createHash('sha256').update(manifestText).digest('hex'),
+    manifest_bytes: Buffer.byteLength(manifestText, 'utf8'),
   });
   const sourceCore = core(sourceManifest);
   return {
     head: sourceHead,
     manifest: sourceManifest,
+    manifestText,
     core: sourceCore,
     coreText: JSON.stringify(sourceCore),
     optionalAssets: {},
@@ -323,8 +327,8 @@ describe('content-addressed v3 cache', () => {
     await cache.install(candidate());
     const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
     const legacyRecord = JSON.parse(storage.files.get(recordPath)!) as Record<string, unknown>;
-    legacyRecord.schema_version = 1;
-    delete legacyRecord.content_hashes;
+    legacyRecord.schema_version = 2;
+    delete legacyRecord.manifest_text;
     const legacyBytes = JSON.stringify(legacyRecord);
     storage.files.set(recordPath, legacyBytes);
 
@@ -342,6 +346,38 @@ describe('content-addressed v3 cache', () => {
     altered.core_text = JSON.stringify(alteredCore);
     storage.files.set(recordPath, JSON.stringify(altered));
     expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+  });
+
+  it('binds persisted and candidate manifest objects to authenticated raw bytes', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    await cache.install(candidate());
+    const recordPath = `payload/v3/generations/${DIGEST_A}.json`;
+    const record = JSON.parse(storage.files.get(recordPath)!) as {
+      manifest: GenerationManifestV3;
+      manifest_text: string;
+    };
+
+    record.manifest.normalization_version = 'locally-mutated-v3';
+    storage.files.set(recordPath, JSON.stringify(record));
+    expect(await createV3GenerationCache(storage).readCurrent()).toBeNull();
+
+    await cache.install(candidate());
+    const authenticated = candidate();
+    const changedManifest = {
+      ...authenticated.manifest,
+      normalization_version: 'network-mismatch-v3',
+    };
+    await expect(cache.install({
+      ...authenticated,
+      manifest: changedManifest,
+    })).rejects.toThrow(/does not match its authenticated manifest bytes/);
+
+    await expect(cache.install({
+      ...authenticated,
+      manifest: changedManifest,
+      manifestText: JSON.stringify(changedManifest),
+    })).rejects.toThrow(/manifest (UTF-8 byte length|SHA-256) does not match pointer head/);
   });
 
   it('checks persisted optional hashes and reruns capability validation on restart', async () => {

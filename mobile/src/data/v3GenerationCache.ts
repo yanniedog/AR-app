@@ -1,12 +1,11 @@
-import { sha256 } from '@noble/hashes/sha256';
-import { utf8ToBytes } from '@noble/hashes/utils';
-
 import type { ValidatedGenerationV3 } from '../contracts/v3/types';
 import {
+  sha256Utf8,
   V3ContractError,
   validateCorePayloadV3,
   validateGenerationHeadV3,
   validateGenerationManifestV3,
+  validateGenerationManifestTextV3,
   validateOptionalAssetTextV3,
   v3AssetCacheKey,
   type OptionalAssetValidatorsV3,
@@ -58,29 +57,24 @@ function parseHead(raw: string | null): GenerationCacheHead | null {
   }
 }
 
-function sha256Text(value: string): string {
-  return Array.from(sha256(utf8ToBytes(value)))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 function contentHashes(candidate: ValidatedGenerationV3) {
   return {
-    core_sha256: sha256Text(candidate.coreText),
+    core_sha256: sha256Utf8(candidate.coreText),
     optional_assets: Object.fromEntries(
       Object.entries(candidate.optionalAssets)
         .sort(([left], [right]) => left.localeCompare(right))
-        .map(([key, value]) => [key, sha256Text(value)]),
+        .map(([key, value]) => [key, sha256Utf8(value)]),
     ),
   };
 }
 
 function serializeCandidate(candidate: ValidatedGenerationV3, savedAt: string): string {
   return JSON.stringify({
-    schema_version: 2,
+    schema_version: 3,
     saved_at: savedAt,
     head: candidate.head,
     manifest: candidate.manifest,
+    manifest_text: candidate.manifestText,
     core_text: candidate.coreText,
     optional_assets: candidate.optionalAssets,
     optional_errors: candidate.optionalErrors,
@@ -137,13 +131,20 @@ function parseCandidate(
   if (!raw) return null;
   try {
     const obj = JSON.parse(raw) as Record<string, unknown>;
-    if (obj.schema_version !== 2 || typeof obj.saved_at !== 'string' || typeof obj.core_text !== 'string') return null;
+    if (
+      obj.schema_version !== 3 ||
+      typeof obj.saved_at !== 'string' ||
+      typeof obj.manifest_text !== 'string' ||
+      typeof obj.core_text !== 'string'
+    ) return null;
     if (!obj.content_hashes || typeof obj.content_hashes !== 'object' || Array.isArray(obj.content_hashes)) return null;
     const hashes = obj.content_hashes as Record<string, unknown>;
-    if (typeof hashes.core_sha256 !== 'string' || hashes.core_sha256 !== sha256Text(obj.core_text)) return null;
+    if (typeof hashes.core_sha256 !== 'string' || hashes.core_sha256 !== sha256Utf8(obj.core_text)) return null;
     if (!hashes.optional_assets || typeof hashes.optional_assets !== 'object' || Array.isArray(hashes.optional_assets)) return null;
     const head = validateGenerationHeadV3(obj.head, 'cache.head');
-    const manifest = validateGenerationManifestV3(obj.manifest, head);
+    const manifest = validateGenerationManifestTextV3(obj.manifest_text, head);
+    const persistedManifest = validateGenerationManifestV3(obj.manifest, head);
+    if (JSON.stringify(manifest) !== JSON.stringify(persistedManifest)) return null;
     if (manifest.observation_state !== 'complete') return null;
     const core = validateCorePayloadV3(JSON.parse(obj.core_text), manifest);
     const { optionalAssets, optionalErrors } = validatedOptionalAssets(
@@ -156,11 +157,12 @@ function parseCandidate(
     const assetKeys = Object.keys(optionalAssets).sort();
     if (Object.keys(optionalHashes).sort().join('\0') !== assetKeys.join('\0')) return null;
     for (const [key, value] of Object.entries(optionalAssets)) {
-      if (typeof optionalHashes[key] !== 'string' || optionalHashes[key] !== sha256Text(value)) return null;
+      if (typeof optionalHashes[key] !== 'string' || optionalHashes[key] !== sha256Utf8(value)) return null;
     }
     return {
       head,
       manifest,
+      manifestText: obj.manifest_text,
       core,
       coreText: obj.core_text,
       optionalAssets,
@@ -209,7 +211,11 @@ export function createV3GenerationCache(
     // Re-validate typed input at the trust boundary. Types do not make values
     // received over the network trustworthy at runtime.
     const head = validateGenerationHeadV3(candidate.head, 'candidate.head');
-    const manifest = validateGenerationManifestV3(candidate.manifest, head);
+    const manifest = validateGenerationManifestTextV3(candidate.manifestText, head);
+    const candidateManifest = validateGenerationManifestV3(candidate.manifest, head);
+    if (JSON.stringify(manifest) !== JSON.stringify(candidateManifest)) {
+      throw new V3ContractError('candidate manifest does not match its authenticated manifest bytes');
+    }
     if (manifest.observation_state !== 'complete') {
       throw new V3ContractError('only complete observations can enter the settled generation cache');
     }
@@ -224,6 +230,7 @@ export function createV3GenerationCache(
       ...candidate,
       head,
       manifest,
+      manifestText: candidate.manifestText,
       core,
       optionalAssets,
       optionalErrors,
@@ -255,6 +262,7 @@ export function createV3GenerationCache(
         if (
           parsed && (
           parsed.manifest.generation_digest !== digest ||
+          parsed.manifestText !== verified.manifestText ||
           parsed.coreText !== verified.coreText ||
           JSON.stringify(parsed.head) !== JSON.stringify(verified.head) ||
           JSON.stringify(parsed.manifest) !== JSON.stringify(verified.manifest)

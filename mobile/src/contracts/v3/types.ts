@@ -143,6 +143,8 @@ export interface CorePayloadV3 {
 export interface ValidatedGenerationV3 {
   head: GenerationHeadV3;
   manifest: GenerationManifestV3;
+  /** Exact UTF-8 manifest bytes authenticated by the immutable pointer head. */
+  manifestText: string;
   core: CorePayloadV3;
   coreText: string;
   /** Keyed by capability, or `capability:cohort` for shardable assets. */
