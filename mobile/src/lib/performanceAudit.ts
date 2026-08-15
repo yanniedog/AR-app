@@ -735,11 +735,11 @@ export function formatAuditErrorForLog(error: unknown): string {
   return flattenAuditLogText(formatAuditError(error));
 }
 
-function firstRows(core: CorePayload | null): RateRow[] {
+function firstComparableRows(core: CorePayload | null): RateRow[] {
   if (!core) return [];
-  const seen = new Set<string>();
-  const rows: RateRow[] = [];
   for (const section of SECTION_ORDER) {
+    const seen = new Set<string>();
+    const rows: RateRow[] = [];
     for (const row of core.sections[section]?.rates ?? []) {
       if (seen.has(row.product_key)) continue;
       seen.add(row.product_key);
@@ -747,7 +747,7 @@ function firstRows(core: CorePayload | null): RateRow[] {
       if (rows.length >= 2) return rows;
     }
   }
-  return rows;
+  return [];
 }
 
 function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourney {
@@ -778,7 +778,7 @@ export function buildPerformanceAuditJourneys(
   core: CorePayload | null,
   interests: SectionKey[] = SECTION_ORDER,
 ): AuditJourney[] {
-  const rows = firstRows(core);
+  const rows = firstComparableRows(core);
   const first = rows[0];
   const second = rows[1];
   const provider = first?.provider ?? Object.keys(core?.brands ?? {})[0];
