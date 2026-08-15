@@ -71,6 +71,7 @@ function parseCandidate(raw: string | null): CachedGenerationV3 | null {
     if (obj.schema_version !== 1 || typeof obj.saved_at !== 'string' || typeof obj.core_text !== 'string') return null;
     const head = validateGenerationHeadV3(obj.head, 'cache.head');
     const manifest = validateGenerationManifestV3(obj.manifest, head);
+    if (manifest.observation_state !== 'complete') return null;
     const core = validateCorePayloadV3(JSON.parse(obj.core_text), manifest);
     const optionalAssets = obj.optional_assets && typeof obj.optional_assets === 'object'
       ? obj.optional_assets as ValidatedGenerationV3['optionalAssets']
@@ -129,6 +130,9 @@ export function createV3GenerationCache(
     // received over the network trustworthy at runtime.
     const head = validateGenerationHeadV3(candidate.head, 'candidate.head');
     const manifest = validateGenerationManifestV3(candidate.manifest, head);
+    if (manifest.observation_state !== 'complete') {
+      throw new V3ContractError('only complete observations can enter the settled generation cache');
+    }
     const core = validateCorePayloadV3(JSON.parse(candidate.coreText), manifest);
     const verified: ValidatedGenerationV3 = { ...candidate, head, manifest, core };
     const savedAt = new Date().toISOString();

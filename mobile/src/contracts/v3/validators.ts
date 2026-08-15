@@ -215,6 +215,7 @@ function assetDescriptor(value: unknown, index: number): AssetDescriptorV3 {
   }
   const cohort = obj.cohort === undefined ? undefined : text(obj.cohort, `${path}.cohort`, 160);
   if (capability === 'details-shard' && !cohort) reject(`${path}.cohort is required for details-shard`);
+  if (capability !== 'details-shard' && cohort !== undefined) reject(`${path}.cohort is valid only for details-shard`);
   return {
     capability,
     schema_id: schemaId,
@@ -501,6 +502,7 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
   const rateIds = new Set<string>();
   const productOwners = new Map<string, string>();
   const legacyProductOwners = new Map<string, string>();
+  const legacyKeyByProduct = new Map<string, string | null>();
   const legacyIndexesByProduct = new Map<string, Map<number, string>>();
   const providerNamesByUid = new Map<string, string>();
   const providerUidsByName = new Map<string, string>();
@@ -515,6 +517,11 @@ export function validateCorePayloadV3(value: unknown, manifest: GenerationManife
       const owner = productOwners.get(row.product_uid);
       if (owner && owner !== row.provider_uid) reject(`product_uid ${row.product_uid} changes provider identity`);
       productOwners.set(row.product_uid, row.provider_uid);
+      const legacyKey = row.legacy_product_key ?? null;
+      if (legacyKeyByProduct.has(row.product_uid) && legacyKeyByProduct.get(row.product_uid) !== legacyKey) {
+        reject(`product_uid ${row.product_uid} has inconsistent legacy_product_key tiers`);
+      }
+      legacyKeyByProduct.set(row.product_uid, legacyKey);
       if (row.legacy_product_key) {
         const legacyOwner = legacyProductOwners.get(row.legacy_product_key);
         if (legacyOwner && legacyOwner !== row.product_uid) reject(`legacy_product_key ${row.legacy_product_key} is ambiguous`);

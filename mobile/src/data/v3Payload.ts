@@ -123,8 +123,8 @@ export async function loadValidatedV3Generation(
   const optionalAssets: Record<string, string> = {};
   const optionalErrors: Record<string, string> = {};
   let coreText: string | null = null;
-  let retainedOptionalCount = 0;
-  let retainedOptionalBytes = 0;
+  let attemptedOptionalCount = 0;
+  let attemptedOptionalBytes = 0;
 
   for (const asset of manifest.assets) {
     const assetKey = assetCacheKey(asset);
@@ -137,16 +137,22 @@ export async function loadValidatedV3Generation(
     if (asset.capability !== 'core') {
       const validator = opts.optionalValidators?.[asset.capability];
       if (!validator) {
-        optionalErrors[assetKey] = `${asset.capability} has no registered capability validator`;
+        const message = `${asset.capability} has no registered capability validator`;
+        if (asset.required) throw new Error(message);
+        optionalErrors[assetKey] = message;
         continue;
       }
       if (
-        retainedOptionalCount >= V3_OPTIONAL_EAGER_MAX_COUNT ||
-        retainedOptionalBytes + asset.uncompressed_bytes > V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES
+        attemptedOptionalCount >= V3_OPTIONAL_EAGER_MAX_COUNT ||
+        attemptedOptionalBytes + asset.uncompressed_bytes > V3_OPTIONAL_EAGER_MAX_INFLATED_BYTES
       ) {
-        optionalErrors[assetKey] = `${asset.capability} exceeds the eager optional-asset aggregate budget`;
+        const message = `${asset.capability} exceeds the eager optional-asset aggregate budget`;
+        if (asset.required) throw new Error(message);
+        optionalErrors[assetKey] = message;
         continue;
       }
+      attemptedOptionalCount += 1;
+      attemptedOptionalBytes += asset.uncompressed_bytes;
     }
     try {
       const text = await download(asset.url, asset.sha256, descriptorOptions(asset));
@@ -156,8 +162,6 @@ export async function loadValidatedV3Generation(
         if (!validator) throw new Error(`${asset.capability} has no registered capability validator`);
         validateOptionalJson(text, asset, manifest, validator);
         optionalAssets[assetKey] = text;
-        retainedOptionalCount += 1;
-        retainedOptionalBytes += asset.uncompressed_bytes;
       }
     } catch (error) {
       const message = String((error as Error)?.message ?? error);

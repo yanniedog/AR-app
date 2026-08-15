@@ -313,6 +313,37 @@ describe('vendored v3 contract', () => {
         }),
       ],
     }), head())).toThrow(/duplicate asset descriptor/);
+
+    expect(() => validateGenerationManifestV3(manifest({
+      assets: [descriptor('core'), descriptor('facets', { cohort: 'not-a-shard' })],
+    }), head())).toThrow(/cohort is valid only for details-shard/);
+  });
+
+  it('requires one consistent legacy product key across every product tier', () => {
+    const inconsistent = core();
+    const original = inconsistent.sections.Mortgage.rates[0];
+    const sibling = {
+      ...original,
+      rate_uid: 'rate/home-1/variable-owner-occupier-lvr-80',
+      typed_rate: { ...original.typed_rate, value: 0.062 },
+    };
+    delete sibling.legacy_product_key;
+    inconsistent.sections.Mortgage.rates.push(sibling);
+    inconsistent.sections.Mortgage.ribbon = {
+      counts: { rates: 2, products: 1, providers: 1 },
+      range: { min: 0.061, max: 0.062, mean: 0.0615, median: 0.0615 },
+      providers: [{
+        provider: 'Example Bank',
+        rates: 2,
+        products: 1,
+        min: 0.061,
+        max: 0.062,
+        mean: 0.0615,
+        median: 0.0615,
+      }],
+    };
+
+    expect(() => validateCorePayloadV3(inconsistent, manifest())).toThrow(/inconsistent legacy_product_key/);
   });
 });
 
@@ -483,6 +514,12 @@ describe('content-addressed v3 cache', () => {
     expect(storage.files.get(recordPath)).toBe(original);
     expect((await cache.readCurrent())?.optionalAssets.facets).toBeUndefined();
   });
+
+  it('rejects finalized partial observations from the settled generation cache', async () => {
+    const cache = createV3GenerationCache(new MemoryStorage());
+    const partialManifest = manifest({ observation_state: 'partial' });
+    await expect(cache.install(candidate(partialManifest))).rejects.toThrow(/only complete observations/);
+  });
 });
 
 describe('dormant dual read', () => {
@@ -562,6 +599,34 @@ describe('dormant dual read', () => {
 
     expect(result.contract).toBe('v1');
     expect(storage.files.size).toBe(0);
+  });
+
+  it('ignores a legacy cached partial generation during fallback', async () => {
+    const storage = new MemoryStorage();
+    const partialManifest = manifest({ observation_state: 'partial' });
+    const partial = candidate(partialManifest);
+    storage.files.set(`payload/v3/generations/${DIGEST_A}.json`, JSON.stringify({
+      schema_version: 1,
+      saved_at: '2026-08-15T02:00:00Z',
+      head: partial.head,
+      manifest: partial.manifest,
+      core_text: partial.coreText,
+      optional_assets: {},
+      optional_errors: {},
+    }));
+    storage.files.set('payload/v3/head.json', JSON.stringify({
+      schema_version: 1,
+      current: DIGEST_A,
+      previous: null,
+    }));
+    const result = await loadCoreDualRead({
+      bridgeEnabled: true,
+      loadV3: async () => { throw new Error('network unavailable'); },
+      loadV1: async () => adaptCoreV3ToLegacy(core()),
+      v3Cache: createV3GenerationCache(storage),
+    });
+
+    expect(result.contract).toBe('v1');
   });
 
   it('quarantines corrupt and base-mismatched optional capabilities while installing core', async () => {
@@ -673,6 +738,16 @@ describe('dormant dual read', () => {
       filters: [],
     }), false);
     expect(unregistered.optionalErrors.facets).toContain('no registered capability validator');
+
+    const requiredManifest = manifest({ assets: [descriptor('core'), descriptor('facets', { required: true })] });
+    baseResponses.set(sourceHead.manifest_url, JSON.stringify(requiredManifest));
+    await expect(run(JSON.stringify({
+      schema_id: facets.schema_id,
+      schema_version: 3,
+      generation_digest: DIGEST_A,
+      filters: [],
+    }), false)).rejects.toThrow(/no registered capability validator/);
+    await expect(run(JSON.stringify({ filters: [] }))).rejects.toThrow(/facets validation failed.*schema_id/);
   });
 
   it('bounds the aggregate number of eagerly retained optional assets', async () => {
@@ -712,5 +787,46 @@ describe('dormant dual read', () => {
     expect(Object.keys(result.optionalAssets)).toHaveLength(V3_OPTIONAL_EAGER_MAX_COUNT);
     expect(optionalDownloads).toHaveLength(V3_OPTIONAL_EAGER_MAX_COUNT);
     expect(result.optionalErrors[`details-shard:provider-${V3_OPTIONAL_EAGER_MAX_COUNT}`]).toContain('aggregate budget');
+  });
+
+  it('charges failed optional downloads to the aggregate byte budget before each request', async () => {
+    const shards = Array.from({ length: 9 }, (_, index) => descriptor('details-shard', {
+      cohort: `provider-${index}`,
+      sha256: index.toString(16).padStart(64, '0'),
+      uncompressed_bytes: 32 * 1024 * 1024,
+      url: `https://github.com/yanniedog/AR-local/releases/download/example/large-details-${index}.json.gz`,
+    }));
+    const sourceManifest = manifest({ assets: [descriptor('core'), ...shards] });
+    const sourceHead = head();
+    const pointer: GenerationPointerV3 = {
+      schema_id: 'https://australianrates.app/schemas/manifest-v3.json',
+      schema_version: 3,
+      generated_at: '2026-08-15T01:05:00Z',
+      latest_observation: sourceHead,
+      latest_complete: sourceHead,
+    };
+    const attempted: string[] = [];
+    const load = (assets: GenerationManifestV3['assets']) => loadValidatedV3Generation(
+      'https://bridge.test/manifest-v3.json',
+      {
+        optionalValidators: { 'details-shard': () => undefined },
+        download: async (url) => {
+          if (url === 'https://bridge.test/manifest-v3.json') return JSON.stringify(pointer);
+          if (url === sourceHead.manifest_url) return JSON.stringify({ ...sourceManifest, assets });
+          if (url === descriptor('core').url) return JSON.stringify(core({ ...sourceManifest, assets }));
+          attempted.push(url);
+          throw new Error('invalid shard');
+        },
+      },
+    );
+
+    const result = await load([descriptor('core'), ...shards]);
+    expect(attempted).toHaveLength(2);
+    expect(result.optionalErrors['details-shard:provider-2']).toContain('aggregate budget');
+
+    attempted.length = 0;
+    const requiredThird = { ...shards[2], required: true };
+    await expect(load([descriptor('core'), shards[0], shards[1], requiredThird])).rejects.toThrow(/aggregate budget/);
+    expect(attempted).toHaveLength(2);
   });
 });
