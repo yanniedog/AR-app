@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, StyleSheet, View } from 'react-native';
+import { AppState, Modal, View } from 'react-native';
 
 import { useStore } from '../data/store';
 import { authenticateBiometric } from '../lib/appLock';
@@ -19,8 +19,8 @@ import { AppText, Button } from './ui';
 
 /**
  * Biometric gate for cold start and every foreground transition. Private
- * children remain mounted to preserve navigation state, but an opaque,
- * input-blocking and accessibility-modal overlay obscures them as soon as the
+ * children remain mounted to preserve navigation state, but an opaque native
+ * modal obscures them (including any other open native modal) as soon as the
  * app becomes inactive/backgrounded. Authentication results are epoch-bound so
  * a late success from an older foreground session cannot reveal a newer one.
  */
@@ -95,6 +95,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   return (
     <View style={{ flex: 1 }}>
       <View
+        testID="app-lock-private-content"
         style={{ flex: 1 }}
         pointerEvents={mustLock ? 'none' : 'auto'}
         accessibilityElementsHidden={mustLock}
@@ -102,19 +103,24 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
       >
         {children}
       </View>
-      {mustLock ? (
+      <Modal
+        testID="app-lock-modal"
+        visible={mustLock}
+        animationType="none"
+        presentationStyle="fullScreen"
+        statusBarTranslucent
+        navigationBarTranslucent
+        onRequestClose={() => undefined}
+      >
         <View
-          style={[
-            StyleSheet.absoluteFillObject,
-            {
-              zIndex: 1,
-              backgroundColor: theme.colors.bg,
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 14,
-              padding: 24,
-            },
-          ]}
+          style={{
+            flex: 1,
+            backgroundColor: theme.colors.bg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 14,
+            padding: 24,
+          }}
           accessibilityViewIsModal
           accessibilityLiveRegion="polite"
         >
@@ -131,7 +137,7 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
             disabled={prompting || machine.lifecycle !== 'active'}
           />
         </View>
-      ) : null}
+      </Modal>
     </View>
   );
 }

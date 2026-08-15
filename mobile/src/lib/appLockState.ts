@@ -68,8 +68,10 @@ export function shouldAutomaticallyPrompt(state: AppLockMachineState): boolean {
  * Pure app-lock state machine. Every privacy-invalidating lifecycle or
  * configuration change advances an epoch, so an authentication result that
  * returns after a real background transition or lock disablement can never
- * unlock a newer foreground session. Prompt-driven inactivity retains the
- * attempt only until the prompt settles or the app actually backgrounds.
+ * unlock a newer foreground session. A lifecycle interruption that occurs
+ * while the OS prompt is live retains the attempt until that prompt settles;
+ * a cancelled real app switch therefore stays locked, while Android's
+ * device-credential activity can still return its authenticated result.
  */
 export function reduceAppLockState(
   state: AppLockMachineState,
@@ -93,13 +95,16 @@ export function reduceAppLockState(
       if (event.lifecycle === state.lifecycle) return state;
 
       // Native biometric/device-credential UI can itself move iOS to
-      // `inactive`. Lock the content immediately, but retain that attempt and
-      // epoch until the prompt settles or a real `background` transition
-      // invalidates it.
-      if (event.lifecycle === 'inactive' && state.promptAttempt) {
+      // `inactive` or put Android's host Activity in `background`. Lock the
+      // content immediately, but retain the attempt only while the OS prompt
+      // is live. A real app switch cancels that prompt and remains locked.
+      if (
+        (event.lifecycle === 'inactive' || event.lifecycle === 'background') &&
+        state.promptAttempt
+      ) {
         return {
           ...state,
-          lifecycle: 'inactive',
+          lifecycle: event.lifecycle,
           locked: state.required,
           promptInterruption: true,
         };
@@ -147,7 +152,7 @@ export function reduceAppLockState(
       if (
         event.success &&
         attemptStillCurrent &&
-        state.lifecycle === 'inactive' &&
+        state.lifecycle !== 'active' &&
         state.promptInterruption
       ) {
         return {
