@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T02:28:30.605Z",
+  "generated_at": "2026-08-15T03:05:14.422Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -789,6 +789,14 @@
         "Secure external links and APK download consent (#197)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.159"
+    },
+    {
+      "version": "1.0.161",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "Remove dormant account and key service (#199)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.161"
     }
   ]
 }
