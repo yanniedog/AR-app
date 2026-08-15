@@ -13,6 +13,7 @@ const ROOT = 'payload/bank-spread';
 const CORE_A = 'a'.repeat(64);
 const CORE_B = 'b'.repeat(64);
 const CORE_C = 'c'.repeat(64);
+const CORE_D = 'd'.repeat(64);
 
 class MemoryStorage implements BankSpreadContentStorage {
   readonly files = new Map<string, string>();
@@ -114,6 +115,7 @@ describe('content-addressed bank spread cache', () => {
   const a = fixture(CORE_A, 'a', 0.02);
   const b = fixture(CORE_B, 'b', 0.015);
   const c = fixture(CORE_C, 'c', 0.01);
+  const d = fixture(CORE_D, 'd', 0.005);
 
   it('binds every cold read to the live compressed asset SHA and exact run date', async () => {
     const storage = new MemoryStorage();
@@ -183,7 +185,9 @@ describe('content-addressed bank spread cache', () => {
       expect.objectContaining({ core_sha256: CORE_C }),
       expect.objectContaining({ core_sha256: CORE_B }),
     ]);
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
+    // A remains for one transaction as rollback grace.  The authoritative
+    // index is still capped at current + one predecessor.
+    expect(storage.files.has(recordPath(a.identity))).toBe(true);
     expect(storage.files.has(recordPath(b.identity))).toBe(true);
     expect(storage.files.has(recordPath(c.identity))).toBe(true);
   });
@@ -199,8 +203,23 @@ describe('content-addressed bank spread cache', () => {
     expect(indexEntries(storage)).toEqual([
       expect.objectContaining({ core_sha256: CORE_C }),
     ]);
-    expect(storage.files.has(recordPath(b.identity))).toBe(false);
+    expect(storage.files.has(recordPath(b.identity))).toBe(true);
     expect(storage.files.has(recordPath(c.identity))).toBe(true);
+  });
+
+  it('bounds physical rollback grace to one record beyond the two-entry index', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    await cache.install(b.identity, b.raw, () => true);
+    await cache.install(c.identity, c.raw, () => true);
+    await cache.install(d.identity, d.raw, () => true);
+
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_D, CORE_C]);
+    expect(storage.files.has(recordPath(a.identity))).toBe(false);
+    expect(storage.files.has(recordPath(b.identity))).toBe(true);
+    expect(storage.files.has(recordPath(c.identity))).toBe(true);
+    expect(storage.files.has(recordPath(d.identity))).toBe(true);
   });
 
   it('recovers an authenticated temporary index after iOS destination deletion and move crash', async () => {
@@ -258,20 +277,22 @@ describe('content-addressed bank spread cache', () => {
     expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
   });
 
-  it('never restores an index entry after its record is deleted during a stale cleanup', async () => {
+  it('preserves the prior indexed generation when cleanup becomes stale after deleting debris', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
     await cache.install(b.identity, b.raw, () => true);
     await cache.install(c.identity, c.raw, () => true);
+    const orphanPath = `${ROOT}/records/${'e'.repeat(64)}-${'f'.repeat(64)}.json`;
+    storage.files.set(orphanPath, 'unindexed debris');
     let aStillCurrent = true;
     storage.afterRemove = (path) => {
-      if (path === recordPath(b.identity)) aStillCurrent = false;
+      if (path === orphanPath) aStillCurrent = false;
     };
 
     await expect(cache.install(a.identity, a.raw, () => aStillCurrent)).resolves.toBe(false);
 
     const entries = indexEntries(storage);
-    expect(entries.map((entry) => entry.core_sha256)).toEqual([CORE_A, CORE_C]);
+    expect(entries.map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
     for (const entry of entries) {
       expect(storage.files.has(recordPath({
         coreSha: entry.core_sha256,
@@ -279,7 +300,11 @@ describe('content-addressed bank spread cache', () => {
         runDate: sampleCore.run_date,
       }))).toBe(true);
     }
-    expect(storage.files.has(recordPath(b.identity))).toBe(false);
+    expect(storage.files.has(recordPath(a.identity))).toBe(false);
+    expect(storage.files.has(recordPath(b.identity))).toBe(true);
+    expect(storage.files.has(recordPath(c.identity))).toBe(true);
+    expect(storage.files.has(orphanPath)).toBe(false);
+    await expect(cache.load(b.identity, () => true)).resolves.toEqual(b.value);
   });
 
   it('rejects an authenticated spread whose raw run_date has a valid-date prefix only', async () => {

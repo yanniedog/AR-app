@@ -109,10 +109,16 @@ async function downloadBytes(
     (
       typeof opts.expectedBytes !== 'number' ||
       !Number.isSafeInteger(opts.expectedBytes) ||
-      opts.expectedBytes <= 0
+      opts.expectedBytes <= 0 ||
+      (
+        typeof opts.maxCompressedBytes === 'number' &&
+        opts.expectedBytes > opts.maxCompressedBytes
+      )
     )
   ) {
-    throw new Error('exact compressed asset size requires a positive safe-integer expectedBytes');
+    throw new Error(
+      'exact compressed asset size requires a positive safe-integer expectedBytes within the compressed byte limit',
+    );
   }
   const fileName = opts.fileName ?? fileNameFromUrl(url);
   const phase = opts.phase ?? 'download';

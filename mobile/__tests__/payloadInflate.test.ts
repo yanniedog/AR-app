@@ -1,6 +1,10 @@
 import { gzipSync } from 'fflate';
 
-import { downloadBankSpreadHistory, gunzipCooperatively } from '../src/data/payload';
+import {
+  BANK_SPREAD_MAX_COMPRESSED_BYTES,
+  downloadBankSpreadHistory,
+  gunzipCooperatively,
+} from '../src/data/payload';
 import { yieldToUi } from '../src/lib/yieldToUi';
 
 jest.mock('../src/lib/yieldToUi', () => ({
@@ -43,7 +47,15 @@ describe('cooperative payload inflate', () => {
     );
   });
 
-  it.each([undefined, null, 0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+  it.each([
+    undefined,
+    null,
+    0,
+    -1,
+    1.5,
+    Number.MAX_SAFE_INTEGER + 1,
+    BANK_SPREAD_MAX_COMPRESSED_BYTES + 1,
+  ])(
     'rejects an invalid exact compressed byte count before network activity (%p)',
     async (expectedBytes) => {
       const xhrBefore = globalThis.XMLHttpRequest;

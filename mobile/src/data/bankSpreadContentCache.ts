@@ -15,14 +15,20 @@ import {
 export type { BankSpreadCacheIdentity } from './bankSpreadContentRecord';
 
 export const BANK_SPREAD_CACHE_MAX_ENTRIES = 2;
+/** One prior-index record is retained for one transaction as rollback grace. */
+export const BANK_SPREAD_CACHE_MAX_SETTLED_RECORDS = BANK_SPREAD_CACHE_MAX_ENTRIES + 1;
 export const BANK_SPREAD_CACHE_MAX_COMPRESSED_BYTES = 8 * 1024 * 1024;
 export const BANK_SPREAD_CACHE_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
 export const BANK_SPREAD_CACHE_MAX_TOTAL_COMPRESSED_BYTES =
   BANK_SPREAD_CACHE_MAX_ENTRIES * BANK_SPREAD_CACHE_MAX_COMPRESSED_BYTES;
+export const BANK_SPREAD_CACHE_MAX_SETTLED_COMPRESSED_BYTES =
+  BANK_SPREAD_CACHE_MAX_SETTLED_RECORDS * BANK_SPREAD_CACHE_MAX_COMPRESSED_BYTES;
 export const BANK_SPREAD_CACHE_MAX_ENCODED_BYTES =
   Math.ceil(BANK_SPREAD_CACHE_MAX_COMPRESSED_BYTES / 3) * 4;
 export const BANK_SPREAD_CACHE_MAX_TOTAL_ENCODED_BYTES =
   BANK_SPREAD_CACHE_MAX_ENTRIES * BANK_SPREAD_CACHE_MAX_ENCODED_BYTES;
+export const BANK_SPREAD_CACHE_MAX_SETTLED_ENCODED_BYTES =
+  BANK_SPREAD_CACHE_MAX_SETTLED_RECORDS * BANK_SPREAD_CACHE_MAX_ENCODED_BYTES;
 
 export interface BankSpreadContentStorage {
   read(path: string): Promise<string | null>;
@@ -191,9 +197,12 @@ export function createBankSpreadContentCache(
   async function cleanupOrphans(
     retained: RetentionIndex,
     stillCurrent: () => boolean,
+    protectedEntries: RetainedEntry[] = [],
   ): Promise<boolean> {
-    const keep = new Set(retained.entries.map((entry) =>
-      recordPath(bankSpreadEntryIdentity(entry))));
+    const keep = new Set(
+      [...retained.entries, ...protectedEntries].map((entry) =>
+        recordPath(bankSpreadEntryIdentity(entry))),
+    );
     const files = await enumerateRecordFiles();
     if (!stillCurrent()) return false;
     for (const path of files) {
@@ -247,13 +256,12 @@ export function createBankSpreadContentCache(
       await replaceIndex(previousIndex);
       return false;
     }
-    if (!(await cleanupOrphans(nextIndex, stillCurrent))) {
-      // Cleanup may already have deleted records excluded from nextIndex.  At
-      // that point the previous index is no longer safe to restore because it
-      // may reference one of those deleted records.  Leave the already
-      // committed nextIndex in place; it contains only records that cleanup
-      // deliberately retained, and the live generation will reorder it on
-      // its next exact-key load/install.
+    if (!(await cleanupOrphans(nextIndex, stillCurrent, previousIndex?.entries))) {
+      // Cleanup protects every record in both the old and new indexes.  It may
+      // remove only older unindexed debris, so restoring the prior index after
+      // a generation change cannot create a dangling reference or evict the
+      // generation that just became live.
+      await replaceIndex(previousIndex);
       return false;
     }
     return true;
