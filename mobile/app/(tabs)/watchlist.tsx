@@ -12,6 +12,7 @@ import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { AppText, Button, Card, Row, SectionHeading } from '../../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr, num } from '../../src/data/calc';
+import { toggleCompareSelection } from '../../src/data/compareSelection';
 import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
 import { formatRate, formatRateChangeDate, formatRunDate, toFraction } from '../../src/data/format';
 import { ensurePermissions } from '../../src/data/notifications';
@@ -236,14 +237,22 @@ export default function MyRates() {
     setSelected([]);
   }, []);
   const toggleSelection = useCallback((token: string) => {
-    setSelected((prev) =>
-      prev.includes(token)
-        ? prev.filter((value) => value !== token)
-        : prev.length < 4
-          ? [...prev, token]
-          : [...prev.slice(1), token],
-    );
-  }, []);
+    if (!core) return;
+    const update = toggleCompareSelection(core, selected, token);
+    if (update.rejection === 'limit_reached') {
+      Alert.alert('Compare up to four', 'Remove one product before adding another.');
+      return;
+    }
+    if (update.rejection === 'category_mismatch') {
+      Alert.alert('Choose one rate category', 'Compare home loans, savings accounts, or term deposits separately.');
+      return;
+    }
+    if (update.rejection === 'unavailable') {
+      Alert.alert('Rate unavailable', 'Refresh My rates and choose a current rate.');
+      return;
+    }
+    setSelected(update.tokens);
+  }, [core, selected]);
   const findExactRow = useCallback((token: string): RateRow | null => {
     if (!core) return null;
     const hash = token.indexOf('#');

@@ -125,10 +125,16 @@ const core: CorePayload = {
           product_name: 'Save',
           rate: '0.04',
         },
+        {
+          provider: 'Bank C',
+          product_key: 'Bank C|save-plus',
+          product_name: 'Save Plus',
+          rate: '0.041',
+        },
       ],
       ribbon: {
-        counts: { rates: 1, products: 1, providers: 1 },
-        range: { min: 0.04, max: 0.04, mean: 0.04, median: 0.04 },
+        counts: { rates: 2, products: 2, providers: 2 },
+        range: { min: 0.04, max: 0.041, mean: 0.0405, median: 0.0405 },
         providers: [],
       },
     },
@@ -235,6 +241,30 @@ describe('performance audit journeys', () => {
       expectedSurface: 'moves.response-chart',
       navigationKind: 'stack',
     });
+  });
+
+  it('builds comparison journeys only from two products in the same section', () => {
+    const compare = buildPerformanceAuditJourneys(core).find((journey) => journey.id === 'compare');
+    expect(compare?.href).toMatchObject({
+      pathname: '/compare',
+      params: { keys: JSON.stringify(['Bank B|save', 'Bank C|save-plus']) },
+    });
+
+    const onePerSection: CorePayload = {
+      ...core,
+      sections: {
+        ...core.sections,
+        Savings: {
+          ...core.sections.Savings,
+          rates: core.sections.Savings.rates.slice(0, 1),
+        },
+      },
+    };
+    expect(buildPerformanceAuditJourneys(onePerSection).find((journey) => journey.id === 'compare'))
+      .toMatchObject({
+        href: undefined,
+        skipReason: 'Fewer than two products are loaded',
+      });
   });
 
   it('keeps data-dependent journeys visible but skipped when no payload exists', () => {
