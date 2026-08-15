@@ -314,6 +314,7 @@ export default function Settings() {
     <Screen>
     <ScreenScrollView
       ref={scrollRef}
+      showDataHealthBanner={false}
       contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 40 }}
       onContentSizeChange={() => setLayoutReady(true)}
     >

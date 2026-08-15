@@ -6,6 +6,10 @@ import {
   useTrustedExternalUrl,
 } from '../src/components/ExternalLinkConfirmation';
 
+// React-test-renderer can be CPU-starved when the full suite runs in parallel
+// on Windows. Keep a finite hang guard without relying on Jest's 5s default.
+jest.setTimeout(15_000);
+
 type TestNode = {
   props: Record<string, unknown>;
   findByProps: (props: Record<string, unknown>) => TestNode;
