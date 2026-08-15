@@ -11,9 +11,9 @@ import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
 import { AppText, Button, Card, Row, SectionHeading } from '../../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
-import { computeLvr, num } from '../../src/data/calc';
+import { computeLvr } from '../../src/data/calc';
 import { toggleCompareSelection } from '../../src/data/compareSelection';
-import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
+import { percentageInputFraction } from '../../src/data/decisionInsights';
 import { formatRate, formatRateChangeDate, formatRunDate, toFraction } from '../../src/data/format';
 import { ensurePermissions } from '../../src/data/notifications';
 import {
@@ -56,11 +56,8 @@ function compareToken(productKey: string, rateIndex: number | null): string {
 interface RatePosition {
   section: SectionKey;
   currentRate: number;
-  principal: number;
   matchedRate: number | null;
   gapRate: number | null;
-  monthlyDollars: number | null;
-  annualDollars: number | null;
   ready: boolean;
 }
 
@@ -76,12 +73,6 @@ function positionHeadline(position: RatePosition): string {
     return 'No matched comparison is available today';
   }
   if (position.gapRate <= 0) return 'No better matched rate observed today';
-  if (position.section === 'Mortgage' && position.monthlyDollars != null) {
-    return `About $${Math.round(position.monthlyDollars).toLocaleString()}/month gap`;
-  }
-  if (position.section === 'Savings' && position.annualDollars != null) {
-    return `About $${Math.round(position.annualDollars).toLocaleString()}/year gap`;
-  }
   return `${(position.gapRate * 100).toFixed(2)} percentage point gap`;
 }
 
@@ -158,9 +149,6 @@ export default function MyRates() {
         ? percentageInputFraction(scenario.mortgage.currentRate)
         : percentageInputFraction(deposit.currentRate);
       if (currentRate == null) return [];
-      const principal = section === 'Mortgage'
-        ? mortgage.loan ?? num(scenario.mortgage.loanBalance)
-        : num(deposit.balance);
       const rows = core.sections[section]?.rates ?? [];
       const lvrTier = section === 'Mortgage' && mortgage.lvr != null
         ? lvrTierForValue(
@@ -175,11 +163,8 @@ export default function MyRates() {
         return [{
           section,
           currentRate,
-          principal,
           matchedRate: null,
           gapRate: null,
-          monthlyDollars: null,
-          annualDollars: null,
           ready: false,
         }];
       }
@@ -201,17 +186,11 @@ export default function MyRates() {
       const gapRate = matchedRate == null
         ? null
         : Math.max(0, section === 'Mortgage' ? currentRate - matchedRate : matchedRate - currentRate);
-      const insight = matchedRate != null && principal > 0
-        ? loyaltyGapInsight(section, principal, currentRate, matchedRate, null)
-        : null;
       return [{
         section,
         currentRate,
-        principal,
         matchedRate,
         gapRate,
-        monthlyDollars: insight?.monthlyDollars ?? null,
-        annualDollars: insight?.annualDollars ?? null,
         ready: true,
       }];
     });
@@ -488,7 +467,7 @@ export default function MyRates() {
               <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
               {position.ready ? (
                 <AppText variant="tiny" color="textMuted">
-                  Observed {formatRunDate(core.run_date)} · matched to your filters{position.principal > 0 ? ` · based on $${Math.round(position.principal).toLocaleString()}` : ''}.
+                  Observed {formatRunDate(core.run_date)} · matched to your filters.
                 </AppText>
               ) : null}
               {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
@@ -510,7 +489,7 @@ export default function MyRates() {
           </Card>
         )}
         <AppText variant="tiny" color="textMuted">
-          Entered amounts stay on this device. Illustrations exclude fees, tax and switching costs.
+          Entered rates stay on this device. Observed gaps are shown in percentage points.
         </AppText>
 
         {profileDetailsPending && !detailsLoading ? (

@@ -41,7 +41,11 @@ export interface SwitchCostModel {
   targetPeriodicFeesMonthly: number;
   pricedCurrentPeriodicFees: { name: string; amount: number; monthsPerCharge: number }[];
   pricedPeriodicFees: { name: string; amount: number; monthsPerCharge: number }[];
+  unpricedUpfrontFees: string[];
   unpricedPeriodicFees: string[];
+  /** True only when both product fee records and every applicable amount are known. */
+  costClaimsAvailable: boolean;
+  unknownFeeReasons: string[];
 }
 
 export interface StaySwitchPoint {
@@ -53,10 +57,10 @@ export interface StaySwitchPoint {
   stayNetDebt: number;
   switchNetDebt: number;
   cumulativeStayInterest: number;
-  cumulativeStayCost: number;
+  cumulativeStayCost: number | null;
   cumulativeSwitchInterest: number;
-  cumulativeSwitchCost: number;
-  cumulativeSaving: number;
+  cumulativeSwitchCost: number | null;
+  cumulativeSaving: number | null;
 }
 
 export interface StaySwitchLeg {
@@ -67,7 +71,7 @@ export interface StaySwitchLeg {
   totalMonthlyAllocation: number;
   openingBalance: number;
   totalInterest: number;
-  totalCost: number;
+  totalCost: number | null;
   effectiveDebtFreeDate: string | null;
   contractualPayoffDate: string | null;
   endBalance: number;
@@ -93,7 +97,7 @@ export interface StaySwitchProjection {
   points: StaySwitchPoint[];
   breakEvenDate: string | null;
   totalInterestSaving: number;
-  totalCostSaving: number;
+  totalCostSaving: number | null;
   assumptions: string[];
   warnings: string[];
 }
@@ -168,7 +172,7 @@ function feeKey(item: DetailItem, source: PublishedFeeEvidence['source']): Switc
   const label = (item.label ?? '').trim().toUpperCase();
   const text = `${item.name ?? ''} ${item.info ?? ''}`.toLowerCase();
   if (source === 'current-product') {
-    return label === 'EXIT' || /\b(?:discharge|exit|release of mortgage)\b/.test(text)
+    return label === 'EXIT' || /\b(?:break (?:cost|fee)|discharge|exit|release of mortgage)\b/.test(text)
       ? 'currentBankExitFees'
       : null;
   }
@@ -220,7 +224,26 @@ export function resolveSwitchCosts(
   const netSwitchCost = grossFees - cashback;
   const pricedCurrentPeriodicFees: { name: string; amount: number; monthsPerCharge: number }[] = [];
   const pricedPeriodicFees: { name: string; amount: number; monthsPerCharge: number }[] = [];
+  const unpricedUpfrontFees: string[] = [];
   const unpricedPeriodicFees: string[] = [];
+  const collectUnpricedOneTime = (
+    detail: ProductDetail | null | undefined,
+    source: PublishedFeeEvidence['source'],
+    sourceLabel: string,
+  ) => {
+    for (const item of detail?.fees ?? []) {
+      const key = feeKey(item, source);
+      const text = `${item.label ?? ''} ${item.name ?? ''} ${item.info ?? ''}`;
+      const potentiallyApplicable = key != null
+        || (source === 'current-product'
+          && /\b(?:break (?:cost|fee)|discharge|exit|release of mortgage)\b/i.test(text));
+      if (!potentiallyApplicable || publishedAmount(item) != null) continue;
+      if (key && cleanAmount(inputs[key]) != null) continue;
+      unpricedUpfrontFees.push(`${sourceLabel}: ${item.name?.trim() || item.label?.trim() || 'one-time fee'}`);
+    }
+  };
+  collectUnpricedOneTime(currentDetail, 'current-product', 'Current product');
+  collectUnpricedOneTime(targetDetail, 'target-product', 'Target product');
   const collectPeriodic = (
     detail: ProductDetail | null | undefined,
     output: { name: string; amount: number; monthsPerCharge: number }[],
@@ -248,10 +271,26 @@ export function resolveSwitchCosts(
     (sum, item) => sum + item.amount / item.monthsPerCharge,
     0,
   );
+  const gaps = fees.filter((item) => item.source === 'missing').map((item) => item.key);
+  const feeKeyLabel: Record<SwitchFeeKey, string> = {
+    currentBankExitFees: 'Current bank exit fees',
+    applicationFees: 'Application fees',
+    valuationFees: 'Valuation fees',
+    settlementFees: 'Settlement fees',
+    governmentAndLegalFees: 'Government and legal fees',
+    otherUpfrontFees: 'Other upfront fees',
+  };
+  const unknownFeeReasons = [...new Set([
+    ...(currentDetail == null ? ['Current product fee details are unavailable.'] : []),
+    ...(targetDetail == null ? ['Target product fee details are unavailable.'] : []),
+    ...gaps.map((key) => `${feeKeyLabel[key]} have no confirmed amount.`),
+    ...unpricedUpfrontFees.map((name) => `${name} has no fixed published amount.`),
+    ...unpricedPeriodicFees.map((name) => `${name} has no fixed amount and cadence.`),
+  ])];
   return {
     fees,
     publishedEvidence,
-    gaps: fees.filter((item) => item.source === 'missing').map((item) => item.key),
+    gaps,
     grossFees,
     cashback,
     netSwitchCost,
@@ -261,7 +300,10 @@ export function resolveSwitchCosts(
     targetPeriodicFeesMonthly,
     pricedCurrentPeriodicFees,
     pricedPeriodicFees,
+    unpricedUpfrontFees,
     unpricedPeriodicFees,
+    costClaimsAvailable: unknownFeeReasons.length === 0,
+    unknownFeeReasons,
   };
 }
 
@@ -355,7 +397,7 @@ function emptyProjection(
     points: [],
     breakEvenDate: null,
     totalInterestSaving: 0,
-    totalCostSaving: 0,
+    totalCostSaving: null,
     assumptions: [],
     warnings: [],
   };
@@ -476,10 +518,15 @@ export function buildStaySwitchProjection({
   let stayFeeMonths = 0;
   let switchFeeMonths = 0;
   const pushPoint = (date: Date) => {
-    const cumulativeStayCost = stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths;
-    const cumulativeSwitchCost = switching.interest + fees.netSwitchCost
-      + fees.targetPeriodicFeesMonthly * switchFeeMonths;
-    const cumulativeSaving = cumulativeStayCost - cumulativeSwitchCost;
+    const cumulativeStayCost = fees.costClaimsAvailable
+      ? stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths
+      : null;
+    const cumulativeSwitchCost = fees.costClaimsAvailable
+      ? switching.interest + fees.netSwitchCost + fees.targetPeriodicFeesMonthly * switchFeeMonths
+      : null;
+    const cumulativeSaving = cumulativeStayCost != null && cumulativeSwitchCost != null
+      ? cumulativeStayCost - cumulativeSwitchCost
+      : null;
     points.push({
       date: isoDate(date),
       stayBalance: stay.balance,
@@ -494,7 +541,7 @@ export function buildStaySwitchProjection({
       cumulativeSwitchCost,
       cumulativeSaving,
     });
-    if (!breakEvenDate && cumulativeSaving > 0.005) {
+    if (!breakEvenDate && cumulativeSaving != null && cumulativeSaving > 0.005) {
       // With no opening cost, the paths are equal at settlement. Treat that as
       // break-even only after the switch proves it produces a positive saving.
       breakEvenDate = fees.netSwitchCost === 0 ? asAt : isoDate(date);
@@ -511,9 +558,12 @@ export function buildStaySwitchProjection({
     if (stay.contractualPayoffDate && switching.contractualPayoffDate) break;
   }
 
-  const stayTotalCost = stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths;
-  const switchTotalCost = switching.interest + fees.netSwitchCost
-    + fees.targetPeriodicFeesMonthly * switchFeeMonths;
+  const stayTotalCost = fees.costClaimsAvailable
+    ? stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths
+    : null;
+  const switchTotalCost = fees.costClaimsAvailable
+    ? switching.interest + fees.netSwitchCost + fees.targetPeriodicFeesMonthly * switchFeeMonths
+    : null;
   const warnings: string[] = [];
   if (targetAllocationShortfall > 0.005) {
     warnings.push(`The target minimum repayment is $${Math.round(targetAllocationShortfall).toLocaleString('en-AU')} per month above the current household allocation.`);
@@ -524,8 +574,7 @@ export function buildStaySwitchProjection({
   if (offsetEvidence === 'unavailable') {
     warnings.push('Target product details are unavailable; no target offset is assumed until they load.');
   }
-  if (fees.gaps.length) warnings.push('Some switch-cost fields have no published amount and remain $0 until entered.');
-  if (fees.unpricedPeriodicFees.length) warnings.push('One or more published periodic fees have no reliable amount or cadence and are excluded from totals.');
+  if (!fees.costClaimsAvailable) warnings.push('Cost difference and break-even are unavailable until every applicable fee amount is confirmed.');
   if (fees.netSwitchCost < 0) warnings.push('Entered cashback exceeds modelled fees; confirm eligibility and payment timing.');
   if (targetIsFixed) warnings.push('The comparison stops at the published fixed-period end; no unknown reversion rate is invented.');
 
@@ -573,7 +622,9 @@ export function buildStaySwitchProjection({
     points,
     breakEvenDate,
     totalInterestSaving: stay.interest - switching.interest,
-    totalCostSaving: stayTotalCost - switchTotalCost,
+    totalCostSaving: stayTotalCost != null && switchTotalCost != null
+      ? stayTotalCost - switchTotalCost
+      : null,
     assumptions: [
       'Both paths start with the same loan balance, remaining term and current offset balance.',
       'The target cash flow uses its advertised rate; comparison rate is not an amortisation rate.',
@@ -587,6 +638,9 @@ export function buildStaySwitchProjection({
         ? 'Positive net switch costs are added to the new loan balance.'
         : 'Positive net switch costs are paid from cash or offset rather than added to the new loan.',
       'Rates and the entered cash allocation are held constant; tax, refinancing timing and future rate changes are not forecast.',
+      ...(!fees.costClaimsAvailable
+        ? ['The loan and interest paths use known inputs only; unknown fee amounts are not treated as zero.']
+        : []),
       ...(targetIsFixed ? [`The target advertised rate is modelled for ${modelMonths} months only.`] : []),
     ],
     warnings,

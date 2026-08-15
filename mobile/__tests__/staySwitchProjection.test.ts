@@ -28,6 +28,19 @@ function scenario() {
   });
 }
 
+function scenarioWithKnownUpfrontFees() {
+  const value = scenario();
+  Object.assign(value.mortgageSwitch, {
+    currentBankExitFees: '0',
+    applicationFees: '0',
+    valuationFees: '0',
+    settlementFees: '0',
+    governmentAndLegalFees: '0',
+    otherUpfrontFees: '0',
+  });
+  return value;
+}
+
 describe('published switch fee extraction', () => {
   it('uses numeric CDR exit and upfront evidence while leaving unpriced rows out', () => {
     const current: ProductDetail = { fees: [
@@ -220,10 +233,13 @@ describe('stay versus switch projection', () => {
   });
 
   it('includes priced periodic fees in break-even and total cost', () => {
-    const noFee = buildStaySwitchProjection({ scenario: scenario(), target: TARGET, targetDetail: OFFSET_DETAIL, now: NOW });
+    const noFee = buildStaySwitchProjection({
+      scenario: scenarioWithKnownUpfrontFees(), target: TARGET, currentDetail: {}, targetDetail: OFFSET_DETAIL, now: NOW,
+    });
     const withFee = buildStaySwitchProjection({
-      scenario: scenario(),
+      scenario: scenarioWithKnownUpfrontFees(),
       target: TARGET,
+      currentDetail: {},
       targetDetail: {
         ...OFFSET_DETAIL,
         fees: [{ label: 'PERIODIC', name: 'Package fee $120 annually' }],
@@ -231,41 +247,44 @@ describe('stay versus switch projection', () => {
       now: NOW,
     });
     expect(withFee.fees.targetPeriodicFeesMonthly).toBe(10);
-    expect(withFee.switching!.totalCost).toBeGreaterThan(noFee.switching!.totalCost);
-    expect(withFee.totalCostSaving).toBeLessThan(noFee.totalCostSaving);
+    expect(withFee.switching!.totalCost!).toBeGreaterThan(noFee.switching!.totalCost!);
+    expect(withFee.totalCostSaving!).toBeLessThan(noFee.totalCostSaving!);
   });
 
   it('includes reliably priced current-product periodic fees on the stay path', () => {
     const currentDetail: ProductDetail = {
       fees: [{ label: 'PERIODIC', name: 'Current package fee', value: '120', info: 'per year' }],
     };
-    const withoutCurrentFee = buildStaySwitchProjection({ scenario: scenario(), target: TARGET, targetDetail: OFFSET_DETAIL, now: NOW });
+    const withoutCurrentFee = buildStaySwitchProjection({
+      scenario: scenarioWithKnownUpfrontFees(), target: TARGET, currentDetail: {}, targetDetail: OFFSET_DETAIL, now: NOW,
+    });
     const withCurrentFee = buildStaySwitchProjection({
-      scenario: scenario(),
+      scenario: scenarioWithKnownUpfrontFees(),
       target: TARGET,
       currentDetail,
       targetDetail: OFFSET_DETAIL,
       now: NOW,
     });
     expect(withCurrentFee.fees.currentPeriodicFeesMonthly).toBe(10);
-    expect(withCurrentFee.stay!.totalCost).toBeGreaterThan(withoutCurrentFee.stay!.totalCost);
-    expect(withCurrentFee.totalCostSaving).toBeGreaterThan(withoutCurrentFee.totalCostSaving);
+    expect(withCurrentFee.stay!.totalCost!).toBeGreaterThan(withoutCurrentFee.stay!.totalCost!);
+    expect(withCurrentFee.totalCostSaving!).toBeGreaterThan(withoutCurrentFee.totalCostSaving!);
   });
 
   it('does not report break-even for a zero-cost losing switch', () => {
     const result = buildStaySwitchProjection({
-      scenario: scenario(),
+      scenario: scenarioWithKnownUpfrontFees(),
       target: { ...TARGET, rate: '0.09' },
+      currentDetail: {},
       targetDetail: OFFSET_DETAIL,
       now: NOW,
     });
     expect(result.fees.netSwitchCost).toBe(0);
-    expect(result.points.at(-1)!.cumulativeSaving).toBeLessThan(0);
+    expect(result.points.at(-1)!.cumulativeSaving!).toBeLessThan(0);
     expect(result.breakEvenDate).toBeNull();
   });
 
   it('stops each periodic fee when that loan is contractually repaid', () => {
-    const short = scenario();
+    const short = scenarioWithKnownUpfrontFees();
     short.mortgage.loanBalance = '10000';
     short.mortgage.currentRate = '12';
     short.mortgage.years = '2';
@@ -275,14 +294,78 @@ describe('stay versus switch projection', () => {
     const result = buildStaySwitchProjection({
       scenario: short,
       target: { ...TARGET, rate: '0.01' },
+      currentDetail: {},
       targetDetail: { fees: [{ label: 'PERIODIC', name: 'Monthly fee', value: '10', info: 'per month' }] },
       now: NOW,
     });
     const payoffPoint = result.points.findIndex((point) => point.date === result.switching!.contractualPayoffDate);
     expect(payoffPoint).toBeGreaterThan(0);
     expect(payoffPoint).toBeLessThan(result.points.length - 1);
-    expect(result.switching!.totalCost - result.switching!.totalInterest - result.fees.netSwitchCost)
+    expect(result.switching!.totalCost! - result.switching!.totalInterest - result.fees.netSwitchCost)
       .toBeCloseTo(result.fees.targetPeriodicFeesMonthly * payoffPoint, 8);
+  });
+
+  it.each<[string, ProductDetail | undefined, ProductDetail | undefined]>([
+    ['current product details', undefined, {}],
+    ['target product details', {}, undefined],
+  ])('withholds cost and break-even when %s are unavailable', (_label, currentDetail, targetDetail) => {
+    const result = buildStaySwitchProjection({
+      scenario: scenarioWithKnownUpfrontFees(),
+      target: TARGET,
+      currentDetail,
+      targetDetail,
+      now: NOW,
+    });
+    expect(result.ready).toBe(true);
+    expect(result.fees.costClaimsAvailable).toBe(false);
+    expect(result.totalCostSaving).toBeNull();
+    expect(result.breakEvenDate).toBeNull();
+    expect(result.stay?.totalCost).toBeNull();
+    expect(result.switching?.totalCost).toBeNull();
+    expect(result.points.every((point) => point.cumulativeSaving == null)).toBe(true);
+  });
+
+  it.each<[string, ProductDetail, ProductDetail]>([
+    ['a missing upfront amount', {}, {}],
+    ['a variable upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Variable valuation fee', amountStatus: 'variable' }] }],
+    ['an unpriced periodic fee', {}, { fees: [{ label: 'PERIODIC', name: 'Package fee', amountStatus: 'variable' }] }],
+  ])('withholds net claims for %s', (_label, currentDetail, targetDetail) => {
+    const value = scenarioWithKnownUpfrontFees();
+    if (_label !== 'an unpriced periodic fee') value.mortgageSwitch.valuationFees = '';
+    const result = buildStaySwitchProjection({ scenario: value, target: TARGET, currentDetail, targetDetail, now: NOW });
+    expect(result.fees.costClaimsAvailable).toBe(false);
+    expect(result.fees.unknownFeeReasons.length).toBeGreaterThan(0);
+    expect(result.totalCostSaving).toBeNull();
+    expect(result.breakEvenDate).toBeNull();
+  });
+
+  it('lets an explicit current exit amount resolve an unpriced break cost', () => {
+    const value = scenarioWithKnownUpfrontFees();
+    value.mortgageSwitch.currentBankExitFees = '900';
+    const result = buildStaySwitchProjection({
+      scenario: value,
+      target: TARGET,
+      currentDetail: { fees: [{ label: 'EVENT', name: 'Break cost', amountStatus: 'variable' }] },
+      targetDetail: OFFSET_DETAIL,
+      now: NOW,
+    });
+    expect(result.fees.costClaimsAvailable).toBe(true);
+    expect(result.fees.fees.find((fee) => fee.key === 'currentBankExitFees')).toMatchObject({
+      amount: 900,
+      source: 'entered',
+    });
+    expect(result.totalCostSaving).not.toBeNull();
+  });
+
+  it('publishes an illustrative difference only when every fee input is known', () => {
+    const result = buildStaySwitchProjection({
+      scenario: scenarioWithKnownUpfrontFees(), target: TARGET, currentDetail: {}, targetDetail: OFFSET_DETAIL, now: NOW,
+    });
+    expect(result.fees.costClaimsAvailable).toBe(true);
+    expect(result.fees.unknownFeeReasons).toEqual([]);
+    expect(result.totalCostSaving).not.toBeNull();
+    expect(result.stay?.totalCost).not.toBeNull();
+    expect(result.switching?.totalCost).not.toBeNull();
   });
 
   it('stops exact fixed-product comparisons at the published period without inventing reversion', () => {

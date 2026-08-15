@@ -55,11 +55,13 @@ export function StaySwitchChart({
     return { stay: path('stayNetDebt'), switching: path('switchNetDebt'), bottom };
   }, [chartHeight, chartWidth, projection.points]);
   const currentLabel = currentBank?.trim() ? currentBank : 'Current bank';
+  const costClaimsAvailable = projection.fees.costClaimsAvailable;
   const chartLabel = `${currentLabel} versus ${projection.targetProvider}. `
     + `${currentLabel} total interest ${projectionCurrency(projection.stay?.totalInterest ?? 0)}; `
     + `${projection.targetProvider} total interest ${projectionCurrency(projection.switching?.totalInterest ?? 0)}. `
-    + `Break-even ${shortDate(projection.breakEvenDate)}. `
-    + `${projection.fees.gaps.length} switch cost amounts need checking.`;
+    + (costClaimsAvailable
+      ? `Break-even ${shortDate(projection.breakEvenDate)}.`
+      : 'Cost difference and break-even unavailable until fee inputs are complete.');
 
   if (!projection.ready) return null;
   return (
@@ -98,16 +100,31 @@ export function StaySwitchChart({
       </Row>
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <AppText variant="tiny" color="textMuted">Modelled cost difference</AppText>
-          <AppText variant="body" weight="800" color={projection.totalCostSaving >= 0 ? 'success' : 'danger'}>
-            {projection.totalCostSaving >= 0 ? 'Save ' : 'Costs '}{projectionCurrency(Math.abs(projection.totalCostSaving))}
+          <AppText variant="tiny" color="textMuted">Illustrative difference</AppText>
+          <AppText
+            variant="body"
+            weight="800"
+            color={projection.totalCostSaving == null
+              ? 'text'
+              : projection.totalCostSaving >= 0 ? 'success' : 'danger'}
+          >
+            {projection.totalCostSaving == null
+              ? 'Unavailable'
+              : `Switch ${projection.totalCostSaving >= 0 ? 'lower by' : 'higher by'} ${projectionCurrency(Math.abs(projection.totalCostSaving))}`}
           </AppText>
         </View>
         <View style={{ alignItems: 'flex-end' }}>
           <AppText variant="tiny" color="textMuted">Break-even</AppText>
-          <AppText variant="body" weight="800">{shortDate(projection.breakEvenDate)}</AppText>
+          <AppText variant="body" weight="800">
+            {costClaimsAvailable ? shortDate(projection.breakEvenDate) : 'Unavailable'}
+          </AppText>
         </View>
       </Row>
+      <AppText variant="tiny" color="textMuted">
+        {costClaimsAvailable
+          ? 'Illustrative only. Rates and the entered allocation are held constant; future rates, tax and refinancing timing are not forecast.'
+          : 'Cost difference and break-even stay unavailable until every applicable fee amount is confirmed.'}
+      </AppText>
       {!compact ? (
         <>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -118,8 +135,12 @@ export function StaySwitchChart({
             </View>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
               <AppText variant="tiny" color="textMuted">Modelled cost</AppText>
-              <AppText variant="small">Stay {projectionCurrency(projection.stay?.totalCost ?? 0)}</AppText>
-              <AppText variant="small">Switch {projectionCurrency(projection.switching?.totalCost ?? 0)}</AppText>
+              <AppText variant="small">
+                Stay {projection.stay?.totalCost == null ? 'Unavailable' : projectionCurrency(projection.stay.totalCost)}
+              </AppText>
+              <AppText variant="small">
+                Switch {projection.switching?.totalCost == null ? 'Unavailable' : projectionCurrency(projection.switching.totalCost)}
+              </AppText>
             </View>
           </Row>
           <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -141,9 +162,9 @@ export function StaySwitchChart({
           Target minimum needs {projectionCurrency(projection.targetAllocationShortfall)} more per month.
         </AppText>
       ) : null}
-      {projection.fees.gaps.length ? (
+      {!costClaimsAvailable ? (
         <AppText variant="tiny" color="textMuted">
-          {projection.fees.gaps.length} switch cost amount{projection.fees.gaps.length === 1 ? '' : 's'} need checking.
+          {projection.fees.unknownFeeReasons.length} fee item{projection.fees.unknownFeeReasons.length === 1 ? '' : 's'} need checking.
         </AppText>
       ) : null}
       {!compact && (projection.warnings.length || projection.assumptions.length) ? (
