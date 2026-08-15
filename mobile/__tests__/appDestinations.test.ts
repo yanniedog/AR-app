@@ -6,26 +6,17 @@ import {
 } from '../src/lib/appDestinations';
 
 describe('app destination registry', () => {
-  it('has stable unique destinations covering the app', () => {
+  it('keeps the drawer to the six deliberate secondary destinations', () => {
     const destinations = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations);
     expect(new Set(destinations.map((destination) => destination.id)).size).toBe(destinations.length);
-    expect(destinations.map((destination) => destination.id)).toEqual(expect.arrayContaining([
-      'today',
-      'explore',
-      'home-loans',
-      'savings',
-      'term-deposits',
+    expect(destinations.map((destination) => destination.id)).toEqual([
       'search',
-      'compare',
-      'saved',
+      'banks',
       'scenario',
-      'projections',
-      'changes',
-      'bank-response',
       'market',
       'settings',
       'about',
-    ]));
+    ]);
   });
 
   it('builds contextual destinations with the active product category', () => {
@@ -36,19 +27,22 @@ describe('app destination registry', () => {
       pathname: '/search',
       params: { section: 'Savings' },
     });
-    const compare = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations)
-      .find((destination) => destination.id === 'compare');
-    expect(destinationHref(compare!, 'Savings')).toEqual({
-      pathname: '/search',
-      params: { section: 'Savings', compare: '1' },
+    const scenario = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations)
+      .find((destination) => destination.id === 'scenario');
+    expect(destinationHref(scenario!, 'Savings')).toEqual({
+      pathname: '/calculator',
+      params: { section: 'Savings' },
     });
   });
 
   it('maps focused routes back to their menu destination', () => {
     expect(destinationIsActive('banks', '/bank/Example')).toBe(true);
     expect(destinationIsActive('market', '/(tabs)/trends')).toBe(true);
+    expect(destinationIsActive('market', '/rba')).toBe(true);
+    expect(destinationIsActive('scenario', '/projections')).toBe(true);
+    expect(destinationIsActive('search', '/compare')).toBe(true);
     expect(destinationIsActive('about', '/about')).toBe(true);
-    expect(destinationIsActive('today', '/browse')).toBe(false);
+    expect(destinationIsActive('search', '/browse')).toBe(false);
   });
 
   it('resolves visible category route parameters in key and slug form', () => {

@@ -32,8 +32,6 @@ export type DeepAuditReadinessCategory =
 export const DEEP_AUDIT_EXCLUDED_ACTION_IDS = [
   'onboarding.complete',
   'notifications.enable',
-  'account.sign-in',
-  'account.sign-out',
   'app-lock.toggle',
   'data.refresh',
   'data.cache.clear',
@@ -875,8 +873,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Only disclosures and rollback-protected appearance/ranking controls are exercised.',
     unsafeActionsExcluded: [
       'notifications.enable',
-      'account.sign-in',
-      'account.sign-out',
       'app-lock.toggle',
       'data.refresh',
       'data.cache.clear',

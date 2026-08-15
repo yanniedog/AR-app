@@ -137,27 +137,6 @@ jest.mock('@react-native-firebase/app', () => ({
   default: {},
 }));
 
-jest.mock('@react-native-firebase/auth', () => {
-  const authInstance = { currentUser: null };
-  return {
-    __esModule: true,
-    getAuth: jest.fn(() => authInstance),
-    onAuthStateChanged: jest.fn(() => jest.fn()),
-    signInWithCredential: jest.fn(async () => ({ user: null })),
-    signOut: jest.fn(async () => {}),
-    GoogleAuthProvider: { credential: jest.fn((t) => ({ token: t })) },
-  };
-});
-
-jest.mock('@react-native-google-signin/google-signin', () => ({
-  GoogleSignin: {
-    configure: jest.fn(),
-    hasPlayServices: jest.fn(async () => true),
-    signIn: jest.fn(async () => ({ type: 'success', data: { idToken: 'test-id-token' } })),
-    signOut: jest.fn(async () => {}),
-  },
-}));
-
 jest.mock('expo-local-authentication', () => ({
   hasHardwareAsync: jest.fn(async () => true),
   isEnrolledAsync: jest.fn(async () => true),

@@ -1,17 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Alert } from 'react-native';
 
-import { Button, AppText } from '../ui';
+import { AppText } from '../ui';
 import { authenticateBiometric, biometricsAvailable } from '../../lib/appLock';
-import {
-  isSignInConfigured,
-  signInWithGoogle,
-  signOutUser,
-  subscribeAuth,
-  type AuthUser,
-} from '../../lib/auth';
-import { adoptConfigKey } from '../../lib/keyVault';
-import { InfoRow, SettingsGap, ToggleRow } from './settingsUi';
+import { SettingsGap, ToggleRow } from './settingsUi';
 
 export function AccountSecurityRows({
   appLockEnabled,
@@ -20,34 +12,6 @@ export function AccountSecurityRows({
   appLockEnabled: boolean;
   onAppLockChange: (v: boolean) => void;
 }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => subscribeAuth(setUser), []);
-
-  const handleSignIn = async () => {
-    setBusy(true);
-    try {
-      await signInWithGoogle();
-      await adoptConfigKey();
-    } catch (err) {
-      Alert.alert('Sign-in failed', String((err as Error)?.message ?? err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleSignOut = async () => {
-    setBusy(true);
-    try {
-      await signOutUser();
-    } catch (err) {
-      Alert.alert('Sign-out failed', String((err as Error)?.message ?? err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleAppLockChange = async (next: boolean) => {
     if (next && !(await biometricsAvailable())) {
       Alert.alert(
@@ -63,25 +27,9 @@ export function AccountSecurityRows({
 
   return (
     <>
-      {user ? (
-        <>
-          <InfoRow label="Signed in as" value={user.email ?? user.displayName ?? user.uid} />
-          <SettingsGap size={6} />
-          <Button title="Sign out" variant="ghost" onPress={handleSignOut} loading={busy} disabled={busy} />
-        </>
-      ) : isSignInConfigured() ? (
-        <Button
-          title="Sign in with Google"
-          icon="logo-google"
-          onPress={handleSignIn}
-          loading={busy}
-          disabled={busy}
-        />
-      ) : (
-        <AppText variant="tiny" color="textFaint" style={{ lineHeight: 16 }}>
-          No account required. Your rates stay on this device.
-        </AppText>
-      )}
+      <AppText variant="tiny" color="textFaint" style={{ lineHeight: 16 }}>
+        No account required. Your rates and scenarios stay on this device.
+      </AppText>
       <SettingsGap size={10} />
       <ToggleRow
         icon="finger-print"

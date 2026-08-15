@@ -125,12 +125,7 @@ export function AppNavigationMenu() {
                 >
                   {group.label.toUpperCase()}
                 </AppText>
-                {group.destinations.filter((destination) => {
-                  if (destination.id === 'home-loans') return interests.includes('Mortgage');
-                  if (destination.id === 'savings') return interests.includes('Savings');
-                  if (destination.id === 'term-deposits') return interests.includes('TD');
-                  return true;
-                }).map((destination) => {
+                {group.destinations.map((destination) => {
                   const selected = destinationIsActive(destination.id, pathname);
                   return (
                     <Pressable

@@ -6,7 +6,7 @@ import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
-import { AppText, Badge, Card, Divider, Row } from '../src/components/ui';
+import { AppText, Badge, Button, Card, Divider, Row } from '../src/components/ui';
 import { SECTIONS } from '../src/constants';
 import {
   formatBalanceRange,
@@ -16,7 +16,10 @@ import {
   isBroadlyAvailable,
 } from '../src/data/format';
 import { rankFraction, rankedRateLabelForRow } from '../src/data/selectors';
-import { resolveCompareSelections } from '../src/data/compareSelection';
+import {
+  validateCompareSelections,
+  type CompareSelectionIssue,
+} from '../src/data/compareSelection';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
@@ -46,6 +49,22 @@ interface AttrRow {
   get: (e: Entry) => string;
   /** When true, values use tabular numerals (rates). */
   tabular?: boolean;
+}
+
+function comparisonIssueCopy(issue: CompareSelectionIssue): { title: string; subtitle: string } {
+  if (issue === 'limit_reached') {
+    return { title: 'Too many products', subtitle: 'Choose no more than four products.' };
+  }
+  if (issue === 'category_mismatch') {
+    return {
+      title: 'Choose one rate category',
+      subtitle: 'Compare home loans, savings accounts, or term deposits separately.',
+    };
+  }
+  if (issue === 'unavailable') {
+    return { title: 'A rate is unavailable', subtitle: 'Return and choose current products again.' };
+  }
+  return { title: 'Nothing to compare', subtitle: 'Select at least two products.' };
 }
 
 function relevantDetailItems(
@@ -104,16 +123,23 @@ export default function Compare() {
   const horizontalScrollRef = useRef<ScrollView>(null);
   const [layoutReady, setLayoutReady] = useState(false);
 
-  const entries = useMemo<Entry[]>(() => {
-    if (!core || !keys) return [];
+  const comparison = useMemo(() => {
+    if (!core) return null;
     let list: string[];
     try {
-      list = JSON.parse(keys);
+      const parsed: unknown = keys ? JSON.parse(keys) : [];
+      list = Array.isArray(parsed)
+        ? parsed.filter((value): value is string => typeof value === 'string')
+        : [];
     } catch {
-      list = keys.split(',');
+      list = keys ? keys.split(',') : [];
     }
-    return resolveCompareSelections(core, list);
+    return validateCompareSelections(core, list);
   }, [core, keys]);
+  const entries = useMemo<Entry[]>(
+    () => comparison && comparison.issue == null ? comparison.entries : [],
+    [comparison],
+  );
 
   useEffect(() => {
     if (entries.length >= 2 && !details) void ensureDetails();
@@ -154,8 +180,9 @@ export default function Compare() {
       {
         id: 'compare.data',
         kind: 'data',
-        status: core && entries.length >= 2 ? 'ready' : 'pending',
+        status: comparison?.issue ? 'error' : core && entries.length >= 2 ? 'ready' : 'pending',
         datasetRevision: core?.run_date ?? null,
+        error: comparison?.issue ? comparisonIssueCopy(comparison.issue).subtitle : null,
       },
       {
         id: 'compare.columns',
@@ -187,25 +214,25 @@ export default function Compare() {
   });
 
   if (!core) return <ScreenSkeleton />;
-  if (entries.length < 2) {
+  if (comparison?.issue) {
+    const copy = comparisonIssueCopy(comparison.issue);
     return (
-      <EmptyState
-        icon="git-compare-outline"
-        title="Nothing to compare"
-        subtitle="Select at least two products."
-        fill
-      />
+      <Screen>
+        <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 24 }}>
+          <EmptyState icon="git-compare-outline" title={copy.title} subtitle={copy.subtitle} />
+          <Button title="Choose products" variant="secondary" onPress={() => router.back()} />
+        </View>
+      </Screen>
     );
   }
 
-  const sameSection = entries.every((e) => e.section === entries[0].section);
   const lowerIsBetter = SECTIONS[entries[0].section].lowerIsBetter;
   const fractions = entries.map((e) =>
     rankFraction(e.row, e.section, depositRankMetric, mortgageRateMetric),
   );
   const valid = fractions.filter((f): f is number => f !== null);
   const bestVal =
-    sameSection && valid.length ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
+    valid.length ? (lowerIsBetter ? Math.min(...valid) : Math.max(...valid)) : null;
   const bestTone = lowerIsBetter ? 'success' : 'primary';
   const bestHighlightBg =
     bestTone === 'success' ? `${theme.colors.success}33` : theme.colors.primaryMuted;
@@ -261,12 +288,11 @@ export default function Compare() {
     depositRankMetric,
     mortgageRateMetric,
   ));
-  const commonRankedRateLabel = sameSection
-    && new Set(rankedRateLabels).size === 1
+  const commonRankedRateLabel = new Set(rankedRateLabels).size === 1
     ? rankedRateLabels[0]
     : 'Ranked rate';
   // A rate field is globally redundant only when it is the ranked metric for
-  // every entry. Mixed categories suppress their ranked row per card instead.
+  // every entry.
   const detailRows = attrRows.filter((row) =>
     !isRateLabelRankedForEveryEntry(row.label, rankedRateLabels));
   const differingRows = detailRows.filter((row) => valuesDiffer(row, entries));
@@ -533,11 +559,9 @@ export default function Compare() {
 
       <Divider />
       <AppText variant="tiny" color="textFaint">
-        {sameSection
-          ? `${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
-            ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
-            : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`
-          : `${entries.length} products · mixed categories · no rate leader highlighted`}
+        {`${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
+          ? mortgageRateMetric === 'comparison' ? 'comparison rate' : 'advertised rate'
+          : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`}
       </AppText>
       <AppText variant="tiny" color="textFaint">
         Missing means not published. Confirm current rates and conditions with the bank.

@@ -2,19 +2,10 @@ import * as SecureStore from 'expo-secure-store';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 import { authenticateBiometric, biometricsAvailable } from '../src/lib/appLock';
-import { isSignInConfigured, signInWithGoogle } from '../src/lib/auth';
 import {
   clearKeyCacheForTests,
   resolvePayloadKeyHex,
-  storePayloadKeyHex,
 } from '../src/lib/keyVault';
-
-describe('auth', () => {
-  it('is unconfigured by default and fails sign-in closed', async () => {
-    expect(isSignInConfigured()).toBe(false);
-    await expect(signInWithGoogle()).rejects.toThrow(/not configured/);
-  });
-});
 
 describe('appLock', () => {
   beforeEach(() => jest.clearAllMocks());
@@ -47,14 +38,9 @@ describe('keyVault', () => {
     expect(await resolvePayloadKeyHex()).toBe('');
   });
 
-  it('prefers the SecureStore key and caches it', async () => {
-    await storePayloadKeyHex('ab'.repeat(32));
+  it('prefers a retained legacy SecureStore key and caches it', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce('ab'.repeat(32));
     expect(await resolvePayloadKeyHex()).toBe('ab'.repeat(32));
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      'ar.payload.deckey',
-      'ab'.repeat(32),
-      expect.objectContaining({ keychainAccessible: 'afterFirstUnlock' }),
-    );
     (SecureStore.getItemAsync as jest.Mock).mockClear();
     expect(await resolvePayloadKeyHex()).toBe('ab'.repeat(32));
     expect(SecureStore.getItemAsync).not.toHaveBeenCalled();

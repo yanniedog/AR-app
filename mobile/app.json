@@ -4,7 +4,7 @@
     "slug": "ar-local-rates",
     "owner": "yannieyannies-team",
     "scheme": "arrates",
-    "version": "1.0.159",
+    "version": "1.0.163",
     "description": "Daily Australian home loan, savings and term-deposit rates. Browse, filter, compare and watch rates — works offline.",
     "primaryColor": "#2563eb",
     "githubUrl": "https://github.com/yanniedog/AR-app",
@@ -101,7 +101,6 @@
           "faceIDPermission": "Unlock Australian Rates with Face ID."
         }
       ],
-      "@react-native-google-signin/google-signin",
       "@kesha-antonov/react-native-background-downloader",
       "expo-background-task"
     ],
@@ -118,8 +117,6 @@
       "apkArmReleaseTag": "app-apk-arm-latest",
       "apkArmManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-apk-latest.json",
       "payloadDecKeyHex": "",
-      "googleWebClientId": "",
-      "keyServiceUrl": "",
       "router": {
         "origin": false,
         "scheme": "arrates",

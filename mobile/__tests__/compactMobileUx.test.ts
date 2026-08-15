@@ -75,4 +75,12 @@ describe('compact mobile UX contracts', () => {
     expect(productCard).toContain('{showLenderAction ? (');
     expect(lender).toContain('showLenderAction={false}');
   });
+
+  it('renders exactly one shared data-health banner on nested Settings scaffolds', () => {
+    const settings = read('../app/(tabs)/settings.tsx');
+
+    expect(settings).toContain('<Screen>');
+    expect(settings).toContain('<ScreenScrollView');
+    expect(settings).toContain('showDataHealthBanner={false}');
+  });
 });

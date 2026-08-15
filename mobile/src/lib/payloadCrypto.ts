@@ -9,8 +9,8 @@ import { PAYLOAD_DEC_KEY_HEX } from '../config';
  * payload_crypto.py (Phase B of docs/SECURITY_CDR_PIPELINE.md).
  *
  * Asset format: `ARE1 | 12-byte nonce | GCM ciphertext+tag` with AAD = "ARE1".
- * The key currently ships in app config (interim — obfuscation, not security);
- * Phase D replaces it with auth-gated key issuance.
+ * This reader remains for backward compatibility with previously published
+ * encrypted assets. New payload contracts do not rely on account-issued keys.
  */
 
 const MAGIC = Uint8Array.from([0x41, 0x52, 0x45, 0x31]); // "ARE1"

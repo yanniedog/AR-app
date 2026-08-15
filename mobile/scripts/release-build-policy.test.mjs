@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 async function readJson(relativePath) {
@@ -16,6 +16,27 @@ test('production dependencies omit dev-client without changing development insta
   assert.equal(lock.packages[''].optionalDependencies['expo-dev-client'], devClientVersion);
   assert.equal(lock.packages['node_modules/expo-dev-client'].optional, true);
   assert.equal(lock.packages['node_modules/expo-dev-launcher'].optional, true);
+});
+
+test('consumer builds omit the abandoned account and remote key-service stack', async () => {
+  const packageJson = await readJson('../package.json');
+  const lock = await readJson('../package-lock.json');
+  const appConfig = await readJson('../app.json');
+  const plugins = appConfig.expo.plugins.map((plugin) =>
+    Array.isArray(plugin) ? plugin[0] : plugin,
+  );
+
+  assert.equal(packageJson.dependencies['@react-native-firebase/auth'], undefined);
+  assert.equal(packageJson.dependencies['@react-native-google-signin/google-signin'], undefined);
+  assert.equal(lock.packages['node_modules/@react-native-firebase/auth'], undefined);
+  assert.equal(lock.packages['node_modules/@react-native-google-signin/google-signin'], undefined);
+  assert.equal(plugins.includes('@react-native-google-signin/google-signin'), false);
+  assert.equal(appConfig.expo.extra.googleWebClientId, undefined);
+  assert.equal(appConfig.expo.extra.keyServiceUrl, undefined);
+  await assert.rejects(
+    access(new URL('../../firebase/functions/package.json', import.meta.url)),
+    { code: 'ENOENT' },
+  );
 });
 
 test('release APKs shrink code/resources but keep the Hermes bundle uncompressed', async () => {
