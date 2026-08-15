@@ -14,6 +14,8 @@ export type AppLockMachineState = {
   epoch: number;
   autoPromptedEpoch: number | null;
   promptAttempt: AppLockPromptAttempt | null;
+  promptInterruption: boolean;
+  pendingAuthentication: boolean;
   nextAttemptId: number;
 };
 
@@ -43,6 +45,8 @@ export function createAppLockState(
     epoch: 0,
     autoPromptedEpoch: null,
     promptAttempt: null,
+    promptInterruption: false,
+    pendingAuthentication: false,
     nextAttemptId: 1,
   };
 }
@@ -61,9 +65,11 @@ export function shouldAutomaticallyPrompt(state: AppLockMachineState): boolean {
 }
 
 /**
- * Pure app-lock state machine. Every lifecycle/configuration change advances an
- * epoch, so an authentication result that returns after the app was obscured or
- * the lock was disabled can never unlock a newer foreground session.
+ * Pure app-lock state machine. Every privacy-invalidating lifecycle or
+ * configuration change advances an epoch, so an authentication result that
+ * returns after a real background transition or lock disablement can never
+ * unlock a newer foreground session. Prompt-driven inactivity retains the
+ * attempt only until the prompt settles or the app actually backgrounds.
  */
 export function reduceAppLockState(
   state: AppLockMachineState,
@@ -79,10 +85,36 @@ export function reduceAppLockState(
         epoch: state.epoch + 1,
         autoPromptedEpoch: null,
         promptAttempt: null,
+        promptInterruption: false,
+        pendingAuthentication: false,
       };
 
-    case 'app_state_changed':
+    case 'app_state_changed': {
       if (event.lifecycle === state.lifecycle) return state;
+
+      // Native biometric/device-credential UI can itself move iOS to
+      // `inactive`. Lock the content immediately, but retain that attempt and
+      // epoch until the prompt settles or a real `background` transition
+      // invalidates it.
+      if (event.lifecycle === 'inactive' && state.promptAttempt) {
+        return {
+          ...state,
+          lifecycle: 'inactive',
+          locked: state.required,
+          promptInterruption: true,
+        };
+      }
+
+      if (event.lifecycle === 'active' && state.promptInterruption) {
+        return {
+          ...state,
+          lifecycle: 'active',
+          locked: state.required ? !state.pendingAuthentication : false,
+          promptInterruption: false,
+          pendingAuthentication: false,
+        };
+      }
+
       return {
         ...state,
         lifecycle: event.lifecycle,
@@ -90,7 +122,10 @@ export function reduceAppLockState(
         epoch: state.epoch + 1,
         autoPromptedEpoch: null,
         promptAttempt: null,
+        promptInterruption: false,
+        pendingAuthentication: false,
       };
+    }
 
     case 'prompt_started': {
       if (!canStartPrompt(state)) return state;
@@ -99,22 +134,39 @@ export function reduceAppLockState(
         ...state,
         promptAttempt,
         nextAttemptId: state.nextAttemptId + 1,
-        autoPromptedEpoch:
-          event.kind === 'automatic' ? state.epoch : state.autoPromptedEpoch,
+        // A failed manual prompt must not be followed immediately by an
+        // automatic prompt in the same foreground epoch.
+        autoPromptedEpoch: state.epoch,
       };
     }
 
     case 'prompt_resolved': {
       if (state.promptAttempt?.id !== event.attemptId) return state;
+      const attemptStillCurrent =
+        state.required && state.promptAttempt.epoch === state.epoch;
+      if (
+        event.success &&
+        attemptStillCurrent &&
+        state.lifecycle === 'inactive' &&
+        state.promptInterruption
+      ) {
+        return {
+          ...state,
+          locked: true,
+          promptAttempt: null,
+          pendingAuthentication: true,
+        };
+      }
       const resultStillCurrent =
         event.success &&
-        state.required &&
+        attemptStillCurrent &&
         state.lifecycle === 'active' &&
-        state.promptAttempt.epoch === state.epoch;
+        !state.promptInterruption;
       return {
         ...state,
         locked: state.required ? !resultStillCurrent : false,
         promptAttempt: null,
+        pendingAuthentication: false,
       };
     }
   }

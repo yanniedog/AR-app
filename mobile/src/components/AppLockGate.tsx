@@ -1,6 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 
 import { useStore } from '../data/store';
 import { authenticateBiometric } from '../lib/appLock';
@@ -18,10 +18,11 @@ import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
 
 /**
- * Biometric gate for cold start and every foreground transition. Children are
- * removed immediately when the app becomes inactive/backgrounded. Authentication
- * results are epoch-bound so a late success from an older foreground session
- * cannot reveal the app after it has been obscured.
+ * Biometric gate for cold start and every foreground transition. Private
+ * children remain mounted to preserve navigation state, but an opaque,
+ * input-blocking and accessibility-modal overlay obscures them as soon as the
+ * app becomes inactive/backgrounded. Authentication results are epoch-bound so
+ * a late success from an older foreground session cannot reveal a newer one.
  */
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
@@ -91,33 +92,46 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
   const mustLock = required && (machine.required !== required || machine.locked);
   const prompting = machine.promptAttempt !== null;
 
-  if (!mustLock) return <>{children}</>;
-
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: theme.colors.bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 14,
-        padding: 24,
-      }}
-      accessibilityViewIsModal
-      accessibilityLiveRegion="polite"
-    >
-      <Ionicons name="lock-closed" size={40} color={theme.colors.primary} />
-      <AppText variant="h3">Locked</AppText>
-      <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
-        Unlock with your fingerprint, face, or device PIN.
-      </AppText>
-      <Button
-        title="Unlock"
-        icon="finger-print"
-        onPress={() => prompt('manual')}
-        loading={prompting}
-        disabled={prompting || machine.lifecycle !== 'active'}
-      />
+    <View style={{ flex: 1 }}>
+      <View
+        style={{ flex: 1 }}
+        pointerEvents={mustLock ? 'none' : 'auto'}
+        accessibilityElementsHidden={mustLock}
+        importantForAccessibility={mustLock ? 'no-hide-descendants' : 'auto'}
+      >
+        {children}
+      </View>
+      {mustLock ? (
+        <View
+          style={[
+            StyleSheet.absoluteFillObject,
+            {
+              zIndex: 1,
+              backgroundColor: theme.colors.bg,
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 14,
+              padding: 24,
+            },
+          ]}
+          accessibilityViewIsModal
+          accessibilityLiveRegion="polite"
+        >
+          <Ionicons name="lock-closed" size={40} color={theme.colors.primary} />
+          <AppText variant="h3">Locked</AppText>
+          <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
+            Unlock with your fingerprint, face, or device PIN.
+          </AppText>
+          <Button
+            title="Unlock"
+            icon="finger-print"
+            onPress={() => prompt('manual')}
+            loading={prompting}
+            disabled={prompting || machine.lifecycle !== 'active'}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
