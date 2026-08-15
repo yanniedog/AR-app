@@ -46,7 +46,8 @@ interface RetainedEntry extends BankSpreadStoredEntry {
 }
 
 interface RetentionIndex {
-  schema_version: 2;
+  schema_version: 3;
+  transaction_sequence: number;
   entries: RetainedEntry[];
 }
 
@@ -65,8 +66,21 @@ interface VerifiedIndex {
   source: 'primary' | 'temporary' | 'empty';
 }
 
+class CorruptRetentionIndexError extends Error {}
+
 function emptyIndex(): RetentionIndex {
-  return { schema_version: 2, entries: [] };
+  return { schema_version: 3, transaction_sequence: 0, entries: [] };
+}
+
+function sameIndex(left: RetentionIndex, right: RetentionIndex): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function nextSequence(index: RetentionIndex, increments = 1): number {
+  if (index.transaction_sequence > Number.MAX_SAFE_INTEGER - increments) {
+    throw new Error('Bank spread retention transaction sequence is exhausted');
+  }
+  return index.transaction_sequence + increments;
 }
 
 function sameEntry(left: BankSpreadStoredEntry, right: BankSpreadStoredEntry): boolean {
@@ -83,7 +97,12 @@ function parseIndex(raw: string | null, limits: BankSpreadCacheLimits): Retentio
   if (!raw || raw.length > limits.maxEntries * 512 + 128) return null;
   try {
     const value = JSON.parse(raw) as Partial<RetentionIndex>;
-    if (value.schema_version !== 2 || !Array.isArray(value.entries)) return null;
+    if (
+      value.schema_version !== 3 ||
+      !Number.isSafeInteger(value.transaction_sequence) ||
+      (value.transaction_sequence as number) < 0 ||
+      !Array.isArray(value.entries)
+    ) return null;
     if (value.entries.length > limits.maxEntries) return null;
     const keys = new Set<string>();
     const slots = new Set<number>();
@@ -185,19 +204,40 @@ export function createBankSpreadContentCache(
     const primaryRaw = await storage.read(indexPath);
     const temporaryRaw = await storage.read(indexTmpPath);
     const primary = parseIndex(primaryRaw, limits);
-    if (primary) {
-      const verified = await verifyIndex(primary, 'primary');
-      if (verified) return verified;
-    }
     const temporary = parseIndex(temporaryRaw, limits);
-    if (temporary) {
-      const verified = await verifyIndex(temporary, 'temporary');
-      if (verified) return verified;
+    if (primaryRaw !== null && !primary) {
+      throw new CorruptRetentionIndexError('Bank spread retention primary index is corrupt');
     }
     if (primaryRaw === null && temporaryRaw === null) {
       return { index: emptyIndex(), records: new Map(), source: 'empty' };
     }
-    throw new Error('Bank spread retention index is corrupt or references invalid slots');
+
+    let selected: { index: RetentionIndex; source: 'primary' | 'temporary' } | null = null;
+    if (primary && temporary) {
+      if (primary.transaction_sequence === temporary.transaction_sequence) {
+        if (!sameIndex(primary, temporary)) {
+          throw new CorruptRetentionIndexError(
+            'Bank spread retention index has an ambiguous transaction sequence',
+          );
+        }
+        selected = { index: primary, source: 'primary' };
+      } else {
+        selected = primary.transaction_sequence > temporary.transaction_sequence
+          ? { index: primary, source: 'primary' }
+          : { index: temporary, source: 'temporary' };
+      }
+    } else if (primary) {
+      selected = { index: primary, source: 'primary' };
+    } else if (temporary) {
+      selected = { index: temporary, source: 'temporary' };
+    }
+    if (selected) {
+      const verified = await verifyIndex(selected.index, selected.source);
+      if (verified) return verified;
+    }
+    throw new CorruptRetentionIndexError(
+      'Bank spread retention index is corrupt or references invalid slots',
+    );
   }
 
   async function replaceIndex(index: RetentionIndex): Promise<void> {
@@ -264,7 +304,11 @@ export function createBankSpreadContentCache(
       totalCompressed = nextCompressed;
       totalEncoded = nextEncoded;
     }
-    return { schema_version: 2, entries };
+    return {
+      schema_version: 3,
+      transaction_sequence: nextSequence(previous.index),
+      entries,
+    };
   }
 
   async function commitIndex(
@@ -275,7 +319,99 @@ export function createBankSpreadContentCache(
     if (!stillCurrent()) return false;
     await replaceIndex(next);
     if (stillCurrent()) return true;
-    await replaceIndex(previous.index);
+    await replaceIndex({
+      ...previous.index,
+      transaction_sequence: nextSequence(next),
+    });
+    return false;
+  }
+
+  async function readStructuralRepairState(): Promise<{
+    preferred: RetentionIndex | null;
+    maximumSequence: number;
+  }> {
+    const primary = parseIndex(await storage.read(indexPath), limits);
+    const temporary = parseIndex(await storage.read(indexTmpPath), limits);
+    if (primary && temporary) {
+      if (primary.transaction_sequence === temporary.transaction_sequence) {
+        return {
+          preferred: sameIndex(primary, temporary) ? primary : null,
+          maximumSequence: primary.transaction_sequence,
+        };
+      }
+      return {
+        preferred: primary.transaction_sequence > temporary.transaction_sequence ? primary : temporary,
+        maximumSequence: Math.max(primary.transaction_sequence, temporary.transaction_sequence),
+      };
+    }
+    const preferred = primary ?? temporary;
+    return {
+      preferred,
+      maximumSequence: preferred?.transaction_sequence ?? 0,
+    };
+  }
+
+  async function verifiedRepairEntries(
+    structural: RetentionIndex | null,
+  ): Promise<{ entry: RetainedEntry; record: VerifiedBankSpreadRecord }[]> {
+    if (!structural) return [];
+    const entries: { entry: RetainedEntry; record: VerifiedBankSpreadRecord }[] = [];
+    for (const entry of structural.entries) {
+      const record = await readSlot(entry);
+      if (record) entries.push({ entry, record });
+    }
+    return entries;
+  }
+
+  async function repairCorruptIndex(
+    candidate: VerifiedBankSpreadRecord,
+    stillCurrent: () => boolean,
+  ): Promise<boolean> {
+    const structural = await readStructuralRepairState();
+    const salvage = await verifiedRepairEntries(structural.preferred);
+    if (!stillCurrent()) return false;
+
+    const candidateKey = bankSpreadIdentityKey(candidate.identity);
+    const exact = structural.preferred?.entries.find(
+      (entry) => bankSpreadIdentityKey(bankSpreadEntryIdentity(entry)) === candidateKey,
+    );
+    const used = new Set(salvage.map(({ entry }) => entry.slot));
+    const slot = exact?.slot ?? Array.from(
+      { length: BANK_SPREAD_CACHE_SLOT_COUNT },
+      (_, index) => index,
+    ).find((value) => !used.has(value));
+    if (!Number.isSafeInteger(slot)) {
+      throw new Error('Bank spread cache has no repair scratch slot');
+    }
+
+    await writeSlot(slot as number, candidate);
+    if (!stillCurrent()) return false;
+
+    const baseSequence = structural.maximumSequence;
+    const repairedBase: VerifiedIndex = {
+      index: {
+        schema_version: 3,
+        transaction_sequence: baseSequence,
+        entries: salvage
+          .filter(({ entry }) => entry.slot !== slot)
+          .map(({ entry }) => entry),
+      },
+      records: new Map(
+        salvage
+          .filter(({ entry }) => entry.slot !== slot)
+          .map(({ entry, record }) => [entry.slot, record]),
+      ),
+      source: 'empty',
+    };
+    const repaired = await buildNextIndex(slot as number, candidate, repairedBase);
+    await replaceIndex(repaired);
+    if (stillCurrent()) return true;
+
+    await replaceIndex({
+      schema_version: 3,
+      transaction_sequence: nextSequence(repaired),
+      entries: [],
+    });
     return false;
   }
 
@@ -317,7 +453,13 @@ export function createBankSpreadContentCache(
     if (!candidate) throw new Error('Bank spread cache rejected unverified or oversized raw bytes');
     return serialize(async () => {
       if (!stillCurrent()) return false;
-      const previous = await readVerifiedIndex();
+      let previous: VerifiedIndex;
+      try {
+        previous = await readVerifiedIndex();
+      } catch (error) {
+        if (!(error instanceof CorruptRetentionIndexError)) throw error;
+        return repairCorruptIndex(candidate, stillCurrent);
+      }
       if (!stillCurrent()) return false;
       await healIndex(previous);
       const existingEntry = previous.index.entries.find(
