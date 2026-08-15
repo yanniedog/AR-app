@@ -16,7 +16,7 @@ import {
   type PassThroughRow,
 } from '../src/data/bankInsights';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
-import { normalizeCoreSectionIntegrity } from '../src/data/sectionIntegrity';
+import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { lenderRaceModel, marketActivityModel } from '../src/data/vizModels';
 import type { CorePayload, RbaEntry } from '../src/types';
@@ -206,7 +206,7 @@ describe('filterBankInsightsForSuitability', () => {
   });
 
   test('withholds provider-section history that includes quarantined products', () => {
-    const contaminated = normalizeCoreSectionIntegrity({
+    const contaminated = normalizeCoreWithIntegrity({
       ...filterCore,
       sections: {
         ...filterCore.sections,
@@ -225,7 +225,14 @@ describe('filterBankInsightsForSuitability', () => {
       },
     });
 
-    const filtered = filterBankInsightsForSuitability(payload, contaminated, true)!;
+    const filtered = filterBankInsightsForSuitability(
+      payload,
+      contaminated.core,
+      true,
+      undefined,
+      undefined,
+      contaminated.integrity,
+    )!;
 
     expect(filtered).not.toBe(payload);
     expect(filtered.banks.GammaBank).toBeUndefined();

@@ -4,6 +4,7 @@ import {
   bankHistoryPairKey,
   isExplicitTermDepositProduct,
   normalizeCoreSectionIntegrity,
+  normalizeCoreWithIntegrity,
   quarantinedBankHistoryPairs,
 } from '../src/data/sectionIntegrity';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
@@ -90,13 +91,13 @@ describe('core section integrity', () => {
     });
     const input = coreWithSavings([saver, move, greatSouthern], [validTd]);
 
-    const normalized = normalizeCoreSectionIntegrity(input);
+    const { core: normalized, integrity } = normalizeCoreWithIntegrity(input);
 
     expect(normalized).not.toBe(input);
     expect(normalized.sections.Savings.rates).toEqual([saver]);
     expect(normalized.sections.TD).toBe(input.sections.TD);
     expect(normalized.sections.TD.rates).toEqual([validTd]);
-    expect([...quarantinedBankHistoryPairs(normalized)]).toEqual([
+    expect([...quarantinedBankHistoryPairs(integrity)]).toEqual([
       bankHistoryPairKey('MOVE Bank', 'Savings'),
       bankHistoryPairKey('Great Southern Bank Business+', 'Savings'),
     ]);
@@ -151,6 +152,22 @@ describe('core section integrity', () => {
     const once = normalizeCoreSectionIntegrity(contaminated);
     const twice = normalizeCoreSectionIntegrity(once);
     expect(twice).toBe(once);
+  });
+
+  it('carries immutable provenance and quarantine counts without object identity state', () => {
+    const result = normalizeCoreWithIntegrity(coreWithSavings([
+      row({ product_key: 'clean' }),
+      row({ product_key: 'td', product_name: 'Term Deposit' }),
+    ]), {
+      contract: 'v1',
+      coreSha256: 'a'.repeat(64),
+    });
+
+    expect(result.integrity.core).toBe(result.core);
+    expect(result.integrity.coreSha256).toBe('a'.repeat(64));
+    expect(result.integrity.quarantines.rowsByReason).toEqual({
+      explicit_term_deposit_in_savings: 1,
+    });
   });
 
   it('exports the bundled sample through the same normalizer', () => {

@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
 import { bpsBetween, formatRate, humanizeEnum, toFraction } from './format';
 import type { SavedRateRef } from './savedRates';
@@ -152,6 +153,42 @@ export function removeSubscription(list: Subscription[], id: string): Subscripti
   return list.filter((s) => s.id !== id);
 }
 
+export interface ProductSubscriptionAliasMigration {
+  subscriptions: Subscription[];
+  /** Exact v1 rate indexes have no authenticated mapping to v3 rate UIDs. */
+  droppedExactSubscriptionIds: string[];
+}
+
+export function migrateProductSubscriptionAliases(
+  list: readonly Subscription[],
+  aliases: LegacyProductAliasMap,
+): ProductSubscriptionAliasMigration {
+  const subscriptions = new Map<string, Subscription>();
+  const droppedExactSubscriptionIds: string[] = [];
+  for (const subscription of list) {
+    if (subscription.kind !== 'product') {
+      subscriptions.set(subscription.id, subscription);
+      continue;
+    }
+    const target = aliases.get(subscription.productKey);
+    if (!target) {
+      subscriptions.set(subscription.id, subscription);
+      continue;
+    }
+    if (subscription.rateIndex !== null) {
+      droppedExactSubscriptionIds.push(subscription.id);
+      continue;
+    }
+    const migrated: ProductSubscription = {
+      ...subscription,
+      id: productSubscriptionId(target.productKey, null),
+      productKey: target.productKey,
+    };
+    subscriptions.set(migrated.id, migrated);
+  }
+  return { subscriptions: [...subscriptions.values()], droppedExactSubscriptionIds };
+}
+
 export function isProductSubscribed(
   list: Subscription[],
   productKey: string,
@@ -277,6 +314,7 @@ function productRatesByIndex(
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
+      if (rateIndex != null && row.exact_alert_eligible === false) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
       out.set(row.rate_index ?? out.size, trackedRateValue(
         row,
