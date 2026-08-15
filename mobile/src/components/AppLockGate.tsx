@@ -1,39 +1,95 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, View } from 'react-native';
 
 import { useStore } from '../data/store';
 import { authenticateBiometric } from '../lib/appLock';
+import { setAppLockScreenProtection } from '../lib/appLockScreenProtection';
+import {
+  createAppLockState,
+  normalizeAppLockLifecycle,
+  reduceAppLockState,
+  shouldAutomaticallyPrompt,
+  type AppLockEvent,
+  type AppLockPromptKind,
+} from '../lib/appLockState';
+import { debugLog } from '../lib/debugLog';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
 
 /**
- * Cold-start biometric gate (Phase C). Children render only after the OS
- * prompt succeeds; the prompt falls back to device PIN/pattern, so this can't
- * permanently lock anyone out. Disabled (pass-through) until prefs hydrate so
- * the splash flow is unaffected for users without the lock.
+ * Biometric gate for cold start and every foreground transition. Children are
+ * removed immediately when the app becomes inactive/backgrounded. Authentication
+ * results are epoch-bound so a late success from an older foreground session
+ * cannot reveal the app after it has been obscured.
  */
 export function AppLockGate({ children }: { children: React.ReactNode }) {
   const theme = useTheme();
   const hydrated = useStore((s) => s.hydrated);
   const enabled = useStore((s) => s.prefs.appLockEnabled);
-  const [unlocked, setUnlocked] = useState(false);
-  const [prompting, setPrompting] = useState(false);
+  const required = hydrated && enabled;
+  const [machine, setMachine] = useState(() =>
+    createAppLockState(required, normalizeAppLockLifecycle(AppState.currentState)),
+  );
+  const machineRef = useRef(machine);
 
-  const mustLock = hydrated && enabled && !unlocked;
-
-  const prompt = useCallback(async () => {
-    setPrompting(true);
-    try {
-      if (await authenticateBiometric('Unlock Australian Rates')) setUnlocked(true);
-    } finally {
-      setPrompting(false);
+  const transition = useCallback((event: AppLockEvent) => {
+    const previous = machineRef.current;
+    const next = reduceAppLockState(previous, event);
+    if (next !== previous) {
+      machineRef.current = next;
+      setMachine(next);
     }
+    return { previous, next };
+  }, []);
+
+  const prompt = useCallback((kind: AppLockPromptKind) => {
+    const { previous, next } = transition({ type: 'prompt_started', kind });
+    if (next === previous || !next.promptAttempt) return;
+    const attemptId = next.promptAttempt.id;
+    void authenticateBiometric('Unlock Australian Rates').then((success) => {
+      transition({ type: 'prompt_resolved', attemptId, success });
+    });
+  }, [transition]);
+
+  useEffect(() => {
+    transition({ type: 'set_required', required });
+  }, [required, transition]);
+
+  useEffect(() => {
+    const applyLifecycle = (nextState: string | null | undefined) => {
+      transition({
+        type: 'app_state_changed',
+        lifecycle: normalizeAppLockLifecycle(nextState),
+      });
+    };
+    const subscription = AppState.addEventListener('change', applyLifecycle);
+    // Close the small mount-to-subscription race without generating a second
+    // transition when the state is unchanged.
+    applyLifecycle(AppState.currentState);
+    return () => subscription.remove();
+  }, [transition]);
+
+  useEffect(() => {
+    void setAppLockScreenProtection(required).catch((error) => {
+      debugLog.warn(
+        'appLock',
+        `screen protection unavailable: ${String((error as Error)?.message ?? error)}`,
+      );
+    });
+  }, [required]);
+
+  useEffect(() => () => {
+    void setAppLockScreenProtection(false).catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    if (mustLock) void prompt();
-  }, [mustLock, prompt]);
+    if (shouldAutomaticallyPrompt(machine)) prompt('automatic');
+  }, [machine, prompt]);
+
+  // Fail closed during the render before the required-state effect commits.
+  const mustLock = required && (machine.required !== required || machine.locked);
+  const prompting = machine.promptAttempt !== null;
 
   if (!mustLock) return <>{children}</>;
 
@@ -47,13 +103,21 @@ export function AppLockGate({ children }: { children: React.ReactNode }) {
         gap: 14,
         padding: 24,
       }}
+      accessibilityViewIsModal
+      accessibilityLiveRegion="polite"
     >
       <Ionicons name="lock-closed" size={40} color={theme.colors.primary} />
       <AppText variant="h3">Locked</AppText>
       <AppText variant="small" color="textMuted" style={{ textAlign: 'center' }}>
         Unlock with your fingerprint, face, or device PIN.
       </AppText>
-      <Button title="Unlock" icon="finger-print" onPress={prompt} loading={prompting} disabled={prompting} />
+      <Button
+        title="Unlock"
+        icon="finger-print"
+        onPress={() => prompt('manual')}
+        loading={prompting}
+        disabled={prompting || machine.lifecycle !== 'active'}
+      />
     </View>
   );
 }
