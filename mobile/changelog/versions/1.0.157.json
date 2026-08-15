@@ -1,0 +1,32 @@
+{
+  "version": "1.0.157",
+  "releaseTag": "app-arm-v1.0.157",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "fix(mobile): secure native modal relocking (#195)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): secure native modal relocking (#195)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.157"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.156"
+        }
+      ]
+    }
+  ]
+}

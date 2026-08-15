@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T01:01:47.060Z",
+  "generated_at": "2026-08-15T01:45:22.823Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -773,6 +773,14 @@
         "fix(mobile): relock private data on app switch (#192)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.154"
+    },
+    {
+      "version": "1.0.157",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "fix(mobile): secure native modal relocking (#195)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.157"
     }
   ]
 }
