@@ -24,6 +24,7 @@ import {
   type SortKey,
 } from '../src/data/selectors';
 import { ensurePermissions } from '../src/data/notifications';
+import { toggleCompareSelection } from '../src/data/compareSelection';
 import { profileToFilters } from '../src/data/profile';
 import { findSearchSubscription, type SearchSubscription } from '../src/data/subscriptions';
 import { useStore } from '../src/data/store';
@@ -262,8 +263,22 @@ export default function Search() {
   };
 
   const toggleSelect = useCallback((key: string) => {
-    setSelected((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key].slice(-4)));
-  }, []);
+    if (!core) return;
+    const update = toggleCompareSelection(core, selected, key);
+    if (update.rejection === 'limit_reached') {
+      Alert.alert('Compare up to four', 'Remove one product before adding another.');
+      return;
+    }
+    if (update.rejection === 'category_mismatch') {
+      Alert.alert('Choose one rate category', 'Compare home loans, savings accounts, or term deposits separately.');
+      return;
+    }
+    if (update.rejection === 'unavailable') {
+      Alert.alert('Rate unavailable', 'Refresh the list and choose a current rate.');
+      return;
+    }
+    setSelected(update.tokens);
+  }, [core, selected]);
 
   const toggleCompareMode = useCallback(() => {
     hapticSelection();
