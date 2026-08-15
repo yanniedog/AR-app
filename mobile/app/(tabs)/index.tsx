@@ -12,8 +12,8 @@ import { SectionCrossfade, SegmentedControl } from '../../src/components/control
 import { AppText, Button, Card, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
-import { computeLvr, num } from '../../src/data/calc';
-import { loyaltyGapInsight, percentageInputFraction } from '../../src/data/decisionInsights';
+import { computeLvr } from '../../src/data/calc';
+import { percentageInputFraction } from '../../src/data/decisionInsights';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
 import { lvrTierForValue, profileFeaturesForSection, profileFilterRows, profileSectionCount } from '../../src/data/profile';
@@ -327,30 +327,14 @@ export default function Home() {
         : 'Rate';
   const scenarioSummary = useMemo(() => {
     if (section === 'Mortgage') {
-      return {
-        currentRate: percentageInputFraction(userScenario.mortgage.currentRate),
-        principal: mortgageScenario.loan ?? num(userScenario.mortgage.loanBalance),
-      };
+      return { currentRate: percentageInputFraction(userScenario.mortgage.currentRate) };
     }
     const deposit = section === 'Savings' ? userScenario.savings : userScenario.termDeposit;
-    return { currentRate: percentageInputFraction(deposit.currentRate), principal: num(deposit.balance) };
-  }, [mortgageScenario.loan, section, userScenario]);
+    return { currentRate: percentageInputFraction(deposit.currentRate) };
+  }, [section, userScenario]);
   const loyaltyComparisonRate = section === 'Mortgage' && activeBest
     ? toFraction(activeBest.rate)
     : heroRate;
-  const loyaltyGap = useMemo(
-    () =>
-      loyaltyComparisonRate != null && scenarioSummary.currentRate != null
-        ? loyaltyGapInsight(
-            section,
-            scenarioSummary.principal,
-            scenarioSummary.currentRate,
-            loyaltyComparisonRate,
-            stats.median,
-          )
-        : null,
-    [loyaltyComparisonRate, scenarioSummary, section, stats.median],
-  );
   const observedGapRate = loyaltyComparisonRate != null && scenarioSummary.currentRate != null
     ? Math.max(
         0,
@@ -552,14 +536,10 @@ export default function Home() {
               ? 'No matched comparison is available today'
               : observedGapRate <= 0
                 ? 'No better matched rate observed today'
-                : section === 'TD' || !loyaltyGap
-                  ? `${(observedGapRate * 100).toFixed(2)} percentage point gap`
-                  : section === 'Mortgage'
-                    ? `About $${Math.round(loyaltyGap.monthlyDollars).toLocaleString()}/month gap`
-                    : `About $${Math.round(loyaltyGap.annualDollars).toLocaleString()}/year gap`}
+                : `${(observedGapRate * 100).toFixed(2)} percentage point gap`}
           </AppText>
           <AppText variant="tiny" color="textMuted">
-            Matched to your filters · observed {formatRunDate(core.run_date)}{scenarioSummary.principal > 0 ? ` · based on $${Math.round(scenarioSummary.principal).toLocaleString()}` : ''}.
+            Matched to your filters · observed {formatRunDate(core.run_date)}.
           </AppText>
           {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
             <AppText variant="tiny" color="textMuted">

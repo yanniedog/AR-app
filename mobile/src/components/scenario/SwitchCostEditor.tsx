@@ -86,17 +86,19 @@ export function SwitchCostEditor({
   );
   const placeholder = (key: SwitchFeeKey): string => {
     const resolved = costs.fees.find((item) => item.key === key);
-    return resolved?.source === 'published' ? String(resolved.amount) : '0';
+    return resolved?.source === 'published' ? String(resolved.amount) : 'Unknown';
   };
   return (
     <Disclosure
       title="Switch costs"
-      summary={costs.gaps.length ? `${costs.gaps.length} amounts to check` : `${dollars(costs.netSwitchCost)} net upfront`}
+      summary={costs.costClaimsAvailable
+        ? `${dollars(costs.netSwitchCost)} known net upfront`
+        : 'Cost difference unavailable'}
       open={open}
       onToggle={() => setOpen((value) => !value)}
     >
       <AppText variant="tiny" color="textMuted" style={{ marginBottom: 10 }}>
-        Blank fields use numeric published fees from your matched current product and leading matched rate. Check missing amounts.
+        Blank means unknown unless a fixed published amount is shown. Enter 0 only after confirming there is no charge.
       </AppText>
       {labels.map((item, index) => index % 2 === 0 ? (
         <Row
@@ -125,7 +127,7 @@ export function SwitchCostEditor({
           label="Cashback"
           accessibilityLabel="Eligible cashback in dollars"
           value={inputs.cashback}
-          placeholder="0"
+          placeholder="None entered"
           editable={editable}
           onChangeText={(cashback) => onChange({ cashback })}
         />
@@ -151,7 +153,12 @@ export function SwitchCostEditor({
       />
       {costs.unpricedPeriodicFees.length ? (
         <AppText variant="tiny" color="textMuted" style={{ marginTop: 10 }}>
-          {costs.unpricedPeriodicFees.length} periodic fee{costs.unpricedPeriodicFees.length === 1 ? '' : 's'} lack a reliable published amount or cadence and are excluded.
+          {costs.unpricedPeriodicFees.length} periodic fee{costs.unpricedPeriodicFees.length === 1 ? '' : 's'} lack a reliable published amount or cadence, so cost difference and break-even remain unavailable.
+        </AppText>
+      ) : null}
+      {!costs.costClaimsAvailable ? (
+        <AppText variant="tiny" color="danger" style={{ marginTop: 10 }}>
+          Confirm all applicable current and target fees before using a cost difference or break-even date.
         </AppText>
       ) : null}
     </Disclosure>
