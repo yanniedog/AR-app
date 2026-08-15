@@ -1,4 +1,4 @@
-import { withAlpha } from '../src/theme/colors';
+import { contrastRatio, ensureTextContrast, withAlpha } from '../src/theme/colors';
 import { BRAND_SOURCE_COLOR, paletteFromM3Scheme } from '../src/theme/m3Palette';
 import { darkTheme, lightTheme, resolveM3Theme, resolveTheme } from '../src/theme/theme';
 import type { Material3Scheme, Material3Theme } from '@pchmn/expo-material3-theme';
@@ -109,6 +109,17 @@ describe('paletteFromM3Scheme', () => {
     expect(dark.success).toBe(darkTheme.colors.success);
     expect(light.warning).toBe(lightTheme.colors.warning);
   });
+
+  it('keeps dynamic faint text readable across every mapped app surface', () => {
+    for (const palette of [
+      paletteFromM3Scheme(mockLightScheme, false),
+      paletteFromM3Scheme(mockDarkScheme, true),
+    ]) {
+      for (const background of [palette.bg, palette.surface, palette.surfaceAlt, palette.card]) {
+        expect(contrastRatio(palette.textFaint, background)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
 });
 
 describe('resolveM3Theme', () => {
@@ -124,6 +135,19 @@ describe('theme palettes', () => {
   it('includes overlay token in both palettes', () => {
     expect(lightTheme.colors.overlay).toMatch(/^#/);
     expect(darkTheme.colors.overlay).toMatch(/^#/);
+  });
+
+  it('keeps faint normal-size text above 4.5:1 on every static app surface', () => {
+    for (const theme of [lightTheme, darkTheme]) {
+      for (const background of [
+        theme.colors.bg,
+        theme.colors.surface,
+        theme.colors.surfaceAlt,
+        theme.colors.card,
+      ]) {
+        expect(contrastRatio(theme.colors.textFaint, background)).toBeGreaterThanOrEqual(4.5);
+      }
+    }
   });
 
   it('keeps the calm static palettes with stable financial meaning', () => {
@@ -157,5 +181,23 @@ describe('theme palettes', () => {
 describe('withAlpha', () => {
   it('converts hex to rgba', () => {
     expect(withAlpha('#3b82f6', 0.35)).toBe('rgba(59, 130, 246, 0.35)');
+  });
+});
+
+describe('ensureTextContrast', () => {
+  it('retains compliant colors and minimally strengthens low-contrast dynamic ink', () => {
+    expect(ensureTextContrast('#172231', ['#ffffff'], false)).toBe('#172231');
+    const adjusted = ensureTextContrast(
+      mockLightScheme.outline,
+      [mockLightScheme.background, mockLightScheme.surface, mockLightScheme.surfaceContainerLow],
+      false,
+    );
+    expect(adjusted).not.toBe(mockLightScheme.outline);
+    expect(contrastRatio(adjusted, mockLightScheme.surfaceContainerLow)).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('strengthens dark dynamic ink towards white', () => {
+    const adjusted = ensureTextContrast('#33404c', ['#0d1117', '#19212b'], true);
+    expect(contrastRatio(adjusted, '#19212b')).toBeGreaterThanOrEqual(4.5);
   });
 });
