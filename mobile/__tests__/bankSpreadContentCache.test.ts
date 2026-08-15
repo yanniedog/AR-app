@@ -431,6 +431,35 @@ describe('fixed-slot bank spread content cache', () => {
     expect(retentionIndex(storage).transaction_sequence).toBeLessThan(Number.MAX_SAFE_INTEGER - 1);
   });
 
+  it('rebases the last accepted sequence before commit and stale rollback', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(a.identity, a.raw, () => true);
+    const nearExhausted = retentionIndex(storage);
+    nearExhausted.transaction_sequence = Number.MAX_SAFE_INTEGER - 2;
+    storage.files.set(`${ROOT}/index.json`, JSON.stringify(nearExhausted));
+
+    await expect(cache.install(b.identity, b.raw, () => true)).resolves.toBe(true);
+    expect(retentionIndex(storage).transaction_sequence).toBe(1);
+    await expect(createBankSpreadContentCache(storage, ROOT).load(b.identity, () => true))
+      .resolves.toEqual(b.value);
+
+    const nearRollbackExhaustion = retentionIndex(storage);
+    nearRollbackExhaustion.transaction_sequence = Number.MAX_SAFE_INTEGER - 2;
+    storage.files.set(`${ROOT}/index.json`, JSON.stringify(nearRollbackExhaustion));
+    let current = true;
+    let indexRemovals = 0;
+    storage.afterRemove = (path) => {
+      if (path === `${ROOT}/index.json` && ++indexRemovals === 2) current = false;
+    };
+
+    await expect(cache.install(c.identity, c.raw, () => current)).resolves.toBe(false);
+    expect(retentionIndex(storage).transaction_sequence).toBe(2);
+    storage.afterRemove = null;
+    await expect(createBankSpreadContentCache(storage, ROOT).load(b.identity, () => true))
+      .resolves.toEqual(b.value);
+  });
+
   it('does not rewrite the index when the requested current entry is already first', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);

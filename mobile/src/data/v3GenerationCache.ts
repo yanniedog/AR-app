@@ -38,7 +38,25 @@ interface GenerationCacheHeadV2 {
   current_ledger_event_digest: string;
 }
 
-type GenerationCacheHead = GenerationCacheHeadV1 | GenerationCacheHeadV2;
+interface GenerationCacheHeadV3 {
+  schema_version: 3;
+  transaction_sequence: number;
+  current: string;
+  previous: string | null;
+  current_observation_date: string;
+  current_generation_revision: number;
+  current_prior_ledger_digest: string | null;
+  current_ledger_event_digest: string;
+}
+
+type GenerationCacheHead = GenerationCacheHeadV1 | GenerationCacheHeadV2 | GenerationCacheHeadV3;
+
+interface VerifiedGenerationCacheHead {
+  head: GenerationCacheHead;
+  current: CachedGenerationV3 | null;
+  previous: CachedGenerationV3 | null;
+  source: 'primary' | 'temporary';
+}
 
 export interface CachedGenerationV3 extends ValidatedGenerationV3 {
   savedAt: string;
@@ -60,22 +78,30 @@ function safeDigest(value: string): string {
 function parseHead(raw: string | null): GenerationCacheHead | null {
   if (!raw) return null;
   try {
-    const value = JSON.parse(raw) as Partial<Omit<GenerationCacheHeadV2, 'schema_version'>> & {
-      schema_version?: 1 | 2;
+    const value = JSON.parse(raw) as Partial<Omit<GenerationCacheHeadV3, 'schema_version'>> & {
+      schema_version?: 1 | 2 | 3;
     };
     if (
-      (value.schema_version !== 1 && value.schema_version !== 2) ||
+      (value.schema_version !== 1 && value.schema_version !== 2 && value.schema_version !== 3) ||
       typeof value.current !== 'string' ||
       !SHA256.test(value.current) ||
       !(value.previous === null || (typeof value.previous === 'string' && SHA256.test(value.previous)))
     ) return null;
-    if (value.schema_version === 2 && (
+    if (value.schema_version !== 1 && (
       typeof value.current_observation_date !== 'string' ||
       !/^\d{4}-\d{2}-\d{2}$/.test(value.current_observation_date) ||
       !Number.isSafeInteger(value.current_generation_revision) ||
       (value.current_generation_revision as number) < 1 ||
       typeof value.current_ledger_event_digest !== 'string' ||
       !SHA256.test(value.current_ledger_event_digest)
+    )) return null;
+    if (value.schema_version === 3 && (
+      !Number.isSafeInteger(value.transaction_sequence) ||
+      (value.transaction_sequence as number) < 0 ||
+      !(value.current_prior_ledger_digest === null || (
+        typeof value.current_prior_ledger_digest === 'string' &&
+        SHA256.test(value.current_prior_ledger_digest)
+      ))
     )) return null;
     return value as GenerationCacheHead;
   } catch {
@@ -227,10 +253,6 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     await storage.move(temporaryPath, destinationPath);
   }
 
-  async function readHead(): Promise<GenerationCacheHead | null> {
-    return parseHead(await storage.read(headPath)) ?? parseHead(await storage.read(headTmpPath));
-  }
-
   async function readDigest(digest: string | null): Promise<CachedGenerationV3 | null> {
     if (!digest) return null;
     const generation =
@@ -239,14 +261,74 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     return generation?.manifest.generation_digest === digest ? generation : null;
   }
 
-  async function readCurrent(): Promise<CachedGenerationV3 | null> {
-    const head = await readHead();
+  async function verifyHead(
+    head: GenerationCacheHead | null,
+    source: VerifiedGenerationCacheHead['source'],
+  ): Promise<VerifiedGenerationCacheHead | null> {
     if (!head) return null;
-    return (await readDigest(head.current)) ?? readDigest(head.previous);
+    const current = await readDigest(head.current);
+    const previous = await readDigest(head.previous);
+    if (!current) {
+      // A verified predecessor remains a safe read fallback. Install still
+      // rejects a v1 head because it lacks the unavailable current's lineage
+      // metadata, while v2/v3 can authenticate a direct successor.
+      return { head, current: null, previous, source };
+    }
+    if (head.schema_version !== 1 && (
+      head.current_observation_date !== current.manifest.observation_date ||
+      head.current_generation_revision !== current.manifest.generation_revision ||
+      head.current_ledger_event_digest !== current.manifest.ledger_event_digest
+    )) return null;
+    if (head.schema_version === 3 &&
+      head.current_prior_ledger_digest !== current.manifest.prior_ledger_digest) return null;
+    if (head.previous !== null && !previous) return null;
+    return { head, current, previous, source };
+  }
+
+  async function readHeadState(): Promise<VerifiedGenerationCacheHead | null> {
+    const [primary, temporary] = await Promise.all([
+      verifyHead(parseHead(await storage.read(headPath)), 'primary'),
+      verifyHead(parseHead(await storage.read(headTmpPath)), 'temporary'),
+    ]);
+    if (!primary) return temporary;
+    if (!temporary) return primary;
+    if (equivalent(primary.head, temporary.head)) return primary;
+
+    if (primary.head.schema_version === 3 && temporary.head.schema_version === 3) {
+      if (primary.head.transaction_sequence === temporary.head.transaction_sequence) return null;
+      return primary.head.transaction_sequence > temporary.head.transaction_sequence ? primary : temporary;
+    }
+    if (primary.head.schema_version === 3) return primary;
+    if (temporary.head.schema_version === 3) return temporary;
+
+    // Legacy heads have no transaction sequence. Prefer a direct successor;
+    // otherwise two different parseable heads are ambiguous and unavailable.
+    if (
+      primary.current && temporary.current &&
+      primary.head.previous === temporary.head.current &&
+      primary.current.manifest.prior_ledger_digest === temporary.current.manifest.ledger_event_digest
+    ) return primary;
+    if (
+      primary.current && temporary.current &&
+      temporary.head.previous === primary.head.current &&
+      temporary.current.manifest.prior_ledger_digest === primary.current.manifest.ledger_event_digest
+    ) return temporary;
+    if (!primary.current && primary.head.previous === temporary.head.current) return temporary;
+    if (!temporary.current && temporary.head.previous === primary.head.current) return primary;
+    return null;
+  }
+
+  async function readHead(): Promise<GenerationCacheHead | null> {
+    return (await readHeadState())?.head ?? null;
+  }
+
+  async function readCurrent(): Promise<CachedGenerationV3 | null> {
+    const state = await readHeadState();
+    return state?.current ?? state?.previous ?? null;
   }
 
   async function readPrevious(): Promise<CachedGenerationV3 | null> {
-    return readDigest((await readHead())?.previous ?? null);
+    return (await readHeadState())?.previous ?? null;
   }
 
   async function installUnserialized(candidate: ValidatedGenerationV3): Promise<GenerationInstallResultV3> {
@@ -261,7 +343,7 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
       const current = previousHead ? await readDigest(previousHead.current) : null;
       const previous = previousHead ? await readDigest(previousHead.previous) : null;
       if (previousHead && !current && previousHead.current !== digest) {
-        if (!previous || previousHead.schema_version !== 2) {
+        if (!previous || previousHead.schema_version === 1) {
           throw new V3ContractError('current cache lineage is unavailable or invalid');
         }
         const cachedCurrentOrder: [string, number] = [
@@ -311,12 +393,17 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
       }
 
       const retainedPrevious = current?.manifest.generation_digest ?? previous?.manifest.generation_digest ?? null;
-      const nextHead: GenerationCacheHeadV2 = {
-        schema_version: 2,
+      const nextHead: GenerationCacheHeadV3 = {
+        schema_version: 3,
+        transaction_sequence: previousHead?.schema_version === 3 &&
+          previousHead.transaction_sequence < Number.MAX_SAFE_INTEGER
+          ? previousHead.transaction_sequence + 1
+          : 0,
         current: digest,
         previous: retainedPrevious && retainedPrevious !== digest ? retainedPrevious : previousHead?.previous ?? null,
         current_observation_date: verified.manifest.observation_date,
         current_generation_revision: verified.manifest.generation_revision,
+        current_prior_ledger_digest: verified.manifest.prior_ledger_digest,
         current_ledger_event_digest: verified.manifest.ledger_event_digest,
       };
       if (!previousHead || !equivalent(previousHead, nextHead)) {

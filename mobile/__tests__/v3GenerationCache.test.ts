@@ -401,6 +401,44 @@ describe('content-addressed v3 generation cache', () => {
     expect((await restarted.readPrevious())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
+  test('rejects a disconnected stale primary head in favor of a valid temporary rollback head', async () => {
+    const storage = new MemoryStorage();
+    const first = buildGeneration();
+    const second = secondGeneration();
+    const disconnected = buildGeneration({
+      date: '2026-08-16',
+      priorLedgerDigest: 'd'.repeat(64),
+      ledgerEventDigest: LEDGER_C,
+    });
+    await createV3GenerationCache(storage).install(first);
+    await createV3GenerationCache(storage).install(second);
+    const connectedHead = storage.files.get('payload/v3/head.json')!;
+
+    const thirdStorage = new MemoryStorage();
+    await createV3GenerationCache(thirdStorage).install(disconnected);
+    storage.files.set(
+      generationRecordPath(disconnected.manifest.generation_digest),
+      thirdStorage.files.get(generationRecordPath(disconnected.manifest.generation_digest))!,
+    );
+    const disconnectedHead = JSON.parse(connectedHead) as Record<string, unknown>;
+    disconnectedHead.current = disconnected.manifest.generation_digest;
+    disconnectedHead.previous = first.manifest.generation_digest;
+    disconnectedHead.current_observation_date = disconnected.manifest.observation_date;
+    disconnectedHead.current_generation_revision = disconnected.manifest.generation_revision;
+    disconnectedHead.current_prior_ledger_digest = disconnected.manifest.prior_ledger_digest;
+    disconnectedHead.current_ledger_event_digest = disconnected.manifest.ledger_event_digest;
+    const rollbackHead = JSON.parse(connectedHead) as Record<string, unknown>;
+    rollbackHead.transaction_sequence = (disconnectedHead.transaction_sequence as number) + 1;
+    storage.files.set('payload/v3/head.json', JSON.stringify(disconnectedHead));
+    storage.files.set('payload/v3/head.json.tmp', JSON.stringify(rollbackHead));
+
+    const restarted = createV3GenerationCache(storage);
+    expect((await restarted.readCurrent())?.manifest.generation_digest)
+      .toBe(second.manifest.generation_digest);
+    expect((await restarted.readPrevious())?.manifest.generation_digest)
+      .toBe(first.manifest.generation_digest);
+  });
+
   test('recovers an authenticated temporary generation after an iOS delete-then-crash repair', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);

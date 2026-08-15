@@ -68,6 +68,8 @@ interface VerifiedIndex {
 
 class CorruptRetentionIndexError extends Error {}
 
+const MAX_TRANSACTION_SEQUENCE = Number.MAX_SAFE_INTEGER - 2;
+
 function emptyIndex(): RetentionIndex {
   return { schema_version: 3, transaction_sequence: 0, entries: [] };
 }
@@ -77,7 +79,7 @@ function sameIndex(left: RetentionIndex, right: RetentionIndex): boolean {
 }
 
 function nextSequence(index: RetentionIndex, increments = 1): number {
-  if (index.transaction_sequence > Number.MAX_SAFE_INTEGER - increments) {
+  if (index.transaction_sequence > MAX_TRANSACTION_SEQUENCE - increments) {
     throw new Error('Bank spread retention transaction sequence is exhausted');
   }
   return index.transaction_sequence + increments;
@@ -101,7 +103,7 @@ function parseIndex(raw: string | null, limits: BankSpreadCacheLimits): Retentio
       value.schema_version !== 3 ||
       !Number.isSafeInteger(value.transaction_sequence) ||
       (value.transaction_sequence as number) < 0 ||
-      (value.transaction_sequence as number) > Number.MAX_SAFE_INTEGER - 2 ||
+      (value.transaction_sequence as number) > MAX_TRANSACTION_SEQUENCE ||
       !Array.isArray(value.entries)
     ) return null;
     if (value.entries.length > limits.maxEntries) return null;
@@ -250,6 +252,18 @@ export function createBankSpreadContentCache(
     if (state.source === 'primary') await storage.remove(indexTmpPath);
   }
 
+  async function ensureSequenceCapacity(
+    state: VerifiedIndex,
+    requiredIncrements = 2,
+  ): Promise<VerifiedIndex> {
+    if (state.index.transaction_sequence <= MAX_TRANSACTION_SEQUENCE - requiredIncrements) {
+      return state;
+    }
+    const rebased = { ...state.index, transaction_sequence: 0 };
+    await replaceIndex(rebased);
+    return { ...state, index: rebased, source: 'primary' };
+  }
+
   async function healSlot(slot: number, record: VerifiedBankSpreadRecord): Promise<void> {
     const path = slotPath(slot);
     if (record.source === 'temporary') {
@@ -381,7 +395,9 @@ export function createBankSpreadContentCache(
     await writeSlot(slot as number, candidate);
     if (!stillCurrent()) return false;
 
-    const baseSequence = structural.maximumSequence;
+    const baseSequence = structural.maximumSequence <= MAX_TRANSACTION_SEQUENCE - 2
+      ? structural.maximumSequence
+      : 0;
     const repairedBase: VerifiedIndex = {
       index: {
         schema_version: 3,
@@ -414,7 +430,7 @@ export function createBankSpreadContentCache(
   ): Promise<BankSpreadHistoryPayload | null> {
     return serialize(async () => {
       if (!validBankSpreadIdentity(identity) || !stillCurrent()) return null;
-      const previous = await readVerifiedIndex();
+      let previous = await readVerifiedIndex();
       if (!stillCurrent()) return null;
       await healIndex(previous);
       const entry = previous.index.entries.find(
@@ -427,6 +443,8 @@ export function createBankSpreadContentCache(
       await healSlot(entry.slot, record);
       if (!stillCurrent()) return null;
       if (previous.index.entries[0]?.slot === entry.slot) return record.payload;
+      previous = await ensureSequenceCapacity(previous);
+      if (!stillCurrent()) return null;
       const next = await buildNextIndex(entry.slot, record, previous);
       if (!(await commitIndex(previous, next, stillCurrent))) return null;
       return record.payload;
@@ -456,6 +474,8 @@ export function createBankSpreadContentCache(
       }
       if (!stillCurrent()) return false;
       await healIndex(previous);
+      previous = await ensureSequenceCapacity(previous);
+      if (!stillCurrent()) return false;
       const existingEntry = previous.index.entries.find(
         (entry) => bankSpreadIdentityKey(bankSpreadEntryIdentity(entry)) ===
           bankSpreadIdentityKey(identity),
