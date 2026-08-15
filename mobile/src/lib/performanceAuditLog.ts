@@ -1,4 +1,4 @@
-/** Compact perf-audit encodings for paste-sized uploads; full report stays in the sidecar. */
+/** Compact perf-audit encodings for bounded local raw-log exports; full report stays in the sidecar. */
 
 const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
 
@@ -6,7 +6,7 @@ const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
  * A deep audit records ~260 checks. Hermes stacks, readiness dumps and joined
  * runtime-error lists are individually unbounded, so a run with many failed
  * steps produced multi-megabyte reports; teardown then serialized, redacted,
- * compacted and uploaded several copies of that body at once and exhausted the
+ * compacted and exported several copies of that body at once and exhausted the
  * JS heap right after progress reached 100%. Evidence is capped per check so
  * the report stays diagnosable without being unbounded.
  */

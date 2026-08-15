@@ -1,9 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as SecureStore from 'expo-secure-store';
 
 // eslint-disable-next-line import/first -- imports after jest mocks
 import {
   ANDROID_LOG_PATH_HINT,
+  DEBUG_LOG_UPLOAD_RECEIPT_KEY,
   MAX_APPENDED_AUDIT_REPORT_CHARS,
   MAX_AUDIT_SNAPSHOT_BODY_CHARS,
   MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
@@ -17,15 +19,18 @@ import {
   RingBuffer,
   debugLog,
   deleteDebugLogUpload,
+  deleteDebugLogUploadAndReceipt,
   formatEntry,
   formatErrorTrace,
   formatLogUploadBody,
   formatVersionedLogExport,
   formatLogDisplayTail,
   installGlobalErrorHandlers,
+  loadDebugLogUploadReceipt,
   parseLogLine,
   redactSecrets,
   resetGlobalErrorHandlersForTests,
+  saveDebugLogUploadReceipt,
   uploadDebugLog,
   uploadLogsToPasteRs,
 } from '../src/lib/debugLog';
@@ -38,20 +43,12 @@ import {
   setDiagnosticsEnabled,
   setObservabilityDepsForTests,
   type CrashlyticsLike,
-  type ClarityLike,
 } from '../src/lib/observability';
 
 const crashlyticsApi: CrashlyticsLike = {
   log: jest.fn(),
   recordError: jest.fn(),
   setCrashlyticsCollectionEnabled: jest.fn(async () => {}),
-};
-
-const clarityApi: ClarityLike = {
-  initialize: jest.fn(),
-  pause: jest.fn(async () => true),
-  resume: jest.fn(async () => true),
-  consent: jest.fn(async () => true),
 };
 
 describe('redactSecrets', () => {
@@ -357,6 +354,24 @@ describe('uploadDebugLog', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('does not create a backup copy after an ambiguous small paste.rs POST', async () => {
+    const mockFetch = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('response lost after submission'))
+      .mockResolvedValueOnce({
+        status: 200,
+        text: async () => JSON.stringify({
+          url: 'https://paste.c-net.org/orphaned-second-copy',
+          delete_key: 'unreachable-delete-key',
+        }),
+      }) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog('small log', mockFetch)).rejects.toThrow(
+      'may have been accepted',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+
   it('does not duplicate a client-rejected upload to the backup', async () => {
     const mockFetch = jest.fn(async () => ({
       status: 400,
@@ -420,6 +435,85 @@ describe('deleteDebugLogUpload', () => {
       deleteDebugLogUpload('https://example.com/not-allowed', 'delete-secret', mockFetch),
     ).rejects.toThrow('cannot be deleted');
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('durable debug-log upload deletion receipt', () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
+  });
+
+  it('persists and restores only an exact allowlisted deletion capability', async () => {
+    const receipt = await saveDebugLogUploadReceipt({
+      url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+    }, '2026-08-15T00:00:00.000Z');
+
+    await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      DEBUG_LOG_UPLOAD_RECEIPT_KEY,
+      JSON.stringify(receipt),
+      { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
+    );
+    await expect(saveDebugLogUploadReceipt({
+      url: 'https://example.com/private',
+      provider: 'paste.rs',
+    })).rejects.toThrow('invalid');
+  });
+
+  it('retains the receipt when the host does not confirm deletion', async () => {
+    const receipt = await saveDebugLogUploadReceipt({
+      url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+    });
+    const mockFetch = jest.fn(async () => ({ status: 503 })) as unknown as typeof fetch;
+
+    await expect(deleteDebugLogUploadAndReceipt(receipt, mockFetch)).rejects.toThrow('status 503');
+    await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
+  });
+
+  it('retains the receipt when deletion times out', async () => {
+    const receipt = await saveDebugLogUploadReceipt({
+      url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+    });
+    const mockFetch = jest.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        const error = new Error('aborted');
+        error.name = 'AbortError';
+        reject(error);
+      });
+    })) as unknown as typeof fetch;
+
+    await expect(deleteDebugLogUploadAndReceipt(receipt, mockFetch, 1)).rejects.toThrow(
+      'did not confirm deletion',
+    );
+    await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
+  });
+
+  it('removes the receipt only after confirmed deletion or confirmed absence', async () => {
+    const save = () => saveDebugLogUploadReceipt({
+      url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
+      provider: 'paste.c-net.org',
+      deleteKey: 'delete-secret',
+    });
+    let receipt = await save();
+    await deleteDebugLogUploadAndReceipt(
+      receipt,
+      jest.fn(async () => ({ status: 204 })) as unknown as typeof fetch,
+    );
+    await expect(loadDebugLogUploadReceipt()).resolves.toBeNull();
+
+    receipt = await save();
+    await deleteDebugLogUploadAndReceipt(
+      receipt,
+      jest.fn(async () => ({ status: 404 })) as unknown as typeof fetch,
+    );
+    await expect(loadDebugLogUploadReceipt()).resolves.toBeNull();
   });
 });
 
@@ -613,15 +707,16 @@ describe('persistent log file', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    (FileSystem.deleteAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
+    (FileSystem.getInfoAsync as jest.Mock).mockReset().mockResolvedValue({ exists: false });
+    (FileSystem.readAsStringAsync as jest.Mock).mockReset().mockResolvedValue('');
+    (FileSystem.writeAsStringAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
     setObservabilityDepsForTests({
       crashlytics: () => crashlyticsApi,
-      clarity: clarityApi,
     });
     await setDiagnosticsEnabled(true);
-    debugLog.clear();
+    await debugLog.clear();
     await AsyncStorage.clear();
-    (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: false });
-    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('');
   });
 
   afterEach(() => {
@@ -1044,7 +1139,7 @@ describe('persistent log file', () => {
   it('clear deletes the persistent log file', async () => {
     debugLog.info('test', 'before clear');
     await debugLog.flushToFile();
-    debugLog.clear();
+    await debugLog.clear();
 
     expect(FileSystem.deleteAsync).toHaveBeenCalledWith(
       LOG_PATH,
@@ -1054,6 +1149,34 @@ describe('persistent log file', () => {
       AUDIT_SIDECAR_PATH,
       { idempotent: true },
     );
+  });
+
+  it('fails closed when deletion or absence verification is incomplete, then repairs on retry', async () => {
+    installPathAwareFiles({ [LOG_PATH]: 'private diagnostics' });
+    (FileSystem.deleteAsync as jest.Mock).mockRejectedValueOnce(new Error('file locked'));
+
+    await expect(debugLog.clear()).rejects.toThrow('clear is incomplete');
+    await expect(debugLog.readCompleteText()).rejects.toThrow('export is blocked');
+
+    await expect(debugLog.clear()).resolves.toBeUndefined();
+    await expect(debugLog.readCompleteText()).resolves.not.toContain('private diagnostics');
+  });
+
+  it('cancels an export whose stale read finishes after Clear starts', async () => {
+    installPathAwareFiles({ [LOG_PATH]: 'private diagnostics' });
+    const readGate: { release?: (value: string) => void } = {};
+    (FileSystem.readAsStringAsync as jest.Mock).mockImplementationOnce(() => new Promise<string>((resolve) => {
+      readGate.release = resolve;
+    }));
+
+    const exporting = debugLog.readCompleteText();
+    await Promise.resolve();
+    await Promise.resolve();
+    const clearing = debugLog.clear();
+    readGate.release?.('private diagnostics');
+
+    await expect(clearing).resolves.toBeUndefined();
+    await expect(exporting).rejects.toThrow('Clear started');
   });
 
   it('restores tail from log file on startup', async () => {
@@ -1066,7 +1189,6 @@ describe('persistent log file', () => {
     (FileSystem.getInfoAsync as jest.Mock).mockResolvedValue({ exists: true });
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue(`${line}\n`);
 
-    debugLog.clear();
     await debugLog.restoreFromStorage();
     expect(debugLog.getText()).toContain('from disk');
   });
@@ -1080,12 +1202,15 @@ describe('persistent log file', () => {
 describe('debugLog integration', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
+    (FileSystem.deleteAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
+    (FileSystem.getInfoAsync as jest.Mock).mockReset().mockResolvedValue({ exists: false });
+    (FileSystem.readAsStringAsync as jest.Mock).mockReset().mockResolvedValue('');
+    (FileSystem.writeAsStringAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
     setObservabilityDepsForTests({
       crashlytics: () => crashlyticsApi,
-      clarity: clarityApi,
     });
     await setDiagnosticsEnabled(true);
-    debugLog.clear();
+    await debugLog.clear();
     await AsyncStorage.clear();
   });
 
@@ -1098,7 +1223,7 @@ describe('debugLog integration', () => {
     expect(debugLog.getText()).toContain('[REDACTED]');
     expect(debugLog.getText()).not.toContain('secret');
 
-    debugLog.clear();
+    await debugLog.clear();
     expect(debugLog.getText()).toBe('');
 
     debugLog.info('test', 'persist me');
@@ -1109,20 +1234,22 @@ describe('debugLog integration', () => {
     expect(debugLog.getEntries().filter((entry) => entry.message === 'persist me')).toHaveLength(1);
   });
 
-  it('forwards warn/error lines to Crashlytics', () => {
+  it('forwards only a fixed error category to Crashlytics', () => {
     debugLog.warn('store', 'prefs rehydrate failed');
     debugLog.error('payload', 'download failed');
 
-    expect(crashlyticsApi.log).toHaveBeenCalledWith('[WARN] store: prefs rehydrate failed');
-    expect(crashlyticsApi.log).toHaveBeenCalledWith('[ERROR] payload: download failed');
+    expect(crashlyticsApi.log).toHaveBeenCalledTimes(1);
+    expect(crashlyticsApi.log).toHaveBeenCalledWith('[ERROR] category=payload');
+    expect(crashlyticsApi.log).not.toHaveBeenCalledWith(expect.stringContaining('download failed'));
+    expect(crashlyticsApi.log).not.toHaveBeenCalledWith(expect.stringContaining('prefs rehydrate failed'));
     expect(crashlyticsApi.recordError).toHaveBeenCalledTimes(1);
   });
 
-  it('redacts secrets forwarded to Crashlytics', () => {
+  it('keeps arbitrary warning text out of Crashlytics', () => {
     debugLog.warn('test', 'hello EXPO_TOKEN=secret');
 
-    expect(crashlyticsApi.log).toHaveBeenCalledWith('[WARN] test: hello EXPO_TOKEN=[REDACTED]');
-    expect(crashlyticsApi.log).not.toHaveBeenCalledWith(expect.stringContaining('secret'));
+    expect(crashlyticsApi.log).not.toHaveBeenCalled();
+    expect(crashlyticsApi.recordError).not.toHaveBeenCalled();
   });
 
   it('keeps performance audit reports local even when diagnostics are enabled', () => {
@@ -1133,8 +1260,8 @@ describe('debugLog integration', () => {
     expect(crashlyticsApi.recordError).not.toHaveBeenCalled();
   });
 
-  it('collapses multi-line audit failures into one parseable logfile row', () => {
-    debugLog.clear();
+  it('collapses multi-line audit failures into one parseable logfile row', async () => {
+    await debugLog.clear();
     const stack = [
       'Error: Mounted action completion was not observed for browse.category.first',
       '    at runDeepAuditStep (PerformanceAuditRunner.tsx:552:13)',
@@ -1151,8 +1278,8 @@ describe('debugLog integration', () => {
     expect(lines[0]).toContain(String.raw`\n`);
   });
 
-  it('installGlobalErrorHandlers forwards fatal errors to debugLog', () => {
-    debugLog.clear();
+  it('installGlobalErrorHandlers forwards fatal errors to debugLog', async () => {
+    await debugLog.clear();
     resetGlobalErrorHandlersForTests();
     const flushSpy = jest.spyOn(debugLog, 'flushToFile').mockResolvedValue(undefined);
     const g = global as typeof global & {

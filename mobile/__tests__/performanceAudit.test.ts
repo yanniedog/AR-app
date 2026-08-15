@@ -5,7 +5,6 @@ import {
   AUDIT_LATENCY_METRIC_KEYS,
   cancelPerformanceAudit,
   buildPerformanceAuditJourneys,
-  claimPerformanceAuditUploadDeletion,
   completePerformanceAudit,
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   flattenAuditLogText,
@@ -17,7 +16,6 @@ import {
   hasExplicitNonTimingFailure,
   isPerformanceAuditActive,
   markPerformanceAuditRunning,
-  markPerformanceAuditUploadDeleted,
   measureAuditAction,
   parsePerformanceAuditHangTimeoutSeconds,
   pausePerformanceAudit,
@@ -26,7 +24,6 @@ import {
   percentile,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   requestPerformanceAudit,
-  releasePerformanceAuditUploadDeletion,
   resolveAuditJourneyOptionalData,
   restorePerformanceAuditPreferences,
   requiresPerformanceAuditRouteRecovery,
@@ -36,7 +33,6 @@ import {
   MAX_REPORTED_AUDIT_CHECKS,
   scoreLatency,
   selectReportedAuditChecks,
-  setPerformanceAuditUploadResult,
   summarizePerformanceAudit,
   summarizeResponsiveness,
   worstStatus,
@@ -427,7 +423,42 @@ describe('performance audit scoring', () => {
       eventLoopSamples: 200_000,
       maxEventLoopLagMs: 199_999,
       frameSamples: 0,
-      maxFrameGapMs: 0,
+      maxFrameGapMs: null,
+    });
+  });
+
+  it('reports empty responsiveness and empty audits as unavailable rather than measured zero', () => {
+    expect(summarizeResponsiveness([], [])).toEqual({
+      eventLoopSamples: 0,
+      eventLoopP95Ms: null,
+      maxEventLoopLagMs: null,
+      stallsOver100Ms: null,
+      frameSamples: 0,
+      frameP95Ms: null,
+      maxFrameGapMs: null,
+      framesOver50Ms: null,
+    });
+    expect(summarizePerformanceAudit([])).toMatchObject({
+      overall: 'attention',
+      coveragePercent: null,
+      slowestCheckId: null,
+      slowestCheckMs: null,
+      maxEventLoopLagMs: null,
+      maxFrameGapMs: null,
+    });
+  });
+
+  it('accepts a zero duration only with explicit measurement proof', () => {
+    const unproven = check('unproven-zero', 'pass', 0);
+    const proven = check('proven-zero', 'pass', 0, { executionAttempted: true });
+
+    expect(summarizePerformanceAudit([unproven])).toMatchObject({
+      slowestCheckId: null,
+      slowestCheckMs: null,
+    });
+    expect(summarizePerformanceAudit([proven])).toMatchObject({
+      slowestCheckId: 'proven-zero',
+      slowestCheckMs: 0,
     });
   });
 
@@ -691,128 +722,13 @@ describe('performance audit lifecycle', () => {
       routeAggregates: [],
       limitations: [],
     };
-    completePerformanceAudit(report, {
-      url: 'https://paste.example/audit',
-      provider: 'test-provider',
-      deleteKey: 'delete-key',
-      linkCopied: false,
-    });
+    completePerformanceAudit(report);
     expect(getPerformanceAuditState()).toMatchObject({
       status: 'complete',
       sessionId,
       report,
-      uploadUrl: 'https://paste.example/audit',
-      uploadProvider: 'test-provider',
-      uploadDeleteKey: 'delete-key',
-      uploadLinkCopied: false,
-      uploadDeleted: false,
-      uploadError: null,
-    });
-
-    markPerformanceAuditUploadDeleted(sessionId);
-    expect(getPerformanceAuditState()).toMatchObject({
-      uploadUrl: null,
-      uploadDeleteKey: null,
-      uploadDeleted: true,
-    });
-  });
-
-  it('synchronously rejects a second upload deletion until the first request releases', () => {
-    const guard = { current: false };
-
-    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(true);
-    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(false);
-
-    releasePerformanceAuditUploadDeletion(guard);
-    expect(claimPerformanceAuditUploadDeletion(guard)).toBe(true);
-  });
-
-  it('publishes the report before the upload finishes and attaches its result later', () => {
-    const sessionId = requestPerformanceAudit();
-    const report = {
-      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-      sessionId,
-      startedAt: '2026-08-08T00:00:00.000Z',
-      finishedAt: '2026-08-08T00:01:00.000Z',
-      durationMs: 60_000,
-      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
-      watchdog: {
-        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
-        storedCheckCount: 0,
-        lastStoredCheckAt: null,
-      },
-      environment,
-      summary: summarizePerformanceAudit([]),
-      checks: [],
-      routeAggregates: [],
-      limitations: [],
-    };
-
-    completePerformanceAudit(report, 'pending');
-    expect(getPerformanceAuditState()).toMatchObject({
-      status: 'complete',
-      report,
-      uploadPending: true,
-      uploadUrl: null,
-      uploadError: null,
-    });
-
-    setPerformanceAuditUploadResult(sessionId, { error: 'paste.rs did not respond in time.' });
-    expect(getPerformanceAuditState()).toMatchObject({
-      status: 'complete',
-      report,
-      uploadPending: false,
-      uploadUrl: null,
-      uploadError: 'paste.rs did not respond in time.',
-    });
-  });
-
-  it('ignores a late upload result once the audit is no longer complete', () => {
-    const sessionId = requestPerformanceAudit();
-    setPerformanceAuditUploadResult(sessionId, { url: 'https://paste.example/late' });
-    expect(getPerformanceAuditState()).toMatchObject({
-      status: 'queued',
-      uploadUrl: null,
-    });
-  });
-
-  it('drops an upload result belonging to a superseded session', () => {
-    const reportFor = (sessionId: string) => ({
-      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
-      sessionId,
-      startedAt: '2026-08-08T00:02:00.000Z',
-      finishedAt: '2026-08-08T00:03:00.000Z',
-      durationMs: 60_000,
-      app: { appVersion: environment.appVersion, buildVersion: environment.buildVersion },
-      watchdog: {
-        hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
-        storedCheckCount: 0,
-        lastStoredCheckAt: null,
-      },
-      environment,
-      summary: summarizePerformanceAudit([]),
-      checks: [],
-      routeAggregates: [],
-      limitations: [],
-    });
-
-    const supersededSessionId = requestPerformanceAudit();
-    completePerformanceAudit(reportFor(supersededSessionId), 'pending');
-    // The user starts and finishes another audit while the first upload is
-    // still in flight.
-    const latestSessionId = requestPerformanceAudit();
-    const latestReport = reportFor(latestSessionId);
-    completePerformanceAudit(latestReport, 'pending');
-
-    setPerformanceAuditUploadResult(supersededSessionId, {
-      url: 'https://paste.example/superseded',
-    });
-
-    expect(getPerformanceAuditState()).toMatchObject({
-      status: 'complete',
-      report: latestReport,
-      uploadUrl: null,
-      uploadPending: true,
+      paused: false,
+      error: null,
     });
   });
 
@@ -848,30 +764,11 @@ describe('performance audit lifecycle', () => {
     markPerformanceAuditRunning(10);
     pausePerformanceAudit();
 
-    completePerformanceAudit(reportFixture(sessionId), 'pending');
+    completePerformanceAudit(reportFixture(sessionId));
 
-    // resumePerformanceAudit refuses terminal states, so a pause left set here
-    // could never be cleared and every ForegroundElapsed built afterwards for
-    // the post-publish upload would accrue nothing and never time out.
+    // Terminal completion must not retain an impossible paused state.
     expect(getPerformanceAuditState().paused).toBe(false);
     expect(new ForegroundElapsed(() => 0).foregroundMs).toBe(0);
-  });
-
-  it('keeps pause tracking while a published report is still uploading', () => {
-    const sessionId = requestPerformanceAudit();
-    markPerformanceAuditRunning(10);
-    completePerformanceAudit(reportFixture(sessionId), 'pending');
-
-    // The upload runs on a foreground budget, so it still needs transitions.
-    pausePerformanceAudit();
-    expect(getPerformanceAuditState().paused).toBe(true);
-    resumePerformanceAudit();
-    expect(getPerformanceAuditState().paused).toBe(false);
-
-    pausePerformanceAudit();
-    setPerformanceAuditUploadResult(sessionId, { url: 'https://paste.example/audit' });
-    // Nothing is left to clear a pause once the upload has settled.
-    expect(getPerformanceAuditState()).toMatchObject({ uploadPending: false, paused: false });
   });
 
   it('never pauses a cancelled or finished audit', () => {
@@ -919,8 +816,8 @@ describe('interrupted check latency stripping', () => {
         check('healthy', 'pass', 12, {}),
       ]);
       expect(summary.slowestCheckId).toBe('healthy');
-      expect(summary.maxEventLoopLagMs).toBe(0);
-      expect(summary.maxFrameGapMs).toBe(0);
+      expect(summary.maxEventLoopLagMs).toBeNull();
+      expect(summary.maxFrameGapMs).toBeNull();
     }
 
     const journey = summarizePerformanceAudit([

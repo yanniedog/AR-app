@@ -1,27 +1,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { Alert, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { Alert, Share, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
   getPerformanceAuditState,
-  claimPerformanceAuditUploadDeletion,
-  markPerformanceAuditUploadDeleted,
   MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS,
   parsePerformanceAuditHangTimeoutSeconds,
   PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY,
   requestPerformanceAudit,
-  releasePerformanceAuditUploadDeletion,
   selectReportedAuditChecks,
   MAX_REPORTED_AUDIT_CHECKS,
   subscribePerformanceAudit,
   type AuditCheck,
-  type AuditCheckStatus,
 } from '../src/lib/performanceAudit';
-import { deleteDebugLogUpload } from '../src/lib/debugLog';
+import { createDeidentifiedDiagnosticsShare } from '../src/lib/diagnosticsEnvelope';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -33,16 +29,33 @@ function usePerformanceAuditState() {
   );
 }
 
-function statusLabel(status: AuditCheckStatus): string {
-  if (status === 'pass') return 'Good';
-  if (status === 'warn') return 'Slow';
-  if (status === 'fail') return 'Bottleneck';
-  return 'Skipped';
+function statusLabel(check: AuditCheck): string {
+  if (check.metrics.availabilityFailure === true || check.metrics.executionAttempted === false) {
+    return 'Unavailable';
+  }
+  if (check.status === 'pass') return 'Good';
+  if (check.status === 'warn') return 'Slow';
+  if (check.status === 'fail') return 'Bottleneck';
+  return 'Interrupted';
 }
 
 function metricNumber(check: AuditCheck, key: string): number | null {
   const value = check.metrics[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  if (
+    value === 0 &&
+    check.metrics.executionAttempted !== true &&
+    check.metrics.measurementAvailable !== true
+  ) return null;
+  return value;
+}
+
+function checkDuration(check: AuditCheck): number | null {
+  if (check.durationMs == null || !Number.isFinite(check.durationMs)) return null;
+  if (check.durationMs !== 0) return check.durationMs;
+  return check.metrics.executionAttempted === true || check.metrics.measurementAvailable === true
+    ? 0
+    : null;
 }
 
 function metricDuration(check: AuditCheck, key: string, label: string): string {
@@ -90,7 +103,7 @@ function checkDetail(check: AuditCheck): string {
     return `${metricDuration(check, 'parseMs', 'Parse')} · ${rows == null ? 'Rows not measured' : `${rows.toLocaleString()} rate rows`}`;
   }
   if (check.id === 'manifest-network') {
-    return `${measuredMs('Request', check.durationMs)} · HTTP ${check.metrics.statusCode ?? '—'}`;
+    return `${measuredMs('Request', checkDuration(check))} · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
   if (check.id.startsWith('section-model-')) {
     const rows = metricNumber(check, 'rows');
@@ -109,9 +122,12 @@ function checkDetail(check: AuditCheck): string {
     return `${check.metrics.checkStatus ?? 'unknown'} · installed ${check.metrics.installedVersion ?? '?'} (${check.metrics.installedBuild ?? '?'}) · cache ${check.metrics.downloadPhase ?? 'unknown'}`;
   }
   if (check.id === 'runtime-responsiveness') {
-    return `Max JS lag ${Number(check.metrics.maxEventLoopLagMs ?? 0).toFixed(0)} ms · JS animation callback gap ${Number(check.metrics.maxFrameGapMs ?? 0).toFixed(0)} ms`;
+    return [
+      measuredMs('Max JS lag', metricNumber(check, 'maxEventLoopLagMs')),
+      measuredMs('JS animation callback gap', metricNumber(check, 'maxFrameGapMs')),
+    ].join(' · ');
   }
-  return measuredMs('Duration', check.durationMs);
+  return measuredMs('Duration', checkDuration(check));
 }
 
 function PerformanceAuditScreenInner() {
@@ -122,9 +138,8 @@ function PerformanceAuditScreenInner() {
   );
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [deletingUpload, setDeletingUpload] = useState(false);
+  const [sharingReport, setSharingReport] = useState(false);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
-  const deletingUploadRef = useRef(false);
   const report = state.report;
   const orderedChecks = useMemo(
     () => (report ? selectReportedAuditChecks(report.checks) : []),
@@ -200,44 +215,36 @@ function PerformanceAuditScreenInner() {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
     requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
   };
-  const confirmRunAudit = () => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
+  const confirmShareReport = () => {
+    if (!report || sharingReport) return;
+    let prepared: ReturnType<typeof createDeidentifiedDiagnosticsShare>;
+    try {
+      prepared = createDeidentifiedDiagnosticsShare(report);
+    } catch (error) {
+      Alert.alert('Report unavailable', error instanceof Error ? error.message : String(error));
+      return;
+    }
     Alert.alert(
-      'Run and publicly upload the full log?',
-      'After the audit, the complete redacted debug log is uploaded to paste.rs, or to paste.c-net.org when needed. Anyone with the link can read it. C-net uploads expire after 180 inactive days; access resets that period. Review or clear the debug log first if needed.',
+      'Share deidentified report?',
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Run and upload', style: 'destructive', onPress: runAudit },
-      ],
-    );
-  };
-  const deleteUpload = () => {
-    if (!state.sessionId || !state.uploadUrl || deletingUpload) return;
-    const sessionId = state.sessionId;
-    const url = state.uploadUrl;
-    Alert.alert(
-      'Delete uploaded log?',
-      'Permanently removes this public copy. This cannot be undone.',
+        `Destination: ${prepared.destination}.`,
+        `Size: ${prepared.byteLength.toLocaleString()} bytes (complete JSON).`,
+        'Included fields:',
+        ...prepared.fields.map((field) => `• ${field}`),
+        'Raw logs, tracebacks, routes, product keys, device identifiers and timestamps are excluded.',
+      ].join('\n'),
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete',
-          style: 'destructive',
+          text: 'Share report',
           onPress: () => {
-            if (!claimPerformanceAuditUploadDeletion(deletingUploadRef)) return;
-            setDeletingUpload(true);
-            void deleteDebugLogUpload(url, state.uploadDeleteKey ?? undefined)
-              .then(() => markPerformanceAuditUploadDeleted(sessionId))
-              .catch((error) => {
-                Alert.alert(
-                  'Could not delete upload',
-                  error instanceof Error ? error.message : String(error),
-                );
-              })
-              .finally(() => {
-                releasePerformanceAuditUploadDeletion(deletingUploadRef);
-                setDeletingUpload(false);
-              });
+            setSharingReport(true);
+            void Share.share({
+              title: 'Australian Rates deidentified performance report',
+              message: prepared.body,
+            }).catch((error) => {
+              Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
+            }).finally(() => setSharingReport(false));
           },
         },
       ],
@@ -260,14 +267,12 @@ function PerformanceAuditScreenInner() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">Full responsiveness diagnosis</AppText>
         <AppText variant="small" color="textMuted">
-          Maximum safe coverage is always on. One tap temporarily enables every local feature and
-          all three sections, preloads their trusted assets, repeats every safe screen action cold
-          and warm, then tests models, responsiveness, storage, payload processing, network and
-          Android update readiness. Your settings and saved data are restored exactly afterward.
+          Runs the registered safe checks locally, reports anything unavailable, and restores your
+          settings and saved data afterward. It does not contact a host or write to the clipboard.
         </AppText>
-        <AppText variant="tiny" color="warning">
-          Anyone with the link can read the uploaded full log. You will be asked to confirm before
-          the audit starts, and can delete a successful upload below.
+        <AppText variant="tiny" color="textMuted">
+          When results are ready, you can separately review and share a byte-capped deidentified
+          report. Raw debug logs are never included in that report.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           The screen stays awake during visual checks. Leaving the app pauses the run and it
@@ -322,7 +327,7 @@ function PerformanceAuditScreenInner() {
           icon="pulse-outline"
           loading={running}
           disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={confirmRunAudit}
+          onPress={runAudit}
         />
       </Card>
 
@@ -374,7 +379,9 @@ function PerformanceAuditScreenInner() {
               variant="small"
               color={report.summary.unexpectedSkipped > 0 ? 'danger' : 'textMuted'}
             >
-              Coverage {report.summary.coveragePercent.toFixed(1)}% · {report.summary.executed}{' '}
+              Coverage {report.summary.coveragePercent == null
+                ? 'unavailable'
+                : `${report.summary.coveragePercent.toFixed(1)}%`} · {report.summary.executed}{' '}
               executed · {report.summary.justifiedSkipped} declared unavailable ·{' '}
               {report.summary.unexpectedSkipped} interrupted/unexpected
             </AppText>
@@ -389,12 +396,18 @@ function PerformanceAuditScreenInner() {
               </AppText>
             ) : null}
             <AppText variant="small" color="textMuted">
-              Slowest: {report.summary.slowestCheckLabel ?? '—'} (
-              {report.summary.slowestCheckMs.toFixed(0)} ms)
+              Slowest: {report.summary.slowestCheckLabel ?? 'unavailable'} (
+              {report.summary.slowestCheckMs == null
+                ? 'not measured'
+                : `${report.summary.slowestCheckMs.toFixed(0)} ms`})
             </AppText>
             <AppText variant="small" color="textMuted">
-              Worst JS lag {report.summary.maxEventLoopLagMs.toFixed(0)} ms · Worst frame gap{' '}
-              {report.summary.maxFrameGapMs.toFixed(0)} ms · Total{' '}
+              Worst JS lag {report.summary.maxEventLoopLagMs == null
+                ? 'not measured'
+                : `${report.summary.maxEventLoopLagMs.toFixed(0)} ms`} · Worst frame gap{' '}
+              {report.summary.maxFrameGapMs == null
+                ? 'not measured'
+                : `${report.summary.maxFrameGapMs.toFixed(0)} ms`} · Total{' '}
               {(report.durationMs / 1_000).toFixed(1)} s
               {report.wallClockMs != null && report.wallClockMs - report.durationMs >= 1_000
                 ? ` (+ ${((report.wallClockMs - report.durationMs) / 1_000).toFixed(1)} s paused)`
@@ -407,32 +420,17 @@ function PerformanceAuditScreenInner() {
             <AppText variant="small" color="textMuted">
               App v{report.environment.appVersion} (build {report.environment.buildVersion})
             </AppText>
-            <AppText variant="small" color={state.uploadUrl ? 'success' : 'textMuted'}>
-              {state.uploadUrl
-                ? `Full log publicly hosted via ${state.uploadProvider}. ${
-                  state.uploadLinkCopied ? 'Link copied to clipboard.' : 'Clipboard copy failed; use the link below.'
-                } Anyone with the link can read it.`
-                : state.uploadPending
-                  ? 'Uploading the full log to a public host...'
-                  : state.uploadDeleted
-                    ? 'Public log upload deleted.'
-                    : `Automatic log upload failed${state.uploadError ? `: ${state.uploadError}` : '.'}`}
+            <AppText variant="small" color="textMuted">
+              Results are stored locally. No report or log was uploaded automatically.
             </AppText>
-            {state.uploadUrl ? (
-              <>
-                <AppText variant="tiny" selectable style={{ fontFamily: 'monospace' }}>
-                  {state.uploadUrl}
-                </AppText>
-                <Button
-                  title="Delete uploaded log"
-                  icon="trash-outline"
-                  variant="ghost"
-                  loading={deletingUpload}
-                  disabled={deletingUpload}
-                  onPress={deleteUpload}
-                />
-              </>
-            ) : null}
+            <Button
+              title="Share deidentified report"
+              icon="share-outline"
+              variant="ghost"
+              loading={sharingReport}
+              disabled={sharingReport}
+              onPress={confirmShareReport}
+            />
           </Card>
 
           {report.routeAggregates.length > 0 ? (
@@ -483,7 +481,7 @@ function PerformanceAuditScreenInner() {
                       {check.label}
                     </AppText>
                     <AppText variant="tiny" weight="700" style={{ color }}>
-                      {statusLabel(check.status)}
+                      {statusLabel(check)}
                     </AppText>
                   </Row>
                   <AppText variant="tiny" color="textFaint">

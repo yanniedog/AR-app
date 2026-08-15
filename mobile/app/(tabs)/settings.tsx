@@ -583,7 +583,7 @@ export default function Settings() {
           open={diagnosticsOpen}
           onOpenChange={changeDiagnosticsOpen}
           summary={
-            prefs.crashReportsEnabled || prefs.sessionReplayEnabled
+            prefs.crashReportsEnabled
               ? 'Optional reporting on'
               : 'Reporting off'
           }
@@ -591,7 +591,7 @@ export default function Settings() {
           <ToggleRow
             icon="pulse-outline"
             label="Crash reports"
-            sub="Send technical crashes and non-debug error logs through Crashlytics"
+            sub="Send crash traces and fixed error categories; never debug logs, audit reports, financial inputs, saved products, searches or notification content"
             value={prefs.crashReportsEnabled}
             onChange={(value) => {
               setPref('crashReportsEnabled', value);
@@ -599,16 +599,10 @@ export default function Settings() {
             }}
           />
           <SettingsGap size={8} />
-          <ToggleRow
-            icon="eye-outline"
-            label="Session replay"
-            sub="Share interaction replays through Clarity; financial-input screens stay excluded"
-            value={prefs.sessionReplayEnabled}
-            onChange={(value) => {
-              setPref('sessionReplayEnabled', value);
-              setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
-            }}
-          />
+          <AppText variant="tiny" color="textFaint">
+            Session replay is not collected. Debug logs and performance reports remain local unless
+            you explicitly export them.
+          </AppText>
         </DisclosureGroup>
       </Section>
 

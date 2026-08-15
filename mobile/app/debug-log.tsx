@@ -8,10 +8,14 @@ import { Alert, ScrollView, Share, View } from 'react-native';
 import { Screen } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
+  DEBUG_LOG_SHARE_FILE,
   debugLog,
-  deleteDebugLogUpload,
+  deleteDebugLogUploadAndReceipt,
   formatVersionedLogExport,
+  loadDebugLogUploadReceipt,
+  saveDebugLogUploadReceipt,
   uploadDebugLog,
+  type DebugLogUploadReceipt,
 } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -19,17 +23,15 @@ import { useTheme } from '../src/theme/ThemeProvider';
 function DebugLogScreenInner() {
   const theme = useTheme();
   const scrollRef = useRef<ScrollView>(null);
-  const retryUploadRef = useRef<() => void>(() => {});
   const [text, setText] = useState(debugLog.getDisplayText());
-  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
-  const [uploadProvider, setUploadProvider] = useState<string | null>(null);
-  const [uploadDeleteKey, setUploadDeleteKey] = useState<string | null>(null);
-  const [busy, setBusy] = useState<'copy' | 'share' | 'upload' | 'delete' | 'path' | null>(null);
+  const [uploadReceipt, setUploadReceipt] = useState<DebugLogUploadReceipt | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const [receiptLoaded, setReceiptLoaded] = useState(false);
+  const [clearFailed, setClearFailed] = useState(false);
+  const [busy, setBusy] = useState<'clear' | 'copy' | 'share' | 'upload' | 'delete' | 'path' | null>(null);
   const [logLayoutReady, setLogLayoutReady] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
-  const uploadUrlRef = useRef(uploadUrl);
-  uploadUrlRef.current = uploadUrl;
   const logPathHint = debugLog.getAndroidLogPathHint();
   const readVersionedExport = useCallback(async () => {
     const completeLog = await debugLog.readCompleteText();
@@ -42,6 +44,23 @@ function DebugLogScreenInner() {
 
   useEffect(() => {
     return debugLog.subscribe(() => setText(debugLog.getDisplayText()));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void loadDebugLogUploadReceipt()
+      .then((receipt) => {
+        if (active) setUploadReceipt(receipt);
+      })
+      .catch((error) => {
+        if (active) setReceiptError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => {
+        if (active) setReceiptLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const scrollToLogEnd = useCallback(() => {
@@ -90,17 +109,33 @@ function DebugLogScreenInner() {
           text: 'Clear',
           style: 'destructive',
           onPress: () => {
-            debugLog.clear();
-            setUploadUrl(null);
-            setUploadProvider(null);
-            setUploadDeleteKey(null);
+            if (busyRef.current) return;
+            busyRef.current = 'clear';
+            setBusy('clear');
+            setClearFailed(false);
+            void debugLog.clear().then(() => {
+              Alert.alert(
+                'Debug log cleared',
+                uploadReceipt
+                  ? 'Local diagnostics were removed. The public-upload deletion receipt was retained.'
+                  : 'Local diagnostics were removed and absence was verified.',
+              );
+            }).catch((error) => {
+              setClearFailed(true);
+              Alert.alert('Clear incomplete', error instanceof Error ? error.message : String(error));
+            }).finally(() => {
+              busyRef.current = null;
+              setBusy(null);
+            });
           },
         },
       ],
     );
-  }, []);
+  }, [uploadReceipt]);
 
   const onCopyPath = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = 'path';
     setBusy('path');
     try {
       await Clipboard.setStringAsync(logPathHint);
@@ -108,11 +143,14 @@ function DebugLogScreenInner() {
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
+      busyRef.current = null;
       setBusy(null);
     }
   }, [logPathHint]);
 
   const onCopy = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = 'copy';
     setBusy('copy');
     try {
       const body = await readVersionedExport();
@@ -121,21 +159,24 @@ function DebugLogScreenInner() {
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     } finally {
+      busyRef.current = null;
       setBusy(null);
     }
   }, [readVersionedExport]);
 
   const onShare = useCallback(async () => {
+    if (busyRef.current) return;
+    busyRef.current = 'share';
     setBusy('share');
+    let wroteShareFile = false;
     try {
       const body = await readVersionedExport();
-      const path = FileSystem.cacheDirectory
-        ? `${FileSystem.cacheDirectory}ar-debug-log-share.txt`
-        : null;
+      const path = FileSystem.cacheDirectory ? DEBUG_LOG_SHARE_FILE : null;
       if (path && await Sharing.isAvailableAsync()) {
         // The screen renders a small tail for responsiveness; explicit export
         // reads the complete flushed file and durable latest audit instead.
         await FileSystem.writeAsStringAsync(path, body);
+        wroteShareFile = true;
         await Sharing.shareAsync(path, {
           mimeType: 'text/plain',
           dialogTitle: 'Share debug log',
@@ -147,12 +188,25 @@ function DebugLogScreenInner() {
     } catch (err) {
       Alert.alert('Share failed', String((err as Error)?.message ?? err));
     } finally {
+      if (wroteShareFile) {
+        try {
+          await FileSystem.deleteAsync(DEBUG_LOG_SHARE_FILE, { idempotent: true });
+        } catch (cleanupError) {
+          setClearFailed(true);
+          Alert.alert(
+            'Temporary share file retained',
+            `Private diagnostics could not be removed from the share cache. ` +
+            `Use Clear before exporting again. ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+          );
+        }
+      }
+      busyRef.current = null;
       setBusy(null);
     }
   }, [readVersionedExport]);
 
   const runUpload = useCallback(async () => {
-    if (busyRef.current) return;
+    if (busyRef.current || !receiptLoaded || uploadReceipt || receiptError) return;
     busyRef.current = 'upload';
     setBusy('upload');
     try {
@@ -162,76 +216,111 @@ function DebugLogScreenInner() {
       if (result.truncated || result.clientTruncated) {
         throw new Error('The upload service did not accept the complete log.');
       }
-      setUploadUrl(url);
-      setUploadProvider(provider);
-      setUploadDeleteKey(deleteKey ?? null);
-      let copied = true;
       try {
-        await Clipboard.setStringAsync(url);
-      } catch {
-        copied = false;
+        const receipt = await saveDebugLogUploadReceipt({ url, provider, deleteKey });
+        setUploadReceipt(receipt);
+        setReceiptError(null);
+      } catch (receiptFailure) {
+        try {
+          await deleteDebugLogUploadAndReceipt({
+            schemaVersion: 1,
+            url,
+            provider,
+            ...(deleteKey ? { deleteKey } : {}),
+            createdAt: new Date().toISOString(),
+          });
+        } catch (cleanupFailure) {
+          setUploadReceipt({
+            schemaVersion: 1,
+            url,
+            provider,
+            ...(deleteKey ? { deleteKey } : {}),
+            createdAt: new Date().toISOString(),
+          });
+          setReceiptError(
+            'The public copy exists, but its deletion receipt could not be secured. ' +
+            'Keep this screen open and delete it now.',
+          );
+          throw cleanupFailure;
+        }
+        throw receiptFailure;
       }
       Alert.alert(
         'Uploaded',
         `${provider} accepted the complete log. ` +
-        `${copied ? 'The link was copied.' : 'The link is shown below.'} ` +
-        'You can delete the public copy from this screen.',
+        'The link was not copied automatically. Its deletion receipt is secured on this device.',
       );
     } catch (err) {
       Alert.alert(
         'Upload unavailable',
         String((err as Error)?.message ?? err),
-        [
-          {
-            text: 'Retry',
-            onPress: () => retryUploadRef.current(),
-          },
-          {
+        [{
             text: 'Share',
             onPress: () => {
               void onShare();
             },
-          },
-          {
+          }, {
             text: 'Copy log',
             onPress: () => {
               void onCopy();
             },
-          },
-        ],
+          }],
       );
     } finally {
       busyRef.current = null;
       setBusy(null);
     }
-  }, [onCopy, onShare, readVersionedExport]);
-  retryUploadRef.current = () => {
-    void runUpload();
-  };
+  }, [onCopy, onShare, readVersionedExport, receiptError, receiptLoaded, uploadReceipt]);
 
   const onUpload = useCallback(() => {
+    if (!receiptLoaded) {
+      Alert.alert('Checking previous upload', 'Wait until the saved deletion receipt has been checked.');
+      return;
+    }
+    if (receiptError) {
+      Alert.alert(
+        'Upload receipt unavailable',
+        'The previous public-upload state could not be verified. Public upload stays blocked to avoid losing a deletion receipt.',
+      );
+      return;
+    }
+    if (uploadReceipt) {
+      Alert.alert('Delete the existing public copy first', 'Only one deletion receipt can be active.');
+      return;
+    }
     Alert.alert(
-      'Upload public debug log?',
-      'Uploads the complete log to paste.rs, or to paste.c-net.org when it is too large or paste.rs is temporarily unavailable. Anyone with the link can read it. C-net uploads expire after 180 inactive days; access resets that period. Review the log before continuing.',
+      'Open expert public-upload flow?',
+      'This is not the deidentified audit report. The raw debug log can contain private device, network, rate, product, receipt and error details even after pattern redaction. Prefer OS Share.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Upload', style: 'destructive', onPress: () => void runUpload() },
+        {
+          text: 'Review risk',
+          style: 'destructive',
+          onPress: () => Alert.alert(
+            'Upload private log now?',
+            'The complete raw log will be sent to paste.rs or paste.c-net.org and anyone with the link can read it. The app will securely retain a deletion receipt, but a lost network response can leave an unknown copy that cannot be recovered.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Upload publicly', style: 'destructive', onPress: () => void runUpload() },
+            ],
+          ),
+        },
       ],
     );
-  }, [runUpload]);
+  }, [receiptError, receiptLoaded, runUpload, uploadReceipt]);
 
   const onCopyUrl = useCallback(async () => {
-    if (!uploadUrl) return;
+    if (!uploadReceipt) return;
     try {
-      await Clipboard.setStringAsync(uploadUrl);
+      await Clipboard.setStringAsync(uploadReceipt.url);
       Alert.alert('Copied', 'Paste URL copied — ready to paste.');
     } catch (err) {
       Alert.alert('Copy failed', String((err as Error)?.message ?? err));
     }
-  }, [uploadUrl]);
+  }, [uploadReceipt]);
 
   const onDeleteUpload = useCallback(() => {
-    if (busyRef.current || !uploadUrl) return;
+    if (busyRef.current || !uploadReceipt) return;
     Alert.alert(
       'Delete uploaded log?',
       'Permanently removes this public host copy. This cannot be undone.',
@@ -241,16 +330,13 @@ function DebugLogScreenInner() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            const deletingUrl = uploadUrl;
             if (busyRef.current) return;
             busyRef.current = 'delete';
             setBusy('delete');
-            void deleteDebugLogUpload(deletingUrl, uploadDeleteKey ?? undefined)
+            void deleteDebugLogUploadAndReceipt(uploadReceipt)
               .then(() => {
-                if (uploadUrlRef.current !== deletingUrl) return;
-                setUploadUrl(null);
-                setUploadProvider(null);
-                setUploadDeleteKey(null);
+                setUploadReceipt(null);
+                setReceiptError(null);
                 Alert.alert('Uploaded log deleted');
               })
               .catch((err) => {
@@ -264,14 +350,14 @@ function DebugLogScreenInner() {
         },
       ],
     );
-  }, [uploadDeleteKey, uploadUrl]);
+  }, [uploadReceipt]);
 
   return (
     <Screen style={{ flex: 1 }}>
         <View style={{ padding: 16, paddingBottom: 8, gap: 12 }}>
           <AppText variant="tiny" color="textFaint">
-            May include device/network info. Known credential and account identifier patterns are
-            redacted; review before sharing or creating a public upload.
+            Raw logs can include private device, network, rate, product, receipt and error details.
+            Pattern redaction is not a privacy guarantee. Review before any export.
           </AppText>
           <Card style={{ gap: 8 }}>
             <AppText variant="tiny" color="textMuted">
@@ -289,17 +375,34 @@ function DebugLogScreenInner() {
             />
           </Card>
           <AppText variant="tiny" color="textMuted">
-            Copy and Share immediately export the complete flushed on-disk log plus the latest
-            complete performance audit. Upload asks for confirmation, then uses paste.rs or
-            the 180-day inactive-expiry paste.c-net.org service when a full-capacity host is needed.
+            Copy stays on this device. Share uses the operating-system share sheet and removes its
+            temporary file afterward. Public hosting is a separate two-confirmation expert flow.
           </AppText>
+          {clearFailed ? (
+            <AppText accessibilityRole="alert" variant="tiny" color="danger">
+              Clear was incomplete. Copy, Share and Upload stay blocked until Clear succeeds.
+            </AppText>
+          ) : null}
+          {receiptError ? (
+            <AppText accessibilityRole="alert" variant="tiny" color="danger">
+              {receiptError}
+            </AppText>
+          ) : null}
           <Row gap={8} style={{ flexWrap: 'wrap' }}>
-            <Button title="Clear" icon="trash-outline" variant="ghost" onPress={onClear} />
+            <Button
+              title="Clear"
+              icon="trash-outline"
+              variant="ghost"
+              loading={busy === 'clear'}
+              disabled={busy !== null}
+              onPress={onClear}
+            />
             <Button
               title="Copy"
               icon="copy-outline"
               variant="secondary"
               loading={busy === 'copy'}
+              disabled={busy !== null || clearFailed}
               onPress={() => void onCopy()}
             />
             <Button
@@ -307,27 +410,28 @@ function DebugLogScreenInner() {
               icon="share-outline"
               variant="secondary"
               loading={busy === 'share'}
+              disabled={busy !== null || clearFailed}
               onPress={() => void onShare()}
             />
             <Button
-              title="Upload"
+              title="Expert public upload"
               icon="cloud-upload-outline"
               loading={busy === 'upload'}
-              disabled={busy !== null}
+              disabled={busy !== null || clearFailed || !receiptLoaded || receiptError != null || uploadReceipt != null}
               onPress={onUpload}
             />
           </Row>
-          {uploadUrl ? (
+          {uploadReceipt ? (
             <Card style={{ gap: 8 }}>
               <AppText variant="tiny" color="textMuted">
-                Upload link{uploadProvider ? ` (${uploadProvider})` : ''} — long-press to select
+                Public upload ({uploadReceipt.provider}) — deletion receipt secured on this device
               </AppText>
               <AppText
                 variant="small"
                 selectable
                 style={{ fontFamily: 'monospace' }}
               >
-                {uploadUrl}
+                {uploadReceipt.url}
               </AppText>
               <Button
                 title="Copy link"

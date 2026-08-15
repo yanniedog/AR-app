@@ -57,7 +57,6 @@ import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
 import {
-  isSessionReplayRouteAllowed,
   setCrashReportsEnabled,
   setSessionReplayEnabled,
 } from '../src/lib/observability';
@@ -82,7 +81,17 @@ export function ErrorBoundary({ error, retry }: { error: Error; retry: () => voi
 }
 
 function navigateFromNotification(href: Href): void {
-  debugLog.info('notify', `tap route ${String(href)}`);
+  const pathname = String(href).split(/[?#]/, 1)[0].toLowerCase();
+  const routeClass = pathname.startsWith('/bank/')
+    ? 'bank-detail'
+    : pathname.startsWith('/product/')
+      ? 'product-detail'
+      : pathname === '/saved'
+        ? 'saved'
+        : pathname === '/rba-response'
+          ? 'bank-response'
+          : 'other';
+  debugLog.info('notify', `tap routeClass=${routeClass}`);
   router.push(href);
 }
 
@@ -263,38 +272,37 @@ function RootNavigator() {
   useLayoutEffect(() => {
     if (!hydrated) return;
     void setCrashReportsEnabled(privacyChoiceCurrent && crashReportsEnabled);
-    void setSessionReplayEnabled(
-      privacyChoiceCurrent &&
-        sessionReplayEnabled &&
-        isSessionReplayRouteAllowed(pathname),
-    );
+    // Session replay is fail-closed: route changes cannot race an asynchronous
+    // SDK pause because the app never enables collection.
+    void setSessionReplayEnabled(false);
+    if (sessionReplayEnabled) setPref('sessionReplayEnabled', false);
   }, [
     hydrated,
     crashReportsEnabled,
     privacyChoiceCurrent,
     sessionReplayEnabled,
-    pathname,
+    setPref,
   ]);
 
   const confirmDiagnosticsChoice = useCallback(
-    ({ crashReports, sessionReplay }: { crashReports: boolean; sessionReplay: boolean }) => {
+    (crashReports: boolean) => {
       setPref('crashReportsEnabled', crashReports);
-      setPref('sessionReplayEnabled', sessionReplay);
+      setPref('sessionReplayEnabled', false);
       setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
     },
     [setPref],
   );
 
   // Consent is only ever recorded from an explicit tap on the banner's own
-  // buttons. Session replay stays opt-in from Settings, so "Allow" grants
-  // exactly what the banner names.
+  // buttons. Session replay remains disabled, so "Allow" grants exactly what
+  // the banner names: crash reports only.
   const acceptDiagnostics = useCallback(() => {
     if (privacyChoiceCurrent) return;
-    confirmDiagnosticsChoice({ crashReports: true, sessionReplay: false });
+    confirmDiagnosticsChoice(true);
   }, [confirmDiagnosticsChoice, privacyChoiceCurrent]);
 
   const declineDiagnostics = useCallback(() => {
-    confirmDiagnosticsChoice({ crashReports: false, sessionReplay: false });
+    confirmDiagnosticsChoice(false);
   }, [confirmDiagnosticsChoice]);
 
   useEffect(() => {

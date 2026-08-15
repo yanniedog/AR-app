@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as SecureStore from 'expo-secure-store';
 
 import { bridgeLogToCrashlytics } from './observability';
 import {
@@ -32,8 +33,10 @@ export const ANDROID_LOG_PATH_HINT = `Android/data/${ANDROID_PACKAGE}/files/logs
 const STORAGE_KEY = 'ar-debug-log-tail';
 const LOG_DIR = `${FileSystem.documentDirectory ?? ''}logs/`;
 const LOG_FILE = `${LOG_DIR}ar-local.log`;
+export const DEBUG_LOG_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-debug-log-share.txt`;
 /** Full audit JSON kept beside the bounded ring so trim cannot drop the diagnosis. */
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
+export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = '@ar/debug-log/public-upload-receipt-v1';
 
 const SECRET_VALUE = String.raw`[^\s,;}"']+`;
 const SECRET_SOURCES: string[] = [
@@ -381,6 +384,8 @@ type Listener = () => void;
 const buffer = new RingBuffer();
 const listeners = new Set<Listener>();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+let clearState: 'ready' | 'clearing' | 'failed' = 'ready';
+let clearPromise: Promise<void> | null = null;
 
 function notify(): void {
   for (const fn of listeners) fn();
@@ -427,8 +432,10 @@ function append(level: LogLevel, tag: string, message: string): void {
   // Audit checkpoints are explicitly flushed by the runner. Avoid scheduling
   // a large AsyncStorage tail serialization in the middle of the next measured
   // navigation phase.
-  if (tag !== 'perf-audit') schedulePersist();
-  scheduleFileFlush();
+  if (clearState === 'ready') {
+    if (tag !== 'perf-audit') schedulePersist();
+    scheduleFileFlush();
+  }
 }
 
 interface StoredPerformanceAudit {
@@ -667,28 +674,73 @@ export const debugLog = {
     })();
     return coldStartResetPromise;
   },
-  async clear(): Promise<void> {
+  clear(): Promise<void> {
+    if (clearPromise) return clearPromise;
+    clearState = 'clearing';
     fileWriteEpoch += 1;
     buffer.clear();
     pendingFileLines = [];
     fileContentCache = null;
     fileByteLength = null;
+    if (persistTimer) {
+      clearTimeout(persistTimer);
+      persistTimer = null;
+    }
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
     }
     const inFlight = fileFlushPromise;
     fileFlushPromise = null;
-    if (inFlight) {
-      await inFlight.catch(() => {});
-    }
-    if (coldStartResetPromise) await coldStartResetPromise.catch(() => {});
     notify();
-    await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
-    await AsyncStorage.removeItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => {});
-    await removeLegacyPerformanceAuditSnapshots();
-    await FileSystem.deleteAsync(LOG_FILE, { idempotent: true }).catch(() => {});
-    await FileSystem.deleteAsync(PERFORMANCE_AUDIT_SIDECAR_FILE, { idempotent: true }).catch(() => {});
+    clearPromise = (async () => {
+      try {
+        if (inFlight) await inFlight;
+        if (coldStartResetPromise) await coldStartResetPromise;
+        const storageKeys = [
+          STORAGE_KEY,
+          LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
+          ...LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
+        ];
+        await Promise.all(storageKeys.map((key) => AsyncStorage.removeItem(key)));
+        const filePaths = [
+          LOG_FILE,
+          PERFORMANCE_AUDIT_SIDECAR_FILE,
+          ...(FileSystem.cacheDirectory ? [DEBUG_LOG_SHARE_FILE] : []),
+        ];
+        await Promise.all(filePaths.map((path) =>
+          FileSystem.deleteAsync(path, { idempotent: true })));
+
+        const retainedStorageKeys = (
+          await Promise.all(storageKeys.map(async (key) => (
+            (await AsyncStorage.getItem(key)) == null ? null : key
+          )))
+        ).filter((key): key is string => key != null);
+        const retainedFiles = (
+          await Promise.all(filePaths.map(async (path) => (
+            (await FileSystem.getInfoAsync(path)).exists ? path : null
+          )))
+        ).filter((path): path is string => path != null);
+        if (retainedStorageKeys.length || retainedFiles.length) {
+          throw new Error(
+            `Clear verification found retained diagnostics: ` +
+            [...retainedStorageKeys, ...retainedFiles].join(', '),
+          );
+        }
+        clearState = 'ready';
+        if (buffer.getEntries().length > 0) schedulePersist();
+        if (pendingFileLines.length > 0) scheduleFileFlush();
+      } catch (error) {
+        clearState = 'failed';
+        throw new Error(
+          `Debug log clear is incomplete; exporting is blocked until Clear succeeds. ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+        );
+      } finally {
+        clearPromise = null;
+      }
+    })();
+    return clearPromise;
   },
   getText(): string {
     return buffer.getText();
@@ -800,22 +852,35 @@ export const debugLog = {
   },
   /** Read the flushed on-disk log plus a paste-sized audit snapshot. */
   async readCompleteText(): Promise<string> {
+    if (clearState !== 'ready') {
+      throw new Error('Debug log export is blocked until the incomplete Clear operation succeeds.');
+    }
+    const exportEpoch = fileWriteEpoch;
+    const assertExportCurrent = () => {
+      if (clearState !== 'ready' || fileWriteEpoch !== exportEpoch) {
+        throw new Error('Debug log export was cancelled because Clear started while it was being prepared.');
+      }
+    };
     if (fileFlushTimer) {
       clearTimeout(fileFlushTimer);
       fileFlushTimer = null;
     }
     await flushPendingToFile();
+    assertExportCurrent();
     const text = !FileSystem.documentDirectory
       ? buffer.getText()
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
+    assertExportCurrent();
     const clean = redactSecrets(text);
     await removeLegacyPerformanceAuditSnapshots();
+    assertExportCurrent();
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
     const latest =
       (await readPerformanceAuditSidecar()) ??
       parseStoredPerformanceAudit(
         await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
       );
+    assertExportCurrent();
     if (!latest) return clean;
     // The physical log carries only the begin/sidecar/end markers, so an export
     // always appends the body from the sidecar. Compaction happens here rather
@@ -829,7 +894,7 @@ export const debugLog = {
     } catch {
       compactJson = latest.reportJson;
     }
-    return [
+    const complete = [
       clean,
       '',
       '# Latest complete performance audit',
@@ -841,6 +906,8 @@ export const debugLog = {
           `(compact report omitted from this export: ${compactJson.length} chars)`
         : compactJson,
     ].join('\n');
+    assertExportCurrent();
+    return complete;
   },
   subscribe(fn: Listener): () => void {
     listeners.add(fn);
@@ -939,8 +1006,85 @@ export interface PasteRsUploadResult {
 
 export interface DebugLogUploadResult extends PasteRsUploadResult {
   provider: 'paste.rs' | 'paste.c-net.org';
-  /** Present only for paste.c-net.org and kept in memory for deletion. */
+  /** Present only for paste.c-net.org and persisted in SecureStore for deletion. */
   deleteKey?: string;
+}
+
+export interface DebugLogUploadReceipt {
+  schemaVersion: 1;
+  url: string;
+  provider: DebugLogUploadResult['provider'];
+  deleteKey?: string;
+  createdAt: string;
+}
+
+function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('The saved upload deletion receipt is invalid.');
+  }
+  const receipt = value as Partial<DebugLogUploadReceipt>;
+  let parsed: URL;
+  try {
+    parsed = new URL(receipt.url ?? '');
+  } catch {
+    throw new Error('The saved upload deletion receipt has an invalid URL.');
+  }
+  const expectedProvider = parsed.origin === new URL(PASTE_RS_URL).origin
+    ? 'paste.rs'
+    : parsed.origin === new URL(PASTE_CNET_URL).origin
+      ? 'paste.c-net.org'
+      : null;
+  if (
+    receipt.schemaVersion !== 1 ||
+    expectedProvider == null ||
+    parsed.protocol !== 'https:' ||
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    receipt.provider !== expectedProvider ||
+    typeof receipt.createdAt !== 'string' ||
+    !Number.isFinite(Date.parse(receipt.createdAt)) ||
+    (expectedProvider === 'paste.c-net.org' &&
+      (typeof receipt.deleteKey !== 'string' || !receipt.deleteKey)) ||
+    (receipt.deleteKey != null && typeof receipt.deleteKey !== 'string')
+  ) {
+    throw new Error('The saved upload deletion receipt is invalid.');
+  }
+  return {
+    schemaVersion: 1,
+    url: parsed.toString(),
+    provider: expectedProvider,
+    ...(receipt.deleteKey ? { deleteKey: receipt.deleteKey } : {}),
+    createdAt: receipt.createdAt,
+  };
+}
+
+export async function saveDebugLogUploadReceipt(
+  result: Pick<DebugLogUploadResult, 'url' | 'provider' | 'deleteKey'>,
+  createdAt = new Date().toISOString(),
+): Promise<DebugLogUploadReceipt> {
+  const receipt = validateDebugLogUploadReceipt({
+    schemaVersion: 1,
+    url: result.url,
+    provider: result.provider,
+    ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
+    createdAt,
+  });
+  await SecureStore.setItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY, JSON.stringify(receipt), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  return receipt;
+}
+
+export async function loadDebugLogUploadReceipt(): Promise<DebugLogUploadReceipt | null> {
+  const raw = await SecureStore.getItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
+  if (raw == null) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('The saved upload deletion receipt cannot be read.');
+  }
+  return validateDebugLogUploadReceipt(parsed);
 }
 
 export interface PasteRsUploadOptions {
@@ -1274,6 +1418,13 @@ export async function uploadDebugLog(
     } catch (error) {
       if (error instanceof PasteRsUploadError) throw error;
       const primaryFailure = error as PasteRsAttemptError;
+      if (primaryFailure.kind === 'timeout' || primaryFailure.kind === 'network') {
+        throw new PasteRsUploadError(
+          'The public upload result was not confirmed. It may have been accepted, so the app ' +
+          'will not create a second copy automatically. Do not retry unless you accept that risk.',
+          attempts,
+        );
+      }
       if (!primaryFailure.transient) {
         throw new PasteRsUploadError(friendlyPasteRsError(primaryFailure), attempts);
       }
@@ -1345,7 +1496,10 @@ export async function deleteDebugLogUpload(
       ...(isPasteCnet ? { headers: { 'X-Delete-Key': deleteKey as string } } : {}),
       signal: controller.signal,
     });
-    if (response.status < 200 || response.status > 299) {
+    // A retained receipt can outlive an ambiguous successful DELETE. A later
+    // 404 is positive absence proof and lets the app finish removing the local
+    // receipt instead of stranding it forever.
+    if ((response.status < 200 || response.status > 299) && response.status !== 404) {
       throw new Error(`The upload host could not delete the log (status ${response.status}).`);
     }
   } catch (error) {
@@ -1356,6 +1510,20 @@ export async function deleteDebugLogUpload(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Delete the public copy first, then remove its SecureStore capability receipt.
+ * A timeout or host failure deliberately leaves the receipt available to retry.
+ */
+export async function deleteDebugLogUploadAndReceipt(
+  receipt: DebugLogUploadReceipt,
+  fetchImpl: typeof fetch = fetch,
+  timeoutMs = PASTE_RS_ATTEMPT_TIMEOUT_MS,
+): Promise<void> {
+  const validated = validateDebugLogUploadReceipt(receipt);
+  await deleteDebugLogUpload(validated.url, validated.deleteKey, fetchImpl, timeoutMs);
+  await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
 }
 
 type GlobalErrorUtils = {
