@@ -17,6 +17,7 @@ import {
   arrayValue,
   booleanValue,
   canonicalSha256,
+  compareDecimalStrings,
   decimalString,
   deepFreeze,
   digest,
@@ -187,7 +188,7 @@ function semanticRange(value: unknown, path: string): SemanticTierRangeV3 {
   exactKeys(obj, ['unit', 'method', 'minimum', 'maximum', 'additional_info', 'conditions'], [], path);
   const minimum = nullableDecimal(obj.minimum, `${path}.minimum`);
   const maximum = nullableDecimal(obj.maximum, `${path}.maximum`);
-  if (minimum !== null && maximum !== null && Number(minimum) > Number(maximum)) {
+  if (minimum !== null && maximum !== null && compareDecimalStrings(minimum, maximum) > 0) {
     reject(`${path}.minimum cannot exceed maximum`);
   }
   return {
@@ -371,6 +372,20 @@ function semanticFee(value: unknown, path: string): CanonicalFeeV3['semantic_fee
   };
 }
 
+function producerSemanticText(value: string | null): string | null {
+  if (value === null) return null;
+  const normalized = value
+    .trim()
+    .normalize('NFKC')
+    .replace(/\s+/gu, ' ')
+    .toLowerCase()
+    // Unicode full case-folding differs from lowercase for these common
+    // characters. NFKC handles the compatibility-only mappings first.
+    .replace(/\u00df/gu, 'ss')
+    .replace(/\u03c2/gu, '\u03c3');
+  return normalized || null;
+}
+
 function nullableMoney(value: unknown, path: string): string | null {
   return value === null ? null : decimalString(value, path, true);
 }
@@ -396,12 +411,20 @@ export function validateCanonicalFee(
     'evidence_ids',
   ], [], path);
   const semantics = deepFreeze(semanticFee(obj.semantic_fee, `${path}.semantic_fee`));
+  const condition = nullableText(obj.condition, `${path}.condition`);
+  if (semantics.additional_info !== producerSemanticText(condition)) {
+    reject(`${path}.condition disagrees with canonical applicability semantics`);
+  }
   const feeUid = digestId(obj.fee_uid, `${path}.fee_uid`, 'fee');
   if (feeUid !== canonicalFeeUid(productUid, semantics)) reject(`${path}.fee_uid does not match its canonical derivation`);
   const fixedAmount = nullableMoney(obj.fixed_amount, `${path}.fixed_amount`);
   const minimumAmount = nullableMoney(obj.minimum_amount, `${path}.minimum_amount`);
   const maximumAmount = nullableMoney(obj.maximum_amount, `${path}.maximum_amount`);
-  if (minimumAmount !== null && maximumAmount !== null && Number(minimumAmount) > Number(maximumAmount)) {
+  if (
+    minimumAmount !== null &&
+    maximumAmount !== null &&
+    compareDecimalStrings(minimumAmount, maximumAmount) > 0
+  ) {
     reject(`${path}.minimum_amount cannot exceed maximum_amount`);
   }
   let feeRate: CanonicalFeeV3['rate'] = null;
@@ -440,7 +463,7 @@ export function validateCanonicalFee(
     minimum_amount: minimumAmount,
     maximum_amount: maximumAmount,
     rate: feeRate,
-    condition: nullableText(obj.condition, `${path}.condition`),
+    condition,
     evidence_ids: evidence,
   };
 }

@@ -174,6 +174,21 @@ describe('computeChanges', () => {
     expect(hit?.productKey).toBe('A|1');
   });
 
+  test('existing exact saved refs fail closed when the canonical tier is alert-ineligible', () => {
+    const before = multiRowCore([
+      { rate_index: 1, rate: '0.0600' },
+      { rate_index: 2, rate: '0.0500' },
+    ]);
+    const after = multiRowCore([
+      { rate_index: 1, rate: '0.0550' },
+      { rate_index: 2, rate: '0.0500' },
+    ]);
+    const exact = makeSavedRateRef(before.sections.Mortgage.rates[0]);
+    before.sections.Mortgage.rates[0].exact_alert_eligible = false;
+    after.sections.Mortgage.rates[0].exact_alert_eligible = false;
+    expect(computeChanges(before, after, [exact], 5)).toEqual([]);
+  });
+
   test('watchlist ignores pure row-order changes', () => {
     const before = multiRowCore([
       { rate_index: 1, rate: '0.0600' },

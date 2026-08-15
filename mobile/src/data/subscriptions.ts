@@ -277,6 +277,7 @@ function productRatesByIndex(
   for (const section of Object.keys(core.sections) as SectionKey[]) {
     for (const row of core.sections[section]?.rates ?? []) {
       if (row.product_key !== productKey) continue;
+      if (rateIndex != null && row.exact_alert_eligible === false) continue;
       if (rateIndex != null && row.rate_index !== rateIndex) continue;
       out.set(row.rate_index ?? out.size, trackedRateValue(
         row,

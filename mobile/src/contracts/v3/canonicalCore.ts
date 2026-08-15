@@ -114,6 +114,13 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
   for (const id of productEvidenceIds) {
     if (!evidenceIds.has(id)) reject(`${path}.evidence references unknown evidence ${id}`);
   }
+  const eligibilityDisclosureStatus = validateDisclosureStatus(
+    evidence.eligibility_disclosure_status,
+    `${path}.evidence.eligibility_disclosure_status`,
+  );
+  if (eligibilityDisclosureStatus !== 'complete') {
+    reject(`${path}.evidence public availability requires complete eligibility evidence`);
+  }
   const observedAt = instant(evidence.observed_at, `${path}.evidence.observed_at`);
   const effectiveDate = nullableInstant(evidence.effective_date, `${path}.evidence.effective_date`);
   const effectiveTo = nullableInstant(evidence.effective_to, `${path}.evidence.effective_to`);
@@ -202,10 +209,7 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
     evidence: {
       availability: 'public',
       fee_disclosure_status: validateDisclosureStatus(evidence.fee_disclosure_status, `${path}.evidence.fee_disclosure_status`),
-      eligibility_disclosure_status: validateDisclosureStatus(
-        evidence.eligibility_disclosure_status,
-        `${path}.evidence.eligibility_disclosure_status`,
-      ),
+      eligibility_disclosure_status: eligibilityDisclosureStatus,
       pricing_status: enumValue(
         evidence.pricing_status,
         ['complete', 'partial', 'unpriced', 'unknown'],

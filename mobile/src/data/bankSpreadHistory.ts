@@ -1,4 +1,9 @@
 import type { RbaCalendar, RbaOutcome } from './rbaCalendar';
+import {
+  bankHistoryPairKey,
+  quarantinedBankHistoryPairs,
+  type CoreIntegrityContext,
+} from './sectionIntegrity';
 
 export type BankSpreadQuality =
   | 'complete'
@@ -131,6 +136,32 @@ export function normalizeBankSpreadHistoryPayload(value: unknown): BankSpreadHis
   }
   if (!Object.keys(banks).length) return null;
   return { schema_version: 1, run_date: runDate, run_dates: dates as string[], method: raw.method, cohorts: cohorts as BankSpreadHistoryPayload['cohorts'], banks };
+}
+
+/**
+ * Pre-aggregated spread rows cannot be repaired after a provider/section cohort
+ * has been quarantined. Fail closed without matching core provenance and remove
+ * the whole provider line when either side of its advertised gap is tainted.
+ */
+export function filterBankSpreadHistoryForIntegrity(
+  payload: BankSpreadHistoryPayload | null | undefined,
+  integrity: CoreIntegrityContext | null | undefined,
+): BankSpreadHistoryPayload | null {
+  if (
+    !payload ||
+    !integrity ||
+    integrity.runDate !== payload.run_date ||
+    integrity.core.run_date !== payload.run_date
+  ) return null;
+  const quarantined = quarantinedBankHistoryPairs(integrity);
+  if (!quarantined.size) return payload;
+  const banks = Object.fromEntries(
+    Object.entries(payload.banks).filter(([provider]) =>
+      !quarantined.has(bankHistoryPairKey(provider, 'Mortgage')) &&
+      !quarantined.has(bankHistoryPairKey(provider, 'Savings')),
+    ),
+  );
+  return Object.keys(banks).length ? { ...payload, banks } : null;
 }
 
 export function buildBankSpreadChartModel(

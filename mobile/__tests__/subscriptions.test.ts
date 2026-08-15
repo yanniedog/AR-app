@@ -194,6 +194,13 @@ describe('computeSubscriptionChanges', () => {
     expect(computeSubscriptionChanges(before, after, [sub], 5)[0].body).toContain('→');
   });
 
+  test('existing exact subscriptions fail closed for alert-ineligible canonical tiers', () => {
+    const before = core([mk({ rate: '0.0600', rate_index: 1, exact_alert_eligible: false })]);
+    const after = core([mk({ rate: '0.0550', rate_index: 1, exact_alert_eligible: false })]);
+    const sub = makeProductSubscription(mk({}), 1);
+    expect(computeSubscriptionChanges(before, after, [sub], 5)).toEqual([]);
+  });
+
   test('mortgage product subscriptions ignore comparison-rate availability transitions', () => {
     const before = core([mk({ rate: '0.0600', rate_index: 1 })]);
     const after = core([mk({ rate: '0.0600', comparison_rate: '0.0650', rate_index: 1 })]);

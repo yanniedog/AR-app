@@ -36,7 +36,7 @@ export function makeSavedRateRef(
   scope: SavedRateRef['scope'] = 'rate',
   savedAt = new Date().toISOString(),
 ): SavedRateRef {
-  if (scope === 'rate' && !Number.isInteger(row.rate_index)) {
+  if (scope === 'rate' && (row.exact_alert_eligible === false || !Number.isInteger(row.rate_index))) {
     throw new RangeError('An exact saved rate requires an integer rate_index');
   }
   const exact = scope === 'rate';
@@ -140,7 +140,11 @@ export function resolveSavedRates(core: CorePayload, refs: readonly SavedRateRef
       for (const row of data?.rates ?? []) {
         if (row.product_key !== ref.productKey) continue;
         const candidate = { ref, row, section };
-        if (ref.scope === 'rate' && row.rate_index === ref.rateIndex) {
+        if (
+          ref.scope === 'rate' &&
+          row.exact_alert_eligible !== false &&
+          row.rate_index === ref.rateIndex
+        ) {
           resolved.push(candidate);
           fallback = null;
           break;

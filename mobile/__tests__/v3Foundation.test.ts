@@ -7,13 +7,14 @@ import {
   V3_CONTRACT_SCHEMA_SET_SHA256,
   V3_CONTRACT_SCHEMA_SHA256,
 } from '../src/contracts/v3/contractLock';
-import type { AssetDescriptorV3, CorePayloadV3, CoverageV2, GenerationManifestV3 } from '../src/contracts/v3/types';
+import type { AssetDescriptorV3, CanonicalFeeV3, CorePayloadV3, CoverageV2, GenerationManifestV3 } from '../src/contracts/v3/types';
 import { utf8Bytes } from '../src/contracts/v3/contractPrimitives';
 import {
   V3_ASSET_LIMITS,
   V3_MANIFEST_LIMIT_BYTES,
   V3_POINTER_LIMIT_BYTES,
   adaptCoreV3ToLegacy,
+  canonicalFeeUid,
   canonicalJsonForContract,
   canonicalRateUid,
   canonicalSchemaSetSha256,
@@ -35,6 +36,7 @@ import {
   loadValidatedV3Generation,
   type V3TextDownloader,
 } from '../src/data/v3Payload';
+import { makeSavedRateRef } from '../src/data/savedRates';
 import {
   LEDGER_A,
   PROVIDER_UID,
@@ -224,6 +226,103 @@ describe('producer pointer, manifest, and coverage semantics', () => {
 });
 
 describe('canonical core validation and legacy adaptation', () => {
+  test('enforces producer public-eligibility and RFC3339 invariants', () => {
+    expect(() => buildGeneration({
+      products: [makeProduct({ eligibility: 'partial' })],
+    })).toThrow(/public availability requires complete eligibility evidence/);
+    expect(() => buildGeneration({
+      products: [makeProduct({ observedAt: '2026-08-14T09:30:00.1234567890+10:00' })],
+    })).toThrow(/RFC3339/);
+    expect(buildGeneration({
+      products: [makeProduct({ observedAt: '2026-08-14T09:30:00.123456789+10:00' })],
+    }).core.products[0].evidence.observed_at).toBe('2026-08-14T09:30:00.123456789+10:00');
+  });
+
+  test('compares tier and fee decimal bounds without IEEE-754 rounding', () => {
+    expect(() => buildGeneration({
+      products: [makeProduct({
+        tiers: [{
+          unit: 'DOLLAR',
+          method: 'PER_TIER',
+          minimum: '9007199254740993',
+          maximum: '9007199254740992',
+          additional_info: null,
+          conditions: [],
+        }],
+      })],
+    })).toThrow(/minimum cannot exceed maximum/);
+
+    const product = makeProduct();
+    const semanticFee: CanonicalFeeV3['semantic_fee'] = {
+      name: 'Balance fee',
+      fee_type: 'PERIODIC',
+      method: 'VARIABLE',
+      cadence: 'P1M',
+      additional_info: null,
+    };
+    product.fees = [{
+      fee_uid: canonicalFeeUid(product.identity.product_uid, semanticFee),
+      fee_identity_status: 'confirmed',
+      semantic_fee: semanticFee,
+      disclosure_status: 'complete',
+      currency: 'AUD',
+      fixed_amount: null,
+      minimum_amount: '9007199254740993',
+      maximum_amount: '9007199254740992',
+      rate: null,
+      condition: null,
+      evidence_ids: product.evidence.evidence_ids,
+    }];
+    expect(() => buildGeneration({ products: [product] })).toThrow(/minimum_amount cannot exceed maximum_amount/);
+  });
+
+  test('binds canonical fee applicability semantics to the published condition', () => {
+    const product = makeProduct();
+    const semanticFee: CanonicalFeeV3['semantic_fee'] = {
+      name: 'Package fee',
+      fee_type: 'PERIODIC',
+      method: 'FIXED',
+      cadence: 'P1M',
+      additional_info: 'only when strasse package applies',
+    };
+    product.fees = [{
+      fee_uid: canonicalFeeUid(product.identity.product_uid, semanticFee),
+      fee_identity_status: 'confirmed',
+      semantic_fee: semanticFee,
+      disclosure_status: 'complete',
+      currency: 'AUD',
+      fixed_amount: '10',
+      minimum_amount: null,
+      maximum_amount: null,
+      rate: null,
+      condition: '  ONLY when Stra\u00dfe   package applies ',
+      evidence_ids: product.evidence.evidence_ids,
+    }];
+    expect(buildGeneration({ products: [product] }).core.products[0].fees).toHaveLength(1);
+
+    const detached = clone(product);
+    detached.fees[0].condition = 'A different condition';
+    expect(() => buildGeneration({ products: [detached] })).toThrow(/condition disagrees/);
+  });
+
+  test('preserves alert eligibility and withholds integer exact identities for ambiguous duplicate tiers', () => {
+    const product = makeProduct();
+    const duplicate = clone(product.rates[0]);
+    product.rates[0].identity.rate_identity_status = 'ambiguous';
+    product.rates[0].exact_alert_eligible = false;
+    duplicate.identity.rate_identity_status = 'ambiguous';
+    duplicate.exact_alert_eligible = false;
+    duplicate.source_index = 1;
+    duplicate.advertised.value = '0.061';
+    product.rates.push(duplicate);
+
+    const rows = adaptCoreV3ToLegacy(buildGeneration({ products: [product] }).core).sections.Mortgage.rates;
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => row.exact_alert_eligible)).toEqual([false, false]);
+    expect(rows.map((row) => row.rate_index)).toEqual([undefined, undefined]);
+    expect(() => makeSavedRateRef(rows[0], 'rate')).toThrow(/integer rate_index/);
+  });
+
   test('preserves stable identities and known semantic TD duration without inventing unknown terms', () => {
     const known = makeProduct({
       kind: 'term_deposit',

@@ -3,7 +3,7 @@ import { utf8ToBytes } from '@noble/hashes/utils';
 
 const HEX_256 = /^[0-9a-f]{64}$/;
 const YMD = /^(\d{4})-(\d{2})-(\d{2})$/;
-const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const RFC3339 = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(Z|([+-])(\d{2}):(\d{2}))$/;
 const DECIMAL = /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 const NONNEGATIVE_DECIMAL = /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/;
 
@@ -89,7 +89,23 @@ export function dateValue(value: unknown, path: string): string {
 }
 
 export function instant(value: unknown, path: string): string {
-  if (typeof value !== 'string' || !RFC3339.test(value) || !Number.isFinite(Date.parse(value))) {
+  if (typeof value !== 'string') reject(`${path} must be an RFC3339 date-time`);
+  const match = RFC3339.exec(value);
+  if (!match) reject(`${path} must be an RFC3339 date-time`);
+  dateValue(`${match[1]}-${match[2]}-${match[3]}`, `${path} date`);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const second = Number(match[6]);
+  const offsetHour = match[10] === undefined ? 0 : Number(match[10]);
+  const offsetMinute = match[11] === undefined ? 0 : Number(match[11]);
+  if (
+    hour > 23 ||
+    minute > 59 ||
+    second > 59 ||
+    offsetHour > 23 ||
+    offsetMinute > 59 ||
+    !Number.isFinite(Date.parse(value))
+  ) {
     reject(`${path} must be an RFC3339 date-time`);
   }
   return value;
@@ -108,10 +124,33 @@ export function decimalString(value: unknown, path: string, nonnegative = false)
   return value;
 }
 
+function decimalParts(value: string): { negative: boolean; whole: string; fraction: string } {
+  const negative = value.startsWith('-');
+  const absolute = negative ? value.slice(1) : value;
+  const [whole = '0', rawFraction = ''] = absolute.split('.');
+  const fraction = rawFraction.replace(/0+$/, '');
+  const isZero = whole === '0' && fraction.length === 0;
+  return { negative: negative && !isZero, whole, fraction };
+}
+
+/** Compare already-validated canonical decimal strings without IEEE-754 coercion. */
+export function compareDecimalStrings(left: string, right: string): -1 | 0 | 1 {
+  const a = decimalParts(left);
+  const b = decimalParts(right);
+  if (a.negative !== b.negative) return a.negative ? -1 : 1;
+  const direction = a.negative ? -1 : 1;
+  if (a.whole.length !== b.whole.length) return a.whole.length < b.whole.length ? -direction as -1 | 1 : direction as -1 | 1;
+  if (a.whole !== b.whole) return a.whole < b.whole ? -direction as -1 | 1 : direction as -1 | 1;
+  const width = Math.max(a.fraction.length, b.fraction.length);
+  const aFraction = a.fraction.padEnd(width, '0');
+  const bFraction = b.fraction.padEnd(width, '0');
+  if (aFraction === bFraction) return 0;
+  return aFraction < bFraction ? -direction as -1 | 1 : direction as -1 | 1;
+}
+
 export function fractionString(value: unknown, path: string): string {
   const raw = decimalString(value, path, true);
-  const numeric = Number(raw);
-  if (!Number.isFinite(numeric) || numeric < 0 || numeric > 1) {
+  if (compareDecimalStrings(raw, '0') < 0 || compareDecimalStrings(raw, '1') > 0) {
     reject(`${path} must be a fraction between 0 and 1`);
   }
   return raw;

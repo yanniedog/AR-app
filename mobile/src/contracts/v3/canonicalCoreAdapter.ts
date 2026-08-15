@@ -50,7 +50,10 @@ function adaptRate(product: CanonicalProductV3, rateValue: CanonicalRateV3): Rat
     product_key: product.identity.product_uid,
     product_name: product.display_name,
     rate: rateValue.advertised.value,
-    rate_index: stableLegacyRateIndex(rateValue.identity.rate_uid),
+    exact_alert_eligible: rateValue.exact_alert_eligible,
+    ...(rateValue.exact_alert_eligible && rateValue.identity.rate_identity_status === 'confirmed'
+      ? { rate_index: stableLegacyRateIndex(rateValue.identity.rate_uid) }
+      : {}),
     rate_type: rateType,
     ...(rateValue.comparison ? { comparison_rate: rateValue.comparison.value } : {}),
     ...(semantics.repayment_type ? { repayment_type: semantics.repayment_type, ribbon_repayment_type: semantics.repayment_type } : {}),

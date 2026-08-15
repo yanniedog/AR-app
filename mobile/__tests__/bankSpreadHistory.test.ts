@@ -1,9 +1,12 @@
 import {
   buildBankSpreadChartModel,
+  filterBankSpreadHistoryForIntegrity,
   normalizeBankSpreadHistoryPayload,
   type BankSpreadHistoryPayload,
 } from '../src/data/bankSpreadHistory';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
+import type { CoreIntegrityContext } from '../src/data/sectionIntegrity';
+import type { CorePayload } from '../src/types';
 
 const raw = {
   schema_version: 1,
@@ -57,5 +60,39 @@ describe('bank spread history', () => {
     expect(model.decisions.map((decision) => decision.outcome)).toEqual(['hold', 'cut']);
     expect(model.minGapPp).toBeLessThan(2);
     expect(model.maxGapPp).toBeGreaterThan(2);
+  });
+
+  it('fails closed without matching core integrity and retains only clean provider series', () => {
+    const payload = normalizeBankSpreadHistoryPayload(raw) as BankSpreadHistoryPayload;
+    const core = {
+      schema_version: 1,
+      run_date: payload.run_date,
+      sections: {
+        Mortgage: { rates: [], ribbon: { counts: { rates: 0, products: 0, providers: 0 }, range: { min: null, max: null, mean: null, median: null }, providers: [] } },
+        Savings: { rates: [], ribbon: { counts: { rates: 0, products: 0, providers: 0 }, range: { min: null, max: null, mean: null, median: null }, providers: [] } },
+        TD: { rates: [], ribbon: { counts: { rates: 0, products: 0, providers: 0 }, range: { min: null, max: null, mean: null, median: null }, providers: [] } },
+      },
+      brands: {},
+      rba: [],
+    } satisfies CorePayload;
+    const integrity: CoreIntegrityContext = {
+      schemaVersion: 1,
+      core,
+      contract: 'v1',
+      runDate: payload.run_date,
+      generationDigest: null,
+      coreSha256: 'a'.repeat(64),
+      normalizationVersion: 'test',
+      quarantines: {
+        bankHistoryPairs: new Set(['Savings\u0000Zeta']),
+        rowsByReason: { explicit_term_deposit_in_savings: 1 },
+      },
+    };
+
+    expect(filterBankSpreadHistoryForIntegrity(payload, null)).toBeNull();
+    expect(filterBankSpreadHistoryForIntegrity(payload, { ...integrity, runDate: '2026-05-21' })).toBeNull();
+    const filtered = filterBankSpreadHistoryForIntegrity(payload, integrity);
+    expect(Object.keys(filtered?.banks ?? {})).toEqual(['Alpha']);
+    expect(filtered?.banks.Alpha).toBe(payload.banks.Alpha);
   });
 });

@@ -7,6 +7,7 @@ import { ScreenSkeleton } from '../src/components/feedback';
 import { Screen, ScreenContent } from '../src/components/Screen';
 import { AppText, Button, Card } from '../src/components/ui';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
+import { filterBankSpreadHistoryForIntegrity } from '../src/data/bankSpreadHistory';
 import { useStore } from '../src/data/store';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -62,6 +63,10 @@ export default function RbaResponseScreen() {
     void suitabilityRevision;
     return filterBankInsightsForSuitability(rawPayload, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
   }, [core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
+  const trustedSpreadHistory = useMemo(
+    () => filterBankSpreadHistoryForIntegrity(spreadHistory, coreIntegrity),
+    [coreIntegrity, spreadHistory],
+  );
 
   const retryInsights = () => {
     setRetrying(true);
@@ -144,7 +149,7 @@ export default function RbaResponseScreen() {
       <View style={{ flex: 1 }}>
         <BankResponseDashboard
           payload={payload}
-          spreadHistory={spreadHistory}
+          spreadHistory={trustedSpreadHistory}
           calendar={calendar}
           initialDecisionDate={decisionDate}
           initialSection={initialSection}
