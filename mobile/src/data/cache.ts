@@ -7,17 +7,13 @@ import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../ty
 import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
-import {
-  normalizeBankSpreadHistoryPayload,
-  type BankSpreadHistoryPayload,
-} from './bankSpreadHistory';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
-import { sha256Utf8 } from '../contracts/v3/contractPrimitives';
+import { createBankSpreadContentCache } from './bankSpreadContentCache';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -27,7 +23,7 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
-const BANK_SPREAD_HISTORY_RECORDS = `${DIR}bank-spread-history/`;
+const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
@@ -48,14 +44,6 @@ export interface OptionalMeta {
   searchIndexSha?: string | null;
   historyBanksSha?: string | null;
   bankInsightsSha?: string | null;
-}
-
-export interface BankSpreadHistoryCacheRecord {
-  schema_version: 1;
-  core_sha256: string;
-  bank_spread_history_sha256: string;
-  payload_sha256: string;
-  payload_text: string;
 }
 
 export interface CacheMeta {
@@ -163,6 +151,28 @@ async function webDelete(path: string): Promise<void> {
   });
 }
 
+async function webList(path: string): Promise<string[]> {
+  const prefix = path.endsWith('/') ? path : `${path}/`;
+  const keys = new Set<string>(webMemory.keys());
+  const db = await webDb();
+  if (db) {
+    const persisted = await new Promise<IDBValidKey[]>((resolve) => {
+      const request = db.transaction('files').objectStore('files').getAllKeys();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => resolve([]);
+    });
+    for (const key of persisted) if (typeof key === 'string') keys.add(key);
+  }
+  const children = new Set<string>();
+  for (const key of keys) {
+    if (!key.startsWith(prefix)) continue;
+    const remainder = key.slice(prefix.length);
+    const child = remainder.split('/')[0];
+    if (child) children.add(child);
+  }
+  return [...children];
+}
+
 async function pathExists(path: string): Promise<boolean> {
   if (IS_WEB) return (await webGet(path)) != null;
   return (await FileSystem.getInfoAsync(path)).exists;
@@ -213,6 +223,17 @@ async function movePath(from: string, to: string): Promise<void> {
   await FileSystem.moveAsync({ from, to });
 }
 
+async function listPath(path: string): Promise<string[]> {
+  if (IS_WEB) return webList(path);
+  try {
+    const info = await FileSystem.getInfoAsync(path);
+    if (!info.exists || !info.isDirectory) return [];
+    return await FileSystem.readDirectoryAsync(path);
+  } catch {
+    return [];
+  }
+}
+
 async function readJson<T>(path: string): Promise<T | null> {
   try {
     if (!(await pathExists(path))) return null;
@@ -255,39 +276,6 @@ function isCacheMeta(value: unknown): value is CacheMeta {
   );
 }
 
-const SHA256 = /^[0-9a-f]{64}$/;
-
-function bankSpreadHistoryRecordPath(coreSha: string, spreadSha: string): string | null {
-  if (!SHA256.test(coreSha) || !SHA256.test(spreadSha)) return null;
-  return `${BANK_SPREAD_HISTORY_RECORDS}${coreSha}/${spreadSha}.json`;
-}
-
-function parseBankSpreadHistoryRecord(
-  value: unknown,
-  coreSha: string,
-  spreadSha: string,
-): { record: BankSpreadHistoryCacheRecord; payload: BankSpreadHistoryPayload } | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const record = value as Partial<BankSpreadHistoryCacheRecord>;
-  if (
-    record.schema_version !== 1 ||
-    record.core_sha256 !== coreSha ||
-    record.bank_spread_history_sha256 !== spreadSha ||
-    typeof record.payload_sha256 !== 'string' ||
-    !SHA256.test(record.payload_sha256) ||
-    typeof record.payload_text !== 'string' ||
-    sha256Utf8(record.payload_text) !== record.payload_sha256
-  ) return null;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(record.payload_text);
-  } catch {
-    return null;
-  }
-  const payload = normalizeBankSpreadHistoryPayload(parsed);
-  return payload ? { record: record as BankSpreadHistoryCacheRecord, payload } : null;
-}
-
 let writeChain: Promise<void> = Promise.resolve();
 function serialize<T>(fn: () => Promise<T>): Promise<T> {
   const run = writeChain.then(fn, fn);
@@ -304,6 +292,32 @@ async function atomicWriteBundle(contents: string): Promise<void> {
   await deletePath(BUNDLE);
   await movePath(BUNDLE_TMP, BUNDLE);
 }
+
+const bankSpreadContentCache = createBankSpreadContentCache(
+  {
+    async read(path) {
+      try {
+        return (await pathExists(path)) ? await readText(path) : null;
+      } catch {
+        return null;
+      }
+    },
+    async write(path, value) {
+      await ensureDir();
+      await ensureParentDirectory(path);
+      await writeText(path, value);
+    },
+    async remove(path) {
+      await deletePath(path);
+    },
+    async move(from, to) {
+      await ensureParentDirectory(to);
+      await movePath(from, to);
+    },
+    list: listPath,
+  },
+  BANK_SPREAD_CONTENT_CACHE,
+);
 
 export const cache = {
   async readBundle(): Promise<CoreBundle | null> {
@@ -423,55 +437,24 @@ export const cache = {
   async readBankSpreadHistoryFor(
     coreSha: string,
     spreadSha: string,
-  ): Promise<BankSpreadHistoryPayload | null> {
-    const path = bankSpreadHistoryRecordPath(coreSha, spreadSha);
-    if (!path) return null;
-    const primary = parseBankSpreadHistoryRecord(await readJson<unknown>(path), coreSha, spreadSha);
-    if (primary) return primary.payload;
-    const recovered = parseBankSpreadHistoryRecord(await readJson<unknown>(`${path}.tmp`), coreSha, spreadSha);
-    return recovered?.payload ?? null;
+    runDate: string,
+    stillCurrent: () => boolean,
+  ) {
+    return bankSpreadContentCache.load({ coreSha, spreadSha, runDate }, stillCurrent);
   },
 
   async writeBankSpreadHistoryFor(
     coreSha: string,
     spreadSha: string,
-    payloadText: string,
-  ): Promise<void> {
-    const path = bankSpreadHistoryRecordPath(coreSha, spreadSha);
-    if (!path) throw new Error('Bank spread cache identity must use lowercase SHA-256 values');
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(payloadText);
-    } catch {
-      throw new Error('Bank spread cache payload must be valid JSON');
-    }
-    if (!normalizeBankSpreadHistoryPayload(parsed)) {
-      throw new Error('Bank spread cache payload failed validation');
-    }
-    const record: BankSpreadHistoryCacheRecord = {
-      schema_version: 1,
-      core_sha256: coreSha,
-      bank_spread_history_sha256: spreadSha,
-      payload_sha256: sha256Utf8(payloadText),
-      payload_text: payloadText,
-    };
-    const serialized = JSON.stringify(record);
-    return serialize(async () => {
-      const primary = parseBankSpreadHistoryRecord(await readJson<unknown>(path), coreSha, spreadSha);
-      const temporary = parseBankSpreadHistoryRecord(await readJson<unknown>(`${path}.tmp`), coreSha, spreadSha);
-      const existing = primary ?? temporary;
-      if (existing) {
-        if (existing.record.payload_text !== payloadText) {
-          throw new Error('Bank spread content-address collision');
-        }
-        return;
-      }
-      await ensureDir();
-      await ensureParentDirectory(path);
-      await writeText(`${path}.tmp`, serialized);
-      await deletePath(path);
-      await movePath(`${path}.tmp`, path);
-    });
+    runDate: string,
+    verifiedRawBytes: Uint8Array,
+    stillCurrent: () => boolean,
+  ) {
+    return bankSpreadContentCache.install(
+      { coreSha, spreadSha, runDate },
+      verifiedRawBytes,
+      stillCurrent,
+    );
   },
 
   async readProductHistory(): Promise<ProductHistoryPayload | null> {

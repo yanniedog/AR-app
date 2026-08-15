@@ -578,7 +578,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         };
       };
       if (!force) {
-        const cached = await cache.readBankSpreadHistoryFor(snapshot.coreSha, snapshot.spreadSha)
+        const cached = await cache.readBankSpreadHistoryFor(
+          snapshot.coreSha,
+          snapshot.spreadSha,
+          snapshot.runDate,
+          () => currentMatches(snapshot),
+        )
           .catch(() => null);
         if (!currentMatches()) return;
         if (cached?.run_date === snapshot.runDate) {
@@ -587,12 +592,26 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
       }
       try {
-        const { text, bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
+        const { bankSpreadHistory: downloaded, verifiedBytes } = await downloadBankSpreadHistory(
+          asset.url,
+          asset.sha256,
+          {
+            fileName: asset.name,
+            expectedBytes: asset.bytes,
+            requireExactBytes: true,
+          },
+        );
         if (!currentMatches()) return;
         if (downloaded.run_date !== snapshot.runDate) {
           throw new Error('bank_spread_history run_date does not match the live core');
         }
-        await cache.writeBankSpreadHistoryFor(snapshot.coreSha, snapshot.spreadSha, text);
+        await cache.writeBankSpreadHistoryFor(
+          snapshot.coreSha,
+          snapshot.spreadSha,
+          snapshot.runDate,
+          verifiedBytes,
+          () => currentMatches(snapshot),
+        );
         if (!currentMatches()) return;
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
@@ -600,7 +619,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const live = liveSnapshot();
         if (!live) return;
         const failedGenerationStillCurrent = currentMatches(snapshot);
-        const fallback = await cache.readBankSpreadHistoryFor(live.coreSha, live.spreadSha)
+        const fallback = await cache.readBankSpreadHistoryFor(
+          live.coreSha,
+          live.spreadSha,
+          live.runDate,
+          () => currentMatches(live),
+        )
           .catch(() => null);
         if (!currentMatches(live)) return;
         if (fallback?.run_date === live.runDate) {

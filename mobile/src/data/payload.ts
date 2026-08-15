@@ -26,6 +26,8 @@ import {
 /** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
 const YIELD_BEFORE_HEAVY_BYTES = HEAVY_JSON_BYTES;
 const INFLATE_CHUNK_BYTES = 64 * 1024;
+export const BANK_SPREAD_MAX_COMPRESSED_BYTES = 8 * 1024 * 1024;
+export const BANK_SPREAD_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
 
 /**
  * Decompress a large gzip without monopolising the JS thread for the entire
@@ -438,13 +440,40 @@ export async function downloadBankInsights(
 
 export async function downloadBankSpreadHistory(
   url: string,
-  expectedSha?: string,
-): Promise<{ text: string; bankSpreadHistory: import('./bankSpreadHistory').BankSpreadHistoryPayload }> {
-  const text = await downloadInflate(url, expectedSha);
+  expectedSha: string,
+  opts: DownloadOpts = {},
+): Promise<{
+  text: string;
+  bankSpreadHistory: import('./bankSpreadHistory').BankSpreadHistoryPayload;
+  verifiedBytes: Uint8Array;
+}> {
+  if (!/^[0-9a-f]{64}$/.test(expectedSha)) {
+    throw new Error('bank_spread_history requires a lowercase SHA-256 descriptor');
+  }
+  let verifiedBytes: Uint8Array | null = null;
+  const callerVerifiedBytes = opts.onVerifiedBytes;
+  const text = await downloadInflate(url, expectedSha, {
+    ...opts,
+    maxCompressedBytes: Math.min(
+      opts.maxCompressedBytes ?? BANK_SPREAD_MAX_COMPRESSED_BYTES,
+      BANK_SPREAD_MAX_COMPRESSED_BYTES,
+    ),
+    maxInflatedBytes: Math.min(
+      opts.maxInflatedBytes ?? BANK_SPREAD_MAX_INFLATED_BYTES,
+      BANK_SPREAD_MAX_INFLATED_BYTES,
+    ),
+    expectedEncoding: 'gzip',
+    allowEncrypted: false,
+    onVerifiedBytes(bytes) {
+      verifiedBytes = bytes;
+      callerVerifiedBytes?.(bytes.slice());
+    },
+  });
+  if (!verifiedBytes) throw new Error('bank_spread_history raw bytes were not verified');
   const parsed = await parseJsonHeavy<unknown>(text);
   const bankSpreadHistory = normalizeBankSpreadHistoryPayload(parsed);
   if (!bankSpreadHistory) throw new Error('bank_spread_history payload failed validation');
-  return { text, bankSpreadHistory };
+  return { text, bankSpreadHistory, verifiedBytes };
 }
 
 export interface HistoryBanksResult {

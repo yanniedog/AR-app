@@ -6,16 +6,27 @@ const mockReadBankSpreadHistoryFor = jest.fn();
 const mockWriteBankSpreadHistoryFor = jest.fn(async (
   _coreSha: string,
   _spreadSha: string,
-  _text: string,
+  _runDate: string,
+  _verifiedBytes: Uint8Array,
+  _stillCurrent: () => boolean,
 ): Promise<void> => {});
 const mockDownloadBankSpreadHistory = jest.fn();
 
 jest.mock('../src/data/cache', () => ({
   cache: {
-    readBankSpreadHistoryFor: (coreSha: string, spreadSha: string) =>
-      mockReadBankSpreadHistoryFor(coreSha, spreadSha),
-    writeBankSpreadHistoryFor: (coreSha: string, spreadSha: string, text: string) =>
-      mockWriteBankSpreadHistoryFor(coreSha, spreadSha, text),
+    readBankSpreadHistoryFor: (
+      coreSha: string,
+      spreadSha: string,
+      runDate: string,
+      stillCurrent: () => boolean,
+    ) => mockReadBankSpreadHistoryFor(coreSha, spreadSha, runDate, stillCurrent),
+    writeBankSpreadHistoryFor: (
+      coreSha: string,
+      spreadSha: string,
+      runDate: string,
+      verifiedBytes: Uint8Array,
+      stillCurrent: () => boolean,
+    ) => mockWriteBankSpreadHistoryFor(coreSha, spreadSha, runDate, verifiedBytes, stillCurrent),
   },
 }));
 
@@ -141,8 +152,12 @@ describe('Bank spread store integrity', () => {
 
     expect(state.bankSpreadHistory).toBeNull();
     expect(state.bankSpreadHistoryError).toBe('offline');
-    expect(mockReadBankSpreadHistoryFor).toHaveBeenNthCalledWith(1, CORE_A, SPREAD_A);
-    expect(mockReadBankSpreadHistoryFor).toHaveBeenNthCalledWith(2, CORE_A, SPREAD_A);
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenNthCalledWith(
+      1, CORE_A, SPREAD_A, spreadA.run_date, expect.any(Function),
+    );
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenNthCalledWith(
+      2, CORE_A, SPREAD_A, spreadA.run_date, expect.any(Function),
+    );
   });
 
   it('loads only the exact current generation cache key without downloading', async () => {
@@ -177,6 +192,7 @@ describe('Bank spread store integrity', () => {
     mockDownloadBankSpreadHistory.mockResolvedValue({
       text: JSON.stringify(spreadA),
       bankSpreadHistory: spreadA,
+      verifiedBytes: new Uint8Array([1, 2, 3]),
     });
     mockWriteBankSpreadHistoryFor.mockReturnValueOnce(writeA.promise);
     const { state, actions } = harness();
@@ -190,7 +206,9 @@ describe('Bank spread store integrity', () => {
     expect(mockWriteBankSpreadHistoryFor).toHaveBeenCalledWith(
       CORE_A,
       SPREAD_A,
-      JSON.stringify(spreadA),
+      spreadA.run_date,
+      new Uint8Array([1, 2, 3]),
+      expect.any(Function),
     );
     expect(state.bankSpreadHistory).toBe(spreadB);
     expect(state.bankSpreadHistoryError).toBeNull();
@@ -209,7 +227,9 @@ describe('Bank spread store integrity', () => {
     downloadA.reject(new Error('A failed after promotion'));
     await pending;
 
-    expect(mockReadBankSpreadHistoryFor).toHaveBeenLastCalledWith(CORE_B, SPREAD_B);
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenLastCalledWith(
+      CORE_B, SPREAD_B, spreadB.run_date, expect.any(Function),
+    );
     expect(state.bankSpreadHistory).toBe(spreadB);
     expect(state.bankSpreadHistoryError).toBeNull();
   });
