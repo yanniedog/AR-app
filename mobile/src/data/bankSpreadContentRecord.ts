@@ -62,7 +62,7 @@ export function validBankSpreadIdentity(identity: BankSpreadCacheIdentity): bool
 }
 
 export function bankSpreadIdentityKey(identity: BankSpreadCacheIdentity): string {
-  return `${identity.coreSha}:${identity.spreadSha}`;
+  return `${identity.runDate}:${identity.coreSha}:${identity.spreadSha}`;
 }
 
 export function bankSpreadEntryIdentity(entry: BankSpreadStoredEntry): BankSpreadCacheIdentity {

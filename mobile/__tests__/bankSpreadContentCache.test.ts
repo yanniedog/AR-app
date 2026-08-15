@@ -1,6 +1,8 @@
 import { gzipSync, strToU8 } from 'fflate';
 
 import {
+  BANK_SPREAD_CACHE_MAX_PHYSICAL_RECORD_FILES,
+  BANK_SPREAD_CACHE_SLOT_COUNT,
   createBankSpreadContentCache,
   type BankSpreadCacheIdentity,
   type BankSpreadContentStorage,
@@ -14,6 +16,7 @@ const CORE_A = 'a'.repeat(64);
 const CORE_B = 'b'.repeat(64);
 const CORE_C = 'c'.repeat(64);
 const CORE_D = 'd'.repeat(64);
+const CORE_E = 'e'.repeat(64);
 
 class MemoryStorage implements BankSpreadContentStorage {
   readonly files = new Map<string, string>();
@@ -51,13 +54,9 @@ class MemoryStorage implements BankSpreadContentStorage {
   }
   async list(path: string) {
     const prefix = path.endsWith('/') ? path : `${path}/`;
-    const children = new Set<string>();
-    for (const key of this.files.keys()) {
-      if (!key.startsWith(prefix)) continue;
-      const child = key.slice(prefix.length).split('/')[0];
-      if (child) children.add(child);
-    }
-    return [...children];
+    return [...this.files.keys()]
+      .filter((key) => key.startsWith(prefix))
+      .map((key) => key.slice(prefix.length).split('/')[0]);
   }
   waitUntilWriteBlocked() {
     return new Promise<void>((resolve) => { this.blocked = resolve; });
@@ -78,13 +77,9 @@ function payload(label: string, gap: number): BankSpreadHistoryPayload {
     cohorts: { mortgage: `mortgage-${label}`, savings: `savings-${label}` },
     banks: {
       'Example Bank': {
-        mortgage_mean: [0.04 + gap],
-        savings_mean: [0.04],
-        gap: [gap],
-        mortgage_count: [1],
-        savings_count: [1],
-        mortgage_hash: [`mortgage-${label}`],
-        savings_hash: [`savings-${label}`],
+        mortgage_mean: [0.04 + gap], savings_mean: [0.04], gap: [gap],
+        mortgage_count: [1], savings_count: [1],
+        mortgage_hash: [`mortgage-${label}`], savings_hash: [`savings-${label}`],
         quality: ['complete'],
       },
     },
@@ -102,26 +97,46 @@ function fixture(coreSha: string, label: string, gap: number) {
   return { value, raw, identity };
 }
 
-function recordPath(identity: BankSpreadCacheIdentity) {
-  return `${ROOT}/records/${identity.coreSha}-${identity.spreadSha}.json`;
+interface IndexEntry {
+  core_sha256: string;
+  bank_spread_history_sha256: string;
+  slot: number;
 }
 
-function indexEntries(storage: MemoryStorage) {
+function slotPath(slot: number) {
+  return `${ROOT}/records/slot-${slot}.json`;
+}
+
+function indexEntries(storage: MemoryStorage): IndexEntry[] {
   const raw = storage.files.get(`${ROOT}/index.json`)!;
-  return (JSON.parse(raw) as { entries: { core_sha256: string; bank_spread_history_sha256: string }[] }).entries;
+  return (JSON.parse(raw) as { entries: IndexEntry[] }).entries;
 }
 
-describe('content-addressed bank spread cache', () => {
+function indexedPath(storage: MemoryStorage, identity: BankSpreadCacheIdentity) {
+  const entry = indexEntries(storage).find((candidate) =>
+    candidate.core_sha256 === identity.coreSha &&
+    candidate.bank_spread_history_sha256 === identity.spreadSha);
+  if (!entry) throw new Error(`identity is not indexed: ${identity.coreSha}`);
+  return slotPath(entry.slot);
+}
+
+function primarySlotPaths(storage: MemoryStorage) {
+  return [...storage.files.keys()].filter((path) =>
+    new RegExp(`^${ROOT}/records/slot-[0-${BANK_SPREAD_CACHE_SLOT_COUNT - 1}]\\.json$`).test(path));
+}
+
+describe('fixed-slot bank spread content cache', () => {
   const a = fixture(CORE_A, 'a', 0.02);
   const b = fixture(CORE_B, 'b', 0.015);
   const c = fixture(CORE_C, 'c', 0.01);
   const d = fixture(CORE_D, 'd', 0.005);
+  const e = fixture(CORE_E, 'e', 0.001);
 
-  it('binds every cold read to the live compressed asset SHA and exact run date', async () => {
+  it('binds every indexed cold read to the live compressed SHA and exact run date', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
-    await expect(cache.install(a.identity, a.raw, () => true)).resolves.toBe(true);
-    await expect(cache.install(b.identity, b.raw, () => true)).resolves.toBe(true);
+    await cache.install(a.identity, a.raw, () => true);
+    await cache.install(b.identity, b.raw, () => true);
 
     await expect(cache.load(b.identity, () => true)).resolves.toEqual(b.value);
     await expect(cache.load({ ...b.identity, spreadSha: a.identity.spreadSha }, () => true))
@@ -130,21 +145,23 @@ describe('content-addressed bank spread cache', () => {
       .resolves.toBeNull();
   });
 
-  it('rejects mutable base64 bytes that no longer hash to the manifest spread SHA', async () => {
+  it('rejects mutable slot bytes that no longer hash to the indexed manifest SHA', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
     await cache.install(a.identity, a.raw, () => true);
-    const path = recordPath(a.identity);
-    const record = JSON.parse(storage.files.get(path)!) as { raw_base64: string; compressed_bytes: number; encoded_bytes: number };
+    const path = indexedPath(storage, a.identity);
+    const record = JSON.parse(storage.files.get(path)!) as {
+      raw_base64: string; compressed_bytes: number; encoded_bytes: number;
+    };
     record.raw_base64 = Buffer.from(b.raw).toString('base64');
     record.compressed_bytes = b.raw.byteLength;
     record.encoded_bytes = record.raw_base64.length;
     storage.files.set(path, JSON.stringify(record));
 
-    await expect(cache.load(a.identity, () => true)).resolves.toBeNull();
+    await expect(cache.load(a.identity, () => true)).rejects.toThrow(/index is corrupt/);
   });
 
-  it('enforces compressed and inflated ceilings before accepting a record', async () => {
+  it('enforces compressed and inflated ceilings before accepting a slot', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT, {
       maxCompressedBytes: 512,
@@ -154,72 +171,38 @@ describe('content-addressed bank spread cache', () => {
       maxTotalEncodedBytes: 2048,
     });
     const oversizedRaw = new Uint8Array(513);
-    const oversizedIdentity = {
+    await expect(cache.install({
       coreSha: CORE_A,
       spreadSha: sha256Bytes(oversizedRaw),
       runDate: sampleCore.run_date,
-    };
-    await expect(cache.install(oversizedIdentity, oversizedRaw, () => true))
-      .rejects.toThrow(/oversized raw bytes/);
+    }, oversizedRaw, () => true)).rejects.toThrow(/oversized raw bytes/);
 
-    const bombText = JSON.stringify({ ...a.value, padding: 'x'.repeat(2048) });
-    const bombRaw = gzipSync(strToU8(bombText));
-    const bombIdentity = {
+    const bombRaw = gzipSync(strToU8(JSON.stringify({ ...a.value, padding: 'x'.repeat(2048) })));
+    expect(bombRaw.byteLength).toBeLessThan(512);
+    await expect(cache.install({
       coreSha: CORE_A,
       spreadSha: sha256Bytes(bombRaw),
       runDate: sampleCore.run_date,
-    };
-    expect(bombRaw.byteLength).toBeLessThan(512);
-    await expect(cache.install(bombIdentity, bombRaw, () => true))
-      .rejects.toThrow(/oversized raw bytes/);
+    }, bombRaw, () => true)).rejects.toThrow(/oversized raw bytes/);
   });
 
-  it('retains current plus one verified predecessor under the explicit entry budget', async () => {
+  it('indexes current plus one verified predecessor while using only three fixed slots', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
-    await cache.install(a.identity, a.raw, () => true);
-    await cache.install(b.identity, b.raw, () => true);
-    await cache.install(c.identity, c.raw, () => true);
+    for (const item of [a, b, c, d]) await cache.install(item.identity, item.raw, () => true);
 
-    expect(indexEntries(storage)).toEqual([
-      expect.objectContaining({ core_sha256: CORE_C }),
-      expect.objectContaining({ core_sha256: CORE_B }),
-    ]);
-    // A remains for one transaction as rollback grace.  The authoritative
-    // index is still capped at current + one predecessor.
-    expect(storage.files.has(recordPath(a.identity))).toBe(true);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_D, CORE_C]);
+    expect(primarySlotPaths(storage)).toHaveLength(BANK_SPREAD_CACHE_SLOT_COUNT);
   });
 
-  it('enforces the total retained compressed-byte budget as well as the entry cap', async () => {
+  it('enforces the indexed compressed-byte budget', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT, {
       maxTotalCompressedBytes: b.raw.byteLength + c.raw.byteLength - 1,
     });
     await cache.install(b.identity, b.raw, () => true);
     await cache.install(c.identity, c.raw, () => true);
-
-    expect(indexEntries(storage)).toEqual([
-      expect.objectContaining({ core_sha256: CORE_C }),
-    ]);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
-  });
-
-  it('bounds physical rollback grace to one record beyond the two-entry index', async () => {
-    const storage = new MemoryStorage();
-    const cache = createBankSpreadContentCache(storage, ROOT);
-    await cache.install(a.identity, a.raw, () => true);
-    await cache.install(b.identity, b.raw, () => true);
-    await cache.install(c.identity, c.raw, () => true);
-    await cache.install(d.identity, d.raw, () => true);
-
-    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_D, CORE_C]);
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
-    expect(storage.files.has(recordPath(d.identity))).toBe(true);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C]);
   });
 
   it('recovers an authenticated temporary index after iOS destination deletion and move crash', async () => {
@@ -239,72 +222,78 @@ describe('content-addressed bank spread cache', () => {
     expect(storage.files.has(`${ROOT}/index.json.tmp`)).toBe(false);
   });
 
-  it('recovers authenticated temporary raw bytes after record replacement move crashes', async () => {
+  it('recovers authenticated temporary bytes in the unreferenced scratch slot', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
-    storage.failMoveTargetAfterDestinationDelete = recordPath(a.identity);
+    storage.failMoveTargetAfterDestinationDelete = slotPath(0);
 
     await expect(cache.install(a.identity, a.raw, () => true))
       .rejects.toThrow(/move failed after destination delete/);
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(`${recordPath(a.identity)}.tmp`)).toBe(true);
+    expect(storage.files.has(slotPath(0))).toBe(false);
+    expect(storage.files.has(`${slotPath(0)}.tmp`)).toBe(true);
     storage.failMoveTargetAfterDestinationDelete = null;
 
+    // The failed transaction did not publish an index. The next exact install
+    // reuses the same bounded scratch slot and commits it.
+    await expect(cache.install(a.identity, a.raw, () => true)).resolves.toBe(true);
     await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
-    expect(storage.files.has(recordPath(a.identity))).toBe(true);
-    expect(storage.files.has(`${recordPath(a.identity)}.tmp`)).toBe(false);
+    expect(storage.files.has(`${slotPath(0)}.tmp`)).toBe(false);
   });
 
-  it('removes stale A finishing after B/C prune without evicting or recreating B/C', async () => {
+  it('never overwrites either indexed generation when a scratch write becomes stale', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
     await cache.install(b.identity, b.raw, () => true);
     await cache.install(c.identity, c.raw, () => true);
-    const aTmp = `${recordPath(a.identity)}.tmp`;
-    storage.blockWriteTarget = aTmp;
+    const scratchTmp = `${slotPath(2)}.tmp`;
+    storage.blockWriteTarget = scratchTmp;
     const blocked = storage.waitUntilWriteBlocked();
-    let aStillCurrent = true;
-    const staleInstall = cache.install(a.identity, a.raw, () => aStillCurrent);
+    let current = true;
+    const pending = cache.install(a.identity, a.raw, () => current);
     await blocked;
-    aStillCurrent = false;
+    current = false;
     storage.releaseWrite();
 
-    await expect(staleInstall).resolves.toBe(false);
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(aTmp)).toBe(false);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
+    await expect(pending).resolves.toBe(false);
     expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
+    await expect(cache.load(b.identity, () => true)).resolves.toEqual(b.value);
+    await expect(cache.load(c.identity, () => true)).resolves.toEqual(c.value);
   });
 
-  it('preserves the prior indexed generation when cleanup becomes stale after deleting debris', async () => {
+  it('restores the exact prior index when generation changes during index replacement', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
     await cache.install(b.identity, b.raw, () => true);
     await cache.install(c.identity, c.raw, () => true);
-    const orphanPath = `${ROOT}/records/${'e'.repeat(64)}-${'f'.repeat(64)}.json`;
-    storage.files.set(orphanPath, 'unindexed debris');
-    let aStillCurrent = true;
+    let current = true;
     storage.afterRemove = (path) => {
-      if (path === orphanPath) aStillCurrent = false;
+      if (path === `${ROOT}/index.json`) current = false;
     };
 
-    await expect(cache.install(a.identity, a.raw, () => aStillCurrent)).resolves.toBe(false);
-
-    const entries = indexEntries(storage);
-    expect(entries.map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
-    for (const entry of entries) {
-      expect(storage.files.has(recordPath({
-        coreSha: entry.core_sha256,
-        spreadSha: entry.bank_spread_history_sha256,
-        runDate: sampleCore.run_date,
-      }))).toBe(true);
-    }
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
-    expect(storage.files.has(orphanPath)).toBe(false);
+    await expect(cache.install(a.identity, a.raw, () => current)).resolves.toBe(false);
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
     await expect(cache.load(b.identity, () => true)).resolves.toEqual(b.value);
+    await expect(cache.load(c.identity, () => true)).resolves.toEqual(c.value);
+  });
+
+  it('bounds repeated failed index commits by reusing the one scratch slot', async () => {
+    const storage = new MemoryStorage();
+    const cache = createBankSpreadContentCache(storage, ROOT);
+    await cache.install(b.identity, b.raw, () => true);
+    await cache.install(c.identity, c.raw, () => true);
+    storage.failWriteTarget = `${ROOT}/index.json.tmp`;
+
+    await expect(cache.install(d.identity, d.raw, () => true)).rejects.toThrow(/write failed/);
+    await expect(cache.install(e.identity, e.raw, () => true)).rejects.toThrow(/write failed/);
+
+    expect(indexEntries(storage).map((entry) => entry.core_sha256)).toEqual([CORE_C, CORE_B]);
+    expect(primarySlotPaths(storage)).toHaveLength(BANK_SPREAD_CACHE_SLOT_COUNT);
+    expect([...storage.files.keys()].filter((path) => path.startsWith(`${ROOT}/records/`)))
+      .toHaveLength(BANK_SPREAD_CACHE_SLOT_COUNT);
+    expect(BANK_SPREAD_CACHE_MAX_PHYSICAL_RECORD_FILES).toBe(BANK_SPREAD_CACHE_SLOT_COUNT * 2);
+    storage.failWriteTarget = null;
+    await expect(cache.load(b.identity, () => true)).resolves.toEqual(b.value);
+    await expect(cache.load(c.identity, () => true)).resolves.toEqual(c.value);
   });
 
   it('rejects an authenticated spread whose raw run_date has a valid-date prefix only', async () => {
@@ -312,47 +301,19 @@ describe('content-addressed bank spread cache', () => {
     const cache = createBankSpreadContentCache(storage, ROOT);
     const malformed = { ...a.value, run_date: `${a.value.run_date}garbage` };
     const raw = gzipSync(strToU8(JSON.stringify(malformed)));
-    const identity = { ...a.identity, spreadSha: sha256Bytes(raw) };
-
-    await expect(cache.install(identity, raw, () => true)).rejects.toThrow(
-      /unverified or oversized raw bytes/,
-    );
-    expect(storage.files.has(recordPath(identity))).toBe(false);
+    await expect(cache.install(
+      { ...a.identity, spreadSha: sha256Bytes(raw) },
+      raw,
+      () => true,
+    )).rejects.toThrow(/unverified or oversized raw bytes/);
+    expect(primarySlotPaths(storage)).toHaveLength(0);
   });
 
-  it('cleans a crash orphan on the next verified C load and never deletes indexed B/C', async () => {
-    const storage = new MemoryStorage();
-    const cache = createBankSpreadContentCache(storage, ROOT);
-    await cache.install(b.identity, b.raw, () => true);
-    await cache.install(c.identity, c.raw, () => true);
-    storage.failWriteTarget = `${ROOT}/index.json.tmp`;
-
-    await expect(cache.install(a.identity, a.raw, () => true)).rejects.toThrow(/write failed/);
-    expect(storage.files.has(recordPath(a.identity))).toBe(true);
-    storage.failWriteTarget = null;
-
-    await expect(cache.load(c.identity, () => true)).resolves.toEqual(c.value);
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-    expect(storage.files.has(recordPath(c.identity))).toBe(true);
-  });
-
-  it('cleans SHA-pattern unindexed records during a cold startup miss', async () => {
-    const storage = new MemoryStorage();
-    const cache = createBankSpreadContentCache(storage, ROOT);
-    await cache.install(b.identity, b.raw, () => true);
-    storage.files.set(recordPath(a.identity), storage.files.get(recordPath(b.identity))!);
-
-    await expect(cache.load(c.identity, () => true)).resolves.toBeNull();
-    expect(storage.files.has(recordPath(a.identity))).toBe(false);
-    expect(storage.files.has(recordPath(b.identity))).toBe(true);
-  });
-
-  it('removes a redundant temporary copy after the primary record verifies', async () => {
+  it('removes a redundant temporary copy after an indexed primary slot verifies', async () => {
     const storage = new MemoryStorage();
     const cache = createBankSpreadContentCache(storage, ROOT);
     await cache.install(a.identity, a.raw, () => true);
-    const path = recordPath(a.identity);
+    const path = indexedPath(storage, a.identity);
     storage.files.set(`${path}.tmp`, storage.files.get(path)!);
 
     await expect(cache.load(a.identity, () => true)).resolves.toEqual(a.value);
