@@ -269,9 +269,11 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     const current = await readDigest(head.current);
     const previous = await readDigest(head.previous);
     if (!current) {
-      // A verified predecessor remains a safe read fallback. Install still
-      // rejects a v1 head because it lacks the unavailable current's lineage
-      // metadata, while v2/v3 can authenticate a direct successor.
+      // A verified predecessor remains a safe read fallback. Install accepts
+      // advancement past an unavailable current only from v3, whose stored
+      // prior digest can authenticate this direct fallback relationship.
+      if (previous && head.schema_version === 3 &&
+        head.current_prior_ledger_digest !== previous.manifest.ledger_event_digest) return null;
       return { head, current: null, previous, source };
     }
     if (head.schema_version !== 1 && (
@@ -281,7 +283,10 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     )) return null;
     if (head.schema_version === 3 &&
       head.current_prior_ledger_digest !== current.manifest.prior_ledger_digest) return null;
-    if (head.previous !== null && !previous) return null;
+    if (head.previous !== null && (
+      !previous ||
+      current.manifest.prior_ledger_digest !== previous.manifest.ledger_event_digest
+    )) return null;
     return { head, current, previous, source };
   }
 
@@ -318,8 +323,34 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     return null;
   }
 
-  async function readHead(): Promise<GenerationCacheHead | null> {
-    return (await readHeadState())?.head ?? null;
+  async function readHeadForInstall(candidateDigest: string): Promise<GenerationCacheHead | null> {
+    const state = await readHeadState();
+    if (state) return state.head;
+
+    const [primaryRaw, temporaryRaw] = await Promise.all([
+      storage.read(headPath),
+      storage.read(headTmpPath),
+    ]);
+    const heads = [parseHead(primaryRaw), parseHead(temporaryRaw)]
+      .filter((head): head is GenerationCacheHead => head !== null);
+    if (heads.length === 0) {
+      if (primaryRaw !== null || temporaryRaw !== null) {
+        throw new V3ContractError('cache head is corrupt or has invalid lineage');
+      }
+      return null;
+    }
+    // Exact same-generation repair may rebuild redundant head metadata. It
+    // must not use an unrelated or ambiguous structural head to admit a new
+    // generation after readHeadState failed closed.
+    if (heads.some((head) => head.current !== candidateDigest)) {
+      throw new V3ContractError('cache head is ambiguous or has invalid lineage');
+    }
+    if (heads.length === 1 || equivalent(heads[0], heads[1])) return heads[0];
+    if (heads[0].schema_version === 3 && heads[1].schema_version === 3 &&
+      heads[0].transaction_sequence !== heads[1].transaction_sequence) {
+      return heads[0].transaction_sequence > heads[1].transaction_sequence ? heads[0] : heads[1];
+    }
+    throw new V3ContractError('cache head is ambiguous or has invalid lineage');
   }
 
   async function readCurrent(): Promise<CachedGenerationV3 | null> {
@@ -339,11 +370,11 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
     const recordTmpPath = generationTmpPath(digest);
 
     try {
-      const previousHead = await readHead();
+      const previousHead = await readHeadForInstall(digest);
       const current = previousHead ? await readDigest(previousHead.current) : null;
       const previous = previousHead ? await readDigest(previousHead.previous) : null;
       if (previousHead && !current && previousHead.current !== digest) {
-        if (!previous || previousHead.schema_version === 1) {
+        if (!previous || previousHead.schema_version !== 3) {
           throw new V3ContractError('current cache lineage is unavailable or invalid');
         }
         const cachedCurrentOrder: [string, number] = [
@@ -392,7 +423,16 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
         await replaceWithTemporary(recordTmpPath, recordPath);
       }
 
-      const retainedPrevious = current?.manifest.generation_digest ?? previous?.manifest.generation_digest ?? null;
+      const retainedPrevious = current
+        ? current.manifest.generation_digest === digest
+          ? previous && verified.manifest.prior_ledger_digest === previous.manifest.ledger_event_digest
+            ? previous.manifest.generation_digest
+            : null
+          : current.manifest.generation_digest
+        : previousHead?.current === digest && previous &&
+          verified.manifest.prior_ledger_digest === previous.manifest.ledger_event_digest
+          ? previous.manifest.generation_digest
+          : null;
       const nextHead: GenerationCacheHeadV3 = {
         schema_version: 3,
         transaction_sequence: previousHead?.schema_version === 3 &&
@@ -400,7 +440,7 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
           ? previousHead.transaction_sequence + 1
           : 0,
         current: digest,
-        previous: retainedPrevious && retainedPrevious !== digest ? retainedPrevious : previousHead?.previous ?? null,
+        previous: retainedPrevious,
         current_observation_date: verified.manifest.observation_date,
         current_generation_revision: verified.manifest.generation_revision,
         current_prior_ledger_digest: verified.manifest.prior_ledger_digest,

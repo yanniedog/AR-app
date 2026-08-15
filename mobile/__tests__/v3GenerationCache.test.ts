@@ -126,8 +126,8 @@ describe('content-addressed v3 generation cache', () => {
     const restarted = createV3GenerationCache(storage);
     expect((await restarted.readCurrent())?.manifest.generation_digest)
       .toBe(third.manifest.generation_digest);
-    expect((await restarted.readPrevious())?.manifest.generation_digest)
-      .toBe(first.manifest.generation_digest);
+    expect(await restarted.readPrevious()).toBeNull();
+    expect(storage.files.has(generationRecordPath(first.manifest.generation_digest))).toBe(false);
     expect(storage.files.has(generationRecordPath(second.manifest.generation_digest))).toBe(false);
   });
 
@@ -437,6 +437,37 @@ describe('content-addressed v3 generation cache', () => {
       .toBe(second.manifest.generation_digest);
     expect((await restarted.readPrevious())?.manifest.generation_digest)
       .toBe(first.manifest.generation_digest);
+  });
+
+  test('fails closed on a disconnected sole head and on equal-sequence ambiguity', async () => {
+    const storage = new MemoryStorage();
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await createV3GenerationCache(storage).install(first);
+    await createV3GenerationCache(storage).install(second);
+    const connectedHead = JSON.parse(storage.files.get('payload/v3/head.json')!) as Record<string, unknown>;
+    const disconnected = {
+      ...connectedHead,
+      current: first.manifest.generation_digest,
+      previous: second.manifest.generation_digest,
+      current_observation_date: first.manifest.observation_date,
+      current_generation_revision: first.manifest.generation_revision,
+      current_prior_ledger_digest: first.manifest.prior_ledger_digest,
+      current_ledger_event_digest: first.manifest.ledger_event_digest,
+    };
+    storage.files.set('payload/v3/head.json', JSON.stringify(disconnected));
+
+    const cache = createV3GenerationCache(storage);
+    expect(await cache.readCurrent()).toBeNull();
+    await expect(cache.install(thirdGeneration())).rejects.toThrow(/invalid lineage/);
+
+    storage.files.set('payload/v3/head.json', JSON.stringify(connectedHead));
+    storage.files.set('payload/v3/head.json.tmp', JSON.stringify({
+      ...connectedHead,
+      previous: null,
+    }));
+    expect(await cache.readCurrent()).toBeNull();
+    await expect(cache.install(thirdGeneration())).rejects.toThrow(/ambiguous/);
   });
 
   test('recovers an authenticated temporary generation after an iOS delete-then-crash repair', async () => {
