@@ -87,6 +87,7 @@ describe('compact mobile UX contracts', () => {
   it('lets primary tab labels wrap and reserves height from system font scale', () => {
     const tabBar = read('../src/components/AppTabBar.tsx');
     const diagnostics = read('../src/components/DiagnosticsConsentBanner.tsx');
+    const ui = read('../src/components/ui.tsx');
 
     expect(tabBar).toContain('useWindowDimensions');
     expect(tabBar).toContain('getTabBarLayout(fontScale)');
@@ -94,5 +95,6 @@ describe('compact mobile UX contracts', () => {
     expect(tabBar).toContain('height: tabBarLayout.contentHeight + insets.bottom');
     expect(tabBar).not.toContain('numberOfLines={1}');
     expect(diagnostics).toContain('getTabBarContentHeight(fontScale)');
+    expect(ui).toContain('fontScale > 1 && { lineHeight: undefined }');
   });
 });

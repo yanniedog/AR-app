@@ -65,6 +65,9 @@ export function AppText({
         variant === 'rateHero' && { letterSpacing: -0.5 },
         (variant === 'rate' || variant === 'rateHero') && { fontVariant: ['tabular-nums'] },
         style,
+        // Compact caller overrides are useful at normal scale, but become
+        // clipping constraints once the OS enlarges the glyphs.
+        fontScale > 1 && { lineHeight: undefined },
       ]}
       {...rest}
     />
