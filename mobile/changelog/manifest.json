@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T03:31:11.572Z",
+  "generated_at": "2026-08-15T03:52:34.539Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -806,6 +806,16 @@
         "Simplify global navigation drawer (#201)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.163"
+    },
+    {
+      "version": "1.0.164",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "Enforce safe comparison selection (#204)",
+        "chore(mobile): auto-release bump to v1.0.163 (after 1751409) (#203)",
+        "Remove duplicate Settings data banner (#202)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.164"
     }
   ]
 }
