@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T00:35:59.261Z",
+  "generated_at": "2026-08-15T01:01:47.060Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -765,6 +765,14 @@
         "feat(mobile): preserve mortgage offset impact (#190)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.152"
+    },
+    {
+      "version": "1.0.154",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "fix(mobile): relock private data on app switch (#192)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.154"
     }
   ]
 }
