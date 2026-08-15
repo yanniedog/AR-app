@@ -1,0 +1,36 @@
+{
+  "version": "1.0.163",
+  "releaseTag": "app-arm-v1.0.163",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "Remove duplicate Settings data banner (#202)",
+    "Simplify global navigation drawer (#201)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Remove duplicate Settings data banner (#202)"
+        },
+        {
+          "text": "Simplify global navigation drawer (#201)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.163"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.162"
+        }
+      ]
+    }
+  ]
+}
