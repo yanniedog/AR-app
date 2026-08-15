@@ -48,7 +48,7 @@ describe('app lock state machine', () => {
     expect(shouldAutomaticallyPrompt(state)).toBe(true);
   });
 
-  it('ignores a successful prompt that resolves after a real app-switch race', () => {
+  it('keeps a real app-switch cancellation locked and ignores its stale success', () => {
     let state = createAppLockState(true, 'active');
     state = reduceAppLockState(state, { type: 'prompt_started', kind: 'automatic' });
     const staleAttemptId = state.promptAttempt!.id;
@@ -56,13 +56,15 @@ describe('app lock state machine', () => {
     state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'inactive' });
     expect(state.promptAttempt?.id).toBe(staleAttemptId);
     state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'background' });
+    expect(state.promptAttempt?.id).toBe(staleAttemptId);
+    state = reduceAppLockState(state, {
+      type: 'prompt_resolved',
+      attemptId: staleAttemptId,
+      success: false,
+    });
     expect(state.promptAttempt).toBeNull();
     state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'active' });
-    expect(shouldAutomaticallyPrompt(state)).toBe(true);
-
-    state = reduceAppLockState(state, { type: 'prompt_started', kind: 'automatic' });
-    const freshAttemptId = state.promptAttempt!.id;
-    expect(freshAttemptId).not.toBe(staleAttemptId);
+    expect(shouldAutomaticallyPrompt(state)).toBe(false);
 
     const afterStaleSuccess = reduceAppLockState(state, {
       type: 'prompt_resolved',
@@ -71,7 +73,10 @@ describe('app lock state machine', () => {
     });
     expect(afterStaleSuccess).toBe(state);
     expect(afterStaleSuccess.locked).toBe(true);
-    expect(afterStaleSuccess.promptAttempt?.id).toBe(freshAttemptId);
+
+    state = reduceAppLockState(state, { type: 'prompt_started', kind: 'manual' });
+    const freshAttemptId = state.promptAttempt!.id;
+    expect(freshAttemptId).not.toBe(staleAttemptId);
 
     state = reduceAppLockState(state, {
       type: 'prompt_resolved',
@@ -79,6 +84,30 @@ describe('app lock state machine', () => {
       success: true,
     });
     expect(state.locked).toBe(false);
+  });
+
+  it('accepts device-credential success across prompt-driven background', () => {
+    let state = createAppLockState(true, 'active');
+    state = reduceAppLockState(state, { type: 'prompt_started', kind: 'automatic' });
+    const attemptId = state.promptAttempt!.id;
+
+    state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'background' });
+    expect(state.locked).toBe(true);
+    expect(state.promptAttempt?.id).toBe(attemptId);
+    expect(shouldAutomaticallyPrompt(state)).toBe(false);
+
+    state = reduceAppLockState(state, {
+      type: 'prompt_resolved',
+      attemptId,
+      success: true,
+    });
+    expect(state.locked).toBe(true);
+    expect(state.pendingAuthentication).toBe(true);
+
+    state = reduceAppLockState(state, { type: 'app_state_changed', lifecycle: 'active' });
+    expect(state.locked).toBe(false);
+    expect(state.pendingAuthentication).toBe(false);
+    expect(shouldAutomaticallyPrompt(state)).toBe(false);
   });
 
   it('accepts prompt success across biometric-driven inactivity without looping', () => {
