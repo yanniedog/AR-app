@@ -6,6 +6,7 @@ import type {
 import {
   arrayValue,
   canonicalSha256,
+  compareRfc3339Instants,
   dateValue,
   deepFreeze,
   enumValue,
@@ -135,10 +136,10 @@ function validateCanonicalProduct(value: unknown, index: number, normalizationVe
       reject(`${path} product and evidence-reference lineage timestamps disagree`);
     }
   }
-  if (effectiveDate !== null && Date.parse(effectiveDate) > Date.parse(observedAt)) {
+  if (effectiveDate !== null && compareRfc3339Instants(effectiveDate, observedAt) > 0) {
     reject(`${path}.evidence public availability cannot precede effective_date`);
   }
-  if (effectiveTo !== null && Date.parse(effectiveTo) <= Date.parse(observedAt)) {
+  if (effectiveTo !== null && compareRfc3339Instants(effectiveTo, observedAt) <= 0) {
     reject(`${path}.evidence public product is already expired`);
   }
 

@@ -8,7 +8,7 @@ import {
   V3_CONTRACT_SCHEMA_SHA256,
 } from '../src/contracts/v3/contractLock';
 import type { AssetDescriptorV3, CanonicalFeeV3, CorePayloadV3, CoverageV2, GenerationManifestV3 } from '../src/contracts/v3/types';
-import { utf8Bytes } from '../src/contracts/v3/contractPrimitives';
+import { compareRfc3339Instants, utf8Bytes } from '../src/contracts/v3/contractPrimitives';
 import {
   V3_ASSET_LIMITS,
   V3_MANIFEST_LIMIT_BYTES,
@@ -236,6 +236,21 @@ describe('canonical core validation and legacy adaptation', () => {
     expect(buildGeneration({
       products: [makeProduct({ observedAt: '2026-08-14T09:30:00.123456789+10:00' })],
     }).core.products[0].evidence.observed_at).toBe('2026-08-14T09:30:00.123456789+10:00');
+    expect(compareRfc3339Instants(
+      '2026-08-14T09:30:00.1+10:00',
+      '2026-08-13T23:30:00.100000000Z',
+    )).toBe(0);
+
+    const futureEffective = makeProduct({ observedAt: '2026-08-14T09:30:00.000000001Z' });
+    futureEffective.evidence.effective_date = '2026-08-14T09:30:00.000000002Z';
+    futureEffective.evidence_refs[0].effective_date = futureEffective.evidence.effective_date;
+    expect(() => buildGeneration({ products: [futureEffective] })).toThrow(/cannot precede effective_date/);
+
+    const active = makeProduct({ observedAt: '2026-08-14T09:30:00.000000001Z' });
+    active.evidence.effective_to = '2026-08-14T09:30:00.000000002Z';
+    active.evidence_refs[0].effective_to = active.evidence.effective_to;
+    expect(buildGeneration({ products: [active] }).core.products[0].evidence.effective_to)
+      .toBe('2026-08-14T09:30:00.000000002Z');
   });
 
   test('compares tier and fee decimal bounds without IEEE-754 rounding', () => {
@@ -276,14 +291,14 @@ describe('canonical core validation and legacy adaptation', () => {
     expect(() => buildGeneration({ products: [product] })).toThrow(/minimum_amount cannot exceed maximum_amount/);
   });
 
-  test('binds canonical fee applicability semantics to the published condition', () => {
+  test('uses authenticated fee semantics as the sole app applicability authority', () => {
     const product = makeProduct();
     const semanticFee: CanonicalFeeV3['semantic_fee'] = {
       name: 'Package fee',
       fee_type: 'PERIODIC',
       method: 'FIXED',
       cadence: 'P1M',
-      additional_info: 'only when strasse package applies',
+      additional_info: 'canonical package condition',
     };
     product.fees = [{
       fee_uid: canonicalFeeUid(product.identity.product_uid, semanticFee),
@@ -295,14 +310,18 @@ describe('canonical core validation and legacy adaptation', () => {
       minimum_amount: null,
       maximum_amount: null,
       rate: null,
-      condition: '  ONLY when Stra\u00dfe   package applies ',
+      condition: '\u13a0\u0345 raw producer condition',
       evidence_ids: product.evidence.evidence_ids,
     }];
-    expect(buildGeneration({ products: [product] }).core.products[0].fees).toHaveLength(1);
+    const validated = buildGeneration({ products: [product] }).core.products[0].fees[0];
+    expect(validated.condition).toBe('canonical package condition');
+    expect(validated.fee_uid).toBe(product.fees[0].fee_uid);
 
     const detached = clone(product);
     detached.fees[0].condition = 'A different condition';
-    expect(() => buildGeneration({ products: [detached] })).toThrow(/condition disagrees/);
+    const revalidated = buildGeneration({ products: [detached] }).core.products[0].fees[0];
+    expect(revalidated.condition).toBe('canonical package condition');
+    expect(revalidated.fee_uid).toBe(validated.fee_uid);
   });
 
   test('preserves alert eligibility and withholds integer exact identities for ambiguous duplicate tiers', () => {

@@ -80,19 +80,43 @@ export function sha1Commit(value: unknown, path: string): string {
 }
 
 export function dateValue(value: unknown, path: string): string {
-  if (typeof value !== 'string' || !YMD.test(value)) reject(`${path} must be YYYY-MM-DD`);
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (!Number.isFinite(parsed.valueOf()) || parsed.toISOString().slice(0, 10) !== value) {
+  if (typeof value !== 'string') reject(`${path} must be YYYY-MM-DD`);
+  const match = YMD.exec(value);
+  if (!match) reject(`${path} must be YYYY-MM-DD`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]) {
     reject(`${path} is not a calendar date`);
   }
   return value;
 }
 
-export function instant(value: unknown, path: string): string {
+interface InstantCoordinate {
+  utcSeconds: number;
+  fractionNanos: string;
+}
+
+function daysFromCivil(year: number, month: number, day: number): number {
+  const adjustedYear = year - (month <= 2 ? 1 : 0);
+  const era = Math.floor(adjustedYear / 400);
+  const yearOfEra = adjustedYear - era * 400;
+  const shiftedMonth = month + (month > 2 ? -3 : 9);
+  const dayOfYear = Math.floor((153 * shiftedMonth + 2) / 5) + day - 1;
+  const dayOfEra = yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  return era * 146097 + dayOfEra - 719468;
+}
+
+function instantCoordinate(value: unknown, path: string): InstantCoordinate {
   if (typeof value !== 'string') reject(`${path} must be an RFC3339 date-time`);
   const match = RFC3339.exec(value);
   if (!match) reject(`${path} must be an RFC3339 date-time`);
   dateValue(`${match[1]}-${match[2]}-${match[3]}`, `${path} date`);
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
   const hour = Number(match[4]);
   const minute = Number(match[5]);
   const second = Number(match[6]);
@@ -103,12 +127,34 @@ export function instant(value: unknown, path: string): string {
     minute > 59 ||
     second > 59 ||
     offsetHour > 23 ||
-    offsetMinute > 59 ||
-    !Number.isFinite(Date.parse(value))
+    offsetMinute > 59
   ) {
     reject(`${path} must be an RFC3339 date-time`);
   }
-  return value;
+  const localSeconds =
+    daysFromCivil(year, month, day) * 86400 +
+    hour * 3600 +
+    minute * 60 +
+    second;
+  const offsetSeconds = (offsetHour * 60 + offsetMinute) * 60 * (match[9] === '-' ? -1 : 1);
+  return {
+    utcSeconds: localSeconds - offsetSeconds,
+    fractionNanos: (match[7] ?? '').padEnd(9, '0'),
+  };
+}
+
+export function instant(value: unknown, path: string): string {
+  instantCoordinate(value, path);
+  return value as string;
+}
+
+/** Compare strict RFC3339 instants at the producer's full nanosecond precision. */
+export function compareRfc3339Instants(left: string, right: string): -1 | 0 | 1 {
+  const a = instantCoordinate(left, 'left instant');
+  const b = instantCoordinate(right, 'right instant');
+  if (a.utcSeconds !== b.utcSeconds) return a.utcSeconds < b.utcSeconds ? -1 : 1;
+  if (a.fractionNanos === b.fractionNanos) return 0;
+  return a.fractionNanos < b.fractionNanos ? -1 : 1;
 }
 
 export function enumValue<T extends string>(value: unknown, allowed: readonly T[], path: string): T {

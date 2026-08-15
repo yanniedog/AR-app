@@ -195,12 +195,14 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
   const generationTmpPath = (digest: string) => `${generationPath(digest)}.tmp`;
 
   async function readHead(): Promise<GenerationCacheHead | null> {
-    return parseHead(await storage.read(headPath));
+    return parseHead(await storage.read(headPath)) ?? parseHead(await storage.read(headTmpPath));
   }
 
   async function readDigest(digest: string | null): Promise<CachedGenerationV3 | null> {
     if (!digest) return null;
-    const generation = await parseCandidate(await storage.read(generationPath(digest)));
+    const generation =
+      await parseCandidate(await storage.read(generationPath(digest))) ??
+      await parseCandidate(await storage.read(generationTmpPath(digest)));
     return generation?.manifest.generation_digest === digest ? generation : null;
   }
 
@@ -236,9 +238,12 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
         }
       }
 
-      const existing = await storage.read(recordPath);
-      if (existing) {
-        const parsed = await parseCandidate(existing);
+      const existingPrimary = await storage.read(recordPath);
+      const existingTemporary = await storage.read(recordTmpPath);
+      const parsed =
+        await parseCandidate(existingPrimary) ??
+        await parseCandidate(existingTemporary);
+      if (existingPrimary || existingTemporary) {
         if (
           (parsed && (
             parsed.manifestText !== verified.manifestText ||
@@ -252,8 +257,10 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
           throw new V3ContractError(`content-addressed cache collision for ${digest}`);
         }
       }
-      await storage.write(recordTmpPath, serializeCandidate(verified, savedAt));
-      await storage.move(recordTmpPath, recordPath);
+      if (!parsed) {
+        await storage.write(recordTmpPath, serializeCandidate(verified, savedAt));
+        await storage.move(recordTmpPath, recordPath);
+      }
 
       const nextHead: GenerationCacheHead = {
         schema_version: 1,
@@ -262,14 +269,17 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
           ? previousHead.current
           : previousHead?.previous ?? null,
       };
-      await storage.write(headTmpPath, JSON.stringify(nextHead));
-      await storage.move(headTmpPath, headPath);
+      if (!previousHead || !equivalent(previousHead, nextHead)) {
+        await storage.write(headTmpPath, JSON.stringify(nextHead));
+        await storage.move(headTmpPath, headPath);
+      }
 
       let cleanupError: string | null = null;
       const displaced = previousHead?.previous;
       if (displaced && displaced !== nextHead.current && displaced !== nextHead.previous) {
         try {
           await storage.remove(generationPath(displaced));
+          await storage.remove(generationTmpPath(displaced));
         } catch (error) {
           cleanupError = `cache cleanup failed: ${String((error as Error)?.message ?? error)}`;
         }
@@ -280,11 +290,9 @@ export function createV3GenerationCache(storage: GenerationCacheStorage, root = 
         persistenceError: cleanupError,
       };
     } catch (error) {
-      try {
-        await storage.remove(recordTmpPath);
-      } catch {
-        // Best-effort cleanup; committed records and head remain authoritative.
-      }
+      // Keep completed temporary records. Expo's legacy iOS move adapter can
+      // delete the destination before a crash; readers authenticate primary
+      // first and then the tmp so that crash window remains recoverable.
       if (error instanceof V3ContractError) throw error;
       return {
         generation: { ...verified, savedAt },

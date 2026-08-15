@@ -15,8 +15,10 @@ const LEDGER_C = 'c'.repeat(64);
 class MemoryStorage implements GenerationCacheStorage {
   readonly files = new Map<string, string>();
   readonly removed: string[] = [];
+  readonly movedTo: string[] = [];
   failWrites = false;
   failMoveTarget: string | null = null;
+  deleteThenFailMoveTarget: string | null = null;
   failRemoveTarget: string | null = null;
 
   async read(path: string) { return this.files.get(path) ?? null; }
@@ -34,8 +36,13 @@ class MemoryStorage implements GenerationCacheStorage {
     if (this.failMoveTarget === to) throw new Error('atomic replace failed');
     const value = this.files.get(from);
     if (value === undefined) throw new Error('source missing');
+    if (this.deleteThenFailMoveTarget === to) {
+      this.files.delete(to);
+      throw new Error('iOS move crashed after destination removal');
+    }
     this.files.set(to, value);
     this.files.delete(from);
+    this.movedTo.push(to);
   }
 }
 
@@ -249,20 +256,60 @@ describe('content-addressed v3 generation cache', () => {
     expect((await cache.readCurrent())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
   });
 
-  test('preserves an existing same-generation record when its atomic rewrite fails', async () => {
+  test('does not rewrite an already authenticated same-generation record', async () => {
     const storage = new MemoryStorage();
     const cache = createV3GenerationCache(storage);
     const generation = buildGeneration();
     await cache.install(generation);
     const path = generationRecordPath(generation.manifest.generation_digest);
     const original = storage.files.get(path);
+    const moveCount = storage.movedTo.filter((target) => target === path).length;
     storage.failMoveTarget = path;
 
     const result = await cache.install(generation);
 
-    expect(result.persisted).toBe(false);
+    expect(result.persisted).toBe(true);
     expect(storage.files.get(path)).toBe(original);
+    expect(storage.movedTo.filter((target) => target === path)).toHaveLength(moveCount);
     expect((await cache.readCurrent())?.manifest.generation_digest).toBe(generation.manifest.generation_digest);
+  });
+
+  test('recovers the authenticated temporary head after an iOS delete-then-crash replacement', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const first = buildGeneration();
+    const second = secondGeneration();
+    await cache.install(first);
+    storage.deleteThenFailMoveTarget = 'payload/v3/head.json';
+
+    const result = await cache.install(second);
+
+    expect(result.persisted).toBe(false);
+    expect(result.persistenceError).toContain('iOS move crashed after destination removal');
+    expect(storage.files.has('payload/v3/head.json')).toBe(false);
+    expect(storage.files.has('payload/v3/head.json.tmp')).toBe(true);
+    const restarted = createV3GenerationCache(storage);
+    expect((await restarted.readCurrent())?.manifest.generation_digest).toBe(second.manifest.generation_digest);
+    expect((await restarted.readPrevious())?.manifest.generation_digest).toBe(first.manifest.generation_digest);
+  });
+
+  test('recovers an authenticated temporary generation after an iOS delete-then-crash repair', async () => {
+    const storage = new MemoryStorage();
+    const cache = createV3GenerationCache(storage);
+    const generation = buildGeneration();
+    await cache.install(generation);
+    const path = generationRecordPath(generation.manifest.generation_digest);
+    storage.files.set(path, '{invalid-primary');
+    storage.deleteThenFailMoveTarget = path;
+
+    const result = await cache.install(generation);
+
+    expect(result.persisted).toBe(false);
+    expect(result.persistenceError).toContain('iOS move crashed after destination removal');
+    expect(storage.files.has(path)).toBe(false);
+    expect(storage.files.has(`${path}.tmp`)).toBe(true);
+    expect((await createV3GenerationCache(storage).readCurrent())?.manifest.generation_digest)
+      .toBe(generation.manifest.generation_digest);
   });
 
   test('rejects an invalid pre-existing non-current record as a content-address collision', async () => {

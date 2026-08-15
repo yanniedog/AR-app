@@ -556,10 +556,23 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       if (force) set({ bankSpreadHistoryError: null });
       const coreSha = manifest.files.core.sha256;
       const meta = await cache.readOptionalMeta();
-      const fresh = (payload: ReturnType<StoreGet>['bankSpreadHistory']) => Boolean(
-        payload && payload.run_date === core.run_date && meta?.coreSha === coreSha &&
-        meta.bankSpreadHistorySha === asset.sha256,
+      const matchesGeneration = (
+        payload: ReturnType<StoreGet>['bankSpreadHistory'],
+        candidateMeta: Awaited<ReturnType<typeof cache.readOptionalMeta>>,
+        expectedRunDate: string | undefined,
+        expectedCoreSha: string | undefined,
+        expectedSpreadSha: string | undefined,
+      ) => Boolean(
+        payload &&
+        expectedRunDate &&
+        expectedCoreSha &&
+        expectedSpreadSha &&
+        payload.run_date === expectedRunDate &&
+        candidateMeta?.coreSha === expectedCoreSha &&
+        candidateMeta.bankSpreadHistorySha === expectedSpreadSha
       );
+      const fresh = (payload: ReturnType<StoreGet>['bankSpreadHistory']) =>
+        matchesGeneration(payload, meta, core.run_date, coreSha, asset.sha256);
       if (!force && fresh(bankSpreadHistory)) return;
       const cached = force ? null : normalizeBankSpreadHistoryPayload(await cache.readBankSpreadHistory());
       if (!force && fresh(cached)) {
@@ -569,13 +582,41 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       try {
         const { bankSpreadHistory: downloaded } = await downloadBankSpreadHistory(asset.url, asset.sha256);
         const live = get();
-        if (live.manifest?.files.bank_spread_history?.sha256 !== asset.sha256 || live.core?.run_date !== downloaded.run_date) return;
+        if (
+          live.manifest?.files.core.sha256 !== coreSha ||
+          live.manifest?.files.bank_spread_history?.sha256 !== asset.sha256 ||
+          live.core?.run_date !== downloaded.run_date
+        ) return;
         await cache.writeBankSpreadHistory(JSON.stringify(downloaded));
         await cache.writeOptionalMeta({ coreSha, bankSpreadHistorySha: asset.sha256 });
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
         const message = String((error as Error)?.message ?? error);
-        set({ bankSpreadHistory: cached ?? bankSpreadHistory ?? null, bankSpreadHistoryError: message });
+        const latestMeta = await cache.readOptionalMeta().catch(() => null);
+        const live = get();
+        const liveCoreSha = live.manifest?.files.core.sha256;
+        const liveSpreadSha = live.manifest?.files.bank_spread_history?.sha256;
+        const liveSpread = live.bankSpreadHistory;
+        const concurrentLive = liveSpread !== bankSpreadHistory && matchesGeneration(
+          liveSpread,
+          latestMeta,
+          live.core?.run_date,
+          liveCoreSha,
+          liveSpreadSha,
+        );
+        if (concurrentLive) return;
+        const sameGeneration =
+          live.core?.run_date === core.run_date &&
+          liveCoreSha === coreSha &&
+          liveSpreadSha === asset.sha256;
+        const originalFallback = sameGeneration
+          ? fresh(bankSpreadHistory)
+            ? bankSpreadHistory
+            : fresh(cached)
+              ? cached
+              : null
+          : null;
+        set({ bankSpreadHistory: originalFallback, bankSpreadHistoryError: message });
       }
     },
 

@@ -372,20 +372,6 @@ function semanticFee(value: unknown, path: string): CanonicalFeeV3['semantic_fee
   };
 }
 
-function producerSemanticText(value: string | null): string | null {
-  if (value === null) return null;
-  const normalized = value
-    .trim()
-    .normalize('NFKC')
-    .replace(/\s+/gu, ' ')
-    .toLowerCase()
-    // Unicode full case-folding differs from lowercase for these common
-    // characters. NFKC handles the compatibility-only mappings first.
-    .replace(/\u00df/gu, 'ss')
-    .replace(/\u03c2/gu, '\u03c3');
-  return normalized || null;
-}
-
 function nullableMoney(value: unknown, path: string): string | null {
   return value === null ? null : decimalString(value, path, true);
 }
@@ -411,10 +397,12 @@ export function validateCanonicalFee(
     'evidence_ids',
   ], [], path);
   const semantics = deepFreeze(semanticFee(obj.semantic_fee, `${path}.semantic_fee`));
-  const condition = nullableText(obj.condition, `${path}.condition`);
-  if (semantics.additional_info !== producerSemanticText(condition)) {
-    reject(`${path}.condition disagrees with canonical applicability semantics`);
-  }
+  // The producer is the sole Unicode NFKC+casefold authority. The raw CDR
+  // condition is still type-checked, but only authenticated semantic identity
+  // material can reach app behavior; duplicating Python's Unicode tables in JS
+  // would create a second, drifting fee-applicability authority.
+  nullableText(obj.condition, `${path}.condition`);
+  const condition = semantics.additional_info;
   const feeUid = digestId(obj.fee_uid, `${path}.fee_uid`, 'fee');
   if (feeUid !== canonicalFeeUid(productUid, semantics)) reject(`${path}.fee_uid does not match its canonical derivation`);
   const fixedAmount = nullableMoney(obj.fixed_amount, `${path}.fixed_amount`);

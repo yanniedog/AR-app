@@ -364,7 +364,9 @@ export default function ProductDetail() {
       </>
     );
   }
-  const favorite = isSavedRate(savedRates, productKey, row.rate_index ?? null);
+  const exactSaveEligible = row.exact_alert_eligible !== false && Number.isInteger(row.rate_index);
+  const saveScope = exactSaveEligible ? 'rate' : 'product';
+  const favorite = isSavedRate(savedRates, productKey, exactSaveEligible ? row.rate_index! : null);
   const productWideSaved = savedRates.some(
     (ref) => ref.scope === 'product' && ref.productKey === productKey,
   );
@@ -442,8 +444,10 @@ export default function ProductDetail() {
               <IconButton
                 icon={favorite ? 'star' : 'star-outline'}
                 color={favorite ? 'warning' : 'text'}
-                onPress={() => toggleSavedRate(row)}
-                accessibilityLabel={favorite ? 'Remove this rate from My rates' : 'Save this exact rate to My rates'}
+                onPress={() => toggleSavedRate(row, saveScope)}
+                accessibilityLabel={favorite
+                  ? exactSaveEligible ? 'Remove this rate from My rates' : 'Remove this product from My rates'
+                  : exactSaveEligible ? 'Save this exact rate to My rates' : 'Save all product variants to My rates'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
               <NavigationMenuButton />
@@ -591,10 +595,12 @@ export default function ProductDetail() {
         <ProductSpecs row={row} section={section} detail={detail} />
 
         <Button
-          title={favorite ? 'Saved to My rates' : 'Save exact rate to My rates'}
+          title={favorite
+            ? 'Saved to My rates'
+            : exactSaveEligible ? 'Save exact rate to My rates' : 'Save product to My rates'}
           icon={favorite ? 'star' : 'star-outline'}
           style={{ marginBottom: 10 }}
-          onPress={() => toggleSavedRate(row)}
+          onPress={() => toggleSavedRate(row, saveScope)}
         />
         <Button
           title="Prepare a bank call"
