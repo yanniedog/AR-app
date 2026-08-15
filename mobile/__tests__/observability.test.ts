@@ -33,17 +33,33 @@ describe('observability', () => {
   });
 
   it('blocks replay on financial-input, profile, settings, and authentication routes', () => {
-    expect(isSessionReplayRouteAllowed('/calculator')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/projections')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/profile/edit')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/settings')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/auth/login')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/rate-receipt')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/debug-log')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/performance-audit')).toBe(false);
-    expect(isSessionReplayRouteAllowed('/product/abc')).toBe(true);
-    expect(isSessionReplayRouteAllowed('/future-sensitive-screen')).toBe(false);
+    for (const route of [
+      '/calculator',
+      '/projections',
+      '/profile/edit',
+      '/settings',
+      '/auth/login',
+      '/',
+      '/rate-receipt',
+      '/debug-log',
+      '/performance-audit',
+      '/product/abc',
+      '/browse',
+      '/passthrough',
+      '/watchlist',
+      '/compare',
+      '/search',
+      '/future-sensitive-screen',
+    ]) {
+      expect(isSessionReplayRouteAllowed(route)).toBe(false);
+    }
+  });
+
+  it('allows replay only on explicitly public market-information routes', () => {
+    expect(isSessionReplayRouteAllowed('/trends')).toBe(true);
+    expect(isSessionReplayRouteAllowed('/banks')).toBe(true);
+    expect(isSessionReplayRouteAllowed('/bank/example-bank')).toBe(true);
+    expect(isSessionReplayRouteAllowed('/terms')).toBe(true);
   });
   const originalDev = (global as { __DEV__?: boolean }).__DEV__;
   const originalClarityId = process.env.EXPO_PUBLIC_CLARITY_PROJECT_ID;

@@ -80,12 +80,9 @@ export function isDiagnosticsEnabled(): boolean {
 }
 
 const ALLOWED_REPLAY_ROUTES = [
-  '/browse',
   '/trends',
-  '/passthrough',
   '/banks',
   '/bank',
-  '/product',
   '/terms',
 ];
 
