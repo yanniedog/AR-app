@@ -119,6 +119,11 @@ function cleanAmount(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= 0 && parsed <= MAX_AMOUNT ? parsed : null;
 }
 
+function hasConditionalApplicability(item: DetailItem): boolean {
+  const text = `${item.name ?? ''} ${item.info ?? ''}`;
+  return /\b(?:if|when|where|for|unless|provided|eligible|subject to|depending on|up to)\b/i.test(text);
+}
+
 function publishedAmount(item: DetailItem): number | null {
   const amountStatus = item.amountStatus?.trim().toLowerCase();
   if ((amountStatus && amountStatus !== 'fixed')
@@ -132,8 +137,8 @@ function publishedAmount(item: DetailItem): number | null {
   if (!Number.isFinite(amount) || amount < 0 || amount > MAX_AMOUNT) return null;
   const text = `${item.name ?? ''} ${item.info ?? ''}`;
   const feeFree = /\b(?:waived|no fee|fee[- ]free|nil)\b/i.test(text);
-  const conditional = /\b(?:if|when|where|for|unless|provided|eligible|subject to)\b/i.test(text);
-  if (feeFree && !conditional) return 0;
+  if (hasConditionalApplicability(item)) return null;
+  if (feeFree) return 0;
   return amount;
 }
 
@@ -159,6 +164,7 @@ function periodicFeeAmount(item: DetailItem): number | null {
   if (amountStatus && amountStatus !== 'fixed') return null;
   const fixed = publishedAmount(item);
   if (fixed != null) return fixed;
+  if (hasConditionalApplicability(item)) return null;
   if (item.amountStatus?.trim().toLowerCase() === 'variable'
     || /(?:variable|rate.?based)/i.test(item.feeMethodUType ?? '')) {
     return null;

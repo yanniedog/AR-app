@@ -42,7 +42,7 @@ function scenarioWithKnownUpfrontFees() {
 }
 
 describe('published switch fee extraction', () => {
-  it('uses numeric CDR exit and upfront evidence while leaving unpriced rows out', () => {
+  it('uses unconditional numeric CDR evidence while leaving conditional and unpriced rows out', () => {
     const current: ProductDetail = { fees: [
       { label: 'EXIT', name: 'Discharge administration fee', value: '350.00' },
       { label: 'EVENT', name: 'Break cost', info: 'Amount provided on request' },
@@ -57,7 +57,6 @@ describe('published switch fee extraction', () => {
       expect.objectContaining({ key: 'currentBankExitFees', amount: 350 }),
       expect.objectContaining({ key: 'applicationFees', amount: 600 }),
       expect.objectContaining({ key: 'applicationFees', amount: 0 }),
-      expect.objectContaining({ key: 'otherUpfrontFees', amount: 395 }),
     ]);
   });
 
@@ -329,14 +328,44 @@ describe('stay versus switch projection', () => {
     ['a missing upfront amount', {}, {}],
     ['a variable upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Variable valuation fee', amountStatus: 'variable' }] }],
     ['an unpriced periodic fee', {}, { fees: [{ label: 'PERIODIC', name: 'Package fee', amountStatus: 'variable' }] }],
+    ['a conditional fixed upfront fee', {}, { fees: [{ label: 'UPFRONT', name: 'Application fee', amountStatus: 'fixed', amount: '395', info: 'Payable if the loan settles within 30 days' }] }],
+    ['a conditional fixed periodic fee', {}, { fees: [{ label: 'PERIODIC', name: 'Offset package fee', amountStatus: 'fixed', amount: '10', info: 'per month if offset is enabled' }] }],
   ])('withholds net claims for %s', (_label, currentDetail, targetDetail) => {
     const value = scenarioWithKnownUpfrontFees();
-    if (_label !== 'an unpriced periodic fee') value.mortgageSwitch.valuationFees = '';
+    if (_label === 'a missing upfront amount' || _label === 'a variable upfront fee') {
+      value.mortgageSwitch.valuationFees = '';
+    }
+    if (_label === 'a conditional fixed upfront fee') value.mortgageSwitch.applicationFees = '';
     const result = buildStaySwitchProjection({ scenario: value, target: TARGET, currentDetail, targetDetail, now: NOW });
     expect(result.fees.costClaimsAvailable).toBe(false);
     expect(result.fees.unknownFeeReasons.length).toBeGreaterThan(0);
     expect(result.totalCostSaving).toBeNull();
     expect(result.breakEvenDate).toBeNull();
+  });
+
+  it('lets an entered category amount replace conditional upfront evidence', () => {
+    const value = scenarioWithKnownUpfrontFees();
+    value.mortgageSwitch.applicationFees = '395';
+    const result = buildStaySwitchProjection({
+      scenario: value,
+      target: TARGET,
+      currentDetail: {},
+      targetDetail: {
+        fees: [{
+          label: 'UPFRONT',
+          name: 'Application fee',
+          amountStatus: 'fixed',
+          amount: '395',
+          info: 'Payable if the loan settles within 30 days',
+        }],
+      },
+      now: NOW,
+    });
+    expect(result.fees.costClaimsAvailable).toBe(true);
+    expect(result.fees.fees.find((fee) => fee.key === 'applicationFees')).toMatchObject({
+      amount: 395,
+      source: 'entered',
+    });
   });
 
   it('lets an explicit current exit amount resolve an unpriced break cost', () => {
