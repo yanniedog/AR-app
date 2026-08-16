@@ -138,6 +138,9 @@ describe('deidentified diagnostics privacy boundary', () => {
     const screen = read('app/performance-audit.tsx');
     const debugScreen = read('app/debug-log.tsx');
     const layout = read('app/_layout.tsx');
+    const settings = read('app/(tabs)/settings.tsx');
+    const observability = read('src/lib/observability.ts');
+    const store = read('src/data/store.ts');
 
     expect(runner).not.toContain('uploadDebugLog');
     expect(runner).not.toContain('reportPerformanceAudit');
@@ -154,5 +157,11 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(debugScreen).not.toContain('setStringAsync(result.url)');
     expect(layout).toContain('routeClass=');
     expect(layout).not.toContain('tap route ${String(href)}');
+    expect(settings).toContain('setCrashReportsEnabled(value)');
+    expect(settings).toContain('Crash reports unchanged');
+    expect(observability).toContain('isCrashlyticsCollectionEnabled');
+    expect(observability).toContain('consent was not confirmed');
+    expect(store).toContain('A native consent-state failure must not');
+    expect(store).toContain('background crash-reporting confirmation failed');
   });
 });

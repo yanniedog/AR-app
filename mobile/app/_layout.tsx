@@ -8,6 +8,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
+  Alert,
   AppState,
   Platform,
   StyleSheet,
@@ -271,7 +272,12 @@ function RootNavigator() {
 
   useLayoutEffect(() => {
     if (!hydrated) return;
-    void setCrashReportsEnabled(privacyChoiceCurrent && crashReportsEnabled);
+    void setCrashReportsEnabled(privacyChoiceCurrent && crashReportsEnabled).catch((error) => {
+      debugLog.warn(
+        'privacy',
+        `crash-reporting consent confirmation failed: ${String((error as Error)?.message ?? error)}`,
+      );
+    });
     // Session replay is fail-closed: route changes cannot race an asynchronous
     // SDK pause because the app never enables collection.
     void setSessionReplayEnabled(false);
@@ -286,9 +292,18 @@ function RootNavigator() {
 
   const confirmDiagnosticsChoice = useCallback(
     (crashReports: boolean) => {
-      setPref('crashReportsEnabled', crashReports);
-      setPref('sessionReplayEnabled', false);
-      setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
+      void setCrashReportsEnabled(crashReports)
+        .then(() => {
+          setPref('crashReportsEnabled', crashReports);
+          setPref('sessionReplayEnabled', false);
+          setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
+        })
+        .catch(() => {
+          Alert.alert(
+            'Privacy choice not saved',
+            'The native crash-reporting state could not be confirmed. Nothing changed; try again.',
+          );
+        });
     },
     [setPref],
   );

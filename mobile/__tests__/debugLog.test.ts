@@ -48,7 +48,10 @@ import {
 const crashlyticsApi: CrashlyticsLike = {
   log: jest.fn(),
   recordError: jest.fn(),
-  setCrashlyticsCollectionEnabled: jest.fn(async () => {}),
+  isCrashlyticsCollectionEnabled: false,
+  setCrashlyticsCollectionEnabled: jest.fn(async (enabled: boolean) => {
+    crashlyticsApi.isCrashlyticsCollectionEnabled = enabled;
+  }),
 };
 
 describe('redactSecrets', () => {

@@ -184,7 +184,14 @@ try {
         await setCrashReportsEnabled(
           prefs.privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION &&
             prefs.crashReportsEnabled,
-        );
+        ).catch((error) => {
+          // Diagnostics are optional. A native consent-state failure must not
+          // prevent the scheduled rates refresh from running.
+          debugLog.warn(
+            'privacy',
+            `background crash-reporting confirmation failed: ${String((error as Error)?.message ?? error)}`,
+          );
+        });
         debugLog.info('background-maintenance', 'scheduled refresh started');
         await useStore.getState().ensureCoreLoaded();
         useStore.setState({ refreshOutcome: null });

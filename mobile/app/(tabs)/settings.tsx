@@ -41,6 +41,7 @@ import type { Subscription } from '../../src/data/subscriptions';
 import type { ThemeMode } from '../../src/theme/theme';
 import { dataSourceLabel } from '../../src/lib/nextIngest';
 import { restorePerformanceAuditPreferences } from '../../src/lib/performanceAudit';
+import { setCrashReportsEnabled } from '../../src/lib/observability';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -594,8 +595,17 @@ export default function Settings() {
             sub="Send crash traces and fixed error categories; never debug logs, audit reports, financial inputs, saved products, searches or notification content"
             value={prefs.crashReportsEnabled}
             onChange={(value) => {
-              setPref('crashReportsEnabled', value);
-              setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
+              void setCrashReportsEnabled(value)
+                .then(() => {
+                  setPref('crashReportsEnabled', value);
+                  setPref('privacyChoiceVersion', CURRENT_PRIVACY_CHOICE_VERSION);
+                })
+                .catch(() => {
+                  Alert.alert(
+                    'Crash reports unchanged',
+                    'The native reporting state could not be confirmed. Try again.',
+                  );
+                });
             }}
           />
           <SettingsGap size={8} />

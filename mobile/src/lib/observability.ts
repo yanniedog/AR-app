@@ -8,6 +8,7 @@ export type CrashlyticsLike = {
   log: (message: string) => void;
   recordError: (error: Error, name?: string) => void;
   setCrashlyticsCollectionEnabled: (enabled: boolean) => Promise<void> | void;
+  isCrashlyticsCollectionEnabled: boolean;
 };
 
 type ObservabilityDeps = {
@@ -51,13 +52,22 @@ export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
 }
 
 export async function setCrashReportsEnabled(enabled: boolean): Promise<void> {
-  crashReportsEnabled = enabled;
   const native = getDeps();
-  if (!native) return;
+  if (!native) {
+    crashReportsEnabled = false;
+    if (enabled) throw new Error('Crash reporting is unavailable on this device.');
+    return;
+  }
+  const crashlytics = native.crashlytics();
   try {
-    await native.crashlytics().setCrashlyticsCollectionEnabled(enabled);
-  } catch {
-    // Expo Go / tests without native modules
+    await crashlytics.setCrashlyticsCollectionEnabled(enabled);
+  } catch (error) {
+    crashReportsEnabled = crashlytics.isCrashlyticsCollectionEnabled;
+    throw error;
+  }
+  crashReportsEnabled = crashlytics.isCrashlyticsCollectionEnabled;
+  if (crashReportsEnabled !== enabled) {
+    throw new Error('Crash-reporting consent was not confirmed by the native service.');
   }
 }
 
@@ -72,14 +82,7 @@ export function setSessionReplayEnabled(_enabled: boolean): Promise<void> {
 
 /** Initialize the consent-gated Crashlytics collection state. */
 export async function initObservability(): Promise<void> {
-  const native = getDeps();
-  if (!native) return;
-
-  try {
-    await native.crashlytics().setCrashlyticsCollectionEnabled(crashReportsEnabled);
-  } catch {
-    // non-fatal
-  }
+  await setCrashReportsEnabled(crashReportsEnabled);
 }
 
 const CRASHLYTICS_ERROR_CATEGORIES: Readonly<Record<string, string>> = {
