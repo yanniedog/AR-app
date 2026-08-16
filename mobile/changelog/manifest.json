@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T13:55:00.460Z",
+  "generated_at": "2026-08-16T01:06:50.828Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -834,6 +834,14 @@
         "Make financial comparisons evidence-complete (#211)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.169"
+    },
+    {
+      "version": "1.0.171",
+      "date": "2026-08-16",
+      "summaryBullets": [
+        "Make quick calculator claims evidence-bound (#213)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.171"
     }
   ]
 }
