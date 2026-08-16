@@ -1,3 +1,6 @@
+import { rateConditionality } from '../lib/rateQualifier';
+import type { RateRow, SectionKey } from '../types';
+
 /**
  * Mortgage calculator inputs — persisted on the user profile so the calculator
  * remembers the user's situation across sessions, and a real LVR can be computed
@@ -32,6 +35,63 @@ export const EMPTY_CALC: CalcInputs = {
   savingsBalance: '',
 };
 
+export const MAX_CALCULATOR_MORTGAGE_AMOUNT = 100_000_000;
+export const MAX_CALCULATOR_DEPOSIT_AMOUNT = 20_000_000;
+export const MAX_CALCULATOR_RATE_PERCENT = 100;
+export const MAX_CALCULATOR_YEARS = 50;
+
+/** Parse a user-entered dollar amount without silently stripping signs or letters. */
+export function calculatorAmount(value: string, maximum: number): number | null {
+  const raw = String(value ?? '').trim();
+  if (!raw || !Number.isFinite(maximum) || maximum <= 0) return null;
+  if (!/^\$?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{1,2})?$/.test(raw)) return null;
+  const parsed = Number(raw.replace(/[$,\s]/g, ''));
+  return Number.isFinite(parsed) && parsed >= 0 && parsed <= maximum ? parsed : null;
+}
+
+/** Calculator fields are labelled as percentages and accept only 0 < rate <= 100. */
+export function calculatorRateFraction(value: string): number | null {
+  const raw = String(value ?? '').trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)\s*%?$/.test(raw)) return null;
+  const percentage = Number(raw.replace(/\s*%$/, ''));
+  return Number.isFinite(percentage) && percentage > 0 && percentage <= MAX_CALCULATOR_RATE_PERCENT
+    ? percentage / 100
+    : null;
+}
+
+/** A mortgage repayment illustration requires an explicitly entered bounded term. */
+export function calculatorYears(value: string): number | null {
+  const raw = String(value ?? '').trim();
+  if (!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(raw)) return null;
+  const years = Number(raw);
+  return Number.isFinite(years) && years > 0 && years <= MAX_CALCULATOR_YEARS
+    && Math.round(years * 12) > 0
+    ? years
+    : null;
+}
+
+export function isPublishedFixedRate(input: Pick<RateRow, 'rate_type' | 'ribbon_rate_structure'>): boolean {
+  return input.ribbon_rate_structure?.trim().toLowerCase() === 'fixed'
+    || input.rate_type?.toUpperCase().includes('FIXED') === true;
+}
+
+/** Explain why a quick deposit dollar estimate cannot be supported by the observed row. */
+export function quickEstimateUnavailableReason(row: RateRow, section: SectionKey): string | null {
+  if (section === 'Mortgage') return null;
+  const conditionality = rateConditionality(row, section);
+  if (row.account_class?.trim().toLowerCase() !== 'standard'
+    || row.exact_alert_eligible === false
+    || conditionality === 'bonus'
+    || conditionality === 'intro'
+    || (section === 'Savings' && conditionality !== 'base')) {
+    return 'Eligibility or rate conditions must be confirmed before estimating dollars.';
+  }
+  if (section === 'TD' && advertisedTermMonths(row) == null) {
+    return 'The maturity term is not published, so no dollar estimate is available.';
+  }
+  return null;
+}
+
 export function normalizeCalcInputs(value?: Partial<CalcInputs> | null): CalcInputs {
   const str = (v: unknown): string => (typeof v === 'string' ? v : '');
   const mode: CalcMode = value?.mode === 'refi' ? 'refi' : 'buy';
@@ -63,14 +123,20 @@ export interface LvrResult {
 
 /** Compute loan + LVR from the inputs for the active mode. */
 export function computeLvr(inputs: CalcInputs): LvrResult {
-  const value = num(inputs.propertyValue);
+  const value = calculatorAmount(inputs.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT);
+  if (value == null || value <= 0) return { loan: null, lvr: null, depositApplied: 0 };
   if (inputs.mode === 'refi') {
-    const loan = num(inputs.loanBalance);
-    const lvr = value > 0 && loan > 0 ? (loan / value) * 100 : null;
-    return { loan: loan > 0 ? loan : null, lvr, depositApplied: 0 };
+    const loan = calculatorAmount(inputs.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT);
+    const lvr = loan != null && loan > 0 ? (loan / value) * 100 : null;
+    return { loan: loan != null && loan > 0 ? loan : null, lvr, depositApplied: 0 };
   }
-  const deposit = num(inputs.deposit);
-  const costs = num(inputs.costs);
+  const deposit = inputs.deposit.trim()
+    ? calculatorAmount(inputs.deposit, MAX_CALCULATOR_MORTGAGE_AMOUNT)
+    : 0;
+  const costs = inputs.costs.trim()
+    ? calculatorAmount(inputs.costs, MAX_CALCULATOR_MORTGAGE_AMOUNT)
+    : 0;
+  if (deposit == null || costs == null) return { loan: null, lvr: null, depositApplied: 0 };
   const depositApplied = Math.max(0, deposit - costs);
   const loan = value > 0 ? Math.max(0, value - depositApplied) : 0;
   const lvr = value > 0 && loan > 0 ? (loan / value) * 100 : null;

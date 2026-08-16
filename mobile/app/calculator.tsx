@@ -18,15 +18,20 @@ import { SECTIONS } from '../src/constants';
 import { assessAccess } from '../src/data/access';
 import {
   advertisedTermMonths,
+  calculatorAmount,
+  calculatorRateFraction,
+  calculatorYears,
   computeLvr,
   depositToReachLvr,
-  fixedRateProjectionMonths,
-  num,
+  isPublishedFixedRate,
+  MAX_CALCULATOR_DEPOSIT_AMOUNT,
+  MAX_CALCULATOR_MORTGAGE_AMOUNT,
+  MAX_CALCULATOR_YEARS,
+  quickEstimateUnavailableReason,
   termDepositInterestDifference,
   type CalcInputs,
 } from '../src/data/calc';
 import { formatRate, humanizeEnum, toFraction, visibleAccountRows } from '../src/data/format';
-import { MAX_PROJECTION_YEARS } from '../src/data/projections';
 import type { CurrentProductReference, MortgageSwitchInputs } from '../src/data/userRateScenario';
 import { sectionSegmentOptions } from '../src/data/interests';
 import { bestRateForProduct, summarizeProductBestRate } from '../src/data/productHistory';
@@ -61,9 +66,10 @@ interface Candidate {
   row: RateRow;
   rate: number; // configured ranking metric shown for transparency
   projectionRate: number; // contractual/headline rate used for arithmetic
-  perMonth: number; // mortgage: repayment saved per month; deposits: extra interest per month
-  total: number; // mortgage: saved over remaining term; deposits: extra interest per year
+  perMonth: number | null; // mortgage: initial repayment difference per month
+  total: number | null; // deposits: simple annual or published-maturity difference
   totalLabel: string;
+  unavailableReason: string | null;
 }
 
 export default function Calculator() {
@@ -211,8 +217,8 @@ export default function Calculator() {
   const nextBandHint = useMemo(() => {
     if (!isMortgage || inputs.mode !== 'buy' || !lvrBand) return null;
     const band = parseLvrTier(lvrBand);
-    const propertyValue = num(inputs.propertyValue);
-    if (!band || band.lo <= 0 || propertyValue <= 0) return null;
+    const propertyValue = calculatorAmount(inputs.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT);
+    if (!band || band.lo <= 0 || propertyValue == null || propertyValue <= 0) return null;
     const extra = depositToReachLvr(propertyValue, lvrResult.depositApplied, band.lo);
     if (extra <= 0) return null;
     return { extra, targetPct: band.lo };
@@ -220,21 +226,45 @@ export default function Calculator() {
 
   // Loan amount that drives the savings comparison.
   const depositInputs = section === 'TD' ? scenario.termDeposit : scenario.savings;
-  const balance = isMortgage ? lvrResult.loan ?? 0 : num(depositInputs.balance);
-
-  const currentRate = (() => {
-    const rawRate = isMortgage ? inputs.currentRate : depositInputs.currentRate;
-    const pct = Number((rawRate || '').trim().replace(/%$/, ''));
-    if (isFinite(pct) && pct > 0) return pct / 100;
-    return null;
-  })();
-  const enteredYears = num(inputs.years) || 25;
-  const years = Math.min(MAX_PROJECTION_YEARS, Math.max(1, enteredYears));
-  const yearsClamped = enteredYears > MAX_PROJECTION_YEARS;
-  const months = Math.round(years * 12);
+  const depositBalance = calculatorAmount(depositInputs.balance, MAX_CALCULATOR_DEPOSIT_AMOUNT);
+  const balance = isMortgage ? lvrResult.loan ?? 0 : depositBalance ?? 0;
+  const currentRateInput = isMortgage ? inputs.currentRate : depositInputs.currentRate;
+  const currentRate = calculatorRateFraction(currentRateInput);
+  const years = calculatorYears(inputs.years);
+  const months = years == null ? 0 : Math.round(years * 12);
+  const inputIssues: string[] = [];
+  if (isMortgage) {
+    if (!inputs.propertyValue.trim()) inputIssues.push('Enter a property value.');
+    else if (calculatorAmount(inputs.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
+      inputIssues.push('Property value must be a valid amount up to $100 million.');
+    }
+    if (inputs.mode === 'refi') {
+      if (!inputs.loanBalance.trim()) inputIssues.push('Enter the current loan balance.');
+      else if (calculatorAmount(inputs.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
+        inputIssues.push('Current loan must be a valid amount up to $100 million.');
+      }
+    } else {
+      if (inputs.deposit.trim() && calculatorAmount(inputs.deposit, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
+        inputIssues.push('Savings must be a valid non-negative amount up to $100 million.');
+      }
+      if (inputs.costs.trim() && calculatorAmount(inputs.costs, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
+        inputIssues.push('Upfront costs must be a valid non-negative amount up to $100 million.');
+      }
+    }
+    if (lvrResult.loan != null && lvrResult.loan <= 0) inputIssues.push('Loan needed must be greater than $0.');
+    if (!inputs.years.trim()) inputIssues.push('Enter the years left on the loan.');
+    else if (years == null) inputIssues.push(`Years left must be greater than 0 and no more than ${MAX_CALCULATOR_YEARS}.`);
+  } else if (!depositInputs.balance.trim()) {
+    inputIssues.push(section === 'TD' ? 'Enter the deposit amount.' : 'Enter the current balance.');
+  } else if (depositBalance == null || depositBalance <= 0) {
+    inputIssues.push(`Balance must be greater than $0 and no more than $${MAX_CALCULATOR_DEPOSIT_AMOUNT.toLocaleString('en-AU')}.`);
+  }
+  if (!currentRateInput.trim()) inputIssues.push('Enter the current interest rate.');
+  else if (currentRate == null) inputIssues.push('Current rate must be greater than 0% and no more than 100%.');
+  const inputIssueKey = inputIssues.join('|');
 
   const candidates = useMemo<Candidate[]>(() => {
-    if (currentRate === null || balance <= 0) return [];
+    if (inputIssueKey || currentRate === null || balance <= 0 || (isLoan && months <= 0)) return [];
     const bestByProvider = new Map<string, { row: RateRow; rate: number; projectionRate: number }>();
     for (const row of rows) {
       const v = rankFraction(row, section, depositRankMetric, mortgageRateMetric);
@@ -252,17 +282,24 @@ export default function Calculator() {
       if (isLoan ? projectionRate >= currentRate : projectionRate <= currentRate) continue;
       if (isLoan) {
         const perMonth = monthlyPayment(balance, currentRate, months) - monthlyPayment(balance, projectionRate, months);
-        const fixedMonths = row.rate_type === 'FIXED' ? advertisedTermMonths(row) : null;
-        const comparisonMonths = fixedRateProjectionMonths(months, fixedMonths);
+        const fixedMonths = isPublishedFixedRate(row) ? advertisedTermMonths(row) : null;
         out.push({
           row,
           rate,
           projectionRate,
           perMonth,
-          total: perMonth * comparisonMonths,
-          totalLabel: fixedMonths ? `over ${comparisonMonths} month fixed period` : 'over remaining term',
+          total: null,
+          totalLabel: fixedMonths
+            ? `initial repayment difference during the published ${Math.min(months, fixedMonths)} month fixed period`
+            : 'initial monthly repayment difference',
+          unavailableReason: null,
         });
       } else {
+        const unavailableReason = quickEstimateUnavailableReason(row, section);
+        if (unavailableReason) {
+          out.push({ row, rate, projectionRate, perMonth: null, total: null, totalLabel: 'Rate only', unavailableReason });
+          continue;
+        }
         const perYear = balance * (rate - currentRate);
         const maturityMonths = section === 'TD' ? advertisedTermMonths(row) : null;
         const total = maturityMonths
@@ -272,14 +309,24 @@ export default function Calculator() {
           row,
           rate,
           projectionRate,
-          perMonth: maturityMonths ? total / maturityMonths : perYear / 12,
+          perMonth: null,
           total,
-          totalLabel: maturityMonths ? `at ${maturityMonths} month maturity` : 'per year',
+          totalLabel: maturityMonths ? `at ${maturityMonths} month maturity` : 'simple interest difference per year',
+          unavailableReason: null,
         });
       }
     }
-    return out.sort((a, b) => b.perMonth - a.perMonth).slice(0, 10);
-  }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric]);
+    return out.sort((a, b) => {
+      const aEstimate = a.perMonth ?? a.total;
+      const bEstimate = b.perMonth ?? b.total;
+      if (aEstimate == null && bEstimate == null) return isLoan
+        ? a.projectionRate - b.projectionRate
+        : b.projectionRate - a.projectionRate;
+      if (aEstimate == null) return 1;
+      if (bEstimate == null) return -1;
+      return bEstimate - aEstimate;
+    }).slice(0, 10);
+  }, [rows, currentRate, balance, months, isLoan, section, depositRankMetric, mortgageRateMetric, inputIssueKey]);
   const currentProductDetail = currentProduct.productKey
     ? details?.products?.[currentProduct.productKey] ?? null
     : null;
@@ -613,11 +660,6 @@ export default function Calculator() {
               {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', 'Current interest rate percent')}
               {field('Years left', inputs.years, (t) => upd({ years: t }), '25', 'Years remaining on loan', 86)}
             </Row>
-            {yearsClamped ? (
-              <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
-                Comparisons use a maximum of {MAX_PROJECTION_YEARS} years to match lifecycle projections.
-              </AppText>
-            ) : null}
             <View style={{ marginTop: 14 }}>
               <SwitchCostEditor
                 inputs={scenario.mortgageSwitch}
@@ -664,6 +706,13 @@ export default function Calculator() {
             </Row>
           </>
         )}
+        {inputIssues.length ? (
+          <View style={{ marginTop: 12, gap: 4 }}>
+            {inputIssues.map((issue) => (
+              <AppText key={issue} variant="tiny" color="danger">{issue}</AppText>
+            ))}
+          </View>
+        ) : null}
       </Card>
 
       <Card style={{ marginBottom: 16, gap: 10 }}>
@@ -716,7 +765,9 @@ export default function Calculator() {
       ) : null}
 
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
-        {profileFeaturesPending
+        {inputIssues.length
+          ? 'CHECK YOUR INPUTS'
+          : profileFeaturesPending
           ? detailsLoading
             ? 'PREPARING YOUR MATCHES…'
             : 'COULD NOT PREPARE YOUR MATCHES'
@@ -808,13 +859,33 @@ export default function Calculator() {
                     </AppText>
                   ) : null}
                 </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <AppText variant="body" weight="800" style={{ color: theme.colors.success }}>
-                    {formatDollars(c.perMonth)}/mo
-                  </AppText>
-                  <AppText variant="tiny" color="textFaint">
-                    {formatDollars(c.total)} {c.totalLabel}
-                  </AppText>
+                <View style={{ alignItems: 'flex-end', maxWidth: '42%' }}>
+                  {c.unavailableReason ? (
+                    <>
+                      <AppText variant="body" weight="800">Rate only</AppText>
+                      <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
+                        {c.unavailableReason}
+                      </AppText>
+                    </>
+                  ) : section === 'Mortgage' && c.perMonth != null ? (
+                    <>
+                      <AppText variant="body" weight="800" style={{ color: theme.colors.success }}>
+                        {formatDollars(c.perMonth)}/mo
+                      </AppText>
+                      <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
+                        {c.totalLabel}
+                      </AppText>
+                    </>
+                  ) : c.total != null ? (
+                    <>
+                      <AppText variant="body" weight="800" style={{ color: theme.colors.success }}>
+                        {formatDollars(c.total)}
+                      </AppText>
+                      <AppText variant="tiny" color="textFaint" style={{ textAlign: 'right' }}>
+                        {c.totalLabel}
+                      </AppText>
+                    </>
+                  ) : null}
                 </View>
                 <AppText variant="body" color="textFaint" style={{ marginLeft: 2 }}>
                   ›
@@ -827,11 +898,11 @@ export default function Calculator() {
         : null}
 
       <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
-        Illustrative; excludes fees, tax, switching costs and unverified bonus conditions. {isMortgage
-          ? 'LVR is loan ÷ property value. Fixed-rate estimates stop when the published fixed term ends.'
+        Illustrative; excludes fees, tax, switching costs and unverified conditions. {isMortgage
+          ? 'LVR is loan ÷ property value. The dollar figure is an initial contractual repayment difference, not a total saving; fixed-rate scope stops at the published period.'
           : section === 'TD'
-            ? 'Projected to each published maturity; check payment timing and early-withdrawal terms.'
-            : 'Check ongoing and bonus conditions.'}
+            ? 'A dollar difference is shown only for a published maturity and a non-conditional rate; check payment timing and early-withdrawal terms.'
+            : 'The dollar figure is a simple annual interest difference shown only for a non-conditional rate; it excludes compounding and tax.'}
       </AppText>
     </ScreenScrollView>
   );
