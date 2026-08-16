@@ -1,0 +1,32 @@
+{
+  "version": "1.0.169",
+  "releaseTag": "app-arm-v1.0.169",
+  "date": "2026-08-15",
+  "summaryBullets": [
+    "Make financial comparisons evidence-complete (#211)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Make financial comparisons evidence-complete (#211)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.169"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.168"
+        }
+      ]
+    }
+  ]
+}
