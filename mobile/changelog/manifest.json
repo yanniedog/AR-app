@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-15T12:55:14.478Z",
+  "generated_at": "2026-08-15T13:55:00.460Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -826,6 +826,14 @@
         "fix faint text contrast across themes (#206)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.166"
+    },
+    {
+      "version": "1.0.169",
+      "date": "2026-08-15",
+      "summaryBullets": [
+        "Make financial comparisons evidence-complete (#211)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.169"
     }
   ]
 }
