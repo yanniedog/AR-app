@@ -26,8 +26,8 @@ function renderGatedRunner(): {
       if (!sessionId) return;
       if (!claim(sessionId)) return;
       started.push(sessionId);
-      // Teardown outlives the run's terminal state, exactly as report upload
-      // and rollback restoration do in the runner.
+      // Teardown outlives the run's terminal state while rollback restoration
+      // completes in the runner.
       finishCurrentRun = release;
     }, [claim, release, releaseCount, sessionId]);
 
@@ -67,8 +67,8 @@ describe('performance audit run gate', () => {
     const runner = renderGatedRunner();
 
     runner.queue('session-a');
-    // The report is already published, so the screen re-enables its run button
-    // while the first run is still uploading its log.
+    // The report is already published, so the screen can queue another run
+    // while the first run is still restoring state.
     runner.queue('session-b');
     expect(runner.started).toEqual(['session-a']);
 

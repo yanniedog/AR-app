@@ -124,11 +124,15 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 
 jest.mock('@react-native-firebase/crashlytics', () => {
-  const crashlytics = jest.fn(() => ({
+  const api = {
     log: jest.fn(),
     recordError: jest.fn(),
-    setCrashlyticsCollectionEnabled: jest.fn(async () => {}),
-  }));
+    isCrashlyticsCollectionEnabled: false,
+    setCrashlyticsCollectionEnabled: jest.fn(async (enabled) => {
+      api.isCrashlyticsCollectionEnabled = enabled;
+    }),
+  };
+  const crashlytics = jest.fn(() => api);
   return { __esModule: true, default: crashlytics };
 });
 

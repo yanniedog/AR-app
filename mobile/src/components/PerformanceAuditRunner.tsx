@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Clipboard from 'expo-clipboard';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -17,7 +16,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { MANIFEST_URL } from '../config';
 import { visibleAccountRows } from '../data/format';
 import { resolveSectionRibbonStats } from '../data/ribbonStats';
 import { excludeTokenDepositRates, rankFraction, sortRows } from '../data/selectors';
@@ -25,9 +23,8 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
-import { checkForAppUpdate, getApkDownloadSnapshot } from '../lib/appUpdate';
-import { debugLog, formatVersionedLogExport, uploadDebugLog } from '../lib/debugLog';
-import { reportPerformanceAudit } from '../lib/observability';
+import { getApkDownloadSnapshot } from '../lib/appUpdate';
+import { debugLog } from '../lib/debugLog';
 import {
   buildDeepPerformanceAuditPlan,
   type DeepAuditStep,
@@ -77,7 +74,6 @@ import {
   resumePerformanceAudit,
   roundMetric,
   scoreLatency,
-  setPerformanceAuditUploadResult,
   subscribePerformanceAudit,
   summarizePerformanceAudit,
   updatePerformanceAuditProgress,
@@ -107,7 +103,6 @@ const ROUTE_TIMEOUT_MS = 8_000;
 const DATA_SETTLE_TIMEOUT_MS = 30_000;
 /** Graphic/list-heavy destinations may need longer than the historical 30s floor. */
 const DATA_SETTLE_TIMEOUT_MAX_MS = 180_000;
-const NETWORK_TIMEOUT_MS = 12_000;
 const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
@@ -121,8 +116,6 @@ const AUDIT_KEEP_AWAKE_TAG = 'performance-audit';
 /** Teardown may read/write a full 2MB log and compact a large report off the JS thread budget. */
 const FINALIZATION_STORE_TIMEOUT_MS = 120_000;
 const FINALIZATION_FLUSH_TIMEOUT_MS = 30_000;
-const FINALIZATION_READ_TIMEOUT_MS = 60_000;
-const FINALIZATION_UPLOAD_TIMEOUT_MS = 90_000;
 type JourneyIteration = 'cold' | 'warm';
 
 class AuditCancelledError extends Error {
@@ -191,7 +184,7 @@ function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void
  * background pause.
  *
  * The rule is the `Ms` suffix rather than a list, because the report and the
- * uploaded log show far more timings than the summary reads —
+ * local diagnostic log shows far more timings than the summary reads —
  * `backgroundSettleMs` and `actionMs` are rendered on the results screen, and a
  * check that says its timings are not reported must not still carry them.
  * AUDIT_LATENCY_METRIC_KEYS names the subset the summary consumes; a test
@@ -598,8 +591,8 @@ async function runDeepAuditStep(
       id: `deep-${step.id}`,
       label,
       kind: 'journey',
-      status: 'fail',
-      durationMs: roundMetric(now() - started),
+      status: 'skipped',
+      durationMs: null,
       metrics: {
         journeyId: `${step.scenarioId}.${step.semanticActionId}`,
         journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
@@ -608,6 +601,8 @@ async function runDeepAuditStep(
         depth: step.depth,
         reason: step.skipReason,
         skipSafety: step.skipSafety.reason,
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'the planned action had no reachable safe target in the pinned dataset',
         executionAttempted: false,
         availabilityFailure: true,
       },
@@ -822,8 +817,8 @@ async function runDeepAuditStepBody(
         id: `deep-${step.id}`,
         label,
         kind: 'journey',
-        status: 'fail',
-        durationMs: roundMetric(now() - started),
+        status: 'skipped',
+        durationMs: null,
         metrics: {
           journeyId: `${step.scenarioId}.${step.semanticActionId}`,
           journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
@@ -833,6 +828,7 @@ async function runDeepAuditStepBody(
           reason: actionResult.unavailableReason,
           skipSafety: step.skipSafety.reason,
           availabilityEvidence: 'mounted action terminal-unavailable result',
+          skipClassification: 'terminal-availability',
           executionAttempted: true,
           actionInvoked: true,
           actionCompleted: false,
@@ -1038,7 +1034,7 @@ function fallbackEnvironment(
     detailsLoaded: store.details != null,
     historyLoaded: store.historyBanks != null,
     productHistoryLoaded: store.productHistory != null,
-    diagnosticsUploadEnabled: store.prefs.crashReportsEnabled,
+    diagnosticsUploadEnabled: false,
     networkType: null,
     networkConnected: null,
     networkInternetReachable: null,
@@ -1106,14 +1102,16 @@ async function ensureMountedActionRoute(
 function responsivenessRecord(
   metrics: ResponsivenessMetrics,
   prefix = '',
-): Record<string, number> {
+): Record<string, AuditMetricValue> {
   const key = (name: string) => prefix ? `${prefix}${name[0].toUpperCase()}${name.slice(1)}` : name;
   return {
     [key('eventLoopSamples')]: metrics.eventLoopSamples,
+    [key('eventLoopMeasurementAvailable')]: metrics.eventLoopSamples > 0,
     [key('eventLoopP95Ms')]: metrics.eventLoopP95Ms,
     [key('maxEventLoopLagMs')]: metrics.maxEventLoopLagMs,
     [key('stallsOver100Ms')]: metrics.stallsOver100Ms,
     [key('frameSamples')]: metrics.frameSamples,
+    [key('frameMeasurementAvailable')]: metrics.frameSamples > 0,
     [key('frameP95Ms')]: metrics.frameP95Ms,
     [key('maxFrameGapMs')]: metrics.maxFrameGapMs,
     [key('framesOver50Ms')]: metrics.framesOver50Ms,
@@ -1122,20 +1120,24 @@ function responsivenessRecord(
 
 const EMPTY_RESPONSIVENESS: ResponsivenessMetrics = {
   eventLoopSamples: 0,
-  eventLoopP95Ms: 0,
-  maxEventLoopLagMs: 0,
-  stallsOver100Ms: 0,
+  eventLoopP95Ms: null,
+  maxEventLoopLagMs: null,
+  stallsOver100Ms: null,
   frameSamples: 0,
-  frameP95Ms: 0,
-  maxFrameGapMs: 0,
-  framesOver50Ms: 0,
+  frameP95Ms: null,
+  maxFrameGapMs: null,
+  framesOver50Ms: null,
 };
 
 function responsivenessStatus(metrics: ResponsivenessMetrics): AuditCheckStatus {
-  return worstStatus(
-    scoreLatency(metrics.maxEventLoopLagMs, 100, 300),
-    scoreLatency(metrics.maxFrameGapMs, 80, 250),
-  );
+  const statuses: AuditCheckStatus[] = [];
+  if (metrics.maxEventLoopLagMs != null) {
+    statuses.push(scoreLatency(metrics.maxEventLoopLagMs, 100, 300));
+  }
+  if (metrics.maxFrameGapMs != null) {
+    statuses.push(scoreLatency(metrics.maxFrameGapMs, 80, 250));
+  }
+  return statuses.length ? worstStatus(...statuses) : 'skipped';
 }
 
 function loadedProductCount(core: ReturnType<typeof useStore.getState>['core']): number {
@@ -1195,7 +1197,7 @@ async function collectEnvironment(
     detailsLoaded: store.details != null,
     historyLoaded: store.historyBanks != null,
     productHistoryLoaded: store.productHistory != null,
-    diagnosticsUploadEnabled: store.prefs.crashReportsEnabled,
+    diagnosticsUploadEnabled: false,
     networkType: network?.type != null ? String(network.type) : null,
     networkConnected: network?.isConnected ?? null,
     networkInternetReachable: network?.isInternetReachable ?? null,
@@ -1211,13 +1213,24 @@ async function runRuntimeCheck(
   await delay(RUNTIME_SAMPLE_MS);
   assertSessionActive(watchdog);
   const metrics = monitor.metricsSince(snapshot);
+  const measurementAvailable = metrics.eventLoopSamples > 0 && metrics.frameSamples > 0;
   return {
     id: 'runtime-responsiveness',
     label: 'Idle responsiveness baseline',
     kind: 'runtime',
-    status: responsivenessStatus(metrics),
-    durationMs: roundMetric(now() - started),
-    metrics: responsivenessRecord(metrics),
+    status: measurementAvailable ? responsivenessStatus(metrics) : 'skipped',
+    durationMs: measurementAvailable ? roundMetric(now() - started) : null,
+    metrics: {
+      ...responsivenessRecord(metrics),
+      executionAttempted: true,
+      measurementAvailable,
+      ...(measurementAvailable ? {} : {
+        skipClassification: 'terminal-availability',
+        availabilityFailure: true,
+        availabilityEvidence: 'timer and animation callback samples were not both captured',
+        reason: 'Responsiveness samples unavailable',
+      }),
+    },
   };
 }
 
@@ -1405,10 +1418,12 @@ async function runFileSystemCheck(
       id: 'file-system',
       label: 'Log filesystem round-trip',
       kind: 'storage',
-      status: 'fail',
-      durationMs: roundMetric(now() - started),
+      status: 'skipped',
+      durationMs: null,
       metrics: {
         reason: 'documentDirectory unavailable',
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'the runtime did not expose a writable app document directory',
         executionAttempted: false,
         availabilityFailure: true,
         ...responsivenessRecord(responsiveness),
@@ -1486,9 +1501,15 @@ async function runDataCheck(
       id: 'active-data',
       label: 'Active payload processing',
       kind: 'data',
-      status: 'fail',
-      durationMs: roundMetric(now() - started),
-      metrics: { reason: 'No active payload is loaded', executionAttempted: false },
+      status: 'skipped',
+      durationMs: null,
+      metrics: {
+        reason: 'No active payload is loaded',
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'the pinned store had no active payload',
+        availabilityFailure: true,
+        executionAttempted: false,
+      },
       error: 'Planned active-payload processing could not run because no payload is loaded',
     };
   }
@@ -1558,77 +1579,22 @@ async function runDataCheck(
 }
 
 async function runNetworkCheck(
-  monitor: ResponsivenessMonitor,
+  _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const started = now();
-  const responsiveAt = monitor.snapshot();
   assertSessionActive(watchdog);
-  const abort = new AbortController();
-  const timeoutMs = Math.max(
-    1,
-    Math.min(NETWORK_TIMEOUT_MS, Math.floor(watchdog.remainingMs())),
-  );
-  const timer = setTimeout(() => abort.abort(), timeoutMs);
-  const cancelTimer = setInterval(() => {
-    if (getPerformanceAuditState().cancelRequested) abort.abort();
-  }, 50);
-  let headersMs: number | null = null;
-  let bodyMs: number | null = null;
-  let parseMs: number | null = null;
-  let statusCode: number | null = null;
-  let responseChars: number | null = null;
-  let error: string | undefined;
-  try {
-    assertSessionActive(watchdog);
-    const response = await fetch(MANIFEST_URL, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-      signal: abort.signal,
-    });
-    headersMs = now() - started;
-    statusCode = response.status;
-    const bodyStarted = now();
-    const body = await response.text();
-    bodyMs = now() - bodyStarted;
-    responseChars = body.length;
-    if (!response.ok) throw new Error(`Manifest request returned HTTP ${response.status}`);
-    const parseStarted = now();
-    JSON.parse(body);
-    parseMs = now() - parseStarted;
-    assertSessionActive(watchdog);
-  } catch (caught) {
-    if (getPerformanceAuditState().cancelRequested) throw new AuditCancelledError();
-    if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
-    error = formatAuditError(caught);
-  } finally {
-    clearTimeout(timer);
-    clearInterval(cancelTimer);
-  }
-  const durationMs = now() - started;
-  const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'manifest-network',
-    label: 'Live manifest network round-trip',
+    label: 'Network transport',
     kind: 'network',
-    status: error
-      ? 'fail'
-      : worstStatus(
-          scoreLatency(durationMs, 1_500, 5_000),
-          responsivenessStatus(responsiveness),
-        ),
-    durationMs: roundMetric(durationMs),
+    status: 'skipped',
+    durationMs: null,
     metrics: {
-      statusCode,
-      responseChars,
-      headersMs: headersMs == null ? null : roundMetric(headersMs),
-      bodyMs: bodyMs == null ? null : roundMetric(bodyMs),
-      parseMs: parseMs == null ? null : roundMetric(parseMs),
-      timeoutMs,
-      ...responsivenessRecord(responsiveness),
+      executionAttempted: false,
+      skipClassification: 'terminal-availability',
+      availabilityEvidence: 'performance audits are local-only and do not start network requests',
+      reason: 'Not run: network and upload transports are outside the local audit contract',
     },
-    ...(error ? { error, trace: captureAuditTrace('manifest network request failed') } : {}),
   };
 }
 
@@ -1646,9 +1612,16 @@ async function runSectionModelCheck(
       id: `section-model-${section.toLowerCase()}`,
       label: `${section} section model`,
       kind: 'data',
-      status: 'fail',
-      durationMs: roundMetric(now() - started),
-      metrics: { reason: 'Section data is unavailable', section, executionAttempted: false },
+      status: 'skipped',
+      durationMs: null,
+      metrics: {
+        reason: 'Section data is unavailable',
+        section,
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'the pinned payload did not contain this section model',
+        availabilityFailure: true,
+        executionAttempted: false,
+      },
       error: `Planned ${section} section benchmark could not run because its data is unavailable`,
     };
   }
@@ -1811,77 +1784,36 @@ async function runLogIoCheck(
 
 async function runUpdateReadinessCheck(
   app: AuditAppIdentity,
-  monitor: ResponsivenessMonitor,
+  _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
 ): Promise<AuditCheck> {
-  const started = now();
-  const responsivenessAt = monitor.snapshot();
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
   const download = getApkDownloadSnapshot();
-  if (Platform.OS !== 'android') {
-    return {
-      id: 'update-readiness',
-      label: 'Android update readiness',
-      kind: 'update',
-      status: 'skipped',
-      durationMs: roundMetric(now() - started),
-      metrics: { reason: 'Android-only', installedVersion: installed.version, installedBuild: installed.buildNumber },
-    };
-  }
-  let result: Awaited<ReturnType<typeof checkForAppUpdate>> | null = null;
-  let error: string | undefined;
-  try {
-    assertSessionActive(watchdog);
-    result = await timeoutAfter(checkForAppUpdate(), NETWORK_TIMEOUT_MS, 'Update manifest check');
-    assertSessionActive(watchdog);
-    if (result.status === 'error') error = result.message;
-  } catch (caught) {
-    rethrowAuditControl(caught);
-    error = formatAuditError(caught);
-  }
-  const durationMs = now() - started;
-  const responsiveness = monitor.metricsSince(responsivenessAt);
-  const remote = result && result.status !== 'error' ? result.remote : null;
-  const compatibilityStatus: AuditCheckStatus = result?.status === 'incompatible' ? 'warn' : 'pass';
-  const manifestContentStatus: AuditCheckStatus = remote &&
-    remote.package_name === Application.applicationId &&
-    !!remote.sha256 &&
-    (remote.bytes ?? 0) > 0
-    ? 'pass'
-    : 'fail';
+  assertSessionActive(watchdog);
   return {
     id: 'update-readiness',
-    label: 'Android update manifest and local readiness',
+    label: 'Android update state (local snapshot)',
     kind: 'update',
-    status: error
-      ? 'fail'
-      : worstStatus(compatibilityStatus, manifestContentStatus),
-    durationMs: roundMetric(durationMs),
+    status: 'skipped',
+    durationMs: null,
     metrics: {
+      executionAttempted: false,
+      skipClassification: 'terminal-availability',
+      availabilityEvidence: Platform.OS === 'android'
+        ? 'the local download state was observed without checking the remote manifest'
+        : 'the update mechanism is Android-only',
+      reason: Platform.OS === 'android'
+        ? 'Not run: remote update checks are outside the local audit contract'
+        : 'Not run: Android-only',
       installedVersion: installed.version,
       installedBuild: installed.buildNumber,
-      checkStatus: result?.status ?? 'unknown',
-      compatibilityMessage: result?.status === 'incompatible' ? result.message : null,
-      remoteVersion: remote?.version ?? null,
-      remoteBuild: remote?.build_number ?? null,
-      manifestBytes: remote?.bytes ?? null,
-      manifestHasSha256: !!remote?.sha256,
       installedApplicationId: Application.applicationId ?? null,
-      manifestPackageMatches: remote?.package_name === Application.applicationId,
-      // The only failure in the audit derived from content rather than an error
-      // or a clock, so an interruption must not discard it as a stale timing.
-      nonTimingFailure:
-        error == null && result != null && result.status !== 'error' && manifestContentStatus === 'fail',
-      durationMayUseTtlCache: true,
-      durationScoredAsNetworkLatency: false,
       downloadPhase: download.phase,
       downloadedBytes: download.bytesWritten,
       downloadTotalBytes: download.totalBytes,
       cachedBuild: download.buildNumber,
       cachedReady: download.phase === 'ready' && !!download.localUri,
-      ...responsivenessRecord(responsiveness),
     },
-    ...(error ? { error, trace: captureAuditTrace('Android update readiness failed') } : {}),
   };
 }
 
@@ -2096,11 +2028,13 @@ export async function runJourney(
       id: `journey-${journey.id}-${iteration}`,
       label: `${journey.label} (${iteration})`,
       kind: 'journey',
-      status: 'fail',
-      durationMs: roundMetric(now() - started),
+      status: 'skipped',
+      durationMs: null,
       metrics: {
         measurementMode: 'route-round-trip',
         reason: journey.skipReason ?? 'Route unavailable',
+        skipClassification: 'terminal-availability',
+        availabilityEvidence: 'the pinned payload did not provide a safe target for this route',
         executionAttempted: false,
         availabilityFailure: true,
         journeyId: journey.id,
@@ -2433,6 +2367,10 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
+      const originalFetch = globalThis.fetch;
+      const localOnlyFetch: typeof fetch = async () => {
+        throw new Error('Network transport is disabled during the local performance audit');
+      };
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
         let settled = false;
@@ -2472,6 +2410,7 @@ export function PerformanceAuditRunner() {
       };
 
       markPerformanceAuditRunning(total);
+      globalThis.fetch = localOnlyFetch;
 
       try {
         // Setup belongs inside the protected region so an unexpected native
@@ -2779,7 +2718,7 @@ export function PerformanceAuditRunner() {
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
         await recordContinuable(
-          'Timing the live manifest request',
+          'Recording the local-only network exclusion',
           () => runNetworkCheck(monitor, watchdog),
         );
         assertSessionActive(watchdog);
@@ -2864,9 +2803,7 @@ export function PerformanceAuditRunner() {
         watchdog.beginFinalization();
         // Publish the terminal state in the foreground. A terminal run cannot be
         // resumed, so completing while paused would leave the pause set with no
-        // AppState listener left to clear it, and every foreground budget the
-        // post-publish upload creates would then accrue nothing and never time
-        // out — leaving uploadPending and the run gate held indefinitely.
+        // AppState listener left to clear it.
         await waitWhilePaused(watchdog);
 
         environment = {
@@ -2958,12 +2895,12 @@ export function PerformanceAuditRunner() {
               ? roundMetric(
                   (executedJourneyChecks / plannedJourneyChecks) * 100,
                 )
-              : 0,
+              : null,
             attemptedPercent: total
               ? roundMetric(
                   (plannedCheckIds.filter((id) => storedIdCounts.has(id)).length / total) * 100,
                 )
-              : 0,
+              : null,
             missingPlannedCheckIds,
             duplicateStoredCheckIds,
             unexpectedStoredCheckIds,
@@ -2998,11 +2935,9 @@ export function PerformanceAuditRunner() {
             'Calculator and projection scenarios apply restorable canned parameter sets through registered UI callbacks; encrypted scenario values are restored with the audit rollback journal.',
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
-            'Update readiness validates manifest content/compatibility and observes existing download state; it never downloads an APK or launches the Android installer. Its duration may come from the one-minute update-check cache and is not classified as network latency.',
+            'Network transport and remote update checks are not executed. The audit records the existing local Android download snapshot without contacting a host or launching the installer.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
-            environment.diagnosticsUploadEnabled
-              ? 'A bounded, deidentified summary is submitted through Crashlytics. The complete report and tracebacks remain only in the local debug log unless explicitly exported.'
-              : 'Automatic submission is disabled. The complete report and tracebacks remain in the local debug log unless explicitly exported.',
+            'The audit performs no automatic network or clipboard action. The complete report and tracebacks remain local unless you later choose a separate export.',
           ],
         };
         const summaryMarker = [
@@ -3073,11 +3008,10 @@ export function PerformanceAuditRunner() {
         // user to leave, so re-check here rather than trusting the gate taken
         // before them.
         await waitWhilePaused(watchdog);
-        // Publish as soon as the report is durable. Everything below — the
-        // Crashlytics envelope, the log flush, and reading/redacting/posting the
-        // whole on-disk log — is heavy work the user should never wait behind,
-        // and no failure in it may discard a report that is already complete.
-        completePerformanceAudit(report, 'pending');
+        // Publish as soon as the report is durable.
+        // The remaining local log flush must not hide a complete result if it
+        // fails.
+        completePerformanceAudit(report);
         await yieldToUi();
 
         try {
@@ -3090,7 +3024,6 @@ export function PerformanceAuditRunner() {
             completeReportStored,
           });
           debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, summaryMarker);
-          reportPerformanceAudit(report);
           await awaitAuditWorkWithTimeout(
             debugLog.flushToFile(),
             watchdog,
@@ -3104,90 +3037,6 @@ export function PerformanceAuditRunner() {
           );
         }
 
-        let upload: {
-          url?: string;
-          provider?: string;
-          deleteKey?: string;
-          linkCopied?: boolean;
-          error?: string;
-        } = {};
-        try {
-          // Build the export in its own scope so the raw log text is collectable
-          // while the upload body — a second full copy of it — is in flight.
-          const exportBody = await (async () => {
-            // Reading, redacting and compacting the export is the last heavy
-            // burst of the run. It happens after the report is published, but
-            // an unyielded burst here would still stall the thread long enough
-            // for Android to offer to kill the app.
-            await yieldToUi();
-            const completeLog = await awaitAuditWorkWithTimeout(
-              debugLog.readCompleteText(),
-              watchdog,
-              'Complete audit log read',
-              FINALIZATION_READ_TIMEOUT_MS,
-            );
-            return formatVersionedLogExport(
-              completeLog,
-              environment.appVersion,
-              environment.buildVersion,
-              { audit_session: sessionId },
-            );
-          })();
-          const result = await awaitAuditWorkWithTimeout(
-            uploadDebugLog(exportBody),
-            watchdog,
-            'Audit log upload',
-            FINALIZATION_UPLOAD_TIMEOUT_MS,
-          );
-          if (result.truncated || result.clientTruncated) {
-            throw new Error('The upload service did not accept the complete log.');
-          }
-          let linkCopied = false;
-          try {
-            await awaitAuditWorkWithTimeout(
-              Clipboard.setStringAsync(result.url),
-              watchdog,
-              'Audit link clipboard write',
-              5_000,
-            );
-            linkCopied = true;
-          } catch (clipboardCaught) {
-            debugLog.warn(
-              PERFORMANCE_AUDIT_LOG_TAG,
-              `complete log uploaded but link copy failed: ${formatAuditErrorForLog(clipboardCaught)}`,
-            );
-          }
-          upload = {
-            url: result.url,
-            provider: result.provider,
-            ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
-            linkCopied,
-          };
-          debugLog.info(
-            PERFORMANCE_AUDIT_LOG_TAG,
-            `complete log uploaded provider=${result.provider} linkCopied=${linkCopied}`,
-          );
-        } catch (uploadCaught) {
-          const message = formatAuditError(uploadCaught);
-          upload = { error: message };
-          debugLog.warn(
-            PERFORMANCE_AUDIT_LOG_TAG,
-            `automatic log upload failed: ${formatAuditErrorForLog(uploadCaught)}`,
-          );
-        }
-        setPerformanceAuditUploadResult(sessionId, upload);
-        // The report is already published; nothing after this point may fall
-        // through to the fatal handler and replace it with a failure state.
-        try {
-          await awaitAuditWorkWithTimeout(
-            debugLog.flushToFile(),
-            watchdog,
-            'Upload-result log flush',
-            FINALIZATION_FLUSH_TIMEOUT_MS,
-          );
-        } catch {
-          // Best effort; the durable report and sidecar are already written.
-        }
       } catch (caught) {
         let recoveryError: string | null = null;
         try {
@@ -3374,7 +3223,6 @@ export function PerformanceAuditRunner() {
               10_000,
               'Partial report persistence',
             );
-            reportPerformanceAudit(partialReport);
           } catch (partialCaught) {
             partialStoreError = formatAuditError(partialCaught);
             debugLog.error(
@@ -3389,6 +3237,7 @@ export function PerformanceAuditRunner() {
           ].join('\n'));
         }
       } finally {
+        if (globalThis.fetch === localOnlyFetch) globalThis.fetch = originalFetch;
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
@@ -3434,12 +3283,7 @@ export function PerformanceAuditRunner() {
   }, [state.status]);
 
   useEffect(() => {
-    // Tracking continues while a published report's log upload is still
-    // running: that work is still on a foreground budget, and without pause
-    // and resume emissions it would charge the whole suspended interval and
-    // time out the moment the user came back.
-    const tracking = state.status === 'queued' || state.status === 'running' ||
-      (state.status === 'complete' && state.uploadPending);
+    const tracking = state.status === 'queued' || state.status === 'running';
     if (!tracking) return;
     // Leaving the app suspends the run rather than discarding it. Route timing,
     // mounted-surface readiness and animation callback gaps do not exist once
@@ -3473,7 +3317,7 @@ export function PerformanceAuditRunner() {
       // change re-subscribes immediately and re-applies the current state.
       resumePerformanceAudit();
     };
-  }, [state.status, state.uploadPending]);
+  }, [state.status]);
 
   if (state.status !== 'queued' && state.status !== 'running') return null;
 

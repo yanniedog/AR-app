@@ -87,12 +87,13 @@ export interface PerformanceAuditSummary {
   executed: number;
   justifiedSkipped: number;
   unexpectedSkipped: number;
-  coveragePercent: number;
+  /** Null when no checks ran; zero is reserved for a measured zero-percent result. */
+  coveragePercent: number | null;
   slowestCheckId: string | null;
   slowestCheckLabel: string | null;
-  slowestCheckMs: number;
-  maxEventLoopLagMs: number;
-  maxFrameGapMs: number;
+  slowestCheckMs: number | null;
+  maxEventLoopLagMs: number | null;
+  maxFrameGapMs: number | null;
 }
 
 export interface PerformanceAuditReport {
@@ -124,9 +125,9 @@ export interface PerformanceAuditCoverage {
   unexpectedSkippedJourneyChecks: number;
   unavailableJourneyChecks: number;
   /** Checks that actually ran. Availability-only skips never count here. */
-  coveragePercent: number;
+  coveragePercent: number | null;
   /** Planned checks whose result was durably stored, including failures. */
-  attemptedPercent: number;
+  attemptedPercent: number | null;
   missingPlannedCheckIds: string[];
   duplicateStoredCheckIds: string[];
   unexpectedStoredCheckIds: string[];
@@ -171,14 +172,6 @@ export interface PerformanceAuditState {
   /** The run is suspended because the app left the foreground. */
   paused: boolean;
   report: PerformanceAuditReport | null;
-  uploadUrl: string | null;
-  uploadProvider: string | null;
-  uploadDeleteKey: string | null;
-  uploadLinkCopied: boolean;
-  uploadDeleted: boolean;
-  uploadError: string | null;
-  /** The report is complete and readable while its log upload is still running. */
-  uploadPending: boolean;
   error: string | null;
 }
 
@@ -264,13 +257,6 @@ const IDLE_STATE: PerformanceAuditState = {
   cancelRequested: false,
   paused: false,
   report: null,
-  uploadUrl: null,
-  uploadProvider: null,
-  uploadDeleteKey: null,
-  uploadLinkCopied: false,
-  uploadDeleted: false,
-  uploadError: null,
-  uploadPending: false,
   error: null,
 };
 
@@ -384,7 +370,7 @@ export class PerformanceAuditInactivityWatchdog {
   readonly hangTimeoutMs: number;
   private lastStoredProgressMs: number;
   private storedChecks = 0;
-  /** Report persistence/upload no longer stores checks; hang prevention must not abort teardown. */
+  /** Report persistence no longer stores checks; hang prevention must not abort teardown. */
   private finalizing = false;
   /** Time spent backgrounded is the user's, not a hang. */
   private paused = false;
@@ -466,13 +452,6 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     cancelRequested: false,
     paused: false,
     report: null,
-    uploadUrl: null,
-    uploadProvider: null,
-    uploadDeleteKey: null,
-    uploadLinkCopied: false,
-    uploadDeleted: false,
-    uploadError: null,
-    uploadPending: false,
     error: null,
   });
   return sessionId;
@@ -522,16 +501,8 @@ export function markPerformanceAuditCheckStored(
  * backgrounded process rather than the app. Pausing keeps the completed work
  * and lets the run continue when the user comes back.
  */
-/**
- * A published report whose log upload is still running is still doing timed
- * work, so it keeps pause tracking. Without it the upload's foreground budget
- * would see no transitions and charge the whole suspended interval on the first
- * tick after the user returns.
- */
 function pauseTrackingApplies(): boolean {
-  return auditState.status === 'queued' ||
-    auditState.status === 'running' ||
-    (auditState.status === 'complete' && auditState.uploadPending);
+  return auditState.status === 'queued' || auditState.status === 'running';
 }
 
 export function pausePerformanceAudit(): void {
@@ -560,24 +531,8 @@ export function cancelPerformanceAudit(): void {
   });
 }
 
-/**
- * Publish the finished report before the log upload runs. Teardown reads,
- * redacts and posts the whole on-disk log; holding the diagnosis back until
- * that succeeded meant any failure — or a low-memory process kill — left the
- * user with nothing after progress reached 100%.
- */
-export function completePerformanceAudit(
-  report: PerformanceAuditReport,
-  upload: {
-    url?: string;
-    provider?: string;
-    deleteKey?: string;
-    linkCopied?: boolean;
-    error?: string;
-  } | 'pending' = {},
-): void {
-  const pending = upload === 'pending';
-  const result = pending ? {} : upload;
+/** Publish the finished report locally. Sharing is a separate user action. */
+export function completePerformanceAudit(report: PerformanceAuditReport): void {
   emit({
     ...auditState,
     status: 'complete',
@@ -589,77 +544,8 @@ export function completePerformanceAudit(
     cancelRequested: false,
     paused: false,
     report,
-    uploadUrl: result.url ?? null,
-    uploadProvider: result.provider ?? null,
-    uploadDeleteKey: result.deleteKey ?? null,
-    uploadLinkCopied: result.linkCopied === true,
-    uploadDeleted: false,
-    uploadError: result.error ?? null,
-    uploadPending: pending,
     error: null,
   });
-}
-
-/**
- * Attach the log-upload outcome to an already-published complete report. The
- * upload outlives the run's terminal state, so a result is keyed to its own
- * session and dropped once a later audit owns the state.
- */
-export function setPerformanceAuditUploadResult(
-  sessionId: string,
-  upload: {
-    url?: string;
-    provider?: string;
-    deleteKey?: string;
-    linkCopied?: boolean;
-    error?: string;
-  },
-): void {
-  if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
-  emit({
-    ...auditState,
-    uploadUrl: upload.url ?? null,
-    uploadProvider: upload.provider ?? null,
-    uploadDeleteKey: upload.deleteKey ?? null,
-    uploadLinkCopied: upload.linkCopied === true,
-    uploadDeleted: false,
-    uploadError: upload.error ?? null,
-    uploadPending: false,
-    // Pause tracking ends with the upload; nothing remains to clear it.
-    paused: false,
-  });
-}
-
-export function markPerformanceAuditUploadDeleted(sessionId: string): void {
-  if (auditState.status !== 'complete' || auditState.sessionId !== sessionId) return;
-  emit({
-    ...auditState,
-    uploadUrl: null,
-    uploadProvider: null,
-    uploadDeleteKey: null,
-    uploadLinkCopied: false,
-    uploadDeleted: true,
-    uploadError: null,
-  });
-}
-
-export interface PerformanceAuditUploadDeletionGuard {
-  current: boolean;
-}
-
-/** Claim deletion synchronously so two confirmation callbacks cannot issue duplicate requests. */
-export function claimPerformanceAuditUploadDeletion(
-  guard: PerformanceAuditUploadDeletionGuard,
-): boolean {
-  if (guard.current) return false;
-  guard.current = true;
-  return true;
-}
-
-export function releasePerformanceAuditUploadDeletion(
-  guard: PerformanceAuditUploadDeletionGuard,
-): void {
-  guard.current = false;
 }
 
 export function markPerformanceAuditCancelled(): void {
@@ -1001,13 +887,13 @@ interface TimedSample {
 
 export interface ResponsivenessMetrics {
   eventLoopSamples: number;
-  eventLoopP95Ms: number;
-  maxEventLoopLagMs: number;
-  stallsOver100Ms: number;
+  eventLoopP95Ms: number | null;
+  maxEventLoopLagMs: number | null;
+  stallsOver100Ms: number | null;
   frameSamples: number;
-  frameP95Ms: number;
-  maxFrameGapMs: number;
-  framesOver50Ms: number;
+  frameP95Ms: number | null;
+  maxFrameGapMs: number | null;
+  framesOver50Ms: number | null;
 }
 
 export class ResponsivenessMonitor {
@@ -1151,13 +1037,13 @@ export function summarizeResponsiveness(
   };
   return {
     eventLoopSamples: lagSamples.length,
-    eventLoopP95Ms: roundMetric(percentile(lagSamples, 0.95)),
-    maxEventLoopLagMs: roundMetric(maximum(lagSamples)),
-    stallsOver100Ms: lagSamples.filter((value) => value > 100).length,
+    eventLoopP95Ms: lagSamples.length ? roundMetric(percentile(lagSamples, 0.95)) : null,
+    maxEventLoopLagMs: lagSamples.length ? roundMetric(maximum(lagSamples)) : null,
+    stallsOver100Ms: lagSamples.length ? lagSamples.filter((value) => value > 100).length : null,
     frameSamples: frameSamples.length,
-    frameP95Ms: roundMetric(percentile(frameSamples, 0.95)),
-    maxFrameGapMs: roundMetric(maximum(frameSamples)),
-    framesOver50Ms: frameSamples.filter((value) => value > 50).length,
+    frameP95Ms: frameSamples.length ? roundMetric(percentile(frameSamples, 0.95)) : null,
+    maxFrameGapMs: frameSamples.length ? roundMetric(maximum(frameSamples)) : null,
+    framesOver50Ms: frameSamples.length ? frameSamples.filter((value) => value > 50).length : null,
   };
 }
 
@@ -1268,47 +1154,71 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
   // understandable, but it cannot turn work that did not run into coverage.
   const coveragePercent = checks.length
     ? roundMetric((executed / checks.length) * 100)
-    : 0;
-  const completed = checks.filter((check) => check.status !== 'skipped');
+    : null;
+  const completed = checks.filter((check) =>
+    check.status !== 'skipped' &&
+    check.metrics.executionAttempted !== false &&
+    check.metrics.availabilityFailure !== true);
   // Keep AUDIT_LATENCY_METRIC_KEYS in step with every key read below.
-  const representativeLatency = (check: AuditCheck): number => {
+  const representativeLatency = (check: AuditCheck): number | null => {
+    const zeroIsProven = check.metrics.executionAttempted === true ||
+      check.metrics.measurementAvailable === true;
     const numeric = (...keys: string[]) =>
-      keys.map((key) => Number(check.metrics[key] ?? 0)).filter(Number.isFinite);
+      keys
+        .map((key) => check.metrics[key])
+        .filter((value): value is number => (
+          typeof value === 'number' && Number.isFinite(value) && (value !== 0 || zeroIsProven)
+        ));
+    const maximum = (values: number[]) => values.length ? Math.max(...values) : null;
     if (check.kind === 'journey') {
-      return Math.max(0, ...numeric('forwardMs', 'backMs'));
+      return maximum(numeric('forwardMs', 'backMs'));
     }
     if (check.id === 'runtime-responsiveness') {
-      return Math.max(0, ...numeric('maxEventLoopLagMs', 'maxFrameGapMs'));
+      return maximum(numeric('maxEventLoopLagMs', 'maxFrameGapMs'));
     }
     if (check.id === 'active-data') {
-      return Math.max(0, ...numeric('stringifyMs', 'parseMs', 'traversalMs', 'maxEventLoopLagMs'));
+      return maximum(numeric('stringifyMs', 'parseMs', 'traversalMs', 'maxEventLoopLagMs'));
     }
     if (check.id === 'async-storage') {
-      return Math.max(0, ...numeric('maxWriteMs', 'maxReadMs'));
+      return maximum(numeric('maxWriteMs', 'maxReadMs'));
     }
     if (check.id === 'file-system') {
-      return Math.max(0, ...numeric('writeMs', 'readMs'));
+      return maximum(numeric('writeMs', 'readMs'));
     }
-    return check.durationMs ?? 0;
+    if (check.durationMs == null) return null;
+    if (check.durationMs !== 0) return check.durationMs;
+    return zeroIsProven ? 0 : null;
   };
   const slowest = completed.reduce<{ check: AuditCheck; latencyMs: number } | null>(
     (current, check) => {
       const latencyMs = representativeLatency(check);
+      if (latencyMs == null) return current;
       return !current || latencyMs > current.latencyMs ? { check, latencyMs } : current;
     },
     null,
   );
-  const maxEventLoopLagMs = Math.max(
-    0,
-    ...checks.map((check) => Number(check.metrics.maxEventLoopLagMs ?? 0)),
-  );
-  const maxFrameGapMs = Math.max(
-    0,
-    ...checks.map((check) => Number(check.metrics.maxFrameGapMs ?? 0)),
-  );
+  const measuredResponsiveness = (
+    metricKey: 'maxEventLoopLagMs' | 'maxFrameGapMs',
+    sampleKey: 'eventLoopSamples' | 'frameSamples',
+  ): number | null => {
+    const values = checks.flatMap((check) => {
+      const value = check.metrics[metricKey];
+      if (typeof value !== 'number' || !Number.isFinite(value)) return [];
+      if (value === 0) {
+        const samples = check.metrics[sampleKey];
+        if (typeof samples !== 'number' || samples <= 0) return [];
+      }
+      return [value];
+    });
+    return values.length ? Math.max(...values) : null;
+  };
+  const maxEventLoopLagMs = measuredResponsiveness('maxEventLoopLagMs', 'eventLoopSamples');
+  const maxFrameGapMs = measuredResponsiveness('maxFrameGapMs', 'frameSamples');
 
   return {
-    overall: fail > 0 || unexpectedSkipped > 0
+    overall: checks.length === 0
+      ? 'attention'
+      : fail > 0 || unexpectedSkipped > 0
       ? 'bottleneck'
       : warn > 0 || justifiedSkipped > 0
         ? 'attention'
@@ -1324,9 +1234,9 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     coveragePercent,
     slowestCheckId: slowest?.check.id ?? null,
     slowestCheckLabel: slowest?.check.label ?? null,
-    slowestCheckMs: roundMetric(slowest?.latencyMs ?? 0),
-    maxEventLoopLagMs: roundMetric(maxEventLoopLagMs),
-    maxFrameGapMs: roundMetric(maxFrameGapMs),
+    slowestCheckMs: slowest ? roundMetric(slowest.latencyMs) : null,
+    maxEventLoopLagMs: maxEventLoopLagMs == null ? null : roundMetric(maxEventLoopLagMs),
+    maxFrameGapMs: maxFrameGapMs == null ? null : roundMetric(maxFrameGapMs),
   };
 }
 
