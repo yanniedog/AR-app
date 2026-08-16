@@ -1,0 +1,32 @@
+{
+  "version": "1.0.173",
+  "releaseTag": "app-arm-v1.0.173",
+  "date": "2026-08-16",
+  "summaryBullets": [
+    "Make diagnostics local, private, and truthful (#215)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Make diagnostics local, private, and truthful (#215)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.173"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.172"
+        }
+      ]
+    }
+  ]
+}

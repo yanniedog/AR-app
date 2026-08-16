@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-16T01:06:50.828Z",
+  "generated_at": "2026-08-16T01:37:08.459Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -842,6 +842,14 @@
         "Make quick calculator claims evidence-bound (#213)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.171"
+    },
+    {
+      "version": "1.0.173",
+      "date": "2026-08-16",
+      "summaryBullets": [
+        "Make diagnostics local, private, and truthful (#215)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.173"
     }
   ]
 }
