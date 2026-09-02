@@ -1,0 +1,32 @@
+{
+  "version": "1.0.175",
+  "releaseTag": "app-arm-v1.0.175",
+  "date": "2026-09-02",
+  "summaryBullets": [
+    "Redesign Australian Rates and audit app health (#217)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Redesign Australian Rates and audit app health (#217)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.175"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.174"
+        }
+      ]
+    }
+  ]
+}

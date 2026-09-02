@@ -4,7 +4,7 @@
     "slug": "ar-local-rates",
     "owner": "yannieyannies-team",
     "scheme": "arrates",
-    "version": "1.0.173",
+    "version": "1.0.175",
     "description": "Daily Australian home loan, savings and term-deposit rates. Browse, filter, compare and watch rates — works offline.",
     "primaryColor": "#2E6A56",
     "githubUrl": "https://github.com/yanniedog/AR-app",
