@@ -5,6 +5,7 @@ import {
 } from '../src/data/displayEvidence';
 import { contrastRatio, LEDGER_DARK, LEDGER_LIGHT } from '../src/theme/colors';
 import { ledgerMotionDuration } from '../src/theme/motion';
+import { THIRD_PARTY_NOTICES } from '../src/content/thirdPartyNotices';
 
 const NOW = new Date(2026, 8, 3, 12, 0, 0);
 
@@ -117,6 +118,13 @@ describe('Rate Ledger data evidence', () => {
 });
 
 describe('Rate Ledger visual tokens', () => {
+  it('ships complete user-readable notices with redistributed fonts and icon geometry', () => {
+    for (const notice of THIRD_PARTY_NOTICES) {
+      expect(notice.noticeText).toMatch(/Copyright/i);
+      expect(notice.noticeText.length).toBeGreaterThan(900);
+    }
+  });
+
   it('keeps primary and secondary ink readable on paper', () => {
     expect(contrastRatio(LEDGER_LIGHT.ink, LEDGER_LIGHT.paper)).toBeGreaterThanOrEqual(7);
     expect(contrastRatio(LEDGER_LIGHT.mutedInk, LEDGER_LIGHT.paper)).toBeGreaterThanOrEqual(4.5);

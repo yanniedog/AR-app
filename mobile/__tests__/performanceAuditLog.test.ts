@@ -9,6 +9,7 @@ import {
   shortenAuditEvidenceText,
   truncateAuditText,
 } from '../src/lib/performanceAuditLog';
+import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
 
 describe('bounded audit evidence', () => {
   it('leaves a check within budget untouched', () => {
@@ -129,6 +130,22 @@ describe('performanceAuditLog compaction', () => {
 
   it('compacts full reports for paste upload without dropping fail signal', () => {
     const sha = 'e5ed9d7c0831dba30dace233f4f9c7a6d943331e3811733b3d495795e4cabe6b';
+    const appHealth = finalizeAppHealthReport({
+      sessionId: 's1',
+      mode: 'local',
+      startedAt: '2026-09-03T00:00:00Z',
+      finishedAt: '2026-09-03T00:00:01Z',
+      checks: [{
+        id: APP_HEALTH_CHECK_CODES.SOURCE_STATE,
+        code: APP_HEALTH_CHECK_CODES.SOURCE_STATE,
+        label: 'Source state',
+        domain: 'data-integrity',
+        status: 'fail',
+        metrics: { source: 'cache', coreAvailable: false },
+        localEvidence: { providerNames: ['Private Bank'] },
+      }],
+      plannedCheckIds: [APP_HEALTH_CHECK_CODES.SOURCE_STATE, APP_HEALTH_CHECK_CODES.AUDIT_PLAN],
+    });
     const compact = compactPerformanceAuditReportForLog({
       schemaVersion: 4,
       sessionId: 's1',
@@ -170,12 +187,18 @@ describe('performanceAuditLog compaction', () => {
         },
       ],
       limitations: ['a', 'b', 'c', 'd', 'e'],
+      appHealth,
       blob: 'O'.repeat(100_000),
     }) as Record<string, unknown>;
 
     expect(compact.blob).toBeUndefined();
     expect(compact.limitations).toEqual(['a', 'b', 'c', 'd', 'e']);
     expect(compact.coverage).toEqual({ plannedChecks: 2, storedChecks: 2, coveragePercent: 100 });
+    expect(compact.appHealth).toEqual(expect.objectContaining({
+      schemaVersion: 7,
+      summary: expect.objectContaining({ fail: 1 }),
+    }));
+    expect(JSON.stringify(compact.appHealth)).not.toContain('Private Bank');
     expect(compact.plan).toEqual({
       schemaVersion: 1,
       inputs: { provider: 'AFG' },
@@ -195,7 +218,7 @@ describe('performanceAuditLog compaction', () => {
     expect(checks[1].error).toBe('nope');
 
     const encoded = compactAuditLogJson(compact);
-    expect(encoded.length).toBeLessThan(2_500);
+    expect(encoded.length).toBeLessThan(4_500);
     expect(encoded).not.toContain(sha);
   });
 });

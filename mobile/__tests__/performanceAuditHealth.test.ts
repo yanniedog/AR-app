@@ -1,5 +1,7 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import { appHealthDisplayObservations } from '../src/lib/performanceAuditHealth';
+import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
+import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -60,5 +62,14 @@ describe('integrated app-health display evidence', () => {
       { role: 'visible', expectedMinimum: 0, visibleCount: 0 },
       { role: 'empty-state', expected: true, rendered: true },
     ]);
+  });
+
+  it('accepts a measured count-only layout probe end to end', () => {
+    const checks = evaluateAppHealthDisplayQuality(
+      [{ id: 'today.hero', requiredRoles: ['critical-layout'] }],
+      appHealthDisplayObservations([check('today.hero:layout:layout:ready:1/1')]),
+    );
+    expect(checks.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status)
+      .toBe('pass');
   });
 });

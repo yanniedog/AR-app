@@ -1,5 +1,7 @@
 /** Compact perf-audit encodings for bounded local raw-log exports; full report stays in the sidecar. */
 
+import { readCompatibleAppHealthReport, toPublicAppHealthReport } from './appHealth';
+
 const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
 
 /**
@@ -200,9 +202,15 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
     });
   }
 
+  const readableAppHealth = readCompatibleAppHealthReport(source.appHealth);
+  const compactAppHealth = readableAppHealth?.kind === 'app-health-v7'
+    ? toPublicAppHealthReport(readableAppHealth.report)
+    : undefined;
+
   const kept = new Set([
     'schemaVersion', 'sessionId', 'startedAt', 'finishedAt', 'durationMs', 'partial',
     'app', 'watchdog', 'environment', 'plan', 'coverage', 'summary', 'checks', 'routeAggregates', 'limitations',
+    'appHealth',
   ]);
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -227,6 +235,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
     checks,
     routeAggregates: source.routeAggregates,
     limitations: source.limitations,
+    appHealth: compactAppHealth,
     ...extras,
   });
 }

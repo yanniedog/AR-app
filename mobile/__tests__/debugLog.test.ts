@@ -400,6 +400,21 @@ describe('uploadDebugLog', () => {
       'The complete debug-log upload failed',
     );
   });
+
+  it('rejects a c-net success response that cannot be deleted', async () => {
+    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+    const mockFetch = jest.fn(async () => ({
+      status: 201,
+      text: async () => JSON.stringify({
+        url: 'https://paste.c-net.org/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      }),
+    })) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toThrow(
+      'full-capacity upload service returned an invalid upload link',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('deleteDebugLogUpload', () => {

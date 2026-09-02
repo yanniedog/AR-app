@@ -1344,7 +1344,7 @@ async function runPasteCnetAttempt(
       }
       const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
       const url = typeof record?.url === 'string' ? record.url.trim() : '';
-      const deleteKey = typeof record?.delete_key === 'string' ? record.delete_key : undefined;
+      const deleteKey = typeof record?.delete_key === 'string' ? record.delete_key.trim() : '';
       let parsedUrl: URL;
       try {
         parsedUrl = new URL(url);
@@ -1354,7 +1354,8 @@ async function runPasteCnetAttempt(
       if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'paste.c-net.org') {
         throw new PasteRsAttemptError('invalid-response', response.status);
       }
-      return { url, ...(deleteKey ? { deleteKey } : {}) };
+      if (!deleteKey) throw new PasteRsAttemptError('invalid-response', response.status);
+      return { url, deleteKey };
     })();
     return await Promise.race([request, timeout]);
   } catch (error) {

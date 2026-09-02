@@ -36,6 +36,12 @@ export default function ThirdPartyNoticesScreen() {
             Revision {notice.pinnedRevision}
           </LedgerText>
           <SourceReference url={notice.sourceUrl} />
+          <View style={{ gap: 6, paddingTop: 8 }}>
+            <LedgerText variant="label">Licence notice</LedgerText>
+            <LedgerText variant="caption" tone="mutedInk" selectable>
+              {notice.noticeText}
+            </LedgerText>
+          </View>
         </LedgerSection>
       ))}
 
