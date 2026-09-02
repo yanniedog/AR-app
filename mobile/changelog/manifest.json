@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-02T22:08:22.489Z",
+  "generated_at": "2026-09-02T22:32:00.881Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -858,6 +858,14 @@
         "Redesign Australian Rates and audit app health (#217)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.175"
+    },
+    {
+      "version": "1.0.177",
+      "date": "2026-09-02",
+      "summaryBullets": [
+        "Close Rate Ledger audit review gaps (#219)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.177"
     }
   ]
 }
