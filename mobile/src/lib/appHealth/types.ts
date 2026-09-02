@@ -27,6 +27,7 @@ export type AppHealthMetricValue = string | number | boolean | null;
 export const APP_HEALTH_CHECK_CODES = {
   SOURCE_STATE: 'data-source-state',
   MANIFEST_CONTRACT: 'manifest-contract',
+  CORE_SCHEMA: 'core-schema',
   ASSET_DESCRIPTORS: 'asset-descriptors',
   RUN_IDENTITY: 'payload-run-identity',
   REQUIRED_SECTIONS: 'required-sections',

@@ -199,6 +199,37 @@ function evaluateManifest(
   );
 }
 
+function evaluateCoreSchema(
+  snapshot: AppHealthDataSnapshot,
+  contract: AppHealthSourceContract,
+): AppHealthCheck {
+  if (!snapshot.core) {
+    return check(
+      APP_HEALTH_CHECK_CODES.CORE_SCHEMA,
+      'Core payload schema',
+      'data-integrity',
+      'unavailable',
+      { coreAvailable: false, schemaSupported: false },
+      'The core payload schema cannot be checked because no core payload is loaded.',
+    );
+  }
+  const schemaSupported = contract.supportedCoreSchemas.includes(snapshot.core.schema_version);
+  return check(
+    APP_HEALTH_CHECK_CODES.CORE_SCHEMA,
+    'Core payload schema',
+    'data-integrity',
+    schemaSupported ? 'pass' : 'fail',
+    {
+      coreAvailable: true,
+      schemaVersion: snapshot.core.schema_version,
+      schemaSupported,
+    },
+    schemaSupported
+      ? undefined
+      : 'The loaded core payload uses a schema this app does not support.',
+  );
+}
+
 function evaluateAssetDescriptors(
   snapshot: AppHealthDataSnapshot,
   contract: AppHealthSourceContract,
@@ -823,6 +854,7 @@ export function evaluateAppHealthDataQuality(
   return [
     evaluateSourceState(snapshot),
     evaluateManifest(snapshot, contract),
+    evaluateCoreSchema(snapshot, contract),
     evaluateAssetDescriptors(snapshot, contract),
     evaluateRunIdentity(snapshot),
     evaluateRequiredSections(snapshot, contract),

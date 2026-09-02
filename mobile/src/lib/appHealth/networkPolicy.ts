@@ -203,6 +203,12 @@ export class AppHealthNetworkPolicy {
     session.pendingAuthorizations -= 1;
   }
 
+  /** Record a post-transport boundary violation such as an unsafe redirect. */
+  recordPolicyViolation(handle: AppHealthNetworkSessionHandle): void {
+    const session = this.sessionFor(handle);
+    if (session) session.policyViolations += 1;
+  }
+
   snapshot(handle: AppHealthNetworkSessionHandle): AppHealthNetworkSnapshot | null {
     const session = this.sessionFor(handle);
     return session ? snapshotOf(session) : null;

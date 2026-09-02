@@ -150,13 +150,19 @@ function evaluateRole(
         break;
       }
       case 'critical-layout': {
-        const invalidDimensions =
+        // Existing screen probes become ready only after their React Native
+        // layout/content-size callback fires. They intentionally report that
+        // boolean without serialising viewport dimensions. When dimensions are
+        // supplied by a richer probe, validate both strictly.
+        const hasDimensions = evidence.width != null || evidence.height != null;
+        const invalidDimensions = hasDimensions && (
           evidence.width == null ||
           evidence.height == null ||
           !Number.isFinite(evidence.width) ||
           !Number.isFinite(evidence.height) ||
           evidence.width <= 0 ||
-          evidence.height <= 0;
+          evidence.height <= 0
+        );
         if (!evidence.measured || evidence.clipped || invalidDimensions) {
           result.failed += 1;
           result.failedSurfaceIds.push(contract.id);

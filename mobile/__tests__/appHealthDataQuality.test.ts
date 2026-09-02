@@ -36,8 +36,23 @@ describe('app-health data quality', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
 
-    expect(checks).toHaveLength(14);
+    expect(checks).toHaveLength(15);
     expect(checks.every((check) => check.status === 'pass')).toBe(true);
+  });
+
+  it('rejects a core payload schema that the app contract does not support', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    Object.assign(snapshot.core!, { schema_version: 99 });
+
+    expect(
+      byCode(
+        evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+        APP_HEALTH_CHECK_CODES.CORE_SCHEMA,
+      ),
+    ).toMatchObject({
+      status: 'fail',
+      metrics: { schemaVersion: 99, schemaSupported: false },
+    });
   });
 
   it('surfaces independent integrity, completeness, and freshness failures', () => {

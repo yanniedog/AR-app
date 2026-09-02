@@ -43,4 +43,35 @@ describe('installAppHealthTransportGuard', () => {
     expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 1, blockedAttempts: 1, transportCalls: 1 });
     guard.restore();
   });
+
+  it('accepts GitHub release delivery redirects but rejects an untrusted final host', async () => {
+    const fetchSpy = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        redirected: true,
+        url: 'https://release-assets.githubusercontent.com/github-production-release-asset/file?sp=r',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        redirected: true,
+        url: 'https://untrusted.test/manifest.json',
+      }) as unknown as typeof fetch;
+    const target = { fetch: fetchSpy };
+    const githubContract = createV1AppHealthSourceContract();
+    const guard = installAppHealthTransportGuard({
+      target,
+      mode: 'live-source',
+      contract: githubContract,
+    });
+
+    await expect(target.fetch(githubContract.manifestUrl)).resolves.toMatchObject({ ok: true });
+    await expect(target.fetch(githubContract.manifestUrl)).rejects.toThrow('blocked');
+    expect(guard.snapshot()).toMatchObject({
+      authorizedAttempts: 2,
+      transportCalls: 2,
+      policyViolations: 1,
+    });
+    guard.restore();
+  });
 });

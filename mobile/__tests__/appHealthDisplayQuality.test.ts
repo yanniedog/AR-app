@@ -47,6 +47,34 @@ describe('app-health display quality', () => {
     expect(byCode(checks, APP_HEALTH_CHECK_CODES.DISPLAY_CHART).status).toBe('fail');
   });
 
+  it('accepts callback-backed layout evidence without dimensions but rejects invalid supplied dimensions', () => {
+    const callbackFixture = makeCompleteDisplayFixture();
+    callbackFixture.observations[0].evidence = callbackFixture.observations[0].evidence.map(
+      (evidence) => evidence.role === 'critical-layout'
+        ? { ...evidence, width: null, height: null }
+        : evidence,
+    );
+    expect(
+      byCode(
+        evaluateAppHealthDisplayQuality(callbackFixture.contracts, callbackFixture.observations),
+        APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+      ).status,
+    ).toBe('pass');
+
+    const invalidFixture = makeCompleteDisplayFixture();
+    invalidFixture.observations[0].evidence = invalidFixture.observations[0].evidence.map(
+      (evidence) => evidence.role === 'critical-layout'
+        ? { ...evidence, width: 0, height: 480 }
+        : evidence,
+    );
+    expect(
+      byCode(
+        evaluateAppHealthDisplayQuality(invalidFixture.contracts, invalidFixture.observations),
+        APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
+      ).status,
+    ).toBe('fail');
+  });
+
   it('distinguishes a decoded logo from a fallback and a missing asset', () => {
     const fallbackFixture = makeCompleteDisplayFixture();
     fallbackFixture.observations[0].evidence = fallbackFixture.observations[0].evidence.map(

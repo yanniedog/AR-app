@@ -53,6 +53,40 @@ function purposeFor(url: string, contract: AppHealthSourceContract): AppHealthNe
   return 'asset';
 }
 
+const GITHUB_RELEASE_DELIVERY_HOSTS = new Set([
+  'objects.githubusercontent.com',
+  'release-assets.githubusercontent.com',
+]);
+
+function acceptedFinalFetchUrl(
+  requestedUrl: string,
+  response: Response,
+  contract: AppHealthSourceContract,
+): boolean {
+  const finalValue = typeof response.url === 'string' ? response.url : '';
+  if (!response.redirected && !finalValue) return true;
+  const requested = canonical(requestedUrl);
+  if (!requested || !finalValue) return false;
+  const finalCanonical = canonical(finalValue);
+  if (finalCanonical === requested) return true;
+  try {
+    const requestedParsed = new URL(requested);
+    const finalParsed = new URL(finalValue);
+    return (
+      requestedParsed.hostname === 'github.com' &&
+      requestedParsed.pathname.startsWith(`/${contract.repo}/releases/download/`) &&
+      finalParsed.protocol === 'https:' &&
+      !finalParsed.username &&
+      !finalParsed.password &&
+      !finalParsed.port &&
+      !finalParsed.hash &&
+      GITHUB_RELEASE_DELIVERY_HOSTS.has(finalParsed.hostname.toLowerCase())
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Install one enforceable transport boundary for the whole audit window.
  * Both fetch and XMLHttpRequest must cross the same policy before native I/O.
@@ -71,15 +105,20 @@ export function installAppHealthTransportGuard(options: {
     declaredAssetUrls,
   });
   const originalFetch = target.fetch;
-  const guardedFetch: typeof fetch = (input, init) => {
+  const guardedFetch: typeof fetch = async (input, init) => {
     const url = requestUrl(input);
-    return executeAppHealthRequest(
+    const response = await executeAppHealthRequest(
       policy,
       handle,
       url,
       purposeFor(url, contract),
       () => originalFetch.call(target, input, init),
     );
+    if (!acceptedFinalFetchUrl(url, response, contract)) {
+      policy.recordPolicyViolation(handle);
+      throw new AppHealthNetworkPolicyError({ allowed: false, reason: 'not-allowlisted' });
+    }
+    return response;
   };
   target.fetch = guardedFetch;
 
