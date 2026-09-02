@@ -123,7 +123,10 @@ describe('navigation shell compatibility', () => {
   });
 
   it('keeps compatibility redirects for former group-qualified routes', () => {
-    expect(read('../app/(tabs)/settings.tsx')).toContain('href="/settings"');
+    const legacySettings = read('../app/(tabs)/settings.tsx');
+    expect(legacySettings).toContain("pathname: '/settings'");
+    expect(legacySettings).toContain("focus: 'update'");
+    expect(legacySettings).toContain("{ t }");
     expect(read('../app/(tabs)/trends.tsx')).toContain("from '../trends'");
     expect(read('../app/trends.tsx')).toContain("focus === 'rba'");
   });

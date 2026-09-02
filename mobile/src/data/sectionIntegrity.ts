@@ -12,6 +12,12 @@ export interface CoreIntegrityContext {
   quarantines: {
     bankHistoryPairs: ReadonlySet<string>;
     rowsByReason: Readonly<Record<string, number>>;
+    /** Exact changes to manifest summary dimensions caused by normalization. */
+    countImpacts: Readonly<{
+      rates: number;
+      products: number;
+      providers: number;
+    }>;
   };
 }
 
@@ -145,6 +151,11 @@ export function normalizeCoreWithIntegrity(
         },
       }
     : core;
+  const rawRows = Object.values(core.sections ?? {}).flatMap((section) => section.rates ?? []);
+  const normalizedRows = Object.values(normalized.sections ?? {})
+    .flatMap((section) => section.rates ?? []);
+  const uniqueCount = (rowsToCount: readonly RateRow[], key: 'product_key' | 'provider') =>
+    new Set(rowsToCount.map((row) => row[key]).filter(Boolean)).size;
   const integrity: CoreIntegrityContext = {
     schemaVersion: 1,
     core: normalized,
@@ -157,6 +168,11 @@ export function normalizeCoreWithIntegrity(
       bankHistoryPairs: quarantinedPairs,
       rowsByReason: Object.freeze({
         explicit_term_deposit_in_savings: contaminated.length,
+      }),
+      countImpacts: Object.freeze({
+        rates: rawRows.length - normalizedRows.length,
+        products: uniqueCount(rawRows, 'product_key') - uniqueCount(normalizedRows, 'product_key'),
+        providers: uniqueCount(rawRows, 'provider') - uniqueCount(normalizedRows, 'provider'),
       }),
     },
   };

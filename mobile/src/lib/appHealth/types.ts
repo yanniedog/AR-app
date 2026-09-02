@@ -154,6 +154,12 @@ export interface AppHealthDetailsObservation {
 export interface AppHealthQuarantineObservation {
   rowsByReason: Readonly<Record<string, number>>;
   bankHistoryPairs: number;
+  /** Exact count changes introduced by client-side quarantine normalization. */
+  countImpacts?: Readonly<{
+    rates: number;
+    products: number;
+    providers: number;
+  }>;
 }
 
 export interface AppHealthDataSnapshot {

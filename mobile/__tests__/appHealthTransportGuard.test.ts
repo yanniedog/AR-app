@@ -2,7 +2,11 @@ import { installAppHealthTransportGuard } from '../src/lib/appHealthTransportGua
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 
 function targetWithSpies() {
-  const fetchSpy = jest.fn(async () => ({ ok: true })) as unknown as typeof fetch;
+  const fetchSpy = jest.fn(async (input: RequestInfo | URL) => ({
+    ok: true,
+    redirected: false,
+    url: typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url,
+  })) as unknown as typeof fetch;
   class FakeXhr {
     open = jest.fn();
     send = jest.fn();
@@ -84,6 +88,16 @@ describe('installAppHealthTransportGuard', () => {
       transportCalls: 2,
       policyViolations: 1,
     });
+    guard.restore();
+  });
+
+  it('fails closed when the transport does not expose its final URL', async () => {
+    const fetchSpy = jest.fn(async () => ({ ok: true, redirected: false, url: '' })) as unknown as typeof fetch;
+    const target = { fetch: fetchSpy };
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+
+    await expect(target.fetch(contract.manifestUrl)).rejects.toThrow('blocked');
+    expect(guard.snapshot()).toMatchObject({ transportCalls: 1, policyViolations: 1 });
     guard.restore();
   });
 

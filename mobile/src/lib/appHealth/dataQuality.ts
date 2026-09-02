@@ -570,7 +570,7 @@ function evaluateRibbonReconciliation(
     }
   }
   const rows = allRows(snapshot).map(([, row]) => row);
-  const actualManifestCounts: Record<string, number> = {
+  const actualManifestCounts: Record<'rates' | 'products' | 'providers', number> = {
     rates: rows.length,
     products: new Set(rows.map((row) => row.product_key).filter(Boolean)).size,
     providers: new Set(rows.map((row) => row.provider).filter(Boolean)).size,
@@ -582,14 +582,17 @@ function evaluateRibbonReconciliation(
     (sum, value) => sum + (Number.isFinite(value) && value > 0 ? value : 0),
     0,
   );
-  for (const [name, actual] of Object.entries(actualManifestCounts)) {
+  const quarantineImpacts = snapshot.quarantine?.countImpacts;
+  for (const [name, actual] of Object.entries(actualManifestCounts) as
+    ['rates' | 'products' | 'providers', number][]) {
     if (!snapshot.manifest || !(name in snapshot.manifest.counts)) continue;
     declaredCountComparisons += 1;
     const declared = snapshot.manifest.counts[name];
     if (!Number.isInteger(declared) || declared < 0) {
       declaredCountMismatches += 1;
     } else if (declared !== actual) {
-      if (declared > actual && declared - actual <= quarantinedRows) {
+      const positiveDelta = declared - actual;
+      if (positiveDelta > 0 && positiveDelta === (quarantineImpacts?.[name] ?? 0)) {
         declaredCountAdjustments += 1;
       } else {
         declaredCountMismatches += 1;
@@ -612,6 +615,11 @@ function evaluateRibbonReconciliation(
       declaredCountComparisons,
       declaredCountAdjustments,
       declaredCountMismatches,
+      quarantinedRows,
+      quarantineImpactsAvailable: Boolean(quarantineImpacts),
+      quarantineRateImpact: quarantineImpacts?.rates ?? null,
+      quarantineProductImpact: quarantineImpacts?.products ?? null,
+      quarantineProviderImpact: quarantineImpacts?.providers ?? null,
     },
     status === 'fail' ? 'A section or manifest summary does not reconcile with the loaded rows.' : undefined,
   );
