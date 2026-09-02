@@ -1,8 +1,8 @@
 # Australian Rates — Rate Ledger atomic redesign and app-health plan
 
-Status: implemented downstream in AR-app  
-Repository: `yanniedog/AR-app` (`mobile/` remains the app root)  
-Producer dependency: `yanniedog/AR-local`  
+Status: implemented downstream in AR-app
+Repository: `yanniedog/AR-app` (`mobile/` remains the app root)
+Producer dependency: `yanniedog/AR-local`
 Language: Australian English
 
 ## 1. Outcome

@@ -1,7 +1,7 @@
 # Rate Ledger design system
 
-Status: implementation contract  
-Product: Australian Rates mobile app  
+Status: implementation contract
+Product: Australian Rates mobile app
 Language: Australian English
 
 ## 1. Design intent

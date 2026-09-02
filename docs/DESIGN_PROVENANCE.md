@@ -1,6 +1,6 @@
 # Rate Ledger design provenance
 
-Status: auditable source record  
+Status: auditable source record
 Scope: visual system, typography, icon approach and design guidance
 
 ## Authorship position
