@@ -121,4 +121,10 @@ describe('navigation shell compatibility', () => {
     expect(tabs).toMatch(/<Tabs\.Screen\s+name="passthrough"/);
     expect(tabs).not.toMatch(/<Tabs\.Screen\s+name="trends"/);
   });
+
+  it('keeps compatibility redirects for former group-qualified routes', () => {
+    expect(read('../app/(tabs)/settings.tsx')).toContain('href="/settings"');
+    expect(read('../app/(tabs)/trends.tsx')).toContain("from '../trends'");
+    expect(read('../app/trends.tsx')).toContain("focus === 'rba'");
+  });
 });
