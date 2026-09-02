@@ -1603,16 +1603,22 @@ async function runNetworkCheck(
   if (mode === 'live-source') {
     const started = now();
     const responsivenessAt = monitor.snapshot();
+    const controller = new AbortController();
     try {
-      const snapshot = await readLiveAppHealthSnapshot({
-        guard,
-        contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
-        appVersion: Application.nativeApplicationVersion ?? '0.0.0',
-        onProgress: () => {
-          assertSessionActive(watchdog);
-          watchdog.touchProgress();
-        },
-      });
+      const snapshot = await awaitAuditWork(
+        readLiveAppHealthSnapshot({
+          guard,
+          contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+          appVersion: Application.nativeApplicationVersion ?? '0.0.0',
+          signal: controller.signal,
+          onProgress: () => {
+            assertSessionActive(watchdog);
+            watchdog.touchProgress();
+          },
+        }),
+        watchdog,
+        'Live-source publication validation',
+      );
       onSnapshot(snapshot);
       const responsiveness = monitor.metricsSince(responsivenessAt);
       return {
@@ -1632,6 +1638,7 @@ async function runNetworkCheck(
         },
       };
     } catch (error) {
+      rethrowAuditControl(error);
       return {
         id: 'manifest-network',
         label: 'Live-source manifest transport',
@@ -1642,6 +1649,8 @@ async function runNetworkCheck(
         error: formatAuditError(error),
         trace: captureAuditTrace('live-source manifest transport failed'),
       };
+    } finally {
+      controller.abort();
     }
   }
   return {

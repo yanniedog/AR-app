@@ -260,6 +260,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'validCoreRunDate',
     'comparisons',
     'mismatches',
+    'indexLag',
   ],
   [APP_HEALTH_CHECK_CODES.REQUIRED_SECTIONS]: [
     'requiredSections',

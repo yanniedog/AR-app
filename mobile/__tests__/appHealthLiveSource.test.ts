@@ -82,10 +82,11 @@ describe('live app-health source validation', () => {
         latest_date: core.run_date,
       }))
       .mockResolvedValueOnce(response(assetUrl('core.json'), null, coreBytes))
-      .mockResolvedValueOnce(response(assetUrl('details.json'), null, detailsBytes)) as unknown as typeof fetch;
-    globalThis.fetch = fetchSpy;
+      .mockResolvedValueOnce(response(assetUrl('details.json'), null, detailsBytes));
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
     const digest = jest.spyOn(Crypto, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
     const progress = jest.fn();
+    const controller = new AbortController();
     const guard = installAppHealthTransportGuard({
       target: globalThis as unknown as AuditTransportTarget,
       mode: 'live-source',
@@ -97,11 +98,13 @@ describe('live app-health source validation', () => {
         contract,
         appVersion: '1.0.0',
         onProgress: progress,
+        signal: controller.signal,
       });
       expect(snapshot.datesIndex).toEqual({ dates: [core.run_date], latestRunDate: core.run_date });
       expect(snapshot.core?.run_date).toBe(core.run_date);
       expect(snapshot.details?.runDate).toBe(core.run_date);
       expect(fetchSpy).toHaveBeenCalledTimes(4);
+      expect(fetchSpy.mock.calls.every(([, init]) => init?.signal === controller.signal)).toBe(true);
       expect(progress.mock.calls.map(([stage]) => stage)).toEqual([
         'manifest:fetched',
         'dates-index:fetched',

@@ -36,8 +36,8 @@ function manifestFile(value: unknown, label: string): ManifestFile {
   return file as unknown as ManifestFile;
 }
 
-async function fetchJson(url: string, label: string): Promise<unknown> {
-  const response = await globalThis.fetch(url, { cache: 'no-store' });
+async function fetchJson(url: string, label: string, signal?: AbortSignal): Promise<unknown> {
+  const response = await globalThis.fetch(url, { cache: 'no-store', signal });
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
   return response.json();
 }
@@ -52,8 +52,9 @@ async function fetchVerifiedAsset<T>(
   file: ManifestFile,
   label: string,
   onProgress?: AppHealthLiveProgress,
+  signal?: AbortSignal,
 ): Promise<T> {
-  const response = await globalThis.fetch(file.url, { cache: 'no-store' });
+  const response = await globalThis.fetch(file.url, { cache: 'no-store', signal });
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
   const raw = new Uint8Array(await response.arrayBuffer());
   await onProgress?.(`${label}:downloaded`);
@@ -83,9 +84,10 @@ export async function readLiveAppHealthSnapshot(options: {
   contract: AppHealthSourceContract;
   appVersion: string;
   onProgress?: AppHealthLiveProgress;
+  signal?: AbortSignal;
 }): Promise<AppHealthDataSnapshot> {
-  const { guard, contract, appVersion, onProgress } = options;
-  const manifestRaw = await fetchJson(contract.manifestUrl, 'Live manifest');
+  const { guard, contract, appVersion, onProgress, signal } = options;
+  const manifestRaw = await fetchJson(contract.manifestUrl, 'Live manifest', signal);
   await onProgress?.('manifest:fetched');
   const manifestObject = object(manifestRaw, 'Live manifest');
   const files = object(manifestObject.files, 'Live manifest files');
@@ -97,15 +99,20 @@ export async function readLiveAppHealthSnapshot(options: {
     });
   guard.allowManifestAssets(declaredUrls);
 
-  const datesRaw = await fetchJson(contract.datesIndexUrl, 'Dates index');
+  const datesRaw = await fetchJson(contract.datesIndexUrl, 'Dates index', signal);
   await onProgress?.('dates-index:fetched');
   const dates = parseDatesIndex(datesRaw);
   if (!dates) throw new Error('Dates index payload is invalid');
 
-  const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress);
+  const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress, signal);
   const coreResult = normalizeCoreWithIntegrity(coreRaw, { coreSha256: coreFile.sha256 });
   await onProgress?.('core:normalized');
-  const details = await fetchVerifiedAsset<DetailsPayload>(detailsFile, 'Details asset', onProgress);
+  const details = await fetchVerifiedAsset<DetailsPayload>(
+    detailsFile,
+    'Details asset',
+    onProgress,
+    signal,
+  );
   const coreKeys = new Set(
     Object.values(coreResult.core.sections ?? {})
       .flatMap((section) => section.rates)

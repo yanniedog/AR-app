@@ -251,14 +251,21 @@ export function appHealthSurfaceContracts(
   plan: DeepPerformanceAuditPlan,
 ): AppHealthSurfaceContract[] {
   const roles = new Map<string, Set<AppHealthDisplayRole>>();
+  const independentListEvidenceSurfaces = new Set([
+    'browse.hierarchy',
+    'lenders.list',
+    'search.results',
+  ]);
   const include = (surface: string, requested: readonly string[] = []) => {
     const next = roles.get(surface) ?? new Set<AppHealthDisplayRole>();
     next.add('model');
     next.add('critical-layout');
     if (requested.includes('list')) {
       next.add('list');
-      next.add('visible');
-      next.add('empty-state');
+      if (independentListEvidenceSurfaces.has(surface)) {
+        next.add('visible');
+        next.add('empty-state');
+      }
     }
     if (requested.includes('logos')) next.add('logo');
     if (requested.includes('graphics')) next.add('chart');
