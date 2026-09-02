@@ -90,7 +90,9 @@ function acceptedFinalFetchUrl(
 
 /**
  * Install one enforceable transport boundary for the whole audit window.
- * Both fetch and XMLHttpRequest must cross the same policy before native I/O.
+ * Fetch crosses the allowlist and verifies its final URL. XHR is blocked during
+ * audits because React Native does not expose redirects before response data is
+ * accepted by callers.
  */
 export function installAppHealthTransportGuard(options: {
   target: AuditTransportTarget;
@@ -135,11 +137,10 @@ export function installAppHealthTransportGuard(options: {
       decisions.set(this, policy.authorize(handle, rawUrl, purposeFor(rawUrl, contract)));
       return originalOpen.call(this, method, url, ...rest);
     };
-    guardedSend = function guardedXhrSend(this: object, body) {
+    guardedSend = function guardedXhrSend(this: object, _body) {
       const decision = decisions.get(this) ?? { allowed: false, reason: 'invalid-url' };
       if (!decision.allowed) throw new AppHealthNetworkPolicyError(decision);
-      policy.recordTransport(handle, decision);
-      return originalSend.call(this, body);
+      throw new AppHealthNetworkPolicyError(policy.blockAuthorizedTransport(handle, decision));
     };
     xhrPrototype.open = guardedOpen;
     xhrPrototype.send = guardedSend;

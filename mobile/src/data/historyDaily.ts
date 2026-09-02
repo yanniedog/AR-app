@@ -1,5 +1,6 @@
 import { DATES_INDEX_URL, datedManifestUrl } from '../config';
 import { debugLog } from '../lib/debugLog';
+import { isValidCalendarDate } from '../lib/calendarDate';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
@@ -18,17 +19,14 @@ export interface DatesIndex {
   latest_date: string;
 }
 
-const YMD = /^\d{4}-\d{2}-\d{2}$/;
-
 /** Parse ``dates-index.json`` from the rolling GitHub release. */
 export function parseDatesIndex(raw: unknown): DatesIndex | null {
   if (!raw || typeof raw !== 'object') return null;
   const obj = raw as Record<string, unknown>;
-  const dates = Array.isArray(obj.dates)
-    ? obj.dates
-        .map((d) => (typeof d === 'string' ? d.slice(0, 10) : ''))
-        .filter((d) => YMD.test(d))
-    : [];
+  if (!Array.isArray(obj.dates)) return null;
+  const dates = obj.dates.map((date) => (typeof date === 'string' ? date.slice(0, 10) : ''));
+  // Reject the document rather than silently deleting corrupt publication days.
+  if (dates.some((date) => !isValidCalendarDate(date))) return null;
   if (!dates.length) return null;
   const sorted = normalizeTimelineDates(dates);
   return {

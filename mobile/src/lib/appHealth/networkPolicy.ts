@@ -222,6 +222,19 @@ export class AppHealthNetworkPolicy {
     session.pendingAuthorizations -= 1;
   }
 
+  /** Consume an authorization without transport when a transport cannot verify redirects. */
+  blockAuthorizedTransport(
+    handle: AppHealthNetworkSessionHandle,
+    decision: AppHealthNetworkDecision,
+  ): AppHealthNetworkDecision {
+    const session = this.sessionFor(handle);
+    if (session && decision.allowed) {
+      session.pendingAuthorizations = Math.max(0, session.pendingAuthorizations - 1);
+      session.blockedAttempts += 1;
+    }
+    return { allowed: false, reason: 'not-allowlisted' };
+  }
+
   /** Record a post-transport boundary violation such as an unsafe redirect. */
   recordPolicyViolation(handle: AppHealthNetworkSessionHandle): void {
     const session = this.sessionFor(handle);

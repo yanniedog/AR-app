@@ -2,7 +2,7 @@ import type { AppState } from '../data/storeTypes';
 import type { AuditCheck, AuditJourney } from './performanceAudit';
 import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
 import {
-  APP_HEALTH_CHECK_CODES,
+  APP_HEALTH_EXPECTED_CHECK_IDS,
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   evaluateAppHealthDataQuality,
   evaluateAppHealthDisplayQuality,
@@ -59,7 +59,7 @@ export function appHealthDataSnapshot(
     },
     details: asset(
       Boolean(state.details),
-      state.detailsLoading === false && Boolean(state.error),
+      false,
       state.details?.run_date,
       detailKeys.length,
     ),
@@ -292,7 +292,7 @@ export function buildIntegratedAppHealthReport(input: {
     startedAt: input.startedAt,
     finishedAt: input.finishedAt,
     checks,
-    plannedCheckIds: checks.map((check) => check.id).concat(APP_HEALTH_CHECK_CODES.AUDIT_PLAN),
+    plannedCheckIds: APP_HEALTH_EXPECTED_CHECK_IDS,
     limitations: [
       'Display checks use screen probes captured during this run; a physical-device review is still required for visual polish and assistive technology.',
       input.mode === 'local'

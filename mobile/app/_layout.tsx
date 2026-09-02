@@ -524,7 +524,7 @@ export default function RootLayout() {
   // launches a headless background worker, and React does not remount it when
   // the existing Activity is only backgrounded and reopened.
   coldStartLogReset ??= debugLog.beginColdStartSession();
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     Commissioner_400Regular: require('../assets/fonts/Commissioner-Regular.ttf'),
     Commissioner_500Medium: require('../assets/fonts/Commissioner-Medium.ttf'),
     Commissioner_600SemiBold: require('../assets/fonts/Commissioner-SemiBold.ttf'),
@@ -534,7 +534,13 @@ export default function RootLayout() {
     Newsreader_500Medium_Italic: require('../assets/fonts/Newsreader-MediumItalic.ttf'),
   });
 
-  if (!fontsLoaded) {
+  useEffect(() => {
+    if (fontError) {
+      debugLog.error('fonts', 'Bundled fonts unavailable; using platform font fallbacks.');
+    }
+  }, [fontError]);
+
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 

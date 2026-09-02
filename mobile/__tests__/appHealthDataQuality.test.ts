@@ -128,6 +128,43 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('does not fabricate live-source evidence when acquisition is unavailable', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.source = 'unavailable';
+    snapshot.core = null;
+    snapshot.manifest = null;
+
+    const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
+
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.SOURCE_STATE)).toMatchObject({
+      status: 'fail',
+      metrics: { source: 'unavailable', coreAvailable: false },
+    });
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.MANIFEST_CONTRACT).status).toBe('unavailable');
+  });
+
+  it('treats missing coverage totals as unavailable and rejects impossible run dates', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage = { provider_failures: [], counts: { providers_failed: 0 } };
+    snapshot.core!.run_date = '2026-02-31';
+    snapshot.manifest!.run_date = '2026-02-31';
+
+    const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
+
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({
+      status: 'unavailable',
+      metrics: { coverageAvailable: true, totalsAvailable: false },
+    });
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.MANIFEST_CONTRACT)).toMatchObject({
+      status: 'fail',
+      metrics: { validRunDate: false },
+    });
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.RUN_IDENTITY)).toMatchObject({
+      status: 'fail',
+      metrics: { validCoreRunDate: false },
+    });
+  });
+
   it('validates the shipping bundled sample without treating bundled URLs as live hosts', () => {
     const details = loadSampleDetails();
     const productKeys = new Set(

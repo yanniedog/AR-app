@@ -95,6 +95,18 @@ describe('Rate Ledger data evidence', () => {
     }).kind).toBe('saved');
   });
 
+  it('shows retained data while checking for an update and preserves overdue offline truth', () => {
+    expect(mapDisplayEvidence({
+      source: 'remote', offline: false, runDate: '2026-09-03', now: NOW,
+      assetStatus: 'loading', hasUsableData: true,
+    })).toMatchObject({ kind: 'loading', label: 'Checking for update' });
+
+    expect(mapDisplayEvidence({
+      source: 'cache', offline: true, runDate: '2026-09-02', now: NOW,
+      overdueAfterUtc: '2026-09-03T01:00:00Z',
+    })).toMatchObject({ kind: 'offline', label: 'Offline · update overdue', tone: 'danger' });
+  });
+
   it('applies the same freshness grace window as app health', () => {
     const deadline = freshnessDeadlineUtc('2026-09-03T01:00:00Z', 24 * 60 * 60 * 1_000);
     expect(deadline).toBe('2026-09-04T01:00:00.000Z');

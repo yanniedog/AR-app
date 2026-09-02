@@ -290,6 +290,7 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
   ],
   [APP_HEALTH_CHECK_CODES.COVERAGE]: [
     'coverageAvailable',
+    'totalsAvailable',
     'providersAttempted',
     'providersSucceeded',
     'providersFailed',

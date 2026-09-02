@@ -26,6 +26,7 @@ import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate'
 import { getApkDownloadSnapshot } from '../lib/appUpdate';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+  type AppHealthAuditMode,
   type AppHealthDataSnapshot,
 } from '../lib/appHealth';
 import { readLiveAppHealthSnapshot } from '../lib/appHealthLiveSource';
@@ -1249,6 +1250,7 @@ async function runRuntimeCheck(
 async function runMaximumCoverageProfileCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
+  auditMode: AppHealthAuditMode,
 ): Promise<AuditCheck> {
   const started = now();
   const responsiveAt = monitor.snapshot();
@@ -1257,23 +1259,9 @@ async function runMaximumCoverageProfileCheck(
   useStore.setState({ prefs, activeSection: prefs.defaultSection });
   await yieldToUi();
 
-  const preparationErrors: string[] = [];
-  const prepare = async (label: string, work: () => Promise<void>) => {
-    try {
-      await awaitAuditWork(work(), watchdog, label);
-    } catch (caught) {
-      rethrowAuditControl(caught);
-      preparationErrors.push(`${label}: ${formatAuditError(caught)}`);
-    }
-  };
-  const prepared = useStore.getState();
-  await prepare('Maximum coverage details', () => prepared.ensureDetails());
-  await prepare('Maximum coverage search index', () => prepared.ensureSearchIndex());
-  await prepare('Maximum coverage bank history', () => prepared.ensureHistoryBanks());
-  await prepare('Maximum coverage bank insights', () => prepared.ensureBankInsights());
-  await prepare('Maximum coverage RBA calendar', () => prepared.ensureRbaCalendar());
-  await prepare('Maximum coverage product history', () =>
-    prepared.ensureProductHistory({ purpose: 'history_ribbon' }));
+  // Audit only what is already cached. Preparing an absent optional asset would
+  // make the audit mutate its subject and either violate local zero-network mode
+  // or authenticate an asset from state that predates the live-source manifest.
   assertSessionActive(watchdog);
 
   const state = useStore.getState();
@@ -1295,7 +1283,7 @@ async function runMaximumCoverageProfileCheck(
     state.rbaCalendarError,
     state.productHistoryError,
   ].filter((value): value is string => Boolean(value));
-  const errors = [...preparationErrors, ...dataErrors];
+  const errors = [...dataErrors];
   const maximumSafeFeaturesEnabled =
     state.prefs.interests.length === SECTION_ORDER.length &&
     SECTION_ORDER.every((section) => state.prefs.interests.includes(section)) &&
@@ -1306,13 +1294,16 @@ async function runMaximumCoverageProfileCheck(
     state.prefs.onboarded &&
     state.prefs.depositRankMetric === 'max' &&
     state.prefs.mortgageRateMetric === 'comparison';
+  const assetsUnavailableWithoutPreparation = missingAssets.length > 0 && errors.length === 0;
   const ok = maximumSafeFeaturesEnabled && missingAssets.length === 0 && errors.length === 0;
   const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'maximum-coverage-profile',
     label: 'Maximum safe audit coverage preparation',
     kind: 'data',
-    status: ok
+    status: assetsUnavailableWithoutPreparation
+      ? 'skipped'
+      : ok
       ? worstStatus('pass', responsivenessStatus(responsiveness))
       : 'fail',
     durationMs: roundMetric(now() - started),
@@ -1328,10 +1319,19 @@ async function runMaximumCoverageProfileCheck(
       requiredAssets: Object.keys(requiredAssets).length,
       availableAssets: Object.values(requiredAssets).filter(Boolean).length,
       missingAssets: missingAssets.join(',') || null,
-      nonTimingFailure: !ok,
+      localCacheOnly: auditMode === 'local',
+      executionAttempted: true,
+      measurementAvailable: !assetsUnavailableWithoutPreparation,
+      ...(assetsUnavailableWithoutPreparation ? {
+        skipClassification: 'terminal-availability',
+        availabilityFailure: true,
+        availabilityEvidence: `Optional assets are not cached: ${missingAssets.join(', ')}`,
+        reason: 'Maximum coverage is unavailable because optional assets are not cached',
+      } : {}),
+      nonTimingFailure: !ok && !assetsUnavailableWithoutPreparation,
       ...responsivenessRecord(responsiveness),
     },
-    ...(ok ? {} : {
+    ...(ok || assetsUnavailableWithoutPreparation ? {} : {
       error: errors.join(' | ') || `Missing maximum-coverage assets: ${missingAssets.join(', ')}`,
       trace: captureAuditTrace('maximum audit coverage preparation failed'),
     }),
@@ -2424,14 +2424,10 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
-      const declaredAssetUrls = Object.values(originalStore.manifest?.files ?? {})
-        .map((file) => file?.url)
-        .filter((url): url is string => typeof url === 'string' && url.length > 0);
       const transportGuard = installAppHealthTransportGuard({
         target: globalThis as unknown as AuditTransportTarget,
         mode: auditMode,
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
-        declaredAssetUrls,
       });
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
@@ -2653,7 +2649,11 @@ export function PerformanceAuditRunner() {
         await recordContinuable(
           'Preparing maximum safe feature coverage',
           async () => {
-            maximumProfileResult.check = await runMaximumCoverageProfileCheck(monitor, watchdog);
+            maximumProfileResult.check = await runMaximumCoverageProfileCheck(
+              monitor,
+              watchdog,
+              auditMode,
+            );
             return maximumProfileResult.check;
           },
         );
@@ -2666,7 +2666,8 @@ export function PerformanceAuditRunner() {
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
           maximumSafeFeaturesEnabled:
             maximumProfileResult.check != null &&
-            maximumProfileResult.check.status !== 'fail',
+            maximumProfileResult.check.status !== 'fail' &&
+            maximumProfileResult.check.status !== 'skipped',
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2956,7 +2957,7 @@ export function PerformanceAuditRunner() {
           network: transportGuard.snapshot(),
           dataSnapshot: auditMode === 'live-source'
             ? liveSourceSnapshot ?? {
-              source: 'remote',
+              source: 'unavailable',
               core: null,
               manifest: null,
               appVersion: app.appVersion,
@@ -3050,7 +3051,7 @@ export function PerformanceAuditRunner() {
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The first and repeat whole-app scenarios run linearly after maximum-profile asset preparation; they are not process-level or empty-cache cold starts. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
             'Every steady-state route also runs a separate push, exact destination settle, router back, and exact audit-origin recovery measurement in both passes. Semantic action checks never publish a synthetic back timing.',
-            `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, preloads their trusted assets, and is covered by the same durable rollback journal as saved data and scenarios. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
+            `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, evaluates already-cached assets, and is covered by the same durable rollback journal as saved data and scenarios. Missing optional assets are reported unavailable without downloading them. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
             'Failed journey or benchmark steps are recorded with error evidence; the runner recovers route/state when needed and continues the remaining plan. Cancel requests, hang-watchdog expiry, and mid-run dataset revision changes remain unrecoverable stops.',
             'In-page actions invoke the same registered callbacks as product searches, filters, calculator/projection field updates, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input.edit actions remain explicitly excluded for safety.',
             'Calculator and projection scenarios apply restorable canned parameter sets through registered UI callbacks; encrypted scenario values are restored with the audit rollback journal.',

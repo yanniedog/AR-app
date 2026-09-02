@@ -28,6 +28,10 @@ describe('historyDaily', () => {
     expect(parsed?.dates).toEqual(['2026-05-13', '2026-05-19', '2026-06-10']);
   });
 
+  it('rejects calendar-impossible publication dates instead of silently dropping them', () => {
+    expect(parseDatesIndex({ dates: ['2026-05-13', '2026-02-31'] })).toBeNull();
+  });
+
   it('historyDatesUpTo caps at target run_date', () => {
     expect(historyDatesUpTo(index, '2026-05-19')).toEqual(['2026-05-13', '2026-05-19']);
   });

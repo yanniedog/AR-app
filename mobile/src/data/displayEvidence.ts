@@ -181,10 +181,14 @@ export function mapDisplayEvidence(input: DisplayEvidenceInput): DisplayEvidence
   if (input.scheduleLabel) facts.push(`Update schedule: ${input.scheduleLabel}`);
   if (input.assetReason) facts.push(`Asset state: ${input.assetReason}`);
 
-  if (input.assetStatus === 'loading' && !hasUsableData) {
+  if (input.assetStatus === 'loading') {
     return {
-      kind: 'loading', tone: 'neutral', label: 'Checking data',
-      detail: 'Waiting for a verified data set.', observedOn, coverageState: coverage.state, facts,
+      kind: 'loading', tone: 'neutral',
+      label: hasUsableData ? 'Checking for update' : 'Checking data',
+      detail: hasUsableData
+        ? 'Showing the last verified observation while a newer publication is checked.'
+        : 'Waiting for a verified data set.',
+      observedOn, coverageState: coverage.state, facts,
     };
   }
 
@@ -224,22 +228,26 @@ export function mapDisplayEvidence(input: DisplayEvidenceInput): DisplayEvidence
     };
   }
 
-  if (isOverdue(input.overdueAfterUtc, now)) {
+  const overdue = isOverdue(input.overdueAfterUtc, now);
+  if (input.offline) {
+    return {
+      kind: 'offline', tone: overdue ? 'danger' : 'neutral',
+      label: overdue ? 'Offline · update overdue' : 'Offline',
+      detail: observedOn
+        ? `Showing a saved copy from ${formatEvidenceDate(observedOn)}${overdue ? '; its scheduled update is overdue' : ''}.`
+        : overdue
+          ? 'Showing saved data; its scheduled update is overdue and no observation date was provided.'
+          : 'Showing saved data; its observation date was not provided.',
+      observedOn, coverageState: coverage.state, facts,
+    };
+  }
+
+  if (overdue) {
     return {
       kind: 'overdue', tone: 'danger', label: 'Update overdue',
       detail: observedOn
         ? `Latest verified observation is ${formatEvidenceDate(observedOn)}.`
         : 'A scheduled update is late and no observation date was provided.',
-      observedOn, coverageState: coverage.state, facts,
-    };
-  }
-
-  if (input.offline) {
-    return {
-      kind: 'offline', tone: 'neutral', label: 'Offline',
-      detail: observedOn
-        ? `Showing a saved copy from ${formatEvidenceDate(observedOn)}.`
-        : 'Showing saved data; its observation date was not provided.',
       observedOn, coverageState: coverage.state, facts,
     };
   }

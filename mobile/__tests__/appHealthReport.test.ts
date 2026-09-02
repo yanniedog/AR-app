@@ -1,5 +1,6 @@
 import {
   APP_HEALTH_CHECK_CODES,
+  APP_HEALTH_EXPECTED_CHECK_IDS,
   type AppHealthCheck,
 } from '../src/lib/appHealth/types';
 import {
@@ -31,6 +32,14 @@ const baseInput = {
 };
 
 describe('app-health report finalization', () => {
+  it('declares every non-plan check independently of the checks a run produced', () => {
+    expect(APP_HEALTH_EXPECTED_CHECK_IDS).toEqual(
+      Object.values(APP_HEALTH_CHECK_CODES).filter(
+        (code) => code !== APP_HEALTH_CHECK_CODES.AUDIT_PLAN,
+      ),
+    );
+  });
+
   it('adds plan integrity before summary and produces a healthy complete report', () => {
     const check = passingCheck();
     const report = finalizeAppHealthReport({

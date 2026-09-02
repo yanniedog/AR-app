@@ -86,4 +86,32 @@ describe('installAppHealthTransportGuard', () => {
     });
     guard.restore();
   });
+
+  it('blocks XHR before send even when its initial URL is allowlisted', () => {
+    class FakeXhr {
+      open(_method: string, _url: string | URL, ..._rest: unknown[]): void {}
+      send(_body?: unknown): void {}
+    }
+    const open = jest.spyOn(FakeXhr.prototype, 'open');
+    const send = jest.spyOn(FakeXhr.prototype, 'send');
+    const fetchSpy = jest.fn(async () => ({ ok: true })) as unknown as typeof fetch;
+    const target = {
+      fetch: fetchSpy,
+      XMLHttpRequest: { prototype: FakeXhr.prototype },
+    };
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const xhr = new FakeXhr();
+
+    xhr.open('GET', contract.manifestUrl);
+    expect(() => xhr.send()).toThrow('blocked');
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(send).not.toHaveBeenCalled();
+    expect(guard.snapshot()).toMatchObject({
+      authorizedAttempts: 1,
+      blockedAttempts: 1,
+      transportCalls: 0,
+      policyViolations: 0,
+    });
+    guard.restore();
+  });
 });

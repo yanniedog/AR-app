@@ -1,5 +1,6 @@
 import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
 import { versionLt } from '../versionCompare';
+import { isValidCalendarDate } from '../calendarDate';
 import {
   APP_HEALTH_ASSET_KEYS,
   APP_HEALTH_CHECK_CODES,
@@ -11,7 +12,6 @@ import {
 } from './types';
 
 const SHA256_RE = /^[a-f0-9]{64}$/i;
-const RUN_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function check(
   code: AppHealthCheck['code'],
@@ -123,7 +123,9 @@ function evaluateSourceState(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   let summary = 'The active core payload is available from the live source.';
   if (!snapshot.core) {
     status = 'fail';
-    summary = 'No core payload is available to audit.';
+    summary = snapshot.source === 'unavailable'
+      ? 'The requested live publication could not be acquired for this audit.'
+      : 'No core payload is available to audit.';
   } else if (snapshot.source === 'sample') {
     status = 'warn';
     summary = 'The app is showing bundled sample data, not published rate data.';
@@ -169,7 +171,7 @@ function evaluateManifest(
       !manifest.app_min_version ||
       !versionLt(snapshot.appVersion, manifest.app_min_version),
   );
-  const validRunDate = RUN_DATE_RE.test(manifest.run_date);
+  const validRunDate = isValidCalendarDate(manifest.run_date);
   const validGeneratedAt = parseTimestamp(manifest.generated_at) != null;
   const violations = [
     !schemaSupported,
@@ -290,22 +292,32 @@ function evaluateRunIdentity(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   let comparisons = 0;
   let mismatches = 0;
   const coreRunDate = snapshot.core.run_date;
-  const validCoreRunDate = RUN_DATE_RE.test(coreRunDate);
+  const validCoreRunDate = isValidCalendarDate(coreRunDate);
   if (snapshot.manifest) {
     comparisons += 1;
     if (snapshot.manifest.run_date !== coreRunDate) mismatches += 1;
   }
   if (snapshot.details) {
     comparisons += 1;
-    if (snapshot.details.runDate !== coreRunDate) mismatches += 1;
+    if (!isValidCalendarDate(snapshot.details.runDate) || snapshot.details.runDate !== coreRunDate) {
+      mismatches += 1;
+    }
   }
   if (snapshot.datesIndex) {
     comparisons += 1;
+    const invalidIndexDates = snapshot.datesIndex.dates.filter(
+      (date) => !isValidCalendarDate(date),
+    ).length;
     const latest =
       snapshot.datesIndex.latestRunDate ??
       snapshot.datesIndex.dates[snapshot.datesIndex.dates.length - 1] ??
       null;
-    if (!snapshot.datesIndex.dates.includes(coreRunDate) || (latest && latest !== coreRunDate)) {
+    if (
+      invalidIndexDates > 0 ||
+      (latest != null && !isValidCalendarDate(latest)) ||
+      !snapshot.datesIndex.dates.includes(coreRunDate) ||
+      (latest && latest !== coreRunDate)
+    ) {
       mismatches += 1;
     }
   }
@@ -600,6 +612,26 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
   const failures = coverage.provider_failures ?? coverage.failures ?? [];
   const failedCount = coverage.counts?.providers_failed ?? failures.length;
   const partialCount = coverage.counts?.providers_partial ?? 0;
+  const totalsAvailable = attempted != null && succeeded != null;
+  if (!totalsAvailable) {
+    return check(
+      APP_HEALTH_CHECK_CODES.COVERAGE,
+      'Producer coverage',
+      'data-completeness',
+      'unavailable',
+      {
+        coverageAvailable: true,
+        totalsAvailable: false,
+        providersAttempted: attempted ?? null,
+        providersSucceeded: succeeded ?? null,
+        providersFailed: failedCount,
+        providersPartial: partialCount,
+        limitations: coverage.limitations?.length ?? 0,
+        invalidCounts: false,
+      },
+      'Provider coverage totals are incomplete, so complete coverage cannot be established.',
+    );
+  }
   const invalidCounts =
     (attempted != null && (!Number.isInteger(attempted) || attempted < 0)) ||
     (succeeded != null && (!Number.isInteger(succeeded) || succeeded < 0)) ||
