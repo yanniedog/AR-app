@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useRef, useState } from 'react';
 import type { StyleProp, ViewStyle } from 'react-native';
 import Animated, {
@@ -11,6 +10,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { resolveOfflineBanner } from './bannerState';
 import { PayloadProgressBar } from './feedbackProgress';
 import { AppText, Row } from './ui';
+import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
 
 const BANNER_FADE_MS = 320;
 const SUCCESS_HOLD_MS = 900;
@@ -134,16 +134,16 @@ export function OfflineBanner({
   const { surface, message, showProgress } = bannerView;
   const sampleTone = surface === 'connecting' || surface === 'success';
   const pendingTone = surface === 'pending';
-  const iconName =
+  const iconName: LedgerIconName =
     surface === 'success'
-      ? 'checkmark-circle-outline'
+      ? 'success'
       : surface === 'syncing'
-        ? 'cloud-download-outline'
+        ? 'refresh'
         : pendingTone
-          ? 'cloud-outline'
+          ? 'refresh'
           : sampleTone
-            ? 'flask-outline'
-            : 'cloud-offline-outline';
+            ? 'info'
+            : 'offline';
   const iconColor =
     surface === 'success'
       ? theme.colors.success
@@ -160,19 +160,17 @@ export function OfflineBanner({
       <Row
         gap={8}
         style={{
-          backgroundColor:
-            surface === 'success'
-              ? `${theme.colors.success}22`
-              : sampleTone || pendingTone
-                ? theme.colors.primaryMuted
-                : theme.colors.chip,
+          backgroundColor: theme.ledger.raised,
           paddingHorizontal: 12,
           paddingVertical: 10,
-          borderRadius: theme.radius.md,
+          borderLeftWidth: 3,
+          borderLeftColor: iconColor,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.ledger.rule,
           alignItems: showProgress && payloadProgress ? 'flex-start' : 'center',
         }}
       >
-        <Ionicons
+        <LedgerIcon
           name={iconName}
           size={16}
           color={iconColor}

@@ -545,6 +545,7 @@ describe('economic outlook', () => {
   });
 
   it('updates healthy official series when one required table fails', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-15T00:00:00.000Z'));
     const aged = buildEconomicOutlookFromCsv({
       inflation: inflationCsv([['31/12/2025', 3.3]]),
       labour: labourCsv([['31/12/2025', 4.0]]),
@@ -580,6 +581,7 @@ describe('economic outlook', () => {
   });
 
   it('does not replace a newer cached observation with an older official response', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-07-15T00:00:00.000Z'));
     const cached = buildEconomicOutlookFromCsv({
       inflation: inflationCsv([['30/06/2026', 3.0]]),
       labour: labourCsv([['30/06/2026', 4.1]]),

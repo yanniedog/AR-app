@@ -26,6 +26,29 @@ export interface Palette {
   favorite: string;
 }
 
+/**
+ * Rate Ledger semantic palette. `rule` is decorative only; interactive
+ * boundaries use `controlRule`, which meets normal-text contrast on paper.
+ */
+export interface LedgerPalette {
+  paper: string;
+  raised: string;
+  ink: string;
+  mutedInk: string;
+  faintInk: string;
+  rule: string;
+  controlRule: string;
+  eucalyptus: string;
+  eucalyptusDeep: string;
+  onEucalyptus: string;
+  wattle: string;
+  onWattle: string;
+  clay: string;
+  danger: string;
+  info: string;
+  scrim: string;
+}
+
 export function withAlpha(hex: string, alpha: number): string {
   const n = hex.replace('#', '');
   const r = parseInt(n.slice(0, 2), 16);
@@ -109,18 +132,96 @@ export function ensureTextContrast(
   return blendHex(source, target, high);
 }
 
-export const DARK: Palette = {
-  bg: '#0d1117', surface: '#141a22', surfaceAlt: '#19212b', card: '#171e27', border: '#2b3542',
-  text: '#f2f5f8', textMuted: '#a9b4c0', textFaint: '#7f8c9a', primary: '#84adff', primaryMuted: '#1d2b43',
-  onPrimary: '#08111f', success: '#69c89d', warning: '#e9b66d', danger: '#f08c82', chip: '#202936',
-  chipText: '#d1d8e0', shadow: '#00000066', skeleton: '#202a36', overlay: '#05080cb8',
-  rba: '#e9b66d', onRba: '#15100a', rateLoan: '#69c89d', rateDeposit: '#84adff', favorite: '#e7c466',
+export const LEDGER_DARK: LedgerPalette = {
+  paper: '#0E1714',
+  raised: '#16211D',
+  ink: '#F3EFE4',
+  mutedInk: '#BAC3BD',
+  faintInk: '#A6B0AA',
+  rule: '#34453E',
+  controlRule: '#72B89D',
+  eucalyptus: '#72B89D',
+  eucalyptusDeep: '#9CCDBB',
+  onEucalyptus: '#0E1714',
+  wattle: '#E2BC54',
+  onWattle: '#15231F',
+  clay: '#E18A67',
+  danger: '#F09A93',
+  info: '#84B5D2',
+  scrim: '#050A08B8',
 };
 
+export const LEDGER_LIGHT: LedgerPalette = {
+  paper: '#F4F0E6',
+  raised: '#FCFAF5',
+  ink: '#15231F',
+  mutedInk: '#4D5D56',
+  faintInk: '#5C6B65',
+  rule: '#C9C1B2',
+  controlRule: '#4D5D56',
+  eucalyptus: '#2E6A56',
+  eucalyptusDeep: '#1E5141',
+  onEucalyptus: '#FCFAF5',
+  wattle: '#D5A62E',
+  onWattle: '#15231F',
+  clay: '#9B5133',
+  danger: '#A43D37',
+  info: '#315F7D',
+  scrim: '#15231F66',
+};
+
+/** Compatibility map for screens migrating incrementally to Rate Ledger. */
+export const DARK: Palette = {
+  bg: LEDGER_DARK.paper,
+  surface: LEDGER_DARK.raised,
+  surfaceAlt: '#1C2924',
+  card: LEDGER_DARK.raised,
+  border: LEDGER_DARK.rule,
+  text: LEDGER_DARK.ink,
+  textMuted: LEDGER_DARK.mutedInk,
+  textFaint: LEDGER_DARK.faintInk,
+  primary: LEDGER_DARK.eucalyptus,
+  primaryMuted: '#233B33',
+  onPrimary: LEDGER_DARK.onEucalyptus,
+  success: LEDGER_DARK.eucalyptus,
+  warning: LEDGER_DARK.wattle,
+  danger: LEDGER_DARK.danger,
+  chip: '#1C2924',
+  chipText: LEDGER_DARK.ink,
+  shadow: '#00000066',
+  skeleton: '#25332D',
+  overlay: LEDGER_DARK.scrim,
+  rba: LEDGER_DARK.wattle,
+  onRba: LEDGER_DARK.onWattle,
+  rateLoan: LEDGER_DARK.clay,
+  rateDeposit: LEDGER_DARK.eucalyptus,
+  favorite: LEDGER_DARK.wattle,
+};
+
+/** Compatibility map for screens migrating incrementally to Rate Ledger. */
 export const LIGHT: Palette = {
-  bg: '#f5f7fa', surface: '#ffffff', surfaceAlt: '#edf1f6', card: '#ffffff', border: '#d8e0e9',
-  text: '#172231', textMuted: '#526275', textFaint: '#5c6d80', primary: '#285ea8', primaryMuted: '#e4edfb',
-  onPrimary: '#ffffff', success: '#187451', warning: '#8a560e', danger: '#b44137', chip: '#edf2f7',
-  chipText: '#304257', shadow: '#17223112', skeleton: '#e5eaf0', overlay: '#17223147',
-  rba: '#9a5d0d', onRba: '#ffffff', rateLoan: '#187451', rateDeposit: '#285ea8', favorite: '#9b6d08',
+  bg: LEDGER_LIGHT.paper,
+  surface: LEDGER_LIGHT.raised,
+  surfaceAlt: '#EDE7DA',
+  card: LEDGER_LIGHT.raised,
+  border: LEDGER_LIGHT.rule,
+  text: LEDGER_LIGHT.ink,
+  textMuted: LEDGER_LIGHT.mutedInk,
+  textFaint: LEDGER_LIGHT.faintInk,
+  primary: LEDGER_LIGHT.eucalyptus,
+  primaryMuted: '#DDE8E1',
+  onPrimary: LEDGER_LIGHT.onEucalyptus,
+  success: LEDGER_LIGHT.eucalyptusDeep,
+  warning: LEDGER_LIGHT.clay,
+  danger: LEDGER_LIGHT.danger,
+  chip: '#EAE4D7',
+  chipText: LEDGER_LIGHT.ink,
+  shadow: '#15231F1A',
+  skeleton: '#E2DCCE',
+  overlay: LEDGER_LIGHT.scrim,
+  rba: LEDGER_LIGHT.wattle,
+  onRba: LEDGER_LIGHT.onWattle,
+  rateLoan: LEDGER_LIGHT.clay,
+  rateDeposit: LEDGER_LIGHT.eucalyptus,
+  favorite: LEDGER_LIGHT.wattle,
 };

@@ -4,16 +4,16 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, View } from 'react-native';
 
-import { SegmentedControl } from '../../src/components/controls';
-import { Screen, ScreenScrollView } from '../../src/components/Screen';
-import { UndoSnackbar } from '../../src/components/Snackbar';
-import { SubscriptionRow } from '../../src/components/SubscriptionRow';
-import { AppText, Button, Chip, Row } from '../../src/components/ui';
-import { AccountSecurityRows } from '../../src/components/settings/AccountSecurityRows';
+import { SegmentedControl } from '../src/components/controls';
+import { Screen, ScreenScrollView } from '../src/components/Screen';
+import { UndoSnackbar } from '../src/components/Snackbar';
+import { SubscriptionRow } from '../src/components/SubscriptionRow';
+import { AppText, Button, Chip, Row } from '../src/components/ui';
+import { AccountSecurityRows } from '../src/components/settings/AccountSecurityRows';
 import {
   AppUpdateSection,
   type AppUpdateSurfaceStatus,
-} from '../../src/components/settings/AppUpdateSection';
+} from '../src/components/settings/AppUpdateSection';
 import {
   DisclosureGroup,
   InfoRow,
@@ -22,32 +22,32 @@ import {
   Section,
   SettingsGap,
   ToggleRow,
-} from '../../src/components/settings/settingsUi';
-import { SECTIONS, SECTION_ORDER } from '../../src/constants';
-import { formatRunDate, relativeDate } from '../../src/data/format';
+} from '../src/components/settings/settingsUi';
+import { SECTIONS, SECTION_ORDER } from '../src/constants';
+import { formatRunDate, relativeDate } from '../src/data/format';
 import {
   coverageFailureProvenanceReported,
   coverageFailures,
   coverageObservedAt,
   coverageProvidersAttempted,
   coverageProvidersSucceeded,
-} from '../../src/data/coverage';
-import { moveInterest, orderedInterestSections, toggleInterest } from '../../src/data/interests';
-import { ensurePermissions } from '../../src/data/notifications';
-import { useStore } from '../../src/data/store';
-import { CURRENT_PRIVACY_CHOICE_VERSION, type Prefs } from '../../src/data/storeTypes';
-import type { MortgageRateMetric, RankMetric } from '../../src/data/selectors';
-import type { Subscription } from '../../src/data/subscriptions';
-import type { ThemeMode } from '../../src/theme/theme';
-import { dataSourceLabel } from '../../src/lib/nextIngest';
-import { restorePerformanceAuditPreferences } from '../../src/lib/performanceAudit';
-import { setCrashReportsEnabled } from '../../src/lib/observability';
+} from '../src/data/coverage';
+import { moveInterest, orderedInterestSections, toggleInterest } from '../src/data/interests';
+import { ensurePermissions } from '../src/data/notifications';
+import { useStore } from '../src/data/store';
+import { CURRENT_PRIVACY_CHOICE_VERSION, type Prefs } from '../src/data/storeTypes';
+import type { MortgageRateMetric, RankMetric } from '../src/data/selectors';
+import type { Subscription } from '../src/data/subscriptions';
+import type { ThemeMode } from '../src/theme/theme';
+import { dataSourceLabel } from '../src/lib/nextIngest';
+import { restorePerformanceAuditPreferences } from '../src/lib/performanceAudit';
+import { setCrashReportsEnabled } from '../src/lib/observability';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
-} from '../../src/lib/proAccess';
-import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
-import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+} from '../src/lib/proAccess';
+import { useUndoSnackbar } from '../src/hooks/useUndoSnackbar';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 
 const THRESHOLDS = [1, 5, 10, 25];
 

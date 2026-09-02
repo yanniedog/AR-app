@@ -1,10 +1,10 @@
-"""Generate the app icon / adaptive icon / splash / favicon for AR Rates.
+"""Generate the Rate Ledger app icon, adaptive icon, splash and favicon.
 
 Pure-PIL, deterministic. Run from anywhere:
 
     python mobile/scripts/make-icons.py
 
-Writes PNGs into mobile/assets/. Mark matches dashboard `site/assets/branding/ar-mark.svg`.
+Writes deterministic, code-native PNGs into mobile/assets/.
 """
 
 from __future__ import annotations
@@ -15,75 +15,70 @@ from PIL import Image, ImageDraw
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
-# Pi dashboard dark shell (`site/foundation.css` :root[data-theme="dark"])
-BG = (11, 14, 17, 255)  # #0b0e11
-MARK_BG = (7, 17, 31, 255)  # #07111f
-MARK_TILE = (34, 211, 238, 61)  # cyan gradient wash at ~24% on tile
-ROOF = (226, 248, 255, 255)  # #e2f8ff
-CHART = (125, 211, 252, 255)  # #7dd3fc
+PAPER = (244, 240, 230, 255)  # #F4F0E6
+INK = (21, 35, 31, 255)  # #15231F
+RULE = (147, 139, 124, 255)
+EUCALYPTUS = (46, 106, 86, 255)  # #2E6A56
+WATTLE = (213, 166, 46, 255)  # #D5A62E
 
 
-def _ar_mark(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
-    """Simplified raster of `ar-mark.svg` (house roof + rising rate chart)."""
+def _rate_mark(draw: ImageDraw.ImageDraw, box: tuple[int, int, int, int]) -> None:
+    """Rate Mark: ledger rules, one changing line and a highlighted datum."""
     x0, y0, x1, y1 = box
     w = x1 - x0
     h = y1 - y0
-    radius = int(w * 0.23)
-    draw.rounded_rectangle(box, radius=radius, fill=MARK_BG)
-    inner = (
-        x0 + w * 0.02,
-        y0 + h * 0.02,
-        x1 - w * 0.02,
-        y1 - h * 0.02,
-    )
-    draw.rounded_rectangle(inner, radius=int(radius * 0.9), fill=MARK_TILE)
-
-    cx = (x0 + x1) / 2
-    roof_y = y0 + h * 0.42
-    left_x = x0 + w * 0.10
-    right_x = x1 - w * 0.10
-    peak_y = y0 + h * 0.17
-    draw.line([(left_x, roof_y), (cx, peak_y), (right_x, roof_y)], fill=ROOF, width=max(2, int(w * 0.07)))
-
-    base_y = y0 + h * 0.71
-    draw.line([(x0 + w * 0.19, base_y), (x1 - w * 0.19, base_y)], fill=ROOF, width=max(2, int(w * 0.06)))
-
-    chart = [
-        (x0 + w * 0.24, y0 + h * 0.58),
-        (x0 + w * 0.35, y0 + h * 0.46),
-        (x0 + w * 0.46, y0 + h * 0.52),
-        (x0 + w * 0.62, y0 + h * 0.36),
+    for fraction in (0.24, 0.5, 0.76):
+        y = y0 + h * fraction
+        draw.line([(x0, y), (x1, y)], fill=RULE, width=max(2, int(w * 0.018)))
+    points = [
+        (x0 + w * 0.04, y0 + h * 0.72),
+        (x0 + w * 0.30, y0 + h * 0.57),
+        (x0 + w * 0.49, y0 + h * 0.63),
+        (x0 + w * 0.72, y0 + h * 0.35),
+        (x0 + w * 0.96, y0 + h * 0.27),
     ]
-    draw.line(chart, fill=CHART, width=max(2, int(w * 0.06)), joint="curve")
-    dot_r = max(2, int(w * 0.05))
-    dot_x = x0 + w * 0.66
-    dot_y = y0 + h * 0.40
-    draw.ellipse((dot_x - dot_r, dot_y - dot_r, dot_x + dot_r, dot_y + dot_r), fill=CHART)
+    draw.line(points, fill=INK, width=max(3, int(w * 0.045)), joint="curve")
+    dot_r = max(3, int(w * 0.068))
+    dot_x, dot_y = points[3]
+    draw.ellipse((dot_x - dot_r, dot_y - dot_r, dot_x + dot_r, dot_y + dot_r), fill=WATTLE)
+    inner = dot_r * 0.34
+    draw.ellipse((dot_x - inner, dot_y - inner, dot_x + inner, dot_y + inner), fill=INK)
+
+
+def _canvas(size: int, background: tuple[int, int, int, int]) -> Image.Image:
+    # Supersampling keeps diagonal strokes calm at favicon size.
+    return Image.new("RGBA", (size * 4, size * 4), background)
+
+
+def _save(img: Image.Image, path: Path, size: int) -> None:
+    img.resize((size, size), Image.Resampling.LANCZOS).save(path)
 
 
 def make_icon() -> None:
     size = 1024
-    img = Image.new("RGBA", (size, size), BG)
-    inset = int(size * 0.14)
-    _ar_mark(ImageDraw.Draw(img), (inset, inset, size - inset, size - inset))
-    img.save(ASSETS / "icon.png")
-    img.resize((64, 64)).save(ASSETS / "favicon.png")
+    img = _canvas(size, PAPER)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle((0, 0, size * 0.055 * 4, size * 4), fill=EUCALYPTUS)
+    inset = int(size * 0.17 * 4)
+    _rate_mark(draw, (inset, inset, size * 4 - inset, size * 4 - inset))
+    _save(img, ASSETS / "icon.png", size)
+    _save(img, ASSETS / "favicon.png", 64)
 
 
 def make_adaptive() -> None:
     size = 1024
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    margin = int(size * 0.2)
-    _ar_mark(ImageDraw.Draw(img), (margin, margin, size - margin, size - margin))
-    img.save(ASSETS / "adaptive-icon.png")
+    img = _canvas(size, (0, 0, 0, 0))
+    margin = int(size * 0.27 * 4)
+    _rate_mark(ImageDraw.Draw(img), (margin, margin, size * 4 - margin, size * 4 - margin))
+    _save(img, ASSETS / "adaptive-icon.png", size)
 
 
 def make_splash() -> None:
     size = 1024
-    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    margin = int(size * 0.28)
-    _ar_mark(ImageDraw.Draw(img), (margin, margin, size - margin, size - margin))
-    img.save(ASSETS / "splash.png")
+    img = _canvas(size, (0, 0, 0, 0))
+    margin = int(size * 0.31 * 4)
+    _rate_mark(ImageDraw.Draw(img), (margin, margin, size * 4 - margin, size * 4 - margin))
+    _save(img, ASSETS / "splash.png", size)
 
 
 if __name__ == "__main__":

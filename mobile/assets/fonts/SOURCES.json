@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "fonts": [
+    {
+      "family": "Commissioner",
+      "source": "https://github.com/kosbarts/Commissioner",
+      "commit": "16865a9483b54bd633b5471b109792db44f7786e",
+      "license": "SIL Open Font License 1.1",
+      "licenseFile": "../licenses/Commissioner-OFL-1.1.txt",
+      "files": [
+        { "file": "Commissioner-Regular.ttf", "weight": 400, "sha256": "44abbc5907648b15f9e179b55614f49a31328400f20b8d7108da27d83c05daf3" },
+        { "file": "Commissioner-Medium.ttf", "weight": 500, "sha256": "55c23e3fd35d6d86dcf58fdd72089cedbd938f97ef5237b14a8391a46703d62b" },
+        { "file": "Commissioner-SemiBold.ttf", "weight": 600, "sha256": "d2c7d8962919ad8f71cd1dc749b512fc382f66ea537db007f39d16034809ac17" },
+        { "file": "Commissioner-Bold.ttf", "weight": 700, "sha256": "49b79365c17d88b2a209560f883bcca104f2e43cfd17b5b9ade586bd46c45f4a" }
+      ]
+    },
+    {
+      "family": "Newsreader",
+      "source": "https://github.com/productiontype/Newsreader",
+      "commit": "cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155",
+      "license": "SIL Open Font License 1.1",
+      "licenseFile": "../licenses/Newsreader-OFL-1.1.txt",
+      "files": [
+        { "file": "Newsreader-Medium.ttf", "weight": 500, "style": "normal", "sha256": "ee2f66ee4c6c313acf211c952211f8c6c0c0d9fa6a17cd0ec0ceba13418b1aed" },
+        { "file": "Newsreader-SemiBold.ttf", "weight": 600, "style": "normal", "sha256": "9e29bad1d5022c1a3d1822469a62dc9fa66cc41ba553f352530f867f84ba1c8f" },
+        { "file": "Newsreader-MediumItalic.ttf", "weight": 500, "style": "italic", "sha256": "a7e93b7f83811d96aaf9bdb5909f4b836c0990ffea45f074868ed081056e2276" }
+      ]
+    }
+  ],
+  "icons": {
+    "source": "https://github.com/iconoir-icons/iconoir",
+    "commit": "d7dfa4d0341df0670bfed9fc24221c9d7ef2112e",
+    "license": "MIT",
+    "licenseFile": "../licenses/Iconoir-MIT.txt",
+    "usage": "Selected paths are adapted into a local semantic React Native SVG registry. The Australian Rates brand mark is original and does not derive from Iconoir."
+  }
+}

@@ -285,7 +285,7 @@ export function UpdateChangelogList({
             onPress={() => requestExternalUrl({
               url: entry.releaseUrl,
               purpose: 'app_release',
-              label: `AustralianRates ${entry.version} changelog`,
+              label: `Australian Rates ${entry.version} changelog`,
             })}
             accessibilityRole="link"
             accessibilityLabel={`Full changelog for version ${entry.version}`}

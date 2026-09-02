@@ -3,33 +3,33 @@ import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { RbaChart } from '../../src/components/charts';
-import { SegmentedControl } from '../../src/components/controls';
-import { ScreenSkeleton } from '../../src/components/feedback';
-import { RbaCountdownCard } from '../../src/components/RbaCountdownCard';
-import { RbaOutlook, type RbaOutlookAuditHandle, type RbaOutlookAuditState } from '../../src/components/RbaOutlook';
-import { Ribbon } from '../../src/components/Ribbon';
-import { ScreenScrollView } from '../../src/components/Screen';
-import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from '../../src/components/ui';
-import { HistoryExplorer, type HistoryViewMode } from '../../src/components/viz/HistoryExplorer';
-import { SECTION_ORDER, SECTIONS } from '../../src/constants';
-import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { formatRate, formatRunDate } from '../../src/data/format';
-import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../../src/data/historySelectors';
-import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
-import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../../src/data/rbaCalendar';
-import { resolveSectionRibbonStats } from '../../src/data/ribbonStats';
-import { useStore } from '../../src/data/store';
-import { getSuitabilityAllowed } from '../../src/data/suitabilityGate';
-import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
-import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { runStoreRetry } from '../../src/lib/degradationLog';
-import { openBrowse, scalarRouteParam } from '../../src/lib/nav';
-import { auditActionString } from '../../src/lib/performanceAuditActionParams';
-import { effectiveBankInsights, effectiveHistoryRibbon } from '../../src/lib/proAccess';
-import { yieldToPaintFrames } from '../../src/lib/yieldToUi';
-import { useTheme } from '../../src/theme/ThemeProvider';
-import type { HistoryWindow } from '../../src/types';
+import { RbaChart } from '../src/components/charts';
+import { SegmentedControl } from '../src/components/controls';
+import { ScreenSkeleton } from '../src/components/feedback';
+import { RbaCountdownCard } from '../src/components/RbaCountdownCard';
+import { RbaOutlook, type RbaOutlookAuditHandle, type RbaOutlookAuditState } from '../src/components/RbaOutlook';
+import { Ribbon } from '../src/components/Ribbon';
+import { ScreenScrollView } from '../src/components/Screen';
+import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from '../src/components/ui';
+import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/HistoryExplorer';
+import { SECTION_ORDER, SECTIONS } from '../src/constants';
+import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
+import { formatRate, formatRunDate } from '../src/data/format';
+import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
+import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
+import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../src/data/rbaCalendar';
+import { resolveSectionRibbonStats } from '../src/data/ribbonStats';
+import { useStore } from '../src/data/store';
+import { getSuitabilityAllowed } from '../src/data/suitabilityGate';
+import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
+import { runStoreRetry } from '../src/lib/degradationLog';
+import { openBrowse, scalarRouteParam } from '../src/lib/nav';
+import { auditActionString } from '../src/lib/performanceAuditActionParams';
+import { effectiveBankInsights, effectiveHistoryRibbon } from '../src/lib/proAccess';
+import { yieldToPaintFrames } from '../src/lib/yieldToUi';
+import { useTheme } from '../src/theme/ThemeProvider';
+import type { HistoryWindow } from '../src/types';
 
 export default function Market() {
   const theme = useTheme();
@@ -228,7 +228,7 @@ export default function Market() {
 
   const surface = usePerformanceAuditSurface({
     id: 'outlook.dashboard',
-    routeKey: '/trends',
+    routeKey: '/research',
     datasetRevision,
     renderRevision,
     actions: {
@@ -297,7 +297,7 @@ export default function Market() {
   });
 
   const rbaSurface = usePerformanceAuditSurface({
-    id: 'outlook.rba-response', routeKey: '/trends', datasetRevision,
+    id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
     renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
     actions: {
       'redirect.rba.verify': () => undefined,

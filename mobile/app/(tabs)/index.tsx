@@ -88,6 +88,8 @@ export default function Home() {
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
+  const manifestSchedule = useStore((s) => s.manifest?.schedule ?? null);
+  const coreAssetState = useStore((s) => s.coreAssetState);
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
   const ensureDetails = useStore((s) => s.ensureDetails);
@@ -485,6 +487,7 @@ export default function Home() {
       >
       <HomeHero
         dataKey={core.run_date}
+        runDate={core.run_date}
         runDateLabel={formatRunDate(core.run_date)}
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}
         source={source}
@@ -492,6 +495,17 @@ export default function Home() {
         pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
         coverageLabel={coverageLabel}
+        coverage={core.coverage}
+        assetStatus={coreAssetState.status}
+        assetReason={coreAssetState.status === 'partial'
+          ? coreAssetState.reason
+          : coreAssetState.status === 'unavailable'
+            ? coreAssetState.reason
+            : coreAssetState.status === 'error'
+              ? coreAssetState.error
+              : null}
+        overdueAfterUtc={manifestSchedule?.next_due_utc ?? null}
+        scheduleLabel={manifestSchedule?.label ?? null}
       />
       </View>
 

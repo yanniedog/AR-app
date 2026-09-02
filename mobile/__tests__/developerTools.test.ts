@@ -14,7 +14,7 @@ describe('quiet diagnostics access', () => {
   });
 
   it('removes the hidden gesture, duplicate links and direct-route gate', () => {
-    const settings = read('../app/(tabs)/settings.tsx');
+    const settings = read('../app/settings.tsx');
     expect(settings).not.toContain('versionTaps');
     expect(settings).not.toContain("router.push('/performance-audit'");
     expect(settings).not.toContain("router.push('/debug-log'");

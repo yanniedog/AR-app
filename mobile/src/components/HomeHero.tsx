@@ -1,17 +1,19 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, type ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { dataSourceLabel } from '../lib/nextIngest';
 import { useReducedMotion } from '../hooks/useReducedMotion';
-import type { PayloadSource } from '../types';
+import type { PayloadCoverage, PayloadSource } from '../types';
+import type { AssetState } from '../data/assetState';
+import { mapDisplayEvidence } from '../data/displayEvidence';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
+import { LedgerIcon } from './icons/LedgerIcon';
+import { DataEvidenceLine } from './ledger';
 
-const SPRING = { damping: 14, stiffness: 180, mass: 0.8 };
+const DATA_CHANGE_TIMING = { duration: 160, easing: Easing.bezier(0.2, 0, 0, 1) };
 
-/** Spring scale wrapper for hero stats / ribbon when `dataKey` changes (new payload). */
+/** Restrained scale cue for hero stats when `dataKey` changes. */
 export function SpringOnNewData({
   dataKey,
   children,
@@ -27,8 +29,8 @@ export function SpringOnNewData({
       scale.value = 1;
       return;
     }
-    scale.value = 0.94;
-    scale.value = withSpring(1, SPRING);
+    scale.value = 0.98;
+    scale.value = withTiming(1, DATA_CHANGE_TIMING);
   }, [dataKey, reducedMotion, scale]);
 
   const style = useAnimatedStyle(() => ({
@@ -40,6 +42,7 @@ export function SpringOnNewData({
 
 export function HomeHero({
   runDateLabel,
+  runDate,
   runAgeLabel,
   source,
   offline,
@@ -47,8 +50,14 @@ export function HomeHero({
   onShare,
   pendingIngest = false,
   coverageLabel,
+  coverage,
+  assetStatus,
+  assetReason,
+  overdueAfterUtc,
+  scheduleLabel,
 }: {
   runDateLabel: string;
+  runDate: string;
   runAgeLabel: string;
   source: PayloadSource;
   offline: boolean;
@@ -60,21 +69,24 @@ export function HomeHero({
   pendingIngest?: boolean;
   /** Measured payload coverage; never implies whole-market completeness. */
   coverageLabel: string;
+  coverage?: PayloadCoverage | null;
+  assetStatus?: AssetState<unknown>['status'];
+  assetReason?: string | null;
+  overdueAfterUtc?: string | null;
+  scheduleLabel?: string | null;
 }) {
   const theme = useTheme();
-  const sourceLabel = pendingIngest ? 'Updating' : dataSourceLabel(source);
-  const statusIcon = offline
-    ? 'cloud-offline-outline'
-    : pendingIngest
-      ? 'cloud-outline'
-      : source === 'remote'
-        ? 'cloud-done'
-        : 'albums-outline';
-  const statusColor = offline
-    ? theme.colors.warning
-    : pendingIngest
-      ? theme.colors.primary
-      : theme.colors.success;
+  const evidence = mapDisplayEvidence({
+    source,
+    offline,
+    runDate: coverage?.observed_on ?? coverage?.observed_at ?? runDate,
+    coverage,
+    assetStatus: pendingIngest && assetStatus === 'live' ? 'loading' : assetStatus,
+    assetReason,
+    hasUsableData: true,
+    overdueAfterUtc,
+    scheduleLabel,
+  });
   const datePulse = useSharedValue(1);
   const reducedMotion = useReducedMotion();
 
@@ -83,8 +95,8 @@ export function HomeHero({
       datePulse.value = 1;
       return;
     }
-    datePulse.value = 0.92;
-    datePulse.value = withSpring(1, SPRING);
+    datePulse.value = 0.98;
+    datePulse.value = withTiming(1, DATA_CHANGE_TIMING);
   }, [dataKey, datePulse, reducedMotion]);
 
   const dateStyle = useAnimatedStyle(() => ({
@@ -107,24 +119,9 @@ export function HomeHero({
               {source === 'sample' ? 'Sample data · not today’s market' : coverageLabel}
             </AppText>
           </Animated.View>
+          <DataEvidenceLine evidence={evidence} detailsTitle="Today’s data" />
         </View>
         <View style={{ alignItems: 'flex-end' }}>
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 6,
-              backgroundColor: theme.colors.primaryMuted,
-              paddingHorizontal: 9,
-              paddingVertical: 5,
-              borderRadius: theme.radius.pill,
-            }}
-          >
-            <Ionicons name={statusIcon} size={14} color={statusColor} />
-            <AppText variant="tiny" weight="700" color="chipText">
-              {offline ? 'Offline' : sourceLabel}
-            </AppText>
-          </View>
           {onShare ? (
             <Pressable
               onPress={onShare}
@@ -136,11 +133,10 @@ export function HomeHero({
                 minHeight: 48,
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: theme.radius.pill,
                 opacity: pressed ? 0.7 : 1,
               })}
             >
-              <Ionicons name="share-social-outline" size={19} color={theme.colors.primary} />
+              <LedgerIcon name="share" size={19} color={theme.colors.primary} />
             </Pressable>
           ) : null}
         </View>

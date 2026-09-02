@@ -2,10 +2,7 @@ import type { Href } from 'expo-router';
 
 import type { TabRouteName } from './tabIcons';
 
-export type PrimaryTabRouteName = Extract<
-  TabRouteName,
-  'index' | 'browse' | 'passthrough' | 'watchlist'
->;
+export type PrimaryTabRouteName = TabRouteName;
 
 /**
  * Four household-level destinations. The legacy Trends screen remains a route
@@ -29,9 +26,7 @@ const TAB_HREFS: Record<TabRouteName, Href> = {
   index: '/(tabs)',
   browse: '/(tabs)/browse',
   passthrough: '/(tabs)/passthrough',
-  trends: '/(tabs)/trends',
   watchlist: '/(tabs)/watchlist',
-  settings: '/(tabs)/settings',
 };
 
 export function tabHref(route: TabRouteName): Href {
@@ -53,7 +48,6 @@ export function shouldShowAppTabBar(pathname: string, onboarded: boolean): boole
     path === '/' ||
     path === '/browse' ||
     path === '/passthrough' ||
-    path === '/trends' ||
     path === '/watchlist'
   );
 }
@@ -65,8 +59,9 @@ export function resolveActiveTab(pathname: string): PrimaryTabRouteName | null {
   if (
     path === '/passthrough' ||
     path.startsWith('/passthrough/') ||
+    path === '/research' ||
+    path.startsWith('/research/') ||
     path === '/trends' ||
-    path.startsWith('/trends/') ||
     path === '/rba-response' ||
     path.startsWith('/rba-response/') ||
     path === '/rba' ||

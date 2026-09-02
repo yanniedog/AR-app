@@ -15,7 +15,7 @@ import { AppText } from '../src/components/ui';
 export default function AboutScreen() {
   return (
     <ScreenScrollView contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
-      <Section title="AustralianRates">
+      <Section title="Australian Rates">
         <InfoRow
           label="Version"
           value={`${Application.nativeApplicationVersion ?? '1.0.0'} (${Application.nativeBuildVersion ?? '0'})`}
@@ -32,6 +32,13 @@ export default function AboutScreen() {
           sub="Data sources and legal notices"
           onPress={() => router.push('/terms')}
         />
+        <SettingsGap size={4} />
+        <NavRow
+          icon="code-slash-outline"
+          label="Open-source notices"
+          sub="Fonts, icons, licences and pinned sources"
+          onPress={() => router.push('/third-party-notices')}
+        />
         <AppText variant="tiny" color="textFaint" style={{ marginTop: 8, lineHeight: 16 }}>
           General information only, not financial advice. Confirm rates, fees and eligibility with
           the bank before applying.
@@ -46,8 +53,8 @@ export default function AboutScreen() {
           <SettingsGap size={6} />
           <NavRow
             icon="speedometer-outline"
-            label="Performance audit"
-            sub="Check app screens and responsiveness"
+            label="App health audit"
+            sub="Check responsiveness, data quality and display gaps"
             onPress={() => router.push('/performance-audit')}
           />
           <SettingsGap size={4} />

@@ -1,7 +1,15 @@
 import type { Material3Theme } from '@pchmn/expo-material3-theme';
 import type { ColorSchemeName } from 'react-native';
 
-import { DARK, LIGHT, type Palette } from './colors';
+import {
+  DARK,
+  LEDGER_DARK,
+  LEDGER_LIGHT,
+  LIGHT,
+  type LedgerPalette,
+  type Palette,
+} from './colors';
+import { LEDGER_RADIUS, LEDGER_SPACE } from './layout';
 import { paletteFromM3Scheme } from './m3Palette';
 
 export type FontVariant =
@@ -17,6 +25,8 @@ export type FontVariant =
 export interface Theme {
   dark: boolean;
   colors: Palette;
+  ledger: LedgerPalette;
+  space: typeof LEDGER_SPACE;
   spacing: (n: number) => number;
   radius: { sm: number; md: number; lg: number; xl: number; pill: number };
   font: Record<FontVariant, number>;
@@ -24,14 +34,21 @@ export interface Theme {
 }
 
 const base = {
+  space: LEDGER_SPACE,
   spacing: (n: number) => n * 4,
-  radius: { sm: 9, md: 14, lg: 18, xl: 24, pill: 999 },
+  radius: {
+    sm: LEDGER_RADIUS.small,
+    md: LEDGER_RADIUS.control,
+    lg: LEDGER_RADIUS.sheet,
+    xl: LEDGER_RADIUS.sheet,
+    pill: LEDGER_RADIUS.pill,
+  },
   font: { h1: 28, h2: 22, h3: 17, body: 15, small: 14, tiny: 12, rate: 21, rateHero: 30 },
   lineHeight: { h1: 35, h2: 29, h3: 23, body: 22, small: 20, tiny: 17, rate: 26, rateHero: 36 },
 };
 
-export const darkTheme: Theme = { dark: true, colors: DARK, ...base };
-export const lightTheme: Theme = { dark: false, colors: LIGHT, ...base };
+export const darkTheme: Theme = { dark: true, colors: DARK, ledger: LEDGER_DARK, ...base };
+export const lightTheme: Theme = { dark: false, colors: LIGHT, ledger: LEDGER_LIGHT, ...base };
 
 export type ThemeMode = 'system' | 'light' | 'dark';
 
@@ -53,5 +70,10 @@ export function resolveM3Theme(
 ): Theme {
   const dark = isDarkMode(mode, scheme);
   const m3Scheme = dark ? material3.dark : material3.light;
-  return { dark, colors: paletteFromM3Scheme(m3Scheme, dark), ...base };
+  return {
+    dark,
+    colors: paletteFromM3Scheme(m3Scheme, dark),
+    ledger: dark ? LEDGER_DARK : LEDGER_LIGHT,
+    ...base,
+  };
 }

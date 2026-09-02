@@ -150,19 +150,19 @@ describe('theme palettes', () => {
     }
   });
 
-  it('keeps the calm static palettes with stable financial meaning', () => {
-    expect(darkTheme.colors.bg).toBe('#0d1117');
-    expect(lightTheme.colors.bg).toBe('#f5f7fa');
-    expect(darkTheme.colors.rba).toBe('#e9b66d');
-    expect(lightTheme.colors.rba).toBe('#9a5d0d');
-    expect(darkTheme.colors.rateLoan).toBe('#69c89d');
-    expect(lightTheme.colors.rateLoan).toBe('#187451');
-    expect(darkTheme.colors.rateDeposit).toBe('#84adff');
-    expect(lightTheme.colors.rateDeposit).toBe('#285ea8');
-    expect(darkTheme.colors.favorite).toBe('#e7c466');
-    expect(lightTheme.colors.favorite).toBe('#9b6d08');
-    expect(darkTheme.colors.onRba).toBe('#15100a');
-    expect(lightTheme.colors.onRba).toBe('#ffffff');
+  it('keeps the Rate Ledger palettes with stable financial meaning', () => {
+    expect(darkTheme.colors.bg).toBe('#0E1714');
+    expect(lightTheme.colors.bg).toBe('#F4F0E6');
+    expect(darkTheme.colors.rba).toBe('#E2BC54');
+    expect(lightTheme.colors.rba).toBe('#D5A62E');
+    expect(darkTheme.colors.rateLoan).toBe('#E18A67');
+    expect(lightTheme.colors.rateLoan).toBe('#9B5133');
+    expect(darkTheme.colors.rateDeposit).toBe('#72B89D');
+    expect(lightTheme.colors.rateDeposit).toBe('#2E6A56');
+    expect(darkTheme.colors.favorite).toBe('#E2BC54');
+    expect(lightTheme.colors.favorite).toBe('#D5A62E');
+    expect(darkTheme.colors.onRba).toBe('#15231F');
+    expect(lightTheme.colors.onRba).toBe('#15231F');
   });
 
   it('includes rate typography tokens and line heights', () => {
