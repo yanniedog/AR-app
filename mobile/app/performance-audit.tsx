@@ -34,9 +34,9 @@ function statusLabel(check: AuditCheck): string {
     return 'Unavailable';
   }
   if (check.status === 'pass') return 'Good';
-  if (check.status === 'warn') return 'Slow';
-  if (check.status === 'fail') return 'Bottleneck';
-  return 'Interrupted';
+  if (check.status === 'warn') return 'Needs review';
+  if (check.status === 'fail') return 'Failed';
+  return 'Not run';
 }
 
 function metricNumber(check: AuditCheck, key: string): number | null {
@@ -211,9 +211,9 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  const runAudit = () => {
+  const runAudit = (mode: 'local' | 'live-source') => {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
-    requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000 });
+    requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
   };
   const confirmShareReport = () => {
     if (!report || sharingReport) return;
@@ -240,7 +240,7 @@ function PerformanceAuditScreenInner() {
           onPress: () => {
             setSharingReport(true);
             void Share.share({
-              title: 'Australian Rates deidentified performance report',
+              title: 'Australian Rates deidentified app health report',
               message: prepared.body,
             }).catch((error) => {
               Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
@@ -265,10 +265,10 @@ function PerformanceAuditScreenInner() {
       onLayout={() => setLayoutReady(true)}
     >
       <Card style={{ gap: 12 }}>
-        <AppText variant="h2">Full responsiveness diagnosis</AppText>
+        <AppText variant="h2">App health audit</AppText>
         <AppText variant="small" color="textMuted">
-          Runs the registered safe checks locally, reports anything unavailable, and restores your
-          settings and saved data afterward. It does not contact a host or write to the clipboard.
+          Checks responsiveness, data integrity, missing assets and whether loaded information
+          actually reaches the display. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           When results are ready, you can separately review and share a byte-capped deidentified
@@ -323,12 +323,25 @@ function PerformanceAuditScreenInner() {
           </AppText>
         </View>
         <Button
-          title={report ? 'Run audit again' : 'Run full audit'}
+          title={report ? 'Run local audit again' : 'Run local audit'}
           icon="pulse-outline"
-          loading={running}
+          loading={running && state.auditMode === 'local'}
           disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={runAudit}
+          onPress={() => runAudit('local')}
         />
+        <Button
+          title="Run with live-source check"
+          icon="cloud-download-outline"
+          variant="secondary"
+          loading={running && state.auditMode === 'live-source'}
+          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null}
+          onPress={() => runAudit('live-source')}
+        />
+        <AppText variant="tiny" color="textMuted">
+          Local mode blocks fetch and XMLHttpRequest. Live-source mode may read only the public
+          Australian Rates manifest, dates index and manifest-authenticated release files. Neither
+          mode uploads diagnostics or writes to the clipboard.
+        </AppText>
       </Card>
 
       {state.status === 'cancelled' ? (
@@ -364,15 +377,15 @@ function PerformanceAuditScreenInner() {
               <AppText variant="h3">Diagnosis</AppText>
               <AppText variant="body" weight="700" style={{ color: summaryColor }}>
                 {report.summary.overall === 'healthy'
-                  ? 'Responsive'
+                  ? 'Healthy'
                   : report.summary.overall === 'attention'
-                    ? 'Needs attention'
-                    : 'Bottleneck found'}
+                    ? 'Needs review'
+                    : 'Failures found'}
               </AppText>
             </Row>
             <AppText variant="small" color="textMuted">
-              {report.summary.pass} good · {report.summary.warn} slow · {report.summary.fail}{' '}
-              bottlenecks · {report.summary.skipped} interrupted · {report.summary.unavailable}{' '}
+              {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
+              failed · {report.summary.skipped} not run · {report.summary.unavailable}{' '}
               unavailable
             </AppText>
             <AppText
@@ -433,6 +446,77 @@ function PerformanceAuditScreenInner() {
             />
           </Card>
 
+          {report.appHealth ? (
+            <View style={{ gap: 8 }}>
+              <AppText variant="h3">Data and display health</AppText>
+              <AppText variant="small" color="textMuted">
+                Mode: {report.appHealth.mode === 'local' ? 'Local · zero network' : 'Live-source allowlist'}
+                {' · '}Coverage {report.appHealth.summary.coveragePercent == null
+                  ? 'unavailable'
+                  : `${report.appHealth.summary.coveragePercent.toFixed(1)}%`}
+              </AppText>
+              {report.appHealth.domains
+                .filter((domain) => domain.total > 0)
+                .map((domain) => (
+                  <Card key={domain.domain} style={{ gap: 4 }}>
+                    <Row style={{ justifyContent: 'space-between' }}>
+                      <AppText variant="small" weight="700">
+                        {domain.domain.replace(/-/g, ' ')}
+                      </AppText>
+                      <AppText
+                        variant="tiny"
+                        weight="700"
+                        color={domain.overall === 'healthy'
+                          ? 'success'
+                          : domain.overall === 'attention'
+                            ? 'warning'
+                            : 'danger'}
+                      >
+                        {domain.overall === 'healthy'
+                          ? 'Good'
+                          : domain.overall === 'attention'
+                            ? 'Needs review'
+                            : 'Failed'}
+                      </AppText>
+                    </Row>
+                    <AppText variant="tiny" color="textMuted">
+                      {domain.pass} good · {domain.warn} review · {domain.fail} failed ·{' '}
+                      {domain.unavailable} unavailable · {domain.notRun} not run
+                    </AppText>
+                  </Card>
+                ))}
+              {report.appHealth.checks
+                .filter((check) => check.status !== 'pass')
+                .map((check) => (
+                  <Card key={check.id} style={{ gap: 4 }}>
+                    <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <AppText variant="small" weight="700" style={{ flex: 1, paddingRight: 8 }}>
+                        {check.label}
+                      </AppText>
+                      <AppText
+                        variant="tiny"
+                        weight="700"
+                        color={check.status === 'fail'
+                          ? 'danger'
+                          : check.status === 'warn'
+                            ? 'warning'
+                            : 'textMuted'}
+                      >
+                        {check.status === 'fail'
+                          ? 'Failed'
+                          : check.status === 'warn'
+                            ? 'Needs review'
+                            : 'Unavailable'}
+                      </AppText>
+                    </Row>
+                    {check.summary ? (
+                      <AppText variant="tiny" color="textMuted">{check.summary}</AppText>
+                    ) : null}
+                  </Card>
+                ))}
+            </View>
+          ) : null}
+
           {report.routeAggregates.length > 0 ? (
             <View style={{ gap: 8 }}>
               <AppText variant="tiny" weight="700" color="textFaint" style={{ marginLeft: 4 }}>
@@ -462,7 +546,7 @@ function PerformanceAuditScreenInner() {
                 accessibilityLiveRegion="polite"
               >
                 Showing {reportedChecks.length} of {orderedChecks.length} checks. All
-                bottlenecks, warnings and unavailable facets come before successful checks.
+                failures, warnings and unavailable facets come before successful checks.
               </AppText>
             ) : null}
             {reportedChecks.map((check) => {

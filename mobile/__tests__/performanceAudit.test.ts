@@ -792,6 +792,14 @@ describe('performance audit lifecycle', () => {
       lastStoredCheckAt: null,
     });
   });
+
+  it('stores the explicitly selected app-health network mode', () => {
+    requestPerformanceAudit({ mode: 'live-source' });
+    expect(getPerformanceAuditState()).toMatchObject({
+      status: 'queued',
+      auditMode: 'live-source',
+    });
+  });
 });
 
 describe('interrupted check latency stripping', () => {

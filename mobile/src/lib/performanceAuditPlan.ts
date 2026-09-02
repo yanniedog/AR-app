@@ -800,7 +800,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   ]);
 
   scenario(templates, 'redirect.rba', {
-    expectedPath: '/trends',
+    expectedPath: '/research',
     expectedSurface: 'outlook.rba-response',
     readiness: ['app', 'redirect', 'data', 'rba-calendar', 'graphics'],
     optional: true,
@@ -810,7 +810,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   ]);
 
   scenario(templates, 'route.outlook', {
-    expectedPath: '/trends',
+    expectedPath: '/research',
     expectedSurface: 'outlook.dashboard',
     readiness: ['app', 'data', 'graphics', 'rba-calendar', 'economic-data'],
     skipReason: missingCore,
