@@ -7,8 +7,9 @@ import {
   normalizeProjectionInputsBySection,
   type ProjectionInputsBySection,
 } from './projectionScenario';
+import { SECURE_STORE_KEYS } from '../lib/secureStoreKey';
 
-const STORAGE_KEY = 'user-rate-scenario-v1';
+const STORAGE_KEY = SECURE_STORE_KEYS.userRateScenario;
 
 export interface DepositScenario {
   balance: string;

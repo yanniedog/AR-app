@@ -2,11 +2,16 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import type { SavedRateRef } from './savedRates';
+import {
+  defineSecureStoreKey,
+  SECURE_STORE_KEYS,
+  type SecureStoreKey,
+} from '../lib/secureStoreKey';
 
 export const TRACKED_RATE_SCHEMA_VERSION = 1 as const;
-export const TRACKED_RATE_SECURE_STORAGE_KEY = 'ar-rates.tracked-rate-metadata.v1';
+export const TRACKED_RATE_SECURE_STORAGE_KEY = SECURE_STORE_KEYS.trackedRateMetadata;
 export const TRACKED_RATE_AUDIT_ROLLBACK_STORAGE_KEY =
-  'ar-rates.performance-audit.tracked-rate-metadata.v1';
+  SECURE_STORE_KEYS.trackedRateAuditRollbackMetadata;
 const SECURE_RECORD_SCHEMA_VERSION = 2 as const;
 const MAX_SECURE_CHUNK_BYTES = 1_800;
 const webMemory = new Map<string, TrackedRate[]>();
@@ -210,13 +215,17 @@ function parseManifest(raw: string | null): SecureRecordManifest | null {
   }
 }
 
-function chunkKey(storageKey: string, generation: string, index: number): string {
-  return `${storageKey}.chunk.${generation}.${index}`;
+function chunkKey(
+  storageKey: SecureStoreKey,
+  generation: string,
+  index: number,
+): SecureStoreKey {
+  return defineSecureStoreKey(`${storageKey}.chunk.${generation}.${index}`);
 }
 
 async function loadTrackedRatesFromStorage(
   savedRates: readonly SavedRateRef[],
-  storageKey: string,
+  storageKey: SecureStoreKey,
 ): Promise<TrackedRatesSecureLoadResult> {
   const empty = () => normalizeTrackedRates(undefined, savedRates);
   if (Platform.OS === 'web') {
@@ -265,7 +274,7 @@ async function loadTrackedRatesFromStorage(
 
 async function saveTrackedRatesToStorage(
   value: readonly TrackedRate[],
-  storageKey: string,
+  storageKey: SecureStoreKey,
 ): Promise<void> {
   const copy = value.map((item) => ({ ...item }));
   if (Platform.OS === 'web') {
@@ -316,7 +325,7 @@ async function saveTrackedRatesToStorage(
   }
 }
 
-async function clearTrackedRatesStorage(storageKey: string): Promise<void> {
+async function clearTrackedRatesStorage(storageKey: SecureStoreKey): Promise<void> {
   if (Platform.OS === 'web') {
     webMemory.delete(storageKey);
     return;

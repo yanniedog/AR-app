@@ -11,6 +11,7 @@ import {
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from './performanceAuditSchema';
+import { SECURE_STORE_KEYS } from './secureStoreKey';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -36,7 +37,7 @@ const LOG_FILE = `${LOG_DIR}ar-local.log`;
 export const DEBUG_LOG_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-debug-log-share.txt`;
 /** Full audit JSON kept beside the bounded ring so trim cannot drop the diagnosis. */
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
-export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = '@ar/debug-log/public-upload-receipt-v1';
+export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = SECURE_STORE_KEYS.debugLogUploadReceipt;
 
 const SECRET_VALUE = String.raw`[^\s,;}"']+`;
 const SECRET_SOURCES: string[] = [
@@ -509,7 +510,11 @@ export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
 
 async function removeLegacyPerformanceAuditSnapshots(): Promise<void> {
   await Promise.all(
-    LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.map((key) =>
+    LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS
+      // Schema v6 remains available to the compatibility reader. Only the
+      // obsolete v5 snapshot is discarded automatically.
+      .filter((key) => key.endsWith('-v5'))
+      .map((key) =>
       AsyncStorage.removeItem(key).catch(() => {})),
   );
 }

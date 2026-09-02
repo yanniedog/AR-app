@@ -447,6 +447,10 @@ describe('durable debug-log upload deletion receipt', () => {
     await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
   });
 
+  it('uses an Expo-compatible receipt key', () => {
+    expect(DEBUG_LOG_UPLOAD_RECEIPT_KEY).toBe('ar.debug-log.public-upload-receipt.v1');
+  });
+
   it('persists and restores only an exact allowlisted deletion capability', async () => {
     const receipt = await saveDebugLogUploadReceipt({
       url: 'https://paste.c-net.org/11111111-2222-3333-4444-555555555555',
@@ -1130,7 +1134,7 @@ describe('persistent log file', () => {
   });
 
   it('removes the legacy v5 snapshot while reading the latest audit', async () => {
-    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS[0];
+    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.find((key) => key.endsWith('-v5'))!;
     await AsyncStorage.setItem(legacyKey, 'legacy audit');
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
 

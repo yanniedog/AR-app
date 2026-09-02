@@ -20,10 +20,12 @@ import {
   restoreUserRateScenarioForAudit,
 } from '../hooks/useUserRateScenario';
 import { ForegroundElapsed, subscribePerformanceAudit } from './performanceAudit';
+import { SECURE_STORE_KEYS } from './secureStoreKey';
 
 export const PERFORMANCE_AUDIT_ROLLBACK_KEY = '@ar/performance-audit/rollback-v1';
 /** Encrypted companion for calculator/projection inputs; never written to AsyncStorage. */
-export const PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY = 'performance-audit-rollback-scenario-v1';
+export const PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY =
+  SECURE_STORE_KEYS.performanceAuditRollbackScenario;
 const PERSISTED_STORE_KEY = 'ar-rates';
 const ROLLBACK_SCHEMA_VERSION = 1 as const;
 const PERSISTENCE_TIMEOUT_MS = 3_000;
