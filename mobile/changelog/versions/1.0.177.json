@@ -1,0 +1,32 @@
+{
+  "version": "1.0.177",
+  "releaseTag": "app-arm-v1.0.177",
+  "date": "2026-09-02",
+  "summaryBullets": [
+    "Close Rate Ledger audit review gaps (#219)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Close Rate Ledger audit review gaps (#219)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.177"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.176"
+        }
+      ]
+    }
+  ]
+}
