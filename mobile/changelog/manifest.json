@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-08-16T01:37:08.459Z",
+  "generated_at": "2026-09-02T22:08:22.489Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -850,6 +850,14 @@
         "Make diagnostics local, private, and truthful (#215)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.173"
+    },
+    {
+      "version": "1.0.175",
+      "date": "2026-09-02",
+      "summaryBullets": [
+        "Redesign Australian Rates and audit app health (#217)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.175"
     }
   ]
 }
