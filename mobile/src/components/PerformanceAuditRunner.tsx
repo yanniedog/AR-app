@@ -1608,6 +1608,10 @@ async function runNetworkCheck(
         guard,
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
         appVersion: Application.nativeApplicationVersion ?? '0.0.0',
+        onProgress: () => {
+          watchdog.touchProgress();
+          assertSessionActive(watchdog);
+        },
       });
       onSnapshot(snapshot);
       const responsiveness = monitor.metricsSince(responsivenessAt);

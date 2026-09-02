@@ -13,6 +13,8 @@ const MAX_COMPRESSED_BYTES = 64 * 1024 * 1024;
 const MAX_INFLATED_BYTES = 192 * 1024 * 1024;
 const SHA256 = /^[0-9a-f]{64}$/;
 
+export type AppHealthLiveProgress = (stage: string) => void | Promise<void>;
+
 function object(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} is not a JSON object`);
@@ -46,22 +48,30 @@ function toHex(bytes: ArrayBuffer): string {
     .join('');
 }
 
-async function fetchVerifiedAsset<T>(file: ManifestFile, label: string): Promise<T> {
+async function fetchVerifiedAsset<T>(
+  file: ManifestFile,
+  label: string,
+  onProgress?: AppHealthLiveProgress,
+): Promise<T> {
   const response = await globalThis.fetch(file.url, { cache: 'no-store' });
   if (!response.ok) throw new Error(`${label} returned HTTP ${response.status}`);
   const raw = new Uint8Array(await response.arrayBuffer());
+  await onProgress?.(`${label}:downloaded`);
   if (raw.byteLength !== file.bytes) {
     throw new Error(`${label} size mismatch (expected ${file.bytes}, got ${raw.byteLength})`);
   }
   await yieldToUi();
   const digest = toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, raw));
   if (digest !== file.sha256) throw new Error(`${label} sha256 mismatch`);
+  await onProgress?.(`${label}:hash-verified`);
   const gzipped = raw.length > 2 && raw[0] === 0x1f && raw[1] === 0x8b;
   const inflated = gzipped
     ? await gunzipCooperatively(raw, 64 * 1024, MAX_INFLATED_BYTES)
     : raw;
   if (inflated.byteLength > MAX_INFLATED_BYTES) throw new Error(`${label} exceeds its decoded size limit`);
-  return parseJsonHeavy<T>(strFromU8(inflated));
+  const parsed = await parseJsonHeavy<T>(strFromU8(inflated));
+  await onProgress?.(`${label}:decoded`);
+  return parsed;
 }
 
 /**
@@ -72,9 +82,11 @@ export async function readLiveAppHealthSnapshot(options: {
   guard: AppHealthTransportGuard;
   contract: AppHealthSourceContract;
   appVersion: string;
+  onProgress?: AppHealthLiveProgress;
 }): Promise<AppHealthDataSnapshot> {
-  const { guard, contract, appVersion } = options;
+  const { guard, contract, appVersion, onProgress } = options;
   const manifestRaw = await fetchJson(contract.manifestUrl, 'Live manifest');
+  await onProgress?.('manifest:fetched');
   const manifestObject = object(manifestRaw, 'Live manifest');
   const files = object(manifestObject.files, 'Live manifest files');
   const coreFile = manifestFile(files.core, 'Core asset');
@@ -86,12 +98,14 @@ export async function readLiveAppHealthSnapshot(options: {
   guard.allowManifestAssets(declaredUrls);
 
   const datesRaw = await fetchJson(contract.datesIndexUrl, 'Dates index');
+  await onProgress?.('dates-index:fetched');
   const dates = parseDatesIndex(datesRaw);
   if (!dates) throw new Error('Dates index payload is invalid');
 
-  const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset');
+  const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress);
   const coreResult = normalizeCoreWithIntegrity(coreRaw, { coreSha256: coreFile.sha256 });
-  const details = await fetchVerifiedAsset<DetailsPayload>(detailsFile, 'Details asset');
+  await onProgress?.('core:normalized');
+  const details = await fetchVerifiedAsset<DetailsPayload>(detailsFile, 'Details asset', onProgress);
   const coreKeys = new Set(
     Object.values(coreResult.core.sections ?? {})
       .flatMap((section) => section.rates)

@@ -12,15 +12,15 @@ import {
 describe('live app-health source validation', () => {
   it('rejects a malformed HTTP-success manifest instead of auditing cached state', async () => {
     const originalFetch = globalThis.fetch;
+    const contract = createV1AppHealthSourceContract();
     const fetchSpy = jest.fn(async () => ({
       ok: true,
       status: 200,
       redirected: false,
-      url: '',
+      url: contract.manifestUrl,
       json: async () => ({ schema_version: 1, files: {} }),
     })) as unknown as typeof fetch;
     globalThis.fetch = fetchSpy;
-    const contract = createV1AppHealthSourceContract();
     const guard = installAppHealthTransportGuard({
       target: globalThis as unknown as AuditTransportTarget,
       mode: 'live-source',
@@ -41,6 +41,7 @@ describe('live app-health source validation', () => {
 
   it('carries the fetched dates index and verified payload into the live snapshot', async () => {
     const originalFetch = globalThis.fetch;
+    const contract = createV1AppHealthSourceContract();
     const encoder = new TextEncoder();
     const coreBytes = encoder.encode(JSON.stringify(core));
     const detailsBytes = encoder.encode(JSON.stringify(details));
@@ -60,11 +61,11 @@ describe('live app-health source validation', () => {
         details: { name: 'details.json', bytes: detailsBytes.length, sha256: '0'.repeat(64), url: assetUrl('details.json') },
       },
     };
-    const response = (value: unknown, bytes?: Uint8Array) => ({
+    const response = (url: string, value: unknown, bytes?: Uint8Array) => ({
       ok: true,
       status: 200,
       redirected: false,
-      url: '',
+      url,
       json: async () => value,
       arrayBuffer: async () => bytes?.buffer.slice(
         bytes.byteOffset,
@@ -72,30 +73,46 @@ describe('live app-health source validation', () => {
       ) as ArrayBuffer,
     });
     const fetchSpy = jest.fn()
-      .mockResolvedValueOnce(response(manifest))
-      .mockResolvedValueOnce(response({
+      .mockResolvedValueOnce(response(contract.manifestUrl, manifest))
+      .mockResolvedValueOnce(response(contract.datesIndexUrl, {
         schema_version: 1,
         dates: [core.run_date],
         count: 1,
         min_date: core.run_date,
         latest_date: core.run_date,
       }))
-      .mockResolvedValueOnce(response(null, coreBytes))
-      .mockResolvedValueOnce(response(null, detailsBytes)) as unknown as typeof fetch;
+      .mockResolvedValueOnce(response(assetUrl('core.json'), null, coreBytes))
+      .mockResolvedValueOnce(response(assetUrl('details.json'), null, detailsBytes)) as unknown as typeof fetch;
     globalThis.fetch = fetchSpy;
     const digest = jest.spyOn(Crypto, 'digest').mockResolvedValue(new Uint8Array(32).buffer);
-    const contract = createV1AppHealthSourceContract();
+    const progress = jest.fn();
     const guard = installAppHealthTransportGuard({
       target: globalThis as unknown as AuditTransportTarget,
       mode: 'live-source',
       contract,
     });
     try {
-      const snapshot = await readLiveAppHealthSnapshot({ guard, contract, appVersion: '1.0.0' });
+      const snapshot = await readLiveAppHealthSnapshot({
+        guard,
+        contract,
+        appVersion: '1.0.0',
+        onProgress: progress,
+      });
       expect(snapshot.datesIndex).toEqual({ dates: [core.run_date], latestRunDate: core.run_date });
       expect(snapshot.core?.run_date).toBe(core.run_date);
       expect(snapshot.details?.runDate).toBe(core.run_date);
       expect(fetchSpy).toHaveBeenCalledTimes(4);
+      expect(progress.mock.calls.map(([stage]) => stage)).toEqual([
+        'manifest:fetched',
+        'dates-index:fetched',
+        'Core asset:downloaded',
+        'Core asset:hash-verified',
+        'Core asset:decoded',
+        'core:normalized',
+        'Details asset:downloaded',
+        'Details asset:hash-verified',
+        'Details asset:decoded',
+      ]);
     } finally {
       guard.restore();
       digest.mockRestore();

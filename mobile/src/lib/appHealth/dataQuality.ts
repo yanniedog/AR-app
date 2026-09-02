@@ -582,6 +582,7 @@ function evaluateRibbonReconciliation(
     (sum, value) => sum + (Number.isFinite(value) && value > 0 ? value : 0),
     0,
   );
+  let remainingQuarantineBudget = quarantinedRows;
   for (const [name, actual] of Object.entries(actualManifestCounts)) {
     if (!snapshot.manifest || !(name in snapshot.manifest.counts)) continue;
     declaredCountComparisons += 1;
@@ -589,8 +590,10 @@ function evaluateRibbonReconciliation(
     if (!Number.isInteger(declared) || declared < 0) {
       declaredCountMismatches += 1;
     } else if (declared !== actual) {
-      if (declared > actual && declared - actual <= quarantinedRows) {
+      const positiveDelta = declared - actual;
+      if (positiveDelta > 0 && positiveDelta <= remainingQuarantineBudget) {
         declaredCountAdjustments += 1;
+        remainingQuarantineBudget -= positiveDelta;
       } else {
         declaredCountMismatches += 1;
       }
@@ -612,6 +615,8 @@ function evaluateRibbonReconciliation(
       declaredCountComparisons,
       declaredCountAdjustments,
       declaredCountMismatches,
+      quarantineBudget: quarantinedRows,
+      quarantineBudgetUsed: quarantinedRows - remainingQuarantineBudget,
     },
     status === 'fail' ? 'A section or manifest summary does not reconcile with the loaded rows.' : undefined,
   );

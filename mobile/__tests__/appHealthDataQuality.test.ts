@@ -128,6 +128,27 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('spends one shared quarantine budget across manifest count adjustments', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.manifest!.counts.rates += 1;
+    snapshot.manifest!.counts.products += 1;
+    snapshot.manifest!.counts.providers += 1;
+    snapshot.quarantine = { rowsByReason: { invalid_row: 1 }, bankHistoryPairs: 0 };
+
+    expect(byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION,
+    )).toMatchObject({
+      status: 'fail',
+      metrics: {
+        declaredCountAdjustments: 1,
+        declaredCountMismatches: 2,
+        quarantineBudget: 1,
+        quarantineBudgetUsed: 1,
+      },
+    });
+  });
+
   it('rejects section ribbon counts that under-report loaded rows and sets', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const counts = snapshot.core!.sections.Savings.ribbon!.counts!;
@@ -178,7 +199,7 @@ describe('app-health data quality', () => {
     });
   });
 
-  it('validates the shipping bundled sample without treating bundled URLs as live hosts', () => {
+  it('audits the shipping bundled sample without treating bundled URLs as live hosts', () => {
     const details = loadSampleDetails();
     const productKeys = new Set(
       Object.values(sampleCore.sections).flatMap((section) =>
@@ -226,8 +247,13 @@ describe('app-health data quality', () => {
     expect(Number(sampleDetails.metrics.orphanProducts)).toBeGreaterThan(0);
     const sampleRibbon = byCode(checks, APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION);
     expect(sampleRibbon).toMatchObject({
-      status: 'pass',
-      metrics: { declaredCountMismatches: 0, declaredCountAdjustments: 3 },
+      status: 'fail',
+      metrics: {
+        declaredCountMismatches: 2,
+        declaredCountAdjustments: 1,
+        quarantineBudget: 3,
+        quarantineBudgetUsed: 3,
+      },
     });
   });
 });

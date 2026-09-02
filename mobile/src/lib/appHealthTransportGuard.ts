@@ -65,7 +65,6 @@ function acceptedFinalFetchUrl(
   contract: AppHealthSourceContract,
 ): boolean {
   const finalValue = typeof response.url === 'string' ? response.url : '';
-  if (!response.redirected && !finalValue) return true;
   const requested = canonical(requestedUrl);
   if (!requested || !finalValue) return false;
   const finalCanonical = canonical(finalValue);
