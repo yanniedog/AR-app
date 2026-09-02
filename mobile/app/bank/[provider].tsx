@@ -470,6 +470,7 @@ export default function BankDetail() {
         status: provider && logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
       {
         id: 'lender.history-data',

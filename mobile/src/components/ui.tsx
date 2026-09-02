@@ -16,14 +16,15 @@ import {
 
 import { hapticLightImpact, hapticSelection } from '../lib/haptics';
 import type { Palette } from '../theme/colors';
+import { commissionerFamily, newsreaderFamily, type LedgerUiWeight } from '../theme/fonts';
 import type { FontVariant } from '../theme/theme';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 
-const VARIANT_WEIGHT: Partial<Record<FontVariant, '700' | '800'>> = {
-  h1: '800',
-  h2: '700',
-  h3: '700',
+const VARIANT_WEIGHT: Partial<Record<FontVariant, LedgerUiWeight>> = {
+  h1: '600',
+  h2: '600',
+  h3: '600',
   rate: '700',
   rateHero: '700',
 };
@@ -49,6 +50,11 @@ export function AppText({
 }) {
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
+  const requestedWeight = weight === '800' ? '700' : (weight ?? VARIANT_WEIGHT[variant] ?? '400');
+  const heading = variant === 'h1' || variant === 'h2' || variant === 'h3';
+  const fontFamily = heading
+    ? newsreaderFamily(requestedWeight === '600' || requestedWeight === '700' ? '600' : '500')
+    : commissionerFamily(requestedWeight);
   return (
     <Text
       allowFontScaling
@@ -58,10 +64,10 @@ export function AppText({
           fontSize: theme.font[variant],
           // Fixed line heights clip glyphs at large accessibility text sizes.
           lineHeight: fontScale > 1 ? undefined : theme.lineHeight[variant],
-          fontWeight: weight ?? VARIANT_WEIGHT[variant],
+          fontFamily,
         },
-        variant === 'h1' && { letterSpacing: -0.5 },
-        variant === 'h2' && { letterSpacing: -0.3 },
+        variant === 'h1' && { letterSpacing: -0.35 },
+        variant === 'h2' && { letterSpacing: -0.2 },
         variant === 'rateHero' && { letterSpacing: -0.5 },
         (variant === 'rate' || variant === 'rateHero') && { fontVariant: ['tabular-nums'] },
         style,
@@ -81,24 +87,17 @@ export function Card({
   ...rest
 }: ViewProps & { variant?: 'plain' | 'outlined' | 'elevated' }) {
   const theme = useTheme();
-  const elevated = variant === 'elevated';
   return (
     <View
       style={[
         {
           backgroundColor: theme.colors.card,
-          borderRadius: theme.radius.lg,
+          borderRadius: theme.radius.sm,
           padding: theme.spacing(4),
-          ...(variant === 'outlined' ? { borderWidth: 1, borderColor: theme.colors.border } : null),
-          ...(Platform.OS === 'android' && elevated ? { elevation: 1 } : null),
-          ...(Platform.OS === 'ios' && elevated
-            ? {
-                shadowColor: theme.colors.shadow,
-                shadowOffset: { width: 0, height: 1 },
-                shadowOpacity: theme.dark ? 0.28 : 0.08,
-                shadowRadius: 2,
-              }
-            : null),
+          borderTopWidth: 1,
+          borderBottomWidth: 1,
+          borderColor: variant === 'elevated' ? theme.ledger.controlRule : theme.ledger.rule,
+          ...(variant === 'outlined' ? { borderLeftWidth: 1, borderRightWidth: 1 } : null),
         },
         style,
       ]}
@@ -198,11 +197,11 @@ export function Button({
   const theme = useTheme();
   const bg =
     variant === 'primary'
-      ? theme.colors.primary
+      ? theme.ledger.wattle
       : variant === 'secondary'
-        ? theme.colors.chip
+        ? theme.ledger.raised
         : 'transparent';
-  const fg = variant === 'primary' ? theme.colors.onPrimary : theme.colors.text;
+  const fg = variant === 'primary' ? theme.ledger.onWattle : theme.ledger.ink;
   const rippleColor =
     variant === 'primary' ? theme.colors.onPrimary : theme.colors.primaryMuted;
   return (
@@ -228,10 +227,10 @@ export function Button({
           gap: 8,
           paddingHorizontal: 18,
           paddingVertical: 13,
-          borderRadius: theme.radius.md,
+          borderRadius: theme.radius.sm,
           backgroundColor: bg,
           borderWidth: variant === 'secondary' ? 1 : 0,
-          borderColor: theme.colors.border,
+          borderColor: theme.ledger.controlRule,
           overflow: 'hidden',
           ...(disabled ? { opacity: 0.6 } : pressedOpacity(pressed, 0.85)),
         },
@@ -243,7 +242,7 @@ export function Button({
       ) : (
         <>
           {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
-          <Text style={{ color: fg, fontWeight: '700', fontSize: theme.font.body }}>{title}</Text>
+          <Text style={{ color: fg, fontFamily: commissionerFamily('700'), fontSize: theme.font.body }}>{title}</Text>
         </>
       )}
     </Pressable>
@@ -385,11 +384,11 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: 'muted'
       style={{
         paddingHorizontal: 8,
         paddingVertical: 3,
-        borderRadius: theme.radius.sm,
+        borderRadius: 2,
         backgroundColor: theme.colors.chip,
       }}
     >
-      <Text style={{ color: map[tone], fontSize: theme.font.tiny, fontWeight: '700' }}>{label}</Text>
+      <Text style={{ color: map[tone], fontSize: theme.font.tiny, fontFamily: commissionerFamily('700') }}>{label}</Text>
     </View>
   );
 }

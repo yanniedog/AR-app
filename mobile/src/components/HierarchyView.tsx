@@ -256,6 +256,8 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         datasetRevision,
         expectedCount: items.length,
         actualCount: listReadiness.committedItemCount,
+        visibleCount: listReadiness.measuredVisibleCount,
+        emptyStateRendered: items.length === 0 && rows != null && listReadiness.ready,
       },
       {
         id: 'browse.layout',
@@ -277,6 +279,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         status: logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
     ],
   });

@@ -34,6 +34,8 @@ import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
+import { freshnessDeadlineUtc } from '../../src/data/displayEvidence';
+import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../../src/lib/appHealth';
 
 /**
  * Slim one-line entry point to a secondary tool. Keeps Today's supporting
@@ -88,6 +90,8 @@ export default function Home() {
   const storeStatus = useStore((s) => s.status);
   const storeError = useStore((s) => s.error);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
+  const manifestSchedule = useStore((s) => s.manifest?.schedule ?? null);
+  const coreAssetState = useStore((s) => s.coreAssetState);
   const refreshing = useStore((s) => s.refreshing);
   const refresh = useStore((s) => s.refresh);
   const ensureDetails = useStore((s) => s.ensureDetails);
@@ -444,6 +448,7 @@ export default function Home() {
         status: todayLogos.ready ? 'ready' : 'pending',
         expectedCount: todayLogos.expectedCount,
         actualCount: todayLogos.terminalCount,
+        fallbackCount: todayLogos.fallbackCount,
       },
       {
         id: 'today.hero-layout',
@@ -485,6 +490,7 @@ export default function Home() {
       >
       <HomeHero
         dataKey={core.run_date}
+        runDate={core.run_date}
         runDateLabel={formatRunDate(core.run_date)}
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}
         source={source}
@@ -492,6 +498,20 @@ export default function Home() {
         pendingIngest={!!pendingIngestRunDate && !offline}
         onShare={shareToday}
         coverageLabel={coverageLabel}
+        coverage={core.coverage}
+        assetStatus={coreAssetState.status}
+        assetReason={coreAssetState.status === 'partial'
+          ? coreAssetState.reason
+          : coreAssetState.status === 'unavailable'
+            ? coreAssetState.reason
+            : coreAssetState.status === 'error'
+              ? coreAssetState.error
+              : null}
+        overdueAfterUtc={freshnessDeadlineUtc(
+          manifestSchedule?.next_due_utc,
+          CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT.freshnessGraceMs,
+        )}
+        scheduleLabel={manifestSchedule?.label ?? null}
       />
       </View>
 

@@ -150,6 +150,7 @@ export default function Onboarding() {
         status: onboardingLogos.ready ? 'ready' : 'pending',
         expectedCount: onboardingLogos.expectedCount,
         actualCount: onboardingLogos.terminalCount,
+        fallbackCount: onboardingLogos.fallbackCount,
       },
       {
         id: 'onboarding.local-state',

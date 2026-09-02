@@ -29,6 +29,7 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
   itemCountRef.current = itemCount;
 
   const [commit, setCommit] = useState(() => initialVirtualizedListCommitState(revision));
+  const [viewability, setViewability] = useState<{ revision: string; count: number } | null>(null);
 
   useEffect(() => {
     setCommit((current) => (
@@ -36,6 +37,10 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
         ? current
         : initialVirtualizedListCommitState(revision)
     ));
+  }, [revision]);
+
+  useEffect(() => {
+    setViewability((current) => current?.revision === revision ? current : null);
   }, [revision]);
 
   const markCommitted = useCallback((visibleCount?: number) => {
@@ -82,9 +87,9 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
   }, []);
 
   const onViewableItemsChanged = useCallback((info: ViewableItemsChangedInfo) => {
-    markCommittedRef.current(
-      info.viewableItems.filter((item) => item.isViewable === true).length,
-    );
+    const count = info.viewableItems.filter((item) => item.isViewable === true).length;
+    setViewability({ revision: revisionRef.current, count });
+    markCommittedRef.current(count);
   }, []);
 
   return {
@@ -93,6 +98,7 @@ export function useVirtualizedListReadiness(revision: string, itemCount: number)
     expectedCount: itemCount,
     committedItemCount: commit.revision === revision && commit.committed ? commit.itemCount : 0,
     visibleCount: commit.revision === revision ? commit.visibleCount : 0,
+    measuredVisibleCount: viewability?.revision === revision ? viewability.count : null,
     onCommitLayoutEffect,
     onRevisionLayout,
     onLoad,

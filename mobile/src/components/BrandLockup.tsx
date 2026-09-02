@@ -2,7 +2,6 @@ import { usePathname } from 'expo-router';
 import React, { createContext, useContext, useEffect, useMemo, useRef } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { useTheme } from '../theme/ThemeProvider';
 import { ArMarkLogo } from './ArMarkLogo';
 import { AppText } from './ui';
 
@@ -63,7 +62,6 @@ export function BrandLockup({
   compact?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  const theme = useTheme();
   const pathname = usePathname();
   const markRef = useRef<View>(null);
   const { registerTarget, morphComplete } = useSplashMorph();
@@ -88,20 +86,16 @@ export function BrandLockup({
         style={{
           width: markSize,
           height: markSize,
-          borderRadius: 9,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.surface,
           alignItems: 'center',
           justifyContent: 'center',
           overflow: 'hidden',
           opacity: isMorphTarget && !morphComplete ? 0 : 1,
         }}
       >
-        <ArMarkLogo size={markSize - 4} />
+        <ArMarkLogo size={markSize} />
       </View>
       <AppText variant="h3" weight="700" style={{ letterSpacing: -0.3 }}>
-        {compact ? 'Rates' : 'AustralianRates'}
+        {compact ? 'Rates' : 'Australian Rates'}
       </AppText>
     </View>
   );

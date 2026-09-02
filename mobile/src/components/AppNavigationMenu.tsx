@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useGlobalSearchParams, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
@@ -16,6 +15,7 @@ import {
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { AppText, Divider, Row } from './ui';
+import { LedgerIcon } from './icons/LedgerIcon';
 
 interface NavigationMenuContextValue {
   open: boolean;
@@ -51,11 +51,11 @@ export function NavigationMenuButton() {
       square
       onPress={menu.show}
       accessibilityRole="button"
-      accessibilityLabel="Open app menu"
+      accessibilityLabel="Open account and app menu"
       accessibilityState={{ expanded: menu.open }}
       style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
-      <Ionicons name="menu" size={25} color={theme.colors.text} />
+      <LedgerIcon name="utility" size={25} color={theme.ledger.ink} />
     </TouchTarget>
   );
 }
@@ -89,7 +89,7 @@ export function AppNavigationMenu() {
       onRequestClose={menu.hide}
       statusBarTranslucent
     >
-      <View style={{ flex: 1, flexDirection: 'row' }}>
+      <View style={{ flex: 1, flexDirection: 'row-reverse' }}>
         <View
           accessibilityViewIsModal
           style={{
@@ -98,33 +98,25 @@ export function AppNavigationMenu() {
             backgroundColor: theme.colors.surface,
             paddingTop: Math.max(insets.top, 12),
             paddingBottom: Math.max(insets.bottom, 12),
-            borderRightWidth: 1,
-            borderRightColor: theme.colors.border,
+            borderLeftWidth: 1,
+            borderLeftColor: theme.colors.border,
           }}
         >
           <Row style={{ justifyContent: 'space-between', paddingHorizontal: 16 }}>
-            <AppText variant="h2">Menu</AppText>
+            <AppText variant="h2">Account and app</AppText>
             <TouchTarget
               square
               onPress={menu.hide}
               accessibilityRole="button"
               accessibilityLabel="Close app menu"
             >
-              <Ionicons name="close" size={24} color={theme.colors.text} />
+              <LedgerIcon name="close" size={24} color={theme.ledger.ink} />
             </TouchTarget>
           </Row>
           <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 20 }}>
             {APP_DESTINATION_GROUPS.map((group, groupIndex) => (
               <View key={group.id}>
                 {groupIndex > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
-                <AppText
-                  variant="tiny"
-                  color="textFaint"
-                  weight="700"
-                  style={{ paddingHorizontal: 12, paddingVertical: 6, letterSpacing: 0.5 }}
-                >
-                  {group.label.toUpperCase()}
-                </AppText>
                 {group.destinations.map((destination) => {
                   const selected = destinationIsActive(destination.id, pathname);
                   return (
@@ -136,16 +128,18 @@ export function AppNavigationMenu() {
                       accessibilityState={{ selected }}
                       style={({ pressed }) => ({
                         minHeight: 48,
-                        borderRadius: theme.radius.md,
+                        borderRadius: theme.radius.sm,
                         paddingHorizontal: 12,
                         flexDirection: 'row',
                         alignItems: 'center',
                         gap: 12,
                         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
+                        borderLeftWidth: 3,
+                        borderLeftColor: selected ? theme.ledger.wattle : 'transparent',
                         opacity: pressed ? 0.65 : 1,
                       })}
                     >
-                      <Ionicons
+                      <LedgerIcon
                         name={destination.icon}
                         size={21}
                         color={selected ? theme.colors.primary : theme.colors.textMuted}

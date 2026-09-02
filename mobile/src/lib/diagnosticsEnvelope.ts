@@ -1,4 +1,5 @@
 import type { AuditCheck, PerformanceAuditReport } from './performanceAudit';
+import { toPublicAppHealthReport } from './appHealth';
 
 const METRIC_ALLOWLIST = new Set([
   'durationMs',
@@ -70,6 +71,7 @@ export const DEIDENTIFIED_DIAGNOSTICS_FIELD_PREVIEW = [
   'app version, build, platform, OS major version and JavaScript engine',
   'payload source, run date, product/provider counts and optional-asset availability',
   'aggregate outcome/counts and measured responsiveness values',
+  'aggregate data-quality, asset, display and network-policy findings',
   'fixed check IDs, status, measured duration and allowlisted numeric/boolean metrics',
 ] as const;
 
@@ -135,7 +137,7 @@ function safeCheckId(value: string | null): string | null {
 }
 
 function safePayloadSource(value: string): string {
-  return ['network', 'cache', 'sample', 'v3'].includes(value) ? value : 'unknown';
+  return ['remote', 'cache', 'sample'].includes(value) ? value : 'unknown';
 }
 
 function safeDuration(check: AuditCheck): number | null {
@@ -195,6 +197,7 @@ export function buildDeidentifiedPerformanceAudit(report: PerformanceAuditReport
       durationMs: safeDuration(check),
       metrics: allowlistedMetrics(check),
     })),
+    appHealth: report.appHealth ? toPublicAppHealthReport(report.appHealth) : null,
   };
 }
 

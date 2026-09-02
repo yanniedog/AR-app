@@ -10,6 +10,7 @@ import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEBUG_LOG_SHARE_FILE,
   debugLog,
+  deleteDebugLogUpload,
   deleteDebugLogUploadAndReceipt,
   formatVersionedLogExport,
   loadDebugLogUploadReceipt,
@@ -19,6 +20,17 @@ import {
 } from '../src/lib/debugLog';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
+
+const RECEIPT_CHECK_FAILED_MESSAGE =
+  'A previous public upload could not be checked. Public upload is unavailable for now; local Copy and Share still work.';
+const RECEIPT_STORAGE_FAILED_MESSAGE =
+  'The public copy was removed because its deletion receipt could not be secured. Public upload stays off; local Copy and Share still work.';
+const RECEIPT_DELETE_UNCONFIRMED_MESSAGE =
+  'The deletion receipt could not be secured, and removal of the public copy was not confirmed. Keep this screen open and use Delete uploaded log.';
+
+function errorDetail(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
 
 function DebugLogScreenInner() {
   const theme = useTheme();
@@ -53,7 +65,8 @@ function DebugLogScreenInner() {
         if (active) setUploadReceipt(receipt);
       })
       .catch((error) => {
-        if (active) setReceiptError(error instanceof Error ? error.message : String(error));
+        debugLog.warn('debugLogUploadReceipt', `read failed: ${errorDetail(error)}`);
+        if (active) setReceiptError(RECEIPT_CHECK_FAILED_MESSAGE);
       })
       .finally(() => {
         if (active) setReceiptLoaded(true);
@@ -221,15 +234,17 @@ function DebugLogScreenInner() {
         setUploadReceipt(receipt);
         setReceiptError(null);
       } catch (receiptFailure) {
+        debugLog.warn(
+          'debugLogUploadReceipt',
+          `secure write failed: ${errorDetail(receiptFailure)}`,
+        );
         try {
-          await deleteDebugLogUploadAndReceipt({
-            schemaVersion: 1,
-            url,
-            provider,
-            ...(deleteKey ? { deleteKey } : {}),
-            createdAt: new Date().toISOString(),
-          });
+          await deleteDebugLogUpload(url, deleteKey);
         } catch (cleanupFailure) {
+          debugLog.warn(
+            'debugLogUploadReceipt',
+            `public-copy cleanup was not confirmed: ${errorDetail(cleanupFailure)}`,
+          );
           setUploadReceipt({
             schemaVersion: 1,
             url,
@@ -237,13 +252,11 @@ function DebugLogScreenInner() {
             ...(deleteKey ? { deleteKey } : {}),
             createdAt: new Date().toISOString(),
           });
-          setReceiptError(
-            'The public copy exists, but its deletion receipt could not be secured. ' +
-            'Keep this screen open and delete it now.',
-          );
-          throw cleanupFailure;
+          setReceiptError(RECEIPT_DELETE_UNCONFIRMED_MESSAGE);
+          throw new Error(RECEIPT_DELETE_UNCONFIRMED_MESSAGE);
         }
-        throw receiptFailure;
+        setReceiptError(RECEIPT_STORAGE_FAILED_MESSAGE);
+        throw new Error(RECEIPT_STORAGE_FAILED_MESSAGE);
       }
       Alert.alert(
         'Uploaded',
@@ -340,7 +353,14 @@ function DebugLogScreenInner() {
                 Alert.alert('Uploaded log deleted');
               })
               .catch((err) => {
-                Alert.alert('Delete failed', String((err as Error)?.message ?? err));
+                debugLog.warn(
+                  'debugLogUploadReceipt',
+                  `delete was not confirmed: ${errorDetail(err)}`,
+                );
+                Alert.alert(
+                  'Delete not confirmed',
+                  'The public copy or its local deletion receipt could not be fully removed. Try again while this screen remains open.',
+                );
               })
               .finally(() => {
                 busyRef.current = null;

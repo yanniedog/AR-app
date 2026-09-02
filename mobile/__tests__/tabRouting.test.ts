@@ -43,7 +43,8 @@ describe('tabRouting', () => {
     expect(shouldShowAppTabBar('/', true)).toBe(true);
     expect(shouldShowAppTabBar('/browse', true)).toBe(true);
     expect(shouldShowAppTabBar('/passthrough', true)).toBe(true);
-    expect(shouldShowAppTabBar('/trends', true)).toBe(true);
+    expect(shouldShowAppTabBar('/research', true)).toBe(false);
+    expect(shouldShowAppTabBar('/trends', true)).toBe(false);
     expect(shouldShowAppTabBar('/watchlist', true)).toBe(true);
     expect(shouldShowAppTabBar('/(tabs)/browse', true)).toBe(true);
 
@@ -89,9 +90,7 @@ describe('tabRouting', () => {
     expect(isPrimaryTabRootPath('/product/x', 'browse')).toBe(false);
   });
 
-  it('keeps legacy and auxiliary route hrefs stable', () => {
-    expect(tabHref('settings')).toBe('/(tabs)/settings');
-    expect(tabHref('trends')).toBe('/(tabs)/trends');
+  it('keeps the four primary route hrefs stable', () => {
     expect(tabHref('passthrough')).toBe('/(tabs)/passthrough');
     expect(tabHref('index')).toBe('/(tabs)');
   });
@@ -113,12 +112,19 @@ describe('navigation shell compatibility', () => {
       'bank/[provider]',
       'rba-response',
       'rba',
+      'research',
     ]) {
       expect(root).toContain(`name="${route}"`);
     }
 
     const tabs = read('../app/(tabs)/_layout.tsx');
     expect(tabs).toMatch(/<Tabs\.Screen\s+name="passthrough"/);
-    expect(tabs).toMatch(/<Tabs\.Screen\s+name="trends"/);
+    expect(tabs).not.toMatch(/<Tabs\.Screen\s+name="trends"/);
+  });
+
+  it('keeps compatibility redirects for former group-qualified routes', () => {
+    expect(read('../app/(tabs)/settings.tsx')).toContain('href="/settings"');
+    expect(read('../app/(tabs)/trends.tsx')).toContain("from '../trends'");
+    expect(read('../app/trends.tsx')).toContain("focus === 'rba'");
   });
 });

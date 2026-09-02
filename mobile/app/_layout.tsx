@@ -1,5 +1,3 @@
-import { MaterialSymbols_400Regular } from '@expo-google-fonts/material-symbols/400Regular';
-import { MaterialSymbolsOutlined_400Regular } from '@expo-google-fonts/material-symbols-outlined/400Regular';
 import * as Application from 'expo-application';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
@@ -37,7 +35,7 @@ import {
   AppUpdateBannerLayoutProvider,
   useAppUpdateBanner,
 } from '../src/components/AppUpdateBanner';
-import { ArMarkLogo } from '../src/components/ArMarkLogo';
+import { RateMark } from '../src/components/RateMark';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
@@ -62,6 +60,7 @@ import {
   setSessionReplayEnabled,
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
+import { commissionerFamily } from '../src/theme/fonts';
 
 // Gives cold-start deep links a real back destination instead of relying on
 // the bottom bar that focused routes deliberately hide.
@@ -218,10 +217,6 @@ function BrandedSplashOverlay({
             top: 0,
             width: SPLASH_MARK,
             height: SPLASH_MARK,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: theme.colors.border,
-            backgroundColor: theme.colors.surface,
             alignItems: 'center',
             justifyContent: 'center',
             overflow: 'hidden',
@@ -229,11 +224,11 @@ function BrandedSplashOverlay({
           markStyle,
         ]}
       >
-        <ArMarkLogo size={SPLASH_MARK - 8} />
+        <RateMark size={SPLASH_MARK - 8} accessibilityLabel="Australian Rates" />
       </Animated.View>
       <Animated.View style={[{ position: 'absolute', top: screenH / 2 + SPLASH_MARK / 2 - 4 }, titleStyle]}>
         <AppText variant="h2" weight="700" style={{ letterSpacing: -0.3 }}>
-          AustralianRates
+          Australian Rates
         </AppText>
       </Animated.View>
     </Animated.View>
@@ -450,7 +445,10 @@ function RootNavigator() {
               <Stack
                 screenOptions={{
                   headerStyle: { backgroundColor: theme.colors.surface },
-                  headerTitleStyle: { color: theme.colors.text },
+                  headerTitleStyle: {
+                    color: theme.colors.text,
+                    fontFamily: commissionerFamily('600'),
+                  },
                   headerTintColor: theme.colors.primary,
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: theme.colors.bg },
@@ -480,10 +478,17 @@ function RootNavigator() {
                 options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
               />
               <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
+              <Stack.Screen name="settings" options={{ title: 'Settings' }} />
+              <Stack.Screen name="research" options={{ title: 'Rate research', headerBackTitle: 'Changes' }} />
+              <Stack.Screen name="trends" options={{ headerShown: false }} />
               <Stack.Screen name="about" options={{ title: 'About' }} />
               <Stack.Screen
+                name="third-party-notices"
+                options={{ title: 'Open-source notices', headerBackTitle: 'About' }}
+              />
+              <Stack.Screen
                 name="performance-audit"
-                options={{ title: 'Performance audit', headerBackTitle: 'About' }}
+                options={{ title: 'App health audit', headerBackTitle: 'About' }}
               />
               <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'About' }} />
               <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'About' }} />
@@ -519,12 +524,23 @@ export default function RootLayout() {
   // launches a headless background worker, and React does not remount it when
   // the existing Activity is only backgrounded and reopened.
   coldStartLogReset ??= debugLog.beginColdStartSession();
-  const [fontsLoaded] = useFonts({
-    MaterialSymbolsOutlined_400Regular,
-    MaterialSymbols_400Regular,
+  const [fontsLoaded, fontError] = useFonts({
+    Commissioner_400Regular: require('../assets/fonts/Commissioner-Regular.ttf'),
+    Commissioner_500Medium: require('../assets/fonts/Commissioner-Medium.ttf'),
+    Commissioner_600SemiBold: require('../assets/fonts/Commissioner-SemiBold.ttf'),
+    Commissioner_700Bold: require('../assets/fonts/Commissioner-Bold.ttf'),
+    Newsreader_500Medium: require('../assets/fonts/Newsreader-Medium.ttf'),
+    Newsreader_600SemiBold: require('../assets/fonts/Newsreader-SemiBold.ttf'),
+    Newsreader_500Medium_Italic: require('../assets/fonts/Newsreader-MediumItalic.ttf'),
   });
 
-  if (Platform.OS === 'android' && !fontsLoaded) {
+  useEffect(() => {
+    if (fontError) {
+      debugLog.error('fonts', 'Bundled fonts unavailable; using platform font fallbacks.');
+    }
+  }, [fontError]);
+
+  if (!fontsLoaded && !fontError) {
     return null;
   }
 

@@ -400,6 +400,21 @@ describe('uploadDebugLog', () => {
       'The complete debug-log upload failed',
     );
   });
+
+  it('rejects a c-net success response that cannot be deleted', async () => {
+    const body = `full-log-${'x'.repeat(PASTE_RS_MAX_FULL_UPLOAD_BYTES)}`;
+    const mockFetch = jest.fn(async () => ({
+      status: 201,
+      text: async () => JSON.stringify({
+        url: 'https://paste.c-net.org/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+      }),
+    })) as unknown as typeof fetch;
+
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toThrow(
+      'full-capacity upload service returned an invalid upload link',
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('deleteDebugLogUpload', () => {
@@ -445,6 +460,10 @@ describe('durable debug-log upload deletion receipt', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
+  });
+
+  it('uses an Expo-compatible receipt key', () => {
+    expect(DEBUG_LOG_UPLOAD_RECEIPT_KEY).toBe('ar.debug-log.public-upload-receipt.v1');
   });
 
   it('persists and restores only an exact allowlisted deletion capability', async () => {
@@ -1129,8 +1148,28 @@ describe('persistent log file', () => {
     expect(complete).not.toContain('old-schema-report');
   });
 
+  it('exports the retained schema-v6 snapshot when no schema-v7 report exists', async () => {
+    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.find((key) => key.endsWith('-v6'))!;
+    await AsyncStorage.setItem(legacyKey, JSON.stringify({
+      schemaVersion: 6,
+      summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY schema=6 session=retained-v6',
+      reportJson: JSON.stringify({
+        schemaVersion: 6,
+        sessionId: 'retained-v6',
+        checks: [],
+        summary: { overall: 'healthy' },
+      }),
+    }));
+    (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
+
+    const complete = await debugLog.readCompleteText();
+
+    expect(complete).toContain('session=retained-v6');
+    expect(complete).toContain('"schemaVersion":6');
+  });
+
   it('removes the legacy v5 snapshot while reading the latest audit', async () => {
-    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS[0];
+    const legacyKey = LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.find((key) => key.endsWith('-v5'))!;
     await AsyncStorage.setItem(legacyKey, 'legacy audit');
     (FileSystem.readAsStringAsync as jest.Mock).mockResolvedValue('current log only');
 

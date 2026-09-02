@@ -2,7 +2,8 @@ import type { Href } from 'expo-router';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
-import type { CorePayload, RateRow, SectionKey } from '../types';
+import type { CorePayload, PayloadSource, RateRow, SectionKey } from '../types';
+import type { AppHealthAuditMode, AppHealthReport } from './appHealth';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
 import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
@@ -62,7 +63,7 @@ export interface AuditEnvironment {
   viewportWidth: number;
   viewportHeight: number;
   fontScale: number;
-  payloadSource: string;
+  payloadSource: PayloadSource;
   payloadRunDate: string | null;
   payloadProducts: number;
   payloadProviders: number;
@@ -114,6 +115,8 @@ export interface PerformanceAuditReport {
   checks: AuditCheck[];
   routeAggregates: AuditRouteAggregate[];
   limitations: string[];
+  /** Schema-v7 quality, availability, display and network diagnosis. */
+  appHealth?: AppHealthReport;
 }
 
 export interface PerformanceAuditCoverage {
@@ -165,6 +168,7 @@ export interface PerformanceAuditState {
   sessionId: string | null;
   startedAt: string | null;
   hangTimeoutMs: number;
+  auditMode: AppHealthAuditMode;
   storedCheckCount: number;
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
@@ -251,6 +255,7 @@ const IDLE_STATE: PerformanceAuditState = {
   sessionId: null,
   startedAt: null,
   hangTimeoutMs: DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
+  auditMode: 'local',
   storedCheckCount: 0,
   lastStoredCheckAt: null,
   progress: { completed: 0, total: 0, label: 'Ready' },
@@ -297,6 +302,7 @@ export function isPerformanceAuditActive(): boolean {
 
 export interface RequestPerformanceAuditOptions {
   hangTimeoutMs?: number;
+  mode?: AppHealthAuditMode;
 }
 
 export function parsePerformanceAuditHangTimeoutSeconds(
@@ -446,6 +452,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     sessionId,
     startedAt: new Date().toISOString(),
     hangTimeoutMs,
+    auditMode: options.mode ?? 'local',
     storedCheckCount: 0,
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
@@ -690,8 +697,8 @@ export function buildPerformanceAuditJourneys(
     {
       id: 'outlook',
       label: 'Outlook',
-      href: '/trends' as Href,
-      expectedPath: '/trends',
+      href: '/research' as Href,
+      expectedPath: '/research',
       expectedSurface: 'outlook.dashboard',
       navigationKind: 'tab',
     },
@@ -699,7 +706,7 @@ export function buildPerformanceAuditJourneys(
       id: 'rba-redirect',
       label: 'Why rates move',
       href: '/rba' as Href,
-      expectedPath: '/trends',
+      expectedPath: '/research',
       expectedSurface: 'outlook.rba-response',
       navigationKind: 'tab',
     },

@@ -6,17 +6,17 @@
     "scheme": "arrates",
     "version": "1.0.173",
     "description": "Daily Australian home loan, savings and term-deposit rates. Browse, filter, compare and watch rates — works offline.",
-    "primaryColor": "#2563eb",
+    "primaryColor": "#2E6A56",
     "githubUrl": "https://github.com/yanniedog/AR-app",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "jsEngine": "hermes",
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#0b0e11",
+    "backgroundColor": "#F4F0E6",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0b0e11"
+      "backgroundColor": "#F4F0E6"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -38,7 +38,7 @@
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0b0e11"
+        "backgroundColor": "#F4F0E6"
       },
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
@@ -62,13 +62,13 @@
       [
         "expo-notifications",
         {
-          "color": "#2563eb"
+          "color": "#2E6A56"
         }
       ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0b0e11",
+          "backgroundColor": "#F4F0E6",
           "image": "./assets/splash.png",
           "imageWidth": 180
         }

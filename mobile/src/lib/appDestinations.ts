@@ -2,22 +2,14 @@ import type { Href } from 'expo-router';
 
 import { SECTION_ORDER, sectionFromSlug } from '../constants';
 import type { SectionKey } from '../types';
+import type { LedgerIconName } from '../components/icons/LedgerIcon';
 
 export type AppDestinationId =
-  | 'search'
-  | 'banks'
-  | 'scenario'
-  | 'market'
+  | 'profile'
   | 'settings'
   | 'about';
 
-export type AppDestinationIcon =
-  | 'search-outline'
-  | 'business-outline'
-  | 'calculator-outline'
-  | 'pulse-outline'
-  | 'settings-outline'
-  | 'information-circle-outline';
+export type AppDestinationIcon = Extract<LedgerIconName, 'profile' | 'settings' | 'about'>;
 
 export interface AppDestination {
   id: AppDestinationId;
@@ -27,44 +19,19 @@ export interface AppDestination {
 }
 
 export interface AppDestinationGroup {
-  id: 'rates' | 'research' | 'more';
+  id: 'more';
   label: string;
   destinations: readonly AppDestination[];
 }
 
 export const APP_DESTINATION_GROUPS: readonly AppDestinationGroup[] = [
   {
-    id: 'rates',
-    label: 'Rates',
-    destinations: [
-      {
-        id: 'search',
-        label: 'Search rates',
-        icon: 'search-outline',
-        href: (section) => ({ pathname: '/search', params: { section } }),
-      },
-      { id: 'banks', label: 'Banks', icon: 'business-outline', href: '/banks' },
-      {
-        id: 'scenario',
-        label: 'My scenario',
-        icon: 'calculator-outline',
-        href: (section) => ({ pathname: '/calculator', params: { section } }),
-      },
-    ],
-  },
-  {
-    id: 'research',
-    label: 'Research',
-    destinations: [
-      { id: 'market', label: 'Market research', icon: 'pulse-outline', href: '/(tabs)/trends' },
-    ],
-  },
-  {
     id: 'more',
-    label: 'More',
+    label: 'Account and app',
     destinations: [
-      { id: 'settings', label: 'Settings', icon: 'settings-outline', href: '/(tabs)/settings' },
-      { id: 'about', label: 'About', icon: 'information-circle-outline', href: '/about' },
+      { id: 'profile', label: 'Your profile', icon: 'profile', href: '/profile' },
+      { id: 'settings', label: 'Settings', icon: 'settings', href: '/settings' },
+      { id: 'about', label: 'About', icon: 'about', href: '/about' },
     ],
   },
 ] as const;
@@ -84,10 +51,7 @@ export function destinationSectionFromParam(
 
 export function destinationIsActive(id: AppDestinationId, pathname: string): boolean {
   const path = pathname.split(/[?#]/, 1)[0]?.replace('/(tabs)', '') || '/';
-  if (id === 'search') return path.startsWith('/search') || path.startsWith('/compare');
-  if (id === 'banks') return path === '/banks' || path.startsWith('/bank/');
-  if (id === 'scenario') return path.startsWith('/calculator') || path.startsWith('/projections');
-  if (id === 'market') return path.startsWith('/trends') || path === '/rba';
+  if (id === 'profile') return path.startsWith('/profile');
   if (id === 'settings') return path.startsWith('/settings');
   return path.startsWith('/about')
     || path.startsWith('/terms')

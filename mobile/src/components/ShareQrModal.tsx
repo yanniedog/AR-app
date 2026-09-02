@@ -83,7 +83,7 @@ export function ShareQrModal({
           }}
         >
           <AppText variant="h3" style={{ marginBottom: 4 }}>
-            Share AustralianRates
+            Share Australian Rates
           </AppText>
           <AppText variant="small" color="textMuted" style={{ marginBottom: 16, textAlign: 'center' }}>
             Scan with a phone camera to {apkUrl ? 'download the latest Android APK' : 'open the latest release'}.

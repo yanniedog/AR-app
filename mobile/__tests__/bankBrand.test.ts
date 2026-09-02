@@ -2,7 +2,9 @@ import core from '../assets/sample/core.json';
 import {
   lookupProvider,
   resolveBankLogoSources,
+  resolveBankLogoSourcesForRuntime,
   resolveBrandShort,
+  resolveBundledBankLogoSource,
 } from '../src/data/bankBrand';
 import type { CorePayload } from '../src/types';
 
@@ -36,6 +38,23 @@ describe('bankBrand', () => {
         ),
       ).toBe(true);
     }
+  });
+
+  it('provides a network-free source for audit rendering', () => {
+    expect(resolveBundledBankLogoSource('ANZ')).not.toBeNull();
+    expect(resolveBundledBankLogoSource('Totally Unknown Bank')).toBeNull();
+    expect(resolveBankLogoSourcesForRuntime(
+      'ANZ',
+      'https://payload.test/anz.png',
+      'https://register.test/anz.svg',
+      true,
+    )).toEqual([resolveBundledBankLogoSource('ANZ')]);
+    expect(resolveBankLogoSourcesForRuntime(
+      'Totally Unknown Bank',
+      'https://payload.test/unknown.png',
+      'https://register.test/unknown.svg',
+      true,
+    )).toEqual([]);
   });
 
   it('prefers payload-embedded logos before bundled fallbacks', () => {

@@ -1,13 +1,11 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, usePathname } from 'expo-router';
 import React, { useCallback } from 'react';
-import { Platform, Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
 import { getTabBarLayout, TAB_BAR_LABEL_LINE_HEIGHT } from '../lib/androidChrome';
 import { hapticSelection } from '../lib/haptics';
-import { getTabIonicon, getTabMaterialSymbol } from '../lib/tabIcons';
 import {
   isPrimaryTabRootPath,
   primaryTabLabel,
@@ -18,7 +16,15 @@ import {
   type PrimaryTabRouteName,
 } from '../lib/tabRouting';
 import { useTheme } from '../theme/ThemeProvider';
-import { MaterialSymbol } from './MaterialSymbol';
+import { commissionerFamily } from '../theme/fonts';
+import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
+
+const TAB_ICONS: Record<PrimaryTabRouteName, LedgerIconName> = {
+  index: 'today',
+  browse: 'explore',
+  passthrough: 'changes',
+  watchlist: 'my-rates',
+};
 
 /**
  * Root-level primary navigation. Focused stack routes deliberately hide this
@@ -30,7 +36,6 @@ export function AppTabBar() {
   const pathname = usePathname();
   const onboarded = useStore((s) => s.prefs.onboarded);
   const active = resolveActiveTab(pathname);
-  const isAndroid = Platform.OS === 'android';
   const { fontScale } = useWindowDimensions();
   const tabBarLayout = getTabBarLayout(fontScale);
 
@@ -49,20 +54,18 @@ export function AppTabBar() {
       accessibilityRole="tablist"
       style={{
         flexDirection: 'row',
-        backgroundColor: isAndroid ? theme.colors.surfaceAlt : theme.colors.surface,
+        backgroundColor: theme.ledger.raised,
         height: tabBarLayout.contentHeight + insets.bottom,
         paddingBottom: insets.bottom,
-        paddingTop: isAndroid ? 8 : 4,
-        borderTopWidth: isAndroid ? 0 : 1,
-        borderTopColor: theme.colors.border,
+        paddingTop: 0,
+        borderTopWidth: 1,
+        borderTopColor: theme.ledger.rule,
       }}
     >
       {TAB_BAR_ORDER.map((route) => {
         const focused = active === route;
         const label = primaryTabLabel(route);
-        const symbol = getTabMaterialSymbol(route);
-        const ionicon = getTabIonicon(route);
-        const tint = focused ? theme.colors.primary : theme.colors.textMuted;
+        const tint = focused ? theme.ledger.eucalyptusDeep : theme.ledger.mutedInk;
 
         return (
           <Pressable
@@ -71,24 +74,19 @@ export function AppTabBar() {
             accessibilityState={{ selected: focused }}
             accessibilityLabel={label}
             onPress={() => onPressTab(route)}
-            style={{ flex: 1, alignItems: 'center', justifyContent: 'center', minHeight: 48 }}
+            style={{
+              flex: 1,
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 48,
+              borderTopWidth: 3,
+              borderTopColor: focused ? theme.ledger.wattle : 'transparent',
+              backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
+            }}
           >
             <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%' }}>
-              <View
-                style={{
-                  width: 52,
-                  height: 30,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: theme.radius.pill,
-                  backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
-                }}
-              >
-              {isAndroid && symbol ? (
-                <MaterialSymbol name={symbol} filled={focused} size={24} color={tint} />
-              ) : ionicon ? (
-                <Ionicons name={ionicon} size={24} color={tint} />
-              ) : null}
+              <View style={{ height: 30, alignItems: 'center', justifyContent: 'center' }}>
+                <LedgerIcon name={TAB_ICONS[route]} size={23} color={tint} />
               </View>
               <Text
                 numberOfLines={tabBarLayout.labelLines}
@@ -96,7 +94,7 @@ export function AppTabBar() {
                   marginTop: 2,
                   fontSize: 11,
                   lineHeight: TAB_BAR_LABEL_LINE_HEIGHT,
-                  fontWeight: focused ? '600' : '500',
+                  fontFamily: commissionerFamily(focused ? '600' : '500'),
                   color: tint,
                   textAlign: 'center',
                   width: '100%',

@@ -222,7 +222,7 @@ export default function RateMovesTab() {
           title="Explore the data"
           icon="analytics-outline"
           variant="secondary"
-          onPress={() => router.navigate('/(tabs)/trends')}
+          onPress={() => router.navigate('/research')}
         />
       </Card>
     </ScreenScrollView>

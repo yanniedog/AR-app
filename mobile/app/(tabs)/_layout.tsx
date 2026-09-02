@@ -1,4 +1,3 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
@@ -10,10 +9,11 @@ import { RefreshOutcomeSnackbar } from '../../src/components/feedback';
 import { resolveInterestSection } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
 import { openSearch } from '../../src/lib/nav';
-import { getTabIonicon } from '../../src/lib/tabIcons';
 import { primaryTabLabel } from '../../src/lib/tabRouting';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { commissionerFamily } from '../../src/theme/fonts';
+import { LedgerIcon } from '../../src/components/icons/LedgerIcon';
 
 // Preserve Today behind direct links into a legacy tab route or Settings.
 export const unstable_settings = {
@@ -41,7 +41,7 @@ function HomeHeaderActions() {
           opacity: pressed ? 0.6 : 1,
         })}
       >
-        <Ionicons name="search" size={22} color={theme.colors.text} />
+        <LedgerIcon name="search" size={22} color={theme.ledger.ink} />
       </Pressable>
     </View>
   );
@@ -67,12 +67,12 @@ export default function TabsLayout() {
         // The banner owns the status-bar inset while visible.
         ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
         headerStyle: {
-          backgroundColor: isAndroid ? theme.colors.surfaceAlt : theme.colors.surface,
-          borderBottomColor: theme.colors.border,
+          backgroundColor: theme.ledger.raised,
+          borderBottomColor: theme.ledger.rule,
         },
         headerTitleStyle: {
           color: theme.colors.text,
-          fontWeight: isAndroid ? '500' : '700',
+          fontFamily: commissionerFamily('600'),
           letterSpacing: isAndroid ? 0 : -0.3,
           fontSize: isAndroid ? 22 : undefined,
         },
@@ -90,7 +90,7 @@ export default function TabsLayout() {
           headerTitle: () => <BrandLockup markSize={28} compact={width < 360} />,
           headerRight: () => <HomeHeaderActions />,
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('index')!} size={size} color={color} />
+            <LedgerIcon name="today" size={size} color={color} />
           ),
         }}
       />
@@ -100,7 +100,7 @@ export default function TabsLayout() {
         options={{
           title: primaryTabLabel('browse'),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('browse')!} size={size} color={color} />
+            <LedgerIcon name="explore" size={size} color={color} />
           ),
         }}
       />
@@ -110,17 +110,7 @@ export default function TabsLayout() {
         options={{
           title: primaryTabLabel('passthrough'),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('passthrough')!} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="trends"
-        listeners={tabPressListener}
-        options={{
-          title: 'Research',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('trends')!} size={size} color={color} />
+            <LedgerIcon name="changes" size={size} color={color} />
           ),
         }}
       />
@@ -130,17 +120,7 @@ export default function TabsLayout() {
         options={{
           title: primaryTabLabel('watchlist'),
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('watchlist')!} size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        listeners={tabPressListener}
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name={getTabIonicon('settings')!} size={size} color={color} />
+            <LedgerIcon name="my-rates" size={size} color={color} />
           ),
         }}
       />

@@ -44,7 +44,7 @@ export function ExternalLinkConfirmation({
         <Pressable
           testID="external-link-backdrop"
           onPress={opening ? undefined : onClose}
-          accessibilityLabel="Stay in AustralianRates"
+          accessibilityLabel="Stay in Australian Rates"
           style={{
             position: 'absolute',
             top: 0,
@@ -73,7 +73,7 @@ export function ExternalLinkConfirmation({
           {state?.kind === 'confirm' ? (
             <>
               <AppText variant="small" color="textMuted" style={{ marginTop: 8, lineHeight: 20 }}>
-                {state.trusted.label} will open outside AustralianRates.
+                {state.trusted.label} will open outside Australian Rates.
               </AppText>
               <AppText
                 testID="external-link-host"

@@ -358,6 +358,8 @@ export default function Search() {
         status: searchPending || !listReadiness.visiblyCommitted ? 'pending' : 'ready',
         expectedCount: rows.length,
         actualCount: listReadiness.committedItemCount,
+        visibleCount: listReadiness.measuredVisibleCount,
+        emptyStateRendered: rows.length === 0 && !searchPending && listReadiness.ready,
       },
       {
         id: 'search.layout',
@@ -372,6 +374,7 @@ export default function Search() {
         status: logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
     ],
   });

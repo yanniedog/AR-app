@@ -77,7 +77,7 @@ describe('compact mobile UX contracts', () => {
   });
 
   it('renders exactly one shared data-health banner on nested Settings scaffolds', () => {
-    const settings = read('../app/(tabs)/settings.tsx');
+    const settings = read('../app/settings.tsx');
 
     expect(settings).toContain('<Screen>');
     expect(settings).toContain('<ScreenScrollView');

@@ -11,6 +11,7 @@ import {
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
 } from './performanceAuditSchema';
+import { SECURE_STORE_KEYS } from './secureStoreKey';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -36,7 +37,7 @@ const LOG_FILE = `${LOG_DIR}ar-local.log`;
 export const DEBUG_LOG_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-debug-log-share.txt`;
 /** Full audit JSON kept beside the bounded ring so trim cannot drop the diagnosis. */
 const PERFORMANCE_AUDIT_SIDECAR_FILE = `${LOG_DIR}ar-performance-audit-latest.json`;
-export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = '@ar/debug-log/public-upload-receipt-v1';
+export const DEBUG_LOG_UPLOAD_RECEIPT_KEY = SECURE_STORE_KEYS.debugLogUploadReceipt;
 
 const SECRET_VALUE = String.raw`[^\s,;}"']+`;
 const SECRET_SOURCES: string[] = [
@@ -439,7 +440,7 @@ function append(level: LogLevel, tag: string, message: string): void {
 }
 
 interface StoredPerformanceAudit {
-  schemaVersion: typeof PERFORMANCE_AUDIT_SCHEMA_VERSION;
+  schemaVersion: typeof PERFORMANCE_AUDIT_SCHEMA_VERSION | 6;
   summaryMarker: string;
   reportJson: string;
 }
@@ -509,7 +510,11 @@ export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
 
 async function removeLegacyPerformanceAuditSnapshots(): Promise<void> {
   await Promise.all(
-    LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.map((key) =>
+    LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS
+      // Schema v6 remains available to the compatibility reader. Only the
+      // obsolete v5 snapshot is discarded automatically.
+      .filter((key) => key.endsWith('-v5'))
+      .map((key) =>
       AsyncStorage.removeItem(key).catch(() => {})),
   );
 }
@@ -596,17 +601,20 @@ async function writeReservedPerformanceAuditBlock(
   fileByteLength = textEncoder.encode(combined).length;
 }
 
-function parseStoredPerformanceAudit(raw: string | null): StoredPerformanceAudit | null {
+function parseStoredPerformanceAudit(
+  raw: string | null,
+  expectedSchema: typeof PERFORMANCE_AUDIT_SCHEMA_VERSION | 6 = PERFORMANCE_AUDIT_SCHEMA_VERSION,
+): StoredPerformanceAudit | null {
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Partial<StoredPerformanceAudit>;
     if (
-      value.schemaVersion !== PERFORMANCE_AUDIT_SCHEMA_VERSION ||
+      value.schemaVersion !== expectedSchema ||
       typeof value.summaryMarker !== 'string' ||
       typeof value.reportJson !== 'string'
     ) return null;
     return {
-      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      schemaVersion: expectedSchema,
       summaryMarker: redactSecrets(value.summaryMarker),
       reportJson: redactSecrets(value.reportJson),
     };
@@ -879,6 +887,12 @@ export const debugLog = {
       (await readPerformanceAuditSidecar()) ??
       parseStoredPerformanceAudit(
         await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
+      ) ??
+      parseStoredPerformanceAudit(
+        await AsyncStorage.getItem(
+          LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS.find((key) => key.endsWith('-v6'))!,
+        ).catch(() => null),
+        6,
       );
     assertExportCurrent();
     if (!latest) return clean;
@@ -1339,7 +1353,7 @@ async function runPasteCnetAttempt(
       }
       const record = parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null;
       const url = typeof record?.url === 'string' ? record.url.trim() : '';
-      const deleteKey = typeof record?.delete_key === 'string' ? record.delete_key : undefined;
+      const deleteKey = typeof record?.delete_key === 'string' ? record.delete_key.trim() : '';
       let parsedUrl: URL;
       try {
         parsedUrl = new URL(url);
@@ -1349,7 +1363,8 @@ async function runPasteCnetAttempt(
       if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'paste.c-net.org') {
         throw new PasteRsAttemptError('invalid-response', response.status);
       }
-      return { url, ...(deleteKey ? { deleteKey } : {}) };
+      if (!deleteKey) throw new PasteRsAttemptError('invalid-response', response.status);
+      return { url, deleteKey };
     })();
     return await Promise.race([request, timeout]);
   } catch (error) {

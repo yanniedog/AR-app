@@ -32,7 +32,7 @@ src/
   components/       UI primitives · ProductCard · market summaries · RBA charts
                     · BankAvatar · …
   theme/            light/dark theme + provider
-assets/             icon/splash (scripts/make-icons.py) + sample/ payload
+assets/             icon/splash (scripts/make-icons.mjs) + sample/ payload
 __tests__/          selectors · format · notifications (jest-expo)
 ```
 

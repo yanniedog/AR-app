@@ -40,7 +40,7 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
       viewportWidth: 448,
       viewportHeight: 997,
       fontScale: 1,
-      payloadSource: 'network',
+      payloadSource: 'remote',
       payloadRunDate: '2026-08-15',
       payloadProducts: 2878,
       payloadProviders: 104,
@@ -138,14 +138,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     const screen = read('app/performance-audit.tsx');
     const debugScreen = read('app/debug-log.tsx');
     const layout = read('app/_layout.tsx');
-    const settings = read('app/(tabs)/settings.tsx');
+    const settings = read('app/settings.tsx');
     const observability = read('src/lib/observability.ts');
     const store = read('src/data/store.ts');
 
     expect(runner).not.toContain('uploadDebugLog');
     expect(runner).not.toContain('reportPerformanceAudit');
     expect(runner).not.toContain('Clipboard');
-    expect(runner).toContain('Network transport is disabled during the local performance audit');
+    expect(runner).toContain('local app-health mode blocks fetch and XMLHttpRequest before transport');
     expect(screen).toContain('Share deidentified report');
     expect(screen).not.toContain('readCompleteText');
     expect(screen).not.toContain('Clipboard');

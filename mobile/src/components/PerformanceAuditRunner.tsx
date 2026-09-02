@@ -24,6 +24,17 @@ import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { getApkDownloadSnapshot } from '../lib/appUpdate';
+import {
+  CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+  type AppHealthAuditMode,
+  type AppHealthDataSnapshot,
+} from '../lib/appHealth';
+import { readLiveAppHealthSnapshot } from '../lib/appHealthLiveSource';
+import {
+  installAppHealthTransportGuard,
+  type AppHealthTransportGuard,
+  type AuditTransportTarget,
+} from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
 import {
   buildDeepPerformanceAuditPlan,
@@ -94,6 +105,7 @@ import {
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
+import { buildIntegratedAppHealthReport } from '../lib/performanceAuditHealth';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
@@ -485,7 +497,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         params: section ? { section } : {},
       } as unknown as Href;
     case 'moves.open': return '/rba-response' as Href;
-    case 'outlook.open': return '/trends' as Href;
+    case 'outlook.open': return '/research' as Href;
     case 'saved.open': return '/watchlist' as Href;
     case 'profile.open': return '/profile' as Href;
     case 'settings.open': return '/settings' as Href;
@@ -529,6 +541,9 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
         typeof probe.renderRevision === 'string' && probe.renderRevision.length > 80
           ? `${probe.renderRevision.slice(0, 80)}…`
           : probe.renderRevision ?? '',
+        probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
+        probe.visibleCount == null ? '' : `visible=${probe.visibleCount}`,
+        probe.emptyStateRendered == null ? '' : `empty=${probe.emptyStateRendered ? 1 : 0}`,
       ].join(':')))
       .join(' | '),
     readinessActionEvidence: snapshot.surfaces
@@ -1237,6 +1252,7 @@ async function runRuntimeCheck(
 async function runMaximumCoverageProfileCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
+  auditMode: AppHealthAuditMode,
 ): Promise<AuditCheck> {
   const started = now();
   const responsiveAt = monitor.snapshot();
@@ -1245,23 +1261,9 @@ async function runMaximumCoverageProfileCheck(
   useStore.setState({ prefs, activeSection: prefs.defaultSection });
   await yieldToUi();
 
-  const preparationErrors: string[] = [];
-  const prepare = async (label: string, work: () => Promise<void>) => {
-    try {
-      await awaitAuditWork(work(), watchdog, label);
-    } catch (caught) {
-      rethrowAuditControl(caught);
-      preparationErrors.push(`${label}: ${formatAuditError(caught)}`);
-    }
-  };
-  const prepared = useStore.getState();
-  await prepare('Maximum coverage details', () => prepared.ensureDetails());
-  await prepare('Maximum coverage search index', () => prepared.ensureSearchIndex());
-  await prepare('Maximum coverage bank history', () => prepared.ensureHistoryBanks());
-  await prepare('Maximum coverage bank insights', () => prepared.ensureBankInsights());
-  await prepare('Maximum coverage RBA calendar', () => prepared.ensureRbaCalendar());
-  await prepare('Maximum coverage product history', () =>
-    prepared.ensureProductHistory({ purpose: 'history_ribbon' }));
+  // Audit only what is already cached. Preparing an absent optional asset would
+  // make the audit mutate its subject and either violate local zero-network mode
+  // or authenticate an asset from state that predates the live-source manifest.
   assertSessionActive(watchdog);
 
   const state = useStore.getState();
@@ -1283,7 +1285,7 @@ async function runMaximumCoverageProfileCheck(
     state.rbaCalendarError,
     state.productHistoryError,
   ].filter((value): value is string => Boolean(value));
-  const errors = [...preparationErrors, ...dataErrors];
+  const errors = [...dataErrors];
   const maximumSafeFeaturesEnabled =
     state.prefs.interests.length === SECTION_ORDER.length &&
     SECTION_ORDER.every((section) => state.prefs.interests.includes(section)) &&
@@ -1294,13 +1296,16 @@ async function runMaximumCoverageProfileCheck(
     state.prefs.onboarded &&
     state.prefs.depositRankMetric === 'max' &&
     state.prefs.mortgageRateMetric === 'comparison';
+  const assetsUnavailableWithoutPreparation = missingAssets.length > 0 && errors.length === 0;
   const ok = maximumSafeFeaturesEnabled && missingAssets.length === 0 && errors.length === 0;
   const responsiveness = monitor.metricsSince(responsiveAt);
   return {
     id: 'maximum-coverage-profile',
     label: 'Maximum safe audit coverage preparation',
     kind: 'data',
-    status: ok
+    status: assetsUnavailableWithoutPreparation
+      ? 'skipped'
+      : ok
       ? worstStatus('pass', responsivenessStatus(responsiveness))
       : 'fail',
     durationMs: roundMetric(now() - started),
@@ -1316,10 +1321,19 @@ async function runMaximumCoverageProfileCheck(
       requiredAssets: Object.keys(requiredAssets).length,
       availableAssets: Object.values(requiredAssets).filter(Boolean).length,
       missingAssets: missingAssets.join(',') || null,
-      nonTimingFailure: !ok,
+      localCacheOnly: auditMode === 'local',
+      executionAttempted: true,
+      measurementAvailable: !assetsUnavailableWithoutPreparation,
+      ...(assetsUnavailableWithoutPreparation ? {
+        skipClassification: 'terminal-availability',
+        availabilityFailure: true,
+        availabilityEvidence: `Optional assets are not cached: ${missingAssets.join(', ')}`,
+        reason: 'Maximum coverage is unavailable because optional assets are not cached',
+      } : {}),
+      nonTimingFailure: !ok && !assetsUnavailableWithoutPreparation,
       ...responsivenessRecord(responsiveness),
     },
-    ...(ok ? {} : {
+    ...(ok || assetsUnavailableWithoutPreparation ? {} : {
       error: errors.join(' | ') || `Missing maximum-coverage assets: ${missingAssets.join(', ')}`,
       trace: captureAuditTrace('maximum audit coverage preparation failed'),
     }),
@@ -1579,10 +1593,53 @@ async function runDataCheck(
 }
 
 async function runNetworkCheck(
-  _monitor: ResponsivenessMonitor,
+  monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
+  mode: 'local' | 'live-source',
+  guard: AppHealthTransportGuard,
+  onSnapshot: (snapshot: AppHealthDataSnapshot) => void,
 ): Promise<AuditCheck> {
   assertSessionActive(watchdog);
+  if (mode === 'live-source') {
+    const started = now();
+    const responsivenessAt = monitor.snapshot();
+    try {
+      const snapshot = await readLiveAppHealthSnapshot({
+        guard,
+        contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+        appVersion: Application.nativeApplicationVersion ?? '0.0.0',
+      });
+      onSnapshot(snapshot);
+      const responsiveness = monitor.metricsSince(responsivenessAt);
+      return {
+        id: 'manifest-network',
+        label: 'Live-source publication validation',
+        kind: 'network',
+        status: responsivenessStatus(responsiveness),
+        durationMs: roundMetric(now() - started),
+        metrics: {
+          executionAttempted: true,
+          allowlistedSource: true,
+          manifestValidated: true,
+          datesIndexValidated: true,
+          coreHashValidated: true,
+          detailsHashValidated: true,
+          ...responsivenessRecord(responsiveness),
+        },
+      };
+    } catch (error) {
+      return {
+        id: 'manifest-network',
+        label: 'Live-source manifest transport',
+        kind: 'network',
+        status: 'fail',
+        durationMs: roundMetric(now() - started),
+        metrics: { executionAttempted: true, allowlistedSource: true },
+        error: formatAuditError(error),
+        trace: captureAuditTrace('live-source manifest transport failed'),
+      };
+    }
+  }
   return {
     id: 'manifest-network',
     label: 'Network transport',
@@ -1592,8 +1649,8 @@ async function runNetworkCheck(
     metrics: {
       executionAttempted: false,
       skipClassification: 'terminal-availability',
-      availabilityEvidence: 'performance audits are local-only and do not start network requests',
-      reason: 'Not run: network and upload transports are outside the local audit contract',
+      availabilityEvidence: 'local app-health mode blocks fetch and XMLHttpRequest before transport',
+      reason: 'Not run: local mode has a zero-network contract',
     },
   };
 }
@@ -2322,6 +2379,7 @@ export function PerformanceAuditRunner() {
     const execute = async () => {
       const sessionId = state.sessionId!;
       const startedAt = state.startedAt!;
+      const auditMode = state.auditMode;
       const startedMs = Date.now();
       // The report's duration is time the audit actually measured. A five-minute
       // pause is the user's, not the app's, and counting it would attribute the
@@ -2358,6 +2416,7 @@ export function PerformanceAuditRunner() {
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
+      let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
@@ -2367,10 +2426,11 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
-      const originalFetch = globalThis.fetch;
-      const localOnlyFetch: typeof fetch = async () => {
-        throw new Error('Network transport is disabled during the local performance audit');
-      };
+      const transportGuard = installAppHealthTransportGuard({
+        target: globalThis as unknown as AuditTransportTarget,
+        mode: auditMode,
+        contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+      });
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
         let settled = false;
@@ -2410,7 +2470,6 @@ export function PerformanceAuditRunner() {
       };
 
       markPerformanceAuditRunning(total);
-      globalThis.fetch = localOnlyFetch;
 
       try {
         // Setup belongs inside the protected region so an unexpected native
@@ -2592,7 +2651,11 @@ export function PerformanceAuditRunner() {
         await recordContinuable(
           'Preparing maximum safe feature coverage',
           async () => {
-            maximumProfileResult.check = await runMaximumCoverageProfileCheck(monitor, watchdog);
+            maximumProfileResult.check = await runMaximumCoverageProfileCheck(
+              monitor,
+              watchdog,
+              auditMode,
+            );
             return maximumProfileResult.check;
           },
         );
@@ -2605,7 +2668,8 @@ export function PerformanceAuditRunner() {
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
           maximumSafeFeaturesEnabled:
             maximumProfileResult.check != null &&
-            maximumProfileResult.check.status !== 'fail',
+            maximumProfileResult.check.status !== 'fail' &&
+            maximumProfileResult.check.status !== 'skipped',
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2716,10 +2780,24 @@ export function PerformanceAuditRunner() {
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-        updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
+        updatePerformanceAuditProgress(
+          completed,
+          total,
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local zero-network boundary',
+        );
         await recordContinuable(
-          'Recording the local-only network exclusion',
-          () => runNetworkCheck(monitor, watchdog),
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local-only network exclusion',
+          () => runNetworkCheck(
+            monitor,
+            watchdog,
+            auditMode,
+            transportGuard,
+            (snapshot) => { liveSourceSnapshot = snapshot; },
+          ),
         );
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
@@ -2815,7 +2893,7 @@ export function PerformanceAuditRunner() {
         auditEnvironment = environment;
 
         const finishedAt = new Date().toISOString();
-        const summary = summarizePerformanceAudit(checks);
+        const performanceSummary = summarizePerformanceAudit(checks);
         const journeyChecks = checks.filter((check) => check.kind === 'journey');
         const justifiedSkippedJourneyChecks = journeyChecks.filter((check) =>
           check.status === 'skipped' &&
@@ -2868,6 +2946,51 @@ export function PerformanceAuditRunner() {
           .map(([id]) => id);
         const unexpectedStoredCheckIds = [...storedIdCounts.keys()]
           .filter((id) => !plannedIdSet.has(id));
+        const appHealth = buildIntegratedAppHealthReport({
+          sessionId,
+          mode: auditMode,
+          startedAt,
+          finishedAt,
+          state: useStore.getState(),
+          appVersion: app.appVersion,
+          performanceChecks: checks,
+          journeys: navigationJourneys,
+          plan,
+          network: transportGuard.snapshot(),
+          dataSnapshot: auditMode === 'live-source'
+            ? liveSourceSnapshot ?? {
+              source: 'unavailable',
+              core: null,
+              manifest: null,
+              appVersion: app.appVersion,
+              datesIndex: null,
+              details: null,
+              assets: {},
+              quarantine: null,
+            }
+            : undefined,
+        });
+        const healthExecuted = appHealth.summary.pass + appHealth.summary.warn + appHealth.summary.fail;
+        const combinedExecuted = performanceSummary.executed + healthExecuted;
+        const combinedTotal = checks.length + appHealth.summary.total;
+        const summary = {
+          ...performanceSummary,
+          pass: performanceSummary.pass + appHealth.summary.pass,
+          warn: performanceSummary.warn + appHealth.summary.warn,
+          fail: performanceSummary.fail + appHealth.summary.fail,
+          skipped: performanceSummary.skipped + appHealth.summary.notRun,
+          unavailable: performanceSummary.unavailable + appHealth.summary.unavailable,
+          executed: combinedExecuted,
+          justifiedSkipped: performanceSummary.justifiedSkipped + appHealth.summary.notRun,
+          coveragePercent: combinedTotal
+            ? roundMetric((combinedExecuted / combinedTotal) * 100)
+            : null,
+          overall: appHealth.summary.overall === 'bottleneck'
+            ? 'bottleneck' as const
+            : appHealth.summary.overall === 'attention' && performanceSummary.overall === 'healthy'
+              ? 'attention' as const
+              : performanceSummary.overall,
+        };
         const report: PerformanceAuditReport = {
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
@@ -2923,21 +3046,26 @@ export function PerformanceAuditRunner() {
           summary,
           checks,
           routeAggregates: aggregateRepeatedJourneys(checks),
+          appHealth,
           limitations: [
             `This report applies exactly to app version ${app.appVersion}, build ${app.buildVersion}.`,
             'JavaScript can record its scheduling stack and errors, but a native CPU/GPU sampling profiler is still required for native-thread instruction stacks.',
             'Animation callback gaps are JavaScript requestAnimationFrame timing, not proof of native GPU frame drops.',
             'The first and repeat whole-app scenarios run linearly after maximum-profile asset preparation; they are not process-level or empty-cache cold starts. Every step waits for its exact mounted surface, all required data/list/logo/graphic/layout probes, and a 650ms stable quiet window before advancing.',
             'Every steady-state route also runs a separate push, exact destination settle, router back, and exact audit-origin recovery measurement in both passes. Semantic action checks never publish a synthetic back timing.',
-            `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, preloads their trusted assets, and is covered by the same durable rollback journal as saved data and scenarios. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
+            `The default ${MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID} profile temporarily enables every safe local feature and all three sections, evaluates already-cached assets, and is covered by the same durable rollback journal as saved data and scenarios. Missing optional assets are reported unavailable without downloading them. Privacy consent, permissions, authentication, app lock and destructive/external actions are not changed.`,
             'Failed journey or benchmark steps are recorded with error evidence; the runner recovers route/state when needed and continues the remaining plan. Cancel requests, hang-watchdog expiry, and mid-run dataset revision changes remain unrecoverable stops.',
             'In-page actions invoke the same registered callbacks as product searches, filters, calculator/projection field updates, optional disclosures, saved comparisons, settings, nested product/lender destinations and chart controls. Android installer, permissions, account, destructive cache, external link and financial-input.edit actions remain explicitly excluded for safety.',
             'Calculator and projection scenarios apply restorable canned parameter sets through registered UI callbacks; encrypted scenario values are restored with the audit rollback journal.',
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
-            'Network transport and remote update checks are not executed. The audit records the existing local Android download snapshot without contacting a host or launching the installer.',
+            auditMode === 'local'
+              ? 'Local mode blocks fetch and XMLHttpRequest before transport. It records the existing Android download snapshot without contacting a host or launching the installer.'
+              : 'Live-source mode permits only the configured public manifest, dates index and manifest-authenticated release assets. It never uploads diagnostics or launches the installer.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
-            'The audit performs no automatic network or clipboard action. The complete report and tracebacks remain local unless you later choose a separate export.',
+            auditMode === 'local'
+              ? 'The audit performs no network or clipboard action. The complete report and tracebacks remain local unless you later choose a separate export.'
+              : 'The explicit live-source run may read allowlisted public payload files. It performs no upload or clipboard action, and the complete report remains local unless you later choose a separate export.',
           ],
         };
         const summaryMarker = [
@@ -3237,7 +3365,7 @@ export function PerformanceAuditRunner() {
           ].join('\n'));
         }
       } finally {
-        if (globalThis.fetch === localOnlyFetch) globalThis.fetch = originalFetch;
+        transportGuard.restore();
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
@@ -3270,6 +3398,7 @@ export function PerformanceAuditRunner() {
     state.hangTimeoutMs,
     state.sessionId,
     state.startedAt,
+    state.auditMode,
     state.status,
   ]);
 
@@ -3342,7 +3471,7 @@ export function PerformanceAuditRunner() {
       <Card style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
           <AppText variant="body" weight="700">
-            Performance audit
+            App health audit
           </AppText>
           <AppText variant="small" weight="700" color="primary">
             {percent}%
@@ -3353,7 +3482,7 @@ export function PerformanceAuditRunner() {
         </AppText>
         <View
           accessibilityRole="progressbar"
-          accessibilityLabel="Performance audit progress"
+          accessibilityLabel="App health audit progress"
           accessibilityValue={{ min: 0, max: 100, now: percent }}
           style={{
             height: 8,

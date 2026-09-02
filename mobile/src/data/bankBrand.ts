@@ -263,6 +263,25 @@ export function resolveBankLogoSources(
   return out;
 }
 
+/** Local bundle only; used while an audit owns the process network boundary. */
+export function resolveBundledBankLogoSource(provider: string): number | null {
+  const key = resolveBrandKey(provider);
+  const icon = key ? BRAND_MAP[key]?.icon : undefined;
+  const slug = icon ? slugFromIcon(icon) : slugify(lookupProvider(provider));
+  return BUNDLED_BANK_LOGOS[slug] ?? null;
+}
+
+export function resolveBankLogoSourcesForRuntime(
+  provider: string,
+  embeddedLogo: string | undefined,
+  registerLogoUri: string | undefined,
+  auditOwnsNetwork: boolean,
+): (string | number)[] {
+  if (!auditOwnsNetwork) return resolveBankLogoSources(provider, embeddedLogo, registerLogoUri);
+  const bundled = resolveBundledBankLogoSource(provider);
+  return bundled == null ? [] : [bundled];
+}
+
 function slugify(value: string): string {
   return normalize(value)
     .replace(/[^a-z0-9]+/g, '-')

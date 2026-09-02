@@ -1,5 +1,5 @@
 /** expo-router tab route names under `app/(tabs)/` (display order). */
-export const TAB_ROUTES = ['index', 'browse', 'passthrough', 'trends', 'watchlist', 'settings'] as const;
+export const TAB_ROUTES = ['index', 'browse', 'passthrough', 'watchlist'] as const;
 
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 
@@ -8,28 +8,14 @@ export type TabIoniconName =
   | 'home'
   | 'list'
   | 'star'
-  | 'stats-chart'
-  | 'swap-vertical'
-  | 'settings';
+  | 'swap-vertical';
 
 /** Human-readable labels for the bottom navigation bar. */
 export const TAB_LABELS: Record<TabRouteName, string> = {
   index: 'Today',
-  browse: 'Products',
-  watchlist: 'Saved',
-  trends: 'Market',
-  passthrough: 'Rate moves',
-  settings: 'Settings',
-};
-
-/** Material Symbols ligature names (Outlined inactive, filled active on Android). */
-export const TAB_MATERIAL_SYMBOLS: Record<TabRouteName, string> = {
-  index: 'home',
-  browse: 'explore',
-  watchlist: 'star',
-  trends: 'monitoring',
-  passthrough: 'swap_vert',
-  settings: 'settings',
+  browse: 'Explore',
+  passthrough: 'Changes',
+  watchlist: 'My rates',
 };
 
 /** iOS tab bar keeps Ionicons for platform-native chrome. */
@@ -37,17 +23,11 @@ export const TAB_IONICONS: Record<TabRouteName, TabIoniconName> = {
   index: 'home',
   browse: 'list',
   watchlist: 'star',
-  trends: 'stats-chart',
   passthrough: 'swap-vertical',
-  settings: 'settings',
 };
 
 export function isTabRouteName(name: string): name is TabRouteName {
   return (TAB_ROUTES as readonly string[]).includes(name);
-}
-
-export function getTabMaterialSymbol(route: string): string | undefined {
-  return isTabRouteName(route) ? TAB_MATERIAL_SYMBOLS[route] : undefined;
 }
 
 export function getTabIonicon(route: string): TabIoniconName | undefined {

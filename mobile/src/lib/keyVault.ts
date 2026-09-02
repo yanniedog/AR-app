@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 
 import { PAYLOAD_DEC_KEY_HEX } from '../config';
 import { debugLog } from './debugLog';
+import { SECURE_STORE_KEYS } from './secureStoreKey';
 
 /**
  * Compatibility custody for legacy payload decryption keys. Resolution order:
@@ -10,7 +11,7 @@ import { debugLog } from './debugLog';
  * refreshes can still read legacy assets; interactive access is app-lock gated.
  */
 
-const STORE_KEY = 'ar.payload.deckey';
+const STORE_KEY = SECURE_STORE_KEYS.payloadDecryptionKey;
 
 let cached: string | null = null;
 
