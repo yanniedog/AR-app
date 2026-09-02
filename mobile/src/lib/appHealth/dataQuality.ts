@@ -291,6 +291,7 @@ function evaluateRunIdentity(snapshot: AppHealthDataSnapshot): AppHealthCheck {
 
   let comparisons = 0;
   let mismatches = 0;
+  let indexLag = false;
   const coreRunDate = snapshot.core.run_date;
   const validCoreRunDate = isValidCalendarDate(coreRunDate);
   if (snapshot.manifest) {
@@ -312,23 +313,33 @@ function evaluateRunIdentity(snapshot: AppHealthDataSnapshot): AppHealthCheck {
       snapshot.datesIndex.latestRunDate ??
       snapshot.datesIndex.dates[snapshot.datesIndex.dates.length - 1] ??
       null;
-    if (
-      invalidIndexDates > 0 ||
-      (latest != null && !isValidCalendarDate(latest)) ||
-      !snapshot.datesIndex.dates.includes(coreRunDate) ||
-      (latest && latest !== coreRunDate)
-    ) {
+    const validLatest = latest != null && isValidCalendarDate(latest);
+    const coreIncluded = snapshot.datesIndex.dates.includes(coreRunDate);
+    if (invalidIndexDates > 0 || !validLatest) {
       mismatches += 1;
+    } else if (!coreIncluded || latest !== coreRunDate) {
+      if (validCoreRunDate && !coreIncluded && coreRunDate > latest) indexLag = true;
+      else mismatches += 1;
     }
   }
-  const status: AppHealthStatus = !validCoreRunDate || mismatches ? 'fail' : comparisons ? 'pass' : 'unavailable';
+  const status: AppHealthStatus = !validCoreRunDate || mismatches
+    ? 'fail'
+    : indexLag
+      ? 'warn'
+      : comparisons
+        ? 'pass'
+        : 'unavailable';
   return check(
     APP_HEALTH_CHECK_CODES.RUN_IDENTITY,
     'Payload run identity',
     'data-integrity',
     status,
-    { validCoreRunDate, comparisons, mismatches },
-    status === 'fail' ? 'Loaded assets do not describe one complete publication run.' : undefined,
+    { validCoreRunDate, comparisons, mismatches, indexLag },
+    status === 'fail'
+      ? 'Loaded assets do not describe one complete publication run.'
+      : indexLag
+        ? 'The loaded publication is ahead of the dates index; finalization may still be propagating.'
+        : undefined,
   );
 }
 

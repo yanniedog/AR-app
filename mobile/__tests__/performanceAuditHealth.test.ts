@@ -1,5 +1,9 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
-import { appHealthDisplayObservations } from '../src/lib/performanceAuditHealth';
+import {
+  appHealthDisplayObservations,
+  appHealthSurfaceContracts,
+} from '../src/lib/performanceAuditHealth';
+import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
 
@@ -69,6 +73,37 @@ describe('integrated app-health display evidence', () => {
       check('saved.list:items:list:ready:0/0'),
     ])[0]?.evidence).toEqual([
       { role: 'list', modelCount: 0, renderedCount: 0 },
+    ]);
+  });
+
+  it('requires independent list roles only on surfaces instrumented to capture them', () => {
+    const plan = {
+      passes: [{
+        steps: [
+          { expectedSurface: 'browse.hierarchy', readiness: ['list'] },
+          { expectedSurface: 'calculator.results', readiness: ['list'] },
+          { expectedSurface: 'debug-log.entries', readiness: ['list'] },
+        ],
+      }],
+    } as unknown as DeepPerformanceAuditPlan;
+
+    const contracts = appHealthSurfaceContracts([], plan);
+    expect(contracts.find(({ id }) => id === 'browse.hierarchy')?.requiredRoles).toEqual([
+      'model',
+      'critical-layout',
+      'list',
+      'visible',
+      'empty-state',
+    ]);
+    expect(contracts.find(({ id }) => id === 'calculator.results')?.requiredRoles).toEqual([
+      'model',
+      'critical-layout',
+      'list',
+    ]);
+    expect(contracts.find(({ id }) => id === 'debug-log.entries')?.requiredRoles).toEqual([
+      'model',
+      'critical-layout',
+      'list',
     ]);
   });
 

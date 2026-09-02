@@ -128,6 +128,32 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('distinguishes a valid publication ahead of a lagging dates index', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.datesIndex = { dates: ['2026-08-31'], latestRunDate: '2026-08-31' };
+
+    expect(byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.RUN_IDENTITY,
+    )).toMatchObject({
+      status: 'warn',
+      metrics: { mismatches: 0, indexLag: true },
+    });
+  });
+
+  it('fails when the dates index is ahead of the loaded publication', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.datesIndex = { dates: ['2026-09-02'], latestRunDate: '2026-09-02' };
+
+    expect(byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.RUN_IDENTITY,
+    )).toMatchObject({
+      status: 'fail',
+      metrics: { mismatches: 1, indexLag: false },
+    });
+  });
+
   it('does not use a quarantined row as a generic excuse for unrelated count gaps', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.manifest!.counts.rates += 1;
