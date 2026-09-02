@@ -86,6 +86,7 @@ describe('bank spread history', () => {
       quarantines: {
         bankHistoryPairs: new Set(['Savings\u0000Zeta']),
         rowsByReason: { explicit_term_deposit_in_savings: 1 },
+        countImpacts: { rates: 1, products: 1, providers: 0 },
       },
     };
 

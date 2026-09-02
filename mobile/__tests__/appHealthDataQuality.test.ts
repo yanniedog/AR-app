@@ -128,12 +128,16 @@ describe('app-health data quality', () => {
     });
   });
 
-  it('spends one shared quarantine budget across manifest count adjustments', () => {
+  it('does not use a quarantined row as a generic excuse for unrelated count gaps', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.manifest!.counts.rates += 1;
     snapshot.manifest!.counts.products += 1;
-    snapshot.manifest!.counts.providers += 1;
-    snapshot.quarantine = { rowsByReason: { invalid_row: 1 }, bankHistoryPairs: 0 };
+    snapshot.manifest!.counts.providers = 4;
+    snapshot.quarantine = {
+      rowsByReason: { invalid_row: 1 },
+      bankHistoryPairs: 0,
+      countImpacts: { rates: 1, products: 1, providers: 0 },
+    };
 
     expect(byCode(
       evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
@@ -141,11 +145,33 @@ describe('app-health data quality', () => {
     )).toMatchObject({
       status: 'fail',
       metrics: {
-        declaredCountAdjustments: 1,
-        declaredCountMismatches: 2,
-        quarantineBudget: 1,
-        quarantineBudgetUsed: 1,
+        declaredCountAdjustments: 2,
+        declaredCountMismatches: 1,
+        quarantineImpactsAvailable: true,
+        quarantineRateImpact: 1,
+        quarantineProductImpact: 1,
+        quarantineProviderImpact: 0,
       },
+    });
+  });
+
+  it('reconciles non-additive count changes using exact quarantine impacts', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.manifest!.counts.rates += 1;
+    snapshot.manifest!.counts.products += 1;
+    snapshot.manifest!.counts.providers = 4;
+    snapshot.quarantine = {
+      rowsByReason: { invalid_row: 1 },
+      bankHistoryPairs: 0,
+      countImpacts: { rates: 1, products: 1, providers: 1 },
+    };
+
+    expect(byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION,
+    )).toMatchObject({
+      status: 'pass',
+      metrics: { declaredCountAdjustments: 3, declaredCountMismatches: 0 },
     });
   });
 
@@ -226,6 +252,7 @@ describe('app-health data quality', () => {
         quarantine: {
           rowsByReason: sampleCoreIntegrity.quarantines.rowsByReason,
           bankHistoryPairs: sampleCoreIntegrity.quarantines.bankHistoryPairs.size,
+          countImpacts: sampleCoreIntegrity.quarantines.countImpacts,
         },
       },
       CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
@@ -247,12 +274,14 @@ describe('app-health data quality', () => {
     expect(Number(sampleDetails.metrics.orphanProducts)).toBeGreaterThan(0);
     const sampleRibbon = byCode(checks, APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION);
     expect(sampleRibbon).toMatchObject({
-      status: 'fail',
+      status: 'pass',
       metrics: {
-        declaredCountMismatches: 2,
-        declaredCountAdjustments: 1,
-        quarantineBudget: 3,
-        quarantineBudgetUsed: 3,
+        declaredCountMismatches: 0,
+        declaredCountAdjustments: 3,
+        quarantineImpactsAvailable: true,
+        quarantineRateImpact: 3,
+        quarantineProductImpact: 3,
+        quarantineProviderImpact: 1,
       },
     });
   });

@@ -287,8 +287,11 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'declaredCountComparisons',
     'declaredCountAdjustments',
     'declaredCountMismatches',
-    'quarantineBudget',
-    'quarantineBudgetUsed',
+    'quarantinedRows',
+    'quarantineImpactsAvailable',
+    'quarantineRateImpact',
+    'quarantineProductImpact',
+    'quarantineProviderImpact',
   ],
   [APP_HEALTH_CHECK_CODES.COVERAGE]: [
     'coverageAvailable',

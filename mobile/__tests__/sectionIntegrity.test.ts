@@ -168,6 +168,11 @@ describe('core section integrity', () => {
     expect(result.integrity.quarantines.rowsByReason).toEqual({
       explicit_term_deposit_in_savings: 1,
     });
+    expect(result.integrity.quarantines.countImpacts).toEqual({
+      rates: 1,
+      products: 1,
+      providers: 0,
+    });
   });
 
   it('exports the bundled sample through the same normalizer', () => {

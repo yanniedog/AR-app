@@ -141,6 +141,7 @@ export async function readLiveAppHealthSnapshot(options: {
     quarantine: {
       rowsByReason: coreResult.integrity.quarantines.rowsByReason,
       bankHistoryPairs: coreResult.integrity.quarantines.bankHistoryPairs.size,
+      countImpacts: coreResult.integrity.quarantines.countImpacts,
     },
   };
 }

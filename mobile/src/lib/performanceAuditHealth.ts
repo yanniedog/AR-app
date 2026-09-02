@@ -114,6 +114,7 @@ export function appHealthDataSnapshot(
       ? {
           rowsByReason: state.coreIntegrity.quarantines.rowsByReason,
           bankHistoryPairs: state.coreIntegrity.quarantines.bankHistoryPairs.size,
+          countImpacts: state.coreIntegrity.quarantines.countImpacts,
         }
       : null,
   };

@@ -1609,8 +1609,8 @@ async function runNetworkCheck(
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
         appVersion: Application.nativeApplicationVersion ?? '0.0.0',
         onProgress: () => {
-          watchdog.touchProgress();
           assertSessionActive(watchdog);
+          watchdog.touchProgress();
         },
       });
       onSnapshot(snapshot);
