@@ -352,6 +352,7 @@ export default function MyRates() {
         status: savedLogos.ready ? 'ready' : 'pending',
         expectedCount: savedLogos.expectedCount,
         actualCount: savedLogos.terminalCount,
+        fallbackCount: savedLogos.fallbackCount,
       },
       {
         id: 'saved.layout',

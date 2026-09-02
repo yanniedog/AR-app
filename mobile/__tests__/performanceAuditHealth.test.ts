@@ -18,7 +18,7 @@ describe('integrated app-health display evidence', () => {
       check([
         'browse.screen:probe:data:ready:12/12',
         'browse.screen:probe:list:ready:10/12',
-        'browse.screen:probe:logo:ready:8/10',
+        'browse.screen:probe:logo:ready:8/10:revision:render:fallback=3',
         'browse.screen:probe:graphic:ready:6/6',
         'browse.screen:probe:layout:ready:1/1',
       ].join(' | ')),
@@ -29,7 +29,9 @@ describe('integrated app-health display evidence', () => {
       evidence: [
         { role: 'model', sourceCount: 12, modelCount: 12 },
         { role: 'list', modelCount: 12, renderedCount: 10 },
-        { role: 'logo', expectedCount: 10, decodedCount: 8, fallbackCount: 0, missingCount: 2 },
+        { role: 'visible', expectedMinimum: 1, visibleCount: 10 },
+        { role: 'empty-state', expected: false, rendered: false },
+        { role: 'logo', expectedCount: 10, decodedCount: 5, fallbackCount: 3, missingCount: 2 },
         { role: 'chart', modelPointCount: 6, renderedPointCount: 6, accessibleSummary: true },
         { role: 'critical-layout', measured: true, clipped: false, width: null, height: null },
       ],
@@ -45,6 +47,18 @@ describe('integrated app-health display evidence', () => {
 
     expect(observations[0]?.evidence).toEqual([
       { role: 'list', modelCount: 12, renderedCount: 10 },
+      { role: 'visible', expectedMinimum: 1, visibleCount: 10 },
+      { role: 'empty-state', expected: false, rendered: false },
+    ]);
+  });
+
+  it('records an explicitly rendered empty state for an empty settled list', () => {
+    expect(appHealthDisplayObservations([
+      check('saved.list:items:list:ready:0/0'),
+    ])[0]?.evidence).toEqual([
+      { role: 'list', modelCount: 0, renderedCount: 0 },
+      { role: 'visible', expectedMinimum: 0, visibleCount: 0 },
+      { role: 'empty-state', expected: true, rendered: true },
     ]);
   });
 });

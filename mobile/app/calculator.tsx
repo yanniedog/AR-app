@@ -516,6 +516,7 @@ export default function Calculator() {
         status: calculatorLogos.ready ? 'ready' : 'pending',
         expectedCount: calculatorLogos.expectedCount,
         actualCount: calculatorLogos.terminalCount,
+        fallbackCount: calculatorLogos.fallbackCount,
       },
       {
         id: 'calculator.layout',

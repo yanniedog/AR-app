@@ -1,4 +1,8 @@
-import { formatEvidenceDate, mapDisplayEvidence } from '../src/data/displayEvidence';
+import {
+  formatEvidenceDate,
+  freshnessDeadlineUtc,
+  mapDisplayEvidence,
+} from '../src/data/displayEvidence';
 import { contrastRatio, LEDGER_DARK, LEDGER_LIGHT } from '../src/theme/colors';
 import { ledgerMotionDuration } from '../src/theme/motion';
 
@@ -88,6 +92,15 @@ describe('Rate Ledger data evidence', () => {
     expect(mapDisplayEvidence({
       source: 'cache', offline: false, runDate: '2026-09-02', now: NOW,
     }).kind).toBe('saved');
+  });
+
+  it('applies the same freshness grace window as app health', () => {
+    const deadline = freshnessDeadlineUtc('2026-09-03T01:00:00Z', 24 * 60 * 60 * 1_000);
+    expect(deadline).toBe('2026-09-04T01:00:00.000Z');
+    expect(mapDisplayEvidence({
+      source: 'remote', offline: false, runDate: '2026-09-03',
+      now: new Date('2026-09-03T12:00:00Z'), overdueAfterUtc: deadline,
+    }).kind).toBe('current');
   });
 
   it('does not call an undated, unconfirmed remote result verified data', () => {

@@ -384,7 +384,7 @@ function PerformanceAuditScreenInner() {
               </AppText>
             </Row>
             <AppText variant="small" color="textMuted">
-              {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
+              All audit checks: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
               failed · {report.summary.skipped} not run · {report.summary.unavailable}{' '}
               unavailable
             </AppText>

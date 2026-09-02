@@ -137,8 +137,13 @@ function evaluateRole(
         break;
       }
       case 'empty-state': {
+        const list = evidenceFor(observation, 'list');
         const model = evidenceFor(observation, 'model');
-        const modelEmpty = model?.role === 'model' ? model.modelCount === 0 : null;
+        const modelEmpty = list?.role === 'list'
+          ? list.modelCount === 0
+          : model?.role === 'model'
+            ? model.modelCount === 0
+            : null;
         if (
           modelEmpty == null ||
           evidence.expected !== modelEmpty ||

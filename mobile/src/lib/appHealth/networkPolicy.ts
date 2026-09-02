@@ -25,8 +25,8 @@ interface ActiveSession {
   handle: AppHealthNetworkSessionHandle;
   mode: AppHealthAuditMode;
   contract: AppHealthSourceContract;
-  declaredAssetUrls: ReadonlySet<string>;
-  declaredManifestUrls: ReadonlySet<string>;
+  declaredAssetUrls: Set<string>;
+  declaredManifestUrls: Set<string>;
   authorizationAttempts: number;
   authorizedAttempts: number;
   blockedAttempts: number;
@@ -156,6 +156,25 @@ export class AppHealthNetworkPolicy {
 
   private sessionFor(handle: AppHealthNetworkSessionHandle): ActiveSession | null {
     return this.active?.handle === handle ? this.active : null;
+  }
+
+  /** Add only URLs authenticated by a manifest already fetched in this session. */
+  declareAssetUrls(
+    handle: AppHealthNetworkSessionHandle,
+    urls: readonly string[],
+  ): number {
+    const session = this.sessionFor(handle);
+    if (!session || session.mode !== 'live-source') return 0;
+    let added = 0;
+    for (const url of urls) {
+      const value = canonicalAuditUrl(url);
+      if (value && assetBelongsToContract(value, session.contract)) {
+        const before = session.declaredAssetUrls.size;
+        session.declaredAssetUrls.add(value);
+        if (session.declaredAssetUrls.size > before) added += 1;
+      }
+    }
+    return added;
   }
 
   authorize(

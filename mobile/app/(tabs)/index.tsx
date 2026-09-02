@@ -34,6 +34,8 @@ import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
+import { freshnessDeadlineUtc } from '../../src/data/displayEvidence';
+import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../../src/lib/appHealth';
 
 /**
  * Slim one-line entry point to a secondary tool. Keeps Today's supporting
@@ -446,6 +448,7 @@ export default function Home() {
         status: todayLogos.ready ? 'ready' : 'pending',
         expectedCount: todayLogos.expectedCount,
         actualCount: todayLogos.terminalCount,
+        fallbackCount: todayLogos.fallbackCount,
       },
       {
         id: 'today.hero-layout',
@@ -504,7 +507,10 @@ export default function Home() {
             : coreAssetState.status === 'error'
               ? coreAssetState.error
               : null}
-        overdueAfterUtc={manifestSchedule?.next_due_utc ?? null}
+        overdueAfterUtc={freshnessDeadlineUtc(
+          manifestSchedule?.next_due_utc,
+          CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT.freshnessGraceMs,
+        )}
         scheduleLabel={manifestSchedule?.label ?? null}
       />
       </View>

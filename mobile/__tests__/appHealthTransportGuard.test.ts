@@ -44,6 +44,18 @@ describe('installAppHealthTransportGuard', () => {
     guard.restore();
   });
 
+  it('admits only manifest-declared assets after the manifest is read', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const githubContract = createV1AppHealthSourceContract();
+    const assetUrl = `https://github.com/${githubContract.repo}/releases/download/app-payload-latest/core.json.gz`;
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract: githubContract });
+    await expect(target.fetch(assetUrl)).rejects.toThrow('blocked');
+    expect(guard.allowManifestAssets([assetUrl, 'https://untrusted.test/core.json.gz'])).toBe(1);
+    await expect(target.fetch(assetUrl)).resolves.toMatchObject({ ok: true });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    guard.restore();
+  });
+
   it('accepts GitHub release delivery redirects but rejects an untrusted final host', async () => {
     const fetchSpy = jest
       .fn()

@@ -125,6 +125,7 @@ interface ParsedProbe {
   ready: boolean;
   actual: number | null;
   expected: number | null;
+  fallbackCount: number | null;
 }
 
 function parseProbe(line: string): ParsedProbe | null {
@@ -133,48 +134,57 @@ function parseProbe(line: string): ParsedProbe | null {
   const [surfaceId, , kind, status, counts] = parts;
   if (!['data', 'list', 'logo', 'graphic', 'layout'].includes(kind)) return null;
   const match = /^(\d+)\/(\d+)$/.exec(counts);
+  const fallback = parts
+    .map((part) => /^fallback=(\d+)$/.exec(part)?.[1] ?? null)
+    .find((value): value is string => value != null);
   return {
     surfaceId,
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
     actual: match ? Number(match[1]) : null,
     expected: match ? Number(match[2]) : null,
+    fallbackCount: fallback == null ? null : Number(fallback),
   };
 }
 
-function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence {
+function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
   const expected = probe.expected ?? (probe.ready ? 1 : 0);
   const actual = probe.actual ?? (probe.ready ? expected : 0);
   if (probe.kind === 'data') {
-    return { role: 'model', sourceCount: expected, modelCount: actual };
+    return [{ role: 'model', sourceCount: expected, modelCount: actual }];
   }
   if (probe.kind === 'list') {
-    return { role: 'list', modelCount: expected, renderedCount: actual };
+    return [
+      { role: 'list', modelCount: expected, renderedCount: actual },
+      { role: 'visible', expectedMinimum: expected > 0 ? 1 : 0, visibleCount: actual },
+      { role: 'empty-state', expected: expected === 0, rendered: expected === 0 && probe.ready },
+    ];
   }
   if (probe.kind === 'logo') {
-    return {
+    const fallbackCount = Math.min(actual, probe.fallbackCount ?? 0);
+    return [{
       role: 'logo',
       expectedCount: expected,
-      decodedCount: actual,
-      fallbackCount: 0,
+      decodedCount: actual - fallbackCount,
+      fallbackCount,
       missingCount: Math.max(0, expected - actual),
-    };
+    }];
   }
   if (probe.kind === 'graphic') {
-    return {
+    return [{
       role: 'chart',
       modelPointCount: expected,
       renderedPointCount: actual,
       accessibleSummary: probe.ready,
-    };
+    }];
   }
-  return {
+  return [{
     role: 'critical-layout',
     measured: probe.ready,
     clipped: !probe.ready,
     width: null,
     height: null,
-  };
+  }];
 }
 
 function observedEvidenceCount(evidence: AppHealthDisplayEvidence): number {
@@ -200,15 +210,13 @@ export function appHealthDisplayObservations(
     for (const line of raw.split(' | ')) {
       const probe = parseProbe(line);
       if (!probe) continue;
-      const evidence = evidenceFor(probe);
       const roles = bySurface.get(probe.surfaceId) ?? new Map();
-      const prior = roles.get(evidence.role);
-      // Repeated cold/warm probes keep the strongest independently observed count.
-      // Comparing the evidence itself avoids string-length ordering errors such as
-      // treating 9 rendered rows as stronger than 10 merely because both serialize
-      // to a similar number of characters.
-      if (!prior || observedEvidenceCount(evidence) >= observedEvidenceCount(prior)) {
-        roles.set(evidence.role, evidence);
+      for (const evidence of evidenceFor(probe)) {
+        const prior = roles.get(evidence.role);
+        // Repeated cold/warm probes keep the strongest independently observed count.
+        if (!prior || observedEvidenceCount(evidence) >= observedEvidenceCount(prior)) {
+          roles.set(evidence.role, evidence);
+        }
       }
       bySurface.set(probe.surfaceId, roles);
     }
@@ -228,7 +236,11 @@ export function appHealthSurfaceContracts(
     const next = roles.get(surface) ?? new Set<AppHealthDisplayRole>();
     next.add('model');
     next.add('critical-layout');
-    if (requested.includes('list')) next.add('list');
+    if (requested.includes('list')) {
+      next.add('list');
+      next.add('visible');
+      next.add('empty-state');
+    }
     if (requested.includes('logos')) next.add('logo');
     if (requested.includes('graphics')) next.add('chart');
     roles.set(surface, next);
@@ -240,6 +252,7 @@ export function appHealthSurfaceContracts(
   return [...roles].map(([id, requiredRoles]) => ({
     id,
     requiredRoles: [...requiredRoles],
+    allowsIntentionalEmpty: requiredRoles.has('empty-state'),
     chartRequired: requiredRoles.has('chart'),
     logosRequired: requiredRoles.has('logo'),
   }));
@@ -256,9 +269,11 @@ export function buildIntegratedAppHealthReport(input: {
   journeys: readonly AuditJourney[];
   plan: DeepPerformanceAuditPlan;
   network: AppHealthNetworkSnapshot;
+  /** Validated remote payload for explicit live-source mode; otherwise use pinned app state. */
+  dataSnapshot?: AppHealthDataSnapshot;
 }): AppHealthReport {
   const dataChecks = evaluateAppHealthDataQuality(
-    appHealthDataSnapshot(input.state, input.appVersion),
+    input.dataSnapshot ?? appHealthDataSnapshot(input.state, input.appVersion),
     CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   );
   const contracts = appHealthSurfaceContracts(input.journeys, input.plan);

@@ -11,6 +11,8 @@ describe('logo readiness', () => {
     expect(summarizeLogoRenderStates(states)).toEqual({
       expectedCount: 2,
       terminalCount: 0,
+      decodedCount: 0,
+      fallbackCount: 0,
       ready: false,
     });
     states = applyLogoRenderState(states, 'row:1', 'decoded');
@@ -18,6 +20,8 @@ describe('logo readiness', () => {
     expect(summarizeLogoRenderStates(states)).toEqual({
       expectedCount: 2,
       terminalCount: 2,
+      decodedCount: 1,
+      fallbackCount: 1,
       ready: true,
     });
   });
@@ -27,6 +31,8 @@ describe('logo readiness', () => {
     expect(summarizeLogoRenderStates(states, ['header'])).toEqual({
       expectedCount: 2,
       terminalCount: 1,
+      decodedCount: 1,
+      fallbackCount: 0,
       ready: false,
     });
     states = applyLogoRenderState(states, 'header', 'initials');
@@ -34,6 +40,8 @@ describe('logo readiness', () => {
     expect(summarizeLogoRenderStates(states, ['header'])).toEqual({
       expectedCount: 1,
       terminalCount: 1,
+      decodedCount: 0,
+      fallbackCount: 1,
       ready: true,
     });
   });

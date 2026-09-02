@@ -202,6 +202,7 @@ export default function Compare() {
         status: entries.length >= 2 && logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
       {
         id: 'compare.history-graphics',

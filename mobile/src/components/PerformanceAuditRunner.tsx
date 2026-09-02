@@ -24,9 +24,14 @@ import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
 import { getApkDownloadSnapshot } from '../lib/appUpdate';
-import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../lib/appHealth';
+import {
+  CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+  type AppHealthDataSnapshot,
+} from '../lib/appHealth';
+import { readLiveAppHealthSnapshot } from '../lib/appHealthLiveSource';
 import {
   installAppHealthTransportGuard,
+  type AppHealthTransportGuard,
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
@@ -535,6 +540,7 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
         typeof probe.renderRevision === 'string' && probe.renderRevision.length > 80
           ? `${probe.renderRevision.slice(0, 80)}…`
           : probe.renderRevision ?? '',
+        probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
       ].join(':')))
       .join(' | '),
     readinessActionEvidence: snapshot.surfaces
@@ -1588,29 +1594,36 @@ async function runNetworkCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   mode: 'local' | 'live-source',
+  guard: AppHealthTransportGuard,
+  onSnapshot: (snapshot: AppHealthDataSnapshot) => void,
 ): Promise<AuditCheck> {
   assertSessionActive(watchdog);
   if (mode === 'live-source') {
     const started = now();
     const responsivenessAt = monitor.snapshot();
     try {
-      const response = await globalThis.fetch(CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT.manifestUrl, {
-        cache: 'no-store',
+      const snapshot = await readLiveAppHealthSnapshot({
+        guard,
+        contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
+        appVersion: Application.nativeApplicationVersion ?? '0.0.0',
       });
+      onSnapshot(snapshot);
       const responsiveness = monitor.metricsSince(responsivenessAt);
       return {
         id: 'manifest-network',
-        label: 'Live-source manifest transport',
+        label: 'Live-source publication validation',
         kind: 'network',
-        status: response.ok ? responsivenessStatus(responsiveness) : 'fail',
+        status: responsivenessStatus(responsiveness),
         durationMs: roundMetric(now() - started),
         metrics: {
           executionAttempted: true,
-          statusCode: response.status,
           allowlistedSource: true,
+          manifestValidated: true,
+          datesIndexValidated: true,
+          coreHashValidated: true,
+          detailsHashValidated: true,
           ...responsivenessRecord(responsiveness),
         },
-        ...(!response.ok ? { error: `Manifest returned HTTP ${response.status}` } : {}),
       };
     } catch (error) {
       return {
@@ -2401,6 +2414,7 @@ export function PerformanceAuditRunner() {
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
+      let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
       let lastStoredCheckAt: string | null = null;
@@ -2763,10 +2777,24 @@ export function PerformanceAuditRunner() {
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-        updatePerformanceAuditProgress(completed, total, 'Timing the live manifest request');
+        updatePerformanceAuditProgress(
+          completed,
+          total,
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local zero-network boundary',
+        );
         await recordContinuable(
-          'Recording the local-only network exclusion',
-          () => runNetworkCheck(monitor, watchdog, auditMode),
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local-only network exclusion',
+          () => runNetworkCheck(
+            monitor,
+            watchdog,
+            auditMode,
+            transportGuard,
+            (snapshot) => { liveSourceSnapshot = snapshot; },
+          ),
         );
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
@@ -2926,9 +2954,34 @@ export function PerformanceAuditRunner() {
           journeys: navigationJourneys,
           plan,
           network: transportGuard.snapshot(),
+          dataSnapshot: auditMode === 'live-source'
+            ? liveSourceSnapshot ?? {
+              source: 'remote',
+              core: null,
+              manifest: null,
+              appVersion: app.appVersion,
+              datesIndex: null,
+              details: null,
+              assets: {},
+              quarantine: null,
+            }
+            : undefined,
         });
+        const healthExecuted = appHealth.summary.pass + appHealth.summary.warn + appHealth.summary.fail;
+        const combinedExecuted = performanceSummary.executed + healthExecuted;
+        const combinedTotal = checks.length + appHealth.summary.total;
         const summary = {
           ...performanceSummary,
+          pass: performanceSummary.pass + appHealth.summary.pass,
+          warn: performanceSummary.warn + appHealth.summary.warn,
+          fail: performanceSummary.fail + appHealth.summary.fail,
+          skipped: performanceSummary.skipped + appHealth.summary.notRun,
+          unavailable: performanceSummary.unavailable + appHealth.summary.unavailable,
+          executed: combinedExecuted,
+          justifiedSkipped: performanceSummary.justifiedSkipped + appHealth.summary.notRun,
+          coveragePercent: combinedTotal
+            ? roundMetric((combinedExecuted / combinedTotal) * 100)
+            : null,
           overall: appHealth.summary.overall === 'bottleneck'
             ? 'bottleneck' as const
             : appHealth.summary.overall === 'attention' && performanceSummary.overall === 'healthy'

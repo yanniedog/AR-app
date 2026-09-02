@@ -292,6 +292,7 @@ export default function ProductDetail() {
         status: row && logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
       {
         id: 'product.history-graphic',

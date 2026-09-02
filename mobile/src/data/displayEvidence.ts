@@ -138,6 +138,17 @@ function isOverdue(value: string | null | undefined, now: Date): boolean {
   return Number.isFinite(deadline) && now.getTime() > deadline;
 }
 
+/** Align product surfaces with the app-health freshness contract. */
+export function freshnessDeadlineUtc(
+  nextDueUtc: string | null | undefined,
+  graceMs: number,
+): string | null {
+  if (!nextDueUtc || !Number.isFinite(graceMs) || graceMs < 0) return null;
+  const dueMs = Date.parse(nextDueUtc);
+  if (!Number.isFinite(dueMs)) return null;
+  return new Date(dueMs + graceMs).toISOString();
+}
+
 /**
  * Convert transport, freshness and coverage truth into one reusable disclosure.
  * It never infers full coverage merely from the absence of a displayed error.

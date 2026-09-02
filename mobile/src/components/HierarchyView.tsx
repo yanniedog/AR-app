@@ -277,6 +277,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         status: logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
     ],
   });

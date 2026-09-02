@@ -198,6 +198,7 @@ export default function Banks() {
         status: filterReady && logoReadiness.ready ? 'ready' : 'pending',
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
+        fallbackCount: logoReadiness.fallbackCount,
       },
     ],
   });

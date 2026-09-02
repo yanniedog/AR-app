@@ -23,6 +23,7 @@ export interface AuditTransportTarget {
 }
 
 export interface AppHealthTransportGuard {
+  allowManifestAssets(urls: readonly string[]): number;
   snapshot(): AppHealthNetworkSnapshot;
   restore(): AppHealthNetworkSnapshot;
 }
@@ -154,6 +155,9 @@ export function installAppHealthTransportGuard(options: {
     policyViolations: 0,
   };
   return {
+    allowManifestAssets(urls) {
+      return policy.declareAssetUrls(handle, urls);
+    },
     snapshot,
     restore() {
       if (target.fetch === guardedFetch) target.fetch = originalFetch;

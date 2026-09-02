@@ -18,6 +18,8 @@ export interface PerformanceAuditProbeDefinition {
   renderRevision?: string | null;
   expectedCount?: number | null;
   actualCount?: number | null;
+  /** Terminal logo fallbacks within actualCount; meaningful for logo probes. */
+  fallbackCount?: number | null;
   error?: string | null;
 }
 
@@ -29,6 +31,7 @@ export interface PerformanceAuditProbePatch {
   renderRevision?: string | null;
   expectedCount?: number | null;
   actualCount?: number | null;
+  fallbackCount?: number | null;
   error?: string | null;
 }
 
@@ -86,6 +89,7 @@ export interface PerformanceAuditProbeSnapshot {
   renderRevision: string | null;
   expectedCount: number | null;
   actualCount: number | null;
+  fallbackCount: number | null;
   error: string | null;
   updatedAtMs: number;
 }
@@ -242,6 +246,7 @@ function probeFingerprint(surfaceId: string, probe: PerformanceAuditProbeSnapsho
     probe.renderRevision ?? '',
     probe.expectedCount ?? '',
     probe.actualCount ?? '',
+    probe.fallbackCount ?? '',
     probe.error ?? '',
   ].join('\u001f');
 }
@@ -455,6 +460,9 @@ export class PerformanceAuditReadinessRegistry {
       actualCount: patch.actualCount === undefined
         ? probe.actualCount
         : nullableCount(patch.actualCount),
+      fallbackCount: patch.fallbackCount === undefined
+        ? probe.fallbackCount
+        : nullableCount(patch.fallbackCount),
       error: patch.error === undefined
         ? normalizeError(status, probe.error)
         : normalizeError(status, patch.error),
@@ -467,6 +475,7 @@ export class PerformanceAuditReadinessRegistry {
       next.renderRevision === probe.renderRevision &&
       next.expectedCount === probe.expectedCount &&
       next.actualCount === probe.actualCount &&
+      next.fallbackCount === probe.fallbackCount &&
       next.error === probe.error
     ) return true;
     Object.assign(probe, next, { updatedAtMs: this.clock.now() });
@@ -760,6 +769,7 @@ export class PerformanceAuditReadinessRegistry {
       renderRevision: nullable(definition.renderRevision),
       expectedCount: nullableCount(definition.expectedCount),
       actualCount: nullableCount(definition.actualCount),
+      fallbackCount: nullableCount(definition.fallbackCount),
       error: normalizeError(status, definition.error),
       updatedAtMs: at,
     };
