@@ -126,6 +126,8 @@ interface ParsedProbe {
   actual: number | null;
   expected: number | null;
   fallbackCount: number | null;
+  visibleCount: number | null;
+  emptyStateRendered: boolean | null;
 }
 
 function parseProbe(line: string): ParsedProbe | null {
@@ -137,6 +139,12 @@ function parseProbe(line: string): ParsedProbe | null {
   const fallback = parts
     .map((part) => /^fallback=(\d+)$/.exec(part)?.[1] ?? null)
     .find((value): value is string => value != null);
+  const visible = parts
+    .map((part) => /^visible=(\d+)$/.exec(part)?.[1] ?? null)
+    .find((value): value is string => value != null);
+  const empty = parts
+    .map((part) => /^empty=([01])$/.exec(part)?.[1] ?? null)
+    .find((value): value is string => value != null);
   return {
     surfaceId,
     kind: kind as ParsedProbe['kind'],
@@ -144,6 +152,8 @@ function parseProbe(line: string): ParsedProbe | null {
     actual: match ? Number(match[1]) : null,
     expected: match ? Number(match[2]) : null,
     fallbackCount: fallback == null ? null : Number(fallback),
+    visibleCount: visible == null ? null : Number(visible),
+    emptyStateRendered: empty == null ? null : empty === '1',
   };
 }
 
@@ -155,9 +165,17 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
   }
   if (probe.kind === 'list') {
     return [
-      { role: 'list', modelCount: expected, renderedCount: actual },
-      { role: 'visible', expectedMinimum: expected > 0 ? 1 : 0, visibleCount: actual },
-      { role: 'empty-state', expected: expected === 0, rendered: expected === 0 && probe.ready },
+      { role: 'list' as const, modelCount: expected, renderedCount: actual },
+      ...(probe.visibleCount == null ? [] : [{
+        role: 'visible' as const,
+        expectedMinimum: expected > 0 ? 1 : 0,
+        visibleCount: probe.visibleCount,
+      }]),
+      ...(probe.emptyStateRendered == null ? [] : [{
+        role: 'empty-state' as const,
+        expected: expected === 0,
+        rendered: probe.emptyStateRendered,
+      }]),
     ];
   }
   if (probe.kind === 'logo') {

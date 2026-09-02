@@ -358,6 +358,8 @@ export default function Search() {
         status: searchPending || !listReadiness.visiblyCommitted ? 'pending' : 'ready',
         expectedCount: rows.length,
         actualCount: listReadiness.committedItemCount,
+        visibleCount: listReadiness.measuredVisibleCount,
+        emptyStateRendered: rows.length === 0 && !searchPending && listReadiness.ready,
       },
       {
         id: 'search.layout',

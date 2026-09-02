@@ -128,6 +128,19 @@ describe('app-health data quality', () => {
     });
   });
 
+  it('rejects section ribbon counts that under-report loaded rows and sets', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    const counts = snapshot.core!.sections.Savings.ribbon!.counts!;
+    counts.rates -= 1;
+    counts.products -= 1;
+    counts.providers -= 1;
+
+    expect(byCode(
+      evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION,
+    )).toMatchObject({ status: 'fail', metrics: { invalidSections: 1 } });
+  });
+
   it('does not fabricate live-source evidence when acquisition is unavailable', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     snapshot.source = 'unavailable';

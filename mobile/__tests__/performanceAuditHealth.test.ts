@@ -19,7 +19,7 @@ describe('integrated app-health display evidence', () => {
     const observations = appHealthDisplayObservations([
       check([
         'browse.screen:probe:data:ready:12/12',
-        'browse.screen:probe:list:ready:10/12',
+        'browse.screen:probe:list:ready:10/12:revision:render:visible=4:empty=0',
         'browse.screen:probe:logo:ready:8/10:revision:render:fallback=3',
         'browse.screen:probe:graphic:ready:6/6',
         'browse.screen:probe:layout:ready:1/1',
@@ -31,7 +31,7 @@ describe('integrated app-health display evidence', () => {
       evidence: [
         { role: 'model', sourceCount: 12, modelCount: 12 },
         { role: 'list', modelCount: 12, renderedCount: 10 },
-        { role: 'visible', expectedMinimum: 1, visibleCount: 10 },
+        { role: 'visible', expectedMinimum: 1, visibleCount: 4 },
         { role: 'empty-state', expected: false, rendered: false },
         { role: 'logo', expectedCount: 10, decodedCount: 5, fallbackCount: 3, missingCount: 2 },
         { role: 'chart', modelPointCount: 6, renderedPointCount: 6, accessibleSummary: true },
@@ -42,26 +42,46 @@ describe('integrated app-health display evidence', () => {
 
   it('retains the highest observed count from repeated cold and warm probes', () => {
     const observations = appHealthDisplayObservations([
-      check('browse.screen:probe:list:ready:9/12'),
-      check('browse.screen:probe:list:ready:10/12'),
-      check('browse.screen:probe:list:ready:8/12'),
+      check('browse.screen:probe:list:ready:9/12:::visible=3:empty=0'),
+      check('browse.screen:probe:list:ready:10/12:::visible=4:empty=0'),
+      check('browse.screen:probe:list:ready:8/12:::visible=2:empty=0'),
     ]);
 
     expect(observations[0]?.evidence).toEqual([
       { role: 'list', modelCount: 12, renderedCount: 10 },
-      { role: 'visible', expectedMinimum: 1, visibleCount: 10 },
+      { role: 'visible', expectedMinimum: 1, visibleCount: 4 },
       { role: 'empty-state', expected: false, rendered: false },
     ]);
   });
 
   it('records an explicitly rendered empty state for an empty settled list', () => {
     expect(appHealthDisplayObservations([
-      check('saved.list:items:list:ready:0/0'),
+      check('saved.list:items:list:ready:0/0:::visible=0:empty=1'),
     ])[0]?.evidence).toEqual([
       { role: 'list', modelCount: 0, renderedCount: 0 },
       { role: 'visible', expectedMinimum: 0, visibleCount: 0 },
       { role: 'empty-state', expected: true, rendered: true },
     ]);
+  });
+
+  it('does not invent empty-state or visibility evidence from a list count', () => {
+    expect(appHealthDisplayObservations([
+      check('saved.list:items:list:ready:0/0'),
+    ])[0]?.evidence).toEqual([
+      { role: 'list', modelCount: 0, renderedCount: 0 },
+    ]);
+  });
+
+  it('fails explicit visibility evidence when rendered rows are not viewable', () => {
+    const checks = evaluateAppHealthDisplayQuality(
+      [{ id: 'browse.screen', requiredRoles: ['list', 'visible'] }],
+      appHealthDisplayObservations([
+        check('browse.screen:items:list:ready:10/10:::visible=0:empty=0'),
+      ]),
+    );
+
+    expect(checks.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY))
+      .toMatchObject({ status: 'fail', metrics: { failed: 1 } });
   });
 
   it('accepts a measured count-only layout probe end to end', () => {

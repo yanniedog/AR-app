@@ -20,6 +20,10 @@ export interface PerformanceAuditProbeDefinition {
   actualCount?: number | null;
   /** Terminal logo fallbacks within actualCount; meaningful for logo probes. */
   fallbackCount?: number | null;
+  /** Rows observed by the list's viewability callback, not inferred from layout. */
+  visibleCount?: number | null;
+  /** Explicit proof that the surface's actual empty-state component rendered. */
+  emptyStateRendered?: boolean | null;
   error?: string | null;
 }
 
@@ -32,6 +36,8 @@ export interface PerformanceAuditProbePatch {
   expectedCount?: number | null;
   actualCount?: number | null;
   fallbackCount?: number | null;
+  visibleCount?: number | null;
+  emptyStateRendered?: boolean | null;
   error?: string | null;
 }
 
@@ -90,6 +96,8 @@ export interface PerformanceAuditProbeSnapshot {
   expectedCount: number | null;
   actualCount: number | null;
   fallbackCount: number | null;
+  visibleCount: number | null;
+  emptyStateRendered: boolean | null;
   error: string | null;
   updatedAtMs: number;
 }
@@ -200,6 +208,10 @@ function nullableCount(value: number | null | undefined): number | null {
   return Number.isFinite(value) ? Math.max(0, value) : null;
 }
 
+function nullableBoolean(value: boolean | null | undefined): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
 function normalizeError(status: PerformanceAuditProbeStatus, error: string | null | undefined): string | null {
   if (status !== 'error') return null;
   const message = error?.trim();
@@ -247,6 +259,8 @@ function probeFingerprint(surfaceId: string, probe: PerformanceAuditProbeSnapsho
     probe.expectedCount ?? '',
     probe.actualCount ?? '',
     probe.fallbackCount ?? '',
+    probe.visibleCount ?? '',
+    probe.emptyStateRendered == null ? '' : probe.emptyStateRendered ? '1' : '0',
     probe.error ?? '',
   ].join('\u001f');
 }
@@ -463,6 +477,12 @@ export class PerformanceAuditReadinessRegistry {
       fallbackCount: patch.fallbackCount === undefined
         ? probe.fallbackCount
         : nullableCount(patch.fallbackCount),
+      visibleCount: patch.visibleCount === undefined
+        ? probe.visibleCount
+        : nullableCount(patch.visibleCount),
+      emptyStateRendered: patch.emptyStateRendered === undefined
+        ? probe.emptyStateRendered
+        : nullableBoolean(patch.emptyStateRendered),
       error: patch.error === undefined
         ? normalizeError(status, probe.error)
         : normalizeError(status, patch.error),
@@ -476,6 +496,8 @@ export class PerformanceAuditReadinessRegistry {
       next.expectedCount === probe.expectedCount &&
       next.actualCount === probe.actualCount &&
       next.fallbackCount === probe.fallbackCount &&
+      next.visibleCount === probe.visibleCount &&
+      next.emptyStateRendered === probe.emptyStateRendered &&
       next.error === probe.error
     ) return true;
     Object.assign(probe, next, { updatedAtMs: this.clock.now() });
@@ -770,6 +792,8 @@ export class PerformanceAuditReadinessRegistry {
       expectedCount: nullableCount(definition.expectedCount),
       actualCount: nullableCount(definition.actualCount),
       fallbackCount: nullableCount(definition.fallbackCount),
+      visibleCount: nullableCount(definition.visibleCount),
+      emptyStateRendered: nullableBoolean(definition.emptyStateRendered),
       error: normalizeError(status, definition.error),
       updatedAtMs: at,
     };

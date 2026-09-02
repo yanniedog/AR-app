@@ -185,6 +185,8 @@ export default function Banks() {
         status: filterReady && listReadiness.visiblyCommitted ? 'ready' : 'pending',
         expectedCount: filtered.length,
         actualCount: listReadiness.committedItemCount,
+        visibleCount: listReadiness.measuredVisibleCount,
+        emptyStateRendered: filtered.length === 0 && filterReady && listReadiness.ready,
       },
       {
         id: 'lenders.layout',

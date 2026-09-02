@@ -93,6 +93,7 @@ describe('virtualized list readiness', () => {
     expect(latest.current?.visiblyCommitted).toBe(true);
     expect(latest.current?.committedItemCount).toBe(1);
     expect(latest.current?.visibleCount).toBe(1);
+    expect(latest.current?.measuredVisibleCount).toBeNull();
 
     act(() => {
       tree!.update(React.createElement(Probe, { revision: 'query:afg:next', itemCount: 2 }));
@@ -138,6 +139,7 @@ describe('virtualized list readiness', () => {
     expect(latest.current?.ready).toBe(true);
     expect(latest.current?.visiblyCommitted).toBe(true);
     expect(latest.current?.visibleCount).toBe(1);
+    expect(latest.current?.measuredVisibleCount).toBe(1);
 
     act(() => {
       tree!.unmount();

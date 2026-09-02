@@ -504,19 +504,24 @@ function evaluateRibbonReconciliation(
     }
     checkedSections += 1;
     const productCount = new Set(rows.map((row) => row.product_key).filter(Boolean)).size;
-    const providerCount = new Set(rows.map((row) => row.provider).filter(Boolean)).size;
+    const rowsByProvider = new Map<string, RateRow[]>();
+    for (const row of rows) {
+      const provider = String(row.provider ?? '').trim();
+      if (!provider) continue;
+      const providerRows = rowsByProvider.get(provider) ?? [];
+      providerRows.push(row);
+      rowsByProvider.set(provider, providerRows);
+    }
+    const providerCount = rowsByProvider.size;
     const counts = ribbon.counts;
     const range = ribbon.range;
     const countInvalid =
       !Number.isInteger(counts?.rates) ||
-      counts.rates < 0 ||
-      counts.rates > rows.length ||
+      counts.rates !== rows.length ||
       !Number.isInteger(counts?.products) ||
-      counts.products < 0 ||
-      counts.products > productCount ||
+      counts.products !== productCount ||
       !Number.isInteger(counts?.providers) ||
-      counts.providers < 0 ||
-      counts.providers > providerCount ||
+      counts.providers !== providerCount ||
       !Array.isArray(ribbon.providers) ||
       ribbon.providers.length !== counts.providers;
     const rangeInvalid =
@@ -525,24 +530,42 @@ function evaluateRibbonReconciliation(
       !finiteOrNull(range?.mean) ||
       !finiteOrNull(range?.median) ||
       (typeof range?.min === 'number' && typeof range?.max === 'number' && range.min > range.max);
-    const providerStatsInvalid = Array.isArray(ribbon.providers) && ribbon.providers.some((provider) =>
-      !String(provider.provider ?? '').trim() ||
-      !Number.isInteger(provider.rates) ||
-      provider.rates < 0 ||
-      !Number.isInteger(provider.products) ||
-      provider.products < 0 ||
-      !finiteOrNull(provider.min) ||
-      !finiteOrNull(provider.max) ||
-      !finiteOrNull(provider.mean) ||
-      !finiteOrNull(provider.median) ||
-      (typeof provider.min === 'number' &&
-        typeof provider.max === 'number' &&
-        provider.min > provider.max),
-    );
+    const ribbonProviderNames = new Set<string>();
+    const providerStatsInvalid = Array.isArray(ribbon.providers) && ribbon.providers.some((provider) => {
+      const providerName = String(provider.provider ?? '').trim();
+      const providerRows = rowsByProvider.get(providerName) ?? [];
+      const providerProducts = new Set(
+        providerRows.map((row) => row.product_key).filter(Boolean),
+      ).size;
+      const duplicate = ribbonProviderNames.has(providerName);
+      ribbonProviderNames.add(providerName);
+      return !providerName ||
+        duplicate ||
+        !rowsByProvider.has(providerName) ||
+        !Number.isInteger(provider.rates) ||
+        provider.rates !== providerRows.length ||
+        !Number.isInteger(provider.products) ||
+        provider.products !== providerProducts ||
+        !finiteOrNull(provider.min) ||
+        !finiteOrNull(provider.max) ||
+        !finiteOrNull(provider.mean) ||
+        !finiteOrNull(provider.median) ||
+        (typeof provider.min === 'number' &&
+          typeof provider.max === 'number' &&
+          provider.min > provider.max);
+    });
+    const providerSetInvalid = ribbonProviderNames.size !== rowsByProvider.size ||
+      [...rowsByProvider.keys()].some((provider) => !ribbonProviderNames.has(provider));
     const providerRates = Array.isArray(ribbon.providers)
       ? ribbon.providers.reduce((sum, provider) => sum + provider.rates, 0)
       : -1;
-    if (countInvalid || rangeInvalid || providerStatsInvalid || providerRates !== counts.rates) {
+    if (
+      countInvalid ||
+      rangeInvalid ||
+      providerStatsInvalid ||
+      providerSetInvalid ||
+      providerRates !== counts.rates
+    ) {
       invalidSections += 1;
     }
   }

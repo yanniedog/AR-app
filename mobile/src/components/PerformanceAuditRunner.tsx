@@ -542,6 +542,8 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
           ? `${probe.renderRevision.slice(0, 80)}…`
           : probe.renderRevision ?? '',
         probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
+        probe.visibleCount == null ? '' : `visible=${probe.visibleCount}`,
+        probe.emptyStateRendered == null ? '' : `empty=${probe.emptyStateRendered ? 1 : 0}`,
       ].join(':')))
       .join(' | '),
     readinessActionEvidence: snapshot.surfaces
