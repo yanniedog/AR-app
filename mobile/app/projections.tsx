@@ -408,6 +408,17 @@ export default function Projections() {
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
+  const recordChartEvidence = useCallback(({ accessibleSummary }: { accessibleSummary: boolean }) => {
+    setChartEvidence((current) => {
+      if (
+        current?.revision === projectionRenderRevision &&
+        current.accessibleSummary === accessibleSummary
+      ) {
+        return current;
+      }
+      return { revision: projectionRenderRevision, accessibleSummary };
+    });
+  }, [projectionRenderRevision]);
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
     if (typeof requested === 'string' && SECTION_OPTIONS.some((item) => item.value === requested)) {
@@ -899,10 +910,7 @@ export default function Projections() {
             metric={metric}
             asAt={result.asAt}
             controllerRef={chartControllerRef}
-            onRenderReady={({ accessibleSummary }) => setChartEvidence({
-              revision: projectionRenderRevision,
-              accessibleSummary,
-            })}
+            onRenderReady={recordChartEvidence}
           />
           <ProjectionSummary section={section} result={result} />
         </>

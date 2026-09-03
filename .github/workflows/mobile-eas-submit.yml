@@ -32,6 +32,7 @@ on:
         type: string
 
 permissions:
+  checks: read
   contents: read
   pull-requests: read
 
@@ -46,6 +47,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: mobile-release
+    env:
+      EAS_BUILD_ID: ${{ inputs.build_id }}
+      EAS_PROFILE: ${{ inputs.profile }}
+      EAS_PLATFORM: ${{ inputs.platform }}
     defaults:
       run:
         working-directory: mobile
@@ -74,23 +79,35 @@ jobs:
             exit 1
           fi
 
+      - name: Validate submission request
+        run: |
+          if [[ ! "$EAS_BUILD_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+            echo "::error::build_id must be an exact EAS build UUID."
+            exit 1
+          fi
+
       - name: Install dependencies
         run: |
           npm ci --no-audit --no-fund
           npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
           echo "$PWD/tools/eas-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
+      - name: Verify exact EAS build provenance
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas build:view "$EAS_BUILD_ID" --json > "$RUNNER_TEMP/eas-build.json"
+          node scripts/verify-eas-submit-build.mjs \
+            --metadata "$RUNNER_TEMP/eas-build.json" \
+            --id "$EAS_BUILD_ID" \
+            --profile "$EAS_PROFILE" \
+            --platform "$EAS_PLATFORM" \
+            --source-sha "$GITHUB_SHA"
+
       - name: EAS Submit (exact build)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EAS_BUILD_ID: ${{ inputs.build_id }}
-          EAS_PROFILE: ${{ inputs.profile }}
-          EAS_PLATFORM: ${{ inputs.platform }}
         run: |
-          if [[ ! "$EAS_BUILD_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
-            echo "::error::build_id must be an exact EAS build UUID."
-            exit 1
-          fi
           eas submit \
             --non-interactive \
             --id "$EAS_BUILD_ID" \

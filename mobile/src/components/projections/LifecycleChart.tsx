@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
@@ -99,6 +99,10 @@ export function LifecycleChart({
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
   const [width, setWidth] = useState(0);
+  const onRenderReadyRef = useRef(onRenderReady);
+  useEffect(() => {
+    onRenderReadyRef.current = onRenderReady;
+  }, [onRenderReady]);
   const dates = useMemo(
     () => Array.from(new Set([
       ...history.map((item) => item.date),
@@ -180,9 +184,9 @@ export function LifecycleChart({
   ].join(', ');
   useEffect(() => {
     if (width > 0 && dates.length > 0) {
-      onRenderReady?.({ accessibleSummary: accessibilitySummary.trim().length > 0 });
+      onRenderReadyRef.current?.({ accessibleSummary: accessibilitySummary.trim().length > 0 });
     }
-  }, [accessibilitySummary, dates.length, onRenderReady, width]);
+  }, [accessibilitySummary, dates.length, width]);
 
   return (
     <View style={{ gap: 10 }}>

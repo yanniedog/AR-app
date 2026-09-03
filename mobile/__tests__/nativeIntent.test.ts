@@ -16,6 +16,11 @@ describe('native intent boundary', () => {
     expect(sanitizeNativeIntentPath('/search\u0000?query=rate')).toBe('/');
   });
 
+  it('keeps internal diagnostic surfaces out of external deep links', () => {
+    expect(sanitizeNativeIntentPath('arrates://debug-log')).toBe('/');
+    expect(sanitizeNativeIntentPath('arrates://performance-audit')).toBe('/');
+  });
+
   it('caps work before decoding attacker-controlled input', () => {
     expect(sanitizeNativeIntentPath(`/search?query=${'a'.repeat(2_100)}`)).toBe('/');
   });

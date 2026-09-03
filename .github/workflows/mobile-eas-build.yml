@@ -40,6 +40,7 @@ on:
           - all
 
 permissions:
+  checks: read
   contents: write
   pull-requests: read
 
@@ -159,7 +160,9 @@ jobs:
           NODE_ENV: ${{ inputs.profile == 'development' && 'development' || 'production' }}
         run: |
           set +e
-          EAS_NO_VCS=1 eas build \
+          # Keep Git metadata enabled: mobile-eas-submit requires the EAS build
+          # record to attest this exact protected-main commit.
+          eas build \
             --non-interactive \
             --profile "${{ inputs.profile }}" \
             --platform "${{ inputs.platform }}" 2>&1 | tee /tmp/eas-build.log

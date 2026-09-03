@@ -80,9 +80,16 @@ test('EAS release jobs can verify the merged pull request for their main commit'
     new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
     'utf8',
   );
+  const apkWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
 
   assert.match(buildWorkflow, /pull-requests:\s+read/);
   assert.match(submitWorkflow, /pull-requests:\s+read/);
+  for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
+    assert.match(workflow, /checks:\s+read/);
+  }
 });
 
 test('EAS submission validates an environment-delivered build UUID', async () => {
@@ -93,6 +100,26 @@ test('EAS submission validates an environment-delivered build UUID', async () =>
 
   assert.match(submitWorkflow, /EAS_BUILD_ID:\s+\$\{\{ inputs\.build_id \}\}/);
   assert.match(submitWorkflow, /build_id must be an exact EAS build UUID/);
+  assert.match(submitWorkflow, /eas build:view "\$EAS_BUILD_ID" --json/);
+  assert.match(submitWorkflow, /verify-eas-submit-build\.mjs/);
   assert.match(submitWorkflow, /--id "\$EAS_BUILD_ID"/);
   assert.doesNotMatch(submitWorkflow, /--id "\$\{\{ inputs\.build_id \}\}"/);
+
+  const buildWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(buildWorkflow, /EAS_NO_VCS/);
+});
+
+test('critical dependency additions fail inside the required mobile-ci job', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/app-ci.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(workflow, /^  dependency-review:/m);
+  assert.match(workflow, /^  mobile:\n[\s\S]*actions\/dependency-review-action@/m);
+  assert.match(workflow, /Dependency review \(required mobile-ci gate\)/);
+  assert.match(workflow, /fail-on-severity: critical/);
 });
