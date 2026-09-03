@@ -110,16 +110,25 @@ test('waitForQueueDrain skips without refreshing when multiple PRs remain', asyn
   assert.equal(syncCount, 0);
 });
 
-test('hasApkBuildInFlight matches only the exact versioned main head', () => {
+test('hasApkBuildInFlight matches the exact head and every required channel', () => {
   const runs = [
-    { headSha: 'older', status: 'in_progress' },
-    { headSha: 'target', status: 'completed' },
+    { headSha: 'older', status: 'in_progress', displayTitle: 'mobile-android-apk (universal+arm)' },
+    { headSha: 'target', status: 'completed', displayTitle: 'mobile-android-apk (universal+arm)' },
   ];
   assert.equal(hasApkBuildInFlight(runs, 'target'), false);
   assert.equal(
-    hasApkBuildInFlight([...runs, { headSha: 'target', status: 'queued' }], 'target'),
+    hasApkBuildInFlight([
+      ...runs,
+      { headSha: 'target', status: 'queued', displayTitle: 'mobile-android-apk (universal+arm)' },
+    ], 'target'),
     true,
   );
+  const armOnly = [
+    { headSha: 'target', status: 'in_progress', displayTitle: 'mobile-android-apk (arm)' },
+  ];
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['arm']), true);
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['universal']), false);
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['universal', 'arm']), false);
 });
 
 test('ensureApkForMainHead dispatches when the version has no published APK', () => {
@@ -129,14 +138,14 @@ test('ensureApkForMainHead dispatches when the version has no published APK', ()
     readVersion: () => '1.0.40',
     readHeadSha: () => 'abc1234',
     readPublishedChannels: () => ({ arm: false, universal: false }),
-    buildInFlight: (headSha) => {
-      checkedHeads.push(headSha);
+    buildInFlight: (headSha, channels) => {
+      checkedHeads.push([headSha, channels]);
       return false;
     },
     dispatch: (v, channels) => dispatched.push([v, channels]),
   });
   assert.equal(did, true);
-  assert.deepEqual(checkedHeads, ['abc1234']);
+  assert.deepEqual(checkedHeads, [['abc1234', ['universal', 'arm']]]);
   assert.deepEqual(dispatched, [['1.0.40', ['universal', 'arm']]]);
 });
 
@@ -197,8 +206,8 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
     readVersion: () => '1.0.41',
     readHeadSha: () => 'def5678',
     readPublishedChannels: () => ({ arm: false, universal: false }),
-    buildInFlight: (headSha) => {
-      checkedHeads.push(headSha);
+    buildInFlight: (headSha, channels) => {
+      checkedHeads.push([headSha, channels]);
       return true;
     },
     dispatch: () => {
@@ -206,7 +215,7 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
     },
   });
   assert.equal(did, false);
-  assert.deepEqual(checkedHeads, ['def5678']);
+  assert.deepEqual(checkedHeads, [['def5678', ['universal', 'arm']]]);
   assert.equal(dispatchedCount, 0);
 });
 

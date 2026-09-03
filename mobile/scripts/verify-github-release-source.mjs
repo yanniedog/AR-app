@@ -4,6 +4,38 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const REQUIRED_PR_CHECKS = ['mobile-ci', 'bot-feedback-gate'];
 
+function checkRunRecency(run) {
+  const timestamp = Date.parse(
+    run?.started_at ?? run?.created_at ?? run?.completed_at ?? run?.updated_at ?? '',
+  );
+  const id = Number(run?.id ?? 0);
+  return {
+    timestamp: Number.isFinite(timestamp) ? timestamp : 0,
+    id: Number.isSafeInteger(id) ? id : 0,
+  };
+}
+
+export function latestCheckRunsByName(checkRuns) {
+  const latest = new Map();
+  for (const run of Array.isArray(checkRuns) ? checkRuns : []) {
+    if (!REQUIRED_PR_CHECKS.includes(run?.name)) continue;
+    const current = latest.get(run.name);
+    if (!current) {
+      latest.set(run.name, run);
+      continue;
+    }
+    const candidateRecency = checkRunRecency(run);
+    const currentRecency = checkRunRecency(current);
+    if (
+      candidateRecency.timestamp > currentRecency.timestamp ||
+      (candidateRecency.timestamp === currentRecency.timestamp && candidateRecency.id > currentRecency.id)
+    ) {
+      latest.set(run.name, run);
+    }
+  }
+  return latest;
+}
+
 export function validateReleaseSourceSnapshot({ mainSha, requestedSha, pulls, checkRuns }) {
   if (!/^[a-f0-9]{40}$/i.test(requestedSha ?? '') || mainSha !== requestedSha) {
     throw new Error('Release checkout is not the current main commit');
@@ -16,9 +48,11 @@ export function validateReleaseSourceSnapshot({ mainSha, requestedSha, pulls, ch
   if (!pull?.head?.sha) {
     throw new Error('Current main commit is not backed by a merged pull request');
   }
-  const missingChecks = REQUIRED_PR_CHECKS.filter((name) =>
-    !checkRuns.some((run) => run?.name === name && run?.conclusion === 'success'),
-  );
+  const latestChecks = latestCheckRunsByName(checkRuns);
+  const missingChecks = REQUIRED_PR_CHECKS.filter((name) => {
+    const latest = latestChecks.get(name);
+    return latest?.status !== 'completed' || latest?.conclusion !== 'success';
+  });
   return { pull, missingChecks };
 }
 
@@ -81,7 +115,7 @@ export async function verifyGithubReleaseSource({
     }
     const result = await readJson(
       repo,
-      `/commits/${preliminary.pull.head.sha}/check-runs?per_page=100`,
+      `/commits/${preliminary.pull.head.sha}/check-runs?per_page=100&filter=all`,
     );
     const validated = validateReleaseSourceSnapshot({
       mainSha: ref?.object?.sha,

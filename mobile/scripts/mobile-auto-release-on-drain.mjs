@@ -101,23 +101,37 @@ export function missingApkChannels(published) {
   ];
 }
 
-export function hasApkBuildInFlight(rows, expectedHeadSha) {
-  return (
-    Array.isArray(rows)
-    && rows.some(
-      (run) =>
-        run?.headSha === expectedHeadSha
-        && (run.status === 'queued' || run.status === 'in_progress'),
-    )
+function channelsCoveredByRun(run) {
+  const match = /^mobile-android-apk \((arm|universal)(\+arm)?\)$/.exec(
+    String(run?.displayTitle ?? ''),
   );
+  if (!match) return [];
+  if (match[1] === 'universal' && match[2] === '+arm') return ['universal', 'arm'];
+  return [match[1]];
+}
+
+export function hasApkBuildInFlight(
+  rows,
+  expectedHeadSha,
+  requiredChannels = ['universal', 'arm'],
+) {
+  if (!Array.isArray(rows)) return false;
+  const covered = new Set(
+    rows
+      .filter((run) =>
+        run?.headSha === expectedHeadSha
+        && (run.status === 'queued' || run.status === 'in_progress'))
+      .flatMap(channelsCoveredByRun),
+  );
+  return requiredChannels.length > 0 && requiredChannels.every((channel) => covered.has(channel));
 }
 
 // A mobile-android-apk run is already queued/in-progress for the exact main head
 // we need to ship. An older build must not suppress the new version's build.
-function apkBuildInFlight(expectedHeadSha) {
+function apkBuildInFlight(expectedHeadSha, requiredChannels) {
   const out = ghTry([
     'run', 'list', '--workflow', 'mobile-android-apk.yml',
-    '--json', 'status,headSha', '-L', '20', '--repo', repo,
+    '--json', 'status,headSha,displayTitle', '-L', '20', '--repo', repo,
   ]).stdout;
   let rows = [];
   try {
@@ -125,7 +139,7 @@ function apkBuildInFlight(expectedHeadSha) {
   } catch {
     return false;
   }
-  return hasApkBuildInFlight(rows, expectedHeadSha);
+  return hasApkBuildInFlight(rows, expectedHeadSha, requiredChannels);
 }
 
 // mobile-android-apk is intentionally dispatch-only: building the pre-bump main
@@ -183,9 +197,9 @@ export function ensureApkForMainHead({
     );
     return false;
   }
-  if (buildInFlight(headSha)) {
+  if (buildInFlight(headSha, missingChannels)) {
     console.log(
-      `mobile-auto-release-on-drain: mobile-android-apk already queued/in-progress for ${headSha.slice(0, 7)} — no APK dispatch`,
+      `mobile-auto-release-on-drain: mobile-android-apk already covers ${missingChannels.join(' + ')} for ${headSha.slice(0, 7)} — no APK dispatch`,
     );
     return false;
   }

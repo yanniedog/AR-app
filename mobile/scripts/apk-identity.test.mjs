@@ -13,6 +13,7 @@ import {
 import {
   fetchRemoteManifest,
   releaseFloorTags,
+  validateReusedReleaseIdentity,
 } from './bump-android-version-code.mjs';
 
 test('parses the package and version identity reported by aapt', () => {
@@ -78,6 +79,27 @@ test('bounds each release-floor manifest request independently', async () => {
     releaseFloorTags('app-apk-latest'),
     ['app-apk-latest', 'app-apk-arm-latest'],
   );
+});
+
+test('reuses one monotonic release identity across paired APK channels', () => {
+  assert.deepEqual(validateReusedReleaseIdentity({
+    version: '1.0.181',
+    versionCode: '193',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), { version: '1.0.181', versionCode: 193 });
+  assert.throws(() => validateReusedReleaseIdentity({
+    version: '1.0.181',
+    versionCode: '',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), /provided together/);
+  assert.throws(() => validateReusedReleaseIdentity({
+    version: '1.0.180',
+    versionCode: '193',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), /advance beyond/);
 });
 
 test('rejects a missing rolling tag before generating changelog metadata', () => {

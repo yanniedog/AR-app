@@ -15,7 +15,7 @@
 # Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
 
 name: mobile-android-apk
-run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }})
+run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
 # Queue-drain automation dispatches this only after the final patch-version PR
 # merges. Building on every preceding main push produced duplicate/stale APKs.
@@ -40,6 +40,16 @@ on:
         required: false
         default: false
         type: boolean
+      release_version:
+        description: Exact version allocated by a preceding universal build
+        required: false
+        default: ''
+        type: string
+      release_version_code:
+        description: Exact versionCode allocated by a preceding universal build
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: write
@@ -107,17 +117,27 @@ jobs:
           node scripts/validate-firebase-package.mjs
 
       - name: Advance APK version iteration from rolling manifest
+        id: release
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REUSED_RELEASE_VERSION: ${{ inputs.release_version }}
+          REUSED_RELEASE_VERSION_CODE: ${{ inputs.release_version_code }}
         run: |
           rolling_tag="app-apk-arm-latest"
           if [ "$APK_CHANNEL" = "universal" ]; then
             rolling_tag="app-apk-latest"
           fi
+          reuse_args=()
+          if [ -n "$REUSED_RELEASE_VERSION" ] || [ -n "$REUSED_RELEASE_VERSION_CODE" ]; then
+            reuse_args+=(--release-version "$REUSED_RELEASE_VERSION")
+            reuse_args+=(--release-version-code "$REUSED_RELEASE_VERSION_CODE")
+          fi
           node scripts/bump-android-version-code.mjs \
             --repo "${{ github.repository }}" \
             --fallback-repo yanniedog/AR-local \
-            --rolling-tag "$rolling_tag"
+            --rolling-tag "$rolling_tag" \
+            "${reuse_args[@]}"
+          node -e "const app=require('./app.json').expo; console.log('version='+app.version); console.log('version_code='+app.android.versionCode)" >> "$GITHUB_OUTPUT"
 
       - name: Materialize Android release keystore
         id: keystore
@@ -220,7 +240,9 @@ jobs:
             --repo "${{ github.repository }}" \
             -f apk_channel=arm \
             -f bridge_legacy_ar_local=false \
-            -f follow_with_arm=false
+            -f follow_with_arm=false \
+            -f release_version="${{ steps.release.outputs.version }}" \
+            -f release_version_code="${{ steps.release.outputs.version_code }}"
 
       - name: Publish README Android install QR section
         if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'

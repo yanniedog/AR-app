@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  latestCheckRunsByName,
   validateReleaseSourceSnapshot,
   verifyGithubReleaseSource,
 } from './verify-github-release-source.mjs';
@@ -23,8 +24,8 @@ test('accepts only current main from a merged PR with both required PR gates', (
     requestedSha: sha,
     pulls: [pull],
     checkRuns: [
-      { name: 'mobile-ci', conclusion: 'success' },
-      { name: 'bot-feedback-gate', conclusion: 'success' },
+      { name: 'mobile-ci', status: 'completed', conclusion: 'success' },
+      { name: 'bot-feedback-gate', status: 'completed', conclusion: 'success' },
     ],
   });
   assert.equal(result.pull.number, 42);
@@ -42,7 +43,7 @@ test('rejects a selected branch and reports incomplete PR gates', () => {
     mainSha: sha,
     requestedSha: sha,
     pulls: [pull],
-    checkRuns: [{ name: 'mobile-ci', conclusion: 'success' }],
+    checkRuns: [{ name: 'mobile-ci', status: 'completed', conclusion: 'success' }],
   });
   assert.deepEqual(result.missingChecks, ['bot-feedback-gate']);
 });
@@ -61,11 +62,11 @@ test('retries transient commit-to-PR association lag before reading checks', asy
         pullReads += 1;
         return pullReads === 1 ? [] : [pull];
       }
-      if (path === `/commits/${headSha}/check-runs?per_page=100`) {
+      if (path === `/commits/${headSha}/check-runs?per_page=100&filter=all`) {
         return {
           check_runs: [
-            { name: 'mobile-ci', conclusion: 'success' },
-            { name: 'bot-feedback-gate', conclusion: 'success' },
+            { name: 'mobile-ci', status: 'completed', conclusion: 'success' },
+            { name: 'bot-feedback-gate', status: 'completed', conclusion: 'success' },
           ],
         };
       }
@@ -77,6 +78,44 @@ test('retries transient commit-to-PR association lag before reading checks', asy
   assert.equal(pullReads, 2);
   assert.equal(sleeps, 1);
 });
+
+test('uses only the latest run for each required check name', () => {
+  const runs = [
+    {
+      id: 10,
+      name: 'mobile-ci',
+      status: 'completed',
+      conclusion: 'success',
+      started_at: '2026-09-03T00:00:00Z',
+    },
+    {
+      id: 11,
+      name: 'mobile-ci',
+      status: 'in_progress',
+      conclusion: null,
+      started_at: '2026-09-03T00:01:00Z',
+    },
+    {
+      id: 12,
+      name: 'bot-feedback-gate',
+      status: 'completed',
+      conclusion: 'success',
+      started_at: '2026-09-03T00:01:00Z',
+    },
+  ];
+  expectLatest(runs, 'mobile-ci', 11);
+  const result = validateReleaseSourceSnapshot({
+    mainSha: sha,
+    requestedSha: sha,
+    pulls: [pull],
+    checkRuns: runs,
+  });
+  assert.deepEqual(result.missingChecks, ['mobile-ci']);
+});
+
+function expectLatest(runs, name, id) {
+  assert.equal(latestCheckRunsByName(runs).get(name)?.id, id);
+}
 
 test('fails immediately when main advances instead of retrying stale source', async () => {
   let reads = 0;

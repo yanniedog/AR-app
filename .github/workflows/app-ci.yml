@@ -35,6 +35,7 @@ jobs:
           persist-credentials: false
       - name: Dependency review (required mobile-ci gate)
         if: github.event_name == 'pull_request'
+        id: dependency-review
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           # Fail closed for high-severity app additions. These exact advisories
@@ -49,6 +50,11 @@ jobs:
             GHSA-2v37-7h3g-55p8,
             GHSA-xwg4-73v4-xw9w,
             GHSA-r292-9mhp-454m
+      - name: Guard build-only EAS advisory scope
+        if: github.event_name == 'pull_request'
+        env:
+          DEPENDENCY_CHANGES: ${{ steps.dependency-review.outputs.dependency-changes }}
+        run: node scripts/verify-dependency-review-scope.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24

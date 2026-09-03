@@ -20,6 +20,7 @@ import {
 
 const require = createRequire(import.meta.url);
 const {
+  compareVersions,
   mergeReleaseFloors,
   nextApkBuildVersion,
   nextVersionCode,
@@ -53,10 +54,35 @@ if (githubEnvArgIdx >= 0 && (!githubEnvPath || githubEnvPath.startsWith('--'))) 
   throw new Error('Missing value for --github-env');
 }
 
+const releaseVersionArgIdx = process.argv.indexOf('--release-version');
+const releaseVersionCodeArgIdx = process.argv.indexOf('--release-version-code');
+const reusedReleaseVersion = releaseVersionArgIdx >= 0 ? process.argv[releaseVersionArgIdx + 1] : null;
+const reusedReleaseVersionCode = releaseVersionCodeArgIdx >= 0
+  ? process.argv[releaseVersionCodeArgIdx + 1]
+  : null;
+
 const appJsonPath = join(mobileDir, 'app.json');
 const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
 const currentVersion = String(appJson.expo?.version ?? '1.0.0');
 const currentCode = Number(appJson.expo?.android?.versionCode ?? 1) || 1;
+
+export function validateReusedReleaseIdentity({ version, versionCode, baseVersion, baseVersionCode }) {
+  const suppliedVersion = String(version ?? '').trim();
+  const suppliedCode = String(versionCode ?? '').trim();
+  if (!suppliedVersion && !suppliedCode) return null;
+  if (!suppliedVersion || !suppliedCode) {
+    throw new Error('--release-version and --release-version-code must be provided together');
+  }
+  compareVersions(suppliedVersion, suppliedVersion);
+  const numericCode = Number(suppliedCode);
+  if (!Number.isSafeInteger(numericCode) || numericCode <= 0) {
+    throw new Error('--release-version-code must be a positive integer');
+  }
+  if (compareVersions(suppliedVersion, baseVersion) <= 0 || numericCode <= baseVersionCode) {
+    throw new Error('Reused release identity must advance beyond the checked-in app identity');
+  }
+  return { version: suppliedVersion, versionCode: numericCode };
+}
 
 export async function fetchRemoteManifest(
   targetRepo = repo,
@@ -108,17 +134,30 @@ export function releaseFloorTags(selectedTag) {
 }
 
 async function main() {
-  const [primaryTag, otherTag] = releaseFloorTags(rollingTag);
-  const primaryRemote = await fetchRemoteManifest(repo, primaryTag);
-  const otherChannelFloor = await fetchRemoteManifest(repo, otherTag);
-  const fallbackRemote =
-    primaryRemote == null && otherChannelFloor == null && fallbackRepo
-      ? await fetchRemoteManifest(fallbackRepo, ROLLING_TAG)
-      : null;
-  const remote = mergeReleaseFloors([primaryRemote, otherChannelFloor, fallbackRemote]);
-  const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
-  const nextVersion = nextApkBuildVersion(currentVersion, remote?.version);
-  const nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
+  const reused = validateReusedReleaseIdentity({
+    version: reusedReleaseVersion,
+    versionCode: reusedReleaseVersionCode,
+    baseVersion: currentVersion,
+    baseVersionCode: currentCode,
+  });
+  let nextVersion;
+  let nextCode;
+  if (reused) {
+    nextVersion = reused.version;
+    nextCode = reused.versionCode;
+  } else {
+    const [primaryTag, otherTag] = releaseFloorTags(rollingTag);
+    const primaryRemote = await fetchRemoteManifest(repo, primaryTag);
+    const otherChannelFloor = await fetchRemoteManifest(repo, otherTag);
+    const fallbackRemote =
+      primaryRemote == null && otherChannelFloor == null && fallbackRepo
+        ? await fetchRemoteManifest(fallbackRepo, ROLLING_TAG)
+        : null;
+    const remote = mergeReleaseFloors([primaryRemote, otherChannelFloor, fallbackRemote]);
+    const runFloor = Number(process.env.GITHUB_RUN_NUMBER ?? 0) || 0;
+    nextVersion = nextApkBuildVersion(currentVersion, remote?.version);
+    nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
+  }
 
   if (githubEnvPath) {
     appendFileSync(
