@@ -30,11 +30,6 @@ on:
         options:
           - arm
           - universal
-      bridge_legacy_ar_local:
-        description: Also publish the universal APK to the legacy AR-local release
-        required: false
-        default: false
-        type: boolean
       follow_with_arm:
         description: After universal publishes, queue the ARM channel before any README mutation
         required: false
@@ -217,19 +212,6 @@ jobs:
             --repo "${{ github.repository }}" \
             --rolling-tag "$rolling_tag"
 
-      - name: Bridge legacy AR-local APK update channel
-        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.bridge_legacy_ar_local == true
-        env:
-          GH_TOKEN: ${{ secrets.AR_LOCAL_RELEASE_TOKEN }}
-          GITHUB_SHA: ${{ github.sha }}
-        run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::AR_LOCAL_RELEASE_TOKEN is not set; skipping legacy AR-local APK bridge."
-            exit 0
-          fi
-          node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
-            --repo yanniedog/AR-local
-
       - name: Queue ARM channel after universal publish
         if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.follow_with_arm == true
         env:
@@ -239,7 +221,6 @@ jobs:
             --ref main \
             --repo "${{ github.repository }}" \
             -f apk_channel=arm \
-            -f bridge_legacy_ar_local=false \
             -f follow_with_arm=false \
             -f release_version="${{ steps.release.outputs.version }}" \
             -f release_version_code="${{ steps.release.outputs.version_code }}"

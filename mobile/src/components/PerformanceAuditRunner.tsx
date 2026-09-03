@@ -23,7 +23,12 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
-import { getApkDownloadSnapshot } from '../lib/appUpdate';
+import {
+  getApkDownloadSnapshot,
+  getHydratedApkDownloadSnapshot,
+  type ApkDownloadSnapshot,
+} from '../lib/appUpdate';
+import { blocksPerformanceAudit } from '../lib/appUpdateDownloadLogic';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   type AppHealthAuditMode,
@@ -1842,9 +1847,9 @@ async function runUpdateReadinessCheck(
   app: AuditAppIdentity,
   _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
+  download: ApkDownloadSnapshot,
 ): Promise<AuditCheck> {
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
-  const download = getApkDownloadSnapshot();
   assertSessionActive(watchdog);
   return {
     id: 'update-readiness',
@@ -2425,6 +2430,7 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
+      let auditApkDownloadSnapshot = getApkDownloadSnapshot();
       const transportGuard = installAppHealthTransportGuard({
         target: globalThis as unknown as AuditTransportTarget,
         mode: auditMode,
@@ -2468,9 +2474,20 @@ export function PerformanceAuditRunner() {
         markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
       };
 
-      markPerformanceAuditRunning(total);
-
       try {
+        if (Platform.OS === 'android') {
+          auditApkDownloadSnapshot = await awaitAuditWork(
+            getHydratedApkDownloadSnapshot(),
+            watchdog,
+            'APK download state hydration',
+          );
+          if (blocksPerformanceAudit(auditApkDownloadSnapshot)) {
+            throw new Error(
+              `An app update is ${auditApkDownloadSnapshot.phase}. Wait for it to finish or cancel it, then run the app health audit again.`,
+            );
+          }
+        }
+        markPerformanceAuditRunning(total);
         // Setup belongs inside the protected region so an unexpected native
         // keep-awake or monitor failure cannot leave the global running flag
         // latched forever.
@@ -2804,7 +2821,12 @@ export function PerformanceAuditRunner() {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
             'Inspecting Android update readiness',
-            () => runUpdateReadinessCheck(app, monitor, watchdog),
+            () => runUpdateReadinessCheck(
+              app,
+              monitor,
+              watchdog,
+              auditApkDownloadSnapshot,
+            ),
           );
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);

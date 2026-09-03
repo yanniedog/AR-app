@@ -53,7 +53,9 @@ jobs:
       - name: Guard build-only EAS advisory scope
         if: github.event_name == 'pull_request'
         env:
-          DEPENDENCY_CHANGES: ${{ steps.dependency-review.outputs.dependency-changes }}
+          GITHUB_TOKEN: ${{ github.token }}
+          DEPENDENCY_REVIEW_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEPENDENCY_REVIEW_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/verify-dependency-review-scope.mjs
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:

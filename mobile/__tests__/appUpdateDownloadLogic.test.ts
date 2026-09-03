@@ -52,6 +52,7 @@ describe('appUpdateDownloadLogic', () => {
       ...IDLE_APK_DOWNLOAD,
       phase: 'ready' as const,
       buildNumber: '42',
+      version: '1.2.3',
       localUri: 'file:///docs/app-update-42.apk',
     };
     expect(isCachedApkReady(snap, '42', true)).toBe(true);
@@ -122,6 +123,7 @@ describe('appUpdateDownloadLogic', () => {
       ...IDLE_APK_DOWNLOAD,
       phase: 'ready' as const,
       buildNumber: '42',
+      version: '1.2.3',
       sha256,
       localUri: 'file:///docs/app-update-42.apk',
       verifiedSha256: sha256,
@@ -129,11 +131,20 @@ describe('appUpdateDownloadLogic', () => {
       verifiedAt: '2026-08-07T00:00:00.000Z',
       verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
     };
-    const manifest = { build_number: '42', sha256, bytes: 1234 };
+    const manifest = { build_number: '42', version: '1.2.3', sha256, bytes: 1234 };
 
     expect(
       hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1234, 'file:///docs/'),
     ).toBe(true);
+    expect(
+      hasTrustedReadyApkReceipt(
+        { ...ready, version: '1.2.2' },
+        manifest,
+        ready.localUri,
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
     expect(
       hasTrustedReadyApkReceipt(
         { ...ready, verifiedReceiptVersion: null },

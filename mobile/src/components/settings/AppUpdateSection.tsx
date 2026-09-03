@@ -62,6 +62,10 @@ export function AppUpdateSection({
     setChangelogs([]);
     try {
       const result = await checkForAppUpdate({ force });
+      const currentAudit = getPerformanceAuditState();
+      if (currentAudit.status === 'queued' || currentAudit.status === 'running') {
+        return;
+      }
       setCheckResult(result);
       if (
         result.status === 'available' ||

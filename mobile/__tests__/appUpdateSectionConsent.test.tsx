@@ -149,4 +149,28 @@ describe('AppUpdateSection consent and manual refresh', () => {
     expect(tree.root.findByProps({ title: 'Check for update' }).props.disabled).toBe(true);
     act(() => tree.unmount());
   });
+
+  it('does not start an automatic download when an audit begins during the update check', async () => {
+    mockPrefs.apkUpdatesAutoDownload = true;
+    let resolveCheck!: (value: typeof availableResult) => void;
+    jest.mocked(checkForAppUpdate).mockReturnValue(new Promise((resolve) => {
+      resolveCheck = resolve;
+    }));
+    let tree!: InspectableRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<AppUpdateSection />) as InspectableRenderer;
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      requestPerformanceAudit({ mode: 'live-source' });
+      resolveCheck(availableResult);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
+    expect(tree.root.findByProps({ title: 'Check for update' }).props.disabled).toBe(true);
+    act(() => tree.unmount());
+  });
 });

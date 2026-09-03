@@ -166,7 +166,10 @@ test('high-severity dependency additions and native verifier compilation gate PR
   assert.match(workflow, /id: dependency-review/);
   assert.match(workflow, /Guard build-only EAS advisory scope/);
   assert.match(workflow, /verify-dependency-review-scope\.mjs/);
-  assert.match(workflow, /DEPENDENCY_CHANGES: \$\{\{ steps\.dependency-review\.outputs\.dependency-changes \}\}/);
+  assert.doesNotMatch(workflow, /DEPENDENCY_CHANGES:/);
+  assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.match(workflow, /DEPENDENCY_REVIEW_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(workflow, /DEPENDENCY_REVIEW_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   for (const ghsa of EAS_TOOLCHAIN_ALLOWED_GHSAS) {
     assert.match(workflow, new RegExp(ghsa));
   }

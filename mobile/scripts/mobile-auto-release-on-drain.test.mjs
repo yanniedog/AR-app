@@ -167,7 +167,6 @@ test('APK release dispatches universal first and lets that run queue ARM', () =>
   assert.deepEqual(calls, [[
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
     '-f', 'apk_channel=universal',
-    '-f', 'bridge_legacy_ar_local=false',
     '-f', 'follow_with_arm=true',
   ]]);
 });
@@ -184,7 +183,6 @@ test('partial APK recovery dispatches only the missing published channel', () =>
   assert.deepEqual(calls, [[
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
     '-f', 'apk_channel=arm',
-    '-f', 'bridge_legacy_ar_local=false',
     '-f', 'follow_with_arm=false',
   ]]);
 });

@@ -77,7 +77,12 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
     const checkAndDownload = () =>
       checkForAppUpdate()
         .then((r) => {
-          if (cancelled) return;
+          const currentAudit = getPerformanceAuditState();
+          if (
+            cancelled ||
+            currentAudit.status === 'queued' ||
+            currentAudit.status === 'running'
+          ) return;
           setResult(r);
           availableManifest = r.status === 'available' ? r.remote : null;
           if (autoDownload && r.status === 'available') {

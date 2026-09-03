@@ -106,7 +106,7 @@ export function isCachedApkReady(
  */
 export function hasTrustedReadyApkReceipt(
   snapshot: ApkDownloadSnapshot,
-  manifest: { build_number: string; bytes?: number; sha256?: string },
+  manifest: { build_number: string; version: string; bytes?: number; sha256?: string },
   localUri: string,
   currentBytes: number,
   privateDirectory: string | null | undefined,
@@ -118,6 +118,7 @@ export function hasTrustedReadyApkReceipt(
   return (
     snapshot.phase === 'ready' &&
     isApkDownloadForBuild(snapshot, manifest.build_number) &&
+    snapshot.version === manifest.version &&
     snapshot.localUri === localUri &&
     Boolean(expectedSha) &&
     snapshot.sha256?.toLowerCase() === expectedSha &&

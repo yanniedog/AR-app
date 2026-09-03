@@ -37,6 +37,7 @@ import {
   type ApkManifest,
 } from './appUpdateLogic';
 import { installDownloadedApk, verifyDownloadedApk } from './appUpdateInstall';
+import { isPerformanceAuditActive } from './performanceAudit';
 
 const STORAGE_KEY = 'app-update-download-v1';
 const EXPLICIT_WAIT_STALL_MS = 3 * 60 * 1000;
@@ -56,6 +57,14 @@ let pendingPromptManifest: ApkManifest | null = null;
 let promptedBuildThisSession: string | null = null;
 const explicitUpgradeWaiters = new Map<string, number>();
 const listeners = new Set<(s: ApkDownloadSnapshot) => void>();
+
+function assertUpdateDownloadAllowed(): void {
+  if (isPerformanceAuditActive()) {
+    throw new Error(
+      'App update download was not started because the app health audit owns network activity. Try again after the audit finishes.',
+    );
+  }
+}
 
 function hookAppStatePrompt(): void {
   if (appStateHooked || Platform.OS !== 'android') return;
@@ -330,6 +339,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     debugLog.warn('app-update', `getExistingDownloadTasks failed: ${String((err as Error)?.message ?? err)}`);
     return false;
   }
+  assertUpdateDownloadAllowed();
 
   const match = existing.find((t) => t.id === taskId);
   for (const task of existing) {
@@ -357,6 +367,21 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
+        assertUpdateDownloadAllowed();
+        await persist({
+          ...snapshot,
+          phase: 'verifying',
+          buildNumber: manifest.build_number,
+          version: manifest.version,
+          downloadUrl: manifest.download_url,
+          sha256: manifest.sha256 ?? null,
+          localUri,
+          bytesWritten: match.bytesDownloaded,
+          totalBytes: match.bytesTotal || manifest.bytes || null,
+          wifiOnly: taskWifiOnly,
+          nativeState: state,
+          error: null,
+        });
         const verification = await verifyDownloadedApk(localUri, manifest);
         await persist({
           phase: 'ready',
@@ -461,6 +486,10 @@ async function startNewDownload(
     // ignore
   }
 
+  // The audit can be requested while stale-file cleanup is awaiting native I/O.
+  // Recheck at the last boundary before creating any native transfer.
+  assertUpdateDownloadAllowed();
+
   const downloadUrl = preferImmutableApkDownloadUrl(manifest);
   if (downloadUrl !== manifest.download_url) {
     debugLog.info(
@@ -482,7 +511,7 @@ async function startNewDownload(
   });
   activeDownloadWifiOnly = wifiOnly;
   attachHandlers(task, manifest);
-  await persist({
+  const persistStarted = persist({
     phase: 'downloading',
     buildNumber: manifest.build_number,
     version: manifest.version,
@@ -502,7 +531,11 @@ async function startNewDownload(
     verifiedAt: null,
     verifiedReceiptVersion: null,
   });
+  // persist() publishes the blocking phase synchronously before its first
+  // await. Starting in the same turn means an audit sees downloading and
+  // refuses to measure, rather than racing an unreported native transfer.
   task.start();
+  await persistStarted;
   debugLog.info(
     'app-update',
     `background download started build=${manifest.build_number} wifiOnly=${wifiOnly}`,
@@ -518,9 +551,13 @@ export async function ensureApkBackgroundDownload(
   options?: { wifiOnly?: boolean; force?: boolean },
 ): Promise<ApkDownloadSnapshot> {
   if (Platform.OS !== 'android') return getApkDownloadSnapshot();
+  assertUpdateDownloadAllowed();
   assertTrustedApkManifest(manifest);
   assertApkCompatibleWithDevice(manifest, Device.supportedCpuArchitectures);
   await hydrate();
+  // Hydration yields to the event loop, so audit ownership must be checked
+  // again before any cached-file, native-task, or network work begins.
+  assertUpdateDownloadAllowed();
 
   const wifiOnly = Boolean(options?.wifiOnly);
   let force = Boolean(options?.force);
@@ -572,6 +609,18 @@ export async function ensureApkBackgroundDownload(
     if (await fileExists(dest)) {
       try {
         const localUri = toFileUri(dest);
+        assertUpdateDownloadAllowed();
+        await persist({
+          ...snapshot,
+          phase: 'verifying',
+          buildNumber: manifest.build_number,
+          version: manifest.version,
+          downloadUrl: manifest.download_url,
+          sha256: manifest.sha256 ?? null,
+          localUri,
+          totalBytes: snapshot.totalBytes ?? manifest.bytes ?? null,
+          error: null,
+        });
         const verification = await verifyDownloadedApk(localUri, manifest);
         await persist({
           ...snapshot,
@@ -683,12 +732,14 @@ export async function ensureApkBackgroundDownload(
   ensureKey = manifestKey;
   ensureInFlight = (async () => {
     try {
+      assertUpdateDownloadAllowed();
       if (force) {
         await stopMatchingTask(manifest);
       } else {
         const reattached = await reattachExisting(manifest);
         if (reattached) return;
       }
+      assertUpdateDownloadAllowed();
       await startNewDownload(
         manifest,
         wifiOnly,
@@ -729,6 +780,34 @@ export function getApkDownloadSnapshot(): ApkDownloadSnapshot {
 /** Hydrate persisted state before an audit decides whether update work is terminal. */
 export async function getHydratedApkDownloadSnapshot(): Promise<ApkDownloadSnapshot> {
   await hydrate();
+  if (Platform.OS === 'android') {
+    try {
+      const existing = await getExistingDownloadTasks();
+      const active = existing.find((task) => {
+        if (!task.id.startsWith('apk-update-')) return false;
+        const state = String(task.state || '').toUpperCase();
+        return !['DONE', 'FAILED', 'STOPPED', 'ERROR', 'CANCELLED'].includes(state);
+      });
+      if (active) {
+        const state = String(active.state || '').toUpperCase();
+        emit({
+          ...snapshot,
+          phase: state === 'PAUSED' ? 'waiting' : 'downloading',
+          bytesWritten: active.bytesDownloaded,
+          totalBytes: active.bytesTotal || snapshot.totalBytes,
+          lastProgressAt:
+            active.bytesDownloaded > snapshot.bytesWritten
+              ? new Date().toISOString()
+              : snapshot.lastProgressAt,
+          nativeState: state || 'UNKNOWN',
+        });
+      }
+    } catch (error) {
+      const message = `Unable to verify native app-update activity: ${String(error)}`;
+      debugLog.warn('app-update', message);
+      throw new Error(message);
+    }
+  }
   return snapshot;
 }
 

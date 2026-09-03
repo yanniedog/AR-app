@@ -139,7 +139,7 @@ test('keeps universal trust while scoping preview APK builds to ARM', () => {
   assert.match(workflow, /-PreactNativeArchitectures=armeabi-v7a,arm64-v8a/);
   assert.match(workflow, /--rolling-tag "\$rolling_tag"/);
   assert.match(workflow, /inputs\.apk_channel == 'universal'/);
-  assert.match(workflow, /Bridge legacy AR-local APK update channel/);
+  assert.doesNotMatch(workflow, /bridge_legacy_ar_local|AR_LOCAL_RELEASE_TOKEN|--repo yanniedog\/AR-local/);
   assert.match(workflow, /Publish README Android install QR section/);
 
   const easWorkflow = readFileSync(

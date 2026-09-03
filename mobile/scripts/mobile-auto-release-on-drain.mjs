@@ -248,7 +248,6 @@ export function dispatchApkBuild(
   runGh([
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
     '-f', `apk_channel=${firstChannel}`,
-    '-f', 'bridge_legacy_ar_local=false',
     '-f', `follow_with_arm=${followWithArm}`,
   ]);
   console.log(

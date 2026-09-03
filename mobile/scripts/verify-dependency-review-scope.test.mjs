@@ -6,6 +6,7 @@ import test from 'node:test';
 import {
   EAS_TOOLCHAIN_ALLOWED_GHSAS,
   EAS_TOOLCHAIN_MANIFEST,
+  fetchDependencyChanges,
   outOfScopeEasAdvisories,
   verifyDependencyReviewScope,
 } from './verify-dependency-review-scope.mjs';
@@ -40,4 +41,56 @@ test('ignores removed dependencies and advisories that are not excepted', () => 
 
 test('fails closed when dependency review output is malformed', () => {
   assert.throws(() => verifyDependencyReviewScope(null), /must be an array/);
+});
+
+test('fetches large dependency comparisons through bounded API pages', async () => {
+  const firstPage = Array.from({ length: 100 }, () => change(EAS_TOOLCHAIN_MANIFEST));
+  const secondPage = [change(EAS_TOOLCHAIN_MANIFEST)];
+  const requested = [];
+  const changes = await fetchDependencyChanges({
+    repository: 'owner/repo',
+    baseSha: 'a'.repeat(40),
+    headSha: 'b'.repeat(40),
+    token: 'token',
+    fetchImpl: async (url, options) => {
+      requested.push({ url: String(url), options });
+      const page = new URL(url).searchParams.get('page');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => page === '1' ? firstPage : secondPage,
+        text: async () => '',
+      };
+    },
+  });
+  assert.equal(changes.length, 101);
+  assert.equal(requested.length, 2);
+  assert.match(requested[0].url, /per_page=100&page=1/);
+  assert.equal(requested[0].options.headers.Authorization, 'Bearer token');
+});
+
+test('fails closed on malformed API identity and responses', async () => {
+  await assert.rejects(
+    fetchDependencyChanges({
+      repository: 'not-a-repository',
+      baseSha: 'a'.repeat(40),
+      headSha: 'b'.repeat(40),
+      token: 'token',
+    }),
+    /owner\/name/,
+  );
+  await assert.rejects(
+    fetchDependencyChanges({
+      repository: 'owner/repo',
+      baseSha: 'a'.repeat(40),
+      headSha: 'b'.repeat(40),
+      token: 'token',
+      fetchImpl: async () => ({
+        ok: false,
+        status: 403,
+        text: async () => 'denied',
+      }),
+    }),
+    /HTTP 403: denied/,
+  );
 });

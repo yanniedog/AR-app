@@ -13,7 +13,10 @@ import {
   resolveApkRollingTag,
   versionTagForApkChannel,
 } from './app-release-meta.mjs';
-import { buildReadmeInstallSection } from './update-readme-app-install.mjs';
+import {
+  buildReadmeInstallSection,
+  resolveVersionAndBuild,
+} from './update-readme-app-install.mjs';
 import {
   pushBranchWithGhAuth,
   readmeApkQrBranchName,
@@ -62,6 +65,7 @@ test('buildReadmeInstallSection follows ARM metadata while preserving a universa
       version: '1.2.3',
       build_number: '77',
       tag: ARM_ROLLING_TAG,
+      version_tag: 'app-arm-v1.2.3',
     }));
     const section = buildReadmeInstallSection({ repo: 'owner/repo', manifestPath });
     assert.match(section, /app-apk-arm-latest\/app-preview-qr\.png\?v=77/);
@@ -71,6 +75,36 @@ test('buildReadmeInstallSection follows ARM metadata while preserving a universa
     assert.match(section, /app-apk-latest\/app-preview\.apk/);
     assert.match(section, /app-apk-latest\/install\.html/);
     assert.match(section, /x86 and x86_64 emulators or devices must use the universal fallback/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an explicit release manifest never falls back to app.json', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ar-readme-invalid-'));
+  try {
+    assert.throws(
+      () => resolveVersionAndBuild(join(dir, 'missing.json')),
+      /required and must be readable JSON/,
+    );
+    const malformed = join(dir, 'malformed.json');
+    writeFileSync(malformed, '{');
+    assert.throws(() => resolveVersionAndBuild(malformed), /readable JSON/);
+    const mismatched = join(dir, 'mismatched.json');
+    writeFileSync(mismatched, JSON.stringify({
+      version: '1.2.3',
+      build_number: '77',
+      tag: ARM_ROLLING_TAG,
+      version_tag: 'app-v1.2.3',
+    }));
+    assert.throws(() => resolveVersionAndBuild(mismatched), /version_tag must be app-arm-v1\.2\.3/);
+    const missingTag = join(dir, 'missing-tag.json');
+    writeFileSync(missingTag, JSON.stringify({
+      version: '1.2.3',
+      build_number: '77',
+      version_tag: 'app-v1.2.3',
+    }));
+    assert.throws(() => resolveVersionAndBuild(missingTag), /missing tag/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

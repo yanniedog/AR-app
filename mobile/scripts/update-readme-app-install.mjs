@@ -6,8 +6,8 @@
  *
  * Usage: node scripts/update-readme-app-install.mjs [--repo owner/name] [--readme path]
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   ARM_ROLLING_TAG,
@@ -18,6 +18,7 @@ import {
   readAppJsonBuildNumber,
   readAppJsonVersion,
   resolveApkRollingTag,
+  versionTagForApkChannel,
 } from './app-release-meta.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -48,14 +49,40 @@ export function resolveVersionAndBuild(manifestPath) {
   let buildNumber = readAppJsonBuildNumber(mobileRoot);
   let rollingTag = ROLLING_TAG;
   const resolvedManifest = manifestPath?.trim();
-  if (resolvedManifest && existsSync(resolvedManifest)) {
+  if (resolvedManifest) {
+    let manifest;
     try {
-      const manifest = JSON.parse(readFileSync(resolvedManifest, 'utf8'));
-      if (manifest.version) version = String(manifest.version);
-      if (manifest.build_number != null) buildNumber = String(manifest.build_number);
-      if (manifest.tag) rollingTag = resolveApkRollingTag(manifest.tag);
-    } catch (err) {
-      console.error(`Error reading or parsing manifest at ${resolvedManifest}:`, err);
+      manifest = JSON.parse(readFileSync(resolvedManifest, 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `Release manifest is required and must be readable JSON at ${resolvedManifest}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+      throw new Error(`Release manifest at ${resolvedManifest} must be a JSON object`);
+    }
+    version = String(manifest.version ?? '').trim();
+    buildNumber = String(manifest.build_number ?? '').trim();
+    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+      throw new Error(`Release manifest has an invalid version: ${version || '(missing)'}`);
+    }
+    if (
+      !/^\d+$/.test(buildNumber) ||
+      Number(buildNumber) < 1 ||
+      Number(buildNumber) > 2_100_000_000 ||
+      !Number.isSafeInteger(Number(buildNumber))
+    ) {
+      throw new Error(`Release manifest has an invalid build_number: ${buildNumber || '(missing)'}`);
+    }
+    if (typeof manifest.tag !== 'string' || !manifest.tag.trim()) {
+      throw new Error('Release manifest has a missing tag');
+    }
+    rollingTag = resolveApkRollingTag(manifest.tag);
+    const expectedVersionTag = versionTagForApkChannel(version, rollingTag);
+    if (manifest.version_tag !== expectedVersionTag) {
+      throw new Error(
+        `Release manifest version_tag must be ${expectedVersionTag}; received ${String(manifest.version_tag ?? '(missing)')}`,
+      );
     }
   }
   return { version, buildNumber, rollingTag, manifestPath: resolvedManifest };
@@ -65,7 +92,10 @@ function manifestPathFromArgv() {
   const manifestArgIdx = process.argv.indexOf('--manifest');
   if (manifestArgIdx < 0) return undefined;
   const rawPath = process.argv[manifestArgIdx + 1];
-  return rawPath ? resolve(rawPath) : undefined;
+  if (!rawPath || rawPath.startsWith('-')) {
+    throw new Error('--manifest requires an exact release manifest path');
+  }
+  return resolve(rawPath);
 }
 
 /**

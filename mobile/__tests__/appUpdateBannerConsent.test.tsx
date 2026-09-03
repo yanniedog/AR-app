@@ -164,6 +164,30 @@ describe('AppUpdateBanner download consent', () => {
     act(() => tree.unmount());
   });
 
+  it('does not start an automatic download when an audit begins during the banner check', async () => {
+    mockPrefs.apkUpdatesAutoDownload = true;
+    let resolveCheck!: (value: typeof availableResult) => void;
+    jest.mocked(checkForAppUpdate).mockReturnValue(new Promise((resolve) => {
+      resolveCheck = resolve;
+    }));
+    let tree!: InspectableRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<HookProbe />) as InspectableRenderer;
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      requestPerformanceAudit({ mode: 'live-source' });
+      resolveCheck(availableResult);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(ensureApkBackgroundDownload).not.toHaveBeenCalled();
+    expect(tree.root.findByProps({ visible: false }).props.visible).toBe(false);
+    act(() => tree.unmount());
+  });
+
   it('requires per-download approval but installs an already verified APK directly', async () => {
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
     let tree!: InspectableRenderer;
