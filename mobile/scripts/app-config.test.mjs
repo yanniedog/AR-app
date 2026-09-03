@@ -6,11 +6,13 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const staticConfig = require('../app.json');
 
-function configFor(channel, release) {
+function configFor(channel, release, easRelease) {
   const previous = {
     channel: process.env.AR_APP_DISTRIBUTION_CHANNEL,
     version: process.env.AR_APP_RELEASE_VERSION,
     versionCode: process.env.AR_APP_ANDROID_VERSION_CODE,
+    easVersion: process.env.AR_APP_EAS_RELEASE_VERSION,
+    easVersionCode: process.env.AR_APP_EAS_ANDROID_VERSION_CODE,
   };
   process.env.AR_APP_DISTRIBUTION_CHANNEL = channel;
   if (release) {
@@ -19,6 +21,13 @@ function configFor(channel, release) {
   } else {
     delete process.env.AR_APP_RELEASE_VERSION;
     delete process.env.AR_APP_ANDROID_VERSION_CODE;
+  }
+  if (easRelease) {
+    process.env.AR_APP_EAS_RELEASE_VERSION = easRelease.version;
+    process.env.AR_APP_EAS_ANDROID_VERSION_CODE = String(easRelease.versionCode);
+  } else {
+    delete process.env.AR_APP_EAS_RELEASE_VERSION;
+    delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
   }
   delete require.cache[require.resolve('../app.config.js')];
   try {
@@ -30,6 +39,10 @@ function configFor(channel, release) {
     else process.env.AR_APP_RELEASE_VERSION = previous.version;
     if (previous.versionCode == null) delete process.env.AR_APP_ANDROID_VERSION_CODE;
     else process.env.AR_APP_ANDROID_VERSION_CODE = previous.versionCode;
+    if (previous.easVersion == null) delete process.env.AR_APP_EAS_RELEASE_VERSION;
+    else process.env.AR_APP_EAS_RELEASE_VERSION = previous.easVersion;
+    if (previous.easVersionCode == null) delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
+    else process.env.AR_APP_EAS_ANDROID_VERSION_CODE = previous.easVersionCode;
   }
 }
 
@@ -55,10 +68,24 @@ test('release environment overrides version metadata without rewriting app.json'
   assert.equal(staticConfig.expo.android.versionCode, originalVersionCode);
 });
 
+test('server-side EAS release environment reaches remote app config without source edits', () => {
+  const config = configFor(
+    'sideload',
+    { version: '9.9.9', versionCode: 999 },
+    { version: '1.2.346', versionCode: 988 },
+  );
+  assert.equal(config.version, '1.2.346');
+  assert.equal(config.android.versionCode, 988);
+});
+
 test('rejects partial or malformed release overrides', () => {
   const previousCode = process.env.AR_APP_ANDROID_VERSION_CODE;
+  const previousEasVersion = process.env.AR_APP_EAS_RELEASE_VERSION;
+  const previousEasVersionCode = process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
   process.env.AR_APP_ANDROID_VERSION_CODE = '123';
   delete process.env.AR_APP_RELEASE_VERSION;
+  delete process.env.AR_APP_EAS_RELEASE_VERSION;
+  delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
   delete require.cache[require.resolve('../app.config.js')];
   try {
     assert.throws(
@@ -68,5 +95,9 @@ test('rejects partial or malformed release overrides', () => {
   } finally {
     if (previousCode == null) delete process.env.AR_APP_ANDROID_VERSION_CODE;
     else process.env.AR_APP_ANDROID_VERSION_CODE = previousCode;
+    if (previousEasVersion == null) delete process.env.AR_APP_EAS_RELEASE_VERSION;
+    else process.env.AR_APP_EAS_RELEASE_VERSION = previousEasVersion;
+    if (previousEasVersionCode == null) delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
+    else process.env.AR_APP_EAS_ANDROID_VERSION_CODE = previousEasVersionCode;
   }
 });

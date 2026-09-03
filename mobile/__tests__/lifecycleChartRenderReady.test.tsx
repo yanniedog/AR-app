@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
-import { LifecycleChart } from '../src/components/projections/LifecycleChart';
+import {
+  LifecycleChart,
+  type LifecycleChartController,
+} from '../src/components/projections/LifecycleChart';
 import type { ProjectionPoint, ProjectionSeries } from '../src/data/projections';
 
 type TestNode = {
@@ -122,6 +125,55 @@ describe('LifecycleChart render evidence', () => {
       renderRevision: 'revision-2',
       accessibleSummary: true,
     });
+    act(() => tree.unmount());
+  });
+
+  it('clamps the selected month when a revised scenario shortens the series', () => {
+    const controllerRef: { current: LifecycleChartController | null } = { current: null };
+    const withDates = (dates: string[]): ProjectionSeries => ({
+      ...series,
+      points: dates.map((date, index) => ({
+        ...point,
+        date,
+        balance: point.balance - index * 1_000,
+      })),
+    });
+    let tree!: InspectableRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <LifecycleChart
+          section="Mortgage"
+          history={[]}
+          series={[withDates(['2026-09-03', '2026-10-03', '2026-11-03'])]}
+          metric="balance"
+          asAt="2026-09-03"
+          renderRevision="long-series"
+          controllerRef={controllerRef}
+        />,
+      ) as InspectableRenderer;
+    });
+    act(() => {
+      controllerRef.current?.next();
+      controllerRef.current?.next();
+    });
+    expect(tree.root.findByProps({ accessibilityRole: 'adjustable' }).props.accessibilityValue)
+      .toMatchObject({ min: 1, max: 3, now: 3 });
+
+    act(() => {
+      tree.update(
+        <LifecycleChart
+          section="Mortgage"
+          history={[]}
+          series={[withDates(['2026-09-03'])]}
+          metric="balance"
+          asAt="2026-09-03"
+          renderRevision="short-series"
+          controllerRef={controllerRef}
+        />,
+      );
+    });
+    expect(tree.root.findByProps({ accessibilityRole: 'adjustable' }).props.accessibilityValue)
+      .toMatchObject({ min: 1, max: 1, now: 1 });
     act(() => tree.unmount());
   });
 });

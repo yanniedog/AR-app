@@ -37,6 +37,7 @@ import {
 } from '../src/components/AppUpdateBanner';
 import { SELF_UPDATE_ENABLED } from '../src/config';
 import { RateMark } from '../src/components/RateMark';
+import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
@@ -406,6 +407,7 @@ function RootNavigator() {
               onDismiss={updateBanner.dismiss}
             />
           ) : null}
+          <ScenarioRecoveryBanner />
           <DataUnavailableScreen />
           <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
@@ -432,6 +434,7 @@ function RootNavigator() {
               onDismiss={updateBanner.dismiss}
             />
           ) : null}
+          <ScenarioRecoveryBanner />
           <View
             style={{ flex: 1 }}
             pointerEvents={performanceAuditActive ? 'none' : 'auto'}

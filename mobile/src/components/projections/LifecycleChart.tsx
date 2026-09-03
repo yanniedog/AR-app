@@ -115,6 +115,10 @@ export function LifecycleChart({
   const todayIndex = Math.max(0, dates.indexOf(asAt));
   const [activeIndex, setActiveIndex] = useState(todayIndex);
   useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric]);
+  useEffect(() => {
+    setActiveIndex((current) => Math.min(Math.max(0, dates.length - 1), Math.max(0, current)));
+  }, [dates.length]);
+  const boundedActiveIndex = Math.min(Math.max(0, dates.length - 1), Math.max(0, activeIndex));
   const selectPrevious = useCallback(() => {
     setActiveIndex((current) => Math.max(0, current - 1));
   }, []);
@@ -159,7 +163,7 @@ export function LifecycleChart({
     [firstMs, innerW, padL, timeSpan]);
   const yAt = useCallback((value: number) => padT + innerH - ((value - yMin) / (yMax - yMin)) * innerH,
     [innerH, yMax, yMin]);
-  const activeDate = dates[Math.min(activeIndex, dates.length - 1)] ?? asAt;
+  const activeDate = dates[boundedActiveIndex] ?? asAt;
   const scrub = useChartScrub({
     sliceCount: dates.length,
     plotWidth: innerW,
@@ -176,7 +180,7 @@ export function LifecycleChart({
     series: series.map((item) => ({ id: item.id, path: pathFor(item.points, metric, xAt, yAt) })),
   }), [history, metric, series, xAt, yAt]);
 
-  const activeMs = dateTimes[Math.min(activeIndex, dateTimes.length - 1)] ?? dateMs(asAt);
+  const activeMs = dateTimes[boundedActiveIndex] ?? dateMs(asAt);
   const activeValues = series.map((item) => ({
     series: item,
     point: nearestPoint(item.points, activeMs),
@@ -215,7 +219,7 @@ export function LifecycleChart({
         accessibilityRole="adjustable"
         accessibilityLabel={`${metricLabel} projection for ${shortDate(activeDate)}. ${accessibilitySummary}`}
         accessibilityHint="Swipe up or down to inspect the next or previous month."
-        accessibilityValue={{ min: 1, max: Math.max(1, dates.length), now: activeIndex + 1, text: shortDate(activeDate) }}
+        accessibilityValue={{ min: 1, max: Math.max(1, dates.length), now: boundedActiveIndex + 1, text: shortDate(activeDate) }}
         accessibilityActions={[
           { name: 'increment', label: 'Next month' },
           { name: 'decrement', label: 'Previous month' },

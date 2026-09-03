@@ -113,6 +113,7 @@ jobs:
 
       - name: Advance APK version iteration from rolling manifest
         if: >-
+          inputs.profile == 'preview' &&
           (inputs.platform == 'android' || inputs.platform == 'all')
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
@@ -158,17 +159,37 @@ jobs:
         id: eas_build
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_PROFILE: ${{ inputs.profile }}
+          EAS_PLATFORM: ${{ inputs.platform }}
           NODE_ENV: ${{ inputs.profile == 'development' && 'development' || 'production' }}
         run: |
           git diff --exit-code
           git diff --cached --exit-code
-          # The EAS worker evaluates app.config.js remotely. Put the calculated
-          # release values in the selected build profile so its APK receives the
-          # same version/versionCode that the runner validated and will publish.
-          if [ -n "${AR_APP_RELEASE_VERSION:-}" ]; then
-            node scripts/inject-eas-release-env.mjs --profile "${{ inputs.profile }}"
+
+          # Preview APK versions are calculated from the rolling sideload
+          # manifest. Send them to the EAS worker through workflow-owned,
+          # server-side environment variables: editing eas.json here would make
+          # the otherwise protected source checkout dirty and invalidate the
+          # exact-build provenance gate used by submission.
+          release_env_active=false
+          cleanup_release_env() {
+            if [ "$release_env_active" = true ]; then
+              eas env:delete preview --variable-name AR_APP_EAS_RELEASE_VERSION --scope project --non-interactive || true
+              eas env:delete preview --variable-name AR_APP_EAS_ANDROID_VERSION_CODE --scope project --non-interactive || true
+            fi
+          }
+          trap cleanup_release_env EXIT
+          if [ "$EAS_PROFILE" = preview ] && { [ "$EAS_PLATFORM" = android ] || [ "$EAS_PLATFORM" = all ]; }; then
+            if [ -z "${AR_APP_RELEASE_VERSION:-}" ] || [ -z "${AR_APP_ANDROID_VERSION_CODE:-}" ]; then
+              echo "::error::Preview Android builds require the calculated APK version and versionCode."
+              exit 1
+            fi
+            release_env_active=true
+            eas env:set preview --name AR_APP_EAS_RELEASE_VERSION --value "$AR_APP_RELEASE_VERSION" --type string --visibility plaintext --scope project --non-interactive
+            eas env:set preview --name AR_APP_EAS_ANDROID_VERSION_CODE --value "$AR_APP_ANDROID_VERSION_CODE" --type string --visibility plaintext --scope project --non-interactive
           fi
-          trap 'git restore --source=HEAD -- eas.json' EXIT
+          git diff --exit-code
+          git diff --cached --exit-code
           set +e
           # Keep Git metadata enabled: mobile-eas-submit requires the EAS build
           # record to attest this exact protected-main commit.

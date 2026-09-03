@@ -126,11 +126,22 @@ test('EAS submission validates an environment-delivered build UUID', async () =>
     'utf8',
   );
   assert.doesNotMatch(buildWorkflow, /EAS_NO_VCS/);
-  assert.match(buildWorkflow, /--github-env "\$GITHUB_ENV"/);
+  assert.match(
+    buildWorkflow,
+    /inputs\.profile == 'preview' &&[\s\S]*bump-android-version-code\.mjs[\s\S]*--github-env "\$GITHUB_ENV"/,
+  );
   assert.match(buildWorkflow, /git diff --exit-code/);
   assert.match(buildWorkflow, /git diff --cached --exit-code/);
-  assert.match(buildWorkflow, /inject-eas-release-env\.mjs --profile/);
-  assert.match(buildWorkflow, /trap 'git restore --source=HEAD -- eas\.json' EXIT/);
+  assert.match(buildWorkflow, /eas env:set preview --name AR_APP_EAS_RELEASE_VERSION/);
+  assert.match(buildWorkflow, /eas env:set preview --name AR_APP_EAS_ANDROID_VERSION_CODE/);
+  assert.match(
+    buildWorkflow,
+    /EAS_PROFILE" = preview[\s\S]*EAS_PLATFORM" = android[\s\S]*EAS_PLATFORM" = all/,
+  );
+  assert.match(buildWorkflow, /eas env:delete preview --variable-name AR_APP_EAS_RELEASE_VERSION/);
+  assert.match(buildWorkflow, /eas env:delete preview --variable-name AR_APP_EAS_ANDROID_VERSION_CODE/);
+  assert.doesNotMatch(buildWorkflow, /inject-eas-release-env\.mjs/);
+  assert.doesNotMatch(buildWorkflow, /git restore --source=HEAD -- eas\.json/);
 });
 
 test('high-severity dependency additions and native verifier compilation gate PRs', async () => {

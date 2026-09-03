@@ -125,6 +125,12 @@ export function updateUserRateScenario(
   return true;
 }
 
+/** Acknowledge a recovered/reset encrypted scenario without changing its values. */
+export function dismissUserRateScenarioWarning(): void {
+  if (snapshot.warning == null) return;
+  emit({ warning: null });
+}
+
 export async function flushUserRateScenario(): Promise<boolean> {
   if (saveTimer) {
     clearTimeout(saveTimer);
@@ -138,6 +144,7 @@ export function useUserRateScenario(): UserRateScenarioSnapshot & {
   update: typeof updateUserRateScenario;
   flush: typeof flushUserRateScenario;
   retryLoad: typeof ensureUserRateScenarioLoaded;
+  dismissWarning: typeof dismissUserRateScenarioWarning;
 } {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   useEffect(() => {
@@ -149,6 +156,7 @@ export function useUserRateScenario(): UserRateScenarioSnapshot & {
     update: updateUserRateScenario,
     flush: flushUserRateScenario,
     retryLoad: ensureUserRateScenarioLoaded,
+    dismissWarning: dismissUserRateScenarioWarning,
   };
 }
 

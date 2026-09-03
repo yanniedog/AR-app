@@ -210,7 +210,6 @@ export default function Projections() {
     storageStatus,
     saveStatus,
     error: storageError,
-    warning: storageWarning,
     update: updateScenario,
     flush,
     retryLoad,
@@ -944,7 +943,7 @@ export default function Projections() {
             : 'Your amounts stay in encrypted local storage on this device. Session replay is blocked on this screen.'}
         </AppText>
       </Card>
-      {storageStatus !== 'ready' || saveStatus === 'saving' || saveStatus === 'saved' || storageError || storageWarning ? (
+      {storageStatus !== 'ready' || saveStatus === 'saving' || saveStatus === 'saved' || storageError ? (
         <Card style={{ gap: 8 }}>
           <AppText variant="small" weight="700">
             {storageStatus === 'loading' || storageStatus === 'idle'
@@ -958,7 +957,6 @@ export default function Projections() {
                     : 'Encrypted scenario reset'}
           </AppText>
           {storageError ? <AppText variant="tiny" color="danger">{storageError}</AppText> : null}
-          {storageWarning ? <AppText variant="tiny" color="warning">{storageWarning}</AppText> : null}
           {storageStatus === 'error' ? (
             <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryLoad()} />
           ) : null}

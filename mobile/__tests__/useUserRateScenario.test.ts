@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import {
+  dismissUserRateScenarioWarning,
   ensureUserRateScenarioLoaded,
   flushUserRateScenario,
   getUserRateScenarioSnapshotForTests,
@@ -52,6 +53,8 @@ describe('shared user rate scenario store', () => {
     expect(recovered.storageStatus).toBe('ready');
     expect(recovered.error).toBeNull();
     expect(recovered.warning).toMatch(/incomplete.*reset/i);
+    dismissUserRateScenarioWarning();
+    expect(getUserRateScenarioSnapshotForTests().warning).toBeNull();
     expect(updateUserRateScenario((value) => ({
       ...value,
       savings: { balance: '100', currentRate: '4' },
