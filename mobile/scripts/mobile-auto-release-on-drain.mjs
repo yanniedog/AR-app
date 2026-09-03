@@ -80,16 +80,34 @@ function ghTry(args) {
   return { ok: res.status === 0, stdout: (res.stdout || '').trim(), stderr: (res.stderr || '').trim() };
 }
 
-function releaseSnapshot(tag) {
-  const result = ghTry([
-    'release', 'view', tag, '--repo', repo, '--json', 'tagName,assets',
-  ]);
-  if (!result.ok) return null;
-  try {
-    return JSON.parse(result.stdout || 'null');
-  } catch {
-    return null;
+export function releaseSnapshotFromGhResult(tag, result) {
+  const detail = [result?.stderr, result?.stdout]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (!result?.ok) {
+    if (/^release not found\.?$/i.test(detail) || /\bHTTP 404\b/i.test(detail)) {
+      return null;
+    }
+    throw new Error(`Unable to inspect release ${tag}: ${detail || 'gh release view failed'}`);
   }
+  try {
+    const parsed = JSON.parse(result.stdout);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('response was not a release object');
+    }
+    return parsed;
+  } catch (error) {
+    throw new Error(
+      `Unable to inspect release ${tag}: invalid JSON (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+}
+
+function releaseSnapshot(tag) {
+  return releaseSnapshotFromGhResult(tag, ghTry([
+    'release', 'view', tag, '--repo', repo, '--json', 'tagName,assets',
+  ]));
 }
 
 function releaseAssetText(release, assetName) {

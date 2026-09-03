@@ -255,6 +255,7 @@ export default function RateMovesTab() {
           </Card>
         ) : filteredEmpty ? (
           <Card
+            key={`filtered-empty:${feedRenderRevision}`}
             variant="outlined"
             style={{ gap: 8 }}
             onLayout={() => recordFeedEvidence({

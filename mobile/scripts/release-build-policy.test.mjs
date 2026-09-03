@@ -2,11 +2,6 @@ import assert from 'node:assert/strict';
 import { access, readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import {
-  EAS_TOOLCHAIN_ALLOWED_GHSAS,
-  EAS_TOOLCHAIN_MANIFEST,
-} from './verify-dependency-review-scope.mjs';
-
 async function readJson(relativePath) {
   return JSON.parse(await readFile(new URL(relativePath, import.meta.url), 'utf8'));
 }
@@ -162,18 +157,9 @@ test('high-severity dependency additions and native verifier compilation gate PR
   assert.match(workflow, /^  mobile:\n[\s\S]*actions\/dependency-review-action@/m);
   assert.match(workflow, /Dependency review \(required mobile-ci gate\)/);
   assert.match(workflow, /fail-on-severity: high/);
-  assert.match(workflow, /allow-ghsas:[\s\S]*GHSA-r292-9mhp-454m/);
+  assert.doesNotMatch(workflow, /allow-ghsas:/);
   assert.match(workflow, /id: dependency-review/);
-  assert.match(workflow, /Guard build-only EAS advisory scope/);
-  assert.match(workflow, /verify-dependency-review-scope\.mjs/);
-  assert.doesNotMatch(workflow, /DEPENDENCY_CHANGES:/);
-  assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.match(workflow, /DEPENDENCY_REVIEW_BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
-  assert.match(workflow, /DEPENDENCY_REVIEW_HEAD_SHA: \$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
-  for (const ghsa of EAS_TOOLCHAIN_ALLOWED_GHSAS) {
-    assert.match(workflow, new RegExp(ghsa));
-  }
-  assert.equal(EAS_TOOLCHAIN_MANIFEST, 'mobile/tools/eas-cli/package-lock.json');
+  assert.doesNotMatch(workflow, /Guard build-only EAS advisory scope/);
   assert.match(workflow, /Compile native APK identity verifier/);
   assert.match(workflow, /expo prebuild --platform android --no-install/);
   assert.match(workflow, /:ar-apk-identity-verifier:compileReleaseKotlin/);

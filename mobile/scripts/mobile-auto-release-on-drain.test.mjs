@@ -11,6 +11,7 @@ import {
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
+  releaseSnapshotFromGhResult,
   recoveryIdentityForMissingChannel,
   validatePublishedChannelSnapshot,
   waitForQueueDrain,
@@ -23,6 +24,68 @@ import {
   ROLLING_TAG,
 } from './app-release-meta.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
+
+test('release inspection distinguishes absence from infrastructure failure', () => {
+  assert.equal(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'release not found',
+    }),
+    null,
+  );
+  assert.equal(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'gh: Not Found (HTTP 404)',
+    }),
+    null,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'HTTP 403: rate limit exceeded',
+    }),
+    /Unable to inspect release v1\.2\.3: HTTP 403/,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'authentication required',
+    }),
+    /Unable to inspect release v1\.2\.3: authentication required/,
+  );
+});
+
+test('release inspection accepts only a valid release object', () => {
+  assert.deepEqual(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: '{"tagName":"v1.2.3","assets":[]}',
+      stderr: '',
+    }),
+    { tagName: 'v1.2.3', assets: [] },
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: 'not json',
+      stderr: '',
+    }),
+    /invalid JSON/,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: 'null',
+      stderr: '',
+    }),
+    /response was not a release object/,
+  );
+});
 
 test('checkedGhOutput returns trimmed stdout for a successful command', () => {
   assert.equal(checkedGhOutput({ status: 0, stdout: '[]\n', stderr: '' }, ['pr', 'list']), '[]');

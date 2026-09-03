@@ -619,6 +619,8 @@ export async function ensureApkBackgroundDownload(
 
     const dest = apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
+      const verificationTaskId = apkDownloadTaskId(manifest.build_number, manifest.sha256);
+      currentProcessVerificationTaskId = verificationTaskId;
       try {
         const localUri = toFileUri(dest);
         assertUpdateDownloadAllowed();
@@ -670,6 +672,10 @@ export async function ensureApkBackgroundDownload(
         }
         await persist(invalidCachedApkRecoverySnapshot(snapshot, manifest, wifiOnly));
         force = true;
+      } finally {
+        if (currentProcessVerificationTaskId === verificationTaskId) {
+          currentProcessVerificationTaskId = null;
+        }
       }
     }
 

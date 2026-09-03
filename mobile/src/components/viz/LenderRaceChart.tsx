@@ -30,6 +30,7 @@ export function LenderRaceChart({
   selectedDate,
   onDateSelect,
   auditRevision,
+  onGraphicReadiness,
   onLogoReadiness,
   height = 170,
   topN = 6,
@@ -42,6 +43,7 @@ export function LenderRaceChart({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
+  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
   onLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
   height?: number;
   topN?: number;
@@ -149,7 +151,13 @@ export function LenderRaceChart({
             : Math.max(0, activeIndex - 1);
           onDateSelect?.(model.dates[next] ?? null);
         }}
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          setWidth(nextWidth);
+          if (nextWidth > 0 && auditRevision) {
+            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
+          }
+        }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
         onTouchEnd={scrub.onTouchEnd}

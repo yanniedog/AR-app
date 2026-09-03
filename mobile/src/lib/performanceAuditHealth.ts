@@ -65,7 +65,7 @@ export function appHealthDataSnapshot(
     ),
     search_index: asset(
       Boolean(state.searchIndex),
-      false,
+      state.searchIndexStatus === 'error',
       state.searchIndex?.run_date,
       countRecord(state.searchIndex?.products),
     ),

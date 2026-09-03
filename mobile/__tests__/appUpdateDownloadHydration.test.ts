@@ -1,12 +1,21 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getExistingDownloadTasks } from '@kesha-antonov/react-native-background-downloader';
+import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 import {
+  ensureApkBackgroundDownload,
   getHydratedApkDownloadSnapshot,
   resetApkDownloadStateForTests,
 } from '../src/lib/appUpdateDownload';
 import { IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
+import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
+import { TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256 } from '../src/lib/appUpdateLogic';
+
+jest.mock('../src/lib/appUpdateInstall', () => ({
+  installDownloadedApk: jest.fn(async () => {}),
+  verifyDownloadedApk: jest.fn(),
+}));
 
 const STORAGE_KEY = 'app-update-download-v1';
 const getExistingTasksMock = getExistingDownloadTasks as jest.MockedFunction<
@@ -87,5 +96,48 @@ describe('APK update state hydration', () => {
       totalBytes: 100,
       nativeState: 'RUNNING',
     });
+  });
+
+  it('does not clear cached-file verification while hashing is active in this process', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValue({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-193-test.apk',
+      size: 1234,
+      modificationTime: 0,
+    } as never);
+    let markVerificationStarted!: () => void;
+    const verificationStarted = new Promise<void>((resolve) => {
+      markVerificationStarted = resolve;
+    });
+    let finishVerification!: (value: { size: number; verifiedSha256: boolean }) => void;
+    jest.mocked(verifyDownloadedApk).mockImplementation(() => new Promise((resolve) => {
+      markVerificationStarted();
+      finishVerification = resolve;
+    }));
+    const manifest = {
+      schema_version: 1 as const,
+      version: '1.0.181',
+      build_number: '193',
+      download_url: 'https://github.com/yanniedog/AR-app/releases/download/app-v1.0.181/app-preview.apk',
+      published_at: '2026-09-03T00:00:00Z',
+      bytes: 1234,
+      sha256: 'a'.repeat(64),
+      package_name: 'com.eyex.australianrates',
+      supported_abis: ['arm64-v8a'],
+      signing_certificate_sha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+    };
+
+    const ensure = ensureApkBackgroundDownload(manifest);
+    await verificationStarted;
+    expect(verifyDownloadedApk).toHaveBeenCalledTimes(1);
+
+    await expect(getHydratedApkDownloadSnapshot()).resolves.toMatchObject({
+      phase: 'verifying',
+      buildNumber: '193',
+    });
+
+    finishVerification({ size: 1234, verifiedSha256: true });
+    await expect(ensure).resolves.toMatchObject({ phase: 'ready', buildNumber: '193' });
   });
 });

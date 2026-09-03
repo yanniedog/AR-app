@@ -1,8 +1,10 @@
 import type { AuditCheck } from '../src/lib/performanceAudit';
 import {
+  appHealthDataSnapshot,
   appHealthDisplayObservations,
   appHealthSurfaceContracts,
 } from '../src/lib/performanceAuditHealth';
+import type { AppState } from '../src/data/storeTypes';
 import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
@@ -19,6 +21,33 @@ function check(readinessEvidence: string): AuditCheck {
 }
 
 describe('integrated app-health display evidence', () => {
+  it('reports an attempted deep-search failure as a failed asset', () => {
+    const snapshot = appHealthDataSnapshot({
+      source: 'network',
+      core: null,
+      coreAssetState: { status: 'idle' },
+      details: null,
+      searchIndex: null,
+      searchIndexStatus: 'error',
+      historyBanks: null,
+      historyBanksError: null,
+      bankInsights: null,
+      bankInsightsError: null,
+      bankSpreadHistory: null,
+      bankSpreadHistoryError: null,
+      rbaCalendar: null,
+      rbaCalendarError: null,
+      manifest: null,
+      coreIntegrity: null,
+    } as unknown as AppState, '1.0.180');
+
+    expect(snapshot.assets?.search_index).toMatchObject({
+      state: 'failed',
+      runDate: null,
+      itemCount: null,
+    });
+  });
+
   it('maps independent model, list, logo, chart and layout probes', () => {
     const observations = appHealthDisplayObservations([
       check([

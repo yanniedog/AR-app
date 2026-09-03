@@ -23,6 +23,8 @@ export function SwitcherEdgeChart({
   window = 'All',
   selectedDate,
   onDateSelect,
+  auditRevision,
+  onGraphicReadiness,
   height = 150,
 }: {
   dates: string[];
@@ -31,6 +33,8 @@ export function SwitcherEdgeChart({
   window?: HistoryWindow;
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
+  auditRevision?: string;
+  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
   height?: number;
 }) {
   const theme = useTheme();
@@ -141,7 +145,13 @@ export function SwitcherEdgeChart({
             : Math.max(0, activeIndex - 1);
           onDateSelect?.(model.points[next]?.date ?? null);
         }}
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          setWidth(nextWidth);
+          if (nextWidth > 0 && auditRevision) {
+            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
+          }
+        }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
         onTouchEnd={scrub.onTouchEnd}

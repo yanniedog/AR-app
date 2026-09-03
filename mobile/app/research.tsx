@@ -78,8 +78,10 @@ export default function Market() {
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
-  const [historyLayoutRevision, setHistoryLayoutRevision] = useState<string | null>(null);
-  const [historyMounted, setHistoryMounted] = useState(false);
+  const [historyGraphicState, setHistoryGraphicState] = useState<{
+    revision: string;
+    accessibleSummary: boolean;
+  } | null>(null);
   const [rbaGraphicState, setRbaGraphicState] = useState<{
     revision: string;
     pointCount: number;
@@ -226,11 +228,11 @@ export default function Market() {
     [explorerInsights?.run_dates, explorerMode, historyModel?.dates],
   );
   const renderRevision = `${datasetRevision ?? 'none'}:${activeSection}:${explorerMode}:${explorerWindow}:${rewindDate ?? 'latest'}`;
-  useEffect(() => {
-    if (!historyMounted || !historyOpen || !historyReady) return;
-    const frame = requestAnimationFrame(() => setHistoryLayoutRevision(renderRevision));
-    return () => cancelAnimationFrame(frame);
-  }, [historyMounted, historyOpen, historyReady, renderRevision]);
+  const historyChartAvailable = !standardFilterWarming && (
+    explorerMode === 'race' || explorerMode === 'pulse'
+      ? showBankInsights && Boolean(explorerInsights)
+      : Boolean(historyModel)
+  );
 
   const nextSection = useCallback(() => {
     const index = Math.max(0, interestSections.indexOf(activeSection));
@@ -312,8 +314,11 @@ export default function Market() {
   });
   usePerformanceAuditProbe(surface, {
     id: 'history-graphic', kind: 'graphic', required: historyOpen,
-    status: !historyOpen || historyLayoutRevision === renderRevision ? 'ready' : 'pending', datasetRevision, renderRevision,
-    accessibleSummary: historyOpen && historyLayoutRevision === renderRevision,
+    status: !historyOpen || (
+      historyChartAvailable && historyGraphicState?.revision === renderRevision
+    ) ? 'ready' : 'pending', datasetRevision, renderRevision,
+    accessibleSummary: historyOpen && historyChartAvailable &&
+      historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
   });
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
@@ -413,15 +418,7 @@ export default function Market() {
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
         ) : historyReady ? (
-          <View
-            style={{ gap: 10 }}
-            onLayout={(event) => {
-              if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
-                setHistoryMounted(true);
-                setHistoryLayoutRevision(renderRevision);
-              }
-            }}
-          >
+          <View style={{ gap: 10 }}>
             <HistoryExplorer
               section={activeSection}
               historyModel={historyModel}
@@ -439,6 +436,7 @@ export default function Market() {
               window={explorerWindow}
               onWindowChange={setExplorerWindow}
               auditRevision={renderRevision}
+              onGraphicReadiness={setHistoryGraphicState}
               onLeaderLogoReadiness={setLeaderLogoState}
               showModePicker={advancedViews}
             />
