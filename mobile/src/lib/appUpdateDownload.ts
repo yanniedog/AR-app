@@ -14,6 +14,7 @@ import {
 
 import { debugLog } from './debugLog';
 import {
+  APK_READY_RECEIPT_VERSION,
   IDLE_APK_DOWNLOAD,
   APK_DOWNLOAD_STALL_MS,
   apkDestinationPath,
@@ -260,6 +261,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
             verifiedBytes: verification.size,
             verifiedAt: new Date().toISOString(),
+            verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
           });
           debugLog.info(
             'app-update',
@@ -305,6 +307,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
         verifiedSha256: null,
         verifiedBytes: null,
         verifiedAt: null,
+        verifiedReceiptVersion: null,
       });
       if (userCancelled) {
         debugLog.info('app-update', `background download cancelled by user build=${manifest.build_number}`);
@@ -373,6 +376,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
           verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
           verifiedBytes: verification.size,
           verifiedAt: new Date().toISOString(),
+          verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
         });
         await maybePromptUpgrade(manifest);
         return true;
@@ -438,6 +442,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
     verifiedSha256: null,
     verifiedBytes: null,
     verifiedAt: null,
+    verifiedReceiptVersion: null,
   });
   return true;
 }
@@ -495,6 +500,7 @@ async function startNewDownload(
     verifiedSha256: null,
     verifiedBytes: null,
     verifiedAt: null,
+    verifiedReceiptVersion: null,
   });
   task.start();
   debugLog.info(
@@ -582,6 +588,7 @@ export async function ensureApkBackgroundDownload(
           verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
           verifiedBytes: verification.size,
           verifiedAt: new Date().toISOString(),
+          verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
         });
         await maybePromptUpgrade(manifest);
         return snapshot;
@@ -785,6 +792,7 @@ export async function installReadyApkUpdate(manifest: ApkManifest): Promise<void
       verifiedSha256: manifest.sha256?.toLowerCase() ?? null,
       verifiedBytes: verification.size,
       verifiedAt: new Date().toISOString(),
+      verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
     });
   }
   debugLog.info('app-update', `install requested build=${manifest.build_number}`);

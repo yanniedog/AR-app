@@ -29,7 +29,11 @@ export interface ApkDownloadSnapshot {
   verifiedSha256: string | null;
   verifiedBytes: number | null;
   verifiedAt: string | null;
+  /** Version 2 proves SHA, package, signer, and a modern Android signature scheme. */
+  verifiedReceiptVersion: number | null;
 }
+
+export const APK_READY_RECEIPT_VERSION = 2;
 
 export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   phase: 'idle',
@@ -49,6 +53,7 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   verifiedSha256: null,
   verifiedBytes: null,
   verifiedAt: null,
+  verifiedReceiptVersion: null,
 };
 
 export const APK_DOWNLOAD_STALL_MS = 2 * 60 * 1000;
@@ -113,6 +118,7 @@ export function hasTrustedReadyApkReceipt(
     snapshot.sha256?.toLowerCase() === expectedSha &&
     snapshot.verifiedSha256?.toLowerCase() === expectedSha &&
     snapshot.verifiedBytes === currentBytes &&
+    snapshot.verifiedReceiptVersion === APK_READY_RECEIPT_VERSION &&
     Boolean(snapshot.verifiedAt && Number.isFinite(Date.parse(snapshot.verifiedAt))) &&
     manifest.bytes === currentBytes &&
     privatePrefix != null &&

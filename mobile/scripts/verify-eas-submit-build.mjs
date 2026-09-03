@@ -49,6 +49,9 @@ export function validateEasSubmitBuild({
   if (String(build.gitCommitHash ?? '').toLowerCase() !== sourceSha) {
     throw new Error('EAS build is not attested to the current protected-main commit');
   }
+  if (build.isGitWorkingTreeDirty !== false) {
+    throw new Error('EAS build source tree is dirty or its clean-tree provenance is missing');
+  }
   if (String(build.app?.id ?? '') !== expectedProjectId) {
     throw new Error('EAS build belongs to a different Expo project');
   }

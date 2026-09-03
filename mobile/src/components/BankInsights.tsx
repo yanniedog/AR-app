@@ -13,6 +13,7 @@ import {
   type BankRateEvent,
 } from '../data/bankInsights';
 import { formatRate, formatRunDate } from '../data/format';
+import { buildFeedRowRevision } from '../lib/feedRenderEvidence';
 import {
   DEPOSIT_SECTIONS,
   LOAN_SECTIONS,
@@ -187,12 +188,14 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   error,
   sections,
   limit = 8,
+  contentRevision,
   onRenderEvidence,
 }: {
   payload: BankInsightsPayload | null;
   error?: string | null;
   sections?: SectionKey[];
   limit?: number;
+  contentRevision?: string;
   onRenderEvidence?: (evidence: {
     expectedCount: number;
     actualCount: number;
@@ -211,10 +214,10 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
       })),
     [events, payload],
   );
-  const rowRevision = useMemo(
-    () => events.map((event) => `${event.date}:${event.provider}:${event.section}`).join('|'),
-    [events],
-  );
+  const rowRevision = useMemo(() => buildFeedRowRevision(
+    contentRevision ?? payload?.run_date ?? 'no-content-revision',
+    events.map((event) => `${event.date}:${event.provider}:${event.section}`),
+  ), [contentRevision, events, payload?.run_date]);
   const measuredRows = useRef(new Set<string>());
   useEffect(() => {
     measuredRows.current = new Set();
@@ -249,7 +252,7 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   return (
     <View>
       {rows.map(({ event, rateContext }, i) => {
-        const key = `${event.date}-${event.provider}-${event.section}-${i}`;
+        const key = `${rowRevision}:${event.date}-${event.provider}-${event.section}-${i}`;
         return (
         <View key={key} onLayout={() => reportRowLayout(key)}>
           {i > 0 ? <Divider /> : null}

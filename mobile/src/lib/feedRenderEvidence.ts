@@ -8,6 +8,13 @@ export interface FeedRenderEvidence extends FeedLayoutEvidence {
   revision: string;
 }
 
+export function buildFeedRowRevision(
+  contentRevision: string,
+  rowIdentities: readonly string[],
+): string {
+  return `${contentRevision}|${rowIdentities.join('|')}`;
+}
+
 export function resetFeedRenderEvidence(
   revision: string,
   expectedCount: number,

@@ -230,6 +230,7 @@ export default function RateMovesTab() {
               error={error}
               sections={[activeSection]}
               limit={14}
+              contentRevision={feedRenderRevision}
               onRenderEvidence={recordFeedEvidence}
             />
           </Card>

@@ -20,6 +20,7 @@ const validBuild = {
   platform: 'ANDROID',
   buildProfile: 'production',
   gitCommitHash: expected.expectedSourceSha,
+  isGitWorkingTreeDirty: false,
   app: {
     id: expected.expectedProjectId,
     slug: expected.expectedSlug,
@@ -42,6 +43,8 @@ for (const [label, mutation, expectedError] of [
   ['wrong profile', { buildProfile: 'preview' }, /profile does not match/i],
   ['missing source provenance', { gitCommitHash: null }, /not attested/i],
   ['wrong source provenance', { gitCommitHash: 'f'.repeat(40) }, /not attested/i],
+  ['dirty source tree', { isGitWorkingTreeDirty: true }, /source tree is dirty/i],
+  ['missing clean-tree provenance', { isGitWorkingTreeDirty: undefined }, /clean-tree provenance/i],
   ['wrong project', { app: { ...validBuild.app, id: 'other-project' } }, /different Expo project/i],
 ]) {
   test(`rejects ${label}`, () => {

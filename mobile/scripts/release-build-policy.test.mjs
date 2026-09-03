@@ -126,6 +126,9 @@ test('EAS submission validates an environment-delivered build UUID', async () =>
     'utf8',
   );
   assert.doesNotMatch(buildWorkflow, /EAS_NO_VCS/);
+  assert.match(buildWorkflow, /--github-env "\$GITHUB_ENV"/);
+  assert.match(buildWorkflow, /git diff --exit-code/);
+  assert.match(buildWorkflow, /git diff --cached --exit-code/);
 });
 
 test('critical dependency additions fail inside the required mobile-ci job', async () => {

@@ -22,6 +22,10 @@ import { SECTIONS } from '../constants';
 import { bankHistoryChartA11ySummary } from '../lib/a11ySummaries';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
 import { debugLog } from '../lib/debugLog';
+import {
+  buildHistoryGraphicRevision,
+  type HistoryGraphicEvidence,
+} from '../lib/historyGraphicEvidence';
 import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { withAlpha } from '../theme/colors';
@@ -71,8 +75,10 @@ export interface BankHistoryChartProps {
   highlightSeries?: HighlightSeries | null;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
+  /** Content-addressed identity for the source history asset(s). */
+  contentRevision?: string | null;
   /** Runtime render evidence emitted by the chart's own measured accessible view. */
-  onGraphicReady?: (evidence: { pointCount: number; accessibleSummary: boolean }) => void;
+  onGraphicReady?: (evidence: HistoryGraphicEvidence) => void;
 }
 
 export interface BankHistoryChartAuditActions {
@@ -120,6 +126,7 @@ export function BankHistoryChart({
   allDates,
   highlightSeries,
   auditActionsRef,
+  contentRevision,
   onGraphicReady,
 }: BankHistoryChartProps) {
   const theme = useTheme();
@@ -165,7 +172,8 @@ export function BankHistoryChart({
 
   const plotDates = sliced.dates;
   const plotPoints = sliced.points;
-  const revision = `${section}:${dates.at(-1) ?? ''}:${dates.length}`;
+  const sourceRevision = contentRevision ?? `${section}:${dates.at(-1) ?? ''}:${dates.length}`;
+  const revision = `${sourceRevision}:${section}:${dates.at(-1) ?? ''}:${dates.length}`;
   useEffect(() => {
     setSelectedDate(null);
     setHoverDate(null);
@@ -234,10 +242,22 @@ export function BankHistoryChart({
       debugLog.warn('BankHistoryChart', 'no finite plot values');
     }
   }, [hasPlottableValues, plotDates.length, plotPoints.length]);
+  const graphicRevision = buildHistoryGraphicRevision(
+    sourceRevision,
+    section,
+    window,
+    plotDates,
+  );
   useEffect(() => {
     if (width <= 0 || !plotDates.length || !plotPoints.length || !hasPlottableValues) return;
-    onGraphicReady?.({ pointCount: plotDates.length, accessibleSummary: true });
-  }, [hasPlottableValues, onGraphicReady, plotDates.length, plotPoints.length, width]);
+    onGraphicReady?.({
+      contentRevision: sourceRevision,
+      graphicRevision,
+      window,
+      pointCount: plotDates.length,
+      accessibleSummary: true,
+    });
+  }, [graphicRevision, hasPlottableValues, onGraphicReady, plotDates.length, plotPoints.length, sourceRevision, width, window]);
 
   if (!plotDates.length || !plotPoints.length) return null;
 

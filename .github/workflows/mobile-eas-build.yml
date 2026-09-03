@@ -121,6 +121,7 @@ jobs:
           --repo "${{ github.repository }}"
           --fallback-repo yanniedog/AR-local
           --rolling-tag app-apk-arm-latest
+          --github-env "$GITHUB_ENV"
 
       # Fail fast in Actions before uploading to EAS cloud (same Metro bundle step).
       - name: Validate JS bundle (typecheck + export)
@@ -159,6 +160,8 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           NODE_ENV: ${{ inputs.profile == 'development' && 'development' || 'production' }}
         run: |
+          git diff --exit-code
+          git diff --cached --exit-code
           set +e
           # Keep Git metadata enabled: mobile-eas-submit requires the EAS build
           # record to attest this exact protected-main commit.

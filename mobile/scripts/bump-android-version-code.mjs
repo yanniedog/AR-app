@@ -8,7 +8,7 @@
  *
  * Usage: node scripts/bump-android-version-code.mjs [--repo owner/name] [--fallback-repo owner/name] [--rolling-tag app-apk-latest|app-apk-arm-latest]
  */
-import { readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -46,6 +46,12 @@ const fallbackRepo =
     ? process.argv[fallbackRepoArgIdx + 1]
     : process.env.APK_VERSION_FALLBACK_REPO
   )?.trim() || '';
+
+const githubEnvArgIdx = process.argv.indexOf('--github-env');
+const githubEnvPath = githubEnvArgIdx >= 0 ? process.argv[githubEnvArgIdx + 1] : null;
+if (githubEnvArgIdx >= 0 && (!githubEnvPath || githubEnvPath.startsWith('--'))) {
+  throw new Error('Missing value for --github-env');
+}
 
 const appJsonPath = join(mobileDir, 'app.json');
 const appJson = JSON.parse(readFileSync(appJsonPath, 'utf8'));
@@ -114,9 +120,17 @@ async function main() {
   const nextVersion = nextApkBuildVersion(currentVersion, remote?.version);
   const nextCode = nextVersionCode(currentCode, remote?.buildNumber, runFloor);
 
-  appJson.expo.version = nextVersion;
-  appJson.expo.android = { ...appJson.expo.android, versionCode: nextCode };
-  writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`, 'utf8');
+  if (githubEnvPath) {
+    appendFileSync(
+      resolve(githubEnvPath),
+      `AR_APP_RELEASE_VERSION=${nextVersion}\nAR_APP_ANDROID_VERSION_CODE=${nextCode}\n`,
+      'utf8',
+    );
+  } else {
+    appJson.expo.version = nextVersion;
+    appJson.expo.android = { ...appJson.expo.android, versionCode: nextCode };
+    writeFileSync(appJsonPath, `${JSON.stringify(appJson, null, 2)}\n`, 'utf8');
+  }
   console.log(
     `bump-android-version-code: release ${currentVersion} (${currentCode}) → ${nextVersion} (${nextCode})`,
   );

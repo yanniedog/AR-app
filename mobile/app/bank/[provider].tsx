@@ -44,6 +44,10 @@ import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
 import { isPerformanceAuditActive } from '../../src/lib/performanceAudit';
+import {
+  isCurrentHistoryGraphicEvidence,
+  type HistoryGraphicEvidence,
+} from '../../src/lib/historyGraphicEvidence';
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
@@ -133,6 +137,8 @@ export default function BankDetail() {
   const router = useRouter();
   const core = useStore((s) => s.core);
   const coreIntegrity = useStore((s) => s.coreIntegrity);
+  const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? null);
+  const bankInsightsSha = useStore((s) => s.manifest?.files.bank_history?.sha256 ?? null);
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
@@ -152,11 +158,8 @@ export default function BankDetail() {
   const scrollRef = useRef<ScrollView>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [historyGraphicEvidence, setHistoryGraphicEvidence] = useState<{
-    revision: string;
-    pointCount: number;
-    accessibleSummary: boolean;
-  } | null>(null);
+  const [historyGraphicEvidence, setHistoryGraphicEvidence] =
+    useState<HistoryGraphicEvidence | null>(null);
 
   const rawBankEvents = useMemo(
     () => recentBankEvents(bankInsights, { provider }),
@@ -294,20 +297,22 @@ export default function BankDetail() {
         : null,
     [activeChartSection, provider, visibleBankInsights],
   );
-  const historyGraphicRevision = `${provider}:${activeChartSection ?? 'none'}:${chartModel?.dates.at(-1) ?? 'none'}:${chartModel?.dates.length ?? 0}`;
-  const onHistoryGraphicReady = useCallback((evidence: {
-    pointCount: number;
-    accessibleSummary: boolean;
-  }) => {
+  const historyContentRevision = [
+    bankInsightsSha ?? 'no-bank-history-sha',
+    provider,
+    activeChartSection ?? 'none',
+    chartModel?.dates.at(-1) ?? 'none',
+    chartModel?.dates.length ?? 0,
+  ].join(':');
+  const onHistoryGraphicReady = useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
-      const next = { revision: historyGraphicRevision, ...evidence };
-      return current?.revision === next.revision &&
-        current.pointCount === next.pointCount &&
-        current.accessibleSummary === next.accessibleSummary
+      return current?.graphicRevision === evidence.graphicRevision &&
+        current.pointCount === evidence.pointCount &&
+        current.accessibleSummary === evidence.accessibleSummary
         ? current
-        : next;
+        : evidence;
     });
-  }, [historyGraphicRevision]);
+  }, []);
 
   const focusSourceEvent: BankRateEvent | null = useMemo(() => {
     if (!focusDate || !focusSection) return null;
@@ -438,8 +443,10 @@ export default function BankDetail() {
       };
     }
     if (chartModel && activeChartSection) {
-      actions['lender.history.window.next'] = () =>
+      actions['lender.history.window.next'] = () => {
+        setHistoryGraphicEvidence(null);
         historyAuditActionsRef.current?.selectNextWindow();
+      };
       actions['lender.history.date.previous'] = () =>
         historyAuditActionsRef.current?.selectPreviousDate();
     }
@@ -458,18 +465,22 @@ export default function BankDetail() {
   );
   const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
   const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
+  const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
+    historyGraphicEvidence,
+    historyContentRevision,
+  ) ? historyGraphicEvidence : null;
   usePerformanceAuditSurface({
     id: 'lender.details',
     routeKey: '/bank/[provider]',
-    datasetRevision: core?.run_date ?? null,
-    renderRevision: `${provider}:${productCount}:${activeChartSection ?? 'none'}:${chartModel?.dates.length ?? 0}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`,
+    datasetRevision: coreSha ?? core?.run_date ?? null,
+    renderRevision: `${provider}:${productCount}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}:${focusHistoryState}:${productHistory ? `moves-${bankEvents.length}` : 'moves-on-demand'}`,
     actions: auditActions,
     probes: [
       {
         id: 'lender.data',
         kind: 'data',
         status: core ? 'ready' : 'pending',
-        datasetRevision: core?.run_date ?? null,
+        datasetRevision: coreSha ?? core?.run_date ?? null,
       },
       {
         id: 'lender.products',
@@ -503,16 +514,12 @@ export default function BankDetail() {
         id: 'lender.history-graphic',
         kind: 'graphic',
         required: false,
-        status: !chartModel || historyGraphicEvidence?.revision === historyGraphicRevision
+        status: !chartModel || currentHistoryGraphicEvidence
           ? 'ready'
           : 'pending',
-        expectedCount: chartModel?.dates.length ?? 0,
-        actualCount: historyGraphicEvidence?.revision === historyGraphicRevision
-          ? historyGraphicEvidence.pointCount
-          : 0,
-        accessibleSummary: historyGraphicEvidence?.revision === historyGraphicRevision
-          ? historyGraphicEvidence.accessibleSummary
-          : false,
+        expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
+        actualCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
+        accessibleSummary: currentHistoryGraphicEvidence?.accessibleSummary ?? false,
       },
       {
         id: 'lender.product-history-data',
@@ -726,6 +733,7 @@ export default function BankDetail() {
               <ChartErrorBoundary name="BankTrendChart">
                 <BankHistoryChart
                   auditActionsRef={historyAuditActionsRef}
+                  contentRevision={historyContentRevision}
                   dates={chartModel.dates}
                   points={chartModel.points}
                   allDates={chartModel.allDates}

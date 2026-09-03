@@ -1,4 +1,5 @@
 import {
+  APK_READY_RECEIPT_VERSION,
   IDLE_APK_DOWNLOAD,
   apkDestinationPath,
   apkDownloadTaskId,
@@ -116,12 +117,22 @@ describe('appUpdateDownloadLogic', () => {
       verifiedSha256: sha256,
       verifiedBytes: 1234,
       verifiedAt: '2026-08-07T00:00:00.000Z',
+      verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
     };
     const manifest = { build_number: '42', sha256, bytes: 1234 };
 
     expect(
       hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1234, 'file:///docs/'),
     ).toBe(true);
+    expect(
+      hasTrustedReadyApkReceipt(
+        { ...ready, verifiedReceiptVersion: null },
+        manifest,
+        ready.localUri,
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
     expect(
       hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1233, 'file:///docs/'),
     ).toBe(false);

@@ -1,10 +1,18 @@
 import {
+  buildFeedRowRevision,
   isFeedRenderEvidenceReady,
   reconcileFeedRenderEvidence,
   resetFeedRenderEvidence,
 } from '../src/lib/feedRenderEvidence';
 
 describe('Changes feed render evidence', () => {
+  it('remounts row measurement keys for same-shape content corrections', () => {
+    const rows = ['2026-09-03:Example Bank:Mortgage'];
+    expect(buildFeedRowRevision('bank-history-sha-a', rows)).not.toBe(
+      buildFeedRowRevision('bank-history-sha-b', rows),
+    );
+  });
+
   it('does not accept the initial zero-of-zero state as a rendered empty feed', () => {
     const evidence = resetFeedRenderEvidence('edition-a:mortgage', 0);
     expect(isFeedRenderEvidenceReady(evidence, 'edition-a:mortgage', 0)).toBe(false);
