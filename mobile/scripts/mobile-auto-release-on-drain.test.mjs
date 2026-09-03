@@ -201,9 +201,9 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.29',
     readHeadSha: () => 'abc1234',
-    readPublishedChannels: (v) => ({
-      arm: v === '1.0.29',
-      universal: v === '1.0.29',
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.30', versionCode: 142, sourceSha: 'abc1234' },
+      universal: { version: '1.0.30', versionCode: 142, sourceSha: 'abc1234' },
     }),
     buildInFlight: () => false,
     dispatch: () => {
@@ -212,6 +212,49 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
   });
   assert.equal(did, false);
   assert.equal(dispatchedCount, 0);
+});
+
+test('partial recovery uses the version actually allocated by the APK workflow', () => {
+  const dispatched = [];
+  const checked = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: null,
+      universal: { version: '1.0.43', versionCode: 155, sourceSha: 'f'.repeat(40) },
+    }),
+    buildInFlight: (head, channels) => {
+      checked.push([head, channels]);
+      return false;
+    },
+    dispatch: (version, channels, options) => dispatched.push([version, channels, options]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(checked, [['f'.repeat(40), ['arm']]]);
+  assert.deepEqual(dispatched, [[
+    '1.0.43',
+    ['arm'],
+    { releaseVersion: '1.0.43', releaseVersionCode: '155' },
+  ]]);
+});
+
+test('current-head channels with conflicting release identities rebuild as a pair', () => {
+  const dispatched = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.43', versionCode: 155, sourceSha: 'f'.repeat(40) },
+      universal: { version: '1.0.44', versionCode: 156, sourceSha: 'f'.repeat(40) },
+    }),
+    buildInFlight: () => false,
+    dispatch: (version, channels) => dispatched.push([version, channels]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(dispatched, [['1.0.42', ['universal', 'arm']]]);
 });
 
 test('ensureApkForMainHead skips dispatch when a build is already in flight', () => {

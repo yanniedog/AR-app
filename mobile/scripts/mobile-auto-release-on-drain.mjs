@@ -148,7 +148,7 @@ export function validatePublishedChannelSnapshot({
   );
 }
 
-function publishedApkChannel(version, rollingTag) {
+function publishedApkChannel(rollingTag) {
   const rollingRelease = releaseSnapshot(rollingTag);
   if (!rollingRelease) return false;
   const manifestText = releaseAssetText(rollingRelease, MANIFEST_ASSET);
@@ -156,6 +156,12 @@ function publishedApkChannel(version, rollingTag) {
   let manifest;
   try {
     manifest = JSON.parse(manifestText);
+  } catch {
+    return false;
+  }
+  const version = String(manifest?.version ?? '').trim();
+  try {
+    compareVersions(version, version);
   } catch {
     return false;
   }
@@ -177,10 +183,10 @@ function publishedApkChannel(version, rollingTag) {
     : null;
 }
 
-function publishedApkChannels(version) {
+function publishedApkChannels() {
   return {
-    arm: publishedApkChannel(version, ARM_ROLLING_TAG),
-    universal: publishedApkChannel(version, ROLLING_TAG),
+    arm: publishedApkChannel(ARM_ROLLING_TAG),
+    universal: publishedApkChannel(ROLLING_TAG),
   };
 }
 
@@ -201,8 +207,14 @@ export function recoveryIdentityForMissingChannel(version, published, headSha) {
   const releaseVersion = String(surviving.version ?? '').trim();
   const releaseVersionCode = Number(surviving.versionCode);
   const sourceSha = String(surviving.sourceSha ?? '').trim().toLowerCase();
+  let predatesCheckedInVersion = false;
+  try {
+    predatesCheckedInVersion = compareVersions(releaseVersion, version) < 0;
+  } catch {
+    throw new Error('The surviving APK channel has an invalid release version');
+  }
   if (
-    releaseVersion !== version ||
+    predatesCheckedInVersion ||
     !Number.isSafeInteger(releaseVersionCode) ||
     releaseVersionCode <= 0 ||
     !/^[a-f0-9]{40}$/.test(sourceSha)
@@ -330,25 +342,44 @@ export function ensureApkForMainHead({
 } = {}) {
   const version = readVersion();
   const headSha = readHeadSha();
-  const publishedChannels = readPublishedChannels(version);
-  const missingChannels = missingApkChannels(publishedChannels);
+  const publishedChannels = readPublishedChannels();
+  const normalizedHeadSha = String(headSha ?? '').trim().toLowerCase();
+  const channelsForHead = {
+    arm:
+      String(publishedChannels?.arm?.sourceSha ?? '').trim().toLowerCase() === normalizedHeadSha
+        ? publishedChannels.arm
+        : null,
+    universal:
+      String(publishedChannels?.universal?.sourceSha ?? '').trim().toLowerCase() === normalizedHeadSha
+        ? publishedChannels.universal
+        : null,
+  };
+  if (
+    channelsForHead.arm
+    && channelsForHead.universal
+    && (
+      channelsForHead.arm.version !== channelsForHead.universal.version
+      || channelsForHead.arm.versionCode !== channelsForHead.universal.versionCode
+    )
+  ) {
+    console.log(
+      'mobile-auto-release-on-drain: current-head APK channels disagree; rebuilding a new paired release',
+    );
+    channelsForHead.arm = null;
+    channelsForHead.universal = null;
+  }
+  const missingChannels = missingApkChannels(channelsForHead);
   if (!missingChannels.length) {
     console.log(
-      `mobile-auto-release-on-drain: ARM and universal v${version} releases already published — no APK dispatch`,
+      `mobile-auto-release-on-drain: ARM and universal v${channelsForHead.arm.version} releases already published — no APK dispatch`,
     );
     return false;
   }
   const recoveryIdentity = recoveryIdentityForMissingChannel(
     version,
-    publishedChannels,
+    channelsForHead,
     headSha,
   );
-  if (missingChannels.length === 1 && !recoveryIdentity) {
-    console.log(
-      'mobile-auto-release-on-drain: surviving channel came from another source commit; rebuilding a new paired release',
-    );
-    missingChannels.splice(0, missingChannels.length, 'universal', 'arm');
-  }
   if (buildInFlight(headSha, missingChannels)) {
     console.log(
       `mobile-auto-release-on-drain: mobile-android-apk already covers ${missingChannels.join(' + ')} for ${headSha.slice(0, 7)} — no APK dispatch`,
@@ -356,7 +387,10 @@ export function ensureApkForMainHead({
     return false;
   }
   if (recoveryIdentity) {
-    dispatch(version, missingChannels, recoveryIdentity);
+    // The APK workflow advances beyond the checked-in version when it allocates
+    // a release. Recover the partner channel using that actual published
+    // identity rather than trying (and failing) to find it at the source floor.
+    dispatch(recoveryIdentity.releaseVersion, missingChannels, recoveryIdentity);
   } else {
     dispatch(version, missingChannels);
   }

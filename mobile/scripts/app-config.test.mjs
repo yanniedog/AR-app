@@ -6,13 +6,14 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const staticConfig = require('../app.json');
 
-function configFor(channel, release, easRelease) {
+function configFor(channel, release, easRelease, iosInstallUrl) {
   const previous = {
     channel: process.env.AR_APP_DISTRIBUTION_CHANNEL,
     version: process.env.AR_APP_RELEASE_VERSION,
     versionCode: process.env.AR_APP_ANDROID_VERSION_CODE,
     easVersion: process.env.AR_APP_EAS_RELEASE_VERSION,
     easVersionCode: process.env.AR_APP_EAS_ANDROID_VERSION_CODE,
+    iosInstallUrl: process.env.AR_APP_IOS_INSTALL_URL,
   };
   process.env.AR_APP_DISTRIBUTION_CHANNEL = channel;
   if (release) {
@@ -29,6 +30,8 @@ function configFor(channel, release, easRelease) {
     delete process.env.AR_APP_EAS_RELEASE_VERSION;
     delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
   }
+  if (iosInstallUrl) process.env.AR_APP_IOS_INSTALL_URL = iosInstallUrl;
+  else delete process.env.AR_APP_IOS_INSTALL_URL;
   delete require.cache[require.resolve('../app.config.js')];
   try {
     return require('../app.config.js')({ config: staticConfig.expo });
@@ -43,6 +46,8 @@ function configFor(channel, release, easRelease) {
     else process.env.AR_APP_EAS_RELEASE_VERSION = previous.easVersion;
     if (previous.easVersionCode == null) delete process.env.AR_APP_EAS_ANDROID_VERSION_CODE;
     else process.env.AR_APP_EAS_ANDROID_VERSION_CODE = previous.easVersionCode;
+    if (previous.iosInstallUrl == null) delete process.env.AR_APP_IOS_INSTALL_URL;
+    else process.env.AR_APP_IOS_INSTALL_URL = previous.iosInstallUrl;
   }
 }
 
@@ -76,6 +81,19 @@ test('server-side EAS release environment reaches remote app config without sour
   );
   assert.equal(config.version, '1.2.346');
   assert.equal(config.android.versionCode, 988);
+});
+
+test('an iOS install destination can be supplied by the release environment', () => {
+  const url = 'https://apps.apple.com/au/app/example/id123';
+  const config = configFor('play', null, null, url);
+  assert.equal(config.extra.iosInstallUrl, url);
+});
+
+test('an iOS install destination is limited to Apple-controlled hosts', () => {
+  assert.throws(
+    () => configFor('play', null, null, 'https://example.test/fake-store'),
+    /AR_APP_IOS_INSTALL_URL must be an https:\/\/apps\.apple\.com or https:\/\/testflight\.apple\.com URL/,
+  );
 });
 
 test('rejects partial or malformed release overrides', () => {

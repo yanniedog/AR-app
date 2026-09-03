@@ -421,9 +421,11 @@ function PerformanceAuditScreenInner() {
               </AppText>
             </Row>
             <AppText variant="small" color="textMuted">
-              All audit checks: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
-              failed · {report.summary.skipped} not run · {report.summary.unavailable}{' '}
-              unavailable
+              Recorded outcomes: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
+              failed · {report.summary.skipped} not run
+            </AppText>
+            <AppText variant="small" color="textMuted">
+              Availability overlay: {report.summary.unavailable} could not be exercised. These checks are already included in the outcomes above.
             </AppText>
             <AppText
               variant="small"

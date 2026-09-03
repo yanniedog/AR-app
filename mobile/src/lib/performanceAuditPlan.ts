@@ -794,21 +794,14 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   scenario(templates, 'route.moves', {
     expectedPath: '/rba-response',
     expectedSurface: 'moves.response-chart',
-    readiness: ['app', 'data', 'bank-insights', 'rba-calendar', 'graphics', 'list'],
+    readiness: ['app', 'data', 'bank-insights', 'rba-calendar', 'list'],
     optional: true,
     ...optionalFeatureSkip,
   }, [
     { depth: 0, semanticActionId: 'moves.open' },
     { depth: 1, semanticActionId: 'moves.decision.previous', readiness: ['rba-calendar'], stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'restorable' },
-    { depth: 2, semanticActionId: 'moves.response-chart.zoom-in', readiness: ['graphics'], stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'moves.response-chart.reset', readiness: ['graphics'], stateImpact: 'local-only' },
-    { depth: 3, semanticActionId: 'moves.response-chart.provider.first', readiness: ['graphics'], stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'moves.sort.timing', stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'moves.query.provider', parameters: { query: inputs.provider }, stateImpact: 'local-only', optional: true, skipReason: missingProvider },
-    { depth: 2, semanticActionId: 'moves.filter.provider.clear', stateImpact: 'local-only' },
-    { depth: 1, semanticActionId: 'moves.patterns.open', readiness: ['list'], stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'moves.lender.open', expectedPath: lenderPath, expectedSurface: 'lender.details', readiness: ['logos', 'list'], parameters: { provider: inputs.provider }, optional: true, skipReason: missingProvider },
+    { depth: 1, semanticActionId: 'moves.section.next', stateImpact: 'local-only' },
+    { depth: 2, semanticActionId: 'moves.response-chart.provider.next', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'redirect.rba', {

@@ -43,6 +43,7 @@ import {
 import { debugLog } from '../lib/debugLog';
 import {
   buildDeepPerformanceAuditPlan,
+  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
@@ -567,6 +568,8 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
     case 'onboarding': return '/onboarding';
     case 'today': return '/';
     case 'changes': return '/passthrough';
+    case 'moves': return '/rba-response';
+    case 'outlook': return '/research';
     default: return null;
   }
 }
@@ -671,6 +674,35 @@ async function runDeepAuditStep(
       trace: captureAuditTrace(`deep step ${step.id} failed; audit continues`),
     };
   }
+}
+
+function skippedAfterScenarioRecovery(step: DeepAuditStep): AuditCheck {
+  const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
+  const reason =
+    'An earlier step failed and route recovery removed the local screen state this action depends on';
+  return {
+    id: `deep-${step.id}`,
+    label: `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`,
+    kind: 'journey',
+    status: 'skipped',
+    durationMs: null,
+    metrics: {
+      journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+      journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+      iteration,
+      passId: step.passId,
+      scenarioId: step.scenarioId,
+      semanticActionId: step.semanticActionId,
+      depth: step.depth,
+      reason,
+      skipClassification: 'scenario-recovery',
+      scenarioRecoveryCascade: true,
+      executionAttempted: false,
+      actionInvoked: false,
+      actionCompleted: false,
+      routeStateInvalidated: false,
+    },
+  };
 }
 
 async function runDeepAuditStepBody(
@@ -2436,6 +2468,12 @@ export function PerformanceAuditRunner() {
         mode: auditMode,
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
       });
+      let transportGuardRestored = false;
+      const restoreTransportGuard = () => {
+        if (transportGuardRestored) return;
+        transportGuard.restore();
+        transportGuardRestored = true;
+      };
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
         let settled = false;
@@ -2720,6 +2758,7 @@ export function PerformanceAuditRunner() {
         }
 
         for (const pass of plan.passes) {
+          const reentryGate = new ScenarioReentryGate();
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
@@ -2737,6 +2776,10 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
+            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
+              await record(skippedAfterScenarioRecovery(step));
+              continue;
+            }
             const recovered = await recordContinuable(
               label,
               () => runDeepAuditStep(
@@ -2747,7 +2790,7 @@ export function PerformanceAuditRunner() {
                 datasetRevision,
               ),
             );
-            void recovered;
+            if (recovered) reentryGate.markRecovered(step);
           }
         }
 
@@ -3159,6 +3202,10 @@ export function PerformanceAuditRunner() {
         // Publish as soon as the report is durable.
         // The remaining local log flush must not hide a complete result if it
         // fails.
+        // Terminal state wakes the root update surfaces. Drop the audit-only
+        // transport interception first so their next check cannot race a guard
+        // that is about to be removed in finally.
+        restoreTransportGuard();
         completePerformanceAudit(report);
         await yieldToUi();
 
@@ -3232,6 +3279,7 @@ export function PerformanceAuditRunner() {
             recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
           }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
+          restoreTransportGuard();
           markPerformanceAuditCancelled();
         } else {
           const error = [
@@ -3379,13 +3427,14 @@ export function PerformanceAuditRunner() {
             );
           }
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Fatal log flush').catch(() => {});
+          restoreTransportGuard();
           failPerformanceAudit([
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'));
         }
       } finally {
-        transportGuard.restore();
+        restoreTransportGuard();
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
