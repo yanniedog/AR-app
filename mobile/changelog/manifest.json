@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-03T02:11:02.726Z",
+  "generated_at": "2026-09-03T13:53:01.266Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -876,6 +876,14 @@
         "build(deps): bump fast-uri from 3.1.2 to 3.1.7 in /mobile (#222)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.180"
+    },
+    {
+      "version": "1.0.183",
+      "date": "2026-09-03",
+      "summaryBullets": [
+        "Finalize Australian Rates app quality, security, and release integrity (#227)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.183"
     }
   ]
 }
