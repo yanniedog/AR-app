@@ -1,4 +1,5 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
 
 import {
   isPrimaryTabRootPath,
@@ -122,11 +123,10 @@ describe('navigation shell compatibility', () => {
     expect(tabs).not.toMatch(/<Tabs\.Screen\s+name="trends"/);
   });
 
-  it('keeps compatibility redirects for former group-qualified routes', () => {
-    const legacySettings = read('../app/(tabs)/settings.tsx');
-    expect(legacySettings).toContain("pathname: '/settings'");
-    expect(legacySettings).toContain("focus: 'update'");
-    expect(legacySettings).toContain("{ t }");
+  it('keeps Settings unambiguous and preserves the remaining legacy route', () => {
+    const root = read('../app/_layout.tsx');
+    expect(root).toContain('<Stack.Screen name="settings"');
+    expect(existsSync(resolve(__dirname, '../app/(tabs)/settings.tsx'))).toBe(false);
     expect(read('../app/(tabs)/trends.tsx')).toContain("from '../trends'");
     expect(read('../app/trends.tsx')).toContain("focus === 'rba'");
   });
