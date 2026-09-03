@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Alert, Share, TextInput, View } from 'react-native';
+import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
@@ -26,6 +28,8 @@ import {
 import { blocksPerformanceAudit } from '../src/lib/appUpdateDownloadLogic';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
+
+const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
 function usePerformanceAuditState() {
   return useSyncExternalStore(
@@ -279,12 +283,36 @@ function PerformanceAuditScreenInner() {
           text: 'Share report',
           onPress: () => {
             setSharingReport(true);
-            void Share.share({
-              title: 'Australian Rates deidentified app health report',
-              message: prepared.body,
-            }).catch((error) => {
-              Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
-            }).finally(() => setSharingReport(false));
+            void (async () => {
+              let wroteShareFile = false;
+              try {
+                if (!FileSystem.cacheDirectory || !(await Sharing.isAvailableAsync())) {
+                  throw new Error('Operating-system file sharing is unavailable on this device.');
+                }
+                await FileSystem.writeAsStringAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, prepared.body);
+                wroteShareFile = true;
+                await Sharing.shareAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, {
+                  mimeType: 'application/json',
+                  dialogTitle: 'Share deidentified Australian Rates app health report',
+                  UTI: 'public.json',
+                });
+              } catch (error) {
+                Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
+              } finally {
+                if (wroteShareFile) {
+                  try {
+                    await FileSystem.deleteAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, { idempotent: true });
+                  } catch (cleanupError) {
+                    Alert.alert(
+                      'Temporary report retained',
+                      `The deidentified report could not be removed from the share cache. ` +
+                      `Close and reopen Australian Rates before sharing again. ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+                    );
+                  }
+                }
+                setSharingReport(false);
+              }
+            })();
           },
         },
       ],
