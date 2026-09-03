@@ -50,7 +50,8 @@ describe('shared user rate scenario store', () => {
     await ensureUserRateScenarioLoaded();
     const recovered = getUserRateScenarioSnapshotForTests();
     expect(recovered.storageStatus).toBe('ready');
-    expect(recovered.error).toMatch(/incomplete.*reset/i);
+    expect(recovered.error).toBeNull();
+    expect(recovered.warning).toMatch(/incomplete.*reset/i);
     expect(updateUserRateScenario((value) => ({
       ...value,
       savings: { balance: '100', currentRate: '4' },

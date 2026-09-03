@@ -9,6 +9,10 @@ import {
   upgradeFromBackgroundDownload,
   type ApkManifest,
 } from '../src/lib/appUpdate';
+import {
+  requestPerformanceAudit,
+  resetPerformanceAuditForTests,
+} from '../src/lib/performanceAudit';
 
 type TestNode = {
   props: Record<string, unknown>;
@@ -75,9 +79,11 @@ describe('AppUpdateSection consent and manual refresh', () => {
     platformDescriptor = Object.getOwnPropertyDescriptor(Platform, 'OS');
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     jest.mocked(checkForAppUpdate).mockResolvedValue(availableResult);
+    resetPerformanceAuditForTests();
   });
 
   afterEach(() => {
+    resetPerformanceAuditForTests();
     jest.restoreAllMocks();
     if (platformDescriptor) Object.defineProperty(Platform, 'OS', platformDescriptor);
   });
@@ -120,6 +126,27 @@ describe('AppUpdateSection consent and manual refresh', () => {
       await Promise.resolve();
     });
     expect(upgradeFromBackgroundDownload).toHaveBeenCalledWith(remote, { wifiOnly: true });
+    act(() => tree.unmount());
+  });
+
+  it('reports a terminal non-error state without network traffic during an app audit', async () => {
+    requestPerformanceAudit({ mode: 'live-source' });
+    const onStatusChange = jest.fn();
+    let tree!: InspectableRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(
+        <AppUpdateSection onStatusChange={onStatusChange} />,
+      ) as InspectableRenderer;
+      await Promise.resolve();
+    });
+
+    expect(checkForAppUpdate).not.toHaveBeenCalled();
+    expect(onStatusChange).toHaveBeenLastCalledWith({
+      terminal: true,
+      status: 'audit-network-suppressed',
+      error: null,
+    });
+    expect(tree.root.findByProps({ title: 'Check for update' }).props.disabled).toBe(true);
     act(() => tree.unmount());
   });
 });

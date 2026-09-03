@@ -51,6 +51,7 @@ describe('LifecycleChart render evidence', () => {
           series={[series]}
           metric="balance"
           asAt="2026-09-03"
+          renderRevision="test-revision-1"
           onRenderReady={() => setReadyCount((current) => current + 1)}
         />
       );
@@ -69,5 +70,58 @@ describe('LifecycleChart render evidence', () => {
 
     expect(observedReadyCount).toBe(1);
     act(() => tree!.unmount());
+  });
+
+  it('emits once for each explicit render revision without layout feedback churn', () => {
+    const onRenderReady = jest.fn();
+    let tree!: InspectableRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <LifecycleChart
+          section="Mortgage"
+          history={[]}
+          series={[series]}
+          metric="balance"
+          asAt="2026-09-03"
+          renderRevision="revision-1"
+          onRenderReady={onRenderReady}
+        />,
+      ) as InspectableRenderer;
+    });
+    const layout = (width: number) => {
+      const chart = tree.root.findByProps({ accessibilityRole: 'adjustable' });
+      (chart.props.onLayout as (event: {
+        nativeEvent: { layout: { width: number } };
+      }) => void)({ nativeEvent: { layout: { width } } });
+    };
+    act(() => layout(320));
+    expect(onRenderReady).toHaveBeenCalledTimes(1);
+    expect(onRenderReady).toHaveBeenLastCalledWith({
+      renderRevision: 'revision-1',
+      accessibleSummary: true,
+    });
+
+    act(() => layout(320.2));
+    expect(onRenderReady).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      tree.update(
+        <LifecycleChart
+          section="Mortgage"
+          history={[]}
+          series={[series]}
+          metric="balance"
+          asAt="2026-09-03"
+          renderRevision="revision-2"
+          onRenderReady={onRenderReady}
+        />,
+      );
+    });
+    expect(onRenderReady).toHaveBeenCalledTimes(2);
+    expect(onRenderReady).toHaveBeenLastCalledWith({
+      renderRevision: 'revision-2',
+      accessibleSummary: true,
+    });
+    act(() => tree.unmount());
   });
 });

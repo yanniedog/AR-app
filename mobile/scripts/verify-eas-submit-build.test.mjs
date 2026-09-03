@@ -21,7 +21,8 @@ const validBuild = {
   buildProfile: 'production',
   gitCommitHash: expected.expectedSourceSha,
   isGitWorkingTreeDirty: false,
-  app: {
+  // Shape emitted by `eas build:view <id> --json`.
+  project: {
     id: expected.expectedProjectId,
     slug: expected.expectedSlug,
     ownerAccount: { name: expected.expectedOwner },
@@ -45,7 +46,7 @@ for (const [label, mutation, expectedError] of [
   ['wrong source provenance', { gitCommitHash: 'f'.repeat(40) }, /not attested/i],
   ['dirty source tree', { isGitWorkingTreeDirty: true }, /source tree is dirty/i],
   ['missing clean-tree provenance', { isGitWorkingTreeDirty: undefined }, /clean-tree provenance/i],
-  ['wrong project', { app: { ...validBuild.app, id: 'other-project' } }, /different Expo project/i],
+  ['wrong project', { project: { ...validBuild.project, id: 'other-project' } }, /different Expo project/i],
 ]) {
   test(`rejects ${label}`, () => {
     assert.throws(

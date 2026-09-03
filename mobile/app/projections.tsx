@@ -210,6 +210,7 @@ export default function Projections() {
     storageStatus,
     saveStatus,
     error: storageError,
+    warning: storageWarning,
     update: updateScenario,
     flush,
     retryLoad,
@@ -408,17 +409,20 @@ export default function Projections() {
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
-  const recordChartEvidence = useCallback(({ accessibleSummary }: { accessibleSummary: boolean }) => {
+  const recordChartEvidence = useCallback(({ renderRevision, accessibleSummary }: {
+    renderRevision: string;
+    accessibleSummary: boolean;
+  }) => {
     setChartEvidence((current) => {
       if (
-        current?.revision === projectionRenderRevision &&
+        current?.revision === renderRevision &&
         current.accessibleSummary === accessibleSummary
       ) {
         return current;
       }
-      return { revision: projectionRenderRevision, accessibleSummary };
+      return { revision: renderRevision, accessibleSummary };
     });
-  }, [projectionRenderRevision]);
+  }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
     if (typeof requested === 'string' && SECTION_OPTIONS.some((item) => item.value === requested)) {
@@ -909,6 +913,7 @@ export default function Projections() {
             series={activeSeries}
             metric={metric}
             asAt={result.asAt}
+            renderRevision={projectionRenderRevision}
             controllerRef={chartControllerRef}
             onRenderReady={recordChartEvidence}
           />
@@ -939,7 +944,7 @@ export default function Projections() {
             : 'Your amounts stay in encrypted local storage on this device. Session replay is blocked on this screen.'}
         </AppText>
       </Card>
-      {storageStatus !== 'ready' || saveStatus === 'saving' || saveStatus === 'saved' || storageError ? (
+      {storageStatus !== 'ready' || saveStatus === 'saving' || saveStatus === 'saved' || storageError || storageWarning ? (
         <Card style={{ gap: 8 }}>
           <AppText variant="small" weight="700">
             {storageStatus === 'loading' || storageStatus === 'idle'
@@ -948,9 +953,12 @@ export default function Projections() {
                 ? 'Saving encrypted scenario...'
                 : saveStatus === 'saved'
                   ? 'Encrypted scenario saved'
-                  : 'Encrypted scenario unavailable'}
+                  : storageStatus === 'error'
+                    ? 'Encrypted scenario unavailable'
+                    : 'Encrypted scenario reset'}
           </AppText>
           {storageError ? <AppText variant="tiny" color="danger">{storageError}</AppText> : null}
+          {storageWarning ? <AppText variant="tiny" color="warning">{storageWarning}</AppText> : null}
           {storageStatus === 'error' ? (
             <Button title="Retry encrypted storage" variant="secondary" onPress={() => void retryLoad()} />
           ) : null}

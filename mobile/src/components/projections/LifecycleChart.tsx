@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import { type LayoutChangeEvent, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import {
@@ -85,6 +85,7 @@ export function LifecycleChart({
   series,
   metric,
   asAt,
+  renderRevision,
   controllerRef,
   onRenderReady,
 }: {
@@ -93,8 +94,9 @@ export function LifecycleChart({
   series: ProjectionSeries[];
   metric: ProjectionMetric;
   asAt: string;
+  renderRevision: string;
   controllerRef?: MutableRefObject<LifecycleChartController | null>;
-  onRenderReady?: (evidence: { accessibleSummary: boolean }) => void;
+  onRenderReady?: (evidence: { renderRevision: string; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
@@ -112,7 +114,7 @@ export function LifecycleChart({
   );
   const todayIndex = Math.max(0, dates.indexOf(asAt));
   const [activeIndex, setActiveIndex] = useState(todayIndex);
-  useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric, series]);
+  useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric]);
   const selectPrevious = useCallback(() => {
     setActiveIndex((current) => Math.max(0, current - 1));
   }, []);
@@ -164,6 +166,10 @@ export function LifecycleChart({
     plotLeft: padL,
     onSelectIndex: setActiveIndex,
   });
+  const recordLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setWidth((current) => Math.abs(current - nextWidth) < 0.5 ? current : nextWidth);
+  }, []);
 
   const paths = useMemo(() => ({
     history: pathFor(history, metric, xAt, yAt),
@@ -184,9 +190,12 @@ export function LifecycleChart({
   ].join(', ');
   useEffect(() => {
     if (width > 0 && dates.length > 0) {
-      onRenderReadyRef.current?.({ accessibleSummary: accessibilitySummary.trim().length > 0 });
+      onRenderReadyRef.current?.({
+        renderRevision,
+        accessibleSummary: accessibilitySummary.trim().length > 0,
+      });
     }
-  }, [accessibilitySummary, dates.length, width]);
+  }, [accessibilitySummary, dates.length, renderRevision, width]);
 
   return (
     <View style={{ gap: 10 }}>
@@ -218,7 +227,7 @@ export function LifecycleChart({
             selectPrevious();
           }
         }}
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onLayout={recordLayout}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
         onTouchEnd={scrub.onTouchEnd}

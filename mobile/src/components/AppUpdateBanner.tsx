@@ -1,5 +1,5 @@
 import Ionicons from './icons/AppIcon';
-import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
+import { createContext, type ReactNode, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, AppState, Platform, Pressable, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -15,6 +15,7 @@ import {
   type UpdateCheckResult,
 } from '../lib/appUpdate';
 import { IDLE_APK_DOWNLOAD, updateBannerCopy } from '../lib/appUpdateDownloadLogic';
+import { getPerformanceAuditState, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
@@ -56,6 +57,12 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
+  const auditState = useSyncExternalStore(
+    subscribePerformanceAudit,
+    getPerformanceAuditState,
+    getPerformanceAuditState,
+  );
+  const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
     ...IDLE_APK_DOWNLOAD,
@@ -64,7 +71,7 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   useEffect(() => subscribeApkDownload(setDownload), []);
 
   useEffect(() => {
-    if (!enabled || Platform.OS !== 'android') return;
+    if (!enabled || auditOwnsNetwork || Platform.OS !== 'android') return;
     let cancelled = false;
     let availableManifest: ApkManifest | null = null;
     const checkAndDownload = () =>
@@ -97,11 +104,11 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
       clearInterval(reconcileTimer);
       appStateSubscription.remove();
     };
-  }, [autoDownload, enabled, wifiOnly]);
+  }, [auditOwnsNetwork, autoDownload, enabled, wifiOnly]);
 
   const available = result?.status === 'available' ? result : null;
   return {
-    visible: shouldShowUpdateBanner(result, dismissedBuild),
+    visible: !auditOwnsNetwork && shouldShowUpdateBanner(result, dismissedBuild),
     remote: available?.remote ?? null,
     download,
     dismiss: () => {

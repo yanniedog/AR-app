@@ -52,12 +52,12 @@ export function validateEasSubmitBuild({
   if (build.isGitWorkingTreeDirty !== false) {
     throw new Error('EAS build source tree is dirty or its clean-tree provenance is missing');
   }
-  if (String(build.app?.id ?? '') !== expectedProjectId) {
+  if (String(build.project?.id ?? '') !== expectedProjectId) {
     throw new Error('EAS build belongs to a different Expo project');
   }
   if (
-    String(build.app?.ownerAccount?.name ?? '') !== expectedOwner ||
-    String(build.app?.slug ?? '') !== expectedSlug
+    String(build.project?.ownerAccount?.name ?? '') !== expectedOwner ||
+    String(build.project?.slug ?? '') !== expectedSlug
   ) {
     throw new Error('EAS build belongs to a different Expo app identity');
   }

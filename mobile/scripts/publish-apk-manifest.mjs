@@ -34,6 +34,7 @@ import {
   qrReleaseUrl,
   readAppJsonBuildNumber,
   readAppJsonVersion,
+  releaseTargetRefForRepository,
   releaseTitle,
   renderRollingReleaseNotes,
   resolveApkRollingTag,
@@ -277,7 +278,7 @@ async function publishVersionedRelease({ apkBuf, version, buildNumber, outDir, c
     rollingTag,
   );
 
-  const targetRef = process.env.GITHUB_SHA?.trim() || '';
+  const targetRef = releaseTargetRefForRepository(repo);
   const action = ensureGitHubRelease(ghToken, repo, tag, title, notes, targetRef);
   const uploadPaths = [apkPath, qrPath, installPath];
   if (changelogSummaryPath) {

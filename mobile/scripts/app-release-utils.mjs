@@ -121,3 +121,15 @@ export function ensureGitHubRelease(ghToken, repo, tag, title, notes, targetRef)
   gh(ghToken, repo, ['release', 'edit', tag, '--title', title, '--notes', notes]);
   return 'updated';
 }
+
+/**
+ * A commit SHA only names a valid release target inside its source repository.
+ * Cross-repository bridges must let GitHub use the destination's default branch.
+ */
+export function releaseTargetRefForRepository(targetRepo, environment = process.env) {
+  const sourceRepo = String(environment.GITHUB_REPOSITORY ?? '').trim();
+  if (!sourceRepo || sourceRepo.toLowerCase() !== String(targetRepo ?? '').trim().toLowerCase()) {
+    return '';
+  }
+  return String(environment.GITHUB_SHA ?? '').trim();
+}

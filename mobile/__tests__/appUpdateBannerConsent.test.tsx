@@ -13,6 +13,10 @@ import {
   type ApkManifest,
 } from '../src/lib/appUpdate';
 import { IDLE_APK_DOWNLOAD } from '../src/lib/appUpdateDownloadLogic';
+import {
+  requestPerformanceAudit,
+  resetPerformanceAuditForTests,
+} from '../src/lib/performanceAudit';
 
 type TestNode = {
   props: Record<string, unknown>;
@@ -105,9 +109,11 @@ describe('AppUpdateBanner download consent', () => {
     jest.mocked(checkForAppUpdate).mockResolvedValue(availableResult);
     jest.mocked(ensureApkBackgroundDownload).mockResolvedValue({ ...IDLE_APK_DOWNLOAD });
     jest.mocked(upgradeFromBackgroundDownload).mockResolvedValue(undefined);
+    resetPerformanceAuditForTests();
   });
 
   afterEach(() => {
+    resetPerformanceAuditForTests();
     jest.restoreAllMocks();
     if (platformDescriptor) Object.defineProperty(Platform, 'OS', platformDescriptor);
     if (appStateDescriptor) Object.defineProperty(AppState, 'currentState', appStateDescriptor);
@@ -142,6 +148,19 @@ describe('AppUpdateBanner download consent', () => {
       await Promise.resolve();
     });
     expect(ensureApkBackgroundDownload).toHaveBeenCalledWith(remote, { wifiOnly: true });
+    act(() => tree.unmount());
+  });
+
+  it('suppresses automatic update traffic while the app audit owns the network boundary', async () => {
+    requestPerformanceAudit({ mode: 'live-source' });
+    let tree!: InspectableRenderer;
+    await act(async () => {
+      tree = TestRenderer.create(<HookProbe />) as InspectableRenderer;
+      await Promise.resolve();
+    });
+
+    expect(checkForAppUpdate).not.toHaveBeenCalled();
+    expect(tree.root.findByProps({ visible: false }).props.visible).toBe(false);
     act(() => tree.unmount());
   });
 

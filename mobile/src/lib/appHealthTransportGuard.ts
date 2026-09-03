@@ -107,6 +107,7 @@ export function installAppHealthTransportGuard(options: {
     declaredAssetUrls,
   });
   const originalFetch = target.fetch;
+  let approvedFetchDepth = 0;
   const guardedFetch: typeof fetch = async (input, init) => {
     const url = requestUrl(input);
     const response = await executeAppHealthRequest(
@@ -114,7 +115,17 @@ export function installAppHealthTransportGuard(options: {
       handle,
       url,
       purposeFor(url, contract),
-      () => Reflect.apply(originalFetch, target, [input, init]) as ReturnType<typeof fetch>,
+      () => {
+        // React Native implements fetch on top of XMLHttpRequest. Mark only
+        // the synchronous XHR created by this already-authorized fetch call;
+        // direct XHR remains blocked because its redirect cannot be verified.
+        approvedFetchDepth += 1;
+        try {
+          return Reflect.apply(originalFetch, target, [input, init]) as ReturnType<typeof fetch>;
+        } finally {
+          approvedFetchDepth -= 1;
+        }
+      },
     );
     if (!acceptedFinalFetchUrl(url, response, contract)) {
       policy.recordPolicyViolation(handle);
@@ -128,15 +139,23 @@ export function installAppHealthTransportGuard(options: {
   const originalOpen = xhrPrototype?.open;
   const originalSend = xhrPrototype?.send;
   const decisions = new WeakMap<object, AppHealthNetworkDecision>();
+  const approvedFetchRequests = new WeakSet<object>();
   let guardedOpen: XhrPrototype['open'] | null = null;
   let guardedSend: XhrPrototype['send'] | null = null;
   if (xhrPrototype && originalOpen && originalSend) {
     guardedOpen = function guardedXhrOpen(this: object, method, url, ...rest) {
+      if (approvedFetchDepth > 0) {
+        approvedFetchRequests.add(this);
+        return originalOpen.call(this, method, url, ...rest);
+      }
       const rawUrl = String(url);
       decisions.set(this, policy.authorize(handle, rawUrl, purposeFor(rawUrl, contract)));
       return originalOpen.call(this, method, url, ...rest);
     };
-    guardedSend = function guardedXhrSend(this: object, _body) {
+    guardedSend = function guardedXhrSend(this: object, body) {
+      if (approvedFetchRequests.delete(this)) {
+        return originalSend.call(this, body);
+      }
       const decision = decisions.get(this) ?? { allowed: false, reason: 'invalid-url' };
       if (!decision.allowed) throw new AppHealthNetworkPolicyError(decision);
       throw new AppHealthNetworkPolicyError(policy.blockAuthorizedTransport(handle, decision));
