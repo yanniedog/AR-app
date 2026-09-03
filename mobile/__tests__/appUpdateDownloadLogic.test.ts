@@ -12,6 +12,7 @@ import {
   isApkDownloadStalled,
   isUserCancelledDownload,
   shouldEnsureBackgroundDownload,
+  shouldClearOrphanedApkDownload,
   toFileUri,
   updateBannerCopy,
 } from '../src/lib/appUpdateDownloadLogic';
@@ -24,6 +25,17 @@ describe('appUpdateDownloadLogic', () => {
     for (const phase of ['idle', 'ready', 'cancelled', 'error'] as const) {
       expect(blocksPerformanceAudit({ phase })).toBe(false);
     }
+  });
+
+  it('clears orphaned restored work without interrupting current-process verification', () => {
+    for (const phase of ['waiting', 'downloading', 'retrying', 'verifying'] as const) {
+      expect(shouldClearOrphanedApkDownload({ phase }, false, false)).toBe(true);
+      expect(shouldClearOrphanedApkDownload({ phase }, true, false)).toBe(false);
+    }
+
+    expect(shouldClearOrphanedApkDownload({ phase: 'verifying' }, false, true)).toBe(false);
+    expect(shouldClearOrphanedApkDownload({ phase: 'downloading' }, false, true)).toBe(true);
+    expect(shouldClearOrphanedApkDownload({ phase: 'ready' }, false, false)).toBe(false);
   });
 
   it('builds stable task ids and destinations', () => {

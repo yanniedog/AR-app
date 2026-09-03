@@ -64,6 +64,23 @@ export function blocksPerformanceAudit(snapshot: Pick<ApkDownloadSnapshot, 'phas
   return ['waiting', 'downloading', 'retrying', 'verifying'].includes(snapshot.phase);
 }
 
+/**
+ * A restored non-terminal phase is stale once Android confirms there is no
+ * native task behind it. The one exception is verification that this JS
+ * process is currently performing after the native download has completed.
+ */
+export function shouldClearOrphanedApkDownload(
+  snapshot: Pick<ApkDownloadSnapshot, 'phase'>,
+  hasActiveNativeTask: boolean,
+  currentProcessVerificationInFlight: boolean,
+): boolean {
+  return (
+    blocksPerformanceAudit(snapshot) &&
+    !hasActiveNativeTask &&
+    !(snapshot.phase === 'verifying' && currentProcessVerificationInFlight)
+  );
+}
+
 export function apkDownloadTaskId(buildNumber: string, sha256?: string | null): string {
   const integrityKey = sha256?.slice(0, 12).toLowerCase();
   return `apk-update-${buildNumber}${integrityKey ? `-${integrityKey}` : ''}`;

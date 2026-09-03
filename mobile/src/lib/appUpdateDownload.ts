@@ -27,6 +27,7 @@ import {
   isApkDownloadStalled,
   isUserCancelledDownload,
   shouldEnsureBackgroundDownload,
+  shouldClearOrphanedApkDownload,
   toFileUri,
   type ApkDownloadSnapshot,
 } from './appUpdateDownloadLogic';
@@ -49,6 +50,7 @@ let hydrated = false;
 let hydratePromise: Promise<void> | null = null;
 let activeTask: DownloadTask | null = null;
 let activeDownloadWifiOnly: boolean | null = null;
+let currentProcessVerificationTaskId: string | null = null;
 let ensureInFlight: Promise<void> | null = null;
 let ensureKey: string | null = null;
 let configReady = false;
@@ -233,6 +235,7 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
       });
     })
     .done(({ location, bytesDownloaded, bytesTotal }) => {
+      currentProcessVerificationTaskId = task.id;
       void (async () => {
         try {
           await persist({
@@ -290,6 +293,9 @@ function attachHandlers(task: DownloadTask, manifest: ApkManifest): void {
             error: message,
           });
         } finally {
+          if (currentProcessVerificationTaskId === task.id) {
+            currentProcessVerificationTaskId = null;
+          }
           if (activeTask?.id === task.id) {
             activeTask = null;
             activeDownloadWifiOnly = null;
@@ -366,6 +372,7 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
       match.downloadParams?.destination ??
       apkDestinationPath(directories.documents, manifest.build_number, manifest.sha256);
     if (await fileExists(dest)) {
+      currentProcessVerificationTaskId = match.id;
       try {
         const localUri = toFileUri(dest);
         assertUpdateDownloadAllowed();
@@ -414,6 +421,10 @@ async function reattachExisting(manifest: ApkManifest): Promise<boolean> {
         if (activeTask?.id === match.id) activeTask = null;
         activeDownloadWifiOnly = null;
         return false;
+      } finally {
+        if (currentProcessVerificationTaskId === match.id) {
+          currentProcessVerificationTaskId = null;
+        }
       }
     }
     debugLog.warn('app-update', 'DONE task missing destination file; starting a new download');
@@ -814,6 +825,29 @@ export async function getHydratedApkDownloadSnapshot(): Promise<ApkDownloadSnaps
               : snapshot.lastProgressAt,
           nativeState: state || 'UNKNOWN',
         });
+      } else if (
+        shouldClearOrphanedApkDownload(
+          snapshot,
+          false,
+          currentProcessVerificationTaskId !== null,
+        )
+      ) {
+        const interruptedPhase = snapshot.phase;
+        const message =
+          `The previous app update ${interruptedPhase} step was interrupted, and Android no longer ` +
+          'reports an active download. Tap Retry to start the update again.';
+        debugLog.warn('app-update', `clearing orphaned ${interruptedPhase} state after native reconciliation`);
+        await persist({
+          ...snapshot,
+          phase: 'error',
+          localUri: null,
+          nativeState: null,
+          error: message,
+          verifiedSha256: null,
+          verifiedBytes: null,
+          verifiedAt: null,
+          verifiedReceiptVersion: null,
+        });
       }
     } catch (error) {
       const message = `Unable to verify native app-update activity: ${String(error)}`;
@@ -1052,6 +1086,7 @@ export async function resetApkDownloadStateForTests(): Promise<void> {
   hydratePromise = null;
   activeTask = null;
   activeDownloadWifiOnly = null;
+  currentProcessVerificationTaskId = null;
   ensureInFlight = null;
   ensureKey = null;
   configReady = false;
