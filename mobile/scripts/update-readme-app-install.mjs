@@ -84,6 +84,9 @@ export function resolveVersionAndBuild(manifestPath) {
         `Release manifest version_tag must be ${expectedVersionTag}; received ${String(manifest.version_tag ?? '(missing)')}`,
       );
     }
+    if (!/^[a-f0-9]{40}$/i.test(String(manifest.source_sha ?? ''))) {
+      throw new Error('Release manifest has a missing or invalid source_sha');
+    }
   }
   return { version, buildNumber, rollingTag, manifestPath: resolvedManifest };
 }

@@ -66,6 +66,7 @@ test('buildReadmeInstallSection follows ARM metadata while preserving a universa
       build_number: '77',
       tag: ARM_ROLLING_TAG,
       version_tag: 'app-arm-v1.2.3',
+      source_sha: 'a'.repeat(40),
     }));
     const section = buildReadmeInstallSection({ repo: 'owner/repo', manifestPath });
     assert.match(section, /app-apk-arm-latest\/app-preview-qr\.png\?v=77/);
@@ -96,6 +97,7 @@ test('an explicit release manifest never falls back to app.json', () => {
       build_number: '77',
       tag: ARM_ROLLING_TAG,
       version_tag: 'app-v1.2.3',
+      source_sha: 'a'.repeat(40),
     }));
     assert.throws(() => resolveVersionAndBuild(mismatched), /version_tag must be app-arm-v1\.2\.3/);
     const missingTag = join(dir, 'missing-tag.json');
@@ -103,8 +105,17 @@ test('an explicit release manifest never falls back to app.json', () => {
       version: '1.2.3',
       build_number: '77',
       version_tag: 'app-v1.2.3',
+      source_sha: 'a'.repeat(40),
     }));
     assert.throws(() => resolveVersionAndBuild(missingTag), /missing tag/);
+    const missingSource = join(dir, 'missing-source.json');
+    writeFileSync(missingSource, JSON.stringify({
+      version: '1.2.3',
+      build_number: '77',
+      tag: ARM_ROLLING_TAG,
+      version_tag: 'app-arm-v1.2.3',
+    }));
+    assert.throws(() => resolveVersionAndBuild(missingSource), /source_sha/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

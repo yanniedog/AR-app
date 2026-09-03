@@ -37,8 +37,8 @@ import {
 } from './lib/google-user-oauth-auth.mjs';
 import {
   DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+  deriveAttestedDiagnosticsIssue,
   extractDeidentifiedEventLogs,
-  hasCurrentDiagnosticsConsentAttestation,
   redactDiagnosticText,
 } from './lib/diagnostics-privacy.mjs';
 
@@ -232,23 +232,39 @@ function formatStackFromEvent(event) {
   return null;
 }
 
-async function resolveAttestedEventDetails(accessToken, issue, projectId, appId, lookbackDays) {
+async function resolveAttestedEventDetails(accessToken, issueId, projectId, appId, lookbackDays) {
   try {
-    const events = await fetchIssueEvents(accessToken, projectId, appId, issue.id, {
+    const events = await fetchIssueEvents(accessToken, projectId, appId, issueId, {
       lookbackDays,
     });
-    const event = events.find((candidate) => hasCurrentDiagnosticsConsentAttestation(candidate));
-    if (!event) return { attested: false, stackTrace: null, diagnosticLogs: null };
+    const evidence = deriveAttestedDiagnosticsIssue(issueId, events);
+    if (!evidence) {
+      return {
+        attested: false,
+        issue: null,
+        metrics: null,
+        stackTrace: null,
+        diagnosticLogs: null,
+      };
+    }
     return {
       attested: true,
-      stackTrace: formatStackFromEvent(event),
-      diagnosticLogs: extractDeidentifiedEventLogs(event),
+      issue: evidence.issue,
+      metrics: evidence.metrics,
+      stackTrace: formatStackFromEvent(evidence.sampleEvent),
+      diagnosticLogs: extractDeidentifiedEventLogs(evidence.sampleEvent),
     };
   } catch (error) {
     console.warn(
-      `Skipping Crashlytics issue ${issue.id}: current-consent event verification failed (${error instanceof Error ? error.message : String(error)})`,
+      `Skipping Crashlytics issue ${issueId}: current-consent event verification failed (${error instanceof Error ? error.message : String(error)})`,
     );
-    return { attested: false, stackTrace: null, diagnosticLogs: null };
+    return {
+      attested: false,
+      issue: null,
+      metrics: null,
+      stackTrace: null,
+      diagnosticLogs: null,
+    };
   }
 }
 
@@ -273,7 +289,7 @@ function buildIssueBody(issue, metrics, stackTrace, diagnosticLogs) {
     `| State | ${issue.state || 'UNKNOWN'} |`,
     `| Title | ${redactDiagnosticText(issue.title || '—')} |`,
     `| Subtitle | ${redactDiagnosticText(issue.subtitle || '—')} |`,
-    `| Events (interval) | ${metrics.eventsCount ?? '—'} |`,
+    `| Consent-attested events (interval) | ${metrics.eventsCount ?? '—'} |`,
     `| First seen version | ${issue.firstSeenVersion || '—'} |`,
     `| Last seen version | ${issue.lastSeenVersion || '—'} |`,
     `| First seen | ${issue.firstSeenTime || '—'} |`,
@@ -435,16 +451,6 @@ async function main() {
     if (!parsed) continue;
     const { issue, metrics } = parsed;
 
-    if (issue.state && issue.state !== 'OPEN') {
-      skipped += 1;
-      continue;
-    }
-
-    if (eventCount(metrics) < opts.minEvents) {
-      skipped += 1;
-      continue;
-    }
-
     if (existing.has(issue.id)) {
       skipped += 1;
       continue;
@@ -453,12 +459,18 @@ async function main() {
     const details = accessToken
       ? await resolveAttestedEventDetails(
           accessToken,
-          issue,
+          issue.id,
           projectId,
           appId,
           opts.lookbackDays,
         )
-      : { attested: true, stackTrace: null, diagnosticLogs: null };
+      : {
+          attested: true,
+          issue,
+          metrics,
+          stackTrace: null,
+          diagnosticLogs: null,
+        };
     if (!details.attested) {
       console.warn(
         `Skipping Crashlytics issue ${issue.id}: no event attests current diagnostics consent`,
@@ -466,17 +478,31 @@ async function main() {
       skipped += 1;
       continue;
     }
-    const title = buildIssueTitle(issue);
+    const attestedIssue = details.issue;
+    const attestedMetrics = details.metrics;
+    if (!attestedIssue || !attestedMetrics) {
+      skipped += 1;
+      continue;
+    }
+    if (attestedIssue.state && attestedIssue.state !== 'OPEN') {
+      skipped += 1;
+      continue;
+    }
+    if (eventCount(attestedMetrics) < opts.minEvents) {
+      skipped += 1;
+      continue;
+    }
+    const title = buildIssueTitle(attestedIssue);
     const body = buildIssueBody(
-      issue,
-      metrics,
+      attestedIssue,
+      attestedMetrics,
       details.stackTrace,
       details.diagnosticLogs,
     );
-    const labels = labelsForErrorType(issue.errorType);
+    const labels = labelsForErrorType(attestedIssue.errorType);
 
     await createGithubIssue(opts.repo, title, body, labels, opts.dryRun);
-    existing.add(issue.id);
+    existing.add(attestedIssue.id);
     created += 1;
   }
 

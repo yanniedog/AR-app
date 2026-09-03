@@ -11,6 +11,7 @@ import {
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
+  recoveryIdentityForMissingChannel,
   validatePublishedChannelSnapshot,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
@@ -179,12 +180,20 @@ test('partial APK recovery dispatches only the missing published channel', () =>
   dispatchApkBuild('1.0.40', ['arm'], {
     simulate: false,
     runGh: (args) => calls.push(args),
+    releaseVersion: '1.0.40',
+    releaseVersionCode: '152',
   });
   assert.deepEqual(calls, [[
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
     '-f', 'apk_channel=arm',
     '-f', 'follow_with_arm=false',
+    '-f', 'release_version=1.0.40',
+    '-f', 'release_version_code=152',
   ]]);
+  assert.throws(
+    () => dispatchApkBuild('1.0.40', ['arm'], { simulate: false, runGh: () => {} }),
+    /exact surviving version and versionCode/,
+  );
 });
 
 test('ensureApkForMainHead is a no-op when the APK is already published', () => {
@@ -225,18 +234,54 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
   assert.equal(dispatchedCount, 0);
 });
 
-test('ensureApkForMainHead never rebuilds the already-published channel', () => {
+test('ensureApkForMainHead repairs only the missing channel with the surviving identity', () => {
   const dispatched = [];
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.42',
-    readHeadSha: () => 'feed123',
-    readPublishedChannels: () => ({ arm: true, universal: false }),
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'f'.repeat(40) },
+      universal: null,
+    }),
     buildInFlight: () => false,
+    dispatch: (version, channels, options) => dispatched.push([version, channels, options]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(dispatched, [[
+    '1.0.42',
+    ['universal'],
+    { releaseVersion: '1.0.42', releaseVersionCode: '154' },
+  ]]);
+  assert.deepEqual(
+    recoveryIdentityForMissingChannel('1.0.42', {
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'f'.repeat(40) },
+      universal: null,
+    }, 'f'.repeat(40)),
+    { releaseVersion: '1.0.42', releaseVersionCode: '154' },
+  );
+});
+
+test('partial recovery rebuilds a new pair when the surviving channel came from another source', () => {
+  const dispatched = [];
+  const checked = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'e'.repeat(40) },
+      universal: null,
+    }),
+    buildInFlight: (head, channels) => {
+      checked.push([head, channels]);
+      return false;
+    },
     dispatch: (version, channels) => dispatched.push([version, channels]),
   });
 
   assert.equal(did, true);
-  assert.deepEqual(dispatched, [['1.0.42', ['universal']]]);
+  assert.deepEqual(checked, [['f'.repeat(40), ['universal', 'arm']]]);
+  assert.deepEqual(dispatched, [['1.0.42', ['universal', 'arm']]]);
 });
 
 test('a channel is published only when its rolling manifest and immutable APK agree', () => {
@@ -257,8 +302,10 @@ test('a channel is published only when its rolling manifest and immutable APK ag
     version_tag: `app-v${version}`,
     repo: repository,
     download_url: `https://github.com/${repository}/releases/download/app-v${version}/${APK_ASSET}`,
+    build_number: '156',
     sha256: 'a'.repeat(64),
     bytes: 123,
+    source_sha: 'a'.repeat(40),
   };
   const snapshot = {
     version,

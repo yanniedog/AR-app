@@ -88,6 +88,12 @@ test('reuses one monotonic release identity across paired APK channels', () => {
     baseVersion: '1.0.180',
     baseVersionCode: 192,
   }), { version: '1.0.181', versionCode: 193 });
+  assert.deepEqual(validateReusedReleaseIdentity({
+    version: '1.0.180',
+    versionCode: '192',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), { version: '1.0.180', versionCode: 192 });
   assert.throws(() => validateReusedReleaseIdentity({
     version: '1.0.181',
     versionCode: '',
@@ -99,7 +105,7 @@ test('reuses one monotonic release identity across paired APK channels', () => {
     versionCode: '193',
     baseVersion: '1.0.180',
     baseVersionCode: 192,
-  }), /advance beyond/);
+  }), /exactly match.*or advance/);
 });
 
 test('rejects a missing rolling tag before generating changelog metadata', () => {

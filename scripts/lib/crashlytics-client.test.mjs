@@ -20,22 +20,27 @@ const nested = flattenMessageQueryParams('filter', {
 assert.deepEqual(nested['filter.issue.errorTypes'], ['FATAL', 'ANR']);
 
 const originalFetch = globalThis.fetch;
-let requestedUrl = '';
+const requestedUrls = [];
 globalThis.fetch = async (url) => {
-  requestedUrl = String(url);
+  requestedUrls.push(String(url));
+  const secondPage = String(url).includes('pageToken=next-page');
   return {
     ok: true,
-    text: async () => JSON.stringify({ events: [{ id: 'newest' }] }),
+    text: async () => JSON.stringify(secondPage
+      ? { events: [{ id: 'older' }] }
+      : { events: [{ id: 'newest' }], nextPageToken: 'next-page' }),
   };
 };
 try {
   const events = await fetchIssueEvents('token', 'project name', 'app/id', 'issue-123', {
     lookbackDays: 7,
   });
-  assert.deepEqual(events, [{ id: 'newest' }]);
-  assert.match(requestedUrl, /projects\/project%20name\/apps\/app%2Fid\/events\?/);
-  assert.match(requestedUrl, /filter\.issue\.id=issue-123/);
-  assert.match(requestedUrl, /filter\.interval\.startTime=/);
+  assert.deepEqual(events, [{ id: 'newest' }, { id: 'older' }]);
+  assert.equal(requestedUrls.length, 2);
+  assert.match(requestedUrls[0], /projects\/project%20name\/apps\/app%2Fid\/events\?/);
+  assert.match(requestedUrls[0], /filter\.issue\.id=issue-123/);
+  assert.match(requestedUrls[0], /filter\.interval\.startTime=/);
+  assert.match(requestedUrls[1], /pageToken=next-page/);
 } finally {
   globalThis.fetch = originalFetch;
 }

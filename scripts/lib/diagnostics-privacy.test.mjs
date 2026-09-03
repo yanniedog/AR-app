@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   CRASHLYTICS_PRIVACY_NOTICE_KEY,
   DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+  deriveAttestedDiagnosticsIssue,
   extractDeidentifiedEventLogs,
   hasCurrentDiagnosticsConsentAttestation,
   redactDiagnosticText,
@@ -39,6 +40,62 @@ assert.equal(hasCurrentDiagnosticsConsentAttestation({
 assert.equal(hasCurrentDiagnosticsConsentAttestation({
   logs: [{ message: `${CRASHLYTICS_PRIVACY_NOTICE_KEY}=${DIAGNOSTICS_PRIVACY_NOTICE_VERSION}` }],
 }), false, 'a log message cannot forge the dedicated custom-key attestation');
+
+const evidence = deriveAttestedDiagnosticsIssue('mixed-issue', [
+  {
+    issue: {
+      id: 'mixed-issue',
+      title: 'Older private title',
+      subtitle: 'Older private subtitle',
+      errorType: 'FATAL',
+      state: 'OPEN',
+      signals: [{ signal: 'SIGNAL_REPETITIVE', description: 'older aggregate' }],
+    },
+    issueTitle: 'Older private title',
+    issueSubtitle: 'Older private subtitle',
+    eventTime: '2026-08-01T00:00:00Z',
+    version: { displayVersion: '1.0.1' },
+    customKeys: { [CRASHLYTICS_PRIVACY_NOTICE_KEY]: 'older-notice' },
+  },
+  {
+    issue: {
+      id: 'mixed-issue',
+      title: 'Attested title',
+      subtitle: 'Attested subtitle',
+      errorType: 'NON_FATAL',
+      state: 'OPEN',
+      uri: 'https://console.firebase.google.com/attested',
+      signals: [{ signal: 'SIGNAL_REPETITIVE', description: 'mixed aggregate' }],
+    },
+    issueTitle: 'Attested title',
+    issueSubtitle: 'Attested subtitle',
+    eventTime: '2026-09-02T00:00:00Z',
+    version: { displayVersion: '1.0.179' },
+    customKeys: { [CRASHLYTICS_PRIVACY_NOTICE_KEY]: DIAGNOSTICS_PRIVACY_NOTICE_VERSION },
+  },
+  {
+    issue: {
+      id: 'mixed-issue',
+      title: 'Latest attested title',
+      subtitle: 'Latest attested subtitle',
+      errorType: 'NON_FATAL',
+      state: 'OPEN',
+    },
+    issueTitle: 'Latest attested title',
+    issueSubtitle: 'Latest attested subtitle',
+    eventTime: '2026-09-03T00:00:00Z',
+    version: { displayVersion: '1.0.180' },
+    customKeys: { [CRASHLYTICS_PRIVACY_NOTICE_KEY]: DIAGNOSTICS_PRIVACY_NOTICE_VERSION },
+  },
+]);
+assert.equal(evidence.metrics.eventsCount, '2');
+assert.equal(evidence.issue.title, 'Latest attested title');
+assert.equal(evidence.issue.firstSeenVersion, '1.0.179');
+assert.equal(evidence.issue.lastSeenVersion, '1.0.180');
+assert.equal(evidence.issue.firstSeenTime, '2026-09-02T00:00:00Z');
+assert.equal(evidence.issue.lastSeenTime, '2026-09-03T00:00:00Z');
+assert.deepEqual(evidence.issue.signals, []);
+assert.doesNotMatch(JSON.stringify(evidence), /Older private|older aggregate|mixed aggregate/);
 
 const mobilePolicy = readFileSync(
   new URL('../../mobile/src/lib/privacyPolicy.ts', import.meta.url),

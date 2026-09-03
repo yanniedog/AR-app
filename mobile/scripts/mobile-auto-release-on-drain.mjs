@@ -139,6 +139,10 @@ export function validatePublishedChannelSnapshot({
     && manifest?.version_tag === expectedVersionTag
     && manifest?.repo === repository
     && manifest?.download_url === apkDownloadUrl(repository, expectedVersionTag)
+    && /^[a-f0-9]{40}$/i.test(String(manifest?.source_sha ?? ''))
+    && /^\d+$/.test(String(manifest?.build_number ?? ''))
+    && Number(manifest?.build_number) > 0
+    && Number.isSafeInteger(Number(manifest?.build_number))
     && /^[a-f0-9]{64}$/i.test(String(manifest?.sha256 ?? ''))
     && Number(manifest?.bytes) > 0,
   );
@@ -156,7 +160,7 @@ function publishedApkChannel(version, rollingTag) {
     return false;
   }
   const versionedRelease = releaseSnapshot(versionTagForApkChannel(version, rollingTag));
-  return validatePublishedChannelSnapshot({
+  const published = validatePublishedChannelSnapshot({
     version,
     rollingTag,
     repository: repo,
@@ -164,6 +168,13 @@ function publishedApkChannel(version, rollingTag) {
     versionedRelease,
     manifest,
   });
+  return published
+    ? {
+        version: manifest.version,
+        versionCode: Number(manifest.build_number),
+        sourceSha: String(manifest.source_sha).toLowerCase(),
+      }
+    : null;
 }
 
 function publishedApkChannels(version) {
@@ -178,6 +189,28 @@ export function missingApkChannels(published) {
     ...(!published?.universal ? ['universal'] : []),
     ...(!published?.arm ? ['arm'] : []),
   ];
+}
+
+export function recoveryIdentityForMissingChannel(version, published, headSha) {
+  const missing = missingApkChannels(published);
+  if (missing.length !== 1) return null;
+  const surviving = missing[0] === 'universal' ? published?.arm : published?.universal;
+  if (!surviving || typeof surviving !== 'object') {
+    throw new Error('A partial APK recovery requires the surviving channel manifest identity');
+  }
+  const releaseVersion = String(surviving.version ?? '').trim();
+  const releaseVersionCode = Number(surviving.versionCode);
+  const sourceSha = String(surviving.sourceSha ?? '').trim().toLowerCase();
+  if (
+    releaseVersion !== version ||
+    !Number.isSafeInteger(releaseVersionCode) ||
+    releaseVersionCode <= 0 ||
+    !/^[a-f0-9]{40}$/.test(sourceSha)
+  ) {
+    throw new Error('The surviving APK channel identity does not match the release being repaired');
+  }
+  if (sourceSha !== String(headSha ?? '').trim().toLowerCase()) return null;
+  return { releaseVersion, releaseVersionCode: String(releaseVersionCode) };
 }
 
 function channelsCoveredByRun(run) {
@@ -229,12 +262,35 @@ function apkBuildInFlight(expectedHeadSha, requiredChannels) {
 export function dispatchApkBuild(
   version,
   missingChannels = ['universal', 'arm'],
-  { runGh = gh, simulate = dryRun } = {},
+  {
+    runGh = gh,
+    simulate = dryRun,
+    releaseVersion = null,
+    releaseVersionCode = null,
+  } = {},
 ) {
   const missing = new Set(missingChannels);
   if (!missing.size) return;
+  if ([...missing].some((channel) => channel !== 'universal' && channel !== 'arm')) {
+    throw new Error(`Unsupported APK channel recovery request: ${[...missing].join(', ')}`);
+  }
   const firstChannel = missing.has('universal') ? 'universal' : 'arm';
   const followWithArm = firstChannel === 'universal' && missing.has('arm');
+  const partialRecovery = missing.size === 1;
+  const reusedVersion = String(releaseVersion ?? '').trim();
+  const reusedCode = String(releaseVersionCode ?? '').trim();
+  if (partialRecovery) {
+    if (
+      reusedVersion !== version ||
+      !/^\d+$/.test(reusedCode) ||
+      Number(reusedCode) <= 0 ||
+      !Number.isSafeInteger(Number(reusedCode))
+    ) {
+      throw new Error('A partial APK recovery requires the exact surviving version and versionCode');
+    }
+  } else if (reusedVersion || reusedCode) {
+    throw new Error('A paired APK release must allocate its identity in the universal build');
+  }
   if (simulate) {
     console.log(
       `mobile-auto-release-on-drain: dry-run — would dispatch ${firstChannel}${followWithArm ? ' then ARM' : ''} mobile-android-apk for v${version}`,
@@ -249,6 +305,12 @@ export function dispatchApkBuild(
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
     '-f', `apk_channel=${firstChannel}`,
     '-f', `follow_with_arm=${followWithArm}`,
+    ...(partialRecovery
+      ? [
+          '-f', `release_version=${reusedVersion}`,
+          '-f', `release_version_code=${reusedCode}`,
+        ]
+      : []),
   ]);
   console.log(
     `mobile-auto-release-on-drain: dispatched ${firstChannel}${followWithArm ? '-then-ARM' : ''} APK release for v${version} on main`,
@@ -268,12 +330,24 @@ export function ensureApkForMainHead({
 } = {}) {
   const version = readVersion();
   const headSha = readHeadSha();
-  const missingChannels = missingApkChannels(readPublishedChannels(version));
+  const publishedChannels = readPublishedChannels(version);
+  const missingChannels = missingApkChannels(publishedChannels);
   if (!missingChannels.length) {
     console.log(
       `mobile-auto-release-on-drain: ARM and universal v${version} releases already published — no APK dispatch`,
     );
     return false;
+  }
+  const recoveryIdentity = recoveryIdentityForMissingChannel(
+    version,
+    publishedChannels,
+    headSha,
+  );
+  if (missingChannels.length === 1 && !recoveryIdentity) {
+    console.log(
+      'mobile-auto-release-on-drain: surviving channel came from another source commit; rebuilding a new paired release',
+    );
+    missingChannels.splice(0, missingChannels.length, 'universal', 'arm');
   }
   if (buildInFlight(headSha, missingChannels)) {
     console.log(
@@ -281,7 +355,11 @@ export function ensureApkForMainHead({
     );
     return false;
   }
-  dispatch(version, missingChannels);
+  if (recoveryIdentity) {
+    dispatch(version, missingChannels, recoveryIdentity);
+  } else {
+    dispatch(version, missingChannels);
+  }
   return true;
 }
 

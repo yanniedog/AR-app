@@ -14,6 +14,54 @@ export function hasCurrentDiagnosticsConsentAttestation(
   return String(keys[CRASHLYTICS_PRIVACY_NOTICE_KEY] ?? '') === expectedNotice;
 }
 
+function eventTimeMs(event) {
+  const value = event?.eventTime || event?.receivedTime;
+  const parsed = Date.parse(String(value ?? ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function eventDisplayVersion(event) {
+  return String(event?.version?.displayVersion ?? '').trim() || null;
+}
+
+/**
+ * Derive every publishable issue field from current-consent events only.
+ * Group aggregates and analyzer signals are deliberately excluded because a
+ * mixed-consent issue can include older events in those values.
+ */
+export function deriveAttestedDiagnosticsIssue(issueId, events) {
+  const expectedIssueId = String(issueId ?? '').trim();
+  if (!expectedIssueId || !Array.isArray(events)) return null;
+  const attested = events
+    .filter((event) =>
+      hasCurrentDiagnosticsConsentAttestation(event) &&
+      String(event?.issue?.id ?? '') === expectedIssueId)
+    .sort((left, right) => eventTimeMs(left) - eventTimeMs(right));
+  if (!attested.length) return null;
+
+  const oldest = attested[0];
+  const newest = attested[attested.length - 1];
+  const firstVersion = attested.find((event) => eventDisplayVersion(event)) ?? oldest;
+  const lastVersion = [...attested].reverse().find((event) => eventDisplayVersion(event)) ?? newest;
+  return {
+    issue: {
+      id: expectedIssueId,
+      title: String(newest.issueTitle ?? newest.issue?.title ?? expectedIssueId),
+      subtitle: String(newest.issueSubtitle ?? newest.issue?.subtitle ?? ''),
+      errorType: String(newest.issue?.errorType ?? 'UNKNOWN'),
+      state: String(newest.issue?.state ?? 'UNKNOWN'),
+      uri: typeof newest.issue?.uri === 'string' ? newest.issue.uri : null,
+      firstSeenVersion: eventDisplayVersion(firstVersion),
+      lastSeenVersion: eventDisplayVersion(lastVersion),
+      firstSeenTime: oldest.eventTime || oldest.receivedTime || null,
+      lastSeenTime: newest.eventTime || newest.receivedTime || null,
+      signals: [],
+    },
+    metrics: { eventsCount: String(attested.length) },
+    sampleEvent: newest,
+  };
+}
+
 /** Defense-in-depth scrub for Crashlytics fields before they leave Firebase. */
 export function redactDiagnosticText(value) {
   return String(value ?? '')

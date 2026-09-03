@@ -390,6 +390,10 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     );
   }
   const downloadUrl = apkDownloadUrl(repo, versionedTagName);
+  const sourceSha = releaseTargetRefForRepository(repo);
+  if (!/^[a-f0-9]{40}$/i.test(sourceSha)) {
+    throw new Error('publish-apk-manifest: protected source commit SHA is missing or invalid');
+  }
 
   const manifest = {
     schema_version: 1,
@@ -407,6 +411,7 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     version_tag: versionedTagName,
     profile: 'preview',
     build_source: source,
+    source_sha: sourceSha,
     ...(easBuildId ? { eas_build_id: easBuildId } : {}),
   };
 

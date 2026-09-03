@@ -78,8 +78,13 @@ export function validateReusedReleaseIdentity({ version, versionCode, baseVersio
   if (!Number.isSafeInteger(numericCode) || numericCode <= 0) {
     throw new Error('--release-version-code must be a positive integer');
   }
-  if (compareVersions(suppliedVersion, baseVersion) <= 0 || numericCode <= baseVersionCode) {
-    throw new Error('Reused release identity must advance beyond the checked-in app identity');
+  const versionComparison = compareVersions(suppliedVersion, baseVersion);
+  const exactRecovery = versionComparison === 0 && numericCode === baseVersionCode;
+  const pairedAdvance = versionComparison > 0 && numericCode > baseVersionCode;
+  if (!exactRecovery && !pairedAdvance) {
+    throw new Error(
+      'Reused release identity must exactly match the checked-in identity or advance version and versionCode together',
+    );
   }
   return { version: suppliedVersion, versionCode: numericCode };
 }

@@ -159,23 +159,32 @@ export async function fetchIssueEvents(
   projectId,
   appId,
   issueId,
-  { lookbackDays = 7, pageSize = 100 } = {},
+  { lookbackDays = 7, pageSize = 100, maxPages = 100 } = {},
 ) {
   const project = encodeURIComponent(projectId);
   const app = encodeURIComponent(appId);
   const recent = buildRecentIntervalFilter(lookbackDays);
-  const query = { pageSize };
-  Object.assign(query, flattenMessageQueryParams('filter', {
-    interval: recent.interval,
-    issue: { id: issueId },
-  }));
-  const page = await crashlyticsRequest(
-    accessToken,
-    'GET',
-    `projects/${project}/apps/${app}/events`,
-    query,
-  );
-  return Array.isArray(page.events) ? page.events : [];
+  const events = [];
+  let pageToken;
+  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber += 1) {
+    const query = { pageSize, pageToken };
+    Object.assign(query, flattenMessageQueryParams('filter', {
+      interval: recent.interval,
+      issue: { id: issueId },
+    }));
+    const page = await crashlyticsRequest(
+      accessToken,
+      'GET',
+      `projects/${project}/apps/${app}/events`,
+      query,
+    );
+    events.push(...(Array.isArray(page.events) ? page.events : []));
+    pageToken = typeof page.nextPageToken === 'string' && page.nextPageToken
+      ? page.nextPageToken
+      : undefined;
+    if (!pageToken) return events;
+  }
+  throw new Error(`Crashlytics events pagination exceeded ${maxPages} pages`);
 }
 
 /**
