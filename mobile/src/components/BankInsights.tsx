@@ -221,7 +221,17 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   const measuredRows = useRef(new Set<string>());
   useEffect(() => {
     measuredRows.current = new Set();
-  }, [rowRevision]);
+    if (!payload) return;
+    // A keyed row replacement can keep identical native geometry, in which
+    // case Android may omit every child onLayout callback. This post-commit
+    // signal proves the current React row set rendered; the screen's separate
+    // layout probe still verifies that the containing surface reached layout.
+    onRenderEvidence?.({
+      expectedCount: rows.length,
+      actualCount: rows.length,
+      emptyStateRendered: rows.length === 0,
+    });
+  }, [onRenderEvidence, payload, rowRevision, rows.length]);
   const reportRowLayout = useCallback((key: string) => {
     if (measuredRows.current.has(key)) return;
     measuredRows.current.add(key);
