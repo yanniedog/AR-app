@@ -307,6 +307,7 @@ export default function BankDetail() {
   const onHistoryGraphicReady = useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
       return current?.graphicRevision === evidence.graphicRevision &&
+        current.availability === evidence.availability &&
         current.pointCount === evidence.pointCount &&
         current.accessibleSummary === evidence.accessibleSummary
         ? current
@@ -514,9 +515,16 @@ export default function BankDetail() {
         id: 'lender.history-graphic',
         kind: 'graphic',
         required: false,
-        status: !chartModel || currentHistoryGraphicEvidence
+        status: !chartModel
           ? 'ready'
-          : 'pending',
+          : !currentHistoryGraphicEvidence
+            ? 'pending'
+            : currentHistoryGraphicEvidence.availability === 'rendered'
+              ? 'ready'
+              : 'error',
+        error: currentHistoryGraphicEvidence?.availability === 'unavailable'
+          ? 'Lender history has no finite values to plot'
+          : null,
         expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
         actualCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
         accessibleSummary: currentHistoryGraphicEvidence?.accessibleSummary ?? false,

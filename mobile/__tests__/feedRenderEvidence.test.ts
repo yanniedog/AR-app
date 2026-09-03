@@ -2,6 +2,7 @@ import {
   buildFeedRowRevision,
   isFeedRenderEvidenceReady,
   reconcileFeedRenderEvidence,
+  resolveFeedRenderProbe,
   resetFeedRenderEvidence,
 } from '../src/lib/feedRenderEvidence';
 
@@ -55,5 +56,17 @@ describe('Changes feed render evidence', () => {
       { expectedCount: 0, actualCount: 0, emptyStateRendered: true },
     );
     expect(isFeedRenderEvidenceReady(evidence, revision, 0)).toBe(true);
+  });
+
+  it('terminates with an error when data failure prevents the feed from rendering', () => {
+    expect(resolveFeedRenderProbe({
+      hasPayload: false,
+      settledEmpty: false,
+      dataError: true,
+      renderReady: false,
+    })).toEqual({
+      status: 'error',
+      error: 'Rate changes feed did not render because its data is unavailable',
+    });
   });
 });

@@ -20,11 +20,18 @@ describe('history graphic audit evidence', () => {
       contentRevision: 'sha-a',
       graphicRevision: 'sha-a:Mortgage:30D:2026-09-01:2',
       window: '30D',
+      availability: 'rendered',
       pointCount: 2,
       accessibleSummary: true,
     };
     expect(isCurrentHistoryGraphicEvidence(evidence, 'sha-a')).toBe(true);
     expect(isCurrentHistoryGraphicEvidence(evidence, 'sha-b')).toBe(false);
     expect(isCurrentHistoryGraphicEvidence({ ...evidence, pointCount: 0 }, 'sha-a')).toBe(false);
+    expect(isCurrentHistoryGraphicEvidence({
+      ...evidence,
+      availability: 'unavailable',
+      pointCount: 0,
+      accessibleSummary: false,
+    }, 'sha-a')).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ export interface HistoryGraphicEvidence {
   contentRevision: string;
   graphicRevision: string;
   window: HistoryWindow;
+  availability: 'rendered' | 'unavailable';
   pointCount: number;
   accessibleSummary: boolean;
 }
@@ -27,8 +28,16 @@ export function isCurrentHistoryGraphicEvidence(
   evidence: HistoryGraphicEvidence | null,
   contentRevision: string,
 ): evidence is HistoryGraphicEvidence {
-  return evidence?.contentRevision === contentRevision &&
-    Number.isInteger(evidence.pointCount) &&
-    evidence.pointCount > 0 &&
-    evidence.accessibleSummary;
+  if (
+    evidence?.contentRevision !== contentRevision ||
+    !Number.isInteger(evidence.pointCount) ||
+    evidence.pointCount < 0
+  ) {
+    return false;
+  }
+  return evidence.availability === 'rendered'
+    ? evidence.pointCount > 0 && evidence.accessibleSummary
+    : evidence.availability === 'unavailable' &&
+        evidence.pointCount === 0 &&
+        !evidence.accessibleSummary;
 }

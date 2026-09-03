@@ -249,11 +249,23 @@ export function BankHistoryChart({
     plotDates,
   );
   useEffect(() => {
-    if (width <= 0 || !plotDates.length || !plotPoints.length || !hasPlottableValues) return;
+    if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
+      onGraphicReady?.({
+        contentRevision: sourceRevision,
+        graphicRevision,
+        window,
+        availability: 'unavailable',
+        pointCount: 0,
+        accessibleSummary: false,
+      });
+      return;
+    }
+    if (width <= 0) return;
     onGraphicReady?.({
       contentRevision: sourceRevision,
       graphicRevision,
       window,
+      availability: 'rendered',
       pointCount: plotDates.length,
       accessibleSummary: true,
     });

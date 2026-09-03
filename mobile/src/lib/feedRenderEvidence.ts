@@ -8,6 +8,34 @@ export interface FeedRenderEvidence extends FeedLayoutEvidence {
   revision: string;
 }
 
+export interface FeedRenderProbeResult {
+  status: 'ready' | 'pending' | 'error';
+  error: string | null;
+}
+
+export function resolveFeedRenderProbe({
+  hasPayload,
+  settledEmpty,
+  dataError,
+  renderReady,
+}: {
+  hasPayload: boolean;
+  settledEmpty: boolean;
+  dataError: boolean;
+  renderReady: boolean;
+}): FeedRenderProbeResult {
+  if (dataError && !hasPayload && !settledEmpty) {
+    return {
+      status: 'error',
+      error: 'Rate changes feed did not render because its data is unavailable',
+    };
+  }
+  return {
+    status: (hasPayload || settledEmpty) && renderReady ? 'ready' : 'pending',
+    error: null,
+  };
+}
+
 export function buildFeedRowRevision(
   contentRevision: string,
   rowIdentities: readonly string[],

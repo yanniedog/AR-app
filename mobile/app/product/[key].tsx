@@ -284,6 +284,7 @@ export default function ProductDetail() {
   const onHistoryGraphicReady = React.useCallback((evidence: HistoryGraphicEvidence) => {
     setHistoryGraphicEvidence((current) => {
       return current?.graphicRevision === evidence.graphicRevision &&
+        current.availability === evidence.availability &&
         current.pointCount === evidence.pointCount &&
         current.accessibleSummary === evidence.accessibleSummary
         ? current
@@ -337,9 +338,16 @@ export default function ProductDetail() {
         required: false,
         status: historyWaitingForInsights
           ? 'pending'
-          : !historyModel || currentHistoryGraphicEvidence
+          : !historyModel
             ? 'ready'
-            : 'pending',
+            : !currentHistoryGraphicEvidence
+              ? 'pending'
+              : currentHistoryGraphicEvidence.availability === 'rendered'
+                ? 'ready'
+                : 'error',
+        error: !historyWaitingForInsights && currentHistoryGraphicEvidence?.availability === 'unavailable'
+          ? 'Product history has no finite values to plot'
+          : null,
         expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
         actualCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
         accessibleSummary: currentHistoryGraphicEvidence?.accessibleSummary ?? false,

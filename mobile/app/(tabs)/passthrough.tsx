@@ -25,6 +25,7 @@ import { scalarRouteParam } from '../../src/lib/nav';
 import {
   isFeedRenderEvidenceReady,
   reconcileFeedRenderEvidence,
+  resolveFeedRenderProbe,
   resetFeedRenderEvidence,
   type FeedLayoutEvidence,
   type FeedRenderEvidence,
@@ -150,6 +151,12 @@ export default function RateMovesTab() {
     feedEvidence.expectedCount === feedExpectedCount
     ? feedEvidence
     : resetFeedRenderEvidence(feedRenderRevision, feedExpectedCount);
+  const feedProbe = resolveFeedRenderProbe({
+    hasPayload: Boolean(payload),
+    settledEmpty: filteredEmpty,
+    dataError: Boolean(error),
+    renderReady: feedReady,
+  });
 
   const changeSection = useCallback(() => {
     const index = sectionOptions.findIndex((option) => option.value === activeSection);
@@ -179,7 +186,8 @@ export default function RateMovesTab() {
       {
         id: 'changes.feed-list',
         kind: 'list',
-        status: (payload || filteredEmpty) && feedReady ? 'ready' : 'pending',
+        status: feedProbe.status,
+        error: feedProbe.error,
         expectedCount: feedExpectedCount,
         actualCount: currentFeedEvidence.actualCount,
         emptyStateRendered: currentFeedEvidence.emptyStateRendered,
