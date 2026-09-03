@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: mobile-eas-submit
@@ -82,9 +83,16 @@ jobs:
       - name: EAS Submit (exact build)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_ID: ${{ inputs.build_id }}
+          EAS_PROFILE: ${{ inputs.profile }}
+          EAS_PLATFORM: ${{ inputs.platform }}
         run: |
+          if [[ ! "$EAS_BUILD_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+            echo "::error::build_id must be an exact EAS build UUID."
+            exit 1
+          fi
           eas submit \
             --non-interactive \
-            --id "${{ inputs.build_id }}" \
-            --profile "${{ inputs.profile }}" \
-            --platform "${{ inputs.platform }}"
+            --id "$EAS_BUILD_ID" \
+            --profile "$EAS_PROFILE" \
+            --platform "$EAS_PLATFORM"

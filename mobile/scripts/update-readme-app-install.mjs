@@ -80,6 +80,14 @@ export function buildReadmeInstallSection(opts = {}) {
   const installUrl = installReleaseUrl(ghRepo, rollingTag);
   const releasePrefix = rollingTag === ARM_ROLLING_TAG ? 'app-arm-v' : 'app-v';
   const releasesUrl = `https://github.com/${ghRepo}/releases?q=${releasePrefix}&expanded=true`;
+  const armPrimary = rollingTag === ARM_ROLLING_TAG;
+  const apkLabel = armPrimary ? 'ARM APK (most phones)' : 'Universal APK (ARM + x86)';
+  const compatibilityRow = armPrimary
+    ? `| Universal/x86 fallback | [APK](${apkDownloadUrl(ghRepo, ROLLING_TAG)}) · [install page](${installReleaseUrl(ghRepo, ROLLING_TAG)}) · [version history](https://github.com/${ghRepo}/releases?q=app-v&expanded=true) |\n`
+    : '';
+  const compatibilityNote = armPrimary
+    ? 'The displayed version and QR follow the phone-optimised ARM channel. x86 and x86_64 emulators or devices must use the universal fallback above.'
+    : 'The universal APK supports ARM and x86 Android devices.';
 
   return `${START}
 ### Android preview install
@@ -90,9 +98,11 @@ Scan with **Android Chrome** to install the latest preview APK. Asset path is st
 |---|---|
 | Version | **${version}** (build ${buildNumber}) |
 | QR | ![Install QR](${qrUrl}) |
-| APK | [app-preview.apk](${apkUrl}) |
+| ${apkLabel} | [app-preview.apk](${apkUrl}) |
 | Install page | [install.html](${installUrl}) |
 | Version history | [${releasePrefix}* releases](${releasesUrl}) |
+${compatibilityRow}
+${compatibilityNote}
 
 In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${rollingTag}\`.
 ${END}`;

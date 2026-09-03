@@ -70,3 +70,29 @@ test('the ARM size budget locks in the optimized two-ABI APK', async () => {
   assert.equal(budgets.apkBaselineByChannel.arm, 48_000_000);
   assert.equal(budgets.maximumGrowthFraction, 0.05);
 });
+
+test('EAS release jobs can verify the merged pull request for their main commit', async () => {
+  const buildWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),
+    'utf8',
+  );
+  const submitWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(buildWorkflow, /pull-requests:\s+read/);
+  assert.match(submitWorkflow, /pull-requests:\s+read/);
+});
+
+test('EAS submission validates an environment-delivered build UUID', async () => {
+  const submitWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(submitWorkflow, /EAS_BUILD_ID:\s+\$\{\{ inputs\.build_id \}\}/);
+  assert.match(submitWorkflow, /build_id must be an exact EAS build UUID/);
+  assert.match(submitWorkflow, /--id "\$EAS_BUILD_ID"/);
+  assert.doesNotMatch(submitWorkflow, /--id "\$\{\{ inputs\.build_id \}\}"/);
+});

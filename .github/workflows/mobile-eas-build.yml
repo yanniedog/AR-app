@@ -41,6 +41,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: read
 
 concurrency:
   # Shared with mobile-android-apk so preview APK publication is globally serial.

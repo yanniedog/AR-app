@@ -54,7 +54,7 @@ test('buildReadmeInstallSection embeds cache-busted QR from manifest', () => {
   assert.match(section, /<!-- app-android-install:end -->/);
 });
 
-test('buildReadmeInstallSection follows an ARM manifest instead of stale universal metadata', () => {
+test('buildReadmeInstallSection follows ARM metadata while preserving a universal fallback', () => {
   const dir = mkdtempSync(join(tmpdir(), 'ar-readme-'));
   const manifestPath = join(dir, 'manifest.json');
   try {
@@ -67,6 +67,10 @@ test('buildReadmeInstallSection follows an ARM manifest instead of stale univers
     assert.match(section, /app-apk-arm-latest\/app-preview-qr\.png\?v=77/);
     assert.match(section, /app-arm-v\* releases/);
     assert.match(section, /Version \| \*\*1\.2\.3\*\* \(build 77\)/);
+    assert.match(section, /Universal\/x86 fallback/);
+    assert.match(section, /app-apk-latest\/app-preview\.apk/);
+    assert.match(section, /app-apk-latest\/install\.html/);
+    assert.match(section, /x86 and x86_64 emulators or devices must use the universal fallback/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

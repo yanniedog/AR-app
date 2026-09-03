@@ -72,7 +72,9 @@ export interface Prefs {
   calc: CalcInputs;
 }
 
-export const CURRENT_PRIVACY_CHOICE_VERSION = 2;
+// Advance whenever diagnostic recipients or processing materially change so
+// a previous opt-in cannot silently authorize a broader disclosure.
+export const CURRENT_PRIVACY_CHOICE_VERSION = 3;
 export const CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION = 1;
 
 export function migratedMortgageRatePreference(
