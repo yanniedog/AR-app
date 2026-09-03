@@ -101,6 +101,7 @@ describe('LifecycleChart render evidence', () => {
     expect(onRenderReady).toHaveBeenCalledTimes(1);
     expect(onRenderReady).toHaveBeenLastCalledWith({
       renderRevision: 'revision-1',
+      selectionIndex: 0,
       accessibleSummary: true,
     });
 
@@ -123,8 +124,42 @@ describe('LifecycleChart render evidence', () => {
     expect(onRenderReady).toHaveBeenCalledTimes(2);
     expect(onRenderReady).toHaveBeenLastCalledWith({
       renderRevision: 'revision-2',
+      selectionIndex: 0,
       accessibleSummary: true,
     });
+    act(() => tree.unmount());
+  });
+
+  it('emits a new render-state token when the adjustable chart changes month', () => {
+    const controllerRef: { current: LifecycleChartController | null } = { current: null };
+    const onRenderReady = jest.fn();
+    const secondPoint = { ...point, date: '2026-10-03', balance: 499_000 };
+    let tree!: InspectableRenderer;
+    act(() => {
+      tree = TestRenderer.create(
+        <LifecycleChart
+          section="Mortgage"
+          history={[]}
+          series={[{ ...series, points: [point, secondPoint] }]}
+          metric="balance"
+          asAt="2026-09-03"
+          renderRevision="interactive-revision"
+          controllerRef={controllerRef}
+          onRenderReady={onRenderReady}
+        />,
+      ) as InspectableRenderer;
+    });
+    act(() => {
+      const chart = tree.root.findByProps({ accessibilityRole: 'adjustable' });
+      (chart.props.onLayout as (event: {
+        nativeEvent: { layout: { width: number } };
+      }) => void)({ nativeEvent: { layout: { width: 320 } } });
+    });
+    expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ selectionIndex: 0 }));
+
+    act(() => controllerRef.current?.next());
+
+    expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ selectionIndex: 1 }));
     act(() => tree.unmount());
   });
 

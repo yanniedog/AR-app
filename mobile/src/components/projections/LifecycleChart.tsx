@@ -79,6 +79,12 @@ export interface LifecycleChartController {
   next(): void;
 }
 
+export interface LifecycleChartRenderEvidence {
+  renderRevision: string;
+  selectionIndex: number;
+  accessibleSummary: boolean;
+}
+
 export function LifecycleChart({
   section,
   history,
@@ -96,7 +102,7 @@ export function LifecycleChart({
   asAt: string;
   renderRevision: string;
   controllerRef?: MutableRefObject<LifecycleChartController | null>;
-  onRenderReady?: (evidence: { renderRevision: string; accessibleSummary: boolean }) => void;
+  onRenderReady?: (evidence: LifecycleChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
@@ -196,10 +202,11 @@ export function LifecycleChart({
     if (width > 0 && dates.length > 0) {
       onRenderReadyRef.current?.({
         renderRevision,
+        selectionIndex: boundedActiveIndex,
         accessibleSummary: accessibilitySummary.trim().length > 0,
       });
     }
-  }, [accessibilitySummary, dates.length, renderRevision, width]);
+  }, [accessibilitySummary, boundedActiveIndex, dates.length, renderRevision, width]);
 
   return (
     <View style={{ gap: 10 }}>

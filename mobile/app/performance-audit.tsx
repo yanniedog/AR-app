@@ -425,7 +425,7 @@ function PerformanceAuditScreenInner() {
               failed · {report.summary.skipped} not run
             </AppText>
             <AppText variant="small" color="textMuted">
-              Availability overlay: {report.summary.unavailable} could not be exercised. These checks are already included in the outcomes above.
+              Availability: {report.summary.unavailable} checks could not be exercised. This is tracked separately and can overlap the outcomes above.
             </AppText>
             <AppText
               variant="small"

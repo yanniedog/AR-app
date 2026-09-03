@@ -130,11 +130,10 @@ export default function RateMovesTab() {
   );
   const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}`;
 
-  useEffect(() => {
-    setFeedEvidence(resetFeedRenderEvidence(feedRenderRevision, feedExpectedCount));
-  }, [feedExpectedCount, feedRenderRevision]);
-
   const recordFeedEvidence = useCallback((observed: FeedLayoutEvidence) => {
+    // Reconcile the first layout for a new revision atomically. Resetting in an
+    // effect can run after the replacement rows have already reported layout,
+    // erasing valid evidence and leaving the audit at 0 of N rendered rows.
     setFeedEvidence((current) => reconcileFeedRenderEvidence(
       current,
       feedRenderRevision,

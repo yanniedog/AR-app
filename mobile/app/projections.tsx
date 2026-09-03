@@ -220,6 +220,7 @@ export default function Projections() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [chartEvidence, setChartEvidence] = useState<{
     revision: string;
+    selectionIndex: number;
     accessibleSummary: boolean;
   } | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
@@ -404,22 +405,25 @@ export default function Projections() {
     result.ready ? 'ready' : `missing:${result.missing.join(',')}`,
     dimension,
     metric,
+    chartEvidence?.selectionIndex ?? 'unmeasured',
     projectionStateRevision,
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
-  const recordChartEvidence = useCallback(({ renderRevision, accessibleSummary }: {
+  const recordChartEvidence = useCallback(({ renderRevision, selectionIndex, accessibleSummary }: {
     renderRevision: string;
+    selectionIndex: number;
     accessibleSummary: boolean;
   }) => {
     setChartEvidence((current) => {
       if (
         current?.revision === renderRevision &&
+        current.selectionIndex === selectionIndex &&
         current.accessibleSummary === accessibleSummary
       ) {
         return current;
       }
-      return { revision: renderRevision, accessibleSummary };
+      return { revision: renderRevision, selectionIndex, accessibleSummary };
     });
   }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {

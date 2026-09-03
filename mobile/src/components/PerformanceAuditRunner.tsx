@@ -54,6 +54,7 @@ import {
 import {
   compactPerformanceAuditReadinessEvidence,
   performanceAuditReadinessRegistry,
+  PerformanceAuditReadinessProbeError,
   PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessKind,
   type PerformanceAuditReadinessSnapshot,
@@ -636,12 +637,57 @@ async function runDeepAuditStep(
     // Cancel / hang / dataset-revision changes remain unrecoverable. Every other
     // step failure is recorded so the remaining plan can still run.
     rethrowAuditControl(caught);
-    const readiness = caught instanceof PerformanceAuditReadinessTimeoutError
+    const readiness = caught instanceof PerformanceAuditReadinessTimeoutError ||
+      caught instanceof PerformanceAuditReadinessProbeError
       ? caught.snapshot
       : performanceAuditReadinessRegistry.snapshot(
         [step.expectedSurface],
         requiredProbeKinds(step),
       );
+    if (
+      step.optional &&
+      step.skipSafety.maySkip &&
+      caught instanceof PerformanceAuditReadinessProbeError
+    ) {
+      const reason = readiness.blockers
+        .map((blocker) => blocker.message)
+        .filter(Boolean)
+        .join('; ')
+        .slice(0, 512) || 'The optional surface reported a terminal readiness error';
+      return {
+        id: `deep-${step.id}`,
+        label,
+        kind: 'journey',
+        status: 'skipped',
+        durationMs: null,
+        metrics: {
+          journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+          journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+          iteration,
+          passId: step.passId,
+          scenarioId: step.scenarioId,
+          semanticActionId: step.semanticActionId,
+          depth: step.depth,
+          plannedExpectedPath: step.expectedPath,
+          expectedPath: step.expectedPath,
+          expectedSurface: step.expectedSurface,
+          reason,
+          skipSafety: step.skipSafety.reason,
+          skipClassification: 'terminal-availability',
+          availabilityEvidence: 'an optional required probe reported a terminal error',
+          availabilityFailure: true,
+          routeStateInvalidated: false,
+          executionAttempted: execution.attempted,
+          actionInvoked: execution.invoked,
+          actionCompleted: false,
+          optional: true,
+          optionalReadinessError: true,
+          ...readinessMetrics(readiness),
+        },
+        error: `Optional audit surface was unavailable: ${reason}`,
+        trace: captureAuditTrace(`deep step ${step.id} reached terminal unavailability`),
+      };
+    }
     return {
       id: `deep-${step.id}`,
       label,
