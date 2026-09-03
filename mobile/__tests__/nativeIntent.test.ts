@@ -25,6 +25,11 @@ describe('native intent boundary', () => {
     expect(sanitizeNativeIntentPath('arrates://performance-audit')).toBe('/');
   });
 
+  it('keeps setup-only and nonexistent surfaces out of external deep links', () => {
+    expect(sanitizeNativeIntentPath('arrates://onboarding')).toBe('/');
+    expect(sanitizeNativeIntentPath('arrates://changelog')).toBe('/');
+  });
+
   it('rejects literal, encoded, and double-encoded path traversal', () => {
     expect(sanitizeNativeIntentPath('arrates://product/../performance-audit')).toBe('/');
     expect(sanitizeNativeIntentPath('arrates://product/%2e%2e/debug-log')).toBe('/');
