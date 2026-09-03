@@ -464,6 +464,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         pathname: '/search',
         params: section ? { section } : {},
       } as unknown as Href;
+    case 'changes.open': return '/(tabs)/passthrough' as Href;
     case 'compare.open':
       return {
         pathname: '/compare',
@@ -544,6 +545,8 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
         probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
         probe.visibleCount == null ? '' : `visible=${probe.visibleCount}`,
         probe.emptyStateRendered == null ? '' : `empty=${probe.emptyStateRendered ? 1 : 0}`,
+        probe.layoutMeasured == null ? '' : `measured=${probe.layoutMeasured ? 1 : 0}`,
+        probe.accessibleSummary == null ? '' : `summary=${probe.accessibleSummary ? 1 : 0}`,
       ].join(':')))
       .join(' | '),
     readinessActionEvidence: snapshot.surfaces
@@ -576,6 +579,7 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
     case 'settings': return '/settings';
     case 'onboarding': return '/onboarding';
     case 'today': return '/';
+    case 'changes': return '/passthrough';
     default: return null;
   }
 }

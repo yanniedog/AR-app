@@ -133,7 +133,16 @@ jest.mock('@react-native-firebase/crashlytics', () => {
     }),
   };
   const crashlytics = jest.fn(() => api);
-  return { __esModule: true, default: crashlytics };
+  return {
+    __esModule: true,
+    default: crashlytics,
+    getCrashlytics: crashlytics,
+    log: jest.fn((instance, message) => instance.log(message)),
+    recordError: jest.fn((instance, error, name) => instance.recordError(error, name)),
+    setCrashlyticsCollectionEnabled: jest.fn((instance, enabled) =>
+      instance.setCrashlyticsCollectionEnabled(enabled),
+    ),
+  };
 });
 
 jest.mock('@react-native-firebase/app', () => ({
@@ -173,13 +182,6 @@ jest.mock('expo-secure-store', () => {
     }),
   };
 });
-
-jest.mock('@microsoft/react-native-clarity', () => ({
-  initialize: jest.fn(),
-  pause: jest.fn(async () => true),
-  resume: jest.fn(async () => true),
-  isPaused: jest.fn(async () => false),
-}));
 
 jest.mock('expo-application', () => ({
   nativeApplicationVersion: '1.0.0',

@@ -129,6 +129,8 @@ interface ParsedProbe {
   fallbackCount: number | null;
   visibleCount: number | null;
   emptyStateRendered: boolean | null;
+  layoutMeasured: boolean | null;
+  accessibleSummary: boolean | null;
 }
 
 function parseProbe(line: string): ParsedProbe | null {
@@ -146,6 +148,12 @@ function parseProbe(line: string): ParsedProbe | null {
   const empty = parts
     .map((part) => /^empty=([01])$/.exec(part)?.[1] ?? null)
     .find((value): value is string => value != null);
+  const measured = parts
+    .map((part) => /^measured=([01])$/.exec(part)?.[1] ?? null)
+    .find((value): value is string => value != null);
+  const summary = parts
+    .map((part) => /^summary=([01])$/.exec(part)?.[1] ?? null)
+    .find((value): value is string => value != null);
   return {
     surfaceId,
     kind: kind as ParsedProbe['kind'],
@@ -155,6 +163,8 @@ function parseProbe(line: string): ParsedProbe | null {
     fallbackCount: fallback == null ? null : Number(fallback),
     visibleCount: visible == null ? null : Number(visible),
     emptyStateRendered: empty == null ? null : empty === '1',
+    layoutMeasured: measured == null ? null : measured === '1',
+    accessibleSummary: summary == null ? null : summary === '1',
   };
 }
 
@@ -194,13 +204,12 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
       role: 'chart',
       modelPointCount: expected,
       renderedPointCount: actual,
-      accessibleSummary: probe.ready,
+      accessibleSummary: probe.accessibleSummary === true,
     }];
   }
   return [{
     role: 'critical-layout',
-    measured: probe.ready,
-    clipped: !probe.ready,
+    measured: probe.layoutMeasured === true,
     width: null,
     height: null,
   }];
@@ -212,7 +221,7 @@ function observedEvidenceCount(evidence: AppHealthDisplayEvidence): number {
     case 'list': return evidence.renderedCount;
     case 'visible': return evidence.visibleCount;
     case 'empty-state': return evidence.rendered ? 1 : 0;
-    case 'critical-layout': return evidence.measured && !evidence.clipped ? 1 : 0;
+    case 'critical-layout': return evidence.measured ? 1 : 0;
     case 'chart': return evidence.renderedPointCount;
     case 'logo': return evidence.decodedCount + evidence.fallbackCount;
   }

@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
 import { Animated as RNAnimated, Pressable } from 'react-native';

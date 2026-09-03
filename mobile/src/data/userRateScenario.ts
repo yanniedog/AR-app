@@ -1,4 +1,3 @@
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import { EMPTY_CALC, normalizeCalcInputs, type CalcInputs } from './calc';
@@ -8,6 +7,7 @@ import {
   type ProjectionInputsBySection,
 } from './projectionScenario';
 import { SECURE_STORE_KEYS } from '../lib/secureStoreKey';
+import { readSecureStoreValue, writeSecureStoreValue } from '../lib/secureStoreValue';
 
 const STORAGE_KEY = SECURE_STORE_KEYS.userRateScenario;
 
@@ -155,7 +155,7 @@ export function normalizeUserRateScenario(value: unknown): UserRateScenario {
 export async function loadUserRateScenario(): Promise<UserRateScenario> {
   if (Platform.OS === 'web') return normalizeUserRateScenario(undefined);
   try {
-    const raw = await SecureStore.getItemAsync(STORAGE_KEY);
+    const raw = await readSecureStoreValue(STORAGE_KEY);
     return raw ? normalizeUserRateScenario(JSON.parse(raw)) : normalizeUserRateScenario(undefined);
   } catch (error) {
     throw new Error(`Unable to read the encrypted rate scenario: ${error instanceof Error ? error.message : String(error)}`);
@@ -164,9 +164,7 @@ export async function loadUserRateScenario(): Promise<UserRateScenario> {
 
 export async function saveUserRateScenario(value: UserRateScenario): Promise<void> {
   if (Platform.OS === 'web') return;
-  await SecureStore.setItemAsync(STORAGE_KEY, JSON.stringify(normalizeUserRateScenario(value)), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-  });
+  await writeSecureStoreValue(STORAGE_KEY, JSON.stringify(normalizeUserRateScenario(value)));
 }
 
 export async function migrateLegacyCalculatorInputs(legacy: Partial<CalcInputs> | null | undefined): Promise<void> {

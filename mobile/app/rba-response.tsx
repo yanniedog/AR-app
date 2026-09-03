@@ -99,7 +99,9 @@ export default function RbaResponseScreen() {
               ? 'Checking which products are broadly available before showing bank response windows.'
               : filteredEmpty
                 ? 'No observed bank response windows match the products currently included in your settings.'
-              : error ?? 'Preparing observed bank response windows…'}
+              : error
+                ? 'The latest observed response data could not be prepared. Try again.'
+                : 'Preparing observed bank response windows…'}
           </AppText>
           {suitabilityWarming ? (
             <Button

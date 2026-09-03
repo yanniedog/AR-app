@@ -27,7 +27,7 @@ if (!process.env.EXPO_TOKEN?.trim()) {
   fail('sync-firebase-eas-env: EXPO_TOKEN is required');
 }
 
-const eas = ['npx', 'eas-cli@16.14.1'];
+const eas = [process.platform === 'win32' ? 'eas.cmd' : 'eas'];
 
 /**
  * @param {string[]} args

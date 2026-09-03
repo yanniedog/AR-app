@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
@@ -127,7 +127,7 @@ export const ResponseScatter = memo(function ResponseScatter({
   onProviderSelect: (provider: string | null) => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
-  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
+  onGraphicReady?: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -191,7 +191,7 @@ export const ResponseScatter = memo(function ResponseScatter({
   const graphicRevision = `${model.decision.date}:${section}:${zoom}:${width}`;
   useEffect(() => {
     if (!plot || width <= 0) return;
-    onGraphicReady?.({ revision: graphicRevision, pointCount: plot.points.length });
+    onGraphicReady?.({ revision: graphicRevision, pointCount: plot.points.length, accessibleSummary: true });
   }, [graphicRevision, onGraphicReady, plot, width]);
 
   const rowStats = useMemo(() => {

@@ -11,6 +11,9 @@
       "node": "24.16.0",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "AR_APP_DISTRIBUTION_CHANNEL": "sideload"
       }
     },
     "preview": {
@@ -18,7 +21,8 @@
       "environment": "preview",
       "node": "24.16.0",
       "env": {
-        "NPM_CONFIG_OMIT": "optional"
+        "NPM_CONFIG_OMIT": "optional",
+        "AR_APP_DISTRIBUTION_CHANNEL": "sideload"
       },
       "android": {
         "buildType": "apk",
@@ -30,7 +34,8 @@
       "environment": "production",
       "node": "24.16.0",
       "env": {
-        "NPM_CONFIG_OMIT": "optional"
+        "NPM_CONFIG_OMIT": "optional",
+        "AR_APP_DISTRIBUTION_CHANNEL": "play"
       },
       "android": {
         "buildType": "app-bundle"

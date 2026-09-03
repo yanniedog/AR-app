@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { BankMovesFeed, MoversLeaderboard } from '../../src/components/BankInsights';
@@ -18,6 +18,7 @@ import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/in
 import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { formatRunDate } from '../../src/data/format';
 import { scalarRouteParam } from '../../src/lib/nav';
 
@@ -38,9 +39,16 @@ function weeklySummary(
   return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${up} increase${up === 1 ? '' : 's'}, ${down} decrease${down === 1 ? '' : 's'}${mixedSummary}.`;
 }
 
+interface FeedRenderEvidence {
+  expectedCount: number;
+  actualCount: number;
+  emptyStateRendered: boolean;
+}
+
 export default function RateMovesTab() {
   const core = useStore((state) => state.core);
   const coreIntegrity = useStore((state) => state.coreIntegrity);
+  const coreSha = useStore((state) => state.manifest?.files.core.sha256 ?? null);
   const rawPayload = useStore((state) => state.bankInsights);
   const calendar = useStore((state) => state.rbaCalendar);
   const error = useStore((state) => state.bankInsightsError);
@@ -55,6 +63,12 @@ export default function RateMovesTab() {
   const [activeSection, setActiveSection] = useState(() => resolveInterestSection(interests, defaultSection));
   const [retrying, setRetrying] = useState(false);
   const [moversOpen, setMoversOpen] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [feedEvidence, setFeedEvidence] = useState<FeedRenderEvidence>({
+    expectedCount: 0,
+    actualCount: 0,
+    emptyStateRendered: false,
+  });
   const suitabilityRevision = useSuitabilityRevision();
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
@@ -110,10 +124,56 @@ export default function RateMovesTab() {
   const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
 
+  const changeSection = useCallback(() => {
+    const index = sectionOptions.findIndex((option) => option.value === activeSection);
+    const next = sectionOptions[(Math.max(0, index) + 1) % Math.max(1, sectionOptions.length)];
+    if (next) setActiveSection(next.value);
+  }, [activeSection, sectionOptions]);
+  const auditActions = useMemo(() => ({
+    'changes.open': () => undefined,
+    'changes.section.next': changeSection,
+    'changes.movers.toggle': () => setMoversOpen((open) => !open),
+  }), [changeSection]);
+  const renderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${activeSection}:${moversOpen ? 'movers' : 'feed'}`;
+  usePerformanceAuditSurface({
+    id: 'changes.feed',
+    routeKey: '/passthrough',
+    datasetRevision: coreSha ?? core?.run_date ?? null,
+    renderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'changes.data',
+        kind: 'data',
+        status: payload || filteredEmpty ? 'ready' : error ? 'error' : 'pending',
+        error: error && !payload ? 'Observed rate changes could not be prepared' : null,
+        datasetRevision: coreSha ?? core?.run_date ?? null,
+      },
+      {
+        id: 'changes.feed-list',
+        kind: 'list',
+        status: payload && (
+          feedEvidence.emptyStateRendered ||
+          feedEvidence.actualCount >= feedEvidence.expectedCount
+        ) ? 'ready' : filteredEmpty ? 'ready' : 'pending',
+        expectedCount: feedEvidence.expectedCount,
+        actualCount: feedEvidence.actualCount,
+        emptyStateRendered: feedEvidence.emptyStateRendered,
+      },
+      {
+        id: 'changes.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
+        renderRevision,
+      },
+    ],
+  });
+
   if (!core) return <ScreenSkeleton />;
 
   return (
-    <ScreenScrollView>
+    <ScreenScrollView onLayout={() => setLayoutReady(true)}>
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
@@ -141,7 +201,13 @@ export default function RateMovesTab() {
         />
         {payload ? (
           <Card>
-            <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14} />
+            <BankMovesFeed
+              payload={payload}
+              error={error}
+              sections={[activeSection]}
+              limit={14}
+              onRenderEvidence={setFeedEvidence}
+            />
           </Card>
         ) : suitabilityWarming ? (
           <Card variant="outlined" style={{ gap: 10 }}>
@@ -165,7 +231,9 @@ export default function RateMovesTab() {
         ) : error ? (
           <Card variant="outlined" style={{ gap: 12 }}>
             <AppText variant="body" weight="700">Rate moves are unavailable</AppText>
-            <AppText variant="small" color="textMuted">{error}</AppText>
+            <AppText variant="small" color="textMuted">
+              The latest observations could not be prepared. Previously downloaded rates remain available.
+            </AppText>
             <Button
               title="Retry"
               icon="refresh"

@@ -11,6 +11,7 @@ import {
 } from '../data/economicOutlook';
 import type { EconomicWindow } from '../data/economicModels';
 import { relativeDate } from '../data/format';
+import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
@@ -38,7 +39,7 @@ function OutlookContent({
   window: EconomicWindow;
   onWindowChange: (window: EconomicWindow) => void;
   selectionStep: number;
-  onGraphicReady: (result: { revision: string; pointCount: number }) => void;
+  onGraphicReady: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
@@ -168,6 +169,7 @@ export interface RbaOutlookAuditState {
   pointCount: number;
   layoutReady: boolean;
   graphicReady: boolean;
+  accessibleSummary: boolean;
   error: string | null;
 }
 
@@ -186,7 +188,11 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const [window, setWindow] = useState<EconomicWindow>('5Y');
   const [selectionStep, setSelectionStep] = useState(0);
   const [layoutRevision, setLayoutRevision] = useState<string | null>(null);
-  const [graphic, setGraphic] = useState<{ revision: string; pointCount: number } | null>(null);
+  const [graphic, setGraphic] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
 
   const availableLenses = useMemo<EconomicExplorerLens[]>(() => {
     const indicatorLenses = data?.indicators.map((indicator) => indicator.id) ?? [];
@@ -215,7 +221,11 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
         setData(value);
       }
     } catch (err) {
-      if (mounted.current) setError(String((err as Error)?.message ?? err));
+      const detail = String((err as Error)?.message ?? err);
+      debugLog.warn('economic-outlook', `official refresh failed: ${detail}`);
+      if (mounted.current) {
+        setError('Official economic sources could not be refreshed.');
+      }
     } finally {
       if (mounted.current) setLoading(false);
     }
@@ -247,9 +257,10 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
       pointCount: graphic?.pointCount ?? 0,
       layoutReady,
       graphicReady,
+      accessibleSummary: graphic?.accessibleSummary === true,
       error,
     });
-  }, [data, error, graphic?.pointCount, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
+  }, [data, error, graphic?.accessibleSummary, graphic?.pointCount, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
 
   return (
     <View
@@ -300,7 +311,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
           />
           {error ? (
             <AppText variant="tiny" color="warning" style={{ marginTop: 8 }}>
-              Could not verify the latest data: {error}
+              {error} Showing the last verified observations.
             </AppText>
           ) : null}
         </>

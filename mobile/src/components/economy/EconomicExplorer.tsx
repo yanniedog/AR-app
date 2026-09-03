@@ -41,7 +41,7 @@ export interface EconomicExplorerProps {
   window?: EconomicWindow;
   onWindowChange?: (window: EconomicWindow) => void;
   selectionStep?: number;
-  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
+  onGraphicReady?: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
 }
 
 function signalColor(
@@ -239,7 +239,7 @@ export function EconomicExplorer({
   useEffect(() => {
     if (!expanded) return;
     const frame = requestAnimationFrame(() => {
-      onGraphicReady?.({ revision: graphicRevision, pointCount });
+      onGraphicReady?.({ revision: graphicRevision, pointCount, accessibleSummary: true });
     });
     return () => cancelAnimationFrame(frame);
   }, [expanded, graphicRevision, onGraphicReady, pointCount]);

@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { Pressable, Text, useColorScheme, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { DARK, LIGHT } from '../theme/colors';
  * even if a provider higher in the tree is what threw.
  */
 export function ErrorScreen({ error, retry }: { error: Error; retry: () => void }) {
+  void error;
   const dark = useColorScheme() !== 'light';
   const colors = dark ? DARK : LIGHT;
 
@@ -48,15 +49,16 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
         >
           The app hit an unexpected error. Your downloaded rates are safe — try again.
         </Text>
-        <Text
-          style={{ color: colors.textMuted, fontSize: 11, textAlign: 'center', marginTop: 10 }}
-          numberOfLines={3}
-        >
-          {error?.message ?? String(error)}
+        <Text style={{ color: colors.textMuted, fontSize: 12, textAlign: 'center', marginTop: 10 }}>
+          Technical details remain in the on-device Debug log.
         </Text>
         <Pressable
           onPress={retry}
+          accessibilityRole="button"
+          accessibilityLabel="Try loading Australian Rates again"
           style={({ pressed }) => ({
+            minHeight: 48,
+            justifyContent: 'center',
             marginTop: 20,
             backgroundColor: colors.primary,
             paddingHorizontal: 22,

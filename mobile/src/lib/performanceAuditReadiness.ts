@@ -24,6 +24,10 @@ export interface PerformanceAuditProbeDefinition {
   visibleCount?: number | null;
   /** Explicit proof that the surface's actual empty-state component rendered. */
   emptyStateRendered?: boolean | null;
+  /** Explicit proof from a React Native layout/content-size callback. */
+  layoutMeasured?: boolean | null;
+  /** Explicit proof that the rendered graphic exposes a spoken summary. */
+  accessibleSummary?: boolean | null;
   error?: string | null;
 }
 
@@ -38,6 +42,8 @@ export interface PerformanceAuditProbePatch {
   fallbackCount?: number | null;
   visibleCount?: number | null;
   emptyStateRendered?: boolean | null;
+  layoutMeasured?: boolean | null;
+  accessibleSummary?: boolean | null;
   error?: string | null;
 }
 
@@ -98,6 +104,8 @@ export interface PerformanceAuditProbeSnapshot {
   fallbackCount: number | null;
   visibleCount: number | null;
   emptyStateRendered: boolean | null;
+  layoutMeasured: boolean | null;
+  accessibleSummary: boolean | null;
   error: string | null;
   updatedAtMs: number;
 }
@@ -261,6 +269,8 @@ function probeFingerprint(surfaceId: string, probe: PerformanceAuditProbeSnapsho
     probe.fallbackCount ?? '',
     probe.visibleCount ?? '',
     probe.emptyStateRendered == null ? '' : probe.emptyStateRendered ? '1' : '0',
+    probe.layoutMeasured == null ? '' : probe.layoutMeasured ? '1' : '0',
+    probe.accessibleSummary == null ? '' : probe.accessibleSummary ? '1' : '0',
     probe.error ?? '',
   ].join('\u001f');
 }
@@ -483,6 +493,12 @@ export class PerformanceAuditReadinessRegistry {
       emptyStateRendered: patch.emptyStateRendered === undefined
         ? probe.emptyStateRendered
         : nullableBoolean(patch.emptyStateRendered),
+      layoutMeasured: patch.layoutMeasured === undefined
+        ? probe.layoutMeasured
+        : nullableBoolean(patch.layoutMeasured),
+      accessibleSummary: patch.accessibleSummary === undefined
+        ? probe.accessibleSummary
+        : nullableBoolean(patch.accessibleSummary),
       error: patch.error === undefined
         ? normalizeError(status, probe.error)
         : normalizeError(status, patch.error),
@@ -498,6 +514,8 @@ export class PerformanceAuditReadinessRegistry {
       next.fallbackCount === probe.fallbackCount &&
       next.visibleCount === probe.visibleCount &&
       next.emptyStateRendered === probe.emptyStateRendered &&
+      next.layoutMeasured === probe.layoutMeasured &&
+      next.accessibleSummary === probe.accessibleSummary &&
       next.error === probe.error
     ) return true;
     Object.assign(probe, next, { updatedAtMs: this.clock.now() });
@@ -794,6 +812,8 @@ export class PerformanceAuditReadinessRegistry {
       fallbackCount: nullableCount(definition.fallbackCount),
       visibleCount: nullableCount(definition.visibleCount),
       emptyStateRendered: nullableBoolean(definition.emptyStateRendered),
+      layoutMeasured: nullableBoolean(definition.layoutMeasured),
+      accessibleSummary: nullableBoolean(definition.accessibleSummary),
       error: normalizeError(status, definition.error),
       updatedAtMs: at,
     };

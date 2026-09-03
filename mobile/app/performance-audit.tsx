@@ -180,6 +180,7 @@ function PerformanceAuditScreenInner() {
         id: 'audit.layout',
         kind: 'layout',
         status: layoutReady && hangTimeoutLoaded ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
     ],
   });

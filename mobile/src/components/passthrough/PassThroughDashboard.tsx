@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import React, { memo, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -33,7 +33,6 @@ import {
 import { hapticSelection } from '../../lib/haptics';
 import { moveTone } from '../../lib/moveSemantics';
 import { openBank } from '../../lib/nav';
-import { useRegisterLogosStore } from '../../lib/registerLogos';
 import type { RbaEntry, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
@@ -292,7 +291,7 @@ const SpeedResponseCard = memo(function SpeedResponseCard({
   onProviderSelect: (provider: string | null) => void;
   zoom: number;
   onZoomChange: (zoom: number) => void;
-  onGraphicReady: (result: { revision: string; pointCount: number }) => void;
+  onGraphicReady: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   return (
@@ -351,14 +350,16 @@ export function PassThroughDashboard({
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<PassThroughSort>('response');
   const [chartZoom, setChartZoom] = useState(1);
-  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
-  const [chartPointCount, setChartPointCount] = useState(0);
+  const [chartEvidence, setChartEvidence] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [listMounted, setListMounted] = useState(false);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests ?? SECTION_ORDER), [interests]);
   const availableSections = useMemo(() => sectionOptions.map((option) => option.value), [sectionOptions]);
-  const registerLogosLoaded = useRegisterLogosStore((state) => state.loaded);
   const listRef = useRef<FlashListRef<DashboardItem>>(null);
   const responseWindows = useMemo(
     () => rbaResponseWindowList(payload, rba, { calendar }),
@@ -445,9 +446,12 @@ export function PassThroughDashboard({
     setChartZoom(1);
   }, []);
 
-  const onChartReady = useCallback((result: { revision: string; pointCount: number }) => {
-    setChartReadyRevision(result.revision);
-    setChartPointCount(result.pointCount);
+  const onChartReady = useCallback((result: {
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  }) => {
+    setChartEvidence(result);
   }, []);
 
   /** Chart already painted locally — defer list filter work off the tap path. */
@@ -535,6 +539,7 @@ export function PassThroughDashboard({
     id: 'response-chart-layout',
     kind: 'layout',
     status: model && layoutReadyRevision === payload.run_date ? 'ready' : 'pending',
+    layoutMeasured: layoutReadyRevision === payload.run_date,
     datasetRevision: payload.run_date,
     renderRevision,
   });
@@ -542,13 +547,14 @@ export function PassThroughDashboard({
     id: 'response-chart-graphic',
     kind: 'graphic',
     required: view === 'window' && hasWindowData,
-    status: view !== 'window' || !hasWindowData || (model && layoutReadyRevision === payload.run_date && chartReadyRevision?.startsWith(`${model.decision.date}:${section}:${chartZoom}:`))
+    status: view !== 'window' || !hasWindowData || (model && layoutReadyRevision === payload.run_date && chartEvidence?.revision.startsWith(`${model.decision.date}:${section}:${chartZoom}:`))
       ? 'ready'
       : 'pending',
     datasetRevision: payload.run_date,
     renderRevision,
     expectedCount: sectionEligible,
-    actualCount: chartPointCount,
+    actualCount: chartEvidence?.pointCount ?? 0,
+    accessibleSummary: chartEvidence?.accessibleSummary ?? false,
   });
   usePerformanceAuditProbe(auditSurface, {
     id: 'bank-patterns',
@@ -560,17 +566,6 @@ export function PassThroughDashboard({
     expectedCount: view === 'patterns' ? visibleProfiles.length : 0,
     actualCount: view === 'patterns' && listReadyRevision === renderRevision ? visibleProfiles.length : 0,
   });
-  usePerformanceAuditProbe(auditSurface, {
-    id: 'visible-lender-logos',
-    kind: 'logo',
-    required: false,
-    status: registerLogosLoaded ? 'ready' : 'pending',
-    datasetRevision: payload.run_date,
-    renderRevision,
-    expectedCount: rows.length ? 1 : 0,
-    actualCount: registerLogosLoaded && rows.length ? 1 : 0,
-  });
-
   const renderItem = useCallback(
     ({ item }: { item: DashboardItem }) => item.kind === 'pattern'
       ? <BankPatternRow profile={item.profile} />

@@ -79,12 +79,17 @@ describe('UserRateScenario', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     const value = normalizeUserRateScenario({ savings: { balance: '12345', currentRate: '4.1' } });
     await saveUserRateScenario(value);
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      'user-rate-scenario-v1',
-      JSON.stringify(value),
-      expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
+    const baseCall = jest.mocked(SecureStore.setItemAsync).mock.calls.find(
+      ([key]) => key === 'user-rate-scenario-v1',
     );
-    jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(JSON.stringify(value));
+    expect(baseCall).toEqual([
+      'user-rate-scenario-v1',
+      expect.stringContaining('ar.secure-value'),
+      expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
+    ]);
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
+      ([key, chunk]) => key.startsWith('user-rate-scenario-v1.chunk.') && chunk.includes('12345'),
+    )).toBe(true);
     await expect(loadUserRateScenario()).resolves.toEqual(value);
   });
 
@@ -99,10 +104,8 @@ describe('UserRateScenario', () => {
     Object.defineProperty(Platform, 'OS', { configurable: true, value: 'android' });
     jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(null);
     await migrateLegacyCalculatorInputs({ propertyValue: '750000', currentRate: '6.2' });
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      'user-rate-scenario-v1',
-      expect.stringContaining('750000'),
-      expect.any(Object),
-    );
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
+      ([key, chunk]) => key.startsWith('user-rate-scenario-v1.chunk.') && chunk.includes('750000'),
+    )).toBe(true);
   });
 });

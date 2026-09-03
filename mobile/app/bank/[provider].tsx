@@ -152,6 +152,11 @@ export default function BankDetail() {
   const scrollRef = useRef<ScrollView>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [historyGraphicEvidence, setHistoryGraphicEvidence] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
 
   const rawBankEvents = useMemo(
     () => recentBankEvents(bankInsights, { provider }),
@@ -289,6 +294,20 @@ export default function BankDetail() {
         : null,
     [activeChartSection, provider, visibleBankInsights],
   );
+  const historyGraphicRevision = `${provider}:${activeChartSection ?? 'none'}:${chartModel?.dates.at(-1) ?? 'none'}:${chartModel?.dates.length ?? 0}`;
+  const onHistoryGraphicReady = useCallback((evidence: {
+    pointCount: number;
+    accessibleSummary: boolean;
+  }) => {
+    setHistoryGraphicEvidence((current) => {
+      const next = { revision: historyGraphicRevision, ...evidence };
+      return current?.revision === next.revision &&
+        current.pointCount === next.pointCount &&
+        current.accessibleSummary === next.accessibleSummary
+        ? current
+        : next;
+    });
+  }, [historyGraphicRevision]);
 
   const focusSourceEvent: BankRateEvent | null = useMemo(() => {
     if (!focusDate || !focusSection) return null;
@@ -463,6 +482,7 @@ export default function BankDetail() {
         id: 'lender.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
       {
         id: 'lender.logo',
@@ -483,8 +503,16 @@ export default function BankDetail() {
         id: 'lender.history-graphic',
         kind: 'graphic',
         required: false,
-        status: showBankInsights && bankInsights && !chartModel ? 'pending' : 'ready',
-        actualCount: chartModel?.dates.length ?? 0,
+        status: !chartModel || historyGraphicEvidence?.revision === historyGraphicRevision
+          ? 'ready'
+          : 'pending',
+        expectedCount: chartModel?.dates.length ?? 0,
+        actualCount: historyGraphicEvidence?.revision === historyGraphicRevision
+          ? historyGraphicEvidence.pointCount
+          : 0,
+        accessibleSummary: historyGraphicEvidence?.revision === historyGraphicRevision
+          ? historyGraphicEvidence.accessibleSummary
+          : false,
       },
       {
         id: 'lender.product-history-data',
@@ -705,6 +733,7 @@ export default function BankDetail() {
                   rbaHolds={core.rba_holds}
                   section={activeChartSection}
                   height={200}
+                  onGraphicReady={onHistoryGraphicReady}
                 />
               </ChartErrorBoundary>
               {rawBankEvents.length ? (

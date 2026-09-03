@@ -3,6 +3,7 @@ import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { AppText, Button, Row } from '../ui';
+import { SELF_UPDATE_ENABLED } from '../../config';
 import { useStore } from '../../data/store';
 import {
   checkForAppUpdate,
@@ -37,7 +38,7 @@ export function AppUpdateSection({
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
   const [changelogs, setChangelogs] = useState<VersionChangelogSummary[]>([]);
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(SELF_UPDATE_ENABLED);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
@@ -47,6 +48,7 @@ export function AppUpdateSection({
   useEffect(() => subscribeApkDownload(setDownload), []);
 
   const runCheck = useCallback(async (force = false) => {
+    if (!SELF_UPDATE_ENABLED) return;
     setChecking(true);
     setError(null);
     setCheckResult(null);
@@ -80,7 +82,7 @@ export function AppUpdateSection({
   }, [autoDownload, wifiOnly]);
 
   useEffect(() => {
-    void runCheck(false);
+    if (SELF_UPDATE_ENABLED) void runCheck(false);
   }, [runCheck]);
 
   const performUpgrade = useCallback(async () => {
@@ -163,14 +165,29 @@ export function AppUpdateSection({
 
   useEffect(() => {
     onStatusChange?.({
-      terminal: Platform.OS !== 'android' || (!checking && (checkResult != null || error != null)),
-      status: Platform.OS !== 'android' ? 'not-android' : statusValue,
+      terminal: Platform.OS !== 'android' || !SELF_UPDATE_ENABLED || (!checking && (checkResult != null || error != null)),
+      status: Platform.OS !== 'android'
+        ? 'not-android'
+        : SELF_UPDATE_ENABLED
+          ? statusValue
+          : 'managed-by-google-play',
       error,
     });
   }, [checkResult, checking, error, onStatusChange, statusValue]);
 
   if (Platform.OS !== 'android') {
     return null;
+  }
+
+  if (!SELF_UPDATE_ENABLED) {
+    return (
+      <Section title="App update">
+        <InfoRow label="Status" value="Managed by Google Play" />
+        <AppText variant="small" color="textMuted">
+          This store build receives verified updates through Google Play. In-app APK downloads are disabled.
+        </AppText>
+      </Section>
+    );
   }
 
   return (

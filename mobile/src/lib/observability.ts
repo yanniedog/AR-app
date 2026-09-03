@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import type { LogLevel } from './debugLog';
+import { CRASHLYTICS_ERROR_CATEGORIES } from './privacyPolicy';
 
 let crashReportsEnabled = false;
 
@@ -21,8 +22,24 @@ function loadNativeDeps(): ObservabilityDeps | null {
   if (Platform.OS === 'web') return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy native bridge
-    const crashlytics = require('@react-native-firebase/crashlytics').default as () => CrashlyticsLike;
-    return { crashlytics };
+    const crashlyticsModule = require('@react-native-firebase/crashlytics') as {
+      getCrashlytics: () => { readonly isCrashlyticsCollectionEnabled: boolean };
+      log: (instance: unknown, message: string) => void;
+      recordError: (instance: unknown, error: Error, name?: string) => void;
+      setCrashlyticsCollectionEnabled: (instance: unknown, enabled: boolean) => Promise<unknown>;
+    };
+    const instance = crashlyticsModule.getCrashlytics();
+    const crashlytics: CrashlyticsLike = {
+      get isCrashlyticsCollectionEnabled() {
+        return instance.isCrashlyticsCollectionEnabled;
+      },
+      log: (message) => crashlyticsModule.log(instance, message),
+      recordError: (error, name) => crashlyticsModule.recordError(instance, error, name),
+      setCrashlyticsCollectionEnabled: async (enabled) => {
+        await crashlyticsModule.setCrashlyticsCollectionEnabled(instance, enabled);
+      },
+    };
+    return { crashlytics: () => crashlytics };
   } catch {
     return null;
   }
@@ -84,17 +101,6 @@ export function setSessionReplayEnabled(_enabled: boolean): Promise<void> {
 export async function initObservability(): Promise<void> {
   await setCrashReportsEnabled(crashReportsEnabled);
 }
-
-const CRASHLYTICS_ERROR_CATEGORIES: Readonly<Record<string, string>> = {
-  app: 'app-lifecycle',
-  global: 'unhandled-runtime',
-  'app-update': 'app-update',
-  payload: 'payload',
-  store: 'data-store',
-  'tracked-rates': 'tracked-rates',
-  history: 'history',
-  'bank-insights': 'bank-insights',
-};
 
 /**
  * Forward only a fixed error category. Raw messages remain in the local debug

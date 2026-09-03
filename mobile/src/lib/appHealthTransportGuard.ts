@@ -114,7 +114,7 @@ export function installAppHealthTransportGuard(options: {
       handle,
       url,
       purposeFor(url, contract),
-      () => originalFetch.call(target, input, init),
+      () => Reflect.apply(originalFetch, target, [input, init]) as ReturnType<typeof fetch>,
     );
     if (!acceptedFinalFetchUrl(url, response, contract)) {
       policy.recordPolicyViolation(handle);

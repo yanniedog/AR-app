@@ -6,8 +6,9 @@ web-build/
 expo-env.d.ts
 
 # Native
-ios/
-android/
+/ios
+/android
+modules/*/android/build/
 *.orig.*
 
 # Metro

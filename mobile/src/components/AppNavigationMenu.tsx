@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { resolveInterestSection } from '../data/interests';
 import { useStore } from '../data/store';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import {
   APP_DESTINATION_GROUPS,
   destinationSectionFromParam,
@@ -66,6 +67,7 @@ export function AppNavigationMenu() {
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ section?: string | string[] }>();
   const { width } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const activeSection = useStore((state) => state.activeSection);
   const interests = useStore((state) => state.prefs.interests);
@@ -85,7 +87,7 @@ export function AppNavigationMenu() {
     <Modal
       visible={menu.open}
       transparent
-      animationType="fade"
+      animationType={reducedMotion === false ? 'fade' : 'none'}
       onRequestClose={menu.hide}
       statusBarTranslucent
     >

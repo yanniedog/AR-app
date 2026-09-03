@@ -22,3 +22,11 @@ export function showCompactDetailRow(
 ): boolean {
   return label !== rankedLabel && (isRateDetailLabel(label) || differs);
 }
+
+/**
+ * Fixed-height comparison tables are only safe at the default text scale.
+ * Accessibility text uses the naturally-sized card layout even on tablets.
+ */
+export function usesCompactCompareLayout(width: number, fontScale: number): boolean {
+  return width < 600 || fontScale >= 1.3;
+}

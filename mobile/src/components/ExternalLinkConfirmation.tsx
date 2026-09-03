@@ -6,6 +6,7 @@ import {
   type TrustedExternalUrlRequest,
   type TrustedExternalUrlResult,
 } from '../lib/trustedExternalUrl';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Row } from './ui';
 
@@ -31,12 +32,13 @@ export function ExternalLinkConfirmation({
   onConfirm: () => void;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const isError = state?.kind === 'error';
   return (
     <Modal
       visible={state != null}
       transparent
-      animationType="fade"
+      animationType={reducedMotion === false ? 'fade' : 'none'}
       onRequestClose={opening ? undefined : onClose}
       statusBarTranslucent
     >

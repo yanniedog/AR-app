@@ -1,6 +1,6 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import { createContext, type ReactNode, useContext, useEffect, useState } from 'react';
-import { Alert, AppState, Platform, Pressable } from 'react-native';
+import { Alert, AppState, Platform, Pressable, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
@@ -121,6 +121,7 @@ export function AppUpdateBanner({
   onDismiss: () => void;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
@@ -169,6 +170,7 @@ export function AppUpdateBanner({
         paddingHorizontal: 14,
         paddingTop: insets.top + 6,
         paddingBottom: 8,
+        flexWrap: fontScale >= 1.3 ? 'wrap' : 'nowrap',
       }}
     >
       <Ionicons
@@ -179,7 +181,6 @@ export function AppUpdateBanner({
       <AppText
         variant="small"
         weight="600"
-        numberOfLines={1}
         accessibilityLiveRegion="polite"
         style={{ flex: 1 }}
       >
@@ -194,7 +195,7 @@ export function AppUpdateBanner({
         }
         accessibilityState={{ disabled: !copy.actionEnabled || busy }}
         hitSlop={8}
-        style={{ minHeight: 44, justifyContent: 'center' }}
+        style={{ minHeight: 48, justifyContent: 'center', paddingHorizontal: 4 }}
       >
         <AppText
           variant="small"
@@ -211,6 +212,7 @@ export function AppUpdateBanner({
         accessibilityRole="button"
         accessibilityLabel="Dismiss update banner"
         hitSlop={8}
+        style={{ minWidth: 48, minHeight: 48, alignItems: 'center', justifyContent: 'center' }}
       >
         <Ionicons name="close" size={18} color={theme.colors.textMuted} />
       </Pressable>

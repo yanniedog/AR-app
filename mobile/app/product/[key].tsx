@@ -101,6 +101,11 @@ export default function ProductDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [historyGraphicEvidence, setHistoryGraphicEvidence] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
@@ -254,6 +259,19 @@ export default function ProductDetail() {
   );
   const logoReadiness = useLogoReadiness(productLogoIds.join('|'), productLogoIds);
   const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyModel?.dates.length ?? 0}`;
+  const onHistoryGraphicReady = React.useCallback((evidence: {
+    pointCount: number;
+    accessibleSummary: boolean;
+  }) => {
+    setHistoryGraphicEvidence((current) => {
+      const next = { revision: productRenderRevision, ...evidence };
+      return current?.revision === next.revision &&
+        current.pointCount === next.pointCount &&
+        current.accessibleSummary === next.accessibleSummary
+        ? current
+        : next;
+    });
+  }, [productRenderRevision]);
   usePerformanceAuditSurface({
     id: 'product.details',
     routeKey: '/product/[key]',
@@ -284,6 +302,7 @@ export default function ProductDetail() {
         id: 'product.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: productRenderRevision,
       },
       {
@@ -298,8 +317,18 @@ export default function ProductDetail() {
         id: 'product.history-graphic',
         kind: 'graphic',
         required: false,
-        status: historyWaitingForInsights ? 'pending' : 'ready',
-        actualCount: historyModel?.dates.length ?? 0,
+        status: historyWaitingForInsights
+          ? 'pending'
+          : !historyModel || historyGraphicEvidence?.revision === productRenderRevision
+            ? 'ready'
+            : 'pending',
+        expectedCount: historyModel?.dates.length ?? 0,
+        actualCount: historyGraphicEvidence?.revision === productRenderRevision
+          ? historyGraphicEvidence.pointCount
+          : 0,
+        accessibleSummary: historyGraphicEvidence?.revision === productRenderRevision
+          ? historyGraphicEvidence.accessibleSummary
+          : false,
       },
       {
         id: 'product.history-data',
@@ -592,6 +621,7 @@ export default function ProductDetail() {
                     section={section}
                     height={210}
                     highlightSeries={productHasHighlight ? productSeries : null}
+                    onGraphicReady={onHistoryGraphicReady}
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />

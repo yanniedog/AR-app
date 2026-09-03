@@ -1,10 +1,11 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { router } from 'expo-router';
 import React, { useCallback, useMemo, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BankAvatar } from '../src/components/BankAvatar';
+import { BrandLockup } from '../src/components/BrandLockup';
 import { Chip } from '../src/components/ui';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
@@ -163,6 +164,7 @@ export default function Onboarding() {
         id: 'onboarding.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
     ],
   });
@@ -212,6 +214,7 @@ export default function Onboarding() {
         onContentSizeChange={() => setLayoutReady(true)}
         showsVerticalScrollIndicator
       >
+        <BrandLockup markSize={34} style={{ marginBottom: 24 }} />
         <AppText variant="h1">Choose what you want to do</AppText>
         <AppText variant="body" color="textMuted" style={{ marginTop: 8 }}>
           {sourceIntro}

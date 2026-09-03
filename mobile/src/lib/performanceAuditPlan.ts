@@ -529,16 +529,28 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       expectedPath: '/compare',
       expectedSurface: 'compare.table',
       parameters: compareParameters,
-      readiness: ['details', 'logos', 'graphics'],
+      readiness: ['details', 'logos'],
       optional: true,
       skipReason: missingPair,
     },
   ]);
 
+  scenario(templates, 'route.changes', {
+    expectedPath: '/passthrough',
+    expectedSurface: 'changes.feed',
+    readiness: ['app', 'data', 'bank-insights', 'suitability', 'list'],
+    optional: true,
+    ...optionalFeatureSkip,
+  }, [
+    { depth: 0, semanticActionId: 'changes.open' },
+    { depth: 1, semanticActionId: 'changes.section.next', stateImpact: 'restorable' },
+    { depth: 1, semanticActionId: 'changes.movers.toggle', stateImpact: 'local-only' },
+  ]);
+
   scenario(templates, 'route.compare', {
     expectedPath: '/compare',
     expectedSurface: 'compare.table',
-    readiness: ['app', 'data', 'details', 'logos', 'graphics'],
+    readiness: ['app', 'data', 'details', 'logos'],
     optional: true,
     skipReason: missingPair,
     skipWhen: ['Fewer than two exact products exist in one section'],
@@ -848,7 +860,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'saved.compare.mode', stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'saved.compare.select.0', parameters: primary ? { selectionToken: primary.selectionToken, rateIndex: primary.rateIndex } : {}, stateImpact: 'local-only' },
     { depth: 2, semanticActionId: 'saved.compare.select.1', parameters: secondary ? { selectionToken: secondary.selectionToken, rateIndex: secondary.rateIndex } : {}, stateImpact: 'local-only' },
-    { depth: 2, semanticActionId: 'saved.compare.open', expectedPath: '/compare', expectedSurface: 'compare.table', readiness: ['details', 'logos', 'graphics'], parameters: compareParameters },
+    { depth: 2, semanticActionId: 'saved.compare.open', expectedPath: '/compare', expectedSurface: 'compare.table', readiness: ['details', 'logos'], parameters: compareParameters },
     { depth: 1, semanticActionId: 'saved.compare.dismiss', expectedPath: '/watchlist', expectedSurface: 'saved.list', readiness: ['list', 'logos'], parameters: { returnPath: '/watchlist' }, stateImpact: 'local-only' },
     { depth: 1, semanticActionId: 'saved.fixture.restore', stateImpact: 'restorable' },
   ]);

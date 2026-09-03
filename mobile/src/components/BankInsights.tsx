@@ -1,5 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useMemo } from 'react';
+import Ionicons from './icons/AppIcon';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
@@ -187,11 +187,17 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   error,
   sections,
   limit = 8,
+  onRenderEvidence,
 }: {
   payload: BankInsightsPayload | null;
   error?: string | null;
   sections?: SectionKey[];
   limit?: number;
+  onRenderEvidence?: (evidence: {
+    expectedCount: number;
+    actualCount: number;
+    emptyStateRendered: boolean;
+  }) => void;
 }) {
   const events = useMemo(
     () => recentBankEvents(payload, { sections, limit }),
@@ -205,6 +211,26 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
       })),
     [events, payload],
   );
+  const rowRevision = useMemo(
+    () => events.map((event) => `${event.date}:${event.provider}:${event.section}`).join('|'),
+    [events],
+  );
+  const measuredRows = useRef(new Set<string>());
+  useEffect(() => {
+    measuredRows.current = new Set();
+  }, [rowRevision]);
+  const reportRowLayout = useCallback((key: string) => {
+    if (measuredRows.current.has(key)) return;
+    measuredRows.current.add(key);
+    onRenderEvidence?.({
+      expectedCount: rows.length,
+      actualCount: measuredRows.current.size,
+      emptyStateRendered: false,
+    });
+  }, [onRenderEvidence, rows.length]);
+  const reportEmptyLayout = useCallback(() => {
+    onRenderEvidence?.({ expectedCount: 0, actualCount: 0, emptyStateRendered: true });
+  }, [onRenderEvidence]);
   if (!payload) {
     if (error) return null;
     return (
@@ -215,19 +241,22 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   }
   if (!rows.length) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText variant="small" color="textMuted" onLayout={reportEmptyLayout}>
         No rate moves detected yet — the feed fills as banks reprice day by day.
       </AppText>
     );
   }
   return (
     <View>
-      {rows.map(({ event, rateContext }, i) => (
-        <React.Fragment key={`${event.date}-${event.provider}-${event.section}`}>
+      {rows.map(({ event, rateContext }, i) => {
+        const key = `${event.date}-${event.provider}-${event.section}-${i}`;
+        return (
+        <View key={key} onLayout={() => reportRowLayout(key)}>
           {i > 0 ? <Divider /> : null}
           <BankMoveRow event={event} rateContext={rateContext} />
-        </React.Fragment>
-      ))}
+        </View>
+        );
+      })}
     </View>
   );
 });

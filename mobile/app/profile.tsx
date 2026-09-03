@@ -75,6 +75,7 @@ export default function Profile() {
         id: 'profile.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
     ],
   });

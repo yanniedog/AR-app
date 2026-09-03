@@ -162,6 +162,7 @@ describe('deep performance audit plan', () => {
       'route.onboarding',
       'route.today',
       'route.browse',
+      'route.changes',
       'redirect.node',
       'route.search',
       'route.compare',

@@ -130,12 +130,10 @@ describe('performance audit rollback journal', () => {
     expect(JSON.stringify(journal.snapshot)).not.toMatch(/6\.25|750000/);
     expect(journal.snapshot.userRateScenarioCaptured).toBe(true);
     expect(journal.snapshot.userRateScenario).toBeNull();
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
-      PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
-      expect.stringMatching(/6\.25/),
-      expect.objectContaining({ keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY }),
-    );
-    expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/6\.25/);
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
+      ([key, chunk]) => key.startsWith(`${PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY}.chunk.`) && /6\.25/.test(chunk),
+    )).toBe(true);
+    expect(secureStore.get(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY)).toMatch(/ar\.secure-value/);
   });
 
   it('keeps tracked dates in a dedicated rollback record and survives a live audit overwrite', async () => {

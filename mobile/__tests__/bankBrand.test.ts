@@ -28,15 +28,7 @@ describe('bankBrand', () => {
     ];
     for (const provider of providers) {
       const sources = resolveBankLogoSources(provider);
-      expect(sources.length).toBeGreaterThan(0);
-      expect(
-        sources.some(
-          (src) =>
-            typeof src === 'number' ||
-            (typeof src === 'string' &&
-              src.includes('raw.githubusercontent.com/yanniedog/AR-local/main/dashboard/assets/banks/')),
-        ),
-      ).toBe(true);
+      expect(sources).toEqual([resolveBundledBankLogoSource(provider)]);
     }
   });
 
@@ -97,14 +89,16 @@ describe('bankBrand', () => {
     expect(resolveBrandShort('Some New Bank')).toBe('SNB');
   });
 
-  it('uses the CDR Register logoUri for brands outside the pack', () => {
+  it('rejects remote register artwork and falls back to local art or initials', () => {
     const uri = 'https://mystate.com.au/wp-content/uploads/MyState_Logo_s.png';
-    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([uri]);
-    // Pack lenders keep bundled art first; the register URI rides last.
+    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([]);
     const anz = resolveBankLogoSources('ANZ', undefined, uri);
-    expect(anz[anz.length - 1]).toBe(uri);
-    expect(anz.length).toBeGreaterThan(1);
-    // No more guessed CDN URLs for unknown brands — monogram is the fallback.
+    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ')]);
     expect(resolveBankLogoSources('Totally Unknown Bank')).toEqual([]);
+  });
+
+  it('rejects remote and oversized embedded logos', () => {
+    expect(resolveBankLogoSources('Unknown', 'https://tracker.test/logo.png')).toEqual([]);
+    expect(resolveBankLogoSources('Unknown', `data:image/png;base64,${'a'.repeat(300_000)}`)).toEqual([]);
   });
 });

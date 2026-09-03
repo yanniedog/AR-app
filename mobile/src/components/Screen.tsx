@@ -2,6 +2,7 @@ import React, { forwardRef } from 'react';
 import {
   ScrollView,
   type ScrollViewProps,
+  useWindowDimensions,
   View,
   type ViewProps,
   type ViewStyle,
@@ -10,10 +11,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
 import type { Theme } from '../theme/theme';
+import {
+  ledgerContentMaxWidth,
+  ledgerHorizontalGutter,
+} from '../theme/layout';
 import { useTheme } from '../theme/ThemeProvider';
 import { DataHealthBanner } from './feedback';
 
-const BANNER_WRAP = { paddingHorizontal: 16, paddingTop: 12 } as const;
+type ScreenMeasure = 'reading' | 'data' | 'full';
+
+export function responsiveScreenContentStyle(
+  width: number,
+  measure: ScreenMeasure = 'reading',
+): ViewStyle {
+  const gutter = ledgerHorizontalGutter(width);
+  return {
+    width: '100%',
+    maxWidth: measure === 'full' ? undefined : ledgerContentMaxWidth(measure) + gutter * 2,
+    alignSelf: 'center',
+    paddingHorizontal: gutter,
+  };
+}
 
 /** Shared data-health strip for tab and stack screens. */
 export function DataHealthBannerStrip() {
@@ -23,9 +41,19 @@ export function DataHealthBannerStrip() {
 }
 
 function PaddedDataHealthBannerStrip() {
+  const { width } = useWindowDimensions();
   const source = useStore((s) => s.source);
   const offline = useStore((s) => s.offline);
-  return <DataHealthBanner source={source} offline={offline} containerStyle={BANNER_WRAP} />;
+  return (
+    <DataHealthBanner
+      source={source}
+      offline={offline}
+      containerStyle={{
+        ...responsiveScreenContentStyle(width),
+        paddingTop: 12,
+      }}
+    />
+  );
 }
 
 /** Horizontal + top padding for fixed screen headers (toolbars). */
@@ -38,9 +66,16 @@ export function screenEdgeStyle(theme: Theme): ViewStyle {
 }
 
 /** Scroll/list body padding — 8pt grid with safe-area bottom inset. */
-export function screenScrollContentStyle(theme: Theme, bottomInset = 0): ViewStyle {
+export function screenScrollContentStyle(
+  theme: Theme,
+  bottomInset = 0,
+  width?: number,
+  measure: ScreenMeasure = 'reading',
+): ViewStyle {
   return {
-    paddingHorizontal: theme.spacing(4),
+    ...(width == null
+      ? { paddingHorizontal: theme.spacing(4) }
+      : responsiveScreenContentStyle(width, measure)),
     paddingTop: theme.spacing(3),
     paddingBottom: theme.spacing(6) + bottomInset,
     gap: theme.spacing(3),
@@ -48,11 +83,17 @@ export function screenScrollContentStyle(theme: Theme, bottomInset = 0): ViewSty
 }
 
 /** Static screen body with enforced spatial scaffold. */
-export function ScreenContent({ style, children, ...rest }: ViewProps) {
+export function ScreenContent({
+  style,
+  children,
+  measure = 'reading',
+  ...rest
+}: ViewProps & { measure?: ScreenMeasure }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   return (
-    <View style={[screenScrollContentStyle(theme, insets.bottom), style]} {...rest}>
+    <View style={[screenScrollContentStyle(theme, insets.bottom, width, measure), style]} {...rest}>
       {children}
     </View>
   );
@@ -77,18 +118,29 @@ export function Screen({
 /** Scrollable screen body; sets both scroll surface and overscroll background. */
 export const ScreenScrollView = forwardRef<
   ScrollView,
-  ScrollViewProps & { showDataHealthBanner?: boolean }
+  ScrollViewProps & { showDataHealthBanner?: boolean; measure?: ScreenMeasure }
 >(function ScreenScrollView(
-  { style, contentContainerStyle, children, showDataHealthBanner = true, ...rest },
+  {
+    style,
+    contentContainerStyle,
+    children,
+    showDataHealthBanner = true,
+    measure = 'reading',
+    ...rest
+  },
   ref,
 ) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   return (
     <ScrollView
       ref={ref}
       style={[{ flex: 1, backgroundColor: theme.colors.bg }, style]}
-      contentContainerStyle={[screenScrollContentStyle(theme, insets.bottom), contentContainerStyle]}
+      contentContainerStyle={[
+        screenScrollContentStyle(theme, insets.bottom, width, measure),
+        contentContainerStyle,
+      ]}
       {...rest}
     >
       {showDataHealthBanner ? <DataHealthBannerStrip /> : null}

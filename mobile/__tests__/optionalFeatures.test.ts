@@ -12,6 +12,8 @@ const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
 const mockDownloadDetails = jest.fn();
 const mockReadDetails = jest.fn();
+const mockReadSearchIndex = jest.fn();
+const mockWriteSearchIndex = jest.fn();
 const mockDownloadSearchIndex = jest.fn();
 const mockDownloadHistoryBanks = jest.fn();
 const mockDownloadBankInsights = jest.fn();
@@ -47,8 +49,8 @@ jest.mock('../src/data/cache', () => ({
     writeBundle: (...args: unknown[]) => mockWriteBundle(...args),
     readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
-    readSearchIndex: jest.fn(async () => null),
-    writeSearchIndex: jest.fn(async () => {}),
+    readSearchIndex: (...args: unknown[]) => mockReadSearchIndex(...args),
+    writeSearchIndex: (...args: unknown[]) => mockWriteSearchIndex(...args),
     readHistoryBanks: (...args: unknown[]) => mockReadHistoryBanks(...args),
     clearHistoryBanks: () => mockClearHistoryBanks(),
     writeHistoryBanks: jest.fn(async () => {}),
@@ -160,6 +162,8 @@ function resetStore() {
     core: remoteCore,
     details: null,
     searchIndex: null,
+    searchIndexStatus: 'idle',
+    searchIndexError: null,
     historyBanks: null,
     historyBanksError: null,
     bankInsights: null,
@@ -207,6 +211,8 @@ describe('optional feature prefs', () => {
       text: JSON.stringify(sampleDetails),
       details: sampleDetails,
     });
+    mockReadSearchIndex.mockResolvedValue(null);
+    mockWriteSearchIndex.mockResolvedValue(undefined);
   });
 
   it('defaults deep search and history ribbon on', () => {
@@ -338,6 +344,135 @@ describe('optional feature prefs', () => {
 
     expect(mockDownloadSearchIndex).toHaveBeenCalled();
     expect(store.getState().searchIndex).not.toBeNull();
+    expect(store.getState().searchIndexStatus).toBe('ready');
+    expect(store.getState().searchIndexError).toBeNull();
+  });
+
+  it('coalesces same-edition deep-search requests before cache IO settles', async () => {
+    let finishDownload!: (value: unknown) => void;
+    const download = new Promise((resolve) => {
+      finishDownload = resolve;
+    });
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
+    mockReadMeta.mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      searchIndexSha: null,
+    });
+    mockDownloadSearchIndex.mockReturnValueOnce(download);
+
+    const first = store.getState().ensureSearchIndex();
+    const second = store.getState().ensureSearchIndex();
+    finishDownload({
+      text: '{"schema_version":1,"run_date":"2026-05-19","products":{}}',
+      searchIndex: { schema_version: 1, run_date: remoteCore.run_date, products: {} },
+    });
+    await Promise.all([first, second]);
+
+    expect(mockDownloadSearchIndex).toHaveBeenCalledTimes(1);
+    expect(store.getState().searchIndexStatus).toBe('ready');
+  });
+
+  it('does not install a deep-search result after the user disables it', async () => {
+    let finishDownload!: (value: unknown) => void;
+    const download = new Promise((resolve) => {
+      finishDownload = resolve;
+    });
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
+    mockReadMeta.mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      searchIndexSha: null,
+    });
+    mockDownloadSearchIndex.mockReturnValueOnce(download);
+
+    const pending = store.getState().ensureSearchIndex();
+    for (let attempt = 0; attempt < 5 && !mockDownloadSearchIndex.mock.calls.length; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(mockDownloadSearchIndex).toHaveBeenCalledTimes(1);
+    store.getState().setPref('enableDeepSearch', false);
+    finishDownload({
+      text: '{"schema_version":1,"run_date":"2026-05-19","products":{}}',
+      searchIndex: { schema_version: 1, run_date: remoteCore.run_date, products: {} },
+    });
+    await pending;
+
+    expect(store.getState().searchIndex).toBeNull();
+    expect(store.getState().searchIndexStatus).toBe('idle');
+  });
+
+  it('reports a terminal unavailable state when the manifest has no deep-search asset', async () => {
+    const files = { ...remoteManifest.files };
+    delete files.search_index;
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'remote',
+      manifest: { ...remoteManifest, files },
+      core: remoteCore,
+    });
+
+    await store.getState().ensureSearchIndex();
+
+    expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
+    expect(store.getState().searchIndexStatus).toBe('unavailable');
+    expect(store.getState().searchIndexError).toMatch(/not available/i);
+  });
+
+  it('restores a matching cached index without network access', async () => {
+    const cached = { schema_version: 1 as const, run_date: remoteCore.run_date, products: {} };
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'cache',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
+    mockReadMeta.mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      searchIndexSha: remoteManifest.files.search_index?.sha256,
+    });
+    mockReadSearchIndex.mockResolvedValue(cached);
+
+    await store.getState().ensureSearchIndex();
+
+    expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
+    expect(store.getState().searchIndex).toEqual(cached);
+    expect(store.getState().searchIndexStatus).toBe('ready');
+  });
+
+  it('moves from a bounded error state to ready after a successful retry', async () => {
+    store.setState({
+      prefs: deepSearchPrefs,
+      source: 'remote',
+      manifest: remoteManifest,
+      core: remoteCore,
+    });
+    mockReadMeta.mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      searchIndexSha: null,
+    });
+    mockDownloadSearchIndex
+      .mockRejectedValueOnce(new Error('private upstream host detail'))
+      .mockResolvedValueOnce({
+        text: '{"schema_version":1,"run_date":"2026-05-19","products":{}}',
+        searchIndex: { schema_version: 1, run_date: remoteCore.run_date, products: {} },
+      });
+
+    await store.getState().ensureSearchIndex();
+    expect(store.getState().searchIndexStatus).toBe('error');
+    expect(store.getState().searchIndexError).not.toContain('private upstream');
+
+    await store.getState().ensureSearchIndex();
+    expect(store.getState().searchIndexStatus).toBe('ready');
+    expect(store.getState().searchIndexError).toBeNull();
   });
 
   it('ensureDetails claims the load before metadata IO and coalesces same-frame callers', async () => {

@@ -169,4 +169,20 @@ describe('tracked rate metadata', () => {
       trackedRates: [expect.objectContaining({ id: saved.id, relevantDate: null })],
     });
   });
+
+  it('reports a committed generation with a missing chunk as unavailable', async () => {
+    const saved = makeSavedRateRef(row());
+    (SecureStore.getItemAsync as jest.Mock)
+      .mockResolvedValueOnce(JSON.stringify({
+        schemaVersion: 2,
+        generation: 'interrupted',
+        chunks: 1,
+      }))
+      .mockResolvedValueOnce(null);
+
+    await expect(loadTrackedRatesSecureResult([saved])).resolves.toEqual({
+      status: 'unavailable',
+      trackedRates: [expect.objectContaining({ id: saved.id, relevantDate: null })],
+    });
+  });
 });

@@ -7,7 +7,7 @@ describe('compact mobile UX contracts', () => {
     const source = read('../app/compare.tsx');
 
     expect(source).toContain('useWindowDimensions');
-    expect(source).toContain('COMPACT_COMPARE_BREAKPOINT = 600');
+    expect(source).toContain('usesCompactCompareLayout(width, fontScale)');
     expect(source).toContain('<ScrollView contentContainerStyle={styles.scrollContent}');
     expect(source).toContain('Key differences');
     expect(source).toContain('const differingRows');

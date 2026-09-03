@@ -25,8 +25,8 @@ describe('integrated app-health display evidence', () => {
         'browse.screen:probe:data:ready:12/12',
         'browse.screen:probe:list:ready:10/12:revision:render:visible=4:empty=0',
         'browse.screen:probe:logo:ready:8/10:revision:render:fallback=3',
-        'browse.screen:probe:graphic:ready:6/6',
-        'browse.screen:probe:layout:ready:1/1',
+        'browse.screen:probe:graphic:ready:6/6:summary=1',
+        'browse.screen:probe:layout:ready:1/1:measured=1',
       ].join(' | ')),
     ]);
 
@@ -39,7 +39,7 @@ describe('integrated app-health display evidence', () => {
         { role: 'empty-state', expected: false, rendered: false },
         { role: 'logo', expectedCount: 10, decodedCount: 5, fallbackCount: 3, missingCount: 2 },
         { role: 'chart', modelPointCount: 6, renderedPointCount: 6, accessibleSummary: true },
-        { role: 'critical-layout', measured: true, clipped: false, width: null, height: null },
+        { role: 'critical-layout', measured: true, width: null, height: null },
       ],
     }]);
   });
@@ -119,12 +119,19 @@ describe('integrated app-health display evidence', () => {
       .toMatchObject({ status: 'fail', metrics: { failed: 1 } });
   });
 
-  it('accepts a measured count-only layout probe end to end', () => {
+  it('requires explicit layout measurement evidence rather than inferring it from readiness', () => {
     const checks = evaluateAppHealthDisplayQuality(
       [{ id: 'today.hero', requiredRoles: ['critical-layout'] }],
-      appHealthDisplayObservations([check('today.hero:layout:layout:ready:1/1')]),
+      appHealthDisplayObservations([check('today.hero:layout:layout:ready:1/1:measured=1')]),
     );
     expect(checks.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status)
       .toBe('pass');
+
+    const missing = evaluateAppHealthDisplayQuality(
+      [{ id: 'today.hero', requiredRoles: ['critical-layout'] }],
+      appHealthDisplayObservations([check('today.hero:layout:layout:ready:1/1')]),
+    );
+    expect(missing.find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT)?.status)
+      .toBe('fail');
   });
 });

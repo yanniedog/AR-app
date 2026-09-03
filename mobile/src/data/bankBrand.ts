@@ -1,10 +1,7 @@
 import { BUNDLED_BANK_LOGOS } from './bankLogoAssets';
 
-/**
- * Canonical pack vendored in this repo (dashboard/assets/banks) — served via
- * GitHub raw so it survives the australianrates.com shutdown.
- */
-const CDN_BANK_BASE = 'https://raw.githubusercontent.com/yanniedog/AR-local/main/dashboard/assets/banks/';
+const MAX_EMBEDDED_LOGO_LENGTH = 256 * 1024;
+const SAFE_EMBEDDED_RASTER_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,/i;
 
 type BrandEntry = {
   short: string;
@@ -231,13 +228,17 @@ function pushIconFile(out: (string | number)[], seen: Set<string>, iconFile: str
   const slug = slugFromIcon(iconFile);
   const bundled = BUNDLED_BANK_LOGOS[slug];
   if (bundled != null) pushUnique(out, seen, bundled);
-  pushUnique(out, seen, `${CDN_BANK_BASE}${iconFile}`);
+}
+
+function safeEmbeddedLogo(value: string): boolean {
+  return value.length <= MAX_EMBEDDED_LOGO_LENGTH && SAFE_EMBEDDED_RASTER_RE.test(value);
 }
 
 /**
- * Ordered logo sources: payload embed, bundled pack + its GitHub-raw twin,
- * then the CDR Register logoUri. Unknown brands no longer get guessed CDN
- * URLs (the old `<slug>.png` guesses 404'd for every non-pack lender).
+ * Logo sources are deliberately local: a bounded integrity-checked raster
+ * embedded in the payload, then the bundled pack. Remote lender artwork can
+ * leak the user's IP and exercise third-party decoders, so unknown brands use
+ * the deterministic initials fallback.
  */
 export function resolveBankLogoSources(
   provider: string,
@@ -247,7 +248,7 @@ export function resolveBankLogoSources(
   const out: (string | number)[] = [];
   const seen = new Set<string>();
   const embedded = String(embeddedLogo ?? '').trim();
-  if (embedded) pushUnique(out, seen, embedded);
+  if (embedded && safeEmbeddedLogo(embedded)) pushUnique(out, seen, embedded);
 
   const key = resolveBrandKey(provider);
   const icon = key ? BRAND_MAP[key]?.icon : undefined;
@@ -258,8 +259,7 @@ export function resolveBankLogoSources(
     if (bundled != null) pushUnique(out, seen, bundled);
   }
 
-  const registerUri = String(registerLogoUri ?? '').trim();
-  if (registerUri) pushUnique(out, seen, registerUri);
+  void registerLogoUri;
   return out;
 }
 
@@ -277,9 +277,8 @@ export function resolveBankLogoSourcesForRuntime(
   registerLogoUri: string | undefined,
   auditOwnsNetwork: boolean,
 ): (string | number)[] {
-  if (!auditOwnsNetwork) return resolveBankLogoSources(provider, embeddedLogo, registerLogoUri);
-  const bundled = resolveBundledBankLogoSource(provider);
-  return bundled == null ? [] : [bundled];
+  void auditOwnsNetwork;
+  return resolveBankLogoSources(provider, embeddedLogo, registerLogoUri);
 }
 
 function slugify(value: string): string {

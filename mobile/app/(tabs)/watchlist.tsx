@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../../src/components/icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -38,6 +38,7 @@ import {
 } from '../../src/data/trackedRates';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
+import { useReducedMotion } from '../../src/hooks/useReducedMotion';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { useUndoSnackbar } from '../../src/hooks/useUndoSnackbar';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
@@ -89,6 +90,7 @@ let auditSavedFixtureSnapshot: {
 
 export default function MyRates() {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
   const storeStatus = useStore((s) => s.status);
@@ -358,6 +360,7 @@ export default function MyRates() {
         id: 'saved.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: savedRenderRevision,
       },
     ],
@@ -672,7 +675,7 @@ export default function MyRates() {
       <Modal
         visible={dateEditor != null}
         transparent
-        animationType="fade"
+        animationType={reducedMotion === false ? 'fade' : 'none'}
         onRequestClose={() => setDateEditor(null)}
       >
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, backgroundColor: 'rgba(0,0,0,0.45)' }}>

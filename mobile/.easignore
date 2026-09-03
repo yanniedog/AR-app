@@ -7,8 +7,9 @@ dist/
 web-build/
 expo-env.d.ts
 
-ios/
-android/
+/ios
+/android
+modules/*/android/build/
 *.orig.*
 
 .metro-health-check*

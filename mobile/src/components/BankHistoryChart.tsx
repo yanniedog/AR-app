@@ -71,6 +71,8 @@ export interface BankHistoryChartProps {
   highlightSeries?: HighlightSeries | null;
   /** Audit-only bridge to the exact callbacks used by the visible chart controls. */
   auditActionsRef?: MutableRefObject<BankHistoryChartAuditActions | null>;
+  /** Runtime render evidence emitted by the chart's own measured accessible view. */
+  onGraphicReady?: (evidence: { pointCount: number; accessibleSummary: boolean }) => void;
 }
 
 export interface BankHistoryChartAuditActions {
@@ -118,6 +120,7 @@ export function BankHistoryChart({
   allDates,
   highlightSeries,
   auditActionsRef,
+  onGraphicReady,
 }: BankHistoryChartProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -139,16 +142,26 @@ export function BankHistoryChart({
   const timeline = allDates ?? dates;
   const sliced = useMemo(() => {
     if (!Array.isArray(dates) || !Array.isArray(points) || !Array.isArray(timeline) || !dates.length || !points.length) {
-      debugLog.warn('BankHistoryChart', 'invalid chart inputs');
-      return { dates: [] as string[], points: [] as BankHistoryPoint[] };
+      return {
+        dates: [] as string[],
+        points: [] as BankHistoryPoint[],
+        issue: 'invalid chart inputs' as string | null,
+      };
     }
     try {
-      return sliceChartTimeline(timeline, points, window);
+      return { ...sliceChartTimeline(timeline, points, window), issue: null };
     } catch (err) {
-      debugLog.warn('BankHistoryChart', `sliceChartTimeline failed: ${String((err as Error)?.message ?? err)}`);
-      return { dates: [] as string[], points: [] as BankHistoryPoint[] };
+      return {
+        dates: [] as string[],
+        points: [] as BankHistoryPoint[],
+        issue: `sliceChartTimeline failed: ${String((err as Error)?.message ?? err)}`,
+      };
     }
   }, [timeline, dates, points, window]);
+
+  useEffect(() => {
+    if (sliced.issue) debugLog.warn('BankHistoryChart', sliced.issue);
+  }, [sliced.issue]);
 
   const plotDates = sliced.dates;
   const plotPoints = sliced.points;
@@ -213,15 +226,22 @@ export function BankHistoryChart({
     };
   }, [activeIndex, auditActionsRef, handleSlicePress, plotDates, window]);
 
-  if (!plotDates.length || !plotPoints.length) return null;
-
   const hasPlottableValues = plotPoints.some(
     (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean),
   );
-  if (!hasPlottableValues) {
-    debugLog.warn('BankHistoryChart', 'no finite plot values');
-    return null;
-  }
+  useEffect(() => {
+    if (plotDates.length && plotPoints.length && !hasPlottableValues) {
+      debugLog.warn('BankHistoryChart', 'no finite plot values');
+    }
+  }, [hasPlottableValues, plotDates.length, plotPoints.length]);
+  useEffect(() => {
+    if (width <= 0 || !plotDates.length || !plotPoints.length || !hasPlottableValues) return;
+    onGraphicReady?.({ pointCount: plotDates.length, accessibleSummary: true });
+  }, [hasPlottableValues, onGraphicReady, plotDates.length, plotPoints.length, width]);
+
+  if (!plotDates.length || !plotPoints.length) return null;
+
+  if (!hasPlottableValues) return null;
 
   const padL = 44;
   const padR = 8;
@@ -369,7 +389,7 @@ export function BankHistoryChart({
         accessible
         accessibilityRole="image"
         accessibilityLabel={chartSummary}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         style={{ width: '100%', height }}
       >
         {width > 0 ? (

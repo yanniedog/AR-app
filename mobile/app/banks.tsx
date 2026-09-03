@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -192,6 +192,7 @@ export default function Banks() {
         id: 'lenders.layout',
         kind: 'layout',
         status: listReadiness.ready ? 'ready' : 'pending',
+        layoutMeasured: listReadiness.ready,
         renderRevision: listRevision,
       },
       {

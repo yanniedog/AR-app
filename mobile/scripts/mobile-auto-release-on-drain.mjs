@@ -76,13 +76,13 @@ function ghTry(args) {
 }
 
 function apkReleaseExists(version) {
-  return ghTry([
+  return [ARM_ROLLING_TAG, ROLLING_TAG].every((rollingTag) => ghTry([
     'release',
     'view',
-    versionTagForApkChannel(version, ARM_ROLLING_TAG),
+    versionTagForApkChannel(version, rollingTag),
     '--repo',
     repo,
-  ]).ok;
+  ]).ok);
 }
 
 export function hasApkBuildInFlight(rows, expectedHeadSha) {
@@ -119,11 +119,17 @@ function apkBuildInFlight(expectedHeadSha) {
 // main with no APK and no failing check (Codex / Sourcery).
 function dispatchApkBuild(version) {
   if (dryRun) {
-    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch mobile-android-apk for v${version}`);
+    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch ARM and universal mobile-android-apk for v${version}`);
     return;
   }
-  gh(['workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo]);
-  console.log(`mobile-auto-release-on-drain: dispatched mobile-android-apk for v${version} on main`);
+  for (const apkChannel of ['arm', 'universal']) {
+    gh([
+      'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
+      '-f', `apk_channel=${apkChannel}`,
+      '-f', 'bridge_legacy_ar_local=false',
+    ]);
+  }
+  console.log(`mobile-auto-release-on-drain: dispatched ARM and universal APKs for v${version} on main`);
 }
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers
@@ -141,7 +147,7 @@ export function ensureApkForMainHead({
   const headSha = readHeadSha();
   if (releaseExists(version)) {
     console.log(
-      `mobile-auto-release-on-drain: ${versionTagForApkChannel(version, ARM_ROLLING_TAG)} already published — no APK dispatch`,
+      `mobile-auto-release-on-drain: ARM and universal v${version} releases already published — no APK dispatch`,
     );
     return false;
   }

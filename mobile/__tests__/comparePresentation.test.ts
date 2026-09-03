@@ -1,6 +1,7 @@
 import {
   isRateLabelRankedForEveryEntry,
   showCompactDetailRow,
+  usesCompactCompareLayout,
 } from '../src/lib/comparePresentation';
 
 describe('compact comparison rate fields', () => {
@@ -20,5 +21,13 @@ describe('compact comparison rate fields', () => {
       'Advertised rate',
       ['Advertised rate', 'Advertised rate'],
     )).toBe(true);
+  });
+});
+
+describe('comparison layout accessibility', () => {
+  it('uses naturally-sized cards when text is enlarged', () => {
+    expect(usesCompactCompareLayout(1_024, 1)).toBe(false);
+    expect(usesCompactCompareLayout(1_024, 1.3)).toBe(true);
+    expect(usesCompactCompareLayout(390, 1)).toBe(true);
   });
 });

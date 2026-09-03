@@ -43,7 +43,11 @@ describe('shared user rate scenario store', () => {
     updateUserRateScenario((value) => ({ ...value, savings: { ...value.savings, balance: '250' } }));
 
     await expect(flushUserRateScenario()).resolves.toBe(true);
-    const saved = JSON.parse(jest.mocked(SecureStore.setItemAsync).mock.calls.at(-1)![1]) as {
+    const savedChunks = jest.mocked(SecureStore.setItemAsync).mock.calls
+      .filter(([key]) => key.startsWith('user-rate-scenario-v1.chunk.'))
+      .map(([, value]) => value)
+      .join('');
+    const saved = JSON.parse(savedChunks) as {
       savings: { balance: string };
     };
     expect(saved.savings.balance).toBe('250');
@@ -59,7 +63,9 @@ describe('shared user rate scenario store', () => {
 
     await expect(flushUserRateScenario()).resolves.toBe(false);
     await expect(flushUserRateScenario()).resolves.toBe(true);
-    expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(2);
+    expect(jest.mocked(SecureStore.setItemAsync).mock.calls.some(
+      ([key, value]) => key === 'user-rate-scenario-v1' && value.includes('ar.secure-value'),
+    )).toBe(true);
     expect(getUserRateScenarioSnapshotForTests().saveStatus).toBe('saved');
   });
 });

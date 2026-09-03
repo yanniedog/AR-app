@@ -8,13 +8,16 @@ import {
   APK_ARM_RELEASE_TAG,
   APK_MANIFEST_URL,
   APK_RELEASE_TAG,
+  PLAY_STORE_URL,
   REPO,
+  SELF_UPDATE_ENABLED,
 } from '../config';
 import {
   apkManifestUrlsForDevice,
   fetchBestCompatibleApkManifest,
 } from '../lib/appUpdateLogic';
 import { logSwallowedError } from '../lib/degradationLog';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
 
@@ -33,6 +36,7 @@ export function ShareQrModal({
   shareMessage: string | null;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [apkUrl, setApkUrl] = useState<string | null>(null);
   const manifestUrls = useMemo(
     () =>
@@ -48,7 +52,7 @@ export function ShareQrModal({
   const releasePageUrl = `https://github.com/${REPO}/releases/tag/${preferredReleaseTag}`;
 
   useEffect(() => {
-    if (!visible || apkUrl) return;
+    if (!SELF_UPDATE_ENABLED || !visible || apkUrl) return;
     let alive = true;
     fetchBestCompatibleApkManifest(manifestUrls, Device.supportedCpuArchitectures)
       .then((m) => {
@@ -60,10 +64,15 @@ export function ShareQrModal({
     };
   }, [visible, apkUrl, manifestUrls]);
 
-  const qrValue = apkUrl ?? releasePageUrl;
+  const qrValue = SELF_UPDATE_ENABLED ? apkUrl ?? releasePageUrl : PLAY_STORE_URL;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reducedMotion === false ? 'fade' : 'none'}
+      onRequestClose={onClose}
+    >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Pressable
           onPress={onClose}
@@ -86,7 +95,12 @@ export function ShareQrModal({
             Share Australian Rates
           </AppText>
           <AppText variant="small" color="textMuted" style={{ marginBottom: 16, textAlign: 'center' }}>
-            Scan with a phone camera to {apkUrl ? 'download the latest Android APK' : 'open the latest release'}.
+            Scan with a phone camera to{' '}
+            {SELF_UPDATE_ENABLED
+              ? apkUrl
+                ? 'download the latest Android APK'
+                : 'open the latest release'
+              : 'open Australian Rates in Google Play'}.
           </AppText>
           <View style={{ padding: 12, backgroundColor: '#fff', borderRadius: theme.radius.md }}>
             <QRCode value={qrValue} size={208} />

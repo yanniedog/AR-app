@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 

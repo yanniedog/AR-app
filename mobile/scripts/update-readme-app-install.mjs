@@ -10,12 +10,14 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ARM_ROLLING_TAG,
   ROLLING_TAG,
   apkDownloadUrl,
   installReleaseUrl,
   qrReleaseUrl,
   readAppJsonBuildNumber,
   readAppJsonVersion,
+  resolveApkRollingTag,
 } from './app-release-meta.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -35,7 +37,7 @@ const readmePath = resolve(
 const START = '<!-- app-android-install:start -->';
 const END = '<!-- app-android-install:end -->';
 
-/** @typedef {{ version: string, buildNumber: string, manifestPath?: string }} ReleaseMeta */
+/** @typedef {{ version: string, buildNumber: string, rollingTag: string, manifestPath?: string }} ReleaseMeta */
 
 /**
  * @param {string} [manifestPath]
@@ -44,17 +46,19 @@ const END = '<!-- app-android-install:end -->';
 export function resolveVersionAndBuild(manifestPath) {
   let version = readAppJsonVersion(mobileRoot);
   let buildNumber = readAppJsonBuildNumber(mobileRoot);
+  let rollingTag = ROLLING_TAG;
   const resolvedManifest = manifestPath?.trim();
   if (resolvedManifest && existsSync(resolvedManifest)) {
     try {
       const manifest = JSON.parse(readFileSync(resolvedManifest, 'utf8'));
       if (manifest.version) version = String(manifest.version);
       if (manifest.build_number != null) buildNumber = String(manifest.build_number);
+      if (manifest.tag) rollingTag = resolveApkRollingTag(manifest.tag);
     } catch (err) {
       console.error(`Error reading or parsing manifest at ${resolvedManifest}:`, err);
     }
   }
-  return { version, buildNumber, manifestPath: resolvedManifest };
+  return { version, buildNumber, rollingTag, manifestPath: resolvedManifest };
 }
 
 function manifestPathFromArgv() {
@@ -70,16 +74,17 @@ function manifestPathFromArgv() {
  */
 export function buildReadmeInstallSection(opts = {}) {
   const ghRepo = opts.repo?.trim() || repo;
-  const { version, buildNumber } = resolveVersionAndBuild(opts.manifestPath);
-  const qrUrl = qrReleaseUrl(ghRepo, ROLLING_TAG, { bust: buildNumber });
-  const apkUrl = apkDownloadUrl(ghRepo, ROLLING_TAG);
-  const installUrl = installReleaseUrl(ghRepo, ROLLING_TAG);
-  const releasesUrl = `https://github.com/${ghRepo}/releases?q=app-v&expanded=true`;
+  const { version, buildNumber, rollingTag } = resolveVersionAndBuild(opts.manifestPath);
+  const qrUrl = qrReleaseUrl(ghRepo, rollingTag, { bust: buildNumber });
+  const apkUrl = apkDownloadUrl(ghRepo, rollingTag);
+  const installUrl = installReleaseUrl(ghRepo, rollingTag);
+  const releasePrefix = rollingTag === ARM_ROLLING_TAG ? 'app-arm-v' : 'app-v';
+  const releasesUrl = `https://github.com/${ghRepo}/releases?q=${releasePrefix}&expanded=true`;
 
   return `${START}
 ### Android preview install
 
-Scan with **Android Chrome** to install the latest preview APK. Asset path is stable (\`${ROLLING_TAG}/app-preview-qr.png\`); the README embed adds \`?v=<build>\` so the image refreshes after each APK publish.
+Scan with **Android Chrome** to install the latest preview APK. Asset path is stable (\`${rollingTag}/app-preview-qr.png\`); the README embed adds \`?v=<build>\` so the image refreshes after each APK publish.
 
 | | |
 |---|---|
@@ -87,9 +92,9 @@ Scan with **Android Chrome** to install the latest preview APK. Asset path is st
 | QR | ![Install QR](${qrUrl}) |
 | APK | [app-preview.apk](${apkUrl}) |
 | Install page | [install.html](${installUrl}) |
-| Version history | [app-v* releases](${releasesUrl}) |
+| Version history | [${releasePrefix}* releases](${releasesUrl}) |
 
-In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${ROLLING_TAG}\`.
+In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${rollingTag}\`.
 ${END}`;
 }
 

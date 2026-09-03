@@ -81,6 +81,8 @@ function setPreferences(
   }
   if (changed.has('enableDeepSearch') && !prefs.enableDeepSearch) {
     partial.searchIndex = null;
+    partial.searchIndexStatus = 'idle';
+    partial.searchIndexError = null;
   }
   if (changed.has('showHistoryRibbon')) {
     partial.historyBanksError = null;
@@ -274,6 +276,8 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
         },
         details: null,
         searchIndex: null,
+        searchIndexStatus: 'idle',
+        searchIndexError: null,
         historyBanks: null,
         historyBanksError: null,
         bankInsights: null,

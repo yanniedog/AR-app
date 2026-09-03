@@ -13,11 +13,6 @@ type TestNode = {
 
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
-jest.mock('@expo/vector-icons/Ionicons', () => ({
-  __esModule: true,
-  default: 'Ionicons',
-}));
-
 jest.mock('../src/data/store', () => {
   const state = { hydrated: true, prefs: { appLockEnabled: true } };
   return {

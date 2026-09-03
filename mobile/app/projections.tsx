@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
@@ -218,7 +218,10 @@ export default function Projections() {
   const [metric, setMetric] = useState<ProjectionMetric>('balance');
   const [dimension, setDimension] = useState<ProjectionDimension>('rates');
   const [layoutReady, setLayoutReady] = useState(false);
-  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
+  const [chartEvidence, setChartEvidence] = useState<{
+    revision: string;
+    accessibleSummary: boolean;
+  } | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
   const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
   auditRenderRevisionTracker.current ??= new OpaquePerformanceAuditRenderRevision();
@@ -601,15 +604,19 @@ export default function Projections() {
         id: 'projections.chart',
         kind: 'graphic',
         required: result.ready,
-        status: !result.ready || chartReadyRevision === projectionRenderRevision ? 'ready' : 'pending',
+        status: !result.ready || chartEvidence?.revision === projectionRenderRevision ? 'ready' : 'pending',
         expectedCount: result.ready ? 1 : 0,
-        actualCount: result.ready && chartReadyRevision === projectionRenderRevision ? 1 : 0,
+        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? 1 : 0,
+        accessibleSummary: chartEvidence?.revision === projectionRenderRevision
+          ? chartEvidence.accessibleSummary
+          : false,
         renderRevision: projectionRenderRevision,
       },
       {
         id: 'projections.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: projectionRenderRevision,
       },
     ],
@@ -638,6 +645,7 @@ export default function Projections() {
         id: 'projections-inputs.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: projectionRenderRevision,
       },
     ],
@@ -891,7 +899,10 @@ export default function Projections() {
             metric={metric}
             asAt={result.asAt}
             controllerRef={chartControllerRef}
-            onRenderReady={() => setChartReadyRevision(projectionRenderRevision)}
+            onRenderReady={({ accessibleSummary }) => setChartEvidence({
+              revision: projectionRenderRevision,
+              accessibleSummary,
+            })}
           />
           <ProjectionSummary section={section} result={result} />
         </>

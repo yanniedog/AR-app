@@ -1,0 +1,9 @@
+{
+  "name": "ar-eas-cli-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated, lockfile-pinned EAS CLI used only by release workflows",
+  "dependencies": {
+    "eas-cli": "23.2.0"
+  }
+}

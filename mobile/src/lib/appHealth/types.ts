@@ -197,7 +197,8 @@ export type AppHealthDisplayEvidence =
   | {
       role: 'critical-layout';
       measured: boolean;
-      clipped: boolean;
+      /** Optional independent viewport/content comparison; absence is not invented as false. */
+      clipped?: boolean | null;
       width: number | null;
       height: number | null;
     }

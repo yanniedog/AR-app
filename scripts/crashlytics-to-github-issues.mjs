@@ -314,7 +314,7 @@ function buildIssueBody(issue, metrics, stackTrace, diagnosticLogs) {
 
   if (diagnosticLogs) {
     lines.push(
-      '## Deidentified diagnostic excerpt',
+      '## Automatically redacted diagnostic excerpt',
       '',
       'Only allowlisted automatic diagnostic messages are included. Crashlytics user, installation, key and timestamp fields are discarded.',
       '',

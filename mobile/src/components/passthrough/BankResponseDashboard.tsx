@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';

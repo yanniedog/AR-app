@@ -5,7 +5,6 @@ import {
   effectiveHistoryRibbon,
 } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
-import { useRegisterLogosStore } from '../lib/registerLogos';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
@@ -138,7 +137,9 @@ export function createBootstrapActions(
             source: bundle.meta.source,
             status: 'ready',
             error: null,
-            ...(cachedSearch ? { searchIndex: cachedSearch } : {}),
+            ...(cachedSearch
+              ? { searchIndex: cachedSearch, searchIndexStatus: 'ready' as const, searchIndexError: null }
+              : { searchIndexStatus: 'idle' as const, searchIndexError: null }),
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
@@ -172,7 +173,6 @@ export function createBootstrapActions(
           );
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
-            void useRegisterLogosStore.getState().ensure();
             const refreshed = await get().refresh({});
             if (!refreshed && get().status !== 'ready' && get().status !== 'error') {
               set({ status: 'error', error: sampleAgeErrorMessage() });
@@ -196,7 +196,6 @@ export function createBootstrapActions(
         return;
       }
 
-      void useRegisterLogosStore.getState().ensure();
       if (!opts.skipRefresh) void get().refresh({});
     },
 
@@ -237,6 +236,8 @@ export function createBootstrapActions(
           offline: true,
           details: null,
           searchIndex: null,
+          searchIndexStatus: 'unavailable',
+          searchIndexError: 'Deep search is not included in the offline sample.',
           historyBanks: null,
           historyBanksError: null,
           bankInsights: null,
@@ -305,6 +306,8 @@ export const bootstrapInitialState = {
   },
   details: null,
   searchIndex: null,
+  searchIndexStatus: 'idle' as const,
+  searchIndexError: null,
   historyBanks: null,
   historyBanksError: null,
   bankInsights: null,

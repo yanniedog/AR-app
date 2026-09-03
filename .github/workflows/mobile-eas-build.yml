@@ -5,10 +5,8 @@
 #   EXPO_TOKEN - robot access token for yannieyannies-team (expo.dev - Access tokens)
 #   GOOGLE_SERVICES_JSON - optional full google-services.json for real Crashlytics (else placeholder)
 #   GOOGLE_SERVICE_INFO_PLIST - optional GoogleService-Info.plist for iOS Crashlytics
-#   EXPO_PUBLIC_CLARITY_PROJECT_ID - optional Clarity project id (passed to EAS build env)
 # EAS project env (expo.dev - project - Environment variables) - alternative to GH secrets:
 #   GOOGLE_SERVICES_JSON - file-type env (path injected at build; see ensure-firebase-config.mjs)
-#   EXPO_PUBLIC_CLARITY_PROJECT_ID - Microsoft Clarity project id (preview/production builds)
 #
 # Profiles: mobile/eas.json (development = dev client; preview = internal APK; production = store)
 # Project: @yannieyannies-team/ar-local-rates (app.json - expo.extra.eas.projectId)
@@ -52,7 +50,10 @@ concurrency:
 jobs:
   eas-build:
     name: eas build (${{ inputs.profile }} - ${{ inputs.platform }})
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: mobile-release
     defaults:
       run:
         working-directory: mobile
@@ -66,6 +67,11 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify protected release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-release-source.mjs
 
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         if: inputs.profile == 'preview' && (inputs.platform == 'android' || inputs.platform == 'all')
@@ -90,7 +96,10 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          echo "$PWD/tools/eas-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
       - name: Materialize Firebase config
         env:
@@ -136,34 +145,6 @@ jobs:
           GOOGLE_SERVICE_INFO_PLIST: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST }}
         run: node scripts/sync-firebase-eas-env.mjs
 
-      - name: Sync Clarity env to EAS
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PUBLIC_CLARITY_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_CLARITY_PROJECT_ID }}
-        run: |
-          if [ -n "${EXPO_PUBLIC_CLARITY_PROJECT_ID:-}" ]; then
-            set +e
-            sync_out=$(mktemp)
-            npx eas-cli@16.14.1 env:create \
-              --name EXPO_PUBLIC_CLARITY_PROJECT_ID \
-              --value "$EXPO_PUBLIC_CLARITY_PROJECT_ID" \
-              --environment "${{ inputs.profile }}" \
-              --visibility plaintext \
-              --non-interactive 2>&1 | tee "$sync_out"
-            sync_status=${PIPESTATUS[0]}
-            set -e
-            if [ "$sync_status" -ne 0 ]; then
-              if grep -q 'already has an environment variable named "EXPO_PUBLIC_CLARITY_PROJECT_ID"' "$sync_out"; then
-                echo "EXPO_PUBLIC_CLARITY_PROJECT_ID already present on EAS (${{ inputs.profile }}); skipping sync"
-              else
-                cat "$sync_out"
-                exit "$sync_status"
-              fi
-            fi
-            rm -f "$sync_out"
-          fi
-
-
       - name: Ensure Android keystore (non-interactive)
         if: inputs.platform == 'android' || inputs.platform == 'all'
         env:
@@ -177,7 +158,7 @@ jobs:
           NODE_ENV: ${{ inputs.profile == 'development' && 'development' || 'production' }}
         run: |
           set +e
-          EAS_NO_VCS=1 npx eas-cli@16.14.1 build \
+          EAS_NO_VCS=1 eas build \
             --non-interactive \
             --profile "${{ inputs.profile }}" \
             --platform "${{ inputs.platform }}" 2>&1 | tee /tmp/eas-build.log
@@ -207,6 +188,7 @@ jobs:
         if: >-
           inputs.profile == 'preview' &&
           (inputs.platform == 'android' || inputs.platform == 'all') &&
+          github.ref == 'refs/heads/main' &&
           steps.eas_build.outputs.eas_build_id != ''
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}

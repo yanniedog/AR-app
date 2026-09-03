@@ -4,6 +4,7 @@ import { ScrollView, View } from 'react-native';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText } from '../src/components/ui';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { OPTIONAL_DIAGNOSTICS_TERMS } from '../src/lib/privacyPolicy';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function TermsScreen() {
@@ -34,6 +35,7 @@ export default function TermsScreen() {
         id: 'terms.layout',
         kind: 'layout',
         status: contentReady ? 'ready' : 'pending',
+        layoutMeasured: contentReady,
       },
     ],
   });
@@ -67,12 +69,7 @@ export default function TermsScreen() {
         Optional diagnostics
       </AppText>
       <AppText variant="body" color="textMuted" style={{ lineHeight: 22 }}>
-        With your confirmation, Crashlytics may receive technical crashes, non-debug error logs,
-        and a bounded performance-audit summary. Performance summaries exclude raw traces, route
-        values, searches, saved products, profile and calculator inputs, device model, and stable
-        installation identifiers. Clarity interaction replay is limited to approved public browsing
-        screens; sensitive and diagnostic screens are excluded. These independent choices can be
-        disabled in Settings at any time.
+        {OPTIONAL_DIAGNOSTICS_TERMS}
       </AppText>
 
       <View

@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { NOT_LISTED_PROVIDER } from '../../data/userRateScenario';
 import { formatRate } from '../../data/format';
 import { alphabeticalScenarioProviders, currentProductOptions } from '../../data/scenarioCatalog';
 import type { RateRow } from '../../types';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from '../ui';
 
@@ -29,6 +30,7 @@ export function CurrentBankPicker({
   editable?: boolean;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
   const providers = useMemo(
     () => alphabeticalScenarioProviders(rows),
@@ -100,7 +102,7 @@ export function CurrentBankPicker({
       <Modal
         visible={open != null}
         transparent
-        animationType="fade"
+        animationType={reducedMotion === false ? 'fade' : 'none'}
         onRequestClose={() => setOpen(null)}
       >
         <View

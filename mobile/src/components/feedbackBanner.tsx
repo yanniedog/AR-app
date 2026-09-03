@@ -7,6 +7,7 @@ import Animated, {
 import type { PayloadProgressSnapshot } from '../data/downloadProgress';
 import { useStore } from '../data/store';
 import { useTheme } from '../theme/ThemeProvider';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { resolveOfflineBanner } from './bannerState';
 import { PayloadProgressBar } from './feedbackProgress';
 import { AppText, Row } from './ui';
@@ -88,6 +89,8 @@ export function OfflineBanner({
   containerStyle?: StyleProp<ViewStyle>;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
+  const motionAllowed = reducedMotion === false;
   const payloadProgress = useStore((s) => s.payloadProgress);
   const refreshing = useStore((s) => s.refreshing);
   const pendingIngestRunDate = useStore((s) => s.pendingIngestRunDate);
@@ -153,8 +156,8 @@ export function OfflineBanner({
 
   return (
     <Animated.View
-      entering={FadeIn.duration(200)}
-      exiting={FadeOut.duration(BANNER_FADE_MS)}
+      entering={motionAllowed ? FadeIn.duration(200) : undefined}
+      exiting={motionAllowed ? FadeOut.duration(BANNER_FADE_MS) : undefined}
       style={[{ marginBottom: 12 }, containerStyle]}
     >
       <Row

@@ -483,6 +483,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           error: null,
           pendingIngestRunDate,
           details: detailsUnchanged ? get().details : null,
+          searchIndex: null,
+          searchIndexStatus: 'idle',
+          searchIndexError: null,
           ...(optionalWork.bankSpreadHistory ? {
             bankSpreadHistory: null,
             bankSpreadHistoryError: null,

@@ -18,6 +18,11 @@ import {
   type ApkManifest,
 } from '../src/lib/appUpdateLogic';
 import { verifyDownloadedApk } from '../src/lib/appUpdateInstall';
+import { verifyApkArchiveIdentity } from '../modules/apk-identity-verifier';
+
+jest.mock('../modules/apk-identity-verifier', () => ({
+  verifyApkArchiveIdentity: jest.fn(),
+}));
 
 const baseManifest: ApkManifest = {
   schema_version: 1,
@@ -64,6 +69,13 @@ const changelogSummary = {
 describe('appUpdateLogic', () => {
   beforeEach(() => {
     global.fetch = jest.fn();
+    jest.mocked(verifyApkArchiveIdentity).mockReset().mockResolvedValue({
+      packageName: 'com.eyex.australianrates',
+      signerSha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+      signerCount: 1,
+      signatureVerified: true,
+      verifiedSchemes: ['v2'],
+    });
   });
 
   it('detects newer remote build on same version', () => {
@@ -162,7 +174,36 @@ describe('appUpdateLogic', () => {
     expect(apkManifestUrlsForDevice(['arm64 v8'], universal, arm)).toEqual([arm, universal]);
     expect(apkManifestUrlsForDevice(['armeabi-v7a'], universal, arm)).toEqual([arm, universal]);
     expect(apkManifestUrlsForDevice(['x86_64'], universal, arm)).toEqual([universal]);
+    expect(apkManifestUrlsForDevice(['x86_64', 'arm64-v8a'], universal, arm)).toEqual([universal]);
     expect(apkManifestUrlsForDevice(undefined, universal, arm)).toEqual([universal]);
+  });
+
+  it('does not treat translation-only ARM support as native APK compatibility', () => {
+    const armOnlyManifest = {
+      ...baseManifest,
+      supported_abis: ['armeabi-v7a', 'arm64-v8a'],
+    };
+    const universalManifest = {
+      ...baseManifest,
+      supported_abis: ['armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'],
+    };
+    expect(isApkCompatibleWithDevice(armOnlyManifest, ['x86_64', 'arm64-v8a'])).toBe(false);
+    expect(isApkCompatibleWithDevice(universalManifest, ['x86_64', 'arm64-v8a'])).toBe(true);
+  });
+
+  it('requires an exact ABI match within the device primary architecture family', () => {
+    expect(isApkCompatibleWithDevice(
+      { ...baseManifest, supported_abis: ['armeabi-v7a'] },
+      ['arm64-v8a'],
+    )).toBe(false);
+    expect(isApkCompatibleWithDevice(
+      { ...baseManifest, supported_abis: ['armeabi-v7a'] },
+      ['arm64-v8a', 'armeabi-v7a'],
+    )).toBe(true);
+    expect(isApkCompatibleWithDevice(
+      { ...baseManifest, supported_abis: ['x86'] },
+      ['x86_64'],
+    )).toBe(false);
   });
 
   it('falls back to the universal channel while the ARM channel is unavailable', async () => {
@@ -378,6 +419,65 @@ describe('APK download integrity', () => {
     await expect(
       verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest),
     ).rejects.toThrow(/sha256 mismatch/i);
+  });
+
+  it('rejects a correctly hashed APK whose archive package is not Australian Rates', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
+    jest.mocked(verifyApkArchiveIdentity).mockResolvedValueOnce({
+      packageName: 'example.attacker.app',
+      signerSha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+      signerCount: 1,
+      signatureVerified: true,
+      verifiedSchemes: ['v2'],
+    });
+
+    await expect(verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest))
+      .rejects.toThrow(/package does not match/i);
+  });
+
+  it('rejects a correctly hashed APK signed by another certificate', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
+    jest.mocked(verifyApkArchiveIdentity).mockResolvedValueOnce({
+      packageName: 'com.eyex.australianrates',
+      signerSha256: '0'.repeat(64),
+      signerCount: 1,
+      signatureVerified: true,
+      verifiedSchemes: ['v2'],
+    });
+
+    await expect(verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest))
+      .rejects.toThrow(/signer does not match/i);
+  });
+
+  it('rejects corrupt or legacy-only archive signatures before install', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
+    jest.mocked(verifyApkArchiveIdentity).mockRejectedValueOnce(
+      new Error('APK cryptographic signature verification failed'),
+    );
+
+    await expect(verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest))
+      .rejects.toThrow(/cryptographic signature verification failed/i);
   });
 
   it('surfaces a native sha256 error from the native module', async () => {

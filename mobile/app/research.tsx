@@ -78,7 +78,11 @@ export default function Market() {
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
   const [historyLayoutRevision, setHistoryLayoutRevision] = useState<string | null>(null);
-  const [rbaGraphicState, setRbaGraphicState] = useState<{ revision: string; pointCount: number } | null>(null);
+  const [rbaGraphicState, setRbaGraphicState] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
   const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<'lens' | 'window' | 'date' | null>(null);
   const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
@@ -285,14 +289,17 @@ export default function Market() {
   usePerformanceAuditProbe(surface, {
     id: 'dashboard-layout', kind: 'layout',
     status: datasetRevision && dashboardLayoutRevision === datasetRevision ? 'ready' : 'pending', datasetRevision, renderRevision,
+    layoutMeasured: dashboardLayoutRevision === datasetRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'history-graphic', kind: 'graphic', required: historyOpen,
     status: !historyOpen || historyLayoutRevision === renderRevision ? 'ready' : 'pending', datasetRevision, renderRevision,
+    accessibleSummary: historyOpen && historyLayoutRevision === renderRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
     datasetRevision, renderRevision,
   });
 
@@ -313,6 +320,7 @@ export default function Market() {
     status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
     expectedCount: rbaOpen ? core?.rba.length ?? 1 : 0,
     actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
+    accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
   });
 
   const handleRetryHistory = async () => {

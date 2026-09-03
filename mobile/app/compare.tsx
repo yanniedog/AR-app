@@ -27,6 +27,7 @@ import {
   isRateDetailLabel,
   isRateLabelRankedForEveryEntry,
   showCompactDetailRow,
+  usesCompactCompareLayout,
 } from '../src/lib/comparePresentation';
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
@@ -37,7 +38,6 @@ const HEADER_H = 88;
 const ROW_H = 44;
 const RATE_ROW_H = 52;
 const CHANGE_ROW_H = 64;
-const COMPACT_COMPARE_BREAKPOINT = 600;
 
 interface Entry {
   row: RateRow;
@@ -111,8 +111,8 @@ function valuesDiffer(row: AttrRow, entries: Entry[]): boolean {
 
 export default function Compare() {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const compact = width < COMPACT_COMPARE_BREAKPOINT;
+  const { width, fontScale } = useWindowDimensions();
+  const compact = usesCompactCompareLayout(width, fontScale);
   const { keys } = useLocalSearchParams<{ keys: string }>();
   const core = useStore((s) => s.core);
   const details = useStore((s) => s.details);
@@ -195,6 +195,7 @@ export default function Compare() {
         id: 'compare.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
       {
         id: 'compare.logos',
@@ -203,13 +204,6 @@ export default function Compare() {
         expectedCount: logoReadiness.expectedCount,
         actualCount: logoReadiness.terminalCount,
         fallbackCount: logoReadiness.fallbackCount,
-      },
-      {
-        id: 'compare.history-graphics',
-        kind: 'graphic',
-        required: false,
-        status: 'ready',
-        actualCount: productHistoryAvailable ? entries.length : 0,
       },
     ],
   });

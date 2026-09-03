@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
   ARM_RELEASE_ABIS,
@@ -49,6 +52,24 @@ test('buildReadmeInstallSection embeds cache-busted QR from manifest', () => {
   assert.match(section, /!\[Install QR\]\(https:\/\/github\.com\/owner\/repo\/releases\/download\/app-apk-latest\/app-preview-qr\.png\?v=/);
   assert.match(section, /<!-- app-android-install:start -->/);
   assert.match(section, /<!-- app-android-install:end -->/);
+});
+
+test('buildReadmeInstallSection follows an ARM manifest instead of stale universal metadata', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'ar-readme-'));
+  const manifestPath = join(dir, 'manifest.json');
+  try {
+    writeFileSync(manifestPath, JSON.stringify({
+      version: '1.2.3',
+      build_number: '77',
+      tag: ARM_ROLLING_TAG,
+    }));
+    const section = buildReadmeInstallSection({ repo: 'owner/repo', manifestPath });
+    assert.match(section, /app-apk-arm-latest\/app-preview-qr\.png\?v=77/);
+    assert.match(section, /app-arm-v\* releases/);
+    assert.match(section, /Version \| \*\*1\.2\.3\*\* \(build 77\)/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('readme APK QR commit message and branch are deterministic', () => {

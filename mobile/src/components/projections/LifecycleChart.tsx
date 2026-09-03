@@ -94,7 +94,7 @@ export function LifecycleChart({
   metric: ProjectionMetric;
   asAt: string;
   controllerRef?: MutableRefObject<LifecycleChartController | null>;
-  onRenderReady?: () => void;
+  onRenderReady?: (evidence: { accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
@@ -179,8 +179,10 @@ export function LifecycleChart({
     .map(({ series: item, point: selected }) => `${item.label} ${formatValue(selected ? metricValue(selected, metric) : null, metric)}`)
   ].join(', ');
   useEffect(() => {
-    if (width > 0 && dates.length > 0) onRenderReady?.();
-  }, [dates.length, onRenderReady, width]);
+    if (width > 0 && dates.length > 0) {
+      onRenderReady?.({ accessibleSummary: accessibilitySummary.trim().length > 0 });
+    }
+  }, [accessibilitySummary, dates.length, onRenderReady, width]);
 
   return (
     <View style={{ gap: 10 }}>

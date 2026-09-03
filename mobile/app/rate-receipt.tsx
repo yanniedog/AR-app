@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -179,6 +179,7 @@ export default function RateReceiptScreen() {
         id: 'receipt.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
       {
         id: 'receipt.logos',

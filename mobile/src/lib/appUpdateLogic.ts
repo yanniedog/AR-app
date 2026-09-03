@@ -176,10 +176,11 @@ export function apkManifestUrlsForDevice(
   universalManifestUrl: string,
   armManifestUrl: string,
 ): string[] {
-  const isArmDevice = deviceAbis?.some((abi) => {
-    const normalized = normalizeAndroidAbi(abi);
-    return normalized === 'arm64-v8a' || normalized === 'armeabi-v7a';
-  });
+  // Android orders SUPPORTED_ABIS by preference. Translation-capable x86
+  // images can advertise ARM later in the list, but an ARM-only React Native
+  // APK still cannot supply the x86 libreactnative.so selected at launch.
+  const primaryAbi = deviceAbis?.[0] ? normalizeAndroidAbi(deviceAbis[0]) : null;
+  const isArmDevice = primaryAbi === 'arm64-v8a' || primaryAbi === 'armeabi-v7a';
   return isArmDevice
     ? [armManifestUrl, universalManifestUrl]
     : [universalManifestUrl];
@@ -191,7 +192,19 @@ export function isApkCompatibleWithDevice(
 ): boolean {
   if (!manifest.supported_abis?.length || !deviceAbis?.length) return true;
   const supported = new Set(manifest.supported_abis.map(normalizeAndroidAbi));
-  return deviceAbis.some((abi) => supported.has(normalizeAndroidAbi(abi)));
+  const normalizedDeviceAbis = deviceAbis.map(normalizeAndroidAbi);
+  const primary = normalizedDeviceAbis[0];
+  if (primary === 'x86' || primary === 'x86_64') {
+    return normalizedDeviceAbis
+      .filter((abi) => abi === 'x86' || abi === 'x86_64')
+      .some((abi) => supported.has(abi));
+  }
+  if (primary === 'armeabi-v7a' || primary === 'arm64-v8a') {
+    return normalizedDeviceAbis
+      .filter((abi) => abi === 'armeabi-v7a' || abi === 'arm64-v8a')
+      .some((abi) => supported.has(abi));
+  }
+  return normalizedDeviceAbis.some((abi) => supported.has(abi));
 }
 
 export function assertApkCompatibleWithDevice(

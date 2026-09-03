@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 
@@ -65,7 +65,9 @@ function Mover({ event, payload, core, history, historyError, onRetryHistory }: 
           </AppText>
           {historyError && !history ? (
             <View>
-              <AppText variant="tiny" color="danger">Product history could not load: {historyError}</AppText>
+              <AppText variant="tiny" color="danger">
+                Product history could not be refreshed. Previously downloaded rates are unchanged.
+              </AppText>
               <Pressable
                 onPress={onRetryHistory}
                 accessibilityRole="button"

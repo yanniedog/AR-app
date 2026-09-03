@@ -50,6 +50,8 @@ import { rebindCoreIntegrity } from './sectionIntegrity';
 let detailsEnsureInFlight: Promise<void> | null = null;
 /** Bumped when a force warm abandons a hung/stale in-flight ensure. */
 let detailsEnsureGeneration = 0;
+/** Coalesce deep-search loads for the same content-addressed data edition. */
+let searchIndexEnsureInFlight: { key: string; promise: Promise<void> } | null = null;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   const datasetStillCurrent = (
@@ -278,33 +280,81 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     async ensureSearchIndex() {
       if (!effectiveDeepSearch(get().prefs)) {
         logEnsureSkipped('ensureSearchIndex', 'proGate');
+        set({ searchIndexStatus: 'idle', searchIndexError: null });
         return;
       }
       const { core, manifest, source, searchIndex } = get();
-      if (!core || !manifest?.files.search_index) return;
+      if (!core) {
+        set({ searchIndexStatus: 'unavailable', searchIndexError: 'Rates are not ready yet.' });
+        return;
+      }
+      if (!manifest?.files.search_index) {
+        set({
+          searchIndexStatus: 'unavailable',
+          searchIndexError: 'Deep search is not available for this data edition.',
+        });
+        return;
+      }
       const asset = manifest.files.search_index;
       const coreSha = manifest.files.core.sha256;
-      const meta = await cache.readOptionalMeta();
-      const shaFresh = meta?.coreSha === coreSha && meta?.searchIndexSha === asset.sha256;
-      if (searchIndex && searchIndex.run_date === core.run_date && shaFresh) {
-        return;
+      const editionKey = `${coreSha}:${asset.sha256}`;
+      if (searchIndexEnsureInFlight?.key === editionKey) {
+        return searchIndexEnsureInFlight.promise;
       }
-      const cached = await cache.readSearchIndex();
-      if (cached && cached.run_date === core.run_date && shaFresh) {
-        set({ searchIndex: cached });
-        return;
-      }
-      if (source !== 'remote') return;
-      try {
-        const { text, searchIndex: fresh } = await downloadSearchIndex(asset.url, asset.sha256);
-        await cache.writeSearchIndex(text);
-        await cache.writeOptionalMeta({ coreSha, searchIndexSha: asset.sha256 });
-        set({ searchIndex: fresh });
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? err);
-        debugLog.warn('store', `ensureSearchIndex failed: ${msg}`);
-        logDegradation('warn', 'store.ensureFailed', { fn: 'ensureSearchIndex', error: msg });
-      }
+      const editionStillCurrent = () => {
+        const current = get();
+        return effectiveDeepSearch(current.prefs) &&
+          current.core?.run_date === core.run_date &&
+          current.manifest?.files.core.sha256 === coreSha &&
+          current.manifest?.files.search_index?.sha256 === asset.sha256;
+      };
+      const run = (async () => {
+        set({ searchIndexStatus: 'loading', searchIndexError: null });
+        try {
+          const meta = await cache.readOptionalMeta();
+          if (!editionStillCurrent()) return;
+          const shaFresh = meta?.coreSha === coreSha && meta?.searchIndexSha === asset.sha256;
+          if (searchIndex && searchIndex.run_date === core.run_date && shaFresh) {
+            set({ searchIndexStatus: 'ready', searchIndexError: null });
+            return;
+          }
+          const cached = await cache.readSearchIndex();
+          if (!editionStillCurrent()) return;
+          if (cached && cached.run_date === core.run_date && shaFresh) {
+            set({ searchIndex: cached, searchIndexStatus: 'ready', searchIndexError: null });
+            return;
+          }
+          if (source !== 'remote') {
+            set({
+              searchIndexStatus: 'unavailable',
+              searchIndexError: 'Deep search needs the optional live search index.',
+            });
+            return;
+          }
+          const { text, searchIndex: fresh } = await downloadSearchIndex(asset.url, asset.sha256);
+          if (!editionStillCurrent()) return;
+          await cache.writeSearchIndex(text);
+          if (!editionStillCurrent()) return;
+          await cache.writeOptionalMeta({ coreSha, searchIndexSha: asset.sha256 });
+          if (!editionStillCurrent()) return;
+          set({ searchIndex: fresh, searchIndexStatus: 'ready', searchIndexError: null });
+        } catch (err) {
+          const msg = String((err as Error)?.message ?? err);
+          debugLog.warn('store', `ensureSearchIndex failed: ${msg}`);
+          logDegradation('warn', 'store.ensureFailed', { fn: 'ensureSearchIndex', error: msg });
+          if (editionStillCurrent()) {
+            set({
+              searchIndexStatus: 'error',
+              searchIndexError: 'Deep search could not be loaded. Basic name search still works.',
+            });
+          }
+        }
+      })();
+      const tracked = run.finally(() => {
+        if (searchIndexEnsureInFlight?.promise === tracked) searchIndexEnsureInFlight = null;
+      });
+      searchIndexEnsureInFlight = { key: editionKey, promise: tracked };
+      return tracked;
     },
 
     async ensureHistoryBanks(opts: { force?: boolean } = {}) {

@@ -42,11 +42,6 @@ jest.mock('../src/lib/appUpdate', () => ({
   upgradeFromBackgroundDownload: jest.fn(async () => undefined),
 }));
 
-jest.mock('@expo/vector-icons/Ionicons', () => ({
-  __esModule: true,
-  default: 'Ionicons',
-}));
-
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));

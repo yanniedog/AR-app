@@ -1,10 +1,10 @@
-# Submit the latest EAS production build to App Store Connect / Google Play.
+# Submit one exact EAS production build to App Store Connect or Google Play.
 # Manual trigger only. Store credentials must be configured in EAS (eas credentials).
 #
 # Secrets:
 #   EXPO_TOKEN - same robot token as mobile-eas-build.yml
 #
-# Prerequisite: a successful production build for the target platform(s).
+# Prerequisite: a successful production build for the target platform.
 
 name: mobile-eas-submit
 
@@ -12,14 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Store platform(s) to submit
+        description: Store platform to submit
         required: true
         default: android
         type: choice
         options:
           - android
           - ios
-          - all
       profile:
         description: EAS submit profile (mobile/eas.json - submit)
         required: true
@@ -27,6 +26,10 @@ on:
         type: choice
         options:
           - production
+      build_id:
+        description: Exact finished EAS production build UUID to submit
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -38,7 +41,10 @@ concurrency:
 jobs:
   eas-submit:
     name: eas submit (${{ inputs.profile }} - ${{ inputs.platform }})
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mobile-release
     defaults:
       run:
         working-directory: mobile
@@ -53,6 +59,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - name: Verify protected release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-release-source.mjs
+
       - name: Require EXPO_TOKEN
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -63,14 +74,17 @@ jobs:
           fi
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          echo "$PWD/tools/eas-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: EAS Submit (latest build)
+      - name: EAS Submit (exact build)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli@16.14.1 submit \
+          eas submit \
             --non-interactive \
-            --latest \
+            --id "${{ inputs.build_id }}" \
             --profile "${{ inputs.profile }}" \
             --platform "${{ inputs.platform }}"

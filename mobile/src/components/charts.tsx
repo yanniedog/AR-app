@@ -50,7 +50,7 @@ export const RbaChart = React.memo(function RbaChart({
   height?: number;
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
-  onGraphicReady?: (result: { revision: string; pointCount: number }) => void;
+  onGraphicReady?: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -121,7 +121,7 @@ export const RbaChart = React.memo(function RbaChart({
   useEffect(() => {
     if (width <= 0 || reducedMotion == null || !pathD) return;
     const timer = setTimeout(() => {
-      onGraphicReady?.({ revision: graphicRevision, pointCount: plottedData.length });
+      onGraphicReady?.({ revision: graphicRevision, pointCount: plottedData.length, accessibleSummary: true });
     }, reducedMotion ? 0 : DRAW_MS);
     return () => clearTimeout(timer);
   }, [graphicRevision, onGraphicReady, pathD, plottedData.length, reducedMotion, width]);
