@@ -1,12 +1,18 @@
 import { Platform } from 'react-native';
 
 import type { LogLevel } from './debugLog';
+import {
+  CRASHLYTICS_ERROR_CATEGORIES,
+  CRASHLYTICS_PRIVACY_NOTICE_KEY,
+  DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+} from './privacyPolicy';
 
 let crashReportsEnabled = false;
 
 export type CrashlyticsLike = {
   log: (message: string) => void;
   recordError: (error: Error, name?: string) => void;
+  setAttribute: (key: string, value: string) => Promise<void> | void;
   setCrashlyticsCollectionEnabled: (enabled: boolean) => Promise<void> | void;
   isCrashlyticsCollectionEnabled: boolean;
 };
@@ -21,8 +27,28 @@ function loadNativeDeps(): ObservabilityDeps | null {
   if (Platform.OS === 'web') return null;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy native bridge
-    const crashlytics = require('@react-native-firebase/crashlytics').default as () => CrashlyticsLike;
-    return { crashlytics };
+    const crashlyticsModule = require('@react-native-firebase/crashlytics') as {
+      getCrashlytics: () => { readonly isCrashlyticsCollectionEnabled: boolean };
+      log: (instance: unknown, message: string) => void;
+      recordError: (instance: unknown, error: Error, name?: string) => void;
+      setAttribute: (instance: unknown, key: string, value: string) => Promise<unknown>;
+      setCrashlyticsCollectionEnabled: (instance: unknown, enabled: boolean) => Promise<unknown>;
+    };
+    const instance = crashlyticsModule.getCrashlytics();
+    const crashlytics: CrashlyticsLike = {
+      get isCrashlyticsCollectionEnabled() {
+        return instance.isCrashlyticsCollectionEnabled;
+      },
+      log: (message) => crashlyticsModule.log(instance, message),
+      recordError: (error, name) => crashlyticsModule.recordError(instance, error, name),
+      setAttribute: async (key, value) => {
+        await crashlyticsModule.setAttribute(instance, key, value);
+      },
+      setCrashlyticsCollectionEnabled: async (enabled) => {
+        await crashlyticsModule.setCrashlyticsCollectionEnabled(instance, enabled);
+      },
+    };
+    return { crashlytics: () => crashlytics };
   } catch {
     return null;
   }
@@ -60,6 +86,16 @@ export async function setCrashReportsEnabled(enabled: boolean): Promise<void> {
   }
   const crashlytics = native.crashlytics();
   try {
+    if (enabled) {
+      // Persisted native consent can survive an app update. Disable collection
+      // until the current notice marker is written so an older-consent event
+      // can never be mistaken for a currently consented triage event.
+      await crashlytics.setCrashlyticsCollectionEnabled(false);
+      await crashlytics.setAttribute(
+        CRASHLYTICS_PRIVACY_NOTICE_KEY,
+        DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+      );
+    }
     await crashlytics.setCrashlyticsCollectionEnabled(enabled);
   } catch (error) {
     crashReportsEnabled = crashlytics.isCrashlyticsCollectionEnabled;
@@ -84,17 +120,6 @@ export function setSessionReplayEnabled(_enabled: boolean): Promise<void> {
 export async function initObservability(): Promise<void> {
   await setCrashReportsEnabled(crashReportsEnabled);
 }
-
-const CRASHLYTICS_ERROR_CATEGORIES: Readonly<Record<string, string>> = {
-  app: 'app-lifecycle',
-  global: 'unhandled-runtime',
-  'app-update': 'app-update',
-  payload: 'payload',
-  store: 'data-store',
-  'tracked-rates': 'tracked-rates',
-  history: 'history',
-  'bank-insights': 'bank-insights',
-};
 
 /**
  * Forward only a fixed error category. Raw messages remain in the local debug

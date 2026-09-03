@@ -55,6 +55,5 @@ Required GitHub Actions secrets mirror the old app build setup:
 - `GOOGLE_SERVICES_JSON` and `GOOGLE_SERVICE_INFO_PLIST` are optional Firebase configs.
 - `EXPO_TOKEN` is optional for fetching EAS Android credentials.
 - `ANDROID_KEYSTORE_B64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` are the preferred GitHub Actions signing path.
-- `AR_LOCAL_RELEASE_TOKEN` is optional and only used to bridge the legacy `yanniedog/AR-local` `app-apk-latest` release for old installed APKs.
 
 The Pi, dashboard, ingest jobs, and payload publisher remain in `yanniedog/AR-local`.

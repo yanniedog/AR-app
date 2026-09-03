@@ -1,7 +1,8 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated as RNAnimated, Easing as RNEasing, View, type DimensionValue, type ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText } from './ui';
 
 export function EmptyState({
@@ -51,11 +52,14 @@ function ShimmerBox({
   style?: ViewStyle;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
+  const motionAllowed = reducedMotion === false;
   const progress = useRef(new RNAnimated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
     progress.setValue(0);
+    if (!motionAllowed) return;
     const loop = RNAnimated.loop(
       RNAnimated.timing(progress, {
         toValue: 1,
@@ -69,7 +73,7 @@ function ShimmerBox({
       loop.stop();
       progress.stopAnimation();
     };
-  }, [progress]);
+  }, [motionAllowed, progress]);
 
   const shineColor = theme.dark ? 'rgba(255,255,255,0.09)' : 'rgba(255,255,255,0.55)';
   const travel = Math.max(trackWidth, SHIMMER_SWEEP);
@@ -92,7 +96,7 @@ function ShimmerBox({
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
     >
-      <RNAnimated.View
+      {motionAllowed ? <RNAnimated.View
         style={{
           position: 'absolute',
           top: 0,
@@ -108,7 +112,7 @@ function ShimmerBox({
             },
           ],
         }}
-      />
+      /> : null}
     </View>
   );
 }
@@ -194,4 +198,3 @@ export function DetailLoadingLines({ lines = 3 }: { lines?: number }) {
     </View>
   );
 }
-

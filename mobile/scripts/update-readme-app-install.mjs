@@ -6,16 +6,19 @@
  *
  * Usage: node scripts/update-readme-app-install.mjs [--repo owner/name] [--readme path]
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  ARM_ROLLING_TAG,
   ROLLING_TAG,
   apkDownloadUrl,
   installReleaseUrl,
   qrReleaseUrl,
   readAppJsonBuildNumber,
   readAppJsonVersion,
+  resolveApkRollingTag,
+  versionTagForApkChannel,
 } from './app-release-meta.mjs';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
@@ -35,7 +38,7 @@ const readmePath = resolve(
 const START = '<!-- app-android-install:start -->';
 const END = '<!-- app-android-install:end -->';
 
-/** @typedef {{ version: string, buildNumber: string, manifestPath?: string }} ReleaseMeta */
+/** @typedef {{ version: string, buildNumber: string, rollingTag: string, manifestPath?: string }} ReleaseMeta */
 
 /**
  * @param {string} [manifestPath]
@@ -44,24 +47,58 @@ const END = '<!-- app-android-install:end -->';
 export function resolveVersionAndBuild(manifestPath) {
   let version = readAppJsonVersion(mobileRoot);
   let buildNumber = readAppJsonBuildNumber(mobileRoot);
+  let rollingTag = ROLLING_TAG;
   const resolvedManifest = manifestPath?.trim();
-  if (resolvedManifest && existsSync(resolvedManifest)) {
+  if (resolvedManifest) {
+    let manifest;
     try {
-      const manifest = JSON.parse(readFileSync(resolvedManifest, 'utf8'));
-      if (manifest.version) version = String(manifest.version);
-      if (manifest.build_number != null) buildNumber = String(manifest.build_number);
-    } catch (err) {
-      console.error(`Error reading or parsing manifest at ${resolvedManifest}:`, err);
+      manifest = JSON.parse(readFileSync(resolvedManifest, 'utf8'));
+    } catch (error) {
+      throw new Error(
+        `Release manifest is required and must be readable JSON at ${resolvedManifest}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) {
+      throw new Error(`Release manifest at ${resolvedManifest} must be a JSON object`);
+    }
+    version = String(manifest.version ?? '').trim();
+    buildNumber = String(manifest.build_number ?? '').trim();
+    if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+      throw new Error(`Release manifest has an invalid version: ${version || '(missing)'}`);
+    }
+    if (
+      !/^\d+$/.test(buildNumber) ||
+      Number(buildNumber) < 1 ||
+      Number(buildNumber) > 2_100_000_000 ||
+      !Number.isSafeInteger(Number(buildNumber))
+    ) {
+      throw new Error(`Release manifest has an invalid build_number: ${buildNumber || '(missing)'}`);
+    }
+    if (typeof manifest.tag !== 'string' || !manifest.tag.trim()) {
+      throw new Error('Release manifest has a missing tag');
+    }
+    rollingTag = resolveApkRollingTag(manifest.tag);
+    const expectedVersionTag = versionTagForApkChannel(version, rollingTag);
+    if (manifest.version_tag !== expectedVersionTag) {
+      throw new Error(
+        `Release manifest version_tag must be ${expectedVersionTag}; received ${String(manifest.version_tag ?? '(missing)')}`,
+      );
+    }
+    if (!/^[a-f0-9]{40}$/i.test(String(manifest.source_sha ?? ''))) {
+      throw new Error('Release manifest has a missing or invalid source_sha');
     }
   }
-  return { version, buildNumber, manifestPath: resolvedManifest };
+  return { version, buildNumber, rollingTag, manifestPath: resolvedManifest };
 }
 
 function manifestPathFromArgv() {
   const manifestArgIdx = process.argv.indexOf('--manifest');
   if (manifestArgIdx < 0) return undefined;
   const rawPath = process.argv[manifestArgIdx + 1];
-  return rawPath ? resolve(rawPath) : undefined;
+  if (!rawPath || rawPath.startsWith('-')) {
+    throw new Error('--manifest requires an exact release manifest path');
+  }
+  return resolve(rawPath);
 }
 
 /**
@@ -70,26 +107,37 @@ function manifestPathFromArgv() {
  */
 export function buildReadmeInstallSection(opts = {}) {
   const ghRepo = opts.repo?.trim() || repo;
-  const { version, buildNumber } = resolveVersionAndBuild(opts.manifestPath);
-  const qrUrl = qrReleaseUrl(ghRepo, ROLLING_TAG, { bust: buildNumber });
-  const apkUrl = apkDownloadUrl(ghRepo, ROLLING_TAG);
-  const installUrl = installReleaseUrl(ghRepo, ROLLING_TAG);
-  const releasesUrl = `https://github.com/${ghRepo}/releases?q=app-v&expanded=true`;
+  const { version, buildNumber, rollingTag } = resolveVersionAndBuild(opts.manifestPath);
+  const qrUrl = qrReleaseUrl(ghRepo, rollingTag, { bust: buildNumber });
+  const apkUrl = apkDownloadUrl(ghRepo, rollingTag);
+  const installUrl = installReleaseUrl(ghRepo, rollingTag);
+  const releasePrefix = rollingTag === ARM_ROLLING_TAG ? 'app-arm-v' : 'app-v';
+  const releasesUrl = `https://github.com/${ghRepo}/releases?q=${releasePrefix}&expanded=true`;
+  const armPrimary = rollingTag === ARM_ROLLING_TAG;
+  const apkLabel = armPrimary ? 'ARM APK (most phones)' : 'Universal APK (ARM + x86)';
+  const compatibilityRow = armPrimary
+    ? `| Universal/x86 fallback | [APK](${apkDownloadUrl(ghRepo, ROLLING_TAG)}) · [install page](${installReleaseUrl(ghRepo, ROLLING_TAG)}) · [version history](https://github.com/${ghRepo}/releases?q=app-v&expanded=true) |\n`
+    : '';
+  const compatibilityNote = armPrimary
+    ? 'The displayed version and QR follow the phone-optimised ARM channel. x86 and x86_64 emulators or devices must use the universal fallback above.'
+    : 'The universal APK supports ARM and x86 Android devices.';
 
   return `${START}
 ### Android preview install
 
-Scan with **Android Chrome** to install the latest preview APK. Asset path is stable (\`${ROLLING_TAG}/app-preview-qr.png\`); the README embed adds \`?v=<build>\` so the image refreshes after each APK publish.
+Scan with **Android Chrome** to install the latest preview APK. Asset path is stable (\`${rollingTag}/app-preview-qr.png\`); the README embed adds \`?v=<build>\` so the image refreshes after each APK publish.
 
 | | |
 |---|---|
 | Version | **${version}** (build ${buildNumber}) |
 | QR | ![Install QR](${qrUrl}) |
-| APK | [app-preview.apk](${apkUrl}) |
+| ${apkLabel} | [app-preview.apk](${apkUrl}) |
 | Install page | [install.html](${installUrl}) |
-| Version history | [app-v* releases](${releasesUrl}) |
+| Version history | [${releasePrefix}* releases](${releasesUrl}) |
+${compatibilityRow}
+${compatibilityNote}
 
-In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${ROLLING_TAG}\`.
+In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${rollingTag}\`.
 ${END}`;
 }
 

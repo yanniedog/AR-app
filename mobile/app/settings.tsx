@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -306,6 +306,7 @@ export default function Settings() {
         id: 'settings.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: settingsRenderRevision,
       },
     ],

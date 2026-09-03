@@ -1,5 +1,5 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useMemo } from 'react';
+import Ionicons from './icons/AppIcon';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { SECTIONS } from '../constants';
@@ -13,6 +13,7 @@ import {
   type BankRateEvent,
 } from '../data/bankInsights';
 import { formatRate, formatRunDate } from '../data/format';
+import { buildFeedRowRevision } from '../lib/feedRenderEvidence';
 import {
   DEPOSIT_SECTIONS,
   LOAN_SECTIONS,
@@ -187,11 +188,19 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   error,
   sections,
   limit = 8,
+  contentRevision,
+  onRenderEvidence,
 }: {
   payload: BankInsightsPayload | null;
   error?: string | null;
   sections?: SectionKey[];
   limit?: number;
+  contentRevision?: string;
+  onRenderEvidence?: (evidence: {
+    expectedCount: number;
+    actualCount: number;
+    emptyStateRendered: boolean;
+  }) => void;
 }) {
   const events = useMemo(
     () => recentBankEvents(payload, { sections, limit }),
@@ -205,6 +214,36 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
       })),
     [events, payload],
   );
+  const rowRevision = useMemo(() => buildFeedRowRevision(
+    contentRevision ?? payload?.run_date ?? 'no-content-revision',
+    events.map((event) => `${event.date}:${event.provider}:${event.section}`),
+  ), [contentRevision, events, payload?.run_date]);
+  const measuredRows = useRef(new Set<string>());
+  useEffect(() => {
+    measuredRows.current = new Set();
+    if (!payload) return;
+    // A keyed row replacement can keep identical native geometry, in which
+    // case Android may omit every child onLayout callback. This post-commit
+    // signal proves the current React row set rendered; the screen's separate
+    // layout probe still verifies that the containing surface reached layout.
+    onRenderEvidence?.({
+      expectedCount: rows.length,
+      actualCount: rows.length,
+      emptyStateRendered: rows.length === 0,
+    });
+  }, [onRenderEvidence, payload, rowRevision, rows.length]);
+  const reportRowLayout = useCallback((key: string) => {
+    if (measuredRows.current.has(key)) return;
+    measuredRows.current.add(key);
+    onRenderEvidence?.({
+      expectedCount: rows.length,
+      actualCount: measuredRows.current.size,
+      emptyStateRendered: false,
+    });
+  }, [onRenderEvidence, rows.length]);
+  const reportEmptyLayout = useCallback(() => {
+    onRenderEvidence?.({ expectedCount: 0, actualCount: 0, emptyStateRendered: true });
+  }, [onRenderEvidence]);
   if (!payload) {
     if (error) return null;
     return (
@@ -215,19 +254,22 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   }
   if (!rows.length) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText key={rowRevision} variant="small" color="textMuted" onLayout={reportEmptyLayout}>
         No rate moves detected yet — the feed fills as banks reprice day by day.
       </AppText>
     );
   }
   return (
     <View>
-      {rows.map(({ event, rateContext }, i) => (
-        <React.Fragment key={`${event.date}-${event.provider}-${event.section}`}>
+      {rows.map(({ event, rateContext }, i) => {
+        const key = `${rowRevision}:${event.date}-${event.provider}-${event.section}-${i}`;
+        return (
+        <View key={key} onLayout={() => reportRowLayout(key)}>
           {i > 0 ? <Divider /> : null}
           <BankMoveRow event={event} rateContext={rateContext} />
-        </React.Fragment>
-      ))}
+        </View>
+        );
+      })}
     </View>
   );
 });

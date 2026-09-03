@@ -8,6 +8,7 @@ import Animated, {
 import type { PayloadProgressSnapshot } from '../data/downloadProgress';
 import { buildPayloadProgressViewModel } from '../data/downloadProgress';
 import { useTheme } from '../theme/ThemeProvider';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { AppText, Row } from './ui';
 
 /** Always-visible determinate sync bar with phase label and ETA. */
@@ -19,6 +20,8 @@ export function PayloadProgressBar({
   caption?: string;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
+  const motionAllowed = reducedMotion === false;
   // Refresh wall clock on every progress snapshot so download rate/ETA stay honest.
   const [nowTick, setNowTick] = useState(() => Date.now());
   useEffect(() => {
@@ -38,14 +41,16 @@ export function PayloadProgressBar({
   const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
-    fill.value = withTiming(vm.overallPercent / 100, { duration: 180 });
-  }, [fill, vm.overallPercent]);
+    fill.value = motionAllowed
+      ? withTiming(vm.overallPercent / 100, { duration: 180 })
+      : vm.overallPercent / 100;
+  }, [fill, motionAllowed, vm.overallPercent]);
 
   // During CPU-bound phases the JS thread may freeze (JSON.parse). Drive a
   // native-driver sweep so motion continues without setInterval / React state.
   useEffect(() => {
     softSweep.stopAnimation();
-    if (!vm.softMotion) {
+    if (!vm.softMotion || !motionAllowed) {
       softSweep.setValue(0);
       return;
     }
@@ -63,7 +68,7 @@ export function PayloadProgressBar({
       loop.stop();
       softSweep.stopAnimation();
     };
-  }, [softSweep, vm.softMotion, progress.phase, progress.startedAt]);
+  }, [motionAllowed, softSweep, vm.softMotion, progress.phase, progress.startedAt]);
 
   const fillStyle = useAnimatedStyle(() => ({
     width: `${Math.max(0, Math.min(1, fill.value)) * 100}%`,
@@ -98,7 +103,7 @@ export function PayloadProgressBar({
         accessibilityRole="progressbar"
         accessibilityValue={{ min: 0, max: 100, now: vm.overallPercent }}
       >
-        {vm.softMotion ? (
+        {vm.softMotion && motionAllowed ? (
           <RNAnimated.View
             style={{
               height: '100%',
@@ -148,11 +153,14 @@ export function IndeterminateProgressBar({
   accessibilityLabel?: string;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
+  const motionAllowed = reducedMotion === false;
   const sweep = useRef(new RNAnimated.Value(0)).current;
   const [trackWidth, setTrackWidth] = useState(0);
 
   useEffect(() => {
     sweep.setValue(0);
+    if (!motionAllowed) return;
     const loop = RNAnimated.loop(
       RNAnimated.timing(sweep, {
         toValue: 1,
@@ -166,7 +174,7 @@ export function IndeterminateProgressBar({
       loop.stop();
       sweep.stopAnimation();
     };
-  }, [sweep]);
+  }, [motionAllowed, sweep]);
 
   const barWidth = Math.max(48, trackWidth * 0.36);
   const travel = Math.max(trackWidth + barWidth, barWidth + 40);
@@ -190,17 +198,17 @@ export function IndeterminateProgressBar({
         <RNAnimated.View
           style={{
             height: '100%',
-            width: barWidth,
+            width: motionAllowed ? barWidth : '36%',
             borderRadius: theme.radius.pill,
             backgroundColor: theme.colors.primary,
-            transform: [
+            ...(motionAllowed ? { transform: [
               {
                 translateX: sweep.interpolate({
                   inputRange: [0, 1],
                   outputRange: [-barWidth, travel],
                 }),
               },
-            ],
+            ] } : null),
           }}
         />
       </View>

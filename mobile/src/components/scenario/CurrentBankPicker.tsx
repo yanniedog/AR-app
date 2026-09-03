@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 
@@ -7,6 +7,7 @@ import { NOT_LISTED_PROVIDER } from '../../data/userRateScenario';
 import { formatRate } from '../../data/format';
 import { alphabeticalScenarioProviders, currentProductOptions } from '../../data/scenarioCatalog';
 import type { RateRow } from '../../types';
+import { useReducedMotion } from '../../hooks/useReducedMotion';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from '../ui';
 
@@ -29,18 +30,22 @@ export function CurrentBankPicker({
   editable?: boolean;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
   const providers = useMemo(
-    () => alphabeticalScenarioProviders(rows),
-    [rows],
+    () => open === 'bank' ? alphabeticalScenarioProviders(rows) : [],
+    [open, rows],
   );
   const products = useMemo(() => {
-    if (!value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
+    if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
     return currentProductOptions(rows, value.provider);
-  }, [rows, value.provider]);
-  const selectedProduct = products.find((row) =>
-    row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
-  );
+  }, [open, rows, value.provider]);
+  const selectedProduct = useMemo(() => {
+    if (!value.productKey) return undefined;
+    return rows.find((row) =>
+      row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
+    );
+  }, [rows, value.productKey, value.rateIndex]);
   const chooseBank = (provider: string) => {
     onChange({ provider, productKey: '', rateIndex: null });
     setOpen(null);
@@ -100,7 +105,7 @@ export function CurrentBankPicker({
       <Modal
         visible={open != null}
         transparent
-        animationType="fade"
+        animationType={reducedMotion === false ? 'fade' : 'none'}
         onRequestClose={() => setOpen(null)}
       >
         <View
@@ -157,7 +162,7 @@ export function CurrentBankPicker({
                     <AppText weight="700">Not listed</AppText>
                   </Pressable>
                 </>
-              ) : (
+              ) : open === 'product' ? (
                 <>
                   <Pressable
                     onPress={() => chooseProduct(null)}
@@ -194,7 +199,7 @@ export function CurrentBankPicker({
                     );
                   })}
                 </>
-              )}
+              ) : null}
             </ScrollView>
           </Card>
         </View>

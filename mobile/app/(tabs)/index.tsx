@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../../src/components/icons/AppIcon';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -454,6 +454,14 @@ export default function Home() {
         id: 'today.hero-layout',
         kind: 'graphic',
         status: heroLayoutRevision === todayRenderRevision ? 'ready' : 'pending',
+        accessibleSummary: heroLayoutRevision === todayRenderRevision,
+        renderRevision: todayRenderRevision,
+      },
+      {
+        id: 'today.layout',
+        kind: 'layout',
+        status: heroLayoutRevision === todayRenderRevision ? 'ready' : 'pending',
+        layoutMeasured: heroLayoutRevision === todayRenderRevision,
         renderRevision: todayRenderRevision,
       },
     ],

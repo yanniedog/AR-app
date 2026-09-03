@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import {
   publishedFactFilterOptions,
 } from '../data/productFacts';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Chip, Disclosure, Divider, Row } from './ui';
 
@@ -57,6 +58,7 @@ export function FilterSheet({
   detailsProducts?: Record<string, ProductDetail> | null;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const [draft, setDraft] = useState<Filters>(filters);
   const [publishedOpen, setPublishedOpen] = useState(false);
@@ -124,7 +126,12 @@ export function FilterSheet({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reducedMotion === false ? 'slide' : 'none'}
+      onRequestClose={onClose}
+    >
       <View style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
           onPress={onClose}

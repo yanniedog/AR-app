@@ -65,6 +65,28 @@ describe('Rate Ledger data evidence', () => {
     expect(result.facts).toContain('Coverage issue: Example Bank — timeout');
   });
 
+  it('does not count partial providers as failed when affected-provider records include both', () => {
+    const result = mapDisplayEvidence({
+      source: 'remote',
+      offline: false,
+      runDate: '2026-09-03',
+      now: NOW,
+      coverage: {
+        providers_attempted: 119,
+        providers_succeeded: 114,
+        provider_failures: Array.from({ length: 9 }, (_, index) => ({
+          provider: `Affected provider ${index + 1}`,
+        })),
+        counts: { providers_failed: 5, providers_partial: 4 },
+      },
+    });
+
+    expect(result).toMatchObject({
+      kind: 'partial',
+      detail: 'Observed 3 Sept 2026 · 4 partial · 5 failed.',
+    });
+  });
+
   it('never presents sample data as current', () => {
     const result = mapDisplayEvidence({
       source: 'sample',

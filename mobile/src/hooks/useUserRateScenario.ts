@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import {
+  consumeUserRateScenarioRecoveryWarning,
   loadUserRateScenario,
   normalizeUserRateScenario,
   saveUserRateScenario,
@@ -15,6 +16,7 @@ export interface UserRateScenarioSnapshot {
   storageStatus: ScenarioStorageStatus;
   saveStatus: ScenarioSaveStatus;
   error: string | null;
+  warning: string | null;
 }
 
 const listeners = new Set<() => void>();
@@ -23,6 +25,7 @@ let snapshot: UserRateScenarioSnapshot = {
   storageStatus: 'idle',
   saveStatus: 'idle',
   error: null,
+  warning: null,
 };
 let loadPromise: Promise<void> | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,19 +51,26 @@ function getSnapshot(): UserRateScenarioSnapshot {
 export function ensureUserRateScenarioLoaded(): Promise<void> {
   if (snapshot.storageStatus === 'ready') return Promise.resolve();
   if (loadPromise) return loadPromise;
-  emit({ storageStatus: 'loading', error: null });
+  emit({ storageStatus: 'loading', error: null, warning: null });
   loadPromise = loadUserRateScenario()
     .then((scenario) => {
       revision = 0;
       enqueuedRevision = 0;
       persistedRevision = 0;
-      emit({ scenario, storageStatus: 'ready', saveStatus: 'idle', error: null });
+      emit({
+        scenario,
+        storageStatus: 'ready',
+        saveStatus: 'idle',
+        error: null,
+        warning: consumeUserRateScenarioRecoveryWarning(),
+      });
     })
     .catch((error) => {
       enqueuedRevision = persistedRevision;
       emit({
         storageStatus: 'error',
         error: error instanceof Error ? error.message : String(error),
+        warning: null,
       });
     })
     .finally(() => {
@@ -109,9 +119,16 @@ export function updateUserRateScenario(
     scenario: normalizeUserRateScenario(updater(snapshot.scenario)),
     saveStatus: 'idle',
     error: null,
+    warning: null,
   });
   scheduleSave();
   return true;
+}
+
+/** Acknowledge a recovered/reset encrypted scenario without changing its values. */
+export function dismissUserRateScenarioWarning(): void {
+  if (snapshot.warning == null) return;
+  emit({ warning: null });
 }
 
 export async function flushUserRateScenario(): Promise<boolean> {
@@ -127,6 +144,7 @@ export function useUserRateScenario(): UserRateScenarioSnapshot & {
   update: typeof updateUserRateScenario;
   flush: typeof flushUserRateScenario;
   retryLoad: typeof ensureUserRateScenarioLoaded;
+  dismissWarning: typeof dismissUserRateScenarioWarning;
 } {
   const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
   useEffect(() => {
@@ -138,6 +156,7 @@ export function useUserRateScenario(): UserRateScenarioSnapshot & {
     update: updateUserRateScenario,
     flush: flushUserRateScenario,
     retryLoad: ensureUserRateScenarioLoaded,
+    dismissWarning: dismissUserRateScenarioWarning,
   };
 }
 
@@ -154,6 +173,7 @@ export function resetUserRateScenarioStoreForTests(): void {
     storageStatus: 'idle',
     saveStatus: 'idle',
     error: null,
+    warning: null,
   };
   listeners.clear();
 }
@@ -181,6 +201,7 @@ export async function restoreUserRateScenarioForAudit(
     scenario: normalizeUserRateScenario(scenario),
     saveStatus: 'idle',
     error: null,
+    warning: null,
   });
   const persisted = await flushUserRateScenario();
   if (!persisted) {

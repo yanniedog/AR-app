@@ -29,7 +29,11 @@ export interface ApkDownloadSnapshot {
   verifiedSha256: string | null;
   verifiedBytes: number | null;
   verifiedAt: string | null;
+  /** Version 3 also proves the signed archive version/build match the manifest. */
+  verifiedReceiptVersion: number | null;
 }
+
+export const APK_READY_RECEIPT_VERSION = 3;
 
 export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   phase: 'idle',
@@ -49,10 +53,33 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   verifiedSha256: null,
   verifiedBytes: null,
   verifiedAt: null,
+  verifiedReceiptVersion: null,
 };
 
 export const APK_DOWNLOAD_STALL_MS = 2 * 60 * 1000;
 export const APK_DOWNLOAD_MAX_AUTO_RETRIES = 2;
+
+/** Non-terminal update work would contaminate app-health timing and network evidence. */
+export function blocksPerformanceAudit(snapshot: Pick<ApkDownloadSnapshot, 'phase'>): boolean {
+  return ['waiting', 'downloading', 'retrying', 'verifying'].includes(snapshot.phase);
+}
+
+/**
+ * A restored non-terminal phase is stale once Android confirms there is no
+ * native task behind it. The one exception is verification that this JS
+ * process is currently performing after the native download has completed.
+ */
+export function shouldClearOrphanedApkDownload(
+  snapshot: Pick<ApkDownloadSnapshot, 'phase'>,
+  hasActiveNativeTask: boolean,
+  currentProcessVerificationInFlight: boolean,
+): boolean {
+  return (
+    blocksPerformanceAudit(snapshot) &&
+    !hasActiveNativeTask &&
+    !(snapshot.phase === 'verifying' && currentProcessVerificationInFlight)
+  );
+}
 
 export function apkDownloadTaskId(buildNumber: string, sha256?: string | null): string {
   const integrityKey = sha256?.slice(0, 12).toLowerCase();
@@ -96,7 +123,7 @@ export function isCachedApkReady(
  */
 export function hasTrustedReadyApkReceipt(
   snapshot: ApkDownloadSnapshot,
-  manifest: { build_number: string; bytes?: number; sha256?: string },
+  manifest: { build_number: string; version: string; bytes?: number; sha256?: string },
   localUri: string,
   currentBytes: number,
   privateDirectory: string | null | undefined,
@@ -108,11 +135,13 @@ export function hasTrustedReadyApkReceipt(
   return (
     snapshot.phase === 'ready' &&
     isApkDownloadForBuild(snapshot, manifest.build_number) &&
+    snapshot.version === manifest.version &&
     snapshot.localUri === localUri &&
     Boolean(expectedSha) &&
     snapshot.sha256?.toLowerCase() === expectedSha &&
     snapshot.verifiedSha256?.toLowerCase() === expectedSha &&
     snapshot.verifiedBytes === currentBytes &&
+    snapshot.verifiedReceiptVersion === APK_READY_RECEIPT_VERSION &&
     Boolean(snapshot.verifiedAt && Number.isFinite(Date.parse(snapshot.verifiedAt))) &&
     manifest.bytes === currentBytes &&
     privatePrefix != null &&
@@ -136,6 +165,40 @@ export function shouldEnsureBackgroundDownload(
     ) return false;
   }
   return true;
+}
+
+/** Reset every cached-file proof after verification rejects an APK. */
+export function invalidCachedApkRecoverySnapshot(
+  snapshot: ApkDownloadSnapshot,
+  manifest: {
+    build_number: string;
+    version: string;
+    download_url: string;
+    sha256?: string;
+    bytes?: number;
+  },
+  wifiOnly: boolean,
+): ApkDownloadSnapshot {
+  return {
+    phase: 'error',
+    buildNumber: manifest.build_number,
+    version: manifest.version,
+    downloadUrl: manifest.download_url,
+    sha256: manifest.sha256 ?? null,
+    localUri: null,
+    bytesWritten: 0,
+    totalBytes: manifest.bytes ?? snapshot.totalBytes,
+    wifiOnly,
+    startedAt: null,
+    lastProgressAt: null,
+    retryCount: snapshot.retryCount,
+    nativeState: null,
+    error: 'Cached update failed verification. Downloading a clean copy.',
+    verifiedSha256: null,
+    verifiedBytes: null,
+    verifiedAt: null,
+    verifiedReceiptVersion: null,
+  };
 }
 
 /** Native downloader cancellation uses errorCode -1 and an explicit message. */

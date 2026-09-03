@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 
@@ -44,6 +44,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   window: controlledWindow,
   onWindowChange,
   auditRevision,
+  onGraphicReadiness,
   onLeaderLogoReadiness,
   showModePicker = true,
 }: {
@@ -67,6 +68,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   window?: HistoryWindow;
   onWindowChange?: (window: HistoryWindow) => void;
   auditRevision?: string;
+  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
   onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
   /** Keeps the default Market view calm; advanced lenses can be disclosed on demand. */
   showModePicker?: boolean;
@@ -158,18 +160,20 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
       ) : (
         <>
           {activeMode === 'calendar' && historyModel ? (
-            <ChartErrorBoundary name="RateHeatCalendar">
+            <ChartErrorBoundary key={`calendar:${auditRevision ?? 'none'}`} name="RateHeatCalendar">
               <RateHeatCalendar
                 dates={historyModel.allDates ?? historyModel.dates}
                 points={historyModel.points}
                 section={section}
                 selectedDate={selectedDate}
                 onDateSelect={onDateSelect}
+                auditRevision={auditRevision}
+                onGraphicReadiness={onGraphicReadiness}
               />
             </ChartErrorBoundary>
           ) : null}
           {activeMode === 'race' ? (
-            <ChartErrorBoundary name="LenderRaceChart">
+            <ChartErrorBoundary key={`race:${auditRevision ?? 'none'}`} name="LenderRaceChart">
               <LenderRaceChart
                 payload={insights}
                 section={section}
@@ -179,12 +183,13 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
                 selectedDate={selectedDate}
                 onDateSelect={onDateSelect}
                 auditRevision={auditRevision}
+                onGraphicReadiness={onGraphicReadiness}
                 onLogoReadiness={onLeaderLogoReadiness}
               />
             </ChartErrorBoundary>
           ) : null}
           {activeMode === 'edge' && historyModel ? (
-            <ChartErrorBoundary name="SwitcherEdgeChart">
+            <ChartErrorBoundary key={`edge:${auditRevision ?? 'none'}`} name="SwitcherEdgeChart">
               <SwitcherEdgeChart
                 dates={historyModel.dates}
                 points={historyModel.points}
@@ -192,11 +197,13 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
                 window={window}
                 selectedDate={selectedDate}
                 onDateSelect={onDateSelect}
+                auditRevision={auditRevision}
+                onGraphicReadiness={onGraphicReadiness}
               />
             </ChartErrorBoundary>
           ) : null}
           {activeMode === 'pulse' ? (
-            <ChartErrorBoundary name="MarketSeismograph">
+            <ChartErrorBoundary key={`pulse:${auditRevision ?? 'none'}`} name="MarketSeismograph">
               <MarketSeismograph
                 payload={insights}
                 section={section}
@@ -205,6 +212,8 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
                 rbaHolds={section === 'Mortgage' ? rbaHolds : undefined}
                 selectedDate={selectedDate}
                 onDateSelect={onDateSelect}
+                auditRevision={auditRevision}
+                onGraphicReadiness={onGraphicReadiness}
               />
             </ChartErrorBoundary>
           ) : null}

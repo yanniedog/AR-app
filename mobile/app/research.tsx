@@ -15,6 +15,7 @@ import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/His
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
 import { formatRate, formatRunDate } from '../src/data/format';
+import { rbaSeriesThroughDate, rbaTimelineDates } from '../src/data/bankHistoryTransform';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
 import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../src/data/rbaCalendar';
@@ -77,11 +78,24 @@ export default function Market() {
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
-  const [historyLayoutRevision, setHistoryLayoutRevision] = useState<string | null>(null);
-  const [rbaGraphicState, setRbaGraphicState] = useState<{ revision: string; pointCount: number } | null>(null);
+  const [historyGraphicState, setHistoryGraphicState] = useState<{
+    revision: string;
+    accessibleSummary: boolean;
+  } | null>(null);
+  const [rbaGraphicState, setRbaGraphicState] = useState<{
+    revision: string;
+    pointCount: number;
+    accessibleSummary: boolean;
+  } | null>(null);
+  const [leaderLogoState, setLeaderLogoState] = useState<{
+    revision: string;
+    expectedCount: number;
+    terminalCount: number;
+  } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
   const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<'lens' | 'window' | 'date' | null>(null);
   const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
+  const [rbaLayoutReady, setRbaLayoutReady] = useState(false);
   const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
   const legacyRbaHandled = useRef(false);
 
@@ -192,6 +206,12 @@ export default function Market() {
   const rbaGraphicReady = !!rbaGraphicState &&
     rbaGraphicState.pointCount > 0 &&
     rbaGraphicState.revision.startsWith(rbaGraphicRevisionPrefix);
+  const rbaChartPointCount = useMemo(() => {
+    if (!core?.rba.length) return 0;
+    const timeline = rbaTimelineDates(core.rba, core.rba_holds);
+    const endDate = timeline.at(-1) ?? core.rba.at(-1)?.date ?? '';
+    return rbaSeriesThroughDate(core.rba, endDate).length;
+  }, [core?.rba, core?.rba_holds]);
   const openRba = useCallback(() => {
     setRbaGraphicState(null);
     setRbaOpen(true);
@@ -208,6 +228,11 @@ export default function Market() {
     [explorerInsights?.run_dates, explorerMode, historyModel?.dates],
   );
   const renderRevision = `${datasetRevision ?? 'none'}:${activeSection}:${explorerMode}:${explorerWindow}:${rewindDate ?? 'latest'}`;
+  const historyChartAvailable = !standardFilterWarming && (
+    explorerMode === 'race' || explorerMode === 'pulse'
+      ? showBankInsights && Boolean(explorerInsights)
+      : Boolean(historyModel)
+  );
 
   const nextSection = useCallback(() => {
     const index = Math.max(0, interestSections.indexOf(activeSection));
@@ -285,14 +310,30 @@ export default function Market() {
   usePerformanceAuditProbe(surface, {
     id: 'dashboard-layout', kind: 'layout',
     status: datasetRevision && dashboardLayoutRevision === datasetRevision ? 'ready' : 'pending', datasetRevision, renderRevision,
+    layoutMeasured: dashboardLayoutRevision === datasetRevision,
   });
   usePerformanceAuditProbe(surface, {
     id: 'history-graphic', kind: 'graphic', required: historyOpen,
-    status: !historyOpen || historyLayoutRevision === renderRevision ? 'ready' : 'pending', datasetRevision, renderRevision,
+    status: !historyOpen || (
+      historyChartAvailable && historyGraphicState?.revision === renderRevision
+    ) ? 'ready' : 'pending', datasetRevision, renderRevision,
+    accessibleSummary: historyOpen && historyChartAvailable &&
+      historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
   });
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
+    datasetRevision, renderRevision,
+  });
+  usePerformanceAuditProbe(surface, {
+    id: 'leader-logos', kind: 'logo', required: explorerMode === 'race',
+    status: explorerMode !== 'race' || (
+      leaderLogoState?.revision === renderRevision &&
+      leaderLogoState.terminalCount === leaderLogoState.expectedCount
+    ) ? 'ready' : 'pending',
+    expectedCount: explorerMode === 'race' ? leaderLogoState?.expectedCount ?? 0 : 0,
+    actualCount: explorerMode === 'race' ? leaderLogoState?.terminalCount ?? 0 : 0,
     datasetRevision, renderRevision,
   });
 
@@ -311,8 +352,15 @@ export default function Market() {
   usePerformanceAuditProbe(rbaSurface, {
     id: 'rba-graphic', kind: 'graphic', required: rbaOpen,
     status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
-    expectedCount: rbaOpen ? core?.rba.length ?? 1 : 0,
+    expectedCount: rbaOpen ? rbaChartPointCount : 0,
     actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
+    accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
+  });
+  usePerformanceAuditProbe(rbaSurface, {
+    id: 'rba-layout', kind: 'layout',
+    status: rbaLayoutReady ? 'ready' : 'pending',
+    layoutMeasured: rbaLayoutReady,
+    datasetRevision,
   });
 
   const handleRetryHistory = async () => {
@@ -370,14 +418,7 @@ export default function Market() {
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
         ) : historyReady ? (
-          <View
-            style={{ gap: 10 }}
-            onLayout={(event) => {
-              if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
-                setHistoryLayoutRevision(renderRevision);
-              }
-            }}
-          >
+          <View style={{ gap: 10 }}>
             <HistoryExplorer
               section={activeSection}
               historyModel={historyModel}
@@ -395,6 +436,8 @@ export default function Market() {
               window={explorerWindow}
               onWindowChange={setExplorerWindow}
               auditRevision={renderRevision}
+              onGraphicReadiness={setHistoryGraphicState}
+              onLeaderLogoReadiness={setLeaderLogoState}
               showModePicker={advancedViews}
             />
             <Button
@@ -419,7 +462,13 @@ export default function Market() {
         )}
       </Disclosure>
 
-      <View onLayout={(event) => setRbaLayoutY(event.nativeEvent.layout.y)}>
+      <View
+        onLayout={(event) => {
+          const { width, height, y } = event.nativeEvent.layout;
+          setRbaLayoutY(y);
+          if (width > 0 && height > 0) setRbaLayoutReady(true);
+        }}
+      >
         <Disclosure
           title="RBA cash rate"
           summary={currentRba ? `${formatRate(currentRba.rate)}${trend.summary ? ` · ${trend.summary}` : ''}` : 'Cash-rate history and decisions'}

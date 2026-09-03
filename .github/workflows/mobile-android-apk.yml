@@ -8,7 +8,6 @@
 # Secrets (Settings - Secrets and variables - Actions):
 #   GOOGLE_SERVICES_JSON - optional; materialized via ensure-firebase-config.mjs
 #   GOOGLE_SERVICE_INFO_PLIST - optional
-#   EXPO_PUBLIC_CLARITY_PROJECT_ID - optional Clarity project id
 #   EXPO_TOKEN - optional; used to download EAS Android keystore when ANDROID_KEYSTORE_B64 unset
 #   ANDROID_KEYSTORE_B64 - optional override; base64 .jks/.keystore
 #   ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD - with B64 override
@@ -16,7 +15,7 @@
 # Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
 
 name: mobile-android-apk
-run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }})
+run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
 # Queue-drain automation dispatches this only after the final patch-version PR
 # merges. Building on every preceding main push produced duplicate/stale APKs.
@@ -31,9 +30,30 @@ on:
         options:
           - arm
           - universal
+      follow_with_arm:
+        description: After universal publishes, queue the ARM channel before any README mutation
+        required: false
+        default: false
+        type: boolean
+      release_version:
+        description: Exact version allocated by a preceding universal build
+        required: false
+        default: ''
+        type: string
+      release_version_code:
+        description: Exact versionCode allocated by a preceding universal build
+        required: false
+        default: ''
+        type: string
+      release_source_sha:
+        description: Immutable main source shared by a preceding universal build
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: write
+  checks: read
   contents: write
   pull-requests: write
 
@@ -46,11 +66,14 @@ concurrency:
 jobs:
   android-apk:
     name: android ${{ inputs.apk_channel || 'arm' }} preview apk (GHA)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: mobile-release
     env:
       NODE_ENV: production
       APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
-      EXPO_PUBLIC_CLARITY_PROJECT_ID: ${{ secrets.EXPO_PUBLIC_CLARITY_PROJECT_ID }}
+      AR_APP_DISTRIBUTION_CHANNEL: sideload
     defaults:
       run:
         working-directory: mobile
@@ -58,6 +81,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ inputs.release_source_sha || github.sha }}
 
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
@@ -69,6 +93,12 @@ jobs:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+
+      - name: Verify protected release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
+        run: node scripts/verify-github-release-source.mjs
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
@@ -89,17 +119,27 @@ jobs:
           node scripts/validate-firebase-package.mjs
 
       - name: Advance APK version iteration from rolling manifest
+        id: release
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
+          REUSED_RELEASE_VERSION: ${{ inputs.release_version }}
+          REUSED_RELEASE_VERSION_CODE: ${{ inputs.release_version_code }}
         run: |
           rolling_tag="app-apk-arm-latest"
           if [ "$APK_CHANNEL" = "universal" ]; then
             rolling_tag="app-apk-latest"
           fi
+          reuse_args=()
+          if [ -n "$REUSED_RELEASE_VERSION" ] || [ -n "$REUSED_RELEASE_VERSION_CODE" ]; then
+            reuse_args+=(--release-version "$REUSED_RELEASE_VERSION")
+            reuse_args+=(--release-version-code "$REUSED_RELEASE_VERSION_CODE")
+          fi
           node scripts/bump-android-version-code.mjs \
             --repo "${{ github.repository }}" \
             --fallback-repo yanniedog/AR-local \
-            --rolling-tag "$rolling_tag"
+            --rolling-tag "$rolling_tag" \
+            "${reuse_args[@]}"
+          node -e "const app=require('./app.json').expo; console.log('version='+app.version); console.log('version_code='+app.android.versionCode)" >> "$GITHUB_OUTPUT"
 
       - name: Materialize Android release keystore
         id: keystore
@@ -165,8 +205,12 @@ jobs:
       - name: Publish preview APK manifest (GitHub release)
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: |
+          # Build work can take tens of minutes. Fail closed if main advanced
+          # after the initial gate instead of replacing a rolling release from
+          # an older checkout.
+          node scripts/verify-github-release-source.mjs
           rolling_tag="app-apk-arm-latest"
           if [ "$APK_CHANNEL" = "universal" ]; then
             rolling_tag="app-apk-latest"
@@ -175,21 +219,27 @@ jobs:
             --repo "${{ github.repository }}" \
             --rolling-tag "$rolling_tag"
 
-      - name: Bridge legacy AR-local APK update channel
-        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal'
+      - name: Queue ARM channel after universal publish
+        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.follow_with_arm == true
         env:
-          GH_TOKEN: ${{ secrets.AR_LOCAL_RELEASE_TOKEN }}
-          GITHUB_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "::warning::AR_LOCAL_RELEASE_TOKEN is not set; skipping legacy AR-local APK bridge."
-            exit 0
-          fi
-          node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
-            --repo yanniedog/AR-local
+          # Close the post-publication race as well: if main moved, leave the
+          # universal artifact alone and let queue-drain recovery rebuild a
+          # matched pair from the new head.
+          node scripts/verify-github-release-source.mjs
+          gh workflow run mobile-android-apk.yml \
+            --ref main \
+            --repo "${{ github.repository }}" \
+            -f apk_channel=arm \
+            -f follow_with_arm=false \
+            -f release_version="${{ steps.release.outputs.version }}" \
+            -f release_version_code="${{ steps.release.outputs.version_code }}" \
+            -f release_source_sha="${{ inputs.release_source_sha || github.sha }}"
 
       - name: Publish README Android install QR section
-        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal'
+        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

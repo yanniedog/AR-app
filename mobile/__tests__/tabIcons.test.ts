@@ -1,6 +1,6 @@
 import { M3_NAV_BAR_HEIGHT } from '../src/lib/androidChrome';
 import {
-  getTabIonicon,
+  getTabLedgerIcon,
   getTabLabel,
   TAB_ROUTES,
 } from '../src/lib/tabIcons';
@@ -8,13 +8,13 @@ import {
 describe('tabIcons', () => {
   it('maps every compatibility tab route to a labelled icon', () => {
     for (const route of TAB_ROUTES) {
-      expect(getTabIonicon(route)).toBeTruthy();
+      expect(getTabLedgerIcon(route)).toBeTruthy();
       expect(getTabLabel(route)).toBeTruthy();
     }
   });
 
   it('returns undefined for unknown routes', () => {
-    expect(getTabIonicon('unknown')).toBeUndefined();
+    expect(getTabLedgerIcon('unknown')).toBeUndefined();
     expect(getTabLabel('unknown', 'Fallback')).toBe('Fallback');
   });
 

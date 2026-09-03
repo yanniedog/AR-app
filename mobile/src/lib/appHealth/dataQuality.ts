@@ -844,7 +844,9 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
     status === 'fail'
       ? 'The details asset is empty or belongs to a different publication run.'
       : status === 'warn'
-        ? 'Some core products have no corresponding detail record.'
+        ? missingProducts > 0
+          ? 'Some core products have no corresponding detail record.'
+          : 'The details asset contains records that are not present in the active core snapshot.'
         : undefined,
   );
 }

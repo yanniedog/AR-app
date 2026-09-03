@@ -1,16 +1,20 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import { Platform } from 'react-native';
+import { verifyApkArchiveIdentity } from '../../modules/apk-identity-verifier';
 
 import { debugLog } from './debugLog';
 import { ensureInstallPermission } from './installPermission';
 import { hashFileSha256 } from './nativeFileHash';
 import {
   assertDownloadedApkMatchesManifest,
+  TRUSTED_ANDROID_PACKAGE,
+  TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
   type ApkManifest,
 } from './appUpdateLogic';
 
 const APK_SHA256_TIMEOUT_MS = 2 * 60 * 1000;
+const APK_IDENTITY_TIMEOUT_MS = 2 * 60 * 1000;
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -36,7 +40,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
  */
 export async function verifyDownloadedApk(
   path: string,
-  manifest: Pick<ApkManifest, 'bytes' | 'sha256'>,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256' | 'version' | 'build_number'>,
 ): Promise<{ size: number; verifiedSha256: boolean }> {
   const info = await FileSystem.getInfoAsync(path);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
@@ -53,9 +57,35 @@ export async function verifyDownloadedApk(
       `APK sha256 mismatch (expected ${expectedSha.slice(0, 12)}…, got ${actual.slice(0, 12)}…)`,
     );
   }
+  const identity = await withTimeout(
+    verifyApkArchiveIdentity(path),
+    APK_IDENTITY_TIMEOUT_MS,
+  );
+  if (!identity.signatureVerified || identity.signerCount !== 1) {
+    throw new Error('APK signature verification did not prove one trusted signer');
+  }
+  if (identity.packageName !== TRUSTED_ANDROID_PACKAGE) {
+    throw new Error('APK package does not match Australian Rates');
+  }
+  if (identity.versionName !== manifest.version) {
+    throw new Error(
+      `APK version mismatch (expected ${manifest.version}, got ${identity.versionName || 'missing'})`,
+    );
+  }
+  if (identity.versionCode !== String(manifest.build_number)) {
+    throw new Error(
+      `APK build mismatch (expected ${manifest.build_number}, got ${identity.versionCode || 'missing'})`,
+    );
+  }
+  if (identity.signerSha256.toLowerCase() !== TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256) {
+    throw new Error('APK signer does not match Australian Rates');
+  }
+  if (!identity.verifiedSchemes.some((scheme) => ['v2', 'v3', 'v3.1', 'v4'].includes(scheme))) {
+    throw new Error('APK requires a verified modern Android signature');
+  }
   debugLog.info(
     'app-update',
-    `verification complete bytes=${size} ms=${Date.now() - startedAt}`,
+    `verification complete bytes=${size} package=${identity.packageName} signer=${identity.signerSha256.slice(0, 12)}… ms=${Date.now() - startedAt}`,
   );
   return { size, verifiedSha256: true };
 }
@@ -63,10 +93,9 @@ export async function verifyDownloadedApk(
 /** Prefer verifyDownloadedApk so large files still enforce manifest.bytes. */
 export async function verifyApkSha256(
   path: string,
-  expectedSha: string,
-  expectedBytes?: number | null,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256' | 'version' | 'build_number'>,
 ): Promise<void> {
-  await verifyDownloadedApk(path, { sha256: expectedSha, bytes: expectedBytes ?? undefined });
+  await verifyDownloadedApk(path, manifest);
 }
 
 export async function installDownloadedApk(localUri: string): Promise<void> {

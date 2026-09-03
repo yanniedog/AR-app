@@ -1,10 +1,10 @@
-# Submit the latest EAS production build to App Store Connect / Google Play.
+# Submit one exact EAS production build to App Store Connect or Google Play.
 # Manual trigger only. Store credentials must be configured in EAS (eas credentials).
 #
 # Secrets:
 #   EXPO_TOKEN - same robot token as mobile-eas-build.yml
 #
-# Prerequisite: a successful production build for the target platform(s).
+# Prerequisite: a successful production build for the target platform.
 
 name: mobile-eas-submit
 
@@ -12,14 +12,13 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: Store platform(s) to submit
+        description: Store platform to submit
         required: true
         default: android
         type: choice
         options:
           - android
           - ios
-          - all
       profile:
         description: EAS submit profile (mobile/eas.json - submit)
         required: true
@@ -27,9 +26,15 @@ on:
         type: choice
         options:
           - production
+      build_id:
+        description: Exact finished EAS production build UUID to submit
+        required: true
+        type: string
 
 permissions:
+  checks: read
   contents: read
+  pull-requests: read
 
 concurrency:
   group: mobile-eas-submit
@@ -38,7 +43,14 @@ concurrency:
 jobs:
   eas-submit:
     name: eas submit (${{ inputs.profile }} - ${{ inputs.platform }})
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mobile-release
+    env:
+      EAS_BUILD_ID: ${{ inputs.build_id }}
+      EAS_PROFILE: ${{ inputs.profile }}
+      EAS_PLATFORM: ${{ inputs.platform }}
     defaults:
       run:
         working-directory: mobile
@@ -53,6 +65,11 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
+      - name: Verify protected release source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/verify-github-release-source.mjs
+
       - name: Require EXPO_TOKEN
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -62,15 +79,39 @@ jobs:
             exit 1
           fi
 
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+      - name: Validate submission request
+        run: |
+          if [[ ! "$EAS_BUILD_ID" =~ ^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$ ]]; then
+            echo "::error::build_id must be an exact EAS build UUID."
+            exit 1
+          fi
 
-      - name: EAS Submit (latest build)
+      - name: Install dependencies
+        run: |
+          npm ci --no-audit --no-fund
+          npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          echo "$PWD/tools/eas-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Verify exact EAS build provenance
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
-          npx eas-cli@16.14.1 submit \
+          eas build:view "$EAS_BUILD_ID" --json > "$RUNNER_TEMP/eas-build.json"
+          node scripts/verify-eas-submit-build.mjs \
+            --metadata "$RUNNER_TEMP/eas-build.json" \
+            --id "$EAS_BUILD_ID" \
+            --profile "$EAS_PROFILE" \
+            --platform "$EAS_PLATFORM" \
+            --source-sha "$GITHUB_SHA"
+
+      - name: EAS Submit (exact build)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node scripts/verify-github-release-source.mjs
+          eas submit \
             --non-interactive \
-            --latest \
-            --profile "${{ inputs.profile }}" \
-            --platform "${{ inputs.platform }}"
+            --id "$EAS_BUILD_ID" \
+            --profile "$EAS_PROFILE" \
+            --platform "$EAS_PLATFORM"

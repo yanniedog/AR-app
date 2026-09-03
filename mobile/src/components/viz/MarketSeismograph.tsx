@@ -32,6 +32,8 @@ export function MarketSeismograph({
   rbaHolds,
   selectedDate,
   onDateSelect,
+  auditRevision,
+  onGraphicReadiness,
   height = 150,
 }: {
   payload: BankInsightsPayload | null;
@@ -42,6 +44,8 @@ export function MarketSeismograph({
   rbaHolds?: string[];
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
+  auditRevision?: string;
+  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
   height?: number;
 }) {
   const theme = useTheme();
@@ -111,7 +115,13 @@ export function MarketSeismograph({
   return (
     <View>
       <View
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          setWidth(nextWidth);
+          if (nextWidth > 0 && auditRevision) {
+            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
+          }
+        }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
         onTouchEnd={scrub.onTouchEnd}

@@ -329,6 +329,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // can navigate. Only touch disk for a cold/headless refresh or a
           // mismatched in-memory core.
           const live = get();
+          const searchIndexChanged =
+            live.manifest?.files.search_index?.sha256 !==
+            remote.files.search_index?.sha256;
           // Persist enriched optional file entries so the next cold start does
           // not re-load a core/details-only dated manifest from cache meta.
           const cachedOptionalChanged =
@@ -381,6 +384,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
+              ...(searchIndexChanged ? {
+                // A corrected optional index can arrive without a core SHA
+                // change. Never let Search keep filtering with the previous
+                // edition while the new asset is loaded on demand.
+                searchIndex: null,
+                searchIndexStatus: 'idle',
+                searchIndexError: null,
+              } : {}),
               ...(bundle || optionalWork.bankSpreadHistory ? {
                 bankSpreadHistory: null,
                 bankSpreadHistoryError: null,
@@ -483,6 +494,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           error: null,
           pendingIngestRunDate,
           details: detailsUnchanged ? get().details : null,
+          searchIndex: null,
+          searchIndexStatus: 'idle',
+          searchIndexError: null,
           ...(optionalWork.bankSpreadHistory ? {
             bankSpreadHistory: null,
             bankSpreadHistoryError: null,

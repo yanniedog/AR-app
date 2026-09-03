@@ -2,6 +2,7 @@ import {
   createPerformanceAuditGraphicToken,
   createPerformanceAuditListToken,
   createPerformanceAuditLogoToken,
+  compactPerformanceAuditReadinessEvidence,
   OpaquePerformanceAuditRenderRevision,
   PerformanceAuditReadinessProbeError,
   PerformanceAuditReadinessRegistry,
@@ -75,6 +76,31 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('keeps every display probe parseable without embedding long revisions', () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-compact');
+    registry.registerSurface({
+      id: 'product.details',
+      datasetRevision: 'a'.repeat(64),
+      renderRevision: 'private-state:'.repeat(80),
+      probes: Array.from({ length: 8 }, (_, index) => ({
+        id: `probe-${index}`,
+        kind: index === 7 ? 'layout' as const : 'list' as const,
+        status: 'ready' as const,
+        expectedCount: index + 1,
+        actualCount: index + 1,
+        layoutMeasured: index === 7 ? true : null,
+      })),
+    });
+
+    const evidence = compactPerformanceAuditReadinessEvidence(registry.snapshot());
+    expect(evidence.length).toBeLessThanOrEqual(512);
+    expect(evidence.split(' | ')).toHaveLength(8);
+    expect(evidence).toContain('product.details:probe-7:layout:ready:8/8:measured=1');
+    expect(evidence).not.toContain('private-state');
+    expect(evidence).not.toContain('a'.repeat(32));
+  });
+
   it('is inert outside capture and never treats zero surfaces as ready', () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);

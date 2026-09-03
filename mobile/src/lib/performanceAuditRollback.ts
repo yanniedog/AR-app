@@ -1,5 +1,4 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import type { AppState } from '../data/storeTypes';
@@ -21,6 +20,11 @@ import {
 } from '../hooks/useUserRateScenario';
 import { ForegroundElapsed, subscribePerformanceAudit } from './performanceAudit';
 import { SECURE_STORE_KEYS } from './secureStoreKey';
+import {
+  deleteSecureStoreValue,
+  readSecureStoreValue,
+  writeSecureStoreValue,
+} from './secureStoreValue';
 
 export const PERFORMANCE_AUDIT_ROLLBACK_KEY = '@ar/performance-audit/rollback-v1';
 /** Encrypted companion for calculator/projection inputs; never written to AsyncStorage. */
@@ -109,17 +113,16 @@ async function persistRollbackScenario(scenario: UserRateScenario | null): Promi
   if (Platform.OS === 'web') return;
   if (!scenario) {
     try {
-      await SecureStore.deleteItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
+      await deleteSecureStoreValue(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
     } catch {
       // Missing key is fine during cleanup.
     }
     return;
   }
   try {
-    await SecureStore.setItemAsync(
+    await writeSecureStoreValue(
       PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY,
       JSON.stringify(normalizeUserRateScenario(scenario)),
-      { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
     );
   } catch (error) {
     throw new Error(
@@ -133,7 +136,7 @@ async function persistRollbackScenario(scenario: UserRateScenario | null): Promi
 async function loadRollbackScenario(): Promise<UserRateScenario | null> {
   if (Platform.OS === 'web') return null;
   try {
-    const raw = await SecureStore.getItemAsync(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
+    const raw = await readSecureStoreValue(PERFORMANCE_AUDIT_ROLLBACK_SCENARIO_KEY);
     return raw ? normalizeUserRateScenario(JSON.parse(raw)) : null;
   } catch {
     return null;

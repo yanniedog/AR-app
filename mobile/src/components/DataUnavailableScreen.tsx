@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { View } from 'react-native';
 
@@ -12,7 +12,6 @@ import { AppText, Button } from './ui';
 /** Full-screen recovery when store.status === 'error' (no usable payload). */
 export function DataUnavailableScreen() {
   const theme = useTheme();
-  const error = useStore((s) => s.error);
   const refreshing = useStore((s) => s.refreshing);
   const status = useStore((s) => s.status);
   const retryDataLoad = useStore((s) => s.retryDataLoad);
@@ -45,11 +44,9 @@ export function DataUnavailableScreen() {
             ? 'We could not load rates. Check your connection and try again, or use the clearly labelled bundled sample offline.'
             : 'We could not load verified rates, and the bundled sample is outside its safety window. Connect to Wi-Fi or allow a manual refresh and try again.'}
         </AppText>
-        {error ? (
-          <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }} numberOfLines={4}>
-            {error}
-          </AppText>
-        ) : null}
+        <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }}>
+          Technical details remain in the on-device Debug log.
+        </AppText>
         <View style={{ marginTop: 22, width: '100%', gap: 10 }}>
           <Button title="Try again" icon="refresh" onPress={() => void retryDataLoad()} loading={busy} disabled={busy} />
           {sampleUsable ? (

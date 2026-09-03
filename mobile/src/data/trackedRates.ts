@@ -249,7 +249,7 @@ async function loadTrackedRatesFromStorage(
         trackedRates: normalizeTrackedRates(raw ? JSON.parse(raw) : undefined, savedRates),
       };
     } catch {
-      return { status: 'ready', trackedRates: empty() };
+      return { status: 'unavailable', trackedRates: empty() };
     }
   }
   const records: unknown[] = [];
@@ -260,13 +260,13 @@ async function loadTrackedRatesFromStorage(
     } catch {
       return { status: 'unavailable', trackedRates: empty() };
     }
-    if (!chunk) return { status: 'ready', trackedRates: empty() };
+    if (!chunk) return { status: 'unavailable', trackedRates: empty() };
     try {
       const parsed = JSON.parse(chunk);
-      if (!Array.isArray(parsed)) return { status: 'ready', trackedRates: empty() };
+      if (!Array.isArray(parsed)) return { status: 'unavailable', trackedRates: empty() };
       records.push(...parsed);
     } catch {
-      return { status: 'ready', trackedRates: empty() };
+      return { status: 'unavailable', trackedRates: empty() };
     }
   }
   return { status: 'ready', trackedRates: normalizeTrackedRates(records, savedRates) };
@@ -332,12 +332,16 @@ async function clearTrackedRatesStorage(storageKey: SecureStoreKey): Promise<voi
   }
   const raw = await SecureStore.getItemAsync(storageKey).catch(() => null);
   const manifest = parseManifest(raw);
+  // Commit the deletion first so interrupted best-effort chunk cleanup cannot
+  // leave a manifest pointing at a partially deleted generation.
+  await SecureStore.deleteItemAsync(storageKey);
   if (manifest) {
     for (let index = 0; index < manifest.chunks; index += 1) {
-      await SecureStore.deleteItemAsync(chunkKey(storageKey, manifest.generation, index));
+      await SecureStore.deleteItemAsync(
+        chunkKey(storageKey, manifest.generation, index),
+      ).catch(() => undefined);
     }
   }
-  await SecureStore.deleteItemAsync(storageKey);
 }
 
 /** User-entered dates never enter general AsyncStorage. */

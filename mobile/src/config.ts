@@ -12,7 +12,9 @@ type Extra = {
   apkManifestUrl?: string;
   apkArmReleaseTag?: string;
   apkArmManifestUrl?: string;
+  iosInstallUrl?: string;
   payloadDecKeyHex?: string;
+  selfUpdateEnabled?: boolean;
 };
 
 const extra = (Constants.expoConfig?.extra ?? {}) as Extra;
@@ -58,6 +60,12 @@ export const APK_MANIFEST_URL =
 export const APK_ARM_MANIFEST_URL =
   extra.apkArmManifestUrl ??
   `https://github.com/${APK_REPO}/releases/download/${APK_ARM_RELEASE_TAG}/${APK_MANIFEST_ASSET}`;
+
+/** False in Google Play builds, whose updates are exclusively Play-managed. */
+export const SELF_UPDATE_ENABLED = extra.selfUpdateEnabled !== false;
+export const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.eyex.australianrates';
+/** App Store or public TestFlight URL. Null until an iOS install destination is published. */
+export const IOS_INSTALL_URL = String(extra.iosInstallUrl ?? '').trim() || null;
 
 /** Schema version this build understands. Older payloads still load best-effort. */
 export const SUPPORTED_SCHEMA = 1;

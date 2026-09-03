@@ -1,6 +1,6 @@
 import * as Device from 'expo-device';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, Share, View } from 'react-native';
+import { Modal, Platform, Pressable, Share, View } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 
 import {
@@ -8,20 +8,25 @@ import {
   APK_ARM_RELEASE_TAG,
   APK_MANIFEST_URL,
   APK_RELEASE_TAG,
+  IOS_INSTALL_URL,
+  PLAY_STORE_URL,
   REPO,
+  SELF_UPDATE_ENABLED,
 } from '../config';
 import {
   apkManifestUrlsForDevice,
   fetchBestCompatibleApkManifest,
 } from '../lib/appUpdateLogic';
 import { logSwallowedError } from '../lib/degradationLog';
+import { resolveShareInstallTarget } from '../lib/shareInstallTarget';
+import { useReducedMotion } from '../hooks/useReducedMotion';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button } from './ui';
 
 /**
- * Share dialog with a scannable QR for the latest Android APK — point a friend's
- * camera at the screen instead of typing a URL. Prefers the direct APK
- * download_url from the rolling manifest; falls back to the release page.
+ * Share dialog with a platform-correct install destination. Android sideload
+ * builds prefer the manifest-authenticated APK; store builds use their own
+ * platform's listing and fail closed when no iOS destination is published.
  */
 export function ShareQrModal({
   visible,
@@ -33,6 +38,7 @@ export function ShareQrModal({
   shareMessage: string | null;
 }) {
   const theme = useTheme();
+  const reducedMotion = useReducedMotion();
   const [apkUrl, setApkUrl] = useState<string | null>(null);
   const manifestUrls = useMemo(
     () =>
@@ -48,7 +54,7 @@ export function ShareQrModal({
   const releasePageUrl = `https://github.com/${REPO}/releases/tag/${preferredReleaseTag}`;
 
   useEffect(() => {
-    if (!visible || apkUrl) return;
+    if (Platform.OS !== 'android' || !SELF_UPDATE_ENABLED || !visible || apkUrl) return;
     let alive = true;
     fetchBestCompatibleApkManifest(manifestUrls, Device.supportedCpuArchitectures)
       .then((m) => {
@@ -60,10 +66,23 @@ export function ShareQrModal({
     };
   }, [visible, apkUrl, manifestUrls]);
 
-  const qrValue = apkUrl ?? releasePageUrl;
+  const installTarget = resolveShareInstallTarget({
+    platform: Platform.OS,
+    selfUpdateEnabled: SELF_UPDATE_ENABLED,
+    apkUrl,
+    releasePageUrl,
+    playStoreUrl: PLAY_STORE_URL,
+    iosInstallUrl: IOS_INSTALL_URL,
+  });
+  const qrValue = installTarget?.url ?? null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={reducedMotion === false ? 'fade' : 'none'}
+      onRequestClose={onClose}
+    >
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }}>
         <Pressable
           onPress={onClose}
@@ -86,19 +105,27 @@ export function ShareQrModal({
             Share Australian Rates
           </AppText>
           <AppText variant="small" color="textMuted" style={{ marginBottom: 16, textAlign: 'center' }}>
-            Scan with a phone camera to {apkUrl ? 'download the latest Android APK' : 'open the latest release'}.
+            {installTarget
+              ? `Scan with a phone camera to ${installTarget.description}.`
+              : Platform.OS === 'ios'
+                ? 'An iOS install link has not been published yet. You can still share these rate details.'
+                : 'An install link is not available on this platform. You can still share these rate details.'}
           </AppText>
-          <View style={{ padding: 12, backgroundColor: '#fff', borderRadius: theme.radius.md }}>
-            <QRCode value={qrValue} size={208} />
-          </View>
+          {qrValue ? (
+            <View style={{ padding: 12, backgroundColor: '#fff', borderRadius: theme.radius.md }}>
+              <QRCode value={qrValue} size={208} />
+            </View>
+          ) : null}
           <View style={{ alignSelf: 'stretch', marginTop: 20, gap: 10 }}>
             {shareMessage ? (
               <Button
-                title="Share link instead"
+                title={qrValue ? 'Share link instead' : 'Share rate details'}
                 icon="share-social-outline"
                 variant="secondary"
                 onPress={() => {
-                  void Share.share({ message: `${shareMessage}\nGet the app: ${qrValue}` });
+                  void Share.share({
+                    message: qrValue ? `${shareMessage}\nGet the app: ${qrValue}` : shareMessage,
+                  });
                 }}
               />
             ) : null}

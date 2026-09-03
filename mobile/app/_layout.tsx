@@ -35,7 +35,9 @@ import {
   AppUpdateBannerLayoutProvider,
   useAppUpdateBanner,
 } from '../src/components/AppUpdateBanner';
+import { SELF_UPDATE_ENABLED } from '../src/config';
 import { RateMark } from '../src/components/RateMark';
+import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
 import { DataUnavailableScreen } from '../src/components/DataUnavailableScreen';
 import { DiagnosticsConsentBanner } from '../src/components/DiagnosticsConsentBanner';
@@ -257,7 +259,7 @@ function RootNavigator() {
   const [morphTarget, setMorphTarget] = useState<SplashMorphTarget | null>(null);
 
   const appReady = hydrated && (status === 'ready' || status === 'error');
-  const updateBanner = useAppUpdateBanner(appReady);
+  const updateBanner = useAppUpdateBanner(appReady && SELF_UPDATE_ENABLED);
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
@@ -405,6 +407,7 @@ function RootNavigator() {
               onDismiss={updateBanner.dismiss}
             />
           ) : null}
+          <ScenarioRecoveryBanner />
           <DataUnavailableScreen />
           <DiagnosticsConsentBanner
             visible={appReady && !privacyChoiceCurrent}
@@ -431,6 +434,7 @@ function RootNavigator() {
               onDismiss={updateBanner.dismiss}
             />
           ) : null}
+          <ScenarioRecoveryBanner />
           <View
             style={{ flex: 1 }}
             pointerEvents={performanceAuditActive ? 'none' : 'auto'}

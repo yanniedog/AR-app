@@ -1,6 +1,6 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useState } from 'react';
-import { Switch, View } from 'react-native';
+import { Switch, useWindowDimensions, View } from 'react-native';
 
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Card, IconButton, Row } from '../ui';
@@ -43,6 +43,7 @@ export function DisclosureGroup({
   children: React.ReactNode;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const open = controlledOpen ?? internalOpen;
   const toggleOpen = () => {
@@ -72,7 +73,7 @@ export function DisclosureGroup({
             {title}
           </AppText>
           {summary && !open ? (
-            <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+            <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
               {summary}
             </AppText>
           ) : null}
@@ -100,6 +101,7 @@ export function NavRow({
   onPress: () => void;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   return (
     <TouchTarget
       fill
@@ -120,7 +122,7 @@ export function NavRow({
           {label}
         </AppText>
         {sub ? (
-          <AppText variant="tiny" color="textFaint" numberOfLines={2}>
+          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 2}>
             {sub}
           </AppText>
         ) : null}
@@ -198,6 +200,7 @@ export function ToggleRow({
   onChange: (v: boolean) => void;
 }) {
   const theme = useTheme();
+  const { fontScale } = useWindowDimensions();
   return (
     <Row gap={12} style={{ minHeight: TOUCH_TARGET_MIN, paddingVertical: 2 }}>
       <Ionicons name={icon} size={20} color={theme.colors.primary} />
@@ -206,7 +209,7 @@ export function ToggleRow({
           {label}
         </AppText>
         {sub ? (
-          <AppText variant="tiny" color="textFaint" numberOfLines={2}>
+          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 2}>
             {sub}
           </AppText>
         ) : null}

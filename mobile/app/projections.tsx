@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
@@ -218,7 +218,11 @@ export default function Projections() {
   const [metric, setMetric] = useState<ProjectionMetric>('balance');
   const [dimension, setDimension] = useState<ProjectionDimension>('rates');
   const [layoutReady, setLayoutReady] = useState(false);
-  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
+  const [chartEvidence, setChartEvidence] = useState<{
+    revision: string;
+    selectionIndex: number;
+    accessibleSummary: boolean;
+  } | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
   const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
   auditRenderRevisionTracker.current ??= new OpaquePerformanceAuditRenderRevision();
@@ -401,10 +405,27 @@ export default function Projections() {
     result.ready ? 'ready' : `missing:${result.missing.join(',')}`,
     dimension,
     metric,
+    chartEvidence?.selectionIndex ?? 'unmeasured',
     projectionStateRevision,
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
+  const recordChartEvidence = useCallback(({ renderRevision, selectionIndex, accessibleSummary }: {
+    renderRevision: string;
+    selectionIndex: number;
+    accessibleSummary: boolean;
+  }) => {
+    setChartEvidence((current) => {
+      if (
+        current?.revision === renderRevision &&
+        current.selectionIndex === selectionIndex &&
+        current.accessibleSummary === accessibleSummary
+      ) {
+        return current;
+      }
+      return { revision: renderRevision, selectionIndex, accessibleSummary };
+    });
+  }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
     if (typeof requested === 'string' && SECTION_OPTIONS.some((item) => item.value === requested)) {
@@ -601,15 +622,19 @@ export default function Projections() {
         id: 'projections.chart',
         kind: 'graphic',
         required: result.ready,
-        status: !result.ready || chartReadyRevision === projectionRenderRevision ? 'ready' : 'pending',
+        status: !result.ready || chartEvidence?.revision === projectionRenderRevision ? 'ready' : 'pending',
         expectedCount: result.ready ? 1 : 0,
-        actualCount: result.ready && chartReadyRevision === projectionRenderRevision ? 1 : 0,
+        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? 1 : 0,
+        accessibleSummary: chartEvidence?.revision === projectionRenderRevision
+          ? chartEvidence.accessibleSummary
+          : false,
         renderRevision: projectionRenderRevision,
       },
       {
         id: 'projections.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: projectionRenderRevision,
       },
     ],
@@ -638,6 +663,7 @@ export default function Projections() {
         id: 'projections-inputs.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: projectionRenderRevision,
       },
     ],
@@ -890,8 +916,9 @@ export default function Projections() {
             series={activeSeries}
             metric={metric}
             asAt={result.asAt}
+            renderRevision={projectionRenderRevision}
             controllerRef={chartControllerRef}
-            onRenderReady={() => setChartReadyRevision(projectionRenderRevision)}
+            onRenderReady={recordChartEvidence}
           />
           <ProjectionSummary section={section} result={result} />
         </>
@@ -929,7 +956,9 @@ export default function Projections() {
                 ? 'Saving encrypted scenario...'
                 : saveStatus === 'saved'
                   ? 'Encrypted scenario saved'
-                  : 'Encrypted scenario unavailable'}
+                  : storageStatus === 'error'
+                    ? 'Encrypted scenario unavailable'
+                    : 'Encrypted scenario reset'}
           </AppText>
           {storageError ? <AppText variant="tiny" color="danger">{storageError}</AppText> : null}
           {storageStatus === 'error' ? (

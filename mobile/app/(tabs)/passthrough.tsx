@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import { BankMovesFeed, MoversLeaderboard } from '../../src/components/BankInsights';
@@ -11,6 +11,7 @@ import { SECTIONS } from '../../src/constants';
 import {
   filterBankInsightsForSuitability,
   marketPulse,
+  recentBankEvents,
   rbaPassThroughMultiSection,
 } from '../../src/data/bankInsights';
 import { summarizeSectionResponse } from '../../src/data/passThroughModels';
@@ -18,8 +19,17 @@ import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/in
 import { useStore } from '../../src/data/store';
 import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { formatRunDate } from '../../src/data/format';
 import { scalarRouteParam } from '../../src/lib/nav';
+import {
+  isFeedRenderEvidenceReady,
+  reconcileFeedRenderEvidence,
+  resolveFeedRenderProbe,
+  resetFeedRenderEvidence,
+  type FeedLayoutEvidence,
+  type FeedRenderEvidence,
+} from '../../src/lib/feedRenderEvidence';
 
 function weeklySummary(
   section: keyof typeof SECTIONS,
@@ -41,6 +51,8 @@ function weeklySummary(
 export default function RateMovesTab() {
   const core = useStore((state) => state.core);
   const coreIntegrity = useStore((state) => state.coreIntegrity);
+  const coreSha = useStore((state) => state.manifest?.files.core.sha256 ?? null);
+  const bankInsightsSha = useStore((state) => state.manifest?.files.bank_history?.sha256 ?? null);
   const rawPayload = useStore((state) => state.bankInsights);
   const calendar = useStore((state) => state.rbaCalendar);
   const error = useStore((state) => state.bankInsightsError);
@@ -55,6 +67,9 @@ export default function RateMovesTab() {
   const [activeSection, setActiveSection] = useState(() => resolveInterestSection(interests, defaultSection));
   const [retrying, setRetrying] = useState(false);
   const [moversOpen, setMoversOpen] = useState(false);
+  const [layoutReady, setLayoutReady] = useState(false);
+  const [feedEvidence, setFeedEvidence] = useState<FeedRenderEvidence>(() =>
+    resetFeedRenderEvidence('uninitialised', 0));
   const suitabilityRevision = useSuitabilityRevision();
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
@@ -109,11 +124,87 @@ export default function RateMovesTab() {
   );
   const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
+  const feedExpectedCount = useMemo(
+    () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
+    [activeSection, payload],
+  );
+  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}`;
+
+  const recordFeedEvidence = useCallback((observed: FeedLayoutEvidence) => {
+    // Reconcile the first layout for a new revision atomically. Resetting in an
+    // effect can run after the replacement rows have already reported layout,
+    // erasing valid evidence and leaving the audit at 0 of N rendered rows.
+    setFeedEvidence((current) => reconcileFeedRenderEvidence(
+      current,
+      feedRenderRevision,
+      feedExpectedCount,
+      observed,
+    ));
+  }, [feedExpectedCount, feedRenderRevision]);
+  const feedReady = isFeedRenderEvidenceReady(
+    feedEvidence,
+    feedRenderRevision,
+    feedExpectedCount,
+  );
+  const currentFeedEvidence = feedEvidence.revision === feedRenderRevision &&
+    feedEvidence.expectedCount === feedExpectedCount
+    ? feedEvidence
+    : resetFeedRenderEvidence(feedRenderRevision, feedExpectedCount);
+  const feedProbe = resolveFeedRenderProbe({
+    hasPayload: Boolean(payload),
+    settledEmpty: filteredEmpty,
+    dataError: Boolean(error),
+    renderReady: feedReady,
+  });
+
+  const changeSection = useCallback(() => {
+    const index = sectionOptions.findIndex((option) => option.value === activeSection);
+    const next = sectionOptions[(Math.max(0, index) + 1) % Math.max(1, sectionOptions.length)];
+    if (next) setActiveSection(next.value);
+  }, [activeSection, sectionOptions]);
+  const auditActions = useMemo(() => ({
+    'changes.open': () => undefined,
+    'changes.section.next': changeSection,
+    'changes.movers.toggle': () => setMoversOpen((open) => !open),
+  }), [changeSection]);
+  const renderRevision = `${feedRenderRevision}:${moversOpen ? 'movers' : 'feed'}`;
+  usePerformanceAuditSurface({
+    id: 'changes.feed',
+    routeKey: '/passthrough',
+    datasetRevision: coreSha ?? core?.run_date ?? null,
+    renderRevision,
+    actions: auditActions,
+    probes: [
+      {
+        id: 'changes.data',
+        kind: 'data',
+        status: payload || filteredEmpty ? 'ready' : error ? 'error' : 'pending',
+        error: error && !payload ? 'Observed rate changes could not be prepared' : null,
+        datasetRevision: coreSha ?? core?.run_date ?? null,
+      },
+      {
+        id: 'changes.feed-list',
+        kind: 'list',
+        status: feedProbe.status,
+        error: feedProbe.error,
+        expectedCount: feedExpectedCount,
+        actualCount: currentFeedEvidence.actualCount,
+        emptyStateRendered: currentFeedEvidence.emptyStateRendered,
+      },
+      {
+        id: 'changes.layout',
+        kind: 'layout',
+        status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
+        renderRevision,
+      },
+    ],
+  });
 
   if (!core) return <ScreenSkeleton />;
 
   return (
-    <ScreenScrollView>
+    <ScreenScrollView onLayout={() => setLayoutReady(true)}>
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
@@ -141,7 +232,14 @@ export default function RateMovesTab() {
         />
         {payload ? (
           <Card>
-            <BankMovesFeed payload={payload} error={error} sections={[activeSection]} limit={14} />
+            <BankMovesFeed
+              payload={payload}
+              error={error}
+              sections={[activeSection]}
+              limit={14}
+              contentRevision={feedRenderRevision}
+              onRenderEvidence={recordFeedEvidence}
+            />
           </Card>
         ) : suitabilityWarming ? (
           <Card variant="outlined" style={{ gap: 10 }}>
@@ -156,7 +254,16 @@ export default function RateMovesTab() {
             />
           </Card>
         ) : filteredEmpty ? (
-          <Card variant="outlined" style={{ gap: 8 }}>
+          <Card
+            key={`filtered-empty:${feedRenderRevision}`}
+            variant="outlined"
+            style={{ gap: 8 }}
+            onLayout={() => recordFeedEvidence({
+              expectedCount: 0,
+              actualCount: 0,
+              emptyStateRendered: true,
+            })}
+          >
             <AppText variant="body" weight="700">No compatible rate moves</AppText>
             <AppText variant="small" color="textMuted">
               No observed lender changes match the products currently included in your settings.
@@ -165,7 +272,9 @@ export default function RateMovesTab() {
         ) : error ? (
           <Card variant="outlined" style={{ gap: 12 }}>
             <AppText variant="body" weight="700">Rate moves are unavailable</AppText>
-            <AppText variant="small" color="textMuted">{error}</AppText>
+            <AppText variant="small" color="textMuted">
+              The latest observations could not be prepared. Previously downloaded rates remain available.
+            </AppText>
             <Button
               title="Retry"
               icon="refresh"

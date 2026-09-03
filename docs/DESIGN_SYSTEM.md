@@ -131,6 +131,11 @@ The Rate Ledger line icons are implemented as a local code-native registry in `m
 
 Selected utility icon geometry is adapted from pinned MIT-licensed Iconoir source into the local semantic registry, then normalised to the Rate Ledger optical grammar. The Rate Mark is wholly original. New icons must extend one of those documented sources rather than mixing Ionicons, Material Symbols and arbitrary illustrations on migrated surfaces.
 
+Every app-owned icon, including compatibility controls on older routes, resolves
+through `LedgerIcon`. `AppIcon.tsx` is the typed vocabulary bridge for those
+controls; it contains no font or third-party runtime component. CI rejects any
+new `@expo/vector-icons` import or direct dependency.
+
 ## 7. Core primitives
 
 New Rate Ledger primitives live under `mobile/src/components/ledger/`.

@@ -3,11 +3,11 @@ import { Image, Text, View } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 
 import {
+  isSvgLogoSource,
   resolveBankLogoSourcesForRuntime,
   resolveBrandShort,
 } from '../data/bankBrand';
 import { useStore } from '../data/store';
-import { isSvgUri, logoUriFor, useRegisterLogosStore } from '../lib/registerLogos';
 import type { LogoRenderState } from '../lib/logoReadiness';
 import { getPerformanceAuditState, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { useTheme } from '../theme/ThemeProvider';
@@ -39,28 +39,21 @@ export function BankAvatar({
 }) {
   const theme = useTheme();
   const brand = useStore((s) => s.core?.brands?.[provider]);
-  const registerLogos = useRegisterLogosStore((s) => s.logos);
-  const ensureRegisterLogos = useRegisterLogosStore((s) => s.ensure);
   const auditState = useSyncExternalStore(
     subscribePerformanceAudit,
     getPerformanceAuditState,
     getPerformanceAuditState,
   );
   const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
-
-  useEffect(() => {
-    if (!auditOwnsNetwork) void ensureRegisterLogos();
-  }, [auditOwnsNetwork, ensureRegisterLogos]);
-
-  const registerUri = brand?.logo_uri ?? brand?.logo_svg_uri ?? logoUriFor(provider, registerLogos);
+  const remoteLogo = brand?.logo_uri ?? brand?.logo_svg_uri;
   const sources = useMemo(
     () => resolveBankLogoSourcesForRuntime(
       provider,
       brand?.logo,
-      registerUri,
+      remoteLogo,
       auditOwnsNetwork,
     ),
-    [auditOwnsNetwork, provider, brand?.logo, registerUri],
+    [auditOwnsNetwork, provider, brand?.logo, remoteLogo],
   );
   const [prevSources, setPrevSources] = useState(sources);
   const [sourceIdx, setSourceIdx] = useState(0);
@@ -118,7 +111,7 @@ export function BankAvatar({
         accessible
         accessibilityLabel={provider}
       >
-        {isSvgUri(activeSource) ? (
+        {isSvgLogoSource(activeSource) ? (
           <SvgUri
             uri={activeSource as string}
             width={size * 0.88}

@@ -101,10 +101,11 @@ function coverageSummary(coverage: PayloadCoverage | null | undefined): {
   const reportedFailed = safeCount(coverage?.counts?.providers_failed);
   const partial = reportedPartial ?? 0;
   const failures = coverageFailures(coverage);
-  const failed = Math.max(
-    reportedFailed ?? 0,
-    failures.length,
-  );
+  // Current payloads list every affected provider in `provider_failures`,
+  // including providers whose observation was only partial. Prefer the
+  // producer's reconciled split count when it is present; the list length is
+  // only a legacy fallback when no failed-provider count was published.
+  const failed = reportedFailed ?? failures.length;
   const partialState = partial > 0
     || failed > 0
     || (attempted !== null && succeeded !== null && succeeded < attempted);

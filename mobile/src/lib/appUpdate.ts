@@ -51,6 +51,7 @@ export {
   ensureApkBackgroundDownload,
   getApkDownloadPercent,
   getApkDownloadSnapshot,
+  getHydratedApkDownloadSnapshot,
   installReadyApkUpdate,
   subscribeApkDownload,
   upgradeFromBackgroundDownload,

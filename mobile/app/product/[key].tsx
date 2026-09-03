@@ -58,6 +58,10 @@ import {
 import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import {
+  isCurrentHistoryGraphicEvidence,
+  type HistoryGraphicEvidence,
+} from '../../src/lib/historyGraphicEvidence';
 
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -70,6 +74,8 @@ export default function ProductDetail() {
   const core = useStore((s) => s.core);
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
+  const historyBanksSha = useStore((s) => s.manifest?.files.history_banks?.sha256 ?? null);
+  const bankInsightsSha = useStore((s) => s.manifest?.files.bank_history?.sha256 ?? null);
   const ensureDetails = useStore((s) => s.ensureDetails);
   const detail = useStore((s) => s.details?.products[productKey] ?? null);
   const normalizedFactKinds = useMemo(
@@ -101,6 +107,8 @@ export default function ProductDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const [historyGraphicEvidence, setHistoryGraphicEvidence] =
+    useState<HistoryGraphicEvidence | null>(null);
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
@@ -224,6 +232,17 @@ export default function ProductDetail() {
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
+  const historyContentRevision = [
+    coreSha ?? core?.run_date ?? 'no-core',
+    historyBanksSha ?? 'no-history-banks',
+    bankInsightsSha ?? 'no-bank-history',
+    productHistory?.core_sha ?? 'no-product-history-core',
+    productHistory?.run_dates.at(-1) ?? 'no-product-history-date',
+    productHistory?.run_dates.length ?? 0,
+    productKey,
+    historyModel?.dates.at(-1) ?? 'none',
+    historyModel?.dates.length ?? 0,
+  ].join(':');
   const auditActions = useMemo(() => {
     const actions: Record<string, (...args: unknown[]) => unknown> = {
       'product.open': () => undefined,
@@ -239,21 +258,39 @@ export default function ProductDetail() {
         return { expectedPath: `/bank/${encodeURIComponent(provider)}` };
       },
       'calculator.candidate.back': () => router.back(),
-      'product.history.window.30d': () => historyAuditActionsRef.current
-        ? historyAuditActionsRef.current.select30DayWindow()
-        : { unavailableReason: 'The mounted product has no rendered history window control' },
+      'product.history.window.30d': () => {
+        if (!historyAuditActionsRef.current) {
+          return { unavailableReason: 'The mounted product has no rendered history window control' };
+        }
+        if (historyGraphicEvidence?.window !== '30D') setHistoryGraphicEvidence(null);
+        historyAuditActionsRef.current.select30DayWindow();
+      },
       'product.history.date.previous': () => historyAuditActionsRef.current
         ? historyAuditActionsRef.current.selectPreviousDate()
         : { unavailableReason: 'The mounted product has no multi-date history chart' },
     };
     return actions;
-  }, [productKey, row]);
+  }, [historyGraphicEvidence?.window, productKey, row]);
   const productLogoIds = useMemo(
     () => row ? [`product:${row.rate_index ?? 'default'}#${row.product_key}`] : [],
     [row],
   );
   const logoReadiness = useLogoReadiness(productLogoIds.join('|'), productLogoIds);
-  const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyModel?.dates.length ?? 0}`;
+  const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
+    historyGraphicEvidence,
+    historyContentRevision,
+  ) ? historyGraphicEvidence : null;
+  const productRenderRevision = `${productKey}:${row?.rate_index ?? 'none'}:${detailsLoading ? 'loading' : 'settled'}:${historyContentRevision}:${currentHistoryGraphicEvidence?.graphicRevision ?? 'graphic-pending'}`;
+  const onHistoryGraphicReady = React.useCallback((evidence: HistoryGraphicEvidence) => {
+    setHistoryGraphicEvidence((current) => {
+      return current?.graphicRevision === evidence.graphicRevision &&
+        current.availability === evidence.availability &&
+        current.pointCount === evidence.pointCount &&
+        current.accessibleSummary === evidence.accessibleSummary
+        ? current
+        : evidence;
+    });
+  }, []);
   usePerformanceAuditSurface({
     id: 'product.details',
     routeKey: '/product/[key]',
@@ -284,6 +321,7 @@ export default function ProductDetail() {
         id: 'product.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: productRenderRevision,
       },
       {
@@ -298,8 +336,21 @@ export default function ProductDetail() {
         id: 'product.history-graphic',
         kind: 'graphic',
         required: false,
-        status: historyWaitingForInsights ? 'pending' : 'ready',
-        actualCount: historyModel?.dates.length ?? 0,
+        status: historyWaitingForInsights
+          ? 'pending'
+          : !historyModel
+            ? 'ready'
+            : !currentHistoryGraphicEvidence
+              ? 'pending'
+              : currentHistoryGraphicEvidence.availability === 'rendered'
+                ? 'ready'
+                : 'error',
+        error: !historyWaitingForInsights && currentHistoryGraphicEvidence?.availability === 'unavailable'
+          ? 'Product history has no finite values to plot'
+          : null,
+        expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
+        actualCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
+        accessibleSummary: currentHistoryGraphicEvidence?.accessibleSummary ?? false,
       },
       {
         id: 'product.history-data',
@@ -584,6 +635,7 @@ export default function ProductDetail() {
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
                     auditActionsRef={historyAuditActionsRef}
+                    contentRevision={historyContentRevision}
                     dates={historyModel.dates}
                     points={historyModel.points}
                     allDates={historyModel.allDates}
@@ -592,6 +644,7 @@ export default function ProductDetail() {
                     section={section}
                     height={210}
                     highlightSeries={productHasHighlight ? productSeries : null}
+                    onGraphicReady={onHistoryGraphicReady}
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />

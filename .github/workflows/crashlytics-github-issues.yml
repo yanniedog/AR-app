@@ -1,4 +1,4 @@
-# Poll Firebase Crashlytics and open deidentified issues in a private repository.
+# Poll Firebase Crashlytics and open automatically redacted issues in a private repository.
 # Live sync requires DIAGNOSTICS_GITHUB_REPOSITORY (Actions variable) plus a
 # DIAGNOSTICS_GH_TOKEN secret scoped only to issues in that private repository.
 # The script refuses every non-private live destination.
@@ -54,8 +54,10 @@ jobs:
             --dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json
 
   sync:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: diagnostics
     permissions:
       contents: read
     steps:
@@ -75,6 +77,7 @@ jobs:
           GH_TOKEN: ${{ secrets.DIAGNOSTICS_GH_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           DIAGNOSTICS_GITHUB_REPOSITORY: ${{ vars.DIAGNOSTICS_GITHUB_REPOSITORY }}
+          DIAGNOSTICS_PRIVACY_NOTICE_VERSION: ${{ vars.DIAGNOSTICS_PRIVACY_NOTICE_VERSION }}
           CRASHLYTICS_LOOKBACK_DAYS: '7'
           CRASHLYTICS_MIN_EVENTS: '1'
           DRY_RUN_INPUT: ${{ inputs.dry_run }}
@@ -87,6 +90,9 @@ jobs:
           fi
           if [ -n "$MOCK_REPORT_INPUT" ]; then
             args+=(--mock-report "$MOCK_REPORT_INPUT")
+          elif [ "${DIAGNOSTICS_PRIVACY_NOTICE_VERSION:-}" != "2026-09-03" ]; then
+            echo "::warning::Private diagnostics sync is not approved for the current in-app privacy notice - running mock dry-run"
+            args+=(--dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json)
           elif [ -z "${FIREBASE_USER_OAUTH_JSON:-}" ] || [ -z "${GH_TOKEN:-}" ] || [ -z "${DIAGNOSTICS_GITHUB_REPOSITORY:-}" ]; then
             echo "::warning::Private diagnostics sync is not fully configured - running mock dry-run"
             args+=(--dry-run --mock-report scripts/fixtures/crashlytics-topIssues-mock.json)

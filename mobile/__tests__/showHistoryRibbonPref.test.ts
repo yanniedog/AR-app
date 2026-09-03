@@ -139,7 +139,7 @@ describe('showHistoryRibbon pref', () => {
     expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
   });
 
-  it('restores current, explicit independent privacy choices', async () => {
+  it('requires v2 users to reconfirm the expanded private-triage disclosure', async () => {
     await useStore.persist.clearStorage();
     await AsyncStorage.setItem(
       'ar-rates',
@@ -148,6 +148,30 @@ describe('showHistoryRibbon pref', () => {
           prefs: {
             ...DEFAULT_PREFS,
             privacyChoiceVersion: 2,
+            crashReportsEnabled: true,
+            sessionReplayEnabled: false,
+          },
+          favorites: [],
+          subscriptions: [],
+        },
+        version: 0,
+      }),
+    );
+    await useStore.persist.rehydrate();
+    expect(useStore.getState().prefs.crashReportsEnabled).toBe(true);
+    expect(useStore.getState().prefs.sessionReplayEnabled).toBe(false);
+    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(0);
+  });
+
+  it('restores current, explicit independent privacy choices', async () => {
+    await useStore.persist.clearStorage();
+    await AsyncStorage.setItem(
+      'ar-rates',
+      JSON.stringify({
+        state: {
+          prefs: {
+            ...DEFAULT_PREFS,
+            privacyChoiceVersion: 3,
             crashReportsEnabled: false,
             sessionReplayEnabled: true,
           },
@@ -160,6 +184,6 @@ describe('showHistoryRibbon pref', () => {
     await useStore.persist.rehydrate();
     expect(useStore.getState().prefs.crashReportsEnabled).toBe(false);
     expect(useStore.getState().prefs.sessionReplayEnabled).toBe(true);
-    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(2);
+    expect(useStore.getState().prefs.privacyChoiceVersion).toBe(3);
   });
 });

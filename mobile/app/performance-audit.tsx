@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Alert, Share, TextInput, View } from 'react-native';
+import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card, Row } from '../src/components/ui';
@@ -18,14 +20,30 @@ import {
   type AuditCheck,
 } from '../src/lib/performanceAudit';
 import { createDeidentifiedDiagnosticsShare } from '../src/lib/diagnosticsEnvelope';
+import {
+  getApkDownloadSnapshot,
+  getHydratedApkDownloadSnapshot,
+  subscribeApkDownload,
+} from '../src/lib/appUpdate';
+import { blocksPerformanceAudit } from '../src/lib/appUpdateDownloadLogic';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
+
+const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
 function usePerformanceAuditState() {
   return useSyncExternalStore(
     subscribePerformanceAudit,
     getPerformanceAuditState,
     getPerformanceAuditState,
+  );
+}
+
+function useApkDownloadState() {
+  return useSyncExternalStore(
+    subscribeApkDownload,
+    getApkDownloadSnapshot,
+    getApkDownloadSnapshot,
   );
 }
 
@@ -133,12 +151,15 @@ function checkDetail(check: AuditCheck): string {
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
+  const apkDownload = useApkDownloadState();
+  const updateBlocksAudit = blocksPerformanceAudit(apkDownload);
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
     String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
   );
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
+  const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const report = state.report;
   const orderedChecks = useMemo(
@@ -180,6 +201,7 @@ function PerformanceAuditScreenInner() {
         id: 'audit.layout',
         kind: 'layout',
         status: layoutReady && hangTimeoutLoaded ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
     ],
   });
@@ -211,9 +233,31 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  const runAudit = (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
-    requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+  const runAudit = async (mode: 'local' | 'live-source') => {
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode) return;
+    setAuditPreflightMode(mode);
+    try {
+      let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
+      try {
+        currentDownload = await getHydratedApkDownloadSnapshot();
+      } catch {
+        Alert.alert(
+          'Could not start the audit',
+          'Android could not confirm whether an app update is active, so no audit was started. Close and reopen Australian Rates, then try again. If it continues, review Diagnostics > Debug log.',
+        );
+        return;
+      }
+      if (blocksPerformanceAudit(currentDownload)) {
+        Alert.alert(
+          'Finish the app update first',
+          'The app-health audit is unavailable while an APK download or verification is active. This keeps its timing and network results trustworthy.',
+        );
+        return;
+      }
+      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+    } finally {
+      setAuditPreflightMode(null);
+    }
   };
   const confirmShareReport = () => {
     if (!report || sharingReport) return;
@@ -239,12 +283,36 @@ function PerformanceAuditScreenInner() {
           text: 'Share report',
           onPress: () => {
             setSharingReport(true);
-            void Share.share({
-              title: 'Australian Rates deidentified app health report',
-              message: prepared.body,
-            }).catch((error) => {
-              Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
-            }).finally(() => setSharingReport(false));
+            void (async () => {
+              let wroteShareFile = false;
+              try {
+                if (!FileSystem.cacheDirectory || !(await Sharing.isAvailableAsync())) {
+                  throw new Error('Operating-system file sharing is unavailable on this device.');
+                }
+                await FileSystem.writeAsStringAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, prepared.body);
+                wroteShareFile = true;
+                await Sharing.shareAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, {
+                  mimeType: 'application/json',
+                  dialogTitle: 'Share deidentified Australian Rates app health report',
+                  UTI: 'public.json',
+                });
+              } catch (error) {
+                Alert.alert('Share failed', error instanceof Error ? error.message : String(error));
+              } finally {
+                if (wroteShareFile) {
+                  try {
+                    await FileSystem.deleteAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, { idempotent: true });
+                  } catch (cleanupError) {
+                    Alert.alert(
+                      'Temporary report retained',
+                      `The deidentified report could not be removed from the share cache. ` +
+                      `Close and reopen Australian Rates before sharing again. ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`,
+                    );
+                  }
+                }
+                setSharingReport(false);
+              }
+            })();
           },
         },
       ],
@@ -325,23 +393,29 @@ function PerformanceAuditScreenInner() {
         <Button
           title={report ? 'Run local audit again' : 'Run local audit'}
           icon="pulse-outline"
-          loading={running && state.auditMode === 'local'}
-          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={() => runAudit('local')}
+          loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
+          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          onPress={() => void runAudit('local')}
         />
         <Button
           title="Run with live-source check"
           icon="cloud-download-outline"
           variant="secondary"
-          loading={running && state.auditMode === 'live-source'}
-          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={() => runAudit('live-source')}
+          loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
+          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
           Local mode blocks fetch and XMLHttpRequest. Live-source mode may read only the public
           Australian Rates manifest, dates index and manifest-authenticated release files. Neither
           mode uploads diagnostics or writes to the clipboard.
         </AppText>
+        {updateBlocksAudit ? (
+          <AppText variant="tiny" color="danger" accessibilityLiveRegion="polite">
+            Finish the active app update before running an audit. Update work would distort its
+            network and timing evidence.
+          </AppText>
+        ) : null}
       </Card>
 
       {state.status === 'cancelled' ? (
@@ -384,9 +458,11 @@ function PerformanceAuditScreenInner() {
               </AppText>
             </Row>
             <AppText variant="small" color="textMuted">
-              All audit checks: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
-              failed · {report.summary.skipped} not run · {report.summary.unavailable}{' '}
-              unavailable
+              Recorded outcomes: {report.summary.pass} good · {report.summary.warn} needs review · {report.summary.fail}{' '}
+              failed · {report.summary.skipped} not run
+            </AppText>
+            <AppText variant="small" color="textMuted">
+              Availability: {report.summary.unavailable} checks could not be exercised. This is tracked separately and can overlap the outcomes above.
             </AppText>
             <AppText
               variant="small"

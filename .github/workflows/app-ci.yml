@@ -25,6 +25,7 @@ jobs:
   mobile:
     name: mobile-ci
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: mobile
@@ -32,15 +33,33 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - name: Dependency review (required mobile-ci gate)
+        if: github.event_name == 'pull_request'
+        id: dependency-review
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
       - name: Review and release automation tests
         working-directory: .
         run: npm run pr:automation:verify
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Compile native APK identity verifier
+        run: |
+          node scripts/ensure-firebase-config.mjs
+          npx expo prebuild --platform android --no-install
+          chmod +x android/gradlew
+          cd android
+          ./gradlew :ar-apk-identity-verifier:compileReleaseKotlin --no-daemon
       - name: Mobile CI (doctor - typecheck - lint - test - export)
         run: npm run ci

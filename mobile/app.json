@@ -35,6 +35,7 @@
     "android": {
       "package": "com.eyex.australianrates",
       "versionCode": 192,
+      "allowBackup": false,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -42,8 +43,11 @@
       },
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
-        "WAKE_LOCK",
-        "REQUEST_INSTALL_PACKAGES"
+        "WAKE_LOCK"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
       ]
     },
     "web": {
@@ -116,6 +120,7 @@
       "apkManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-latest/app-apk-latest.json",
       "apkArmReleaseTag": "app-apk-arm-latest",
       "apkArmManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-apk-latest.json",
+      "selfUpdateEnabled": true,
       "payloadDecKeyHex": "",
       "router": {
         "origin": false,

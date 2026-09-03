@@ -27,12 +27,16 @@ export function RateHeatCalendar({
   section,
   selectedDate,
   onDateSelect,
+  auditRevision,
+  onGraphicReadiness,
 }: {
   dates: string[];
   points: BankHistoryPoint[];
   section: SectionKey;
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
+  auditRevision?: string;
+  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -90,7 +94,13 @@ export function RateHeatCalendar({
             : Math.max(0, activeIndex - 1);
           onDateSelect?.(observations[next]?.date ?? null);
         }}
-        onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+        onLayout={(event) => {
+          const nextWidth = event.nativeEvent.layout.width;
+          setWidth(nextWidth);
+          if (nextWidth > 0 && auditRevision) {
+            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
+          }
+        }}
         style={{ width: '100%' }}
       >
         {width > 0 ? (

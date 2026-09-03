@@ -11,8 +11,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
+  APK_ASSET,
   ARM_ROLLING_TAG,
+  INSTALL_HTML,
+  MANIFEST_ASSET,
+  QR_ASSET,
   ROLLING_TAG,
+  apkDownloadUrl,
   versionTagForApkChannel,
 } from './app-release-meta.mjs';
 import {
@@ -75,33 +80,224 @@ function ghTry(args) {
   return { ok: res.status === 0, stdout: (res.stdout || '').trim(), stderr: (res.stderr || '').trim() };
 }
 
-function apkReleaseExists(version) {
-  return ghTry([
-    'release',
-    'view',
-    versionTagForApkChannel(version, ARM_ROLLING_TAG),
-    '--repo',
-    repo,
-  ]).ok;
+export function releaseSnapshotFromGhResult(tag, result) {
+  const detail = [result?.stderr, result?.stdout]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (!result?.ok) {
+    if (/^release not found\.?$/i.test(detail) || /\bHTTP 404\b/i.test(detail)) {
+      return null;
+    }
+    throw new Error(`Unable to inspect release ${tag}: ${detail || 'gh release view failed'}`);
+  }
+  try {
+    const parsed = JSON.parse(result.stdout);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('response was not a release object');
+    }
+    return parsed;
+  } catch (error) {
+    throw new Error(
+      `Unable to inspect release ${tag}: invalid JSON (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
 }
 
-export function hasApkBuildInFlight(rows, expectedHeadSha) {
-  return (
-    Array.isArray(rows)
-    && rows.some(
-      (run) =>
-        run?.headSha === expectedHeadSha
-        && (run.status === 'queued' || run.status === 'in_progress'),
-    )
+function releaseSnapshot(tag) {
+  return releaseSnapshotFromGhResult(tag, ghTry([
+    'release', 'view', tag, '--repo', repo, '--json', 'tagName,assets',
+  ]));
+}
+
+export function releaseAssetTextFromGhResult(assetName, result) {
+  const detail = [result?.stderr, result?.stdout]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (!result?.ok) {
+    throw new Error(`Unable to download release asset ${assetName}: ${detail || 'gh api failed'}`);
+  }
+  return String(result.stdout ?? '');
+}
+
+export function releaseAssetApiEndpoint(release, assetName) {
+  const asset = Array.isArray(release?.assets)
+    ? release.assets.find((candidate) => candidate?.name === assetName)
+    : null;
+  if (!asset) return null;
+  if (typeof asset.apiUrl !== 'string' || !asset.apiUrl.trim()) {
+    throw new Error(`Unable to download release asset ${assetName}: release metadata omitted its API URL`);
+  }
+  try {
+    const endpoint = new URL(asset.apiUrl).pathname.replace(/^\/+/, '');
+    if (!endpoint) throw new Error('URL did not contain an API path');
+    return endpoint;
+  } catch (error) {
+    throw new Error(
+      `Unable to download release asset ${assetName}: invalid API URL (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+}
+
+function releaseAssetText(release, assetName) {
+  const endpoint = releaseAssetApiEndpoint(release, assetName);
+  if (!endpoint) return null;
+  return releaseAssetTextFromGhResult(
+    assetName,
+    ghTry(['api', '-H', 'Accept: application/octet-stream', endpoint]),
   );
+}
+
+function releaseAssetNames(release) {
+  return new Set(
+    (Array.isArray(release?.assets) ? release.assets : [])
+      .map((asset) => String(asset?.name ?? ''))
+      .filter(Boolean),
+  );
+}
+
+export function validatePublishedChannelSnapshot({
+  version,
+  rollingTag,
+  repository,
+  rollingRelease,
+  versionedRelease,
+  manifest,
+}) {
+  const expectedVersionTag = versionTagForApkChannel(version, rollingTag);
+  const rollingAssets = releaseAssetNames(rollingRelease);
+  const versionedAssets = releaseAssetNames(versionedRelease);
+  const hasRollingAssets = [APK_ASSET, MANIFEST_ASSET, QR_ASSET, INSTALL_HTML]
+    .every((name) => rollingAssets.has(name));
+  const hasImmutableApk = versionedAssets.has(APK_ASSET);
+  return Boolean(
+    rollingRelease?.tagName === rollingTag
+    && versionedRelease?.tagName === expectedVersionTag
+    && hasRollingAssets
+    && hasImmutableApk
+    && manifest?.version === version
+    && manifest?.tag === rollingTag
+    && manifest?.version_tag === expectedVersionTag
+    && manifest?.repo === repository
+    && manifest?.download_url === apkDownloadUrl(repository, expectedVersionTag)
+    && /^[a-f0-9]{40}$/i.test(String(manifest?.source_sha ?? ''))
+    && /^\d+$/.test(String(manifest?.build_number ?? ''))
+    && Number(manifest?.build_number) > 0
+    && Number.isSafeInteger(Number(manifest?.build_number))
+    && /^[a-f0-9]{64}$/i.test(String(manifest?.sha256 ?? ''))
+    && Number(manifest?.bytes) > 0,
+  );
+}
+
+function publishedApkChannel(rollingTag) {
+  const rollingRelease = releaseSnapshot(rollingTag);
+  if (!rollingRelease) return false;
+  const manifestText = releaseAssetText(rollingRelease, MANIFEST_ASSET);
+  if (!manifestText) return false;
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestText);
+  } catch {
+    return false;
+  }
+  const version = String(manifest?.version ?? '').trim();
+  try {
+    compareVersions(version, version);
+  } catch {
+    return false;
+  }
+  const versionedRelease = releaseSnapshot(versionTagForApkChannel(version, rollingTag));
+  const published = validatePublishedChannelSnapshot({
+    version,
+    rollingTag,
+    repository: repo,
+    rollingRelease,
+    versionedRelease,
+    manifest,
+  });
+  return published
+    ? {
+        version: manifest.version,
+        versionCode: Number(manifest.build_number),
+        sourceSha: String(manifest.source_sha).toLowerCase(),
+      }
+    : null;
+}
+
+function publishedApkChannels() {
+  return {
+    arm: publishedApkChannel(ARM_ROLLING_TAG),
+    universal: publishedApkChannel(ROLLING_TAG),
+  };
+}
+
+export function missingApkChannels(published) {
+  return [
+    ...(!published?.universal ? ['universal'] : []),
+    ...(!published?.arm ? ['arm'] : []),
+  ];
+}
+
+export function recoveryIdentityForMissingChannel(version, published, headSha) {
+  const missing = missingApkChannels(published);
+  if (missing.length !== 1) return null;
+  const surviving = missing[0] === 'universal' ? published?.arm : published?.universal;
+  if (!surviving || typeof surviving !== 'object') {
+    throw new Error('A partial APK recovery requires the surviving channel manifest identity');
+  }
+  const releaseVersion = String(surviving.version ?? '').trim();
+  const releaseVersionCode = Number(surviving.versionCode);
+  const sourceSha = String(surviving.sourceSha ?? '').trim().toLowerCase();
+  let predatesCheckedInVersion = false;
+  try {
+    predatesCheckedInVersion = compareVersions(releaseVersion, version) < 0;
+  } catch {
+    throw new Error('The surviving APK channel has an invalid release version');
+  }
+  if (
+    predatesCheckedInVersion ||
+    !Number.isSafeInteger(releaseVersionCode) ||
+    releaseVersionCode <= 0 ||
+    !/^[a-f0-9]{40}$/.test(sourceSha)
+  ) {
+    throw new Error('The surviving APK channel identity does not match the release being repaired');
+  }
+  if (sourceSha !== String(headSha ?? '').trim().toLowerCase()) return null;
+  return { releaseVersion, releaseVersionCode: String(releaseVersionCode) };
+}
+
+function channelsCoveredByRun(run) {
+  const match = /^mobile-android-apk \((arm|universal)(\+arm)?\)$/.exec(
+    String(run?.displayTitle ?? ''),
+  );
+  if (!match) return [];
+  if (match[1] === 'universal' && match[2] === '+arm') return ['universal', 'arm'];
+  return [match[1]];
+}
+
+export function hasApkBuildInFlight(
+  rows,
+  expectedHeadSha,
+  requiredChannels = ['universal', 'arm'],
+) {
+  if (!Array.isArray(rows)) return false;
+  const covered = new Set(
+    rows
+      .filter((run) =>
+        run?.headSha === expectedHeadSha
+        && (run.status === 'queued' || run.status === 'in_progress'))
+      .flatMap(channelsCoveredByRun),
+  );
+  return requiredChannels.length > 0 && requiredChannels.every((channel) => covered.has(channel));
 }
 
 // A mobile-android-apk run is already queued/in-progress for the exact main head
 // we need to ship. An older build must not suppress the new version's build.
-function apkBuildInFlight(expectedHeadSha) {
+function apkBuildInFlight(expectedHeadSha, requiredChannels) {
   const out = ghTry([
     'run', 'list', '--workflow', 'mobile-android-apk.yml',
-    '--json', 'status,headSha', '-L', '20', '--repo', repo,
+    '--json', 'status,headSha,displayTitle', '-L', '20', '--repo', repo,
   ]).stdout;
   let rows = [];
   try {
@@ -109,7 +305,7 @@ function apkBuildInFlight(expectedHeadSha) {
   } catch {
     return false;
   }
-  return hasApkBuildInFlight(rows, expectedHeadSha);
+  return hasApkBuildInFlight(rows, expectedHeadSha, requiredChannels);
 }
 
 // mobile-android-apk is intentionally dispatch-only: building the pre-bump main
@@ -117,13 +313,62 @@ function apkBuildInFlight(expectedHeadSha) {
 // Dispatch after the generated version PR merges. Requires actions:write.
 // Failure propagates: a silent dispatch failure would leave the new version on
 // main with no APK and no failing check (Codex / Sourcery).
-function dispatchApkBuild(version) {
-  if (dryRun) {
-    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch mobile-android-apk for v${version}`);
+export function dispatchApkBuild(
+  version,
+  missingChannels = ['universal', 'arm'],
+  {
+    runGh = gh,
+    simulate = dryRun,
+    releaseVersion = null,
+    releaseVersionCode = null,
+  } = {},
+) {
+  const missing = new Set(missingChannels);
+  if (!missing.size) return;
+  if ([...missing].some((channel) => channel !== 'universal' && channel !== 'arm')) {
+    throw new Error(`Unsupported APK channel recovery request: ${[...missing].join(', ')}`);
+  }
+  const firstChannel = missing.has('universal') ? 'universal' : 'arm';
+  const followWithArm = firstChannel === 'universal' && missing.has('arm');
+  const partialRecovery = missing.size === 1;
+  const reusedVersion = String(releaseVersion ?? '').trim();
+  const reusedCode = String(releaseVersionCode ?? '').trim();
+  if (partialRecovery) {
+    if (
+      reusedVersion !== version ||
+      !/^\d+$/.test(reusedCode) ||
+      Number(reusedCode) <= 0 ||
+      !Number.isSafeInteger(Number(reusedCode))
+    ) {
+      throw new Error('A partial APK recovery requires the exact surviving version and versionCode');
+    }
+  } else if (reusedVersion || reusedCode) {
+    throw new Error('A paired APK release must allocate its identity in the universal build');
+  }
+  if (simulate) {
+    console.log(
+      `mobile-auto-release-on-drain: dry-run — would dispatch ${firstChannel}${followWithArm ? ' then ARM' : ''} mobile-android-apk for v${version}`,
+    );
     return;
   }
-  gh(['workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo]);
-  console.log(`mobile-auto-release-on-drain: dispatched mobile-android-apk for v${version} on main`);
+  // The universal build must publish first. It then dispatches the ARM build,
+  // which alone may open the README refresh PR. Dispatching both here puts them
+  // in the same concurrency queue; ARM can otherwise mutate main before the
+  // queued universal run verifies its protected source SHA.
+  runGh([
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
+    '-f', `apk_channel=${firstChannel}`,
+    '-f', `follow_with_arm=${followWithArm}`,
+    ...(partialRecovery
+      ? [
+          '-f', `release_version=${reusedVersion}`,
+          '-f', `release_version_code=${reusedCode}`,
+        ]
+      : []),
+  ]);
+  console.log(
+    `mobile-auto-release-on-drain: dispatched ${firstChannel}${followWithArm ? '-then-ARM' : ''} APK release for v${version} on main`,
+  );
 }
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers
@@ -133,25 +378,64 @@ function dispatchApkBuild(version) {
 export function ensureApkForMainHead({
   readVersion = readCurrentVersion,
   readHeadSha = readHeadCommitSha,
-  releaseExists = apkReleaseExists,
+  readPublishedChannels = publishedApkChannels,
   buildInFlight = apkBuildInFlight,
   dispatch = dispatchApkBuild,
 } = {}) {
   const version = readVersion();
   const headSha = readHeadSha();
-  if (releaseExists(version)) {
+  const publishedChannels = readPublishedChannels();
+  const normalizedHeadSha = String(headSha ?? '').trim().toLowerCase();
+  const channelsForHead = {
+    arm:
+      String(publishedChannels?.arm?.sourceSha ?? '').trim().toLowerCase() === normalizedHeadSha
+        ? publishedChannels.arm
+        : null,
+    universal:
+      String(publishedChannels?.universal?.sourceSha ?? '').trim().toLowerCase() === normalizedHeadSha
+        ? publishedChannels.universal
+        : null,
+  };
+  if (
+    channelsForHead.arm
+    && channelsForHead.universal
+    && (
+      channelsForHead.arm.version !== channelsForHead.universal.version
+      || channelsForHead.arm.versionCode !== channelsForHead.universal.versionCode
+    )
+  ) {
     console.log(
-      `mobile-auto-release-on-drain: ${versionTagForApkChannel(version, ARM_ROLLING_TAG)} already published — no APK dispatch`,
+      'mobile-auto-release-on-drain: current-head APK channels disagree; rebuilding a new paired release',
+    );
+    channelsForHead.arm = null;
+    channelsForHead.universal = null;
+  }
+  const missingChannels = missingApkChannels(channelsForHead);
+  if (!missingChannels.length) {
+    console.log(
+      `mobile-auto-release-on-drain: ARM and universal v${channelsForHead.arm.version} releases already published — no APK dispatch`,
     );
     return false;
   }
-  if (buildInFlight(headSha)) {
+  const recoveryIdentity = recoveryIdentityForMissingChannel(
+    version,
+    channelsForHead,
+    headSha,
+  );
+  if (buildInFlight(headSha, missingChannels)) {
     console.log(
-      `mobile-auto-release-on-drain: mobile-android-apk already queued/in-progress for ${headSha.slice(0, 7)} — no APK dispatch`,
+      `mobile-auto-release-on-drain: mobile-android-apk already covers ${missingChannels.join(' + ')} for ${headSha.slice(0, 7)} — no APK dispatch`,
     );
     return false;
   }
-  dispatch(version);
+  if (recoveryIdentity) {
+    // The APK workflow advances beyond the checked-in version when it allocates
+    // a release. Recover the partner channel using that actual published
+    // identity rather than trying (and failing) to find it at the source floor.
+    dispatch(recoveryIdentity.releaseVersion, missingChannels, recoveryIdentity);
+  } else {
+    dispatch(version, missingChannels);
+  }
   return true;
 }
 

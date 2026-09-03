@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
@@ -17,7 +17,6 @@ import {
 } from '../data/taxonomy';
 import { useStore } from '../data/store';
 import { logCategoryRowPress } from '../lib/degradationLog';
-import { debugLog } from '../lib/debugLog';
 import { openBrowseDrill, openProduct, openProductsList } from '../lib/nav';
 import { useSuitabilityRevision } from '../hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../hooks/usePerformanceAuditReadiness';
@@ -145,8 +144,6 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
     const cacheKey = `${section}|${pathKey}|${includeNonStandard ? 1 : 0}|${depositRankMetric}|${mortgageRateMetric}|${suitabilityRevision}`;
     let cached = byKey.get(cacheKey);
     if (!cached) {
-      // #region agent log
-      const _t1 = Date.now();
       cached = computeHierarchyView(
         rows,
         sectionData,
@@ -157,11 +154,6 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         detailsProducts,
         mortgageRateMetric,
       );
-      debugLog.debug(
-        'perf',
-        `hierarchy cache-miss ms=${Date.now() - _t1} section=${section} path=${pathKey || '(root)'} rows=${rows.length} details=${detailsProducts ? 'yes' : 'no'}`,
-      );
-      // #endregion
       byKey.set(cacheKey, cached);
     }
     return cached;
@@ -263,14 +255,8 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         id: 'browse.layout',
         kind: 'layout',
         status: listReadiness.ready ? 'ready' : 'pending',
+        layoutMeasured: listReadiness.ready,
         renderRevision: listRevision,
-      },
-      {
-        id: 'browse.graphics',
-        kind: 'graphic',
-        required: false,
-        status: 'ready',
-        renderRevision: `${section}:${pathKey}:${stats.products}`,
       },
       {
         id: 'browse.logos',

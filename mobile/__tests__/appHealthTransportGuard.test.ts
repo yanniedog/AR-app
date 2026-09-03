@@ -128,4 +128,39 @@ describe('installAppHealthTransportGuard', () => {
     });
     guard.restore();
   });
+
+  it('allows the internal XHR used by an already-authorized React Native fetch', async () => {
+    class FakeXhr {
+      open(_method: string, _url: string | URL, ..._rest: unknown[]): void {}
+      send(_body?: unknown): void {}
+    }
+    const open = jest.spyOn(FakeXhr.prototype, 'open');
+    const send = jest.spyOn(FakeXhr.prototype, 'send');
+    const fetchSpy = jest.fn(async (input: RequestInfo | URL) => {
+      const xhr = new FakeXhr();
+      xhr.open('GET', typeof input === 'string' ? input : input.toString());
+      xhr.send();
+      return {
+        ok: true,
+        redirected: false,
+        url: typeof input === 'string' ? input : input.toString(),
+      } as Response;
+    }) as unknown as typeof fetch;
+    const target = {
+      fetch: fetchSpy,
+      XMLHttpRequest: { prototype: FakeXhr.prototype },
+    };
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+
+    await expect(target.fetch(contract.manifestUrl)).resolves.toMatchObject({ ok: true });
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(guard.snapshot()).toMatchObject({
+      authorizedAttempts: 1,
+      blockedAttempts: 0,
+      transportCalls: 1,
+      policyViolations: 0,
+    });
+    guard.restore();
+  });
 });

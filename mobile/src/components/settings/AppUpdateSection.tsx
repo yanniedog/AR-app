@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
 import { AppText, Button, Row } from '../ui';
+import { SELF_UPDATE_ENABLED } from '../../config';
 import { useStore } from '../../data/store';
 import {
   checkForAppUpdate,
@@ -17,6 +18,7 @@ import {
   type VersionChangelogSummary,
 } from '../../lib/appUpdate';
 import { IDLE_APK_DOWNLOAD } from '../../lib/appUpdateDownloadLogic';
+import { getPerformanceAuditState, subscribePerformanceAudit } from '../../lib/performanceAudit';
 import { DisclosureGroup, InfoRow, Section, SettingsGap, ToggleRow } from './settingsUi';
 
 export interface AppUpdateSurfaceStatus {
@@ -34,10 +36,16 @@ export function AppUpdateSection({
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
+  const auditState = useSyncExternalStore(
+    subscribePerformanceAudit,
+    getPerformanceAuditState,
+    getPerformanceAuditState,
+  );
+  const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
   const [checkResult, setCheckResult] = useState<UpdateCheckResult | null>(null);
   const [remote, setRemote] = useState<ApkManifest | null>(null);
   const [changelogs, setChangelogs] = useState<VersionChangelogSummary[]>([]);
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(SELF_UPDATE_ENABLED);
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
@@ -47,12 +55,17 @@ export function AppUpdateSection({
   useEffect(() => subscribeApkDownload(setDownload), []);
 
   const runCheck = useCallback(async (force = false) => {
+    if (!SELF_UPDATE_ENABLED || auditOwnsNetwork) return;
     setChecking(true);
     setError(null);
     setCheckResult(null);
     setChangelogs([]);
     try {
       const result = await checkForAppUpdate({ force });
+      const currentAudit = getPerformanceAuditState();
+      if (currentAudit.status === 'queued' || currentAudit.status === 'running') {
+        return;
+      }
       setCheckResult(result);
       if (
         result.status === 'available' ||
@@ -77,11 +90,19 @@ export function AppUpdateSection({
     } finally {
       setChecking(false);
     }
-  }, [autoDownload, wifiOnly]);
+  }, [auditOwnsNetwork, autoDownload, wifiOnly]);
 
   useEffect(() => {
-    void runCheck(false);
-  }, [runCheck]);
+    if (auditOwnsNetwork) {
+      setChecking(false);
+      setError(null);
+      setCheckResult(null);
+      setRemote(null);
+      setChangelogs([]);
+      return;
+    }
+    if (SELF_UPDATE_ENABLED) void runCheck(false);
+  }, [auditOwnsNetwork, runCheck]);
 
   const performUpgrade = useCallback(async () => {
     if (!remote) return;
@@ -112,7 +133,9 @@ export function AppUpdateSection({
     : isCurrent
       ? `${installed.version} (${installed.buildNumber})`
       : '—';
-  const statusValue = updateAvailable
+  const statusValue = auditOwnsNetwork
+    ? 'Not checked during app audit'
+    : updateAvailable
       ? phase === 'ready'
       ? `Verified and ready to install · ${latestLabel}`
       : phase === 'verifying'
@@ -163,14 +186,31 @@ export function AppUpdateSection({
 
   useEffect(() => {
     onStatusChange?.({
-      terminal: Platform.OS !== 'android' || (!checking && (checkResult != null || error != null)),
-      status: Platform.OS !== 'android' ? 'not-android' : statusValue,
+      terminal: auditOwnsNetwork || Platform.OS !== 'android' || !SELF_UPDATE_ENABLED || (!checking && (checkResult != null || error != null)),
+      status: auditOwnsNetwork
+        ? 'audit-network-suppressed'
+        : Platform.OS !== 'android'
+        ? 'not-android'
+        : SELF_UPDATE_ENABLED
+          ? statusValue
+          : 'managed-by-google-play',
       error,
     });
-  }, [checkResult, checking, error, onStatusChange, statusValue]);
+  }, [auditOwnsNetwork, checkResult, checking, error, onStatusChange, statusValue]);
 
   if (Platform.OS !== 'android') {
     return null;
+  }
+
+  if (!SELF_UPDATE_ENABLED) {
+    return (
+      <Section title="App update">
+        <InfoRow label="Status" value="Managed by Google Play" />
+        <AppText variant="small" color="textMuted">
+          This store build receives verified updates through Google Play. In-app APK downloads are disabled.
+        </AppText>
+      </Section>
+    );
   }
 
   return (
@@ -238,7 +278,7 @@ export function AppUpdateSection({
           variant="secondary"
           style={{ flex: 1 }}
           loading={checking}
-          disabled={upgrading}
+          disabled={auditOwnsNetwork || upgrading}
           onPress={() => void runCheck(true)}
         />
         {updateAvailable ? (

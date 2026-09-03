@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react';
-import { useWindowDimensions, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
+import { type LayoutChangeEvent, useWindowDimensions, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import {
@@ -79,12 +79,19 @@ export interface LifecycleChartController {
   next(): void;
 }
 
+export interface LifecycleChartRenderEvidence {
+  renderRevision: string;
+  selectionIndex: number;
+  accessibleSummary: boolean;
+}
+
 export function LifecycleChart({
   section,
   history,
   series,
   metric,
   asAt,
+  renderRevision,
   controllerRef,
   onRenderReady,
 }: {
@@ -93,12 +100,17 @@ export function LifecycleChart({
   series: ProjectionSeries[];
   metric: ProjectionMetric;
   asAt: string;
+  renderRevision: string;
   controllerRef?: MutableRefObject<LifecycleChartController | null>;
-  onRenderReady?: () => void;
+  onRenderReady?: (evidence: LifecycleChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const { width: viewportWidth, fontScale } = useWindowDimensions();
   const [width, setWidth] = useState(0);
+  const onRenderReadyRef = useRef(onRenderReady);
+  useEffect(() => {
+    onRenderReadyRef.current = onRenderReady;
+  }, [onRenderReady]);
   const dates = useMemo(
     () => Array.from(new Set([
       ...history.map((item) => item.date),
@@ -108,7 +120,11 @@ export function LifecycleChart({
   );
   const todayIndex = Math.max(0, dates.indexOf(asAt));
   const [activeIndex, setActiveIndex] = useState(todayIndex);
-  useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric, series]);
+  useEffect(() => setActiveIndex(todayIndex), [todayIndex, metric]);
+  useEffect(() => {
+    setActiveIndex((current) => Math.min(Math.max(0, dates.length - 1), Math.max(0, current)));
+  }, [dates.length]);
+  const boundedActiveIndex = Math.min(Math.max(0, dates.length - 1), Math.max(0, activeIndex));
   const selectPrevious = useCallback(() => {
     setActiveIndex((current) => Math.max(0, current - 1));
   }, []);
@@ -153,20 +169,24 @@ export function LifecycleChart({
     [firstMs, innerW, padL, timeSpan]);
   const yAt = useCallback((value: number) => padT + innerH - ((value - yMin) / (yMax - yMin)) * innerH,
     [innerH, yMax, yMin]);
-  const activeDate = dates[Math.min(activeIndex, dates.length - 1)] ?? asAt;
+  const activeDate = dates[boundedActiveIndex] ?? asAt;
   const scrub = useChartScrub({
     sliceCount: dates.length,
     plotWidth: innerW,
     plotLeft: padL,
     onSelectIndex: setActiveIndex,
   });
+  const recordLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setWidth((current) => Math.abs(current - nextWidth) < 0.5 ? current : nextWidth);
+  }, []);
 
   const paths = useMemo(() => ({
     history: pathFor(history, metric, xAt, yAt),
     series: series.map((item) => ({ id: item.id, path: pathFor(item.points, metric, xAt, yAt) })),
   }), [history, metric, series, xAt, yAt]);
 
-  const activeMs = dateTimes[Math.min(activeIndex, dateTimes.length - 1)] ?? dateMs(asAt);
+  const activeMs = dateTimes[boundedActiveIndex] ?? dateMs(asAt);
   const activeValues = series.map((item) => ({
     series: item,
     point: nearestPoint(item.points, activeMs),
@@ -179,8 +199,14 @@ export function LifecycleChart({
     .map(({ series: item, point: selected }) => `${item.label} ${formatValue(selected ? metricValue(selected, metric) : null, metric)}`)
   ].join(', ');
   useEffect(() => {
-    if (width > 0 && dates.length > 0) onRenderReady?.();
-  }, [dates.length, onRenderReady, width]);
+    if (width > 0 && dates.length > 0) {
+      onRenderReadyRef.current?.({
+        renderRevision,
+        selectionIndex: boundedActiveIndex,
+        accessibleSummary: accessibilitySummary.trim().length > 0,
+      });
+    }
+  }, [accessibilitySummary, boundedActiveIndex, dates.length, renderRevision, width]);
 
   return (
     <View style={{ gap: 10 }}>
@@ -200,7 +226,7 @@ export function LifecycleChart({
         accessibilityRole="adjustable"
         accessibilityLabel={`${metricLabel} projection for ${shortDate(activeDate)}. ${accessibilitySummary}`}
         accessibilityHint="Swipe up or down to inspect the next or previous month."
-        accessibilityValue={{ min: 1, max: Math.max(1, dates.length), now: activeIndex + 1, text: shortDate(activeDate) }}
+        accessibilityValue={{ min: 1, max: Math.max(1, dates.length), now: boundedActiveIndex + 1, text: shortDate(activeDate) }}
         accessibilityActions={[
           { name: 'increment', label: 'Next month' },
           { name: 'decrement', label: 'Previous month' },
@@ -212,7 +238,7 @@ export function LifecycleChart({
             selectPrevious();
           }
         }}
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onLayout={recordLayout}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
         onTouchEnd={scrub.onTouchEnd}

@@ -250,6 +250,11 @@ interface PreparedSortRow {
   comparisonTie: number | null;
 }
 
+// Reuse one comparator for large product lists. Calling String#localeCompare
+// tens of thousands of times is particularly expensive in Hermes because the
+// locale machinery may be prepared for every comparison.
+const ROW_TEXT_COLLATOR = new Intl.Collator();
+
 function prepareSortRow(
   row: RateRow,
   originalIndex: number,
@@ -326,7 +331,8 @@ export function sortRows(
 }
 
 function compareProviderThenName(a: RateRow, b: RateRow): number {
-  return a.provider.localeCompare(b.provider) || a.product_name.localeCompare(b.product_name);
+  return ROW_TEXT_COLLATOR.compare(a.provider, b.provider) ||
+    ROW_TEXT_COLLATOR.compare(a.product_name, b.product_name);
 }
 
 function inList(value: string | undefined, list: string[] | undefined): boolean {

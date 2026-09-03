@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -9,6 +9,11 @@ import { buildBankSpreadChartModel, type BankSpreadHistoryPayload } from '../../
 import { resolveBrandShort } from '../../data/bankBrand';
 import type { RbaCalendar } from '../../data/rbaCalendar';
 import { useStore } from '../../data/store';
+import {
+  usePerformanceAuditProbe,
+  usePerformanceAuditSurface,
+} from '../../hooks/usePerformanceAuditReadiness';
+import { auditActionString } from '../../lib/performanceAuditActionParams';
 import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
@@ -75,6 +80,11 @@ export function BankResponseDashboard({
   const active = windows[Math.min(decisionIndex, Math.max(0, windows.length - 1))];
   const spreadModel = useMemo(() => spreadHistory ? buildBankSpreadChartModel(spreadHistory, calendar) : null, [calendar, spreadHistory]);
   const [selectedProvider, setSelectedProvider] = useState('');
+  const [listMounted, setListMounted] = useState(false);
+  const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
+  const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
+  const [chartMounted, setChartMounted] = useState(false);
+  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
   useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     if (!spreadModel?.lines.length) return;
@@ -86,6 +96,104 @@ export function BankResponseDashboard({
     const index = windows.findIndex((window) => window.decision.date === initialDecisionDate);
     if (index >= 0) setDecisionIndex(index);
   }, [initialDecisionDate, windows]);
+  const renderRevision = `${payload.run_date}:${section}:${active?.decision.date ?? 'none'}:${selectedProvider || 'none'}`;
+  useEffect(() => {
+    if (!listMounted || !active) return;
+    const frame = requestAnimationFrame(() => {
+      setListReadyRevision(renderRevision);
+      setLayoutReadyRevision(renderRevision);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [active, listMounted, renderRevision]);
+  useEffect(() => {
+    if (!spreadModel || !selectedProvider) {
+      setChartMounted(false);
+      setChartReadyRevision(null);
+      return;
+    }
+    if (!chartMounted) return;
+    const frame = requestAnimationFrame(() => setChartReadyRevision(renderRevision));
+    return () => cancelAnimationFrame(frame);
+  }, [chartMounted, renderRevision, selectedProvider, spreadModel]);
+
+  const actions = useMemo(() => ({
+    'moves.open': () => undefined,
+    'moves.decision.previous': () => {
+      if (decisionIndex >= windows.length - 1) {
+        return { unavailableReason: 'No older RBA decision is available' };
+      }
+      setDecisionIndex((index) => Math.min(windows.length - 1, index + 1));
+      return undefined;
+    },
+    'moves.section.next': (...args: unknown[]) => {
+      const requested = auditActionString(args, 'section');
+      const requestedSection = SECTIONS.find((option) => option.value === requested)?.value;
+      if (requestedSection && requestedSection !== section) {
+        setSection(requestedSection);
+        return;
+      }
+      const index = Math.max(0, SECTIONS.findIndex((option) => option.value === section));
+      setSection(SECTIONS[(index + 1) % SECTIONS.length].value);
+    },
+    'moves.response-chart.provider.next': () => {
+      if (!spreadModel?.lines.length) {
+        return { unavailableReason: 'Mortgage-savings history is unavailable' };
+      }
+      if (spreadModel.lines.length < 2) {
+        return { unavailableReason: 'Only one eligible bank is available in the chart' };
+      }
+      const index = Math.max(0, spreadModel.lines.findIndex((line) => line.provider === selectedProvider));
+      setSelectedProvider(spreadModel.lines[(index + 1) % spreadModel.lines.length].provider);
+      return undefined;
+    },
+  }), [decisionIndex, section, selectedProvider, spreadModel, windows]);
+  const auditSurface = usePerformanceAuditSurface({
+    id: 'moves.response-chart',
+    routeKey: '/rba-response',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    actions,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'bank-response-data',
+    kind: 'data',
+    status: active ? 'ready' : 'error',
+    error: active ? null : 'No recorded RBA decision overlaps the available bank history',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: 1,
+    actualCount: active ? 1 : 0,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'bank-response-list',
+    kind: 'list',
+    status: active && listReadyRevision === renderRevision ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: active?.rows.length ?? 0,
+    actualCount: active && listReadyRevision === renderRevision ? active.rows.length : 0,
+    emptyStateRendered: active?.rows.length === 0 && listReadyRevision === renderRevision,
+  });
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'bank-response-layout',
+    kind: 'layout',
+    status: active && layoutReadyRevision === renderRevision ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    layoutMeasured: layoutReadyRevision === renderRevision,
+  });
+  const selectedLine = spreadModel?.lines.find((line) => line.provider === selectedProvider) ?? null;
+  usePerformanceAuditProbe(auditSurface, {
+    id: 'mortgage-savings-chart',
+    kind: 'graphic',
+    required: false,
+    status: !selectedLine || chartReadyRevision === renderRevision ? 'ready' : 'pending',
+    datasetRevision: payload.run_date,
+    renderRevision,
+    expectedCount: selectedLine?.points.length ?? 0,
+    actualCount: selectedLine && chartReadyRevision === renderRevision ? selectedLine.points.length : 0,
+    accessibleSummary: Boolean(selectedLine && chartReadyRevision === renderRevision),
+  });
   if (!active) return <Card><AppText>No recorded RBA decisions overlap the available history.</AppText></Card>;
 
   const header = <View style={{ gap: 12, paddingBottom: 10 }}>
@@ -111,7 +219,16 @@ export function BankResponseDashboard({
         <AppText variant="h3">Mortgage–savings gap</AppText>
         <AppText variant="tiny" color="textMuted">Provider means · percentage points</AppText>
       </View>
-      <MortgageSavingsSpreadChart model={spreadModel} selectedProvider={selectedProvider} onSelectedProviderChange={setSelectedProvider} />
+      <View
+        onLayout={(event) => {
+          if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+            setChartMounted(true);
+            setChartReadyRevision(renderRevision);
+          }
+        }}
+      >
+        <MortgageSavingsSpreadChart model={spreadModel} selectedProvider={selectedProvider} onSelectedProviderChange={setSelectedProvider} />
+      </View>
     </> : <Card variant="outlined" style={{ gap: 8 }}>
       <AppText variant="small" weight="700">
         {spreadError ? 'Mortgage–savings history unavailable' : 'Mortgage–savings history is building'}
@@ -142,9 +259,25 @@ export function BankResponseDashboard({
   </View>;
   return <FlashList
     data={active.rows}
+    extraData={renderRevision}
     keyExtractor={(row) => row.provider}
     renderItem={({ item }) => <CompactRow row={item} />}
     ListHeaderComponent={header}
+    ListEmptyComponent={
+      <Card variant="outlined">
+        <AppText variant="small" color="textMuted">No bank moves were observed in this response window.</AppText>
+      </Card>
+    }
     contentContainerStyle={{ padding: 16, paddingBottom: 36 }}
+    onLayout={(event) => {
+      if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
+        setLayoutReadyRevision(renderRevision);
+      }
+    }}
+    onLoad={() => {
+      setListMounted(true);
+      setListReadyRevision(renderRevision);
+    }}
+    onContentSizeChange={() => setListReadyRevision(renderRevision)}
   />;
 }

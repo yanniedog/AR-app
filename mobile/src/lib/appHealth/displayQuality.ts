@@ -155,10 +155,10 @@ function evaluateRole(
         break;
       }
       case 'critical-layout': {
-        // Existing screen probes become ready only after their React Native
-        // layout/content-size callback fires. They intentionally report that
-        // boolean without serialising viewport dimensions. When dimensions are
-        // supplied by a richer probe, validate both strictly.
+        // `measured` is carried separately from general readiness and can only
+        // be set by the screen's layout/content-size callback. Dimensions are
+        // optional because readiness evidence is deliberately compact; richer
+        // probes must supply both dimensions together.
         const hasDimensions = evidence.width != null || evidence.height != null;
         const invalidDimensions = hasDimensions && (
           evidence.width == null ||
@@ -168,7 +168,7 @@ function evaluateRole(
           evidence.width <= 0 ||
           evidence.height <= 0
         );
-        if (!evidence.measured || evidence.clipped || invalidDimensions) {
+        if (!evidence.measured || evidence.clipped === true || invalidDimensions) {
           result.failed += 1;
           result.failedSurfaceIds.push(contract.id);
         }
@@ -303,7 +303,7 @@ const ROLE_CHECKS: readonly {
     role: 'critical-layout',
     code: APP_HEALTH_CHECK_CODES.DISPLAY_LAYOUT,
     label: 'Critical layout visibility',
-    failureSummary: 'Critical content was unmeasured, clipped, or had no visible bounds.',
+    failureSummary: 'Critical content was unmeasured, clipped, or had invalid visible bounds.',
   },
   {
     role: 'chart',

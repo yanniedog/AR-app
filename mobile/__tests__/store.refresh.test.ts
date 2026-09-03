@@ -108,6 +108,9 @@ function resetStore() {
     ensureDetails: originalEnsureDetails,
     bankSpreadHistory: null,
     bankSpreadHistoryError: null,
+    searchIndex: null,
+    searchIndexStatus: 'idle',
+    searchIndexError: null,
   });
 }
 
@@ -261,6 +264,55 @@ describe('store refresh lifecycle', () => {
     expect(mockEnsureHistoryBanks).toHaveBeenCalledTimes(1);
     expect(mockEnsureBankInsights).toHaveBeenCalledTimes(1);
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidates a loaded deep-search index when a same-core manifest revises its hash', async () => {
+    const searchAsset = (sha256: string) => ({
+      name: 'search-index.json.gz',
+      bytes: 100,
+      sha256,
+      url: `https://example.com/search-index-${sha256}.json.gz`,
+    });
+    const previousManifest: Manifest = {
+      ...remoteManifest,
+      files: {
+        ...remoteManifest.files,
+        search_index: searchAsset('search-old'),
+      },
+    };
+    const revisedManifest: Manifest = {
+      ...previousManifest,
+      files: {
+        ...previousManifest.files,
+        search_index: searchAsset('search-new'),
+      },
+    };
+    useStore.setState({
+      source: 'remote',
+      manifest: previousManifest,
+      searchIndex: {
+        schema_version: 1,
+        run_date: remoteCore.run_date,
+        products: { stale: 'previous index' },
+      },
+      searchIndexStatus: 'ready',
+      searchIndexError: null,
+    });
+    mockFetchManifest.mockResolvedValue(revisedManifest);
+    mockReadMeta.mockResolvedValue({
+      manifest: previousManifest,
+      source: 'remote',
+      savedAt: '2026-06-09T00:00:00Z',
+      coreSha: revisedManifest.files.core.sha256,
+      detailsSha: revisedManifest.files.details.sha256,
+    });
+
+    await expect(useStore.getState().refresh({})).resolves.toBe(false);
+
+    expect(useStore.getState().manifest?.files.search_index?.sha256).toBe('search-new');
+    expect(useStore.getState().searchIndex).toBeNull();
+    expect(useStore.getState().searchIndexStatus).toBe('idle');
+    expect(useStore.getState().searchIndexError).toBeNull();
   });
 
   it('keeps OS-scheduled refresh bounded when optional asset hashes change', async () => {

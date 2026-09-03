@@ -733,6 +733,6 @@ The redesign is complete only when all statements below are evidenced:
 - [x] Apply the same system to My rates/scenario/tools.
 - [x] Apply the same system to onboarding/profile/settings/about/legal/diagnostics.
 - [x] Extend app-health audit interaction and data/display axes.
-- [ ] Complete physical Android/iOS, screen-reader and large-text matrices. Deterministic checks and a 390 x 844 web visual pass are complete; native SDK/device tooling was unavailable in this implementation environment.
+- [ ] Complete physical Android/iOS, screen-reader and large-text matrices. Deterministic checks, a 390 x 844 web visual pass, an Android release-emulator smoke test and the full live-source Android audit are complete; physical devices, iOS, screen-reader and large-text native passes remain.
 - [x] Validate the currently published v1 AR-local manifest, dates index and hashed core payload without modifying AR-local. The user explicitly removed waiting for a later producer state.
 - [ ] Complete PR feedback/ship bar. Final local CI is green; this item closes only after remote review gates and merge settle.

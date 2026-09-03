@@ -522,6 +522,7 @@ export default function Calculator() {
         id: 'calculator.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
         renderRevision: calculatorRenderRevision,
       },
     ],

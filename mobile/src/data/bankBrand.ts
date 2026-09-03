@@ -1,10 +1,9 @@
 import { BUNDLED_BANK_LOGOS } from './bankLogoAssets';
 
-/**
- * Canonical pack vendored in this repo (dashboard/assets/banks) — served via
- * GitHub raw so it survives the australianrates.com shutdown.
- */
-const CDN_BANK_BASE = 'https://raw.githubusercontent.com/yanniedog/AR-local/main/dashboard/assets/banks/';
+const MAX_EMBEDDED_LOGO_LENGTH = 256 * 1024;
+const MAX_REMOTE_LOGO_URI_LENGTH = 2_048;
+const SAFE_EMBEDDED_RASTER_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,/i;
+const SAFE_REMOTE_LOGO_PATH_RE = /\.(?:png|jpe?g|gif|webp|svg)$/i;
 
 type BrandEntry = {
   short: string;
@@ -231,13 +230,54 @@ function pushIconFile(out: (string | number)[], seen: Set<string>, iconFile: str
   const slug = slugFromIcon(iconFile);
   const bundled = BUNDLED_BANK_LOGOS[slug];
   if (bundled != null) pushUnique(out, seen, bundled);
-  pushUnique(out, seen, `${CDN_BANK_BASE}${iconFile}`);
+}
+
+function safeEmbeddedLogo(value: string): boolean {
+  return value.length <= MAX_EMBEDDED_LOGO_LENGTH && SAFE_EMBEDDED_RASTER_RE.test(value);
+}
+
+export function isSvgLogoSource(value: string | number | null | undefined): boolean {
+  if (typeof value !== 'string' || value.startsWith('data:')) return false;
+  try {
+    return new URL(value).pathname.toLowerCase().endsWith('.svg');
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Ordered logo sources: payload embed, bundled pack + its GitHub-raw twin,
- * then the CDR Register logoUri. Unknown brands no longer get guessed CDN
- * URLs (the old `<slug>.png` guesses 404'd for every non-pack lender).
+ * Accept only bounded public HTTPS artwork from the integrity-checked core.
+ * The caller never passes navigation/user input here, and audit mode removes
+ * these network sources entirely.
+ */
+export function safePayloadLogoUri(value: string): boolean {
+  if (!value || value.length > MAX_REMOTE_LOGO_URI_LENGTH) return false;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, '');
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      (url.port && url.port !== '443') ||
+      !host ||
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.startsWith('[') ||
+      /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) ||
+      !SAFE_REMOTE_LOGO_PATH_RE.test(url.pathname)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ordered logo sources: bounded embedded artwork, the bundled pack, then a
+ * validated public HTTPS URI carried by the integrity-checked payload.
  */
 export function resolveBankLogoSources(
   provider: string,
@@ -247,7 +287,7 @@ export function resolveBankLogoSources(
   const out: (string | number)[] = [];
   const seen = new Set<string>();
   const embedded = String(embeddedLogo ?? '').trim();
-  if (embedded) pushUnique(out, seen, embedded);
+  if (embedded && safeEmbeddedLogo(embedded)) pushUnique(out, seen, embedded);
 
   const key = resolveBrandKey(provider);
   const icon = key ? BRAND_MAP[key]?.icon : undefined;
@@ -258,8 +298,8 @@ export function resolveBankLogoSources(
     if (bundled != null) pushUnique(out, seen, bundled);
   }
 
-  const registerUri = String(registerLogoUri ?? '').trim();
-  if (registerUri) pushUnique(out, seen, registerUri);
+  const remote = String(registerLogoUri ?? '').trim();
+  if (safePayloadLogoUri(remote)) pushUnique(out, seen, remote);
   return out;
 }
 
@@ -277,9 +317,11 @@ export function resolveBankLogoSourcesForRuntime(
   registerLogoUri: string | undefined,
   auditOwnsNetwork: boolean,
 ): (string | number)[] {
-  if (!auditOwnsNetwork) return resolveBankLogoSources(provider, embeddedLogo, registerLogoUri);
-  const bundled = resolveBundledBankLogoSource(provider);
-  return bundled == null ? [] : [bundled];
+  return resolveBankLogoSources(
+    provider,
+    embeddedLogo,
+    auditOwnsNetwork ? undefined : registerLogoUri,
+  );
 }
 
 function slugify(value: string): string {

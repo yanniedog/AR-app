@@ -70,3 +70,106 @@ test('the ARM size budget locks in the optimized two-ABI APK', async () => {
   assert.equal(budgets.apkBaselineByChannel.arm, 48_000_000);
   assert.equal(budgets.maximumGrowthFraction, 0.05);
 });
+
+test('EAS release jobs can verify the merged pull request for their main commit', async () => {
+  const buildWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),
+    'utf8',
+  );
+  const submitWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
+    'utf8',
+  );
+  const apkWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(buildWorkflow, /pull-requests:\s+read/);
+  assert.match(submitWorkflow, /pull-requests:\s+read/);
+  for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
+    assert.match(workflow, /checks:\s+read/);
+    const expectedSourceChecks = workflow === apkWorkflow ? 3 : 2;
+    assert.equal(
+      workflow.match(/node scripts\/verify-github-release-source\.mjs/g)?.length,
+      expectedSourceChecks,
+      'release source must be checked before work and every publication or chained dispatch',
+    );
+  }
+});
+
+test('APK publication serializes universal before ARM and delays README mutation', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /inputs\.apk_channel == 'universal' && inputs\.follow_with_arm == true/);
+  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
+  assert.match(workflow, /-f apk_channel=arm/);
+  assert.match(workflow, /-f follow_with_arm=false/);
+  assert.match(workflow, /-f release_version="\$\{\{ steps\.release\.outputs\.version \}\}"/);
+  assert.match(workflow, /-f release_version_code="\$\{\{ steps\.release\.outputs\.version_code \}\}"/);
+  assert.match(workflow, /release_source_sha:[\s\S]*description: Immutable main source/);
+  assert.match(workflow, /ref: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
+  assert.equal(
+    workflow.match(/RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/g)?.length,
+    3,
+  );
+  assert.match(workflow, /Queue ARM channel after universal publish[\s\S]*verify-github-release-source\.mjs/);
+  assert.match(workflow, /-f release_source_sha="\$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}"/);
+  assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
+});
+
+test('EAS submission validates an environment-delivered build UUID', async () => {
+  const submitWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.match(submitWorkflow, /EAS_BUILD_ID:\s+\$\{\{ inputs\.build_id \}\}/);
+  assert.match(submitWorkflow, /build_id must be an exact EAS build UUID/);
+  assert.match(submitWorkflow, /eas build:view "\$EAS_BUILD_ID" --json/);
+  assert.match(submitWorkflow, /verify-eas-submit-build\.mjs/);
+  assert.match(submitWorkflow, /--id "\$EAS_BUILD_ID"/);
+  assert.doesNotMatch(submitWorkflow, /--id "\$\{\{ inputs\.build_id \}\}"/);
+
+  const buildWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-eas-build.yml', import.meta.url),
+    'utf8',
+  );
+  assert.doesNotMatch(buildWorkflow, /EAS_NO_VCS/);
+  assert.match(
+    buildWorkflow,
+    /inputs\.profile == 'preview' &&[\s\S]*bump-android-version-code\.mjs[\s\S]*--github-env "\$GITHUB_ENV"/,
+  );
+  assert.match(buildWorkflow, /git diff --exit-code/);
+  assert.match(buildWorkflow, /git diff --cached --exit-code/);
+  assert.match(buildWorkflow, /eas env:set preview --name AR_APP_EAS_RELEASE_VERSION/);
+  assert.match(buildWorkflow, /eas env:set preview --name AR_APP_EAS_ANDROID_VERSION_CODE/);
+  assert.match(
+    buildWorkflow,
+    /EAS_PROFILE" = preview[\s\S]*EAS_PLATFORM" = android[\s\S]*EAS_PLATFORM" = all/,
+  );
+  assert.match(buildWorkflow, /eas env:delete preview --variable-name AR_APP_EAS_RELEASE_VERSION/);
+  assert.match(buildWorkflow, /eas env:delete preview --variable-name AR_APP_EAS_ANDROID_VERSION_CODE/);
+  assert.doesNotMatch(buildWorkflow, /inject-eas-release-env\.mjs/);
+  assert.doesNotMatch(buildWorkflow, /git restore --source=HEAD -- eas\.json/);
+});
+
+test('high-severity dependency additions and native verifier compilation gate PRs', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/app-ci.yml', import.meta.url),
+    'utf8',
+  );
+
+  assert.doesNotMatch(workflow, /^  dependency-review:/m);
+  assert.match(workflow, /^  mobile:\n[\s\S]*actions\/dependency-review-action@/m);
+  assert.match(workflow, /Dependency review \(required mobile-ci gate\)/);
+  assert.match(workflow, /fail-on-severity: high/);
+  assert.doesNotMatch(workflow, /allow-ghsas:/);
+  assert.match(workflow, /id: dependency-review/);
+  assert.doesNotMatch(workflow, /Guard build-only EAS advisory scope/);
+  assert.match(workflow, /Compile native APK identity verifier/);
+  assert.match(workflow, /expo prebuild --platform android --no-install/);
+  assert.match(workflow, /:ar-apk-identity-verifier:compileReleaseKotlin/);
+});

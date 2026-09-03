@@ -25,6 +25,7 @@ export default function NotFound() {
         id: 'not-found.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
     ],
   });

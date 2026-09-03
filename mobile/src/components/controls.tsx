@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   type LayoutChangeEvent,
@@ -19,6 +19,7 @@ import Animated, {
 
 import { hapticSelection } from '../lib/haptics';
 import { useReducedMotion } from '../hooks/useReducedMotion';
+import { commissionerFamily } from '../theme/fonts';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { androidRipple, AppText } from './ui';
@@ -193,7 +194,8 @@ export function SearchBar({
         backgroundColor: theme.colors.surfaceAlt,
         borderRadius: theme.radius.md,
         paddingHorizontal: 12,
-        height: 48,
+        minHeight: 48,
+        paddingVertical: 4,
       }}
     >
       <Ionicons name="search" size={18} color={theme.colors.textFaint} />
@@ -203,7 +205,13 @@ export function SearchBar({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={theme.colors.textFaint}
-        style={{ flex: 1, color: theme.colors.text, fontSize: theme.font.body }}
+        style={{
+          flex: 1,
+          minHeight: 48,
+          color: theme.colors.text,
+          fontFamily: commissionerFamily(),
+          fontSize: theme.font.body,
+        }}
         autoCorrect={false}
         autoCapitalize="none"
         clearButtonMode="while-editing"
@@ -216,8 +224,8 @@ export function SearchBar({
           accessibilityLabel="Clear search"
           android_ripple={androidRipple(theme.colors.primaryMuted, true)}
           style={{
-            width: 44,
-            height: 44,
+            width: 48,
+            minHeight: 48,
             borderRadius: theme.radius.sm,
             overflow: 'hidden',
             alignItems: 'center',

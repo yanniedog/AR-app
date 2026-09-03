@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { Pressable, useWindowDimensions, View } from 'react-native';
 
@@ -89,8 +89,9 @@ export function ProductCard({
   onLogoRenderStateChange?: (id: string, state: LogoRenderState) => void;
 }) {
   const theme = useTheme();
-  const { width } = useWindowDimensions();
-  const compact = width < 380;
+  const { width, fontScale } = useWindowDimensions();
+  const compact = width < 380 || fontScale >= 1.3;
+  const textLines = fontScale >= 1.3 ? undefined : compact ? 2 : 1;
   const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
@@ -185,10 +186,10 @@ export function ProductCard({
           )}
 
           <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="body" weight="700" numberOfLines={compact ? 2 : 1}>
+        <AppText variant="body" weight="700" numberOfLines={textLines}>
           {row.product_name}
         </AppText>
-        <AppText variant="small" color="textMuted" numberOfLines={1}>
+        <AppText variant="small" color="textMuted" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
           {row.provider}
         </AppText>
         <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
@@ -269,7 +270,7 @@ export function ProductCard({
             paddingLeft: 0,
           }}
         >
-          <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+          <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
             {rateLabel}
           </AppText>
           <AppText
@@ -279,7 +280,7 @@ export function ProductCard({
             {rateText}
           </AppText>
           {secondaryRate !== null && secondaryLabel ? (
-            <AppText variant="tiny" color="textFaint" numberOfLines={1}>
+            <AppText variant="tiny" color="textFaint" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
               {formatRate(secondaryRate)} {secondaryLabel.toLowerCase()}
             </AppText>
           ) : null}

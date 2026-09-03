@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -171,14 +171,18 @@ export default function RateReceiptScreen() {
       {
         id: 'receipt.facts',
         kind: 'list',
-        status: receipt && brief && evidenceOpen ? 'ready' : 'pending',
-        expectedCount: receiptFactCount,
-        actualCount: evidenceOpen ? receiptFactCount : 0,
+        // The disclosure is intentionally closed on entry. Its contents only
+        // become required after the audit (or user) opens it.
+        required: evidenceOpen,
+        status: !evidenceOpen || (receipt && brief) ? 'ready' : 'pending',
+        expectedCount: evidenceOpen ? receiptFactCount : 0,
+        actualCount: evidenceOpen && receipt && brief ? receiptFactCount : 0,
       },
       {
         id: 'receipt.layout',
         kind: 'layout',
         status: layoutReady ? 'ready' : 'pending',
+        layoutMeasured: layoutReady,
       },
       {
         id: 'receipt.logos',

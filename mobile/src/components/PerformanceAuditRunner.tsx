@@ -23,7 +23,12 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
-import { getApkDownloadSnapshot } from '../lib/appUpdate';
+import {
+  getApkDownloadSnapshot,
+  getHydratedApkDownloadSnapshot,
+  type ApkDownloadSnapshot,
+} from '../lib/appUpdate';
+import { blocksPerformanceAudit } from '../lib/appUpdateDownloadLogic';
 import {
   CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
   type AppHealthAuditMode,
@@ -38,14 +43,18 @@ import {
 import { debugLog } from '../lib/debugLog';
 import {
   buildDeepPerformanceAuditPlan,
+  ScenarioReentryGate,
   type DeepAuditStep,
 } from '../lib/performanceAuditPlan';
 import {
   MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
   maximumPerformanceAuditPrefs,
+  maximumPerformanceAuditProfileWasEnabled,
 } from '../lib/performanceAuditProfile';
 import {
+  compactPerformanceAuditReadinessEvidence,
   performanceAuditReadinessRegistry,
+  PerformanceAuditReadinessProbeError,
   PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessKind,
   type PerformanceAuditReadinessSnapshot,
@@ -464,6 +473,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         pathname: '/search',
         params: section ? { section } : {},
       } as unknown as Href;
+    case 'changes.open': return '/(tabs)/passthrough' as Href;
     case 'compare.open':
       return {
         pathname: '/compare',
@@ -527,25 +537,7 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
     readinessProbeCount: snapshot.totalProbes,
     readinessRequiredProbeCount: snapshot.requiredProbes,
     readinessPendingRequiredProbeCount: snapshot.pendingRequiredProbes,
-    readinessEvidence: snapshot.surfaces
-      .flatMap((surface) => surface.probes.map((probe) => [
-        surface.id,
-        probe.id,
-        probe.kind,
-        probe.status,
-        probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
-        // Keep revision identity without dumping full sha256 blobs into every row.
-        typeof probe.datasetRevision === 'string' && probe.datasetRevision.length > 16
-          ? `${probe.datasetRevision.slice(0, 12)}…`
-          : probe.datasetRevision ?? '',
-        typeof probe.renderRevision === 'string' && probe.renderRevision.length > 80
-          ? `${probe.renderRevision.slice(0, 80)}…`
-          : probe.renderRevision ?? '',
-        probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
-        probe.visibleCount == null ? '' : `visible=${probe.visibleCount}`,
-        probe.emptyStateRendered == null ? '' : `empty=${probe.emptyStateRendered ? 1 : 0}`,
-      ].join(':')))
-      .join(' | '),
+    readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot),
     readinessActionEvidence: snapshot.surfaces
       .map((surface) => `${surface.id}:${surface.lastCompletedAction ?? 'none'}:${surface.actionRevision}`)
       .join(' | '),
@@ -576,6 +568,9 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
     case 'settings': return '/settings';
     case 'onboarding': return '/onboarding';
     case 'today': return '/';
+    case 'changes': return '/passthrough';
+    case 'moves': return '/rba-response';
+    case 'outlook': return '/research';
     default: return null;
   }
 }
@@ -642,12 +637,57 @@ async function runDeepAuditStep(
     // Cancel / hang / dataset-revision changes remain unrecoverable. Every other
     // step failure is recorded so the remaining plan can still run.
     rethrowAuditControl(caught);
-    const readiness = caught instanceof PerformanceAuditReadinessTimeoutError
+    const readiness = caught instanceof PerformanceAuditReadinessTimeoutError ||
+      caught instanceof PerformanceAuditReadinessProbeError
       ? caught.snapshot
       : performanceAuditReadinessRegistry.snapshot(
         [step.expectedSurface],
         requiredProbeKinds(step),
       );
+    if (
+      step.optional &&
+      step.skipSafety.maySkip &&
+      caught instanceof PerformanceAuditReadinessProbeError
+    ) {
+      const reason = readiness.blockers
+        .map((blocker) => blocker.message)
+        .filter(Boolean)
+        .join('; ')
+        .slice(0, 512) || 'The optional surface reported a terminal readiness error';
+      return {
+        id: `deep-${step.id}`,
+        label,
+        kind: 'journey',
+        status: 'skipped',
+        durationMs: null,
+        metrics: {
+          journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+          journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+          iteration,
+          passId: step.passId,
+          scenarioId: step.scenarioId,
+          semanticActionId: step.semanticActionId,
+          depth: step.depth,
+          plannedExpectedPath: step.expectedPath,
+          expectedPath: step.expectedPath,
+          expectedSurface: step.expectedSurface,
+          reason,
+          skipSafety: step.skipSafety.reason,
+          skipClassification: 'terminal-availability',
+          availabilityEvidence: 'an optional required probe reported a terminal error',
+          availabilityFailure: true,
+          routeStateInvalidated: false,
+          executionAttempted: execution.attempted,
+          actionInvoked: execution.invoked,
+          actionCompleted: false,
+          optional: true,
+          optionalReadinessError: true,
+          ...readinessMetrics(readiness),
+        },
+        error: `Optional audit surface was unavailable: ${reason}`,
+        trace: captureAuditTrace(`deep step ${step.id} reached terminal unavailability`),
+      };
+    }
     return {
       id: `deep-${step.id}`,
       label,
@@ -680,6 +720,35 @@ async function runDeepAuditStep(
       trace: captureAuditTrace(`deep step ${step.id} failed; audit continues`),
     };
   }
+}
+
+function skippedAfterScenarioRecovery(step: DeepAuditStep): AuditCheck {
+  const iteration: JourneyIteration = step.passId === 'first-pass' ? 'cold' : 'warm';
+  const reason =
+    'An earlier step failed and route recovery removed the local screen state this action depends on';
+  return {
+    id: `deep-${step.id}`,
+    label: `${step.scenarioId}: ${step.semanticActionId} (${step.passId})`,
+    kind: 'journey',
+    status: 'skipped',
+    durationMs: null,
+    metrics: {
+      journeyId: `${step.scenarioId}.${step.semanticActionId}`,
+      journeyLabel: `${step.scenarioId}: ${step.semanticActionId}`,
+      iteration,
+      passId: step.passId,
+      scenarioId: step.scenarioId,
+      semanticActionId: step.semanticActionId,
+      depth: step.depth,
+      reason,
+      skipClassification: 'scenario-recovery',
+      scenarioRecoveryCascade: true,
+      executionAttempted: false,
+      actionInvoked: false,
+      actionCompleted: false,
+      routeStateInvalidated: false,
+    },
+  };
 }
 
 async function runDeepAuditStepBody(
@@ -1856,9 +1925,9 @@ async function runUpdateReadinessCheck(
   app: AuditAppIdentity,
   _monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
+  download: ApkDownloadSnapshot,
 ): Promise<AuditCheck> {
   const installed = { version: app.appVersion, buildNumber: app.buildVersion };
-  const download = getApkDownloadSnapshot();
   assertSessionActive(watchdog);
   return {
     id: 'update-readiness',
@@ -2439,11 +2508,18 @@ export function PerformanceAuditRunner() {
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
+      let auditApkDownloadSnapshot = getApkDownloadSnapshot();
       const transportGuard = installAppHealthTransportGuard({
         target: globalThis as unknown as AuditTransportTarget,
         mode: auditMode,
         contract: CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT,
       });
+      let transportGuardRestored = false;
+      const restoreTransportGuard = () => {
+        if (transportGuardRestored) return;
+        transportGuard.restore();
+        transportGuardRestored = true;
+      };
 
       const awaitStoredCheckFlush = async (): Promise<void> => {
         let settled = false;
@@ -2482,9 +2558,20 @@ export function PerformanceAuditRunner() {
         markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
       };
 
-      markPerformanceAuditRunning(total);
-
       try {
+        if (Platform.OS === 'android') {
+          auditApkDownloadSnapshot = await awaitAuditWork(
+            getHydratedApkDownloadSnapshot(),
+            watchdog,
+            'APK download state hydration',
+          );
+          if (blocksPerformanceAudit(auditApkDownloadSnapshot)) {
+            throw new Error(
+              `An app update is ${auditApkDownloadSnapshot.phase}. Wait for it to finish or cancel it, then run the app health audit again.`,
+            );
+          }
+        }
+        markPerformanceAuditRunning(total);
         // Setup belongs inside the protected region so an unexpected native
         // keep-awake or monitor failure cannot leave the global running flag
         // latched forever.
@@ -2679,10 +2766,9 @@ export function PerformanceAuditRunner() {
           historyLoaded: maximumProfileState.historyBanks != null,
           productHistoryLoaded: maximumProfileState.productHistory != null,
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
-          maximumSafeFeaturesEnabled:
-            maximumProfileResult.check != null &&
-            maximumProfileResult.check.status !== 'fail' &&
-            maximumProfileResult.check.status !== 'skipped',
+          maximumSafeFeaturesEnabled: maximumPerformanceAuditProfileWasEnabled(
+            maximumProfileResult.check?.metrics,
+          ),
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');
@@ -2718,6 +2804,7 @@ export function PerformanceAuditRunner() {
         }
 
         for (const pass of plan.passes) {
+          const reentryGate = new ScenarioReentryGate();
           for (const step of pass.steps) {
             assertSessionActive(watchdog);
             assertDatasetRevision(datasetRevision);
@@ -2735,6 +2822,10 @@ export function PerformanceAuditRunner() {
               expectedSurface: step.expectedSurface,
             });
             await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Deep-step marker flush');
+            if (reentryGate.shouldSkip(step, routeEntryHref(step) != null)) {
+              await record(skippedAfterScenarioRecovery(step));
+              continue;
+            }
             const recovered = await recordContinuable(
               label,
               () => runDeepAuditStep(
@@ -2745,7 +2836,7 @@ export function PerformanceAuditRunner() {
                 datasetRevision,
               ),
             );
-            void recovered;
+            if (recovered) reentryGate.markRecovered(step);
           }
         }
 
@@ -2819,7 +2910,12 @@ export function PerformanceAuditRunner() {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
             'Inspecting Android update readiness',
-            () => runUpdateReadinessCheck(app, monitor, watchdog),
+            () => runUpdateReadinessCheck(
+              app,
+              monitor,
+              watchdog,
+              auditApkDownloadSnapshot,
+            ),
           );
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
@@ -3152,6 +3248,10 @@ export function PerformanceAuditRunner() {
         // Publish as soon as the report is durable.
         // The remaining local log flush must not hide a complete result if it
         // fails.
+        // Terminal state wakes the root update surfaces. Drop the audit-only
+        // transport interception first so their next check cannot race a guard
+        // that is about to be removed in finally.
+        restoreTransportGuard();
         completePerformanceAudit(report);
         await yieldToUi();
 
@@ -3225,6 +3325,7 @@ export function PerformanceAuditRunner() {
             recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
           }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
+          restoreTransportGuard();
           markPerformanceAuditCancelled();
         } else {
           const error = [
@@ -3372,13 +3473,14 @@ export function PerformanceAuditRunner() {
             );
           }
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Fatal log flush').catch(() => {});
+          restoreTransportGuard();
           failPerformanceAudit([
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'));
         }
       } finally {
-        transportGuard.restore();
+        restoreTransportGuard();
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);

@@ -79,6 +79,7 @@ The following are created specifically for Rate Ledger and remain project code/a
 - paper/rule/asymmetry layout grammar;
 - evidence-state model and canonical data-status language;
 - the semantic icon registry, naming and optical normalisation around the selected attributed Iconoir-derived utility paths;
+- the product-wide typed icon bridge that routes legacy control vocabulary to that registry without loading an icon font;
 - screen composition, content hierarchy and Australian-English interface copy;
 - rate, comparison, ongoing, coverage and failure presentation rules.
 

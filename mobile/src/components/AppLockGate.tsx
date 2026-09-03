@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from './icons/AppIcon';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Modal, Platform, View } from 'react-native';
 import { FullWindowOverlay } from 'react-native-screens';

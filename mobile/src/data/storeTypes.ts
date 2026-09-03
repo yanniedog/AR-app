@@ -33,7 +33,7 @@ export interface Prefs {
   notificationsEnabled: boolean;
   /** Firebase Crashlytics collection. Preselected, but dormant until the privacy choice is confirmed. */
   crashReportsEnabled: boolean;
-  /** Microsoft Clarity session replay. Preselected, but dormant until the privacy choice is confirmed. */
+  /** Legacy persisted replay choice; runtime collection is permanently disabled. */
   sessionReplayEnabled: boolean;
   /** Consent-copy version accepted by the user (0 means no current consent). */
   privacyChoiceVersion: number;
@@ -72,7 +72,9 @@ export interface Prefs {
   calc: CalcInputs;
 }
 
-export const CURRENT_PRIVACY_CHOICE_VERSION = 2;
+// Advance whenever diagnostic recipients or processing materially change so
+// a previous opt-in cannot silently authorize a broader disclosure.
+export const CURRENT_PRIVACY_CHOICE_VERSION = 3;
 export const CURRENT_MORTGAGE_RATE_PREFERENCE_VERSION = 1;
 
 export function migratedMortgageRatePreference(
@@ -121,6 +123,7 @@ export const DEFAULT_PREFS: Prefs = {
 };
 
 export type Status = 'idle' | 'loading' | 'ready' | 'error';
+export type OptionalAssetLoadStatus = 'idle' | 'loading' | 'ready' | 'unavailable' | 'error';
 
 export interface AppState {
   status: Status;
@@ -135,6 +138,9 @@ export interface AppState {
   coreAssetState: AssetState<CoreIntegrityContext>;
   details: DetailsPayload | null;
   searchIndex: SearchIndexPayload | null;
+  searchIndexStatus: OptionalAssetLoadStatus;
+  /** Bounded user-facing reason; raw download errors stay in the local log. */
+  searchIndexError: string | null;
   historyBanks: HistoryBanksPayload | null;
   /** Set when optional history payload download/parse fails (pref may stay on). */
   historyBanksError: string | null;

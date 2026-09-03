@@ -4,14 +4,145 @@ import test from 'node:test';
 
 import {
   checkedGhOutput,
+  dispatchApkBuild,
   ensureApkForMainHead,
   hasApkBuildInFlight,
+  missingApkChannels,
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
+  releaseAssetApiEndpoint,
+  releaseAssetTextFromGhResult,
+  releaseSnapshotFromGhResult,
+  recoveryIdentityForMissingChannel,
+  validatePublishedChannelSnapshot,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
+import {
+  APK_ASSET,
+  INSTALL_HTML,
+  MANIFEST_ASSET,
+  QR_ASSET,
+  ROLLING_TAG,
+} from './app-release-meta.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
+
+test('release inspection distinguishes absence from infrastructure failure', () => {
+  assert.equal(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'release not found',
+    }),
+    null,
+  );
+  assert.equal(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'gh: Not Found (HTTP 404)',
+    }),
+    null,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'HTTP 403: rate limit exceeded',
+    }),
+    /Unable to inspect release v1\.2\.3: HTTP 403/,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: false,
+      stdout: '',
+      stderr: 'authentication required',
+    }),
+    /Unable to inspect release v1\.2\.3: authentication required/,
+  );
+});
+
+test('release inspection accepts only a valid release object', () => {
+  assert.deepEqual(
+    releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: '{"tagName":"v1.2.3","assets":[]}',
+      stderr: '',
+    }),
+    { tagName: 'v1.2.3', assets: [] },
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: 'not json',
+      stderr: '',
+    }),
+    /invalid JSON/,
+  );
+  assert.throws(
+    () => releaseSnapshotFromGhResult('v1.2.3', {
+      ok: true,
+      stdout: 'null',
+      stderr: '',
+    }),
+    /response was not a release object/,
+  );
+});
+
+test('release asset download fails closed on GitHub API errors', () => {
+  assert.equal(
+    releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: true,
+      stdout: '{"version":"1.2.3"}',
+      stderr: '',
+    }),
+    '{"version":"1.2.3"}',
+  );
+  assert.throws(
+    () => releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: false,
+      stdout: '',
+      stderr: 'HTTP 403: rate limit exceeded',
+    }),
+    /Unable to download release asset app-apk-latest\.json: HTTP 403/,
+  );
+  assert.throws(
+    () => releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: false,
+      stdout: '',
+      stderr: 'authentication required',
+    }),
+    /Unable to download release asset app-apk-latest\.json: authentication required/,
+  );
+});
+
+test('release asset metadata distinguishes absence from an unusable asset record', () => {
+  assert.equal(
+    releaseAssetApiEndpoint({ assets: [] }, 'app-apk-latest.json'),
+    null,
+  );
+  assert.equal(
+    releaseAssetApiEndpoint({
+      assets: [{
+        name: 'app-apk-latest.json',
+        apiUrl: 'https://api.github.com/repos/yanniedog/AR-app/releases/assets/123',
+      }],
+    }, 'app-apk-latest.json'),
+    'repos/yanniedog/AR-app/releases/assets/123',
+  );
+  assert.throws(
+    () => releaseAssetApiEndpoint({
+      assets: [{ name: 'app-apk-latest.json' }],
+    }, 'app-apk-latest.json'),
+    /release metadata omitted its API URL/,
+  );
+  assert.throws(
+    () => releaseAssetApiEndpoint({
+      assets: [{ name: 'app-apk-latest.json', apiUrl: 'not a URL' }],
+    }, 'app-apk-latest.json'),
+    /invalid API URL/,
+  );
+});
 
 test('checkedGhOutput returns trimmed stdout for a successful command', () => {
   assert.equal(checkedGhOutput({ status: 0, stdout: '[]\n', stderr: '' }, ['pr', 'list']), '[]');
@@ -108,16 +239,25 @@ test('waitForQueueDrain skips without refreshing when multiple PRs remain', asyn
   assert.equal(syncCount, 0);
 });
 
-test('hasApkBuildInFlight matches only the exact versioned main head', () => {
+test('hasApkBuildInFlight matches the exact head and every required channel', () => {
   const runs = [
-    { headSha: 'older', status: 'in_progress' },
-    { headSha: 'target', status: 'completed' },
+    { headSha: 'older', status: 'in_progress', displayTitle: 'mobile-android-apk (universal+arm)' },
+    { headSha: 'target', status: 'completed', displayTitle: 'mobile-android-apk (universal+arm)' },
   ];
   assert.equal(hasApkBuildInFlight(runs, 'target'), false);
   assert.equal(
-    hasApkBuildInFlight([...runs, { headSha: 'target', status: 'queued' }], 'target'),
+    hasApkBuildInFlight([
+      ...runs,
+      { headSha: 'target', status: 'queued', displayTitle: 'mobile-android-apk (universal+arm)' },
+    ], 'target'),
     true,
   );
+  const armOnly = [
+    { headSha: 'target', status: 'in_progress', displayTitle: 'mobile-android-apk (arm)' },
+  ];
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['arm']), true);
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['universal']), false);
+  assert.equal(hasApkBuildInFlight(armOnly, 'target', ['universal', 'arm']), false);
 });
 
 test('ensureApkForMainHead dispatches when the version has no published APK', () => {
@@ -126,16 +266,54 @@ test('ensureApkForMainHead dispatches when the version has no published APK', ()
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.40',
     readHeadSha: () => 'abc1234',
-    releaseExists: () => false,
-    buildInFlight: (headSha) => {
-      checkedHeads.push(headSha);
+    readPublishedChannels: () => ({ arm: false, universal: false }),
+    buildInFlight: (headSha, channels) => {
+      checkedHeads.push([headSha, channels]);
       return false;
     },
-    dispatch: (v) => dispatched.push(v),
+    dispatch: (v, channels) => dispatched.push([v, channels]),
   });
   assert.equal(did, true);
-  assert.deepEqual(checkedHeads, ['abc1234']);
-  assert.deepEqual(dispatched, ['1.0.40']);
+  assert.deepEqual(checkedHeads, [['abc1234', ['universal', 'arm']]]);
+  assert.deepEqual(dispatched, [['1.0.40', ['universal', 'arm']]]);
+});
+
+test('APK release dispatches universal first and lets that run queue ARM', () => {
+  const calls = [];
+  dispatchApkBuild('1.0.40', ['universal', 'arm'], {
+    simulate: false,
+    runGh: (args) => calls.push(args),
+  });
+
+  assert.deepEqual(calls, [[
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
+    '-f', 'apk_channel=universal',
+    '-f', 'follow_with_arm=true',
+  ]]);
+});
+
+test('partial APK recovery dispatches only the missing published channel', () => {
+  assert.deepEqual(missingApkChannels({ arm: true, universal: false }), ['universal']);
+  assert.deepEqual(missingApkChannels({ arm: false, universal: true }), ['arm']);
+
+  const calls = [];
+  dispatchApkBuild('1.0.40', ['arm'], {
+    simulate: false,
+    runGh: (args) => calls.push(args),
+    releaseVersion: '1.0.40',
+    releaseVersionCode: '152',
+  });
+  assert.deepEqual(calls, [[
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
+    '-f', 'apk_channel=arm',
+    '-f', 'follow_with_arm=false',
+    '-f', 'release_version=1.0.40',
+    '-f', 'release_version_code=152',
+  ]]);
+  assert.throws(
+    () => dispatchApkBuild('1.0.40', ['arm'], { simulate: false, runGh: () => {} }),
+    /exact surviving version and versionCode/,
+  );
 });
 
 test('ensureApkForMainHead is a no-op when the APK is already published', () => {
@@ -143,7 +321,10 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.29',
     readHeadSha: () => 'abc1234',
-    releaseExists: (v) => v === '1.0.29',
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.30', versionCode: 142, sourceSha: 'abc1234' },
+      universal: { version: '1.0.30', versionCode: 142, sourceSha: 'abc1234' },
+    }),
     buildInFlight: () => false,
     dispatch: () => {
       dispatchedCount += 1;
@@ -153,15 +334,58 @@ test('ensureApkForMainHead is a no-op when the APK is already published', () => 
   assert.equal(dispatchedCount, 0);
 });
 
+test('partial recovery uses the version actually allocated by the APK workflow', () => {
+  const dispatched = [];
+  const checked = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: null,
+      universal: { version: '1.0.43', versionCode: 155, sourceSha: 'f'.repeat(40) },
+    }),
+    buildInFlight: (head, channels) => {
+      checked.push([head, channels]);
+      return false;
+    },
+    dispatch: (version, channels, options) => dispatched.push([version, channels, options]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(checked, [['f'.repeat(40), ['arm']]]);
+  assert.deepEqual(dispatched, [[
+    '1.0.43',
+    ['arm'],
+    { releaseVersion: '1.0.43', releaseVersionCode: '155' },
+  ]]);
+});
+
+test('current-head channels with conflicting release identities rebuild as a pair', () => {
+  const dispatched = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.43', versionCode: 155, sourceSha: 'f'.repeat(40) },
+      universal: { version: '1.0.44', versionCode: 156, sourceSha: 'f'.repeat(40) },
+    }),
+    buildInFlight: () => false,
+    dispatch: (version, channels) => dispatched.push([version, channels]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(dispatched, [['1.0.42', ['universal', 'arm']]]);
+});
+
 test('ensureApkForMainHead skips dispatch when a build is already in flight', () => {
   let dispatchedCount = 0;
   const checkedHeads = [];
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.41',
     readHeadSha: () => 'def5678',
-    releaseExists: () => false,
-    buildInFlight: (headSha) => {
-      checkedHeads.push(headSha);
+    readPublishedChannels: () => ({ arm: false, universal: false }),
+    buildInFlight: (headSha, channels) => {
+      checkedHeads.push([headSha, channels]);
       return true;
     },
     dispatch: () => {
@@ -169,8 +393,108 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
     },
   });
   assert.equal(did, false);
-  assert.deepEqual(checkedHeads, ['def5678']);
+  assert.deepEqual(checkedHeads, [['def5678', ['universal', 'arm']]]);
   assert.equal(dispatchedCount, 0);
+});
+
+test('ensureApkForMainHead repairs only the missing channel with the surviving identity', () => {
+  const dispatched = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'f'.repeat(40) },
+      universal: null,
+    }),
+    buildInFlight: () => false,
+    dispatch: (version, channels, options) => dispatched.push([version, channels, options]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(dispatched, [[
+    '1.0.42',
+    ['universal'],
+    { releaseVersion: '1.0.42', releaseVersionCode: '154' },
+  ]]);
+  assert.deepEqual(
+    recoveryIdentityForMissingChannel('1.0.42', {
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'f'.repeat(40) },
+      universal: null,
+    }, 'f'.repeat(40)),
+    { releaseVersion: '1.0.42', releaseVersionCode: '154' },
+  );
+});
+
+test('partial recovery rebuilds a new pair when the surviving channel came from another source', () => {
+  const dispatched = [];
+  const checked = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'f'.repeat(40),
+    readPublishedChannels: () => ({
+      arm: { version: '1.0.42', versionCode: 154, sourceSha: 'e'.repeat(40) },
+      universal: null,
+    }),
+    buildInFlight: (head, channels) => {
+      checked.push([head, channels]);
+      return false;
+    },
+    dispatch: (version, channels) => dispatched.push([version, channels]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(checked, [['f'.repeat(40), ['universal', 'arm']]]);
+  assert.deepEqual(dispatched, [['1.0.42', ['universal', 'arm']]]);
+});
+
+test('a channel is published only when its rolling manifest and immutable APK agree', () => {
+  const version = '1.0.44';
+  const repository = 'owner/repo';
+  const rollingRelease = {
+    tagName: ROLLING_TAG,
+    assets: [APK_ASSET, MANIFEST_ASSET, QR_ASSET, INSTALL_HTML]
+      .map((name) => ({ name })),
+  };
+  const versionedRelease = {
+    tagName: `app-v${version}`,
+    assets: [{ name: APK_ASSET }],
+  };
+  const manifest = {
+    version,
+    tag: ROLLING_TAG,
+    version_tag: `app-v${version}`,
+    repo: repository,
+    download_url: `https://github.com/${repository}/releases/download/app-v${version}/${APK_ASSET}`,
+    build_number: '156',
+    sha256: 'a'.repeat(64),
+    bytes: 123,
+    source_sha: 'a'.repeat(40),
+  };
+  const snapshot = {
+    version,
+    rollingTag: ROLLING_TAG,
+    repository,
+    rollingRelease,
+    versionedRelease,
+    manifest,
+  };
+
+  assert.equal(validatePublishedChannelSnapshot(snapshot), true);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    rollingRelease: {
+      ...rollingRelease,
+      assets: rollingRelease.assets.filter((asset) => asset.name !== MANIFEST_ASSET),
+    },
+  }), false);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    manifest: { ...manifest, version: '1.0.43' },
+  }), false);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    versionedRelease: { ...versionedRelease, assets: [] },
+  }), false);
 });
 
 test('auto-release advances from the published APK instead of a stale source version', () => {

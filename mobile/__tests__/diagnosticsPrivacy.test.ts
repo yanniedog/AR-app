@@ -147,6 +147,10 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(runner).not.toContain('Clipboard');
     expect(runner).toContain('local app-health mode blocks fetch and XMLHttpRequest before transport');
     expect(screen).toContain('Share deidentified report');
+    expect(screen).toContain('FileSystem.writeAsStringAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, prepared.body)');
+    expect(screen).toContain('Sharing.shareAsync(DEIDENTIFIED_AUDIT_SHARE_FILE');
+    expect(screen).toContain('FileSystem.deleteAsync(DEIDENTIFIED_AUDIT_SHARE_FILE, { idempotent: true })');
+    expect(screen).not.toContain('Share.share({');
     expect(screen).not.toContain('readCompleteText');
     expect(screen).not.toContain('Clipboard');
     expect(screen).not.toContain('uploadDebugLog');

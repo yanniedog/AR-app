@@ -24,8 +24,7 @@ import { spawnSync } from 'node:child_process';
 import {
   buildRecentIntervalFilter,
   fetchAllReportGroups,
-  fetchIssue,
-  fetchResource,
+  fetchIssueEvents,
   parseIssueGroup,
 } from './lib/crashlytics-client.mjs';
 import {
@@ -37,6 +36,8 @@ import {
   parseAuthorizedUserJson,
 } from './lib/google-user-oauth-auth.mjs';
 import {
+  DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+  deriveAttestedDiagnosticsIssue,
   extractDeidentifiedEventLogs,
   redactDiagnosticText,
 } from './lib/diagnostics-privacy.mjs';
@@ -231,38 +232,40 @@ function formatStackFromEvent(event) {
   return null;
 }
 
-async function resolveEventDetails(accessToken, issue) {
-  const sample = issue.sampleEvent;
-  if (!sample) return { stackTrace: null, diagnosticLogs: null };
+async function resolveAttestedEventDetails(accessToken, issueId, projectId, appId, lookbackDays) {
   try {
-    const event = await fetchResource(accessToken, sample);
-    return {
-      stackTrace: formatStackFromEvent(event),
-      diagnosticLogs: extractDeidentifiedEventLogs(event),
-    };
-  } catch {
-    return { stackTrace: await resolveStackTrace(accessToken, issue), diagnosticLogs: null };
-  }
-}
-
-async function resolveStackTrace(accessToken, issue) {
-  const sample = issue.sampleEvent;
-  if (!sample) return null;
-  try {
-    const event = await fetchResource(accessToken, sample);
-    return formatStackFromEvent(event);
-  } catch {
-    try {
-      const detailed = await fetchIssue(accessToken, issue.name);
-      if (detailed.sampleEvent && detailed.sampleEvent !== sample) {
-        const event = await fetchResource(accessToken, detailed.sampleEvent);
-        return formatStackFromEvent(event);
-      }
-    } catch {
-      // optional enrichment
+    const events = await fetchIssueEvents(accessToken, projectId, appId, issueId, {
+      lookbackDays,
+    });
+    const evidence = deriveAttestedDiagnosticsIssue(issueId, events);
+    if (!evidence) {
+      return {
+        attested: false,
+        issue: null,
+        metrics: null,
+        stackTrace: null,
+        diagnosticLogs: null,
+      };
     }
+    return {
+      attested: true,
+      issue: evidence.issue,
+      metrics: evidence.metrics,
+      stackTrace: formatStackFromEvent(evidence.sampleEvent),
+      diagnosticLogs: extractDeidentifiedEventLogs(evidence.sampleEvent),
+    };
+  } catch (error) {
+    console.warn(
+      `Skipping Crashlytics issue ${issueId}: current-consent event verification failed (${error instanceof Error ? error.message : String(error)})`,
+    );
+    return {
+      attested: false,
+      issue: null,
+      metrics: null,
+      stackTrace: null,
+      diagnosticLogs: null,
+    };
   }
-  return null;
 }
 
 function buildIssueTitle(issue) {
@@ -286,7 +289,7 @@ function buildIssueBody(issue, metrics, stackTrace, diagnosticLogs) {
     `| State | ${issue.state || 'UNKNOWN'} |`,
     `| Title | ${redactDiagnosticText(issue.title || '—')} |`,
     `| Subtitle | ${redactDiagnosticText(issue.subtitle || '—')} |`,
-    `| Events (interval) | ${metrics.eventsCount ?? '—'} |`,
+    `| Consent-attested events (interval) | ${metrics.eventsCount ?? '—'} |`,
     `| First seen version | ${issue.firstSeenVersion || '—'} |`,
     `| Last seen version | ${issue.lastSeenVersion || '—'} |`,
     `| First seen | ${issue.firstSeenTime || '—'} |`,
@@ -314,7 +317,7 @@ function buildIssueBody(issue, metrics, stackTrace, diagnosticLogs) {
 
   if (diagnosticLogs) {
     lines.push(
-      '## Deidentified diagnostic excerpt',
+      '## Automatically redacted diagnostic excerpt',
       '',
       'Only allowlisted automatic diagnostic messages are included. Crashlytics user, installation, key and timestamp fields are discarded.',
       '',
@@ -380,6 +383,10 @@ async function createGithubIssue(repo, title, body, labels, dryRun) {
 async function main() {
   const opts = parseArgs(process.argv);
   const pureMockDryRun = opts.dryRun && Boolean(opts.mockReport);
+  const configuredNotice = process.env.DIAGNOSTICS_PRIVACY_NOTICE_VERSION?.trim() || '';
+  if (!opts.mockReport && configuredNotice !== DIAGNOSTICS_PRIVACY_NOTICE_VERSION) {
+    throw new Error('Live diagnostics triage is not approved for the current privacy notice');
+  }
   if (!pureMockDryRun) ensureGh();
   if (!opts.dryRun) assertPrivateDestination(opts.repo);
 
@@ -444,35 +451,58 @@ async function main() {
     if (!parsed) continue;
     const { issue, metrics } = parsed;
 
-    if (issue.state && issue.state !== 'OPEN') {
-      skipped += 1;
-      continue;
-    }
-
-    if (eventCount(metrics) < opts.minEvents) {
-      skipped += 1;
-      continue;
-    }
-
     if (existing.has(issue.id)) {
       skipped += 1;
       continue;
     }
 
     const details = accessToken
-      ? await resolveEventDetails(accessToken, issue)
-      : { stackTrace: null, diagnosticLogs: null };
-    const title = buildIssueTitle(issue);
+      ? await resolveAttestedEventDetails(
+          accessToken,
+          issue.id,
+          projectId,
+          appId,
+          opts.lookbackDays,
+        )
+      : {
+          attested: true,
+          issue,
+          metrics,
+          stackTrace: null,
+          diagnosticLogs: null,
+        };
+    if (!details.attested) {
+      console.warn(
+        `Skipping Crashlytics issue ${issue.id}: no event attests current diagnostics consent`,
+      );
+      skipped += 1;
+      continue;
+    }
+    const attestedIssue = details.issue;
+    const attestedMetrics = details.metrics;
+    if (!attestedIssue || !attestedMetrics) {
+      skipped += 1;
+      continue;
+    }
+    if (attestedIssue.state && attestedIssue.state !== 'OPEN') {
+      skipped += 1;
+      continue;
+    }
+    if (eventCount(attestedMetrics) < opts.minEvents) {
+      skipped += 1;
+      continue;
+    }
+    const title = buildIssueTitle(attestedIssue);
     const body = buildIssueBody(
-      issue,
-      metrics,
+      attestedIssue,
+      attestedMetrics,
       details.stackTrace,
       details.diagnosticLogs,
     );
-    const labels = labelsForErrorType(issue.errorType);
+    const labels = labelsForErrorType(attestedIssue.errorType);
 
     await createGithubIssue(opts.repo, title, body, labels, opts.dryRun);
-    existing.add(issue.id);
+    existing.add(attestedIssue.id);
     created += 1;
   }
 

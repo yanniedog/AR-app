@@ -298,6 +298,9 @@ describe('app-health data quality', () => {
     const sampleDetails = byCode(checks, APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS);
     expect(sampleDetails.status).toBe('warn');
     expect(Number(sampleDetails.metrics.orphanProducts)).toBeGreaterThan(0);
+    expect(sampleDetails.summary).toBe(
+      'The details asset contains records that are not present in the active core snapshot.',
+    );
     const sampleRibbon = byCode(checks, APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION);
     expect(sampleRibbon).toMatchObject({
       status: 'pass',

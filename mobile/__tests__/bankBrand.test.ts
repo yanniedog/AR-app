@@ -1,6 +1,7 @@
 import core from '../assets/sample/core.json';
 import {
   lookupProvider,
+  isSvgLogoSource,
   resolveBankLogoSources,
   resolveBankLogoSourcesForRuntime,
   resolveBrandShort,
@@ -28,15 +29,7 @@ describe('bankBrand', () => {
     ];
     for (const provider of providers) {
       const sources = resolveBankLogoSources(provider);
-      expect(sources.length).toBeGreaterThan(0);
-      expect(
-        sources.some(
-          (src) =>
-            typeof src === 'number' ||
-            (typeof src === 'string' &&
-              src.includes('raw.githubusercontent.com/yanniedog/AR-local/main/dashboard/assets/banks/')),
-        ),
-      ).toBe(true);
+      expect(sources).toEqual([resolveBundledBankLogoSource(provider)]);
     }
   });
 
@@ -97,14 +90,46 @@ describe('bankBrand', () => {
     expect(resolveBrandShort('Some New Bank')).toBe('SNB');
   });
 
-  it('uses the CDR Register logoUri for brands outside the pack', () => {
+  it('uses validated payload artwork after local sources', () => {
     const uri = 'https://mystate.com.au/wp-content/uploads/MyState_Logo_s.png';
     expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([uri]);
-    // Pack lenders keep bundled art first; the register URI rides last.
     const anz = resolveBankLogoSources('ANZ', undefined, uri);
-    expect(anz[anz.length - 1]).toBe(uri);
-    expect(anz.length).toBeGreaterThan(1);
-    // No more guessed CDN URLs for unknown brands — monogram is the fallback.
+    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ'), uri]);
     expect(resolveBankLogoSources('Totally Unknown Bank')).toEqual([]);
+  });
+
+  it('rejects untrusted remote and oversized embedded logos', () => {
+    expect(resolveBankLogoSources('Unknown', 'https://tracker.test/logo.png')).toEqual([]);
+    expect(resolveBankLogoSources('Unknown', `data:image/png;base64,${'a'.repeat(300_000)}`)).toEqual([]);
+    for (const uri of [
+      'http://bank.test/logo.png',
+      'https://user:secret@bank.test/logo.png',
+      'https://localhost/logo.png',
+      'https://127.0.0.1/logo.png',
+      'https://10.0.0.2/logo.png',
+      'https://bank.test/logo.html',
+    ]) {
+      expect(resolveBankLogoSources('Unknown', undefined, uri)).toEqual([]);
+    }
+  });
+
+  it('keeps audit rendering network-free and resolves every trusted sample logo', () => {
+    const remote = 'https://bank.test/logo.svg';
+    expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, true)).toEqual([]);
+    expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, false)).toEqual([remote]);
+    expect(isSvgLogoSource(remote)).toBe(true);
+
+    const providersWithArtwork = Object.entries(sample.brands ?? {}).filter(([, brand]) =>
+      Boolean(brand.logo || brand.logo_uri || brand.logo_svg_uri));
+    expect(providersWithArtwork.length).toBeGreaterThan(0);
+    for (const [provider, brand] of providersWithArtwork) {
+      expect(
+        resolveBankLogoSources(
+          provider,
+          brand.logo,
+          brand.logo_uri ?? brand.logo_svg_uri,
+        ),
+      ).not.toHaveLength(0);
+    }
   });
 });

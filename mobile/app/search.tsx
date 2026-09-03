@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
@@ -12,7 +12,7 @@ import { ProductCard } from '../src/components/ProductCard';
 import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../src/components/Screen';
 import { ToolbarIconButton } from '../src/components/ToolbarIconButton';
 import { SearchBar } from '../src/components/controls';
-import { AppText, Button, Chip, Row } from '../src/components/ui';
+import { AppText, Button, Card, Chip, Row } from '../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import {
   activeFilterCount,
@@ -106,6 +106,9 @@ export default function Search() {
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const searchIndex = useStore((s) => s.searchIndex);
+  const searchIndexSha = useStore((s) => s.manifest?.files.search_index?.sha256 ?? null);
+  const searchIndexStatus = useStore((s) => s.searchIndexStatus);
+  const searchIndexError = useStore((s) => s.searchIndexError);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
   const restoredSub = useMemo(
@@ -124,9 +127,9 @@ export default function Search() {
   const subscribeSearch = useStore((s) => s.subscribeSearch);
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const suitabilityRevision = useSuitabilityRevision();
-  // Re-run when core/details identity changes so Search warms after cold start
-  // or a dataset refresh that cleared details (storeRefresh SHA swap).
-  const coreKey = core?.run_date ?? null;
+  // Re-run on content identity, not only calendar date: corrected same-day
+  // cores must not leave deep Search idle against the previous edition.
+  const coreKey = coreSha ?? core?.run_date ?? null;
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
     if (!isFocused) return;
@@ -139,7 +142,7 @@ export default function Search() {
       void ensureDetails({ force: true });
       if (deepSearchActive) void ensureSearchIndex();
     });
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, isFocused]);
+  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
@@ -238,7 +241,14 @@ export default function Search() {
   );
 
   const searchSub = useStore((s) => findSearchSubscription(s.subscriptions, searchSnapshot));
-  const searchIndexLoading = deepSearchActive && !searchIndex;
+  const searchIndexLoading =
+    deepSearchActive &&
+    !searchIndex &&
+    (searchIndexStatus === 'idle' || searchIndexStatus === 'loading');
+  const searchIndexUnavailable =
+    deepSearchActive &&
+    !searchIndex &&
+    (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
   const detailFiltersPending =
     (effectiveFilters.accountFeatures.length > 0 ||
       effectiveFilters.eligibilityCriteria.length > 0 ||
@@ -365,6 +375,7 @@ export default function Search() {
         id: 'search.layout',
         kind: 'layout',
         status: listReadiness.ready ? 'ready' : 'pending',
+        layoutMeasured: listReadiness.ready,
         renderRevision: listRevision,
       },
       {
@@ -419,6 +430,19 @@ export default function Search() {
           {rows.length} {rows.length === 1 ? 'product' : 'products'}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
         </AppText>
+        {searchIndexUnavailable ? (
+          <Card variant="outlined" accessibilityRole="alert" style={{ gap: theme.spacing(2) }}>
+            <AppText variant="small" weight="700">Deep search unavailable</AppText>
+            <AppText variant="small" color="textMuted">
+              {searchIndexError ?? 'Basic product-name search is still available.'}
+            </AppText>
+            <Button
+              title="Retry deep search"
+              variant="secondary"
+              onPress={() => void ensureSearchIndex()}
+            />
+          </Card>
+        ) : null}
         {showDeepSearchHint ? (
           <Pressable onPress={() => setPref('enableDeepSearch', true)}>
             <AppText variant="tiny" color="primary" style={{ lineHeight: 16 }}>

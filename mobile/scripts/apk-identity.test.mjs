@@ -13,6 +13,7 @@ import {
 import {
   fetchRemoteManifest,
   releaseFloorTags,
+  validateReusedReleaseIdentity,
 } from './bump-android-version-code.mjs';
 
 test('parses the package and version identity reported by aapt', () => {
@@ -80,6 +81,33 @@ test('bounds each release-floor manifest request independently', async () => {
   );
 });
 
+test('reuses one monotonic release identity across paired APK channels', () => {
+  assert.deepEqual(validateReusedReleaseIdentity({
+    version: '1.0.181',
+    versionCode: '193',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), { version: '1.0.181', versionCode: 193 });
+  assert.deepEqual(validateReusedReleaseIdentity({
+    version: '1.0.180',
+    versionCode: '192',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), { version: '1.0.180', versionCode: 192 });
+  assert.throws(() => validateReusedReleaseIdentity({
+    version: '1.0.181',
+    versionCode: '',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), /provided together/);
+  assert.throws(() => validateReusedReleaseIdentity({
+    version: '1.0.180',
+    versionCode: '193',
+    baseVersion: '1.0.180',
+    baseVersionCode: 192,
+  }), /exactly match.*or advance/);
+});
+
 test('rejects a missing rolling tag before generating changelog metadata', () => {
   const script = fileURLToPath(new URL('./ensure-changelog-entry.mjs', import.meta.url));
   const result = spawnSync(process.execPath, [script, '--rolling-tag'], { encoding: 'utf8' });
@@ -117,7 +145,7 @@ test('keeps universal trust while scoping preview APK builds to ARM', () => {
   assert.match(workflow, /-PreactNativeArchitectures=armeabi-v7a,arm64-v8a/);
   assert.match(workflow, /--rolling-tag "\$rolling_tag"/);
   assert.match(workflow, /inputs\.apk_channel == 'universal'/);
-  assert.match(workflow, /Bridge legacy AR-local APK update channel/);
+  assert.doesNotMatch(workflow, /bridge_legacy_ar_local|AR_LOCAL_RELEASE_TOKEN|--repo yanniedog\/AR-local/);
   assert.match(workflow, /Publish README Android install QR section/);
 
   const easWorkflow = readFileSync(

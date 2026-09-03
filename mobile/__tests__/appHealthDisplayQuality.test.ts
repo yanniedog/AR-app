@@ -31,11 +31,11 @@ describe('app-health display quality', () => {
     expect(byCode(checks, APP_HEALTH_CHECK_CODES.DISPLAY_LIST).status).toBe('fail');
   });
 
-  it('detects content that rendered off-screen or clipped and missing chart accessibility', () => {
+  it('detects content that rendered off-screen or unmeasured and missing chart accessibility', () => {
     const { contracts, observations } = makeCompleteDisplayFixture();
     observations[0].evidence = observations[0].evidence.map((evidence) => {
       if (evidence.role === 'visible') return { ...evidence, visibleCount: 0 };
-      if (evidence.role === 'critical-layout') return { ...evidence, clipped: true };
+      if (evidence.role === 'critical-layout') return { ...evidence, measured: false };
       if (evidence.role === 'chart') return { ...evidence, accessibleSummary: false };
       return evidence;
     });

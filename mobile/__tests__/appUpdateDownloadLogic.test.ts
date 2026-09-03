@@ -1,19 +1,43 @@
 import {
+  APK_READY_RECEIPT_VERSION,
   IDLE_APK_DOWNLOAD,
   apkDestinationPath,
   apkDownloadTaskId,
+  blocksPerformanceAudit,
   canAutoRetryApkDownload,
   downloadPercent,
   hasTrustedReadyApkReceipt,
+  invalidCachedApkRecoverySnapshot,
   isCachedApkReady,
   isApkDownloadStalled,
   isUserCancelledDownload,
   shouldEnsureBackgroundDownload,
+  shouldClearOrphanedApkDownload,
   toFileUri,
   updateBannerCopy,
 } from '../src/lib/appUpdateDownloadLogic';
 
 describe('appUpdateDownloadLogic', () => {
+  it('blocks performance audits for every non-terminal APK update phase', () => {
+    for (const phase of ['waiting', 'downloading', 'retrying', 'verifying'] as const) {
+      expect(blocksPerformanceAudit({ phase })).toBe(true);
+    }
+    for (const phase of ['idle', 'ready', 'cancelled', 'error'] as const) {
+      expect(blocksPerformanceAudit({ phase })).toBe(false);
+    }
+  });
+
+  it('clears orphaned restored work without interrupting current-process verification', () => {
+    for (const phase of ['waiting', 'downloading', 'retrying', 'verifying'] as const) {
+      expect(shouldClearOrphanedApkDownload({ phase }, false, false)).toBe(true);
+      expect(shouldClearOrphanedApkDownload({ phase }, true, false)).toBe(false);
+    }
+
+    expect(shouldClearOrphanedApkDownload({ phase: 'verifying' }, false, true)).toBe(false);
+    expect(shouldClearOrphanedApkDownload({ phase: 'downloading' }, false, true)).toBe(true);
+    expect(shouldClearOrphanedApkDownload({ phase: 'ready' }, false, false)).toBe(false);
+  });
+
   it('builds stable task ids and destinations', () => {
     expect(apkDownloadTaskId('42')).toBe('apk-update-42');
     expect(apkDestinationPath('file:///docs/', '42')).toBe('file:///docs/app-update-42.apk');
@@ -41,6 +65,7 @@ describe('appUpdateDownloadLogic', () => {
       ...IDLE_APK_DOWNLOAD,
       phase: 'ready' as const,
       buildNumber: '42',
+      version: '1.2.3',
       localUri: 'file:///docs/app-update-42.apk',
     };
     expect(isCachedApkReady(snap, '42', true)).toBe(true);
@@ -81,6 +106,49 @@ describe('appUpdateDownloadLogic', () => {
     ).toBe(true);
   });
 
+  it('clears rejected cached-APK proof so a replacement download can start', () => {
+    const rejected = invalidCachedApkRecoverySnapshot(
+      {
+        ...IDLE_APK_DOWNLOAD,
+        phase: 'verifying',
+        buildNumber: '42',
+        version: '1.2.3',
+        localUri: 'file:///docs/app-update-42.apk',
+        bytesWritten: 1234,
+        retryCount: 1,
+        verifiedSha256: 'a'.repeat(64),
+        verifiedBytes: 1234,
+        verifiedAt: '2026-09-03T00:00:00.000Z',
+        verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
+      },
+      {
+        build_number: '42',
+        version: '1.2.3',
+        download_url: 'https://example.test/app.apk',
+        sha256: 'b'.repeat(64),
+        bytes: 4321,
+      },
+      true,
+    );
+
+    expect(rejected).toMatchObject({
+      phase: 'error',
+      buildNumber: '42',
+      localUri: null,
+      bytesWritten: 0,
+      totalBytes: 4321,
+      wifiOnly: true,
+      startedAt: null,
+      lastProgressAt: null,
+      nativeState: null,
+      verifiedSha256: null,
+      verifiedBytes: null,
+      verifiedAt: null,
+      verifiedReceiptVersion: null,
+    });
+    expect(shouldEnsureBackgroundDownload(rejected, '42')).toBe(true);
+  });
+
   it('formats banner copy for download phases', () => {
     expect(updateBannerCopy('ready', '1.0.44', null)).toEqual({
       title: 'Update verified and ready — v1.0.44',
@@ -111,17 +179,37 @@ describe('appUpdateDownloadLogic', () => {
       ...IDLE_APK_DOWNLOAD,
       phase: 'ready' as const,
       buildNumber: '42',
+      version: '1.2.3',
       sha256,
       localUri: 'file:///docs/app-update-42.apk',
       verifiedSha256: sha256,
       verifiedBytes: 1234,
       verifiedAt: '2026-08-07T00:00:00.000Z',
+      verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
     };
-    const manifest = { build_number: '42', sha256, bytes: 1234 };
+    const manifest = { build_number: '42', version: '1.2.3', sha256, bytes: 1234 };
 
     expect(
       hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1234, 'file:///docs/'),
     ).toBe(true);
+    expect(
+      hasTrustedReadyApkReceipt(
+        { ...ready, version: '1.2.2' },
+        manifest,
+        ready.localUri,
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
+    expect(
+      hasTrustedReadyApkReceipt(
+        { ...ready, verifiedReceiptVersion: null },
+        manifest,
+        ready.localUri,
+        1234,
+        'file:///docs/',
+      ),
+    ).toBe(false);
     expect(
       hasTrustedReadyApkReceipt(ready, manifest, ready.localUri, 1233, 'file:///docs/'),
     ).toBe(false);

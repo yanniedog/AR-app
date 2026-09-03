@@ -1,4 +1,4 @@
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Ionicons from '../icons/AppIcon';
 import React, { useMemo } from 'react';
 import { PanResponder, Pressable, View } from 'react-native';
 
