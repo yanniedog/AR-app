@@ -7,6 +7,7 @@ import {
   canAutoRetryApkDownload,
   downloadPercent,
   hasTrustedReadyApkReceipt,
+  invalidCachedApkRecoverySnapshot,
   isCachedApkReady,
   isApkDownloadStalled,
   isUserCancelledDownload,
@@ -91,6 +92,49 @@ describe('appUpdateDownloadLogic', () => {
         '42',
       ),
     ).toBe(true);
+  });
+
+  it('clears rejected cached-APK proof so a replacement download can start', () => {
+    const rejected = invalidCachedApkRecoverySnapshot(
+      {
+        ...IDLE_APK_DOWNLOAD,
+        phase: 'verifying',
+        buildNumber: '42',
+        version: '1.2.3',
+        localUri: 'file:///docs/app-update-42.apk',
+        bytesWritten: 1234,
+        retryCount: 1,
+        verifiedSha256: 'a'.repeat(64),
+        verifiedBytes: 1234,
+        verifiedAt: '2026-09-03T00:00:00.000Z',
+        verifiedReceiptVersion: APK_READY_RECEIPT_VERSION,
+      },
+      {
+        build_number: '42',
+        version: '1.2.3',
+        download_url: 'https://example.test/app.apk',
+        sha256: 'b'.repeat(64),
+        bytes: 4321,
+      },
+      true,
+    );
+
+    expect(rejected).toMatchObject({
+      phase: 'error',
+      buildNumber: '42',
+      localUri: null,
+      bytesWritten: 0,
+      totalBytes: 4321,
+      wifiOnly: true,
+      startedAt: null,
+      lastProgressAt: null,
+      nativeState: null,
+      verifiedSha256: null,
+      verifiedBytes: null,
+      verifiedAt: null,
+      verifiedReceiptVersion: null,
+    });
+    expect(shouldEnsureBackgroundDownload(rejected, '42')).toBe(true);
   });
 
   it('formats banner copy for download phases', () => {

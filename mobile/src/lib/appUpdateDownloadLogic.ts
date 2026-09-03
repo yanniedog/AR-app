@@ -150,6 +150,40 @@ export function shouldEnsureBackgroundDownload(
   return true;
 }
 
+/** Reset every cached-file proof after verification rejects an APK. */
+export function invalidCachedApkRecoverySnapshot(
+  snapshot: ApkDownloadSnapshot,
+  manifest: {
+    build_number: string;
+    version: string;
+    download_url: string;
+    sha256?: string;
+    bytes?: number;
+  },
+  wifiOnly: boolean,
+): ApkDownloadSnapshot {
+  return {
+    phase: 'error',
+    buildNumber: manifest.build_number,
+    version: manifest.version,
+    downloadUrl: manifest.download_url,
+    sha256: manifest.sha256 ?? null,
+    localUri: null,
+    bytesWritten: 0,
+    totalBytes: manifest.bytes ?? snapshot.totalBytes,
+    wifiOnly,
+    startedAt: null,
+    lastProgressAt: null,
+    retryCount: snapshot.retryCount,
+    nativeState: null,
+    error: 'Cached update failed verification. Downloading a clean copy.',
+    verifiedSha256: null,
+    verifiedBytes: null,
+    verifiedAt: null,
+    verifiedReceiptVersion: null,
+  };
+}
+
 /** Native downloader cancellation uses errorCode -1 and an explicit message. */
 export function isUserCancelledDownload(error: string, errorCode?: number | null): boolean {
   return errorCode === -1 && /cancel/i.test(error);

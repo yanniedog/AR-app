@@ -244,7 +244,7 @@ export const BankMovesFeed = React.memo(function BankMovesFeed({
   }
   if (!rows.length) {
     return (
-      <AppText variant="small" color="textMuted" onLayout={reportEmptyLayout}>
+      <AppText key={rowRevision} variant="small" color="textMuted" onLayout={reportEmptyLayout}>
         No rate moves detected yet — the feed fills as banks reprice day by day.
       </AppText>
     );

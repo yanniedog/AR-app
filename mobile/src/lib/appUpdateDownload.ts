@@ -22,6 +22,7 @@ import {
   canAutoRetryApkDownload,
   downloadPercent,
   hasTrustedReadyApkReceipt,
+  invalidCachedApkRecoverySnapshot,
   isCachedApkReady,
   isApkDownloadStalled,
   isUserCancelledDownload,
@@ -642,10 +643,22 @@ export async function ensureApkBackgroundDownload(
         await maybePromptUpgrade(manifest);
         return snapshot;
       } catch (err) {
+        const message = String((err as Error)?.message ?? err);
         debugLog.warn(
           'app-update',
-          `cached APK invalid, re-downloading: ${String((err as Error)?.message ?? err)}`,
+          `cached APK invalid, re-downloading: ${message}`,
         );
+        await stopMatchingTask(manifest);
+        try {
+          await FileSystem.deleteAsync(toFileUri(dest), { idempotent: true });
+        } catch (deleteErr) {
+          debugLog.warn(
+            'app-update',
+            `invalid cached APK cleanup failed: ${String((deleteErr as Error)?.message ?? deleteErr)}`,
+          );
+        }
+        await persist(invalidCachedApkRecoverySnapshot(snapshot, manifest, wifiOnly));
+        force = true;
       }
     }
 
