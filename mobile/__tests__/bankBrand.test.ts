@@ -1,6 +1,7 @@
 import core from '../assets/sample/core.json';
 import {
   lookupProvider,
+  isSvgLogoSource,
   resolveBankLogoSources,
   resolveBankLogoSourcesForRuntime,
   resolveBrandShort,
@@ -89,16 +90,42 @@ describe('bankBrand', () => {
     expect(resolveBrandShort('Some New Bank')).toBe('SNB');
   });
 
-  it('rejects remote register artwork and falls back to local art or initials', () => {
+  it('uses validated payload artwork after local sources', () => {
     const uri = 'https://mystate.com.au/wp-content/uploads/MyState_Logo_s.png';
-    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([]);
+    expect(resolveBankLogoSources('MyState Bank', undefined, uri)).toEqual([uri]);
     const anz = resolveBankLogoSources('ANZ', undefined, uri);
-    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ')]);
+    expect(anz).toEqual([resolveBundledBankLogoSource('ANZ'), uri]);
     expect(resolveBankLogoSources('Totally Unknown Bank')).toEqual([]);
   });
 
-  it('rejects remote and oversized embedded logos', () => {
+  it('rejects untrusted remote and oversized embedded logos', () => {
     expect(resolveBankLogoSources('Unknown', 'https://tracker.test/logo.png')).toEqual([]);
     expect(resolveBankLogoSources('Unknown', `data:image/png;base64,${'a'.repeat(300_000)}`)).toEqual([]);
+    for (const uri of [
+      'http://bank.test/logo.png',
+      'https://user:secret@bank.test/logo.png',
+      'https://localhost/logo.png',
+      'https://127.0.0.1/logo.png',
+      'https://10.0.0.2/logo.png',
+      'https://bank.test/logo.html',
+    ]) {
+      expect(resolveBankLogoSources('Unknown', undefined, uri)).toEqual([]);
+    }
+  });
+
+  it('keeps audit rendering network-free while preserving broad normal coverage', () => {
+    const remote = 'https://bank.test/logo.svg';
+    expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, true)).toEqual([]);
+    expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, false)).toEqual([remote]);
+    expect(isSvgLogoSource(remote)).toBe(true);
+
+    const providers = Object.entries(sample.brands ?? {});
+    const covered = providers.filter(([provider, brand]) =>
+      resolveBankLogoSources(
+        provider,
+        brand.logo,
+        brand.logo_uri ?? brand.logo_svg_uri,
+      ).length > 0);
+    expect(covered.length).toBeGreaterThanOrEqual(Math.ceil(providers.length * 0.75));
   });
 });

@@ -198,6 +198,7 @@ jobs:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           GH_TOKEN: ${{ github.token }}
         run: |
+          node scripts/verify-github-release-source.mjs
           node scripts/publish-apk-manifest.mjs --eas-build-id "${{ steps.eas_build.outputs.eas_build_id }}" \
             --repo "${{ github.repository }}" \
             --rolling-tag app-apk-arm-latest

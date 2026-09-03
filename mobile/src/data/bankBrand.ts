@@ -1,7 +1,9 @@
 import { BUNDLED_BANK_LOGOS } from './bankLogoAssets';
 
 const MAX_EMBEDDED_LOGO_LENGTH = 256 * 1024;
+const MAX_REMOTE_LOGO_URI_LENGTH = 2_048;
 const SAFE_EMBEDDED_RASTER_RE = /^data:image\/(?:png|jpe?g|gif|webp);base64,/i;
+const SAFE_REMOTE_LOGO_PATH_RE = /\.(?:png|jpe?g|gif|webp|svg)$/i;
 
 type BrandEntry = {
   short: string;
@@ -234,11 +236,48 @@ function safeEmbeddedLogo(value: string): boolean {
   return value.length <= MAX_EMBEDDED_LOGO_LENGTH && SAFE_EMBEDDED_RASTER_RE.test(value);
 }
 
+export function isSvgLogoSource(value: string | number | null | undefined): boolean {
+  if (typeof value !== 'string' || value.startsWith('data:')) return false;
+  try {
+    return new URL(value).pathname.toLowerCase().endsWith('.svg');
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Logo sources are deliberately local: a bounded integrity-checked raster
- * embedded in the payload, then the bundled pack. Remote lender artwork can
- * leak the user's IP and exercise third-party decoders, so unknown brands use
- * the deterministic initials fallback.
+ * Accept only bounded public HTTPS artwork from the integrity-checked core.
+ * The caller never passes navigation/user input here, and audit mode removes
+ * these network sources entirely.
+ */
+export function safePayloadLogoUri(value: string): boolean {
+  if (!value || value.length > MAX_REMOTE_LOGO_URI_LENGTH) return false;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, '');
+    if (
+      url.protocol !== 'https:' ||
+      url.username ||
+      url.password ||
+      (url.port && url.port !== '443') ||
+      !host ||
+      host === 'localhost' ||
+      host.endsWith('.localhost') ||
+      host.startsWith('[') ||
+      /^(?:\d{1,3}\.){3}\d{1,3}$/.test(host) ||
+      !SAFE_REMOTE_LOGO_PATH_RE.test(url.pathname)
+    ) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ordered logo sources: bounded embedded artwork, the bundled pack, then a
+ * validated public HTTPS URI carried by the integrity-checked payload.
  */
 export function resolveBankLogoSources(
   provider: string,
@@ -259,7 +298,8 @@ export function resolveBankLogoSources(
     if (bundled != null) pushUnique(out, seen, bundled);
   }
 
-  void registerLogoUri;
+  const remote = String(registerLogoUri ?? '').trim();
+  if (safePayloadLogoUri(remote)) pushUnique(out, seen, remote);
   return out;
 }
 
@@ -277,8 +317,11 @@ export function resolveBankLogoSourcesForRuntime(
   registerLogoUri: string | undefined,
   auditOwnsNetwork: boolean,
 ): (string | number)[] {
-  void auditOwnsNetwork;
-  return resolveBankLogoSources(provider, embeddedLogo, registerLogoUri);
+  return resolveBankLogoSources(
+    provider,
+    embeddedLogo,
+    auditOwnsNetwork ? undefined : registerLogoUri,
+  );
 }
 
 function slugify(value: string): string {

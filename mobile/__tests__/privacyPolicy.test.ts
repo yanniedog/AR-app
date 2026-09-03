@@ -1,4 +1,5 @@
 import {
+  LENDER_ARTWORK_TERMS,
   OPTIONAL_DIAGNOSTICS_TERMS,
   PRIVACY_RUNTIME_POLICY,
 } from '../src/lib/privacyPolicy';
@@ -17,5 +18,12 @@ describe('privacy disclosure contract', () => {
     expect(OPTIONAL_DIAGNOSTICS_TERMS).toContain('app-health results');
     expect(OPTIONAL_DIAGNOSTICS_TERMS).toContain('Session replay is not collected');
     expect(OPTIONAL_DIAGNOSTICS_TERMS).not.toContain('performance-audit summary');
+  });
+
+  it('discloses verified remote lender artwork without implying user inputs are sent', () => {
+    expect(LENDER_ARTWORK_TERMS).toContain('integrity-checked rates data');
+    expect(LENDER_ARTWORK_TERMS).toContain('IP address');
+    expect(LENDER_ARTWORK_TERMS).toContain('does not include your searches');
+    expect(LENDER_ARTWORK_TERMS).toContain('app-health audit');
   });
 });

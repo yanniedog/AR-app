@@ -7,6 +7,7 @@ import {
   dispatchApkBuild,
   ensureApkForMainHead,
   hasApkBuildInFlight,
+  missingApkChannels,
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
@@ -127,21 +128,21 @@ test('ensureApkForMainHead dispatches when the version has no published APK', ()
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.40',
     readHeadSha: () => 'abc1234',
-    releaseExists: () => false,
+    readPublishedChannels: () => ({ arm: false, universal: false }),
     buildInFlight: (headSha) => {
       checkedHeads.push(headSha);
       return false;
     },
-    dispatch: (v) => dispatched.push(v),
+    dispatch: (v, channels) => dispatched.push([v, channels]),
   });
   assert.equal(did, true);
   assert.deepEqual(checkedHeads, ['abc1234']);
-  assert.deepEqual(dispatched, ['1.0.40']);
+  assert.deepEqual(dispatched, [['1.0.40', ['universal', 'arm']]]);
 });
 
 test('APK release dispatches universal first and lets that run queue ARM', () => {
   const calls = [];
-  dispatchApkBuild('1.0.40', {
+  dispatchApkBuild('1.0.40', ['universal', 'arm'], {
     simulate: false,
     runGh: (args) => calls.push(args),
   });
@@ -154,12 +155,32 @@ test('APK release dispatches universal first and lets that run queue ARM', () =>
   ]]);
 });
 
+test('partial APK recovery dispatches only the missing published channel', () => {
+  assert.deepEqual(missingApkChannels({ arm: true, universal: false }), ['universal']);
+  assert.deepEqual(missingApkChannels({ arm: false, universal: true }), ['arm']);
+
+  const calls = [];
+  dispatchApkBuild('1.0.40', ['arm'], {
+    simulate: false,
+    runGh: (args) => calls.push(args),
+  });
+  assert.deepEqual(calls, [[
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
+    '-f', 'apk_channel=arm',
+    '-f', 'bridge_legacy_ar_local=false',
+    '-f', 'follow_with_arm=false',
+  ]]);
+});
+
 test('ensureApkForMainHead is a no-op when the APK is already published', () => {
   let dispatchedCount = 0;
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.29',
     readHeadSha: () => 'abc1234',
-    releaseExists: (v) => v === '1.0.29',
+    readPublishedChannels: (v) => ({
+      arm: v === '1.0.29',
+      universal: v === '1.0.29',
+    }),
     buildInFlight: () => false,
     dispatch: () => {
       dispatchedCount += 1;
@@ -175,7 +196,7 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
   const did = ensureApkForMainHead({
     readVersion: () => '1.0.41',
     readHeadSha: () => 'def5678',
-    releaseExists: () => false,
+    readPublishedChannels: () => ({ arm: false, universal: false }),
     buildInFlight: (headSha) => {
       checkedHeads.push(headSha);
       return true;
@@ -187,6 +208,20 @@ test('ensureApkForMainHead skips dispatch when a build is already in flight', ()
   assert.equal(did, false);
   assert.deepEqual(checkedHeads, ['def5678']);
   assert.equal(dispatchedCount, 0);
+});
+
+test('ensureApkForMainHead never rebuilds the already-published channel', () => {
+  const dispatched = [];
+  const did = ensureApkForMainHead({
+    readVersion: () => '1.0.42',
+    readHeadSha: () => 'feed123',
+    readPublishedChannels: () => ({ arm: true, universal: false }),
+    buildInFlight: () => false,
+    dispatch: (version, channels) => dispatched.push([version, channels]),
+  });
+
+  assert.equal(did, true);
+  assert.deepEqual(dispatched, [['1.0.42', ['universal']]]);
 });
 
 test('auto-release advances from the published APK instead of a stale source version', () => {

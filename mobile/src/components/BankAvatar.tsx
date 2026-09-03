@@ -1,12 +1,15 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Image, Text, View } from 'react-native';
+import { SvgUri } from 'react-native-svg';
 
 import {
+  isSvgLogoSource,
   resolveBankLogoSourcesForRuntime,
   resolveBrandShort,
 } from '../data/bankBrand';
 import { useStore } from '../data/store';
 import type { LogoRenderState } from '../lib/logoReadiness';
+import { getPerformanceAuditState, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { useTheme } from '../theme/ThemeProvider';
 
 function contrastText(hex: string): string {
@@ -36,14 +39,21 @@ export function BankAvatar({
 }) {
   const theme = useTheme();
   const brand = useStore((s) => s.core?.brands?.[provider]);
+  const auditState = useSyncExternalStore(
+    subscribePerformanceAudit,
+    getPerformanceAuditState,
+    getPerformanceAuditState,
+  );
+  const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
+  const remoteLogo = brand?.logo_uri ?? brand?.logo_svg_uri;
   const sources = useMemo(
     () => resolveBankLogoSourcesForRuntime(
       provider,
       brand?.logo,
-      undefined,
-      false,
+      remoteLogo,
+      auditOwnsNetwork,
     ),
-    [provider, brand?.logo],
+    [auditOwnsNetwork, provider, brand?.logo, remoteLogo],
   );
   const [prevSources, setPrevSources] = useState(sources);
   const [sourceIdx, setSourceIdx] = useState(0);
@@ -101,17 +111,30 @@ export function BankAvatar({
         accessible
         accessibilityLabel={provider}
       >
-        <Image
-          accessible={false}
-          source={typeof activeSource === 'number' ? activeSource : { uri: activeSource }}
-          resizeMode="contain"
-          style={{ width: size * 0.88, height: size * 0.88 }}
-          onLoad={() => {
-            setDecoded(true);
-            onAssetTerminal?.({ provider, status: 'loaded' });
-          }}
-          onError={advanceSource}
-        />
+        {isSvgLogoSource(activeSource) ? (
+          <SvgUri
+            uri={activeSource as string}
+            width={size * 0.88}
+            height={size * 0.88}
+            onLoad={() => {
+              setDecoded(true);
+              onAssetTerminal?.({ provider, status: 'loaded' });
+            }}
+            onError={advanceSource}
+          />
+        ) : (
+          <Image
+            accessible={false}
+            source={typeof activeSource === 'number' ? activeSource : { uri: activeSource }}
+            resizeMode="contain"
+            style={{ width: size * 0.88, height: size * 0.88 }}
+            onLoad={() => {
+              setDecoded(true);
+              onAssetTerminal?.({ provider, status: 'loaded' });
+            }}
+            onError={advanceSource}
+          />
+        )}
       </View>
     );
   }

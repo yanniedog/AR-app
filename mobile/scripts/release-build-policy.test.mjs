@@ -89,7 +89,23 @@ test('EAS release jobs can verify the merged pull request for their main commit'
   assert.match(submitWorkflow, /pull-requests:\s+read/);
   for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
     assert.match(workflow, /checks:\s+read/);
+    assert.equal(
+      workflow.match(/node scripts\/verify-github-release-source\.mjs/g)?.length,
+      2,
+      'release source must be checked both before work and immediately before publication/submission',
+    );
   }
+});
+
+test('APK publication serializes universal before ARM and delays README mutation', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /inputs\.apk_channel == 'universal' && inputs\.follow_with_arm == true/);
+  assert.match(workflow, /-f apk_channel=arm/);
+  assert.match(workflow, /-f follow_with_arm=false/);
+  assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
 });
 
 test('EAS submission validates an environment-delivered build UUID', async () => {

@@ -4,7 +4,7 @@ import { ScrollView, View } from 'react-native';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText } from '../src/components/ui';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
-import { OPTIONAL_DIAGNOSTICS_TERMS } from '../src/lib/privacyPolicy';
+import { LENDER_ARTWORK_TERMS, OPTIONAL_DIAGNOSTICS_TERMS } from '../src/lib/privacyPolicy';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 export default function TermsScreen() {
@@ -21,7 +21,7 @@ export default function TermsScreen() {
   usePerformanceAuditSurface({
     id: 'terms.notices',
     routeKey: '/terms',
-    renderRevision: 'terms-v1',
+    renderRevision: 'terms-v2',
     actions: auditActions,
     probes: [
       {
@@ -63,6 +63,13 @@ export default function TermsScreen() {
       <AppText variant="body" color="textMuted" style={{ marginTop: 12, lineHeight: 22 }}>
         This application is not an accredited Consumer Data Right participant, does not use the CDR trade
         mark, and is not affiliated with the ACCC, OAIC, Treasury, or any data holder.
+      </AppText>
+
+      <AppText variant="h3" style={{ marginTop: 24, marginBottom: 8 }}>
+        Lender artwork
+      </AppText>
+      <AppText variant="body" color="textMuted" style={{ lineHeight: 22 }}>
+        {LENDER_ARTWORK_TERMS}
       </AppText>
 
       <AppText variant="h3" style={{ marginTop: 24, marginBottom: 8 }}>

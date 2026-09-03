@@ -127,9 +127,9 @@ export default function Search() {
   const subscribeSearch = useStore((s) => s.subscribeSearch);
   const unsubscribeSearch = useStore((s) => s.unsubscribeSearch);
   const suitabilityRevision = useSuitabilityRevision();
-  // Re-run when core/details identity changes so Search warms after cold start
-  // or a dataset refresh that cleared details (storeRefresh SHA swap).
-  const coreKey = core?.run_date ?? null;
+  // Re-run on content identity, not only calendar date: corrected same-day
+  // cores must not leave deep Search idle against the previous edition.
+  const coreKey = coreSha ?? core?.run_date ?? null;
   const detailsKey = details?.run_date ?? null;
   useEffect(() => {
     if (!isFocused) return;

@@ -185,6 +185,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_SHA: ${{ github.sha }}
         run: |
+          # Build work can take tens of minutes. Fail closed if main advanced
+          # after the initial gate instead of replacing a rolling release from
+          # an older checkout.
+          node scripts/verify-github-release-source.mjs
           rolling_tag="app-apk-arm-latest"
           if [ "$APK_CHANNEL" = "universal" ]; then
             rolling_tag="app-apk-latest"

@@ -75,14 +75,30 @@ function ghTry(args) {
   return { ok: res.status === 0, stdout: (res.stdout || '').trim(), stderr: (res.stderr || '').trim() };
 }
 
-function apkReleaseExists(version) {
-  return [ARM_ROLLING_TAG, ROLLING_TAG].every((rollingTag) => ghTry([
-    'release',
-    'view',
-    versionTagForApkChannel(version, rollingTag),
-    '--repo',
-    repo,
-  ]).ok);
+function publishedApkChannels(version) {
+  return {
+    arm: ghTry([
+      'release',
+      'view',
+      versionTagForApkChannel(version, ARM_ROLLING_TAG),
+      '--repo',
+      repo,
+    ]).ok,
+    universal: ghTry([
+      'release',
+      'view',
+      versionTagForApkChannel(version, ROLLING_TAG),
+      '--repo',
+      repo,
+    ]).ok,
+  };
+}
+
+export function missingApkChannels(published) {
+  return [
+    ...(!published?.universal ? ['universal'] : []),
+    ...(!published?.arm ? ['arm'] : []),
+  ];
 }
 
 export function hasApkBuildInFlight(rows, expectedHeadSha) {
@@ -119,10 +135,17 @@ function apkBuildInFlight(expectedHeadSha) {
 // main with no APK and no failing check (Codex / Sourcery).
 export function dispatchApkBuild(
   version,
+  missingChannels = ['universal', 'arm'],
   { runGh = gh, simulate = dryRun } = {},
 ) {
+  const missing = new Set(missingChannels);
+  if (!missing.size) return;
+  const firstChannel = missing.has('universal') ? 'universal' : 'arm';
+  const followWithArm = firstChannel === 'universal' && missing.has('arm');
   if (simulate) {
-    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch universal then ARM mobile-android-apk for v${version}`);
+    console.log(
+      `mobile-auto-release-on-drain: dry-run — would dispatch ${firstChannel}${followWithArm ? ' then ARM' : ''} mobile-android-apk for v${version}`,
+    );
     return;
   }
   // The universal build must publish first. It then dispatches the ARM build,
@@ -131,11 +154,13 @@ export function dispatchApkBuild(
   // queued universal run verifies its protected source SHA.
   runGh([
     'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
-    '-f', 'apk_channel=universal',
+    '-f', `apk_channel=${firstChannel}`,
     '-f', 'bridge_legacy_ar_local=false',
-    '-f', 'follow_with_arm=true',
+    '-f', `follow_with_arm=${followWithArm}`,
   ]);
-  console.log(`mobile-auto-release-on-drain: dispatched universal-first APK chain for v${version} on main`);
+  console.log(
+    `mobile-auto-release-on-drain: dispatched ${firstChannel}${followWithArm ? '-then-ARM' : ''} APK release for v${version} on main`,
+  );
 }
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers
@@ -145,13 +170,14 @@ export function dispatchApkBuild(
 export function ensureApkForMainHead({
   readVersion = readCurrentVersion,
   readHeadSha = readHeadCommitSha,
-  releaseExists = apkReleaseExists,
+  readPublishedChannels = publishedApkChannels,
   buildInFlight = apkBuildInFlight,
   dispatch = dispatchApkBuild,
 } = {}) {
   const version = readVersion();
   const headSha = readHeadSha();
-  if (releaseExists(version)) {
+  const missingChannels = missingApkChannels(readPublishedChannels(version));
+  if (!missingChannels.length) {
     console.log(
       `mobile-auto-release-on-drain: ARM and universal v${version} releases already published — no APK dispatch`,
     );
@@ -163,7 +189,7 @@ export function ensureApkForMainHead({
     );
     return false;
   }
-  dispatch(version);
+  dispatch(version, missingChannels);
   return true;
 }
 

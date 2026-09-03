@@ -41,24 +41,45 @@ async function githubJson(repo, path) {
   }
 }
 
-async function main() {
-  const repo = process.env.GITHUB_REPOSITORY?.trim();
-  const requestedSha = process.env.GITHUB_SHA?.trim();
+export async function verifyGithubReleaseSource({
+  repo,
+  requestedSha,
+  readJson = githubJson,
+  sleep = delay,
+  attempts = 60,
+} = {}) {
   if (!repo || !requestedSha) throw new Error('GITHUB_REPOSITORY and GITHUB_SHA are required');
 
-  const pulls = await githubJson(repo, `/commits/${requestedSha}/pulls`);
   let lastMissing = REQUIRED_PR_CHECKS;
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+  let lastAssociationError = null;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     // Re-read main on every attempt so a queued publisher cannot proceed after
     // a newer pull request lands while it waits for the selected head's gates.
-    const ref = await githubJson(repo, '/git/ref/heads/main');
-    const preliminary = validateReleaseSourceSnapshot({
-      mainSha: ref?.object?.sha,
-      requestedSha,
-      pulls,
-      checkRuns: [],
-    });
-    const result = await githubJson(
+    const ref = await readJson(repo, '/git/ref/heads/main');
+    if (ref?.object?.sha !== requestedSha) {
+      throw new Error('Release checkout is not the current main commit');
+    }
+    // GitHub's commit-to-PR association can lag immediately after a squash
+    // merge. Fetch and validate it inside the same retry window as check runs.
+    const pulls = await readJson(repo, `/commits/${requestedSha}/pulls`);
+    let preliminary;
+    try {
+      preliminary = validateReleaseSourceSnapshot({
+        mainSha: ref?.object?.sha,
+        requestedSha,
+        pulls,
+        checkRuns: [],
+      });
+      lastAssociationError = null;
+    } catch (error) {
+      lastAssociationError = error instanceof Error ? error : new Error(String(error));
+      if (attempt < attempts - 1) {
+        await sleep(20_000);
+        continue;
+      }
+      break;
+    }
+    const result = await readJson(
       repo,
       `/commits/${preliminary.pull.head.sha}/check-runs?per_page=100`,
     );
@@ -73,11 +94,18 @@ async function main() {
       console.log(
         `verify-github-release-source: main ${requestedSha.slice(0, 12)} from merged PR #${validated.pull.number}; required PR checks passed`,
       );
-      return;
+      return validated;
     }
-    if (attempt < 59) await delay(20_000);
+    if (attempt < attempts - 1) await sleep(20_000);
   }
+  if (lastAssociationError) throw lastAssociationError;
   throw new Error(`Required pull-request checks did not pass: ${lastMissing.join(', ')}`);
+}
+
+async function main() {
+  const repo = process.env.GITHUB_REPOSITORY?.trim();
+  const requestedSha = process.env.GITHUB_SHA?.trim();
+  await verifyGithubReleaseSource({ repo, requestedSha });
 }
 
 if (process.argv[1]?.replace(/\\/g, '/').endsWith('verify-github-release-source.mjs')) {

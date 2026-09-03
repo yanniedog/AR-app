@@ -107,7 +107,9 @@ jobs:
       - name: EAS Submit (exact build)
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          node scripts/verify-github-release-source.mjs
           eas submit \
             --non-interactive \
             --id "$EAS_BUILD_ID" \
