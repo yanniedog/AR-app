@@ -233,7 +233,16 @@ function PerformanceAuditScreenInner() {
     if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode) return;
     setAuditPreflightMode(mode);
     try {
-      const currentDownload = await getHydratedApkDownloadSnapshot();
+      let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
+      try {
+        currentDownload = await getHydratedApkDownloadSnapshot();
+      } catch {
+        Alert.alert(
+          'Could not start the audit',
+          'Android could not confirm whether an app update is active, so no audit was started. Close and reopen Australian Rates, then try again. If it continues, review Diagnostics > Debug log.',
+        );
+        return;
+      }
       if (blocksPerformanceAudit(currentDownload)) {
         Alert.alert(
           'Finish the app update first',
