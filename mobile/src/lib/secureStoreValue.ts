@@ -13,6 +13,13 @@ interface SecureValueManifest {
   chunks: number;
 }
 
+export class RecoveredIncompleteSecureStoreValueError extends Error {
+  constructor() {
+    super('Encrypted value was incomplete and has been reset');
+    this.name = 'RecoveredIncompleteSecureStoreValueError';
+  }
+}
+
 function utf8ByteLength(value: string): number {
   let bytes = 0;
   for (const char of value) {
@@ -84,7 +91,12 @@ export async function readSecureStoreValue(baseKey: SecureStoreKey): Promise<str
   for (let index = 0; index < manifest.chunks; index += 1) {
     const chunk = await SecureStore.getItemAsync(chunkKey(baseKey, manifest.generation, index));
     if (chunk == null) {
-      throw new Error('Encrypted value is incomplete');
+      // The committed generation can never become readable again. Remove the
+      // manifest first so a future write is not permanently blocked, then make
+      // best-effort cleanup of any surviving chunks.
+      await SecureStore.deleteItemAsync(baseKey);
+      await deleteManifestChunks(baseKey, manifest).catch(() => undefined);
+      throw new RecoveredIncompleteSecureStoreValueError();
     }
     chunks.push(chunk);
   }

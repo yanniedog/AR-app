@@ -5,6 +5,7 @@ import {
   deleteSecureStoreValue,
   MAX_SECURE_STORE_VALUE_BYTES,
   readSecureStoreValue,
+  RecoveredIncompleteSecureStoreValueError,
   writeSecureStoreValue,
 } from '../src/lib/secureStoreValue';
 
@@ -39,14 +40,18 @@ describe('byte-bounded SecureStore values', () => {
     await expect(readSecureStoreValue(key)).resolves.toBe('{"legacy":true}');
   });
 
-  it('rejects an incomplete committed generation', async () => {
+  it('removes and reports an incomplete committed generation', async () => {
     values.set(key, JSON.stringify({
       kind: 'ar.secure-value',
       schemaVersion: 1,
       generation: 'missing',
       chunks: 1,
     }));
-    await expect(readSecureStoreValue(key)).rejects.toThrow('incomplete');
+    await expect(readSecureStoreValue(key)).rejects.toBeInstanceOf(
+      RecoveredIncompleteSecureStoreValueError,
+    );
+    expect(values.has(key)).toBe(false);
+    expect([...values.keys()].some((item) => item.startsWith(`${key}.chunk.`))).toBe(false);
   });
 
   it('deletes the manifest and every referenced chunk', async () => {

@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 
 import {
+  consumeUserRateScenarioRecoveryWarning,
   loadUserRateScenario,
   normalizeUserRateScenario,
   saveUserRateScenario,
@@ -54,7 +55,12 @@ export function ensureUserRateScenarioLoaded(): Promise<void> {
       revision = 0;
       enqueuedRevision = 0;
       persistedRevision = 0;
-      emit({ scenario, storageStatus: 'ready', saveStatus: 'idle', error: null });
+      emit({
+        scenario,
+        storageStatus: 'ready',
+        saveStatus: 'idle',
+        error: consumeUserRateScenarioRecoveryWarning(),
+      });
     })
     .catch((error) => {
       enqueuedRevision = persistedRevision;

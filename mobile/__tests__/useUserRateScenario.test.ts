@@ -36,6 +36,28 @@ describe('shared user rate scenario store', () => {
     expect(getUserRateScenarioSnapshotForTests().storageStatus).toBe('ready');
   });
 
+  it('recovers an incomplete encrypted generation as editable defaults with a warning', async () => {
+    const manifest = JSON.stringify({
+      kind: 'ar.secure-value',
+      schemaVersion: 1,
+      generation: 'missing',
+      chunks: 1,
+    });
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (key) =>
+      key === 'user-rate-scenario-v1' ? manifest : null,
+    );
+
+    await ensureUserRateScenarioLoaded();
+    const recovered = getUserRateScenarioSnapshotForTests();
+    expect(recovered.storageStatus).toBe('ready');
+    expect(recovered.error).toMatch(/incomplete.*reset/i);
+    expect(updateUserRateScenario((value) => ({
+      ...value,
+      savings: { balance: '100', currentRate: '4' },
+    }))).toBe(true);
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('user-rate-scenario-v1');
+  });
+
   it('flushes the latest rapid edit before navigation', async () => {
     jest.mocked(SecureStore.getItemAsync).mockResolvedValueOnce(null);
     await ensureUserRateScenarioLoaded();

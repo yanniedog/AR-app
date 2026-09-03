@@ -7,9 +7,22 @@ import {
   type ProjectionInputsBySection,
 } from './projectionScenario';
 import { SECURE_STORE_KEYS } from '../lib/secureStoreKey';
-import { readSecureStoreValue, writeSecureStoreValue } from '../lib/secureStoreValue';
+import {
+  readSecureStoreValue,
+  RecoveredIncompleteSecureStoreValueError,
+  writeSecureStoreValue,
+} from '../lib/secureStoreValue';
 
 const STORAGE_KEY = SECURE_STORE_KEYS.userRateScenario;
+const RECOVERY_WARNING =
+  'Encrypted scenario inputs were incomplete and have been reset on this device. You can enter them again.';
+let pendingRecoveryWarning: string | null = null;
+
+export function consumeUserRateScenarioRecoveryWarning(): string | null {
+  const warning = pendingRecoveryWarning;
+  pendingRecoveryWarning = null;
+  return warning;
+}
 
 export interface DepositScenario {
   balance: string;
@@ -158,6 +171,10 @@ export async function loadUserRateScenario(): Promise<UserRateScenario> {
     const raw = await readSecureStoreValue(STORAGE_KEY);
     return raw ? normalizeUserRateScenario(JSON.parse(raw)) : normalizeUserRateScenario(undefined);
   } catch (error) {
+    if (error instanceof RecoveredIncompleteSecureStoreValueError) {
+      pendingRecoveryWarning = RECOVERY_WARNING;
+      return normalizeUserRateScenario(undefined);
+    }
     throw new Error(`Unable to read the encrypted rate scenario: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
