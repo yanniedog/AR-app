@@ -9,6 +9,11 @@ export const CRASHLYTICS_ERROR_CATEGORIES: Readonly<Record<string, string>> = {
   'bank-insights': 'bank-insights',
 };
 
+// Kept in lockstep with the protected diagnostics workflow. Every event that
+// may enter private maintainer triage carries this exact, non-user identifier.
+export const DIAGNOSTICS_PRIVACY_NOTICE_VERSION = '2026-09-03';
+export const CRASHLYTICS_PRIVACY_NOTICE_KEY = 'ar_diagnostics_privacy_notice';
+
 export const PRIVACY_RUNTIME_POLICY = Object.freeze({
   crashReportsRequireConsent: true,
   crashReportsUseFixedCategoriesOnly: true,

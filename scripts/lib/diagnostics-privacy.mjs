@@ -1,5 +1,19 @@
 const REDACTED = '[REDACTED]';
 
+export const DIAGNOSTICS_PRIVACY_NOTICE_VERSION = '2026-09-03';
+export const CRASHLYTICS_PRIVACY_NOTICE_KEY = 'ar_diagnostics_privacy_notice';
+
+/** Only events explicitly marked after the current consent can enter triage. */
+export function hasCurrentDiagnosticsConsentAttestation(
+  event,
+  expectedNotice = DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+) {
+  if (!event || typeof event !== 'object') return false;
+  const keys = event.customKeys;
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return false;
+  return String(keys[CRASHLYTICS_PRIVACY_NOTICE_KEY] ?? '') === expectedNotice;
+}
+
 /** Defense-in-depth scrub for Crashlytics fields before they leave Firebase. */
 export function redactDiagnosticText(value) {
   return String(value ?? '')

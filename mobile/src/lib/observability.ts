@@ -1,13 +1,18 @@
 import { Platform } from 'react-native';
 
 import type { LogLevel } from './debugLog';
-import { CRASHLYTICS_ERROR_CATEGORIES } from './privacyPolicy';
+import {
+  CRASHLYTICS_ERROR_CATEGORIES,
+  CRASHLYTICS_PRIVACY_NOTICE_KEY,
+  DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+} from './privacyPolicy';
 
 let crashReportsEnabled = false;
 
 export type CrashlyticsLike = {
   log: (message: string) => void;
   recordError: (error: Error, name?: string) => void;
+  setAttribute: (key: string, value: string) => Promise<void> | void;
   setCrashlyticsCollectionEnabled: (enabled: boolean) => Promise<void> | void;
   isCrashlyticsCollectionEnabled: boolean;
 };
@@ -26,6 +31,7 @@ function loadNativeDeps(): ObservabilityDeps | null {
       getCrashlytics: () => { readonly isCrashlyticsCollectionEnabled: boolean };
       log: (instance: unknown, message: string) => void;
       recordError: (instance: unknown, error: Error, name?: string) => void;
+      setAttribute: (instance: unknown, key: string, value: string) => Promise<unknown>;
       setCrashlyticsCollectionEnabled: (instance: unknown, enabled: boolean) => Promise<unknown>;
     };
     const instance = crashlyticsModule.getCrashlytics();
@@ -35,6 +41,9 @@ function loadNativeDeps(): ObservabilityDeps | null {
       },
       log: (message) => crashlyticsModule.log(instance, message),
       recordError: (error, name) => crashlyticsModule.recordError(instance, error, name),
+      setAttribute: async (key, value) => {
+        await crashlyticsModule.setAttribute(instance, key, value);
+      },
       setCrashlyticsCollectionEnabled: async (enabled) => {
         await crashlyticsModule.setCrashlyticsCollectionEnabled(instance, enabled);
       },
@@ -77,6 +86,16 @@ export async function setCrashReportsEnabled(enabled: boolean): Promise<void> {
   }
   const crashlytics = native.crashlytics();
   try {
+    if (enabled) {
+      // Persisted native consent can survive an app update. Disable collection
+      // until the current notice marker is written so an older-consent event
+      // can never be mistaken for a currently consented triage event.
+      await crashlytics.setCrashlyticsCollectionEnabled(false);
+      await crashlytics.setAttribute(
+        CRASHLYTICS_PRIVACY_NOTICE_KEY,
+        DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
+      );
+    }
     await crashlytics.setCrashlyticsCollectionEnabled(enabled);
   } catch (error) {
     crashReportsEnabled = crashlytics.isCrashlyticsCollectionEnabled;

@@ -24,8 +24,7 @@ import { spawnSync } from 'node:child_process';
 import {
   buildRecentIntervalFilter,
   fetchAllReportGroups,
-  fetchIssue,
-  fetchResource,
+  fetchIssueEvents,
   parseIssueGroup,
 } from './lib/crashlytics-client.mjs';
 import {
@@ -37,7 +36,9 @@ import {
   parseAuthorizedUserJson,
 } from './lib/google-user-oauth-auth.mjs';
 import {
+  DIAGNOSTICS_PRIVACY_NOTICE_VERSION,
   extractDeidentifiedEventLogs,
+  hasCurrentDiagnosticsConsentAttestation,
   redactDiagnosticText,
 } from './lib/diagnostics-privacy.mjs';
 
@@ -231,38 +232,24 @@ function formatStackFromEvent(event) {
   return null;
 }
 
-async function resolveEventDetails(accessToken, issue) {
-  const sample = issue.sampleEvent;
-  if (!sample) return { stackTrace: null, diagnosticLogs: null };
+async function resolveAttestedEventDetails(accessToken, issue, projectId, appId, lookbackDays) {
   try {
-    const event = await fetchResource(accessToken, sample);
+    const events = await fetchIssueEvents(accessToken, projectId, appId, issue.id, {
+      lookbackDays,
+    });
+    const event = events.find((candidate) => hasCurrentDiagnosticsConsentAttestation(candidate));
+    if (!event) return { attested: false, stackTrace: null, diagnosticLogs: null };
     return {
+      attested: true,
       stackTrace: formatStackFromEvent(event),
       diagnosticLogs: extractDeidentifiedEventLogs(event),
     };
-  } catch {
-    return { stackTrace: await resolveStackTrace(accessToken, issue), diagnosticLogs: null };
+  } catch (error) {
+    console.warn(
+      `Skipping Crashlytics issue ${issue.id}: current-consent event verification failed (${error instanceof Error ? error.message : String(error)})`,
+    );
+    return { attested: false, stackTrace: null, diagnosticLogs: null };
   }
-}
-
-async function resolveStackTrace(accessToken, issue) {
-  const sample = issue.sampleEvent;
-  if (!sample) return null;
-  try {
-    const event = await fetchResource(accessToken, sample);
-    return formatStackFromEvent(event);
-  } catch {
-    try {
-      const detailed = await fetchIssue(accessToken, issue.name);
-      if (detailed.sampleEvent && detailed.sampleEvent !== sample) {
-        const event = await fetchResource(accessToken, detailed.sampleEvent);
-        return formatStackFromEvent(event);
-      }
-    } catch {
-      // optional enrichment
-    }
-  }
-  return null;
 }
 
 function buildIssueTitle(issue) {
@@ -380,6 +367,10 @@ async function createGithubIssue(repo, title, body, labels, dryRun) {
 async function main() {
   const opts = parseArgs(process.argv);
   const pureMockDryRun = opts.dryRun && Boolean(opts.mockReport);
+  const configuredNotice = process.env.DIAGNOSTICS_PRIVACY_NOTICE_VERSION?.trim() || '';
+  if (!opts.mockReport && configuredNotice !== DIAGNOSTICS_PRIVACY_NOTICE_VERSION) {
+    throw new Error('Live diagnostics triage is not approved for the current privacy notice');
+  }
   if (!pureMockDryRun) ensureGh();
   if (!opts.dryRun) assertPrivateDestination(opts.repo);
 
@@ -460,8 +451,21 @@ async function main() {
     }
 
     const details = accessToken
-      ? await resolveEventDetails(accessToken, issue)
-      : { stackTrace: null, diagnosticLogs: null };
+      ? await resolveAttestedEventDetails(
+          accessToken,
+          issue,
+          projectId,
+          appId,
+          opts.lookbackDays,
+        )
+      : { attested: true, stackTrace: null, diagnosticLogs: null };
+    if (!details.attested) {
+      console.warn(
+        `Skipping Crashlytics issue ${issue.id}: no event attests current diagnostics consent`,
+      );
+      skipped += 1;
+      continue;
+    }
     const title = buildIssueTitle(issue);
     const body = buildIssueBody(
       issue,

@@ -10,3 +10,5 @@ The optional Crashlytics-to-GitHub triage job remains in mock dry-run mode unles
 - `DIAGNOSTICS_PRIVACY_NOTICE_VERSION=2026-09-03` in the protected `diagnostics` environment.
 
 When enabled, only redacted sample traces and allowlisted technical categories may be copied to the private issue tracker. Maintainer access must remain restricted. Close or delete a triage issue when it is no longer needed; do not copy raw debug logs, searches, saved rates, profile inputs, calculator inputs, or route history into it.
+
+Live triage also requires an event-level `ar_diagnostics_privacy_notice=2026-09-03` custom key written only after the native collector confirms the current in-app choice. The triage job reads recent events for each issue and skips the issue unless at least one event carries that exact marker. Aggregated issues and sample events from older consent versions therefore remain in Firebase and are never copied into GitHub triage.

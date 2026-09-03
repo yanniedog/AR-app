@@ -127,6 +127,7 @@ jest.mock('@react-native-firebase/crashlytics', () => {
   const api = {
     log: jest.fn(),
     recordError: jest.fn(),
+    setAttribute: jest.fn(async () => {}),
     isCrashlyticsCollectionEnabled: false,
     setCrashlyticsCollectionEnabled: jest.fn(async (enabled) => {
       api.isCrashlyticsCollectionEnabled = enabled;
@@ -139,6 +140,7 @@ jest.mock('@react-native-firebase/crashlytics', () => {
     getCrashlytics: crashlytics,
     log: jest.fn((instance, message) => instance.log(message)),
     recordError: jest.fn((instance, error, name) => instance.recordError(error, name)),
+    setAttribute: jest.fn((instance, key, value) => instance.setAttribute(key, value)),
     setCrashlyticsCollectionEnabled: jest.fn((instance, enabled) =>
       instance.setCrashlyticsCollectionEnabled(enabled),
     ),

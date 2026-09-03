@@ -151,6 +151,34 @@ export async function fetchAllReportGroups(accessToken, projectId, appId, report
 }
 
 /**
+ * Return the newest events for one issue. Event customKeys are required by the
+ * privacy-attestation gate, so this intentionally requests the full event.
+ */
+export async function fetchIssueEvents(
+  accessToken,
+  projectId,
+  appId,
+  issueId,
+  { lookbackDays = 7, pageSize = 100 } = {},
+) {
+  const project = encodeURIComponent(projectId);
+  const app = encodeURIComponent(appId);
+  const recent = buildRecentIntervalFilter(lookbackDays);
+  const query = { pageSize };
+  Object.assign(query, flattenMessageQueryParams('filter', {
+    interval: recent.interval,
+    issue: { id: issueId },
+  }));
+  const page = await crashlyticsRequest(
+    accessToken,
+    'GET',
+    `projects/${project}/apps/${app}/events`,
+    query,
+  );
+  return Array.isArray(page.events) ? page.events : [];
+}
+
+/**
  * @param {string} accessToken
  * @param {string} issueName  full resource name
  */

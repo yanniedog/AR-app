@@ -12,6 +12,7 @@ function makeMocks() {
   const crashlyticsApi: CrashlyticsLike = {
     log: jest.fn(),
     recordError: jest.fn(),
+    setAttribute: jest.fn(async () => {}),
     isCrashlyticsCollectionEnabled: false,
     setCrashlyticsCollectionEnabled: jest.fn(async (enabled: boolean) => {
       crashlyticsApi.isCrashlyticsCollectionEnabled = enabled;
@@ -39,6 +40,11 @@ describe('observability', () => {
     const { crashlytics, crashlyticsApi } = makeMocks();
     setObservabilityDepsForTests({ crashlytics });
     await setDiagnosticsEnabled(true);
+
+    expect(crashlyticsApi.setAttribute).toHaveBeenCalledWith(
+      'ar_diagnostics_privacy_notice',
+      '2026-09-03',
+    );
 
     bridgeLogToCrashlytics('info', 'store', 'refresh ok');
     bridgeLogToCrashlytics('warn', 'store', 'prefs failed');
@@ -105,6 +111,19 @@ describe('observability', () => {
     await expect(setDiagnosticsEnabled(true)).rejects.toThrow(
       'consent was not confirmed',
     );
+    expect(isDiagnosticsEnabled()).toBe(false);
+  });
+
+  it('fails closed when the current privacy marker cannot be attested', async () => {
+    const { crashlytics, crashlyticsApi } = makeMocks();
+    crashlyticsApi.setAttribute = jest.fn(async () => {
+      throw new Error('attribute failed');
+    });
+    setObservabilityDepsForTests({ crashlytics });
+
+    await expect(setDiagnosticsEnabled(true)).rejects.toThrow('attribute failed');
+    expect(crashlyticsApi.setCrashlyticsCollectionEnabled).toHaveBeenCalledWith(false);
+    expect(crashlyticsApi.setCrashlyticsCollectionEnabled).not.toHaveBeenCalledWith(true);
     expect(isDiagnosticsEnabled()).toBe(false);
   });
 });

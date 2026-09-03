@@ -11,8 +11,16 @@ import {
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
+  validatePublishedChannelSnapshot,
   waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
+import {
+  APK_ASSET,
+  INSTALL_HTML,
+  MANIFEST_ASSET,
+  QR_ASSET,
+  ROLLING_TAG,
+} from './app-release-meta.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 test('checkedGhOutput returns trimmed stdout for a successful command', () => {
@@ -231,6 +239,54 @@ test('ensureApkForMainHead never rebuilds the already-published channel', () => 
 
   assert.equal(did, true);
   assert.deepEqual(dispatched, [['1.0.42', ['universal']]]);
+});
+
+test('a channel is published only when its rolling manifest and immutable APK agree', () => {
+  const version = '1.0.44';
+  const repository = 'owner/repo';
+  const rollingRelease = {
+    tagName: ROLLING_TAG,
+    assets: [APK_ASSET, MANIFEST_ASSET, QR_ASSET, INSTALL_HTML]
+      .map((name) => ({ name })),
+  };
+  const versionedRelease = {
+    tagName: `app-v${version}`,
+    assets: [{ name: APK_ASSET }],
+  };
+  const manifest = {
+    version,
+    tag: ROLLING_TAG,
+    version_tag: `app-v${version}`,
+    repo: repository,
+    download_url: `https://github.com/${repository}/releases/download/app-v${version}/${APK_ASSET}`,
+    sha256: 'a'.repeat(64),
+    bytes: 123,
+  };
+  const snapshot = {
+    version,
+    rollingTag: ROLLING_TAG,
+    repository,
+    rollingRelease,
+    versionedRelease,
+    manifest,
+  };
+
+  assert.equal(validatePublishedChannelSnapshot(snapshot), true);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    rollingRelease: {
+      ...rollingRelease,
+      assets: rollingRelease.assets.filter((asset) => asset.name !== MANIFEST_ASSET),
+    },
+  }), false);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    manifest: { ...manifest, version: '1.0.43' },
+  }), false);
+  assert.equal(validatePublishedChannelSnapshot({
+    ...snapshot,
+    versionedRelease: { ...versionedRelease, assets: [] },
+  }), false);
 });
 
 test('auto-release advances from the published APK instead of a stale source version', () => {

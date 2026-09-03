@@ -11,8 +11,13 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
+  APK_ASSET,
   ARM_ROLLING_TAG,
+  INSTALL_HTML,
+  MANIFEST_ASSET,
+  QR_ASSET,
   ROLLING_TAG,
+  apkDownloadUrl,
   versionTagForApkChannel,
 } from './app-release-meta.mjs';
 import {
@@ -75,22 +80,96 @@ function ghTry(args) {
   return { ok: res.status === 0, stdout: (res.stdout || '').trim(), stderr: (res.stderr || '').trim() };
 }
 
+function releaseSnapshot(tag) {
+  const result = ghTry([
+    'release', 'view', tag, '--repo', repo, '--json', 'tagName,assets',
+  ]);
+  if (!result.ok) return null;
+  try {
+    return JSON.parse(result.stdout || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function releaseAssetText(release, assetName) {
+  const asset = Array.isArray(release?.assets)
+    ? release.assets.find((candidate) => candidate?.name === assetName)
+    : null;
+  if (!asset?.apiUrl) return null;
+  let endpoint;
+  try {
+    endpoint = new URL(asset.apiUrl).pathname.replace(/^\/+/, '');
+  } catch {
+    return null;
+  }
+  const result = ghTry(['api', '-H', 'Accept: application/octet-stream', endpoint]);
+  return result.ok ? result.stdout : null;
+}
+
+function releaseAssetNames(release) {
+  return new Set(
+    (Array.isArray(release?.assets) ? release.assets : [])
+      .map((asset) => String(asset?.name ?? ''))
+      .filter(Boolean),
+  );
+}
+
+export function validatePublishedChannelSnapshot({
+  version,
+  rollingTag,
+  repository,
+  rollingRelease,
+  versionedRelease,
+  manifest,
+}) {
+  const expectedVersionTag = versionTagForApkChannel(version, rollingTag);
+  const rollingAssets = releaseAssetNames(rollingRelease);
+  const versionedAssets = releaseAssetNames(versionedRelease);
+  const hasRollingAssets = [APK_ASSET, MANIFEST_ASSET, QR_ASSET, INSTALL_HTML]
+    .every((name) => rollingAssets.has(name));
+  const hasImmutableApk = versionedAssets.has(APK_ASSET);
+  return Boolean(
+    rollingRelease?.tagName === rollingTag
+    && versionedRelease?.tagName === expectedVersionTag
+    && hasRollingAssets
+    && hasImmutableApk
+    && manifest?.version === version
+    && manifest?.tag === rollingTag
+    && manifest?.version_tag === expectedVersionTag
+    && manifest?.repo === repository
+    && manifest?.download_url === apkDownloadUrl(repository, expectedVersionTag)
+    && /^[a-f0-9]{64}$/i.test(String(manifest?.sha256 ?? ''))
+    && Number(manifest?.bytes) > 0,
+  );
+}
+
+function publishedApkChannel(version, rollingTag) {
+  const rollingRelease = releaseSnapshot(rollingTag);
+  if (!rollingRelease) return false;
+  const manifestText = releaseAssetText(rollingRelease, MANIFEST_ASSET);
+  if (!manifestText) return false;
+  let manifest;
+  try {
+    manifest = JSON.parse(manifestText);
+  } catch {
+    return false;
+  }
+  const versionedRelease = releaseSnapshot(versionTagForApkChannel(version, rollingTag));
+  return validatePublishedChannelSnapshot({
+    version,
+    rollingTag,
+    repository: repo,
+    rollingRelease,
+    versionedRelease,
+    manifest,
+  });
+}
+
 function publishedApkChannels(version) {
   return {
-    arm: ghTry([
-      'release',
-      'view',
-      versionTagForApkChannel(version, ARM_ROLLING_TAG),
-      '--repo',
-      repo,
-    ]).ok,
-    universal: ghTry([
-      'release',
-      'view',
-      versionTagForApkChannel(version, ROLLING_TAG),
-      '--repo',
-      repo,
-    ]).ok,
+    arm: publishedApkChannel(version, ARM_ROLLING_TAG),
+    universal: publishedApkChannel(version, ROLLING_TAG),
   };
 }
 
