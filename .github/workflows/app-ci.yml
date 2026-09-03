@@ -66,6 +66,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Compile native APK identity verifier
         run: |
+          node scripts/ensure-firebase-config.mjs
+          npx expo prebuild --platform android --no-install
           chmod +x android/gradlew
           cd android
           ./gradlew :ar-apk-identity-verifier:compileReleaseKotlin --no-daemon

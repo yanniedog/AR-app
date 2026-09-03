@@ -145,5 +145,6 @@ test('high-severity dependency additions and native verifier compilation gate PR
   assert.match(workflow, /fail-on-severity: high/);
   assert.match(workflow, /allow-ghsas:[\s\S]*GHSA-r292-9mhp-454m/);
   assert.match(workflow, /Compile native APK identity verifier/);
+  assert.match(workflow, /expo prebuild --platform android --no-install/);
   assert.match(workflow, /:ar-apk-identity-verifier:compileReleaseKotlin/);
 });
