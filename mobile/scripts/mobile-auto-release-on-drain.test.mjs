@@ -11,6 +11,8 @@ import {
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
+  releaseAssetApiEndpoint,
+  releaseAssetTextFromGhResult,
   releaseSnapshotFromGhResult,
   recoveryIdentityForMissingChannel,
   validatePublishedChannelSnapshot,
@@ -84,6 +86,61 @@ test('release inspection accepts only a valid release object', () => {
       stderr: '',
     }),
     /response was not a release object/,
+  );
+});
+
+test('release asset download fails closed on GitHub API errors', () => {
+  assert.equal(
+    releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: true,
+      stdout: '{"version":"1.2.3"}',
+      stderr: '',
+    }),
+    '{"version":"1.2.3"}',
+  );
+  assert.throws(
+    () => releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: false,
+      stdout: '',
+      stderr: 'HTTP 403: rate limit exceeded',
+    }),
+    /Unable to download release asset app-apk-latest\.json: HTTP 403/,
+  );
+  assert.throws(
+    () => releaseAssetTextFromGhResult('app-apk-latest.json', {
+      ok: false,
+      stdout: '',
+      stderr: 'authentication required',
+    }),
+    /Unable to download release asset app-apk-latest\.json: authentication required/,
+  );
+});
+
+test('release asset metadata distinguishes absence from an unusable asset record', () => {
+  assert.equal(
+    releaseAssetApiEndpoint({ assets: [] }, 'app-apk-latest.json'),
+    null,
+  );
+  assert.equal(
+    releaseAssetApiEndpoint({
+      assets: [{
+        name: 'app-apk-latest.json',
+        apiUrl: 'https://api.github.com/repos/yanniedog/AR-app/releases/assets/123',
+      }],
+    }, 'app-apk-latest.json'),
+    'repos/yanniedog/AR-app/releases/assets/123',
+  );
+  assert.throws(
+    () => releaseAssetApiEndpoint({
+      assets: [{ name: 'app-apk-latest.json' }],
+    }, 'app-apk-latest.json'),
+    /release metadata omitted its API URL/,
+  );
+  assert.throws(
+    () => releaseAssetApiEndpoint({
+      assets: [{ name: 'app-apk-latest.json', apiUrl: 'not a URL' }],
+    }, 'app-apk-latest.json'),
+    /invalid API URL/,
   );
 });
 

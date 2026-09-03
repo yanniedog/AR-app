@@ -54,6 +54,43 @@ describe('byte-bounded SecureStore values', () => {
     expect([...values.keys()].some((item) => item.startsWith(`${key}.chunk.`))).toBe(false);
   });
 
+  it('does not let an incomplete read delete a concurrently written generation', async () => {
+    const staleGeneration = 'stale';
+    const staleChunkKey = `${key}.chunk.${staleGeneration}.0`;
+    values.set(key, JSON.stringify({
+      kind: 'ar.secure-value',
+      schemaVersion: 1,
+      generation: staleGeneration,
+      chunks: 1,
+    }));
+
+    let reportChunkRead!: () => void;
+    const chunkReadStarted = new Promise<void>((resolve) => {
+      reportChunkRead = resolve;
+    });
+    let resolveMissingChunk!: (value: string | null) => void;
+    const missingChunk = new Promise<string | null>((resolve) => {
+      resolveMissingChunk = resolve;
+    });
+    jest.mocked(SecureStore.getItemAsync).mockImplementation(async (storageKey) => {
+      if (storageKey === staleChunkKey) {
+        reportChunkRead();
+        return missingChunk;
+      }
+      return values.get(storageKey) ?? null;
+    });
+
+    const staleRead = readSecureStoreValue(key);
+    await chunkReadStarted;
+    const replacement = 'replacement-private-value'.repeat(200);
+    const replacementWrite = writeSecureStoreValue(key, replacement);
+    resolveMissingChunk(null);
+
+    await expect(staleRead).rejects.toBeInstanceOf(RecoveredIncompleteSecureStoreValueError);
+    await replacementWrite;
+    await expect(readSecureStoreValue(key)).resolves.toBe(replacement);
+  });
+
   it('deletes the manifest and every referenced chunk', async () => {
     await writeSecureStoreValue(key, 'private-value'.repeat(400));
     await deleteSecureStoreValue(key);

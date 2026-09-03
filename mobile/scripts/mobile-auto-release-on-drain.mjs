@@ -110,19 +110,43 @@ function releaseSnapshot(tag) {
   ]));
 }
 
-function releaseAssetText(release, assetName) {
+export function releaseAssetTextFromGhResult(assetName, result) {
+  const detail = [result?.stderr, result?.stdout]
+    .map((value) => String(value ?? '').trim())
+    .filter(Boolean)
+    .join('\n');
+  if (!result?.ok) {
+    throw new Error(`Unable to download release asset ${assetName}: ${detail || 'gh api failed'}`);
+  }
+  return String(result.stdout ?? '');
+}
+
+export function releaseAssetApiEndpoint(release, assetName) {
   const asset = Array.isArray(release?.assets)
     ? release.assets.find((candidate) => candidate?.name === assetName)
     : null;
-  if (!asset?.apiUrl) return null;
-  let endpoint;
-  try {
-    endpoint = new URL(asset.apiUrl).pathname.replace(/^\/+/, '');
-  } catch {
-    return null;
+  if (!asset) return null;
+  if (typeof asset.apiUrl !== 'string' || !asset.apiUrl.trim()) {
+    throw new Error(`Unable to download release asset ${assetName}: release metadata omitted its API URL`);
   }
-  const result = ghTry(['api', '-H', 'Accept: application/octet-stream', endpoint]);
-  return result.ok ? result.stdout : null;
+  try {
+    const endpoint = new URL(asset.apiUrl).pathname.replace(/^\/+/, '');
+    if (!endpoint) throw new Error('URL did not contain an API path');
+    return endpoint;
+  } catch (error) {
+    throw new Error(
+      `Unable to download release asset ${assetName}: invalid API URL (${error instanceof Error ? error.message : String(error)})`,
+    );
+  }
+}
+
+function releaseAssetText(release, assetName) {
+  const endpoint = releaseAssetApiEndpoint(release, assetName);
+  if (!endpoint) return null;
+  return releaseAssetTextFromGhResult(
+    assetName,
+    ghTry(['api', '-H', 'Accept: application/octet-stream', endpoint]),
+  );
 }
 
 function releaseAssetNames(release) {

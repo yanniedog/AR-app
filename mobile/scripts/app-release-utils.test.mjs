@@ -14,6 +14,17 @@ test('uses the source SHA only when publishing into the source repository', () =
   );
 });
 
+test('uses an explicitly pinned release source ahead of the workflow event SHA', () => {
+  assert.equal(
+    releaseTargetRefForRepository('yanniedog/AR-app', {
+      GITHUB_REPOSITORY: 'yanniedog/AR-app',
+      GITHUB_SHA: '1'.repeat(40),
+      RELEASE_SOURCE_SHA: '2'.repeat(40),
+    }),
+    '2'.repeat(40),
+  );
+});
+
 test('does not send a foreign source SHA to a cross-repository release', () => {
   assert.equal(
     releaseTargetRefForRepository('yanniedog/AR-local', {

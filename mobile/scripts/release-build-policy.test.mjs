@@ -89,10 +89,11 @@ test('EAS release jobs can verify the merged pull request for their main commit'
   assert.match(submitWorkflow, /pull-requests:\s+read/);
   for (const workflow of [buildWorkflow, submitWorkflow, apkWorkflow]) {
     assert.match(workflow, /checks:\s+read/);
+    const expectedSourceChecks = workflow === apkWorkflow ? 3 : 2;
     assert.equal(
       workflow.match(/node scripts\/verify-github-release-source\.mjs/g)?.length,
-      2,
-      'release source must be checked both before work and immediately before publication/submission',
+      expectedSourceChecks,
+      'release source must be checked before work and every publication or chained dispatch',
     );
   }
 });
@@ -108,6 +109,14 @@ test('APK publication serializes universal before ARM and delays README mutation
   assert.match(workflow, /-f follow_with_arm=false/);
   assert.match(workflow, /-f release_version="\$\{\{ steps\.release\.outputs\.version \}\}"/);
   assert.match(workflow, /-f release_version_code="\$\{\{ steps\.release\.outputs\.version_code \}\}"/);
+  assert.match(workflow, /release_source_sha:[\s\S]*description: Immutable main source/);
+  assert.match(workflow, /ref: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
+  assert.equal(
+    workflow.match(/RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/g)?.length,
+    3,
+  );
+  assert.match(workflow, /Queue ARM channel after universal publish[\s\S]*verify-github-release-source\.mjs/);
+  assert.match(workflow, /-f release_source_sha="\$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}"/);
   assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
 });
 

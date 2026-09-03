@@ -45,6 +45,11 @@ on:
         required: false
         default: ''
         type: string
+      release_source_sha:
+        description: Immutable main source shared by a preceding universal build
+        required: false
+        default: ''
+        type: string
 
 permissions:
   actions: write
@@ -76,6 +81,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ inputs.release_source_sha || github.sha }}
 
       - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
@@ -91,6 +97,7 @@ jobs:
       - name: Verify protected release source
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: node scripts/verify-github-release-source.mjs
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
@@ -198,7 +205,7 @@ jobs:
       - name: Publish preview APK manifest (GitHub release)
         env:
           GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ github.sha }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: |
           # Build work can take tens of minutes. Fail closed if main advanced
           # after the initial gate instead of replacing a rolling release from
@@ -216,14 +223,20 @@ jobs:
         if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.follow_with_arm == true
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: |
+          # Close the post-publication race as well: if main moved, leave the
+          # universal artifact alone and let queue-drain recovery rebuild a
+          # matched pair from the new head.
+          node scripts/verify-github-release-source.mjs
           gh workflow run mobile-android-apk.yml \
             --ref main \
             --repo "${{ github.repository }}" \
             -f apk_channel=arm \
             -f follow_with_arm=false \
             -f release_version="${{ steps.release.outputs.version }}" \
-            -f release_version_code="${{ steps.release.outputs.version_code }}"
+            -f release_version_code="${{ steps.release.outputs.version_code }}" \
+            -f release_source_sha="${{ inputs.release_source_sha || github.sha }}"
 
       - name: Publish README Android install QR section
         if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'

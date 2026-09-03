@@ -138,7 +138,10 @@ export async function verifyGithubReleaseSource({
 
 async function main() {
   const repo = process.env.GITHUB_REPOSITORY?.trim();
-  const requestedSha = process.env.GITHUB_SHA?.trim();
+  const requestedSha = (
+    process.env.RELEASE_SOURCE_SHA?.trim()
+    || process.env.GITHUB_SHA?.trim()
+  );
   await verifyGithubReleaseSource({ repo, requestedSha });
 }
 

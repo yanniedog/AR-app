@@ -13,6 +13,30 @@ interface SecureValueManifest {
   chunks: number;
 }
 
+const secureValueOperationTails = new Map<SecureStoreKey, Promise<void>>();
+
+async function withSecureValueLock<T>(
+  baseKey: SecureStoreKey,
+  operation: () => Promise<T>,
+): Promise<T> {
+  const previous = secureValueOperationTails.get(baseKey) ?? Promise.resolve();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.catch(() => undefined).then(() => gate);
+  secureValueOperationTails.set(baseKey, tail);
+  await previous.catch(() => undefined);
+  try {
+    return await operation();
+  } finally {
+    release();
+    if (secureValueOperationTails.get(baseKey) === tail) {
+      secureValueOperationTails.delete(baseKey);
+    }
+  }
+}
+
 export class RecoveredIncompleteSecureStoreValueError extends Error {
   constructor() {
     super('Encrypted value was incomplete and has been reset');
@@ -83,7 +107,7 @@ async function deleteManifestChunks(
  * Read a byte-bounded encrypted value. Direct pre-v1 values remain readable so
  * existing installations migrate without losing financial inputs.
  */
-export async function readSecureStoreValue(baseKey: SecureStoreKey): Promise<string | null> {
+async function readSecureStoreValueUnlocked(baseKey: SecureStoreKey): Promise<string | null> {
   const raw = await SecureStore.getItemAsync(baseKey);
   const manifest = parseManifest(raw);
   if (!manifest) return raw;
@@ -103,11 +127,15 @@ export async function readSecureStoreValue(baseKey: SecureStoreKey): Promise<str
   return chunks.join('');
 }
 
+export function readSecureStoreValue(baseKey: SecureStoreKey): Promise<string | null> {
+  return withSecureValueLock(baseKey, () => readSecureStoreValueUnlocked(baseKey));
+}
+
 /**
  * Write chunks first and commit their small manifest last. A failed write
  * therefore leaves the previous generation readable.
  */
-export async function writeSecureStoreValue(
+async function writeSecureStoreValueUnlocked(
   baseKey: SecureStoreKey,
   value: string,
 ): Promise<void> {
@@ -141,7 +169,14 @@ export async function writeSecureStoreValue(
   await deleteManifestChunks(baseKey, previousManifest).catch(() => undefined);
 }
 
-export async function deleteSecureStoreValue(baseKey: SecureStoreKey): Promise<void> {
+export function writeSecureStoreValue(
+  baseKey: SecureStoreKey,
+  value: string,
+): Promise<void> {
+  return withSecureValueLock(baseKey, () => writeSecureStoreValueUnlocked(baseKey, value));
+}
+
+async function deleteSecureStoreValueUnlocked(baseKey: SecureStoreKey): Promise<void> {
   const raw = await SecureStore.getItemAsync(baseKey).catch(() => null);
   const manifest = parseManifest(raw);
   // Remove the committed manifest first. If best-effort chunk cleanup is
@@ -149,4 +184,8 @@ export async function deleteSecureStoreValue(baseKey: SecureStoreKey): Promise<v
   // encrypted value.
   await SecureStore.deleteItemAsync(baseKey);
   await deleteManifestChunks(baseKey, manifest).catch(() => undefined);
+}
+
+export function deleteSecureStoreValue(baseKey: SecureStoreKey): Promise<void> {
+  return withSecureValueLock(baseKey, () => deleteSecureStoreValueUnlocked(baseKey));
 }

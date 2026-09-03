@@ -131,5 +131,5 @@ export function releaseTargetRefForRepository(targetRepo, environment = process.
   if (!sourceRepo || sourceRepo.toLowerCase() !== String(targetRepo ?? '').trim().toLowerCase()) {
     return '';
   }
-  return String(environment.GITHUB_SHA ?? '').trim();
+  return String(environment.RELEASE_SOURCE_SHA ?? environment.GITHUB_SHA ?? '').trim();
 }
