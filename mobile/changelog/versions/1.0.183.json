@@ -1,0 +1,32 @@
+{
+  "version": "1.0.183",
+  "releaseTag": "app-arm-v1.0.183",
+  "date": "2026-09-03",
+  "summaryBullets": [
+    "Finalize Australian Rates app quality, security, and release integrity (#227)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Finalize Australian Rates app quality, security, and release integrity (#227)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.183"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.182"
+        }
+      ]
+    }
+  ]
+}
