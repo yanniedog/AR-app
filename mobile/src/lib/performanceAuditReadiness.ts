@@ -137,6 +137,30 @@ export interface PerformanceAuditReadinessSnapshot {
   fingerprint: string;
 }
 
+/**
+ * Machine-readable display evidence kept deliberately compact. Revisions live
+ * in their own audit metrics; including them here used to push later probes
+ * beyond the per-metric evidence cap and made rendered lists look absent.
+ */
+export function compactPerformanceAuditReadinessEvidence(
+  snapshot: PerformanceAuditReadinessSnapshot,
+): string {
+  return snapshot.surfaces
+    .flatMap((surface) => surface.probes.map((probe) => [
+      surface.id,
+      probe.id,
+      probe.kind,
+      probe.status,
+      probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
+      ...(probe.fallbackCount == null ? [] : [`fallback=${probe.fallbackCount}`]),
+      ...(probe.visibleCount == null ? [] : [`visible=${probe.visibleCount}`]),
+      ...(probe.emptyStateRendered == null ? [] : [`empty=${probe.emptyStateRendered ? 1 : 0}`]),
+      ...(probe.layoutMeasured == null ? [] : [`measured=${probe.layoutMeasured ? 1 : 0}`]),
+      ...(probe.accessibleSummary == null ? [] : [`summary=${probe.accessibleSummary ? 1 : 0}`]),
+    ].join(':')))
+    .join(' | ');
+}
+
 export interface PerformanceAuditReadinessClock {
   now(): number;
   setTimeout(callback: () => void, delayMs: number): unknown;

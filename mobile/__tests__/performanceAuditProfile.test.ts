@@ -3,6 +3,7 @@ import { DEFAULT_PREFS, type Prefs } from '../src/data/storeTypes';
 import {
   MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
   maximumPerformanceAuditPrefs,
+  maximumPerformanceAuditProfileWasEnabled,
 } from '../src/lib/performanceAuditProfile';
 
 describe('maximum performance audit profile', () => {
@@ -51,5 +52,11 @@ describe('maximum performance audit profile', () => {
     const profile = maximumPerformanceAuditPrefs(original);
     expect(original.interests).toEqual(['Savings']);
     expect(profile.interests).not.toBe(original.interests);
+  });
+
+  it('reports enabled profile state independently of optional-asset availability', () => {
+    expect(maximumPerformanceAuditProfileWasEnabled({ maximumSafeFeaturesEnabled: true })).toBe(true);
+    expect(maximumPerformanceAuditProfileWasEnabled({ maximumSafeFeaturesEnabled: false })).toBe(false);
+    expect(maximumPerformanceAuditProfileWasEnabled(undefined)).toBe(false);
   });
 });

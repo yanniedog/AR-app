@@ -109,6 +109,12 @@ function DebugLogScreenInner() {
         expectedCount: logEntryCount,
         actualCount: logEntryCount,
       },
+      {
+        id: 'debug-log.layout',
+        kind: 'layout',
+        status: logLayoutReady ? 'ready' : 'pending',
+        layoutMeasured: logLayoutReady,
+      },
     ],
   });
 

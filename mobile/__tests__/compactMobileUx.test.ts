@@ -70,10 +70,28 @@ describe('compact mobile UX contracts', () => {
 
     expect(receipt).toContain("'receipt.scroll.evidence': () => {");
     expect(receipt).toContain('setEvidenceOpen(true)');
-    expect(receipt).toContain("evidenceOpen ? 'ready' : 'pending'");
+    expect(receipt).toContain('required: evidenceOpen');
+    expect(receipt).toContain("status: !evidenceOpen || (receipt && brief) ? 'ready' : 'pending'");
     expect(productCard).toContain('showLenderAction = true');
     expect(productCard).toContain('{showLenderAction ? (');
     expect(lender).toContain('showLenderAction={false}');
+  });
+
+  it('reports leader logos and the RBA chart layout from their rendered views', () => {
+    const research = read('../app/research.tsx');
+
+    expect(research).toContain("id: 'leader-logos', kind: 'logo'");
+    expect(research).toContain('onLeaderLogoReadiness={setLeaderLogoState}');
+    expect(research).toContain("id: 'rba-layout', kind: 'layout'");
+    expect(research).toContain('if (width > 0 && height > 0) setRbaLayoutReady(true)');
+  });
+
+  it('does not build hidden bank and product picker lists during calculator entry', () => {
+    const picker = read('../src/components/scenario/CurrentBankPicker.tsx');
+
+    expect(picker).toContain("open === 'bank' ? alphabeticalScenarioProviders(rows) : []");
+    expect(picker).toContain("open !== 'product'");
+    expect(picker).toContain(") : open === 'product' ? (");
   });
 
   it('renders exactly one shared data-health banner on nested Settings scaffolds', () => {

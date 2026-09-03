@@ -58,6 +58,22 @@ describe('integrated app-health display evidence', () => {
     ]);
   });
 
+  it('prefers accessible chart proof when an optional closed chart has the same count', () => {
+    const observations = appHealthDisplayObservations([
+      check([
+        'outlook.dashboard:history:graphic:ready:1/1:summary=1',
+        'outlook.dashboard:economy:graphic:ready:1/1:summary=0',
+      ].join(' | ')),
+    ]);
+
+    expect(observations[0]?.evidence).toContainEqual({
+      role: 'chart',
+      modelPointCount: 1,
+      renderedPointCount: 1,
+      accessibleSummary: true,
+    });
+  });
+
   it('records an explicitly rendered empty state for an empty settled list', () => {
     expect(appHealthDisplayObservations([
       check('saved.list:items:list:ready:0/0:::visible=0:empty=1'),

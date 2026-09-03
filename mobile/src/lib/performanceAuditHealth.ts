@@ -227,6 +227,18 @@ function observedEvidenceCount(evidence: AppHealthDisplayEvidence): number {
   }
 }
 
+function observedEvidenceQuality(evidence: AppHealthDisplayEvidence): number {
+  switch (evidence.role) {
+    case 'chart': return evidence.accessibleSummary ? 1 : 0;
+    case 'critical-layout': return evidence.measured ? 1 : 0;
+    case 'empty-state': return evidence.rendered === evidence.expected ? 1 : 0;
+    case 'logo': return evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
+    case 'model': return evidence.modelCount === evidence.sourceCount ? 1 : 0;
+    case 'list': return evidence.renderedCount === evidence.modelCount ? 1 : 0;
+    case 'visible': return evidence.visibleCount >= evidence.expectedMinimum ? 1 : 0;
+  }
+}
+
 /** Convert independently registered screen probes into display-quality evidence. */
 export function appHealthDisplayObservations(
   checks: readonly AuditCheck[],
@@ -241,8 +253,16 @@ export function appHealthDisplayObservations(
       const roles = bySurface.get(probe.surfaceId) ?? new Map();
       for (const evidence of evidenceFor(probe)) {
         const prior = roles.get(evidence.role);
-        // Repeated cold/warm probes keep the strongest independently observed count.
-        if (!prior || observedEvidenceCount(evidence) >= observedEvidenceCount(prior)) {
+        // Repeated cold/warm probes keep the strongest independently observed
+        // count. On a tie, retain the evidence with the stronger quality proof
+        // (for example an accessible chart rather than a closed optional chart).
+        const nextCount = observedEvidenceCount(evidence);
+        const priorCount = prior == null ? -1 : observedEvidenceCount(prior);
+        if (
+          !prior ||
+          nextCount > priorCount ||
+          (nextCount === priorCount && observedEvidenceQuality(evidence) > observedEvidenceQuality(prior))
+        ) {
           roles.set(evidence.role, evidence);
         }
       }

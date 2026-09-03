@@ -33,16 +33,19 @@ export function CurrentBankPicker({
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
   const providers = useMemo(
-    () => alphabeticalScenarioProviders(rows),
-    [rows],
+    () => open === 'bank' ? alphabeticalScenarioProviders(rows) : [],
+    [open, rows],
   );
   const products = useMemo(() => {
-    if (!value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
+    if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
     return currentProductOptions(rows, value.provider);
-  }, [rows, value.provider]);
-  const selectedProduct = products.find((row) =>
-    row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
-  );
+  }, [open, rows, value.provider]);
+  const selectedProduct = useMemo(() => {
+    if (!value.productKey) return undefined;
+    return rows.find((row) =>
+      row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
+    );
+  }, [rows, value.productKey, value.rateIndex]);
   const chooseBank = (provider: string) => {
     onChange({ provider, productKey: '', rateIndex: null });
     setOpen(null);
@@ -159,7 +162,7 @@ export function CurrentBankPicker({
                     <AppText weight="700">Not listed</AppText>
                   </Pressable>
                 </>
-              ) : (
+              ) : open === 'product' ? (
                 <>
                   <Pressable
                     onPress={() => chooseProduct(null)}
@@ -196,7 +199,7 @@ export function CurrentBankPicker({
                     );
                   })}
                 </>
-              )}
+              ) : null}
             </ScrollView>
           </Card>
         </View>

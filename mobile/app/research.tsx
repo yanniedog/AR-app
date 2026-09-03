@@ -15,6 +15,7 @@ import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/His
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
 import { formatRate, formatRunDate } from '../src/data/format';
+import { rbaSeriesThroughDate, rbaTimelineDates } from '../src/data/bankHistoryTransform';
 import { selectBankHistoryChartModel, shouldEnsurePrebuiltBankHistory } from '../src/data/historySelectors';
 import { orderedInterestSections, resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
 import { decisionLine, formatRbaDate, rbaTrend, recentDecisions } from '../src/data/rbaCalendar';
@@ -83,9 +84,15 @@ export default function Market() {
     pointCount: number;
     accessibleSummary: boolean;
   } | null>(null);
+  const [leaderLogoState, setLeaderLogoState] = useState<{
+    revision: string;
+    expectedCount: number;
+    terminalCount: number;
+  } | null>(null);
   const [economicAuditState, setEconomicAuditState] = useState<RbaOutlookAuditState | null>(null);
   const [pendingEconomyAuditAction, setPendingEconomyAuditAction] = useState<'lens' | 'window' | 'date' | null>(null);
   const [rbaLayoutY, setRbaLayoutY] = useState<number | null>(null);
+  const [rbaLayoutReady, setRbaLayoutReady] = useState(false);
   const rbaOutlookRef = useRef<RbaOutlookAuditHandle>(null);
   const legacyRbaHandled = useRef(false);
 
@@ -196,6 +203,12 @@ export default function Market() {
   const rbaGraphicReady = !!rbaGraphicState &&
     rbaGraphicState.pointCount > 0 &&
     rbaGraphicState.revision.startsWith(rbaGraphicRevisionPrefix);
+  const rbaChartPointCount = useMemo(() => {
+    if (!core?.rba.length) return 0;
+    const timeline = rbaTimelineDates(core.rba, core.rba_holds);
+    const endDate = timeline.at(-1) ?? core.rba.at(-1)?.date ?? '';
+    return rbaSeriesThroughDate(core.rba, endDate).length;
+  }, [core?.rba, core?.rba_holds]);
   const openRba = useCallback(() => {
     setRbaGraphicState(null);
     setRbaOpen(true);
@@ -302,6 +315,16 @@ export default function Market() {
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
     datasetRevision, renderRevision,
   });
+  usePerformanceAuditProbe(surface, {
+    id: 'leader-logos', kind: 'logo', required: explorerMode === 'race',
+    status: explorerMode !== 'race' || (
+      leaderLogoState?.revision === renderRevision &&
+      leaderLogoState.terminalCount === leaderLogoState.expectedCount
+    ) ? 'ready' : 'pending',
+    expectedCount: explorerMode === 'race' ? leaderLogoState?.expectedCount ?? 0 : 0,
+    actualCount: explorerMode === 'race' ? leaderLogoState?.terminalCount ?? 0 : 0,
+    datasetRevision, renderRevision,
+  });
 
   const rbaSurface = usePerformanceAuditSurface({
     id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
@@ -318,9 +341,15 @@ export default function Market() {
   usePerformanceAuditProbe(rbaSurface, {
     id: 'rba-graphic', kind: 'graphic', required: rbaOpen,
     status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
-    expectedCount: rbaOpen ? core?.rba.length ?? 1 : 0,
+    expectedCount: rbaOpen ? rbaChartPointCount : 0,
     actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
     accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
+  });
+  usePerformanceAuditProbe(rbaSurface, {
+    id: 'rba-layout', kind: 'layout',
+    status: rbaLayoutReady ? 'ready' : 'pending',
+    layoutMeasured: rbaLayoutReady,
+    datasetRevision,
   });
 
   const handleRetryHistory = async () => {
@@ -403,6 +432,7 @@ export default function Market() {
               window={explorerWindow}
               onWindowChange={setExplorerWindow}
               auditRevision={renderRevision}
+              onLeaderLogoReadiness={setLeaderLogoState}
               showModePicker={advancedViews}
             />
             <Button
@@ -427,7 +457,13 @@ export default function Market() {
         )}
       </Disclosure>
 
-      <View onLayout={(event) => setRbaLayoutY(event.nativeEvent.layout.y)}>
+      <View
+        onLayout={(event) => {
+          const { width, height, y } = event.nativeEvent.layout;
+          setRbaLayoutY(y);
+          if (width > 0 && height > 0) setRbaLayoutReady(true);
+        }}
+      >
         <Disclosure
           title="RBA cash rate"
           summary={currentRba ? `${formatRate(currentRba.rate)}${trend.summary ? ` · ${trend.summary}` : ''}` : 'Cash-rate history and decisions'}

@@ -43,8 +43,10 @@ import {
 import {
   MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
   maximumPerformanceAuditPrefs,
+  maximumPerformanceAuditProfileWasEnabled,
 } from '../lib/performanceAuditProfile';
 import {
+  compactPerformanceAuditReadinessEvidence,
   performanceAuditReadinessRegistry,
   PerformanceAuditReadinessTimeoutError,
   type PerformanceAuditReadinessKind,
@@ -528,27 +530,7 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
     readinessProbeCount: snapshot.totalProbes,
     readinessRequiredProbeCount: snapshot.requiredProbes,
     readinessPendingRequiredProbeCount: snapshot.pendingRequiredProbes,
-    readinessEvidence: snapshot.surfaces
-      .flatMap((surface) => surface.probes.map((probe) => [
-        surface.id,
-        probe.id,
-        probe.kind,
-        probe.status,
-        probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
-        // Keep revision identity without dumping full sha256 blobs into every row.
-        typeof probe.datasetRevision === 'string' && probe.datasetRevision.length > 16
-          ? `${probe.datasetRevision.slice(0, 12)}…`
-          : probe.datasetRevision ?? '',
-        typeof probe.renderRevision === 'string' && probe.renderRevision.length > 80
-          ? `${probe.renderRevision.slice(0, 80)}…`
-          : probe.renderRevision ?? '',
-        probe.fallbackCount == null ? '' : `fallback=${probe.fallbackCount}`,
-        probe.visibleCount == null ? '' : `visible=${probe.visibleCount}`,
-        probe.emptyStateRendered == null ? '' : `empty=${probe.emptyStateRendered ? 1 : 0}`,
-        probe.layoutMeasured == null ? '' : `measured=${probe.layoutMeasured ? 1 : 0}`,
-        probe.accessibleSummary == null ? '' : `summary=${probe.accessibleSummary ? 1 : 0}`,
-      ].join(':')))
-      .join(' | '),
+    readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot),
     readinessActionEvidence: snapshot.surfaces
       .map((surface) => `${surface.id}:${surface.lastCompletedAction ?? 'none'}:${surface.actionRevision}`)
       .join(' | '),
@@ -2683,10 +2665,9 @@ export function PerformanceAuditRunner() {
           historyLoaded: maximumProfileState.historyBanks != null,
           productHistoryLoaded: maximumProfileState.productHistory != null,
           auditCoverageProfile: MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID,
-          maximumSafeFeaturesEnabled:
-            maximumProfileResult.check != null &&
-            maximumProfileResult.check.status !== 'fail' &&
-            maximumProfileResult.check.status !== 'skipped',
+          maximumSafeFeaturesEnabled: maximumPerformanceAuditProfileWasEnabled(
+            maximumProfileResult.check?.metrics,
+          ),
         };
 
         updatePerformanceAuditProgress(completed, total, 'Sampling idle responsiveness');

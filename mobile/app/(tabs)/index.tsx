@@ -457,6 +457,13 @@ export default function Home() {
         accessibleSummary: heroLayoutRevision === todayRenderRevision,
         renderRevision: todayRenderRevision,
       },
+      {
+        id: 'today.layout',
+        kind: 'layout',
+        status: heroLayoutRevision === todayRenderRevision ? 'ready' : 'pending',
+        layoutMeasured: heroLayoutRevision === todayRenderRevision,
+        renderRevision: todayRenderRevision,
+      },
     ],
   });
 

@@ -171,9 +171,12 @@ export default function RateReceiptScreen() {
       {
         id: 'receipt.facts',
         kind: 'list',
-        status: receipt && brief && evidenceOpen ? 'ready' : 'pending',
-        expectedCount: receiptFactCount,
-        actualCount: evidenceOpen ? receiptFactCount : 0,
+        // The disclosure is intentionally closed on entry. Its contents only
+        // become required after the audit (or user) opens it.
+        required: evidenceOpen,
+        status: !evidenceOpen || (receipt && brief) ? 'ready' : 'pending',
+        expectedCount: evidenceOpen ? receiptFactCount : 0,
+        actualCount: evidenceOpen && receipt && brief ? receiptFactCount : 0,
       },
       {
         id: 'receipt.layout',
