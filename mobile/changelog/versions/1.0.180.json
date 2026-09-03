@@ -1,0 +1,40 @@
+{
+  "version": "1.0.180",
+  "releaseTag": "app-arm-v1.0.180",
+  "date": "2026-09-03",
+  "summaryBullets": [
+    "build(deps): bump browserslist from 4.28.2 to 4.28.8 in /mobile (#224)",
+    "build(deps): bump @xmldom/xmldom from 0.8.13 to 0.8.15 in /mobile (#223)",
+    "build(deps): bump fast-uri from 3.1.2 to 3.1.7 in /mobile (#222)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "build(deps): bump browserslist from 4.28.2 to 4.28.8 in /mobile (#224)"
+        },
+        {
+          "text": "build(deps): bump @xmldom/xmldom from 0.8.13 to 0.8.15 in /mobile (#223)"
+        },
+        {
+          "text": "build(deps): bump fast-uri from 3.1.2 to 3.1.7 in /mobile (#222)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.180"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.179"
+        }
+      ]
+    }
+  ]
+}
