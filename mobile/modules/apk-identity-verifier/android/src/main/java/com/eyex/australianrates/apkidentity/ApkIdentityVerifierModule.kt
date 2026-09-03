@@ -1,6 +1,7 @@
 package com.eyex.australianrates.apkidentity
 
 import android.net.Uri
+import android.os.Build
 import com.android.apksig.ApkVerifier
 import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.modules.Module
@@ -45,9 +46,17 @@ class ApkIdentityVerifierModule : Module() {
 
       val packageInfo = context.packageManager.getPackageArchiveInfo(apk.absolutePath, 0)
         ?: throw SecurityException("APK package identity could not be parsed")
+      @Suppress("DEPRECATION")
+      val versionCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        packageInfo.longVersionCode
+      } else {
+        packageInfo.versionCode.toLong()
+      }
 
       mapOf(
         "packageName" to packageInfo.packageName,
+        "versionName" to (packageInfo.versionName ?: ""),
+        "versionCode" to versionCode.toString(),
         "signerSha256" to signerSha256,
         "signerCount" to certificates.size,
         "signatureVerified" to true,

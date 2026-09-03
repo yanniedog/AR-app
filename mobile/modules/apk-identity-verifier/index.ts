@@ -2,6 +2,8 @@ import { requireOptionalNativeModule } from 'expo-modules-core';
 
 export interface VerifiedApkArchiveIdentity {
   packageName: string;
+  versionName: string;
+  versionCode: string;
   signerSha256: string;
   signerCount: number;
   signatureVerified: boolean;

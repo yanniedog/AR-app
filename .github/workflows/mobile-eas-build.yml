@@ -162,6 +162,13 @@ jobs:
         run: |
           git diff --exit-code
           git diff --cached --exit-code
+          # The EAS worker evaluates app.config.js remotely. Put the calculated
+          # release values in the selected build profile so its APK receives the
+          # same version/versionCode that the runner validated and will publish.
+          if [ -n "${AR_APP_RELEASE_VERSION:-}" ]; then
+            node scripts/inject-eas-release-env.mjs --profile "${{ inputs.profile }}"
+          fi
+          trap 'git restore --source=HEAD -- eas.json' EXIT
           set +e
           # Keep Git metadata enabled: mobile-eas-submit requires the EAS build
           # record to attest this exact protected-main commit.

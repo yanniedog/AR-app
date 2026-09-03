@@ -29,11 +29,11 @@ export interface ApkDownloadSnapshot {
   verifiedSha256: string | null;
   verifiedBytes: number | null;
   verifiedAt: string | null;
-  /** Version 2 proves SHA, package, signer, and a modern Android signature scheme. */
+  /** Version 3 also proves the signed archive version/build match the manifest. */
   verifiedReceiptVersion: number | null;
 }
 
-export const APK_READY_RECEIPT_VERSION = 2;
+export const APK_READY_RECEIPT_VERSION = 3;
 
 export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
   phase: 'idle',
@@ -58,6 +58,11 @@ export const IDLE_APK_DOWNLOAD: ApkDownloadSnapshot = {
 
 export const APK_DOWNLOAD_STALL_MS = 2 * 60 * 1000;
 export const APK_DOWNLOAD_MAX_AUTO_RETRIES = 2;
+
+/** Non-terminal update work would contaminate app-health timing and network evidence. */
+export function blocksPerformanceAudit(snapshot: Pick<ApkDownloadSnapshot, 'phase'>): boolean {
+  return ['waiting', 'downloading', 'retrying', 'verifying'].includes(snapshot.phase);
+}
 
 export function apkDownloadTaskId(buildNumber: string, sha256?: string | null): string {
   const integrityKey = sha256?.slice(0, 12).toLowerCase();

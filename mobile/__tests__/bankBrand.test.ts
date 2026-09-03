@@ -113,19 +113,23 @@ describe('bankBrand', () => {
     }
   });
 
-  it('keeps audit rendering network-free while preserving broad normal coverage', () => {
+  it('keeps audit rendering network-free and resolves every trusted sample logo', () => {
     const remote = 'https://bank.test/logo.svg';
     expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, true)).toEqual([]);
     expect(resolveBankLogoSourcesForRuntime('Unknown', undefined, remote, false)).toEqual([remote]);
     expect(isSvgLogoSource(remote)).toBe(true);
 
-    const providers = Object.entries(sample.brands ?? {});
-    const covered = providers.filter(([provider, brand]) =>
-      resolveBankLogoSources(
-        provider,
-        brand.logo,
-        brand.logo_uri ?? brand.logo_svg_uri,
-      ).length > 0);
-    expect(covered.length).toBeGreaterThanOrEqual(Math.ceil(providers.length * 0.75));
+    const providersWithArtwork = Object.entries(sample.brands ?? {}).filter(([, brand]) =>
+      Boolean(brand.logo || brand.logo_uri || brand.logo_svg_uri));
+    expect(providersWithArtwork.length).toBeGreaterThan(0);
+    for (const [provider, brand] of providersWithArtwork) {
+      expect(
+        resolveBankLogoSources(
+          provider,
+          brand.logo,
+          brand.logo_uri ?? brand.logo_svg_uri,
+        ),
+      ).not.toHaveLength(0);
+    }
   });
 });

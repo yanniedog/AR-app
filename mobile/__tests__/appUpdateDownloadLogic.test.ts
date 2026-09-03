@@ -3,6 +3,7 @@ import {
   IDLE_APK_DOWNLOAD,
   apkDestinationPath,
   apkDownloadTaskId,
+  blocksPerformanceAudit,
   canAutoRetryApkDownload,
   downloadPercent,
   hasTrustedReadyApkReceipt,
@@ -15,6 +16,15 @@ import {
 } from '../src/lib/appUpdateDownloadLogic';
 
 describe('appUpdateDownloadLogic', () => {
+  it('blocks performance audits for every non-terminal APK update phase', () => {
+    for (const phase of ['waiting', 'downloading', 'retrying', 'verifying'] as const) {
+      expect(blocksPerformanceAudit({ phase })).toBe(true);
+    }
+    for (const phase of ['idle', 'ready', 'cancelled', 'error'] as const) {
+      expect(blocksPerformanceAudit({ phase })).toBe(false);
+    }
+  });
+
   it('builds stable task ids and destinations', () => {
     expect(apkDownloadTaskId('42')).toBe('apk-update-42');
     expect(apkDestinationPath('file:///docs/', '42')).toBe('file:///docs/app-update-42.apk');

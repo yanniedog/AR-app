@@ -4,6 +4,9 @@ describe('native intent boundary', () => {
   it('normalizes supported app links to internal routes', () => {
     expect(sanitizeNativeIntentPath('arrates://product/A%7C1?ri=2')).toBe('/product/A%7C1?ri=2');
     expect(sanitizeNativeIntentPath('arrates://product/rate%25special')).toBe('/product/rate%25special');
+    expect(sanitizeNativeIntentPath('arrates://product/Hume%20Bank%7CO%2FOcc%7C1')).toBe(
+      '/product/Hume%20Bank%7CO%2FOcc%7C1',
+    );
     expect(sanitizeNativeIntentPath('/search?section=Mortgage')).toBe('/search?section=Mortgage');
     expect(sanitizeNativeIntentPath('arrates://passthrough')).toBe('/passthrough');
     expect(sanitizeNativeIntentPath('arrates://watchlist')).toBe('/watchlist');
@@ -26,7 +29,7 @@ describe('native intent boundary', () => {
     expect(sanitizeNativeIntentPath('arrates://product/../performance-audit')).toBe('/');
     expect(sanitizeNativeIntentPath('arrates://product/%2e%2e/debug-log')).toBe('/');
     expect(sanitizeNativeIntentPath('arrates://product/%252e%252e/debug-log')).toBe('/');
-    expect(sanitizeNativeIntentPath('arrates://product/%2fdebug-log')).toBe('/');
+    expect(sanitizeNativeIntentPath('arrates://product/key/%2fdebug-log')).toBe('/');
     expect(sanitizeNativeIntentPath('arrates://product/%c0%ae%c0%ae/debug-log')).toBe('/');
   });
 

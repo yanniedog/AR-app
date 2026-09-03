@@ -726,11 +726,22 @@ export function getApkDownloadSnapshot(): ApkDownloadSnapshot {
   return snapshot;
 }
 
+/** Hydrate persisted state before an audit decides whether update work is terminal. */
+export async function getHydratedApkDownloadSnapshot(): Promise<ApkDownloadSnapshot> {
+  await hydrate();
+  return snapshot;
+}
+
 export function subscribeApkDownload(
   listener: (s: ApkDownloadSnapshot) => void,
 ): () => void {
   listeners.add(listener);
   listener(snapshot);
+  // Load persisted/native-backed state as soon as any UI needs it. This keeps
+  // the audit preflight from mistaking a process-restored download for idle.
+  void hydrate().catch((error) => {
+    debugLog.warn('app-update', `download state hydration failed: ${String(error)}`);
+  });
   return () => {
     listeners.delete(listener);
   };

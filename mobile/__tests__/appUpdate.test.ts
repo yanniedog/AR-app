@@ -71,6 +71,8 @@ describe('appUpdateLogic', () => {
     global.fetch = jest.fn();
     jest.mocked(verifyApkArchiveIdentity).mockReset().mockResolvedValue({
       packageName: 'com.eyex.australianrates',
+      versionName: baseManifest.version,
+      versionCode: baseManifest.build_number,
       signerSha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
       signerCount: 1,
       signatureVerified: true,
@@ -432,6 +434,8 @@ describe('APK download integrity', () => {
     jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
     jest.mocked(verifyApkArchiveIdentity).mockResolvedValueOnce({
       packageName: 'example.attacker.app',
+      versionName: baseManifest.version,
+      versionCode: baseManifest.build_number,
       signerSha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
       signerCount: 1,
       signatureVerified: true,
@@ -453,6 +457,8 @@ describe('APK download integrity', () => {
     jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
     jest.mocked(verifyApkArchiveIdentity).mockResolvedValueOnce({
       packageName: 'com.eyex.australianrates',
+      versionName: baseManifest.version,
+      versionCode: baseManifest.build_number,
       signerSha256: '0'.repeat(64),
       signerCount: 1,
       signatureVerified: true,
@@ -461,6 +467,29 @@ describe('APK download integrity', () => {
 
     await expect(verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest))
       .rejects.toThrow(/signer does not match/i);
+  });
+
+  it('rejects a trusted-signed APK whose archive version does not match the manifest', async () => {
+    jest.mocked(FileSystem.getInfoAsync).mockResolvedValueOnce({
+      exists: true,
+      isDirectory: false,
+      uri: 'file:///docs/app-update-42.apk',
+      size: baseManifest.bytes!,
+      modificationTime: 0,
+    });
+    jest.mocked(NativeFileSystem.hash).mockResolvedValueOnce(baseManifest.sha256!);
+    jest.mocked(verifyApkArchiveIdentity).mockResolvedValueOnce({
+      packageName: 'com.eyex.australianrates',
+      versionName: '1.0.0',
+      versionCode: '41',
+      signerSha256: TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256,
+      signerCount: 1,
+      signatureVerified: true,
+      verifiedSchemes: ['v2'],
+    });
+
+    await expect(verifyDownloadedApk('file:///docs/app-update-42.apk', baseManifest))
+      .rejects.toThrow(/build mismatch/i);
   });
 
   it('rejects corrupt or legacy-only archive signatures before install', async () => {

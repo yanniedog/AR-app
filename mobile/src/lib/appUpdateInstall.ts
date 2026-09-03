@@ -40,7 +40,7 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
  */
 export async function verifyDownloadedApk(
   path: string,
-  manifest: Pick<ApkManifest, 'bytes' | 'sha256'>,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256' | 'version' | 'build_number'>,
 ): Promise<{ size: number; verifiedSha256: boolean }> {
   const info = await FileSystem.getInfoAsync(path);
   const size = info.exists && 'size' in info ? (info.size ?? 0) : 0;
@@ -67,6 +67,16 @@ export async function verifyDownloadedApk(
   if (identity.packageName !== TRUSTED_ANDROID_PACKAGE) {
     throw new Error('APK package does not match Australian Rates');
   }
+  if (identity.versionName !== manifest.version) {
+    throw new Error(
+      `APK version mismatch (expected ${manifest.version}, got ${identity.versionName || 'missing'})`,
+    );
+  }
+  if (identity.versionCode !== String(manifest.build_number)) {
+    throw new Error(
+      `APK build mismatch (expected ${manifest.build_number}, got ${identity.versionCode || 'missing'})`,
+    );
+  }
   if (identity.signerSha256.toLowerCase() !== TRUSTED_ANDROID_SIGNING_CERTIFICATE_SHA256) {
     throw new Error('APK signer does not match Australian Rates');
   }
@@ -83,10 +93,9 @@ export async function verifyDownloadedApk(
 /** Prefer verifyDownloadedApk so large files still enforce manifest.bytes. */
 export async function verifyApkSha256(
   path: string,
-  expectedSha: string,
-  expectedBytes?: number | null,
+  manifest: Pick<ApkManifest, 'bytes' | 'sha256' | 'version' | 'build_number'>,
 ): Promise<void> {
-  await verifyDownloadedApk(path, { sha256: expectedSha, bytes: expectedBytes ?? undefined });
+  await verifyDownloadedApk(path, manifest);
 }
 
 export async function installDownloadedApk(localUri: string): Promise<void> {

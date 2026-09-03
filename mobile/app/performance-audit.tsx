@@ -18,6 +18,12 @@ import {
   type AuditCheck,
 } from '../src/lib/performanceAudit';
 import { createDeidentifiedDiagnosticsShare } from '../src/lib/diagnosticsEnvelope';
+import {
+  getApkDownloadSnapshot,
+  getHydratedApkDownloadSnapshot,
+  subscribeApkDownload,
+} from '../src/lib/appUpdate';
+import { blocksPerformanceAudit } from '../src/lib/appUpdateDownloadLogic';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
 
@@ -26,6 +32,14 @@ function usePerformanceAuditState() {
     subscribePerformanceAudit,
     getPerformanceAuditState,
     getPerformanceAuditState,
+  );
+}
+
+function useApkDownloadState() {
+  return useSyncExternalStore(
+    subscribeApkDownload,
+    getApkDownloadSnapshot,
+    getApkDownloadSnapshot,
   );
 }
 
@@ -133,12 +147,15 @@ function checkDetail(check: AuditCheck): string {
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
+  const apkDownload = useApkDownloadState();
+  const updateBlocksAudit = blocksPerformanceAudit(apkDownload);
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
     String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
   );
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
+  const [auditPreflightMode, setAuditPreflightMode] = useState<'local' | 'live-source' | null>(null);
   const [visibleCheckLimit, setVisibleCheckLimit] = useState(MAX_REPORTED_AUDIT_CHECKS);
   const report = state.report;
   const orderedChecks = useMemo(
@@ -212,9 +229,22 @@ function PerformanceAuditScreenInner() {
     ).catch(() => {});
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
-  const runAudit = (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null) return;
-    requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+  const runAudit = async (mode: 'local' | 'live-source') => {
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode) return;
+    setAuditPreflightMode(mode);
+    try {
+      const currentDownload = await getHydratedApkDownloadSnapshot();
+      if (blocksPerformanceAudit(currentDownload)) {
+        Alert.alert(
+          'Finish the app update first',
+          'The app-health audit is unavailable while an APK download or verification is active. This keeps its timing and network results trustworthy.',
+        );
+        return;
+      }
+      requestPerformanceAudit({ hangTimeoutMs: hangTimeoutSeconds * 1_000, mode });
+    } finally {
+      setAuditPreflightMode(null);
+    }
   };
   const confirmShareReport = () => {
     if (!report || sharingReport) return;
@@ -326,23 +356,29 @@ function PerformanceAuditScreenInner() {
         <Button
           title={report ? 'Run local audit again' : 'Run local audit'}
           icon="pulse-outline"
-          loading={running && state.auditMode === 'local'}
-          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={() => runAudit('local')}
+          loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
+          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          onPress={() => void runAudit('local')}
         />
         <Button
           title="Run with live-source check"
           icon="cloud-download-outline"
           variant="secondary"
-          loading={running && state.auditMode === 'live-source'}
-          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null}
-          onPress={() => runAudit('live-source')}
+          loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
+          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
           Local mode blocks fetch and XMLHttpRequest. Live-source mode may read only the public
           Australian Rates manifest, dates index and manifest-authenticated release files. Neither
           mode uploads diagnostics or writes to the clipboard.
         </AppText>
+        {updateBlocksAudit ? (
+          <AppText variant="tiny" color="danger" accessibilityLiveRegion="polite">
+            Finish the active app update before running an audit. Update work would distort its
+            network and timing evidence.
+          </AppText>
+        ) : null}
       </Card>
 
       {state.status === 'cancelled' ? (

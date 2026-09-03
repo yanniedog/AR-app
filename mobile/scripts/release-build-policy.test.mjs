@@ -129,9 +129,11 @@ test('EAS submission validates an environment-delivered build UUID', async () =>
   assert.match(buildWorkflow, /--github-env "\$GITHUB_ENV"/);
   assert.match(buildWorkflow, /git diff --exit-code/);
   assert.match(buildWorkflow, /git diff --cached --exit-code/);
+  assert.match(buildWorkflow, /inject-eas-release-env\.mjs --profile/);
+  assert.match(buildWorkflow, /trap 'git restore --source=HEAD -- eas\.json' EXIT/);
 });
 
-test('critical dependency additions fail inside the required mobile-ci job', async () => {
+test('high-severity dependency additions and native verifier compilation gate PRs', async () => {
   const workflow = await readFile(
     new URL('../../.github/workflows/app-ci.yml', import.meta.url),
     'utf8',
@@ -140,5 +142,8 @@ test('critical dependency additions fail inside the required mobile-ci job', asy
   assert.doesNotMatch(workflow, /^  dependency-review:/m);
   assert.match(workflow, /^  mobile:\n[\s\S]*actions\/dependency-review-action@/m);
   assert.match(workflow, /Dependency review \(required mobile-ci gate\)/);
-  assert.match(workflow, /fail-on-severity: critical/);
+  assert.match(workflow, /fail-on-severity: high/);
+  assert.match(workflow, /allow-ghsas:[\s\S]*GHSA-r292-9mhp-454m/);
+  assert.match(workflow, /Compile native APK identity verifier/);
+  assert.match(workflow, /:ar-apk-identity-verifier:compileReleaseKotlin/);
 });
