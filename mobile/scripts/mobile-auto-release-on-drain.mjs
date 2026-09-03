@@ -117,19 +117,25 @@ function apkBuildInFlight(expectedHeadSha) {
 // Dispatch after the generated version PR merges. Requires actions:write.
 // Failure propagates: a silent dispatch failure would leave the new version on
 // main with no APK and no failing check (Codex / Sourcery).
-function dispatchApkBuild(version) {
-  if (dryRun) {
-    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch ARM and universal mobile-android-apk for v${version}`);
+export function dispatchApkBuild(
+  version,
+  { runGh = gh, simulate = dryRun } = {},
+) {
+  if (simulate) {
+    console.log(`mobile-auto-release-on-drain: dry-run — would dispatch universal then ARM mobile-android-apk for v${version}`);
     return;
   }
-  for (const apkChannel of ['arm', 'universal']) {
-    gh([
-      'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
-      '-f', `apk_channel=${apkChannel}`,
-      '-f', 'bridge_legacy_ar_local=false',
-    ]);
-  }
-  console.log(`mobile-auto-release-on-drain: dispatched ARM and universal APKs for v${version} on main`);
+  // The universal build must publish first. It then dispatches the ARM build,
+  // which alone may open the README refresh PR. Dispatching both here puts them
+  // in the same concurrency queue; ARM can otherwise mutate main before the
+  // queued universal run verifies its protected source SHA.
+  runGh([
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', repo,
+    '-f', 'apk_channel=universal',
+    '-f', 'bridge_legacy_ar_local=false',
+    '-f', 'follow_with_arm=true',
+  ]);
+  console.log(`mobile-auto-release-on-drain: dispatched universal-first APK chain for v${version} on main`);
 }
 
 // Build an APK for main's CURRENT version when one isn't published yet. Callers

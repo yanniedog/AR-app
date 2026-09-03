@@ -11,6 +11,7 @@ import { SECTIONS } from '../../src/constants';
 import {
   filterBankInsightsForSuitability,
   marketPulse,
+  recentBankEvents,
   rbaPassThroughMultiSection,
 } from '../../src/data/bankInsights';
 import { summarizeSectionResponse } from '../../src/data/passThroughModels';
@@ -21,6 +22,13 @@ import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { formatRunDate } from '../../src/data/format';
 import { scalarRouteParam } from '../../src/lib/nav';
+import {
+  isFeedRenderEvidenceReady,
+  reconcileFeedRenderEvidence,
+  resetFeedRenderEvidence,
+  type FeedLayoutEvidence,
+  type FeedRenderEvidence,
+} from '../../src/lib/feedRenderEvidence';
 
 function weeklySummary(
   section: keyof typeof SECTIONS,
@@ -39,16 +47,11 @@ function weeklySummary(
   return `${pulse.banksMoved} lender${pulse.banksMoved === 1 ? '' : 's'} changed ${label}: ${up} increase${up === 1 ? '' : 's'}, ${down} decrease${down === 1 ? '' : 's'}${mixedSummary}.`;
 }
 
-interface FeedRenderEvidence {
-  expectedCount: number;
-  actualCount: number;
-  emptyStateRendered: boolean;
-}
-
 export default function RateMovesTab() {
   const core = useStore((state) => state.core);
   const coreIntegrity = useStore((state) => state.coreIntegrity);
   const coreSha = useStore((state) => state.manifest?.files.core.sha256 ?? null);
+  const bankInsightsSha = useStore((state) => state.manifest?.files.bank_history?.sha256 ?? null);
   const rawPayload = useStore((state) => state.bankInsights);
   const calendar = useStore((state) => state.rbaCalendar);
   const error = useStore((state) => state.bankInsightsError);
@@ -64,11 +67,8 @@ export default function RateMovesTab() {
   const [retrying, setRetrying] = useState(false);
   const [moversOpen, setMoversOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [feedEvidence, setFeedEvidence] = useState<FeedRenderEvidence>({
-    expectedCount: 0,
-    actualCount: 0,
-    emptyStateRendered: false,
-  });
+  const [feedEvidence, setFeedEvidence] = useState<FeedRenderEvidence>(() =>
+    resetFeedRenderEvidence('uninitialised', 0));
   const suitabilityRevision = useSuitabilityRevision();
   const { date: decisionDateRaw } = useLocalSearchParams<{ date?: string | string[] }>();
   const decisionDate = scalarRouteParam(decisionDateRaw);
@@ -123,6 +123,33 @@ export default function RateMovesTab() {
   );
   const suitabilityWarming = rawPayload !== null && payload === null && !error && !suitabilityReady;
   const filteredEmpty = rawPayload !== null && payload === null && !error && suitabilityReady;
+  const feedExpectedCount = useMemo(
+    () => payload ? recentBankEvents(payload, { sections: [activeSection], limit: 14 }).length : 0,
+    [activeSection, payload],
+  );
+  const feedRenderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${bankInsightsSha ?? 'no-bank-history'}:${activeSection}`;
+
+  useEffect(() => {
+    setFeedEvidence(resetFeedRenderEvidence(feedRenderRevision, feedExpectedCount));
+  }, [feedExpectedCount, feedRenderRevision]);
+
+  const recordFeedEvidence = useCallback((observed: FeedLayoutEvidence) => {
+    setFeedEvidence((current) => reconcileFeedRenderEvidence(
+      current,
+      feedRenderRevision,
+      feedExpectedCount,
+      observed,
+    ));
+  }, [feedExpectedCount, feedRenderRevision]);
+  const feedReady = isFeedRenderEvidenceReady(
+    feedEvidence,
+    feedRenderRevision,
+    feedExpectedCount,
+  );
+  const currentFeedEvidence = feedEvidence.revision === feedRenderRevision &&
+    feedEvidence.expectedCount === feedExpectedCount
+    ? feedEvidence
+    : resetFeedRenderEvidence(feedRenderRevision, feedExpectedCount);
 
   const changeSection = useCallback(() => {
     const index = sectionOptions.findIndex((option) => option.value === activeSection);
@@ -134,7 +161,7 @@ export default function RateMovesTab() {
     'changes.section.next': changeSection,
     'changes.movers.toggle': () => setMoversOpen((open) => !open),
   }), [changeSection]);
-  const renderRevision = `${payload?.run_date ?? core?.run_date ?? 'none'}:${activeSection}:${moversOpen ? 'movers' : 'feed'}`;
+  const renderRevision = `${feedRenderRevision}:${moversOpen ? 'movers' : 'feed'}`;
   usePerformanceAuditSurface({
     id: 'changes.feed',
     routeKey: '/passthrough',
@@ -152,13 +179,10 @@ export default function RateMovesTab() {
       {
         id: 'changes.feed-list',
         kind: 'list',
-        status: payload && (
-          feedEvidence.emptyStateRendered ||
-          feedEvidence.actualCount >= feedEvidence.expectedCount
-        ) ? 'ready' : filteredEmpty ? 'ready' : 'pending',
-        expectedCount: feedEvidence.expectedCount,
-        actualCount: feedEvidence.actualCount,
-        emptyStateRendered: feedEvidence.emptyStateRendered,
+        status: (payload || filteredEmpty) && feedReady ? 'ready' : 'pending',
+        expectedCount: feedExpectedCount,
+        actualCount: currentFeedEvidence.actualCount,
+        emptyStateRendered: currentFeedEvidence.emptyStateRendered,
       },
       {
         id: 'changes.layout',
@@ -206,7 +230,7 @@ export default function RateMovesTab() {
               error={error}
               sections={[activeSection]}
               limit={14}
-              onRenderEvidence={setFeedEvidence}
+              onRenderEvidence={recordFeedEvidence}
             />
           </Card>
         ) : suitabilityWarming ? (
@@ -222,7 +246,15 @@ export default function RateMovesTab() {
             />
           </Card>
         ) : filteredEmpty ? (
-          <Card variant="outlined" style={{ gap: 8 }}>
+          <Card
+            variant="outlined"
+            style={{ gap: 8 }}
+            onLayout={() => recordFeedEvidence({
+              expectedCount: 0,
+              actualCount: 0,
+              emptyStateRendered: true,
+            })}
+          >
             <AppText variant="body" weight="700">No compatible rate moves</AppText>
             <AppText variant="small" color="textMuted">
               No observed lender changes match the products currently included in your settings.

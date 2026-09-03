@@ -35,6 +35,11 @@ on:
         required: false
         default: false
         type: boolean
+      follow_with_arm:
+        description: After universal publishes, queue the ARM channel before any README mutation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: write
@@ -200,6 +205,18 @@ jobs:
           fi
           node scripts/publish-apk-manifest.mjs --apk "${{ steps.apk.outputs.path }}" \
             --repo yanniedog/AR-local
+
+      - name: Queue ARM channel after universal publish
+        if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'universal' && inputs.follow_with_arm == true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run mobile-android-apk.yml \
+            --ref main \
+            --repo "${{ github.repository }}" \
+            -f apk_channel=arm \
+            -f bridge_legacy_ar_local=false \
+            -f follow_with_arm=false
 
       - name: Publish README Android install QR section
         if: github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'

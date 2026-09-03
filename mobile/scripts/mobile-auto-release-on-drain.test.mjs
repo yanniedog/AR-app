@@ -4,6 +4,7 @@ import test from 'node:test';
 
 import {
   checkedGhOutput,
+  dispatchApkBuild,
   ensureApkForMainHead,
   hasApkBuildInFlight,
   nextAutoReleaseVersion,
@@ -136,6 +137,21 @@ test('ensureApkForMainHead dispatches when the version has no published APK', ()
   assert.equal(did, true);
   assert.deepEqual(checkedHeads, ['abc1234']);
   assert.deepEqual(dispatched, ['1.0.40']);
+});
+
+test('APK release dispatches universal first and lets that run queue ARM', () => {
+  const calls = [];
+  dispatchApkBuild('1.0.40', {
+    simulate: false,
+    runGh: (args) => calls.push(args),
+  });
+
+  assert.deepEqual(calls, [[
+    'workflow', 'run', 'mobile-android-apk.yml', '--ref', 'main', '--repo', 'yanniedog/AR-app',
+    '-f', 'apk_channel=universal',
+    '-f', 'bridge_legacy_ar_local=false',
+    '-f', 'follow_with_arm=true',
+  ]]);
 });
 
 test('ensureApkForMainHead is a no-op when the APK is already published', () => {

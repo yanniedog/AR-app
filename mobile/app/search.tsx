@@ -106,6 +106,7 @@ export default function Search() {
   const details = useStore((s) => s.details);
   const detailsLoading = useStore((s) => s.detailsLoading);
   const searchIndex = useStore((s) => s.searchIndex);
+  const searchIndexSha = useStore((s) => s.manifest?.files.search_index?.sha256 ?? null);
   const searchIndexStatus = useStore((s) => s.searchIndexStatus);
   const searchIndexError = useStore((s) => s.searchIndexError);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
@@ -141,7 +142,7 @@ export default function Search() {
       void ensureDetails({ force: true });
       if (deepSearchActive) void ensureSearchIndex();
     });
-  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, isFocused]);
+  }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
