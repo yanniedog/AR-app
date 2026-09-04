@@ -121,6 +121,9 @@ export function buildReadmeInstallSection(opts = {}) {
   const compatibilityNote = armPrimary
     ? 'The displayed version and QR follow the phone-optimised ARM channel. x86 and x86_64 emulators or devices must use the universal fallback above.'
     : 'The universal APK supports ARM and x86 Android devices.';
+  const selfUpdateNote = armPrimary
+    ? 'In-app self-update reads `app-apk-latest.json` from tag `app-apk-arm-latest` on ARM devices and from tag `app-apk-latest` on x86 and x86_64 devices.'
+    : `In-app self-update reads the rolling manifest \`app-apk-latest.json\` from tag \`${rollingTag}\`.`;
 
   return `${START}
 ### Android preview install
@@ -137,7 +140,7 @@ Scan with **Android Chrome** to install the latest preview APK. Asset path is st
 ${compatibilityRow}
 ${compatibilityNote}
 
-In-app self-update uses the rolling manifest \`app-apk-latest.json\` on tag \`${rollingTag}\`.
+${selfUpdateNote}
 ${END}`;
 }
 

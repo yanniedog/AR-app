@@ -76,6 +76,8 @@ test('buildReadmeInstallSection follows ARM metadata while preserving a universa
     assert.match(section, /app-apk-latest\/app-preview\.apk/);
     assert.match(section, /app-apk-latest\/install\.html/);
     assert.match(section, /x86 and x86_64 emulators or devices must use the universal fallback/);
+    assert.match(section, /app-apk-arm-latest` on ARM devices/);
+    assert.match(section, /app-apk-latest` on x86 and x86_64 devices/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
