@@ -1,3 +1,4 @@
+import { hasAppHealthFetchGuard } from '../lib/appHealthTransportGuard';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
 import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
@@ -130,6 +131,26 @@ async function downloadBytes(
     totalBytes: opts.expectedBytes ?? null,
     startedAt,
   });
+
+  if (hasAppHealthFetchGuard()) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const response = await globalThis.fetch(url, { signal: controller.signal });
+      if (!response.ok) throw new Error(`asset HTTP ${response.status}`);
+      const buf = await response.arrayBuffer();
+      if (opts.maxCompressedBytes != null && buf.byteLength > opts.maxCompressedBytes) {
+        throw new Error(`compressed asset exceeds ${opts.maxCompressedBytes} byte limit`);
+      }
+      if (opts.requireExactBytes && buf.byteLength !== opts.expectedBytes) {
+        throw new Error(`compressed asset size mismatch (expected ${opts.expectedBytes}, got ${buf.byteLength})`);
+      }
+      emit(opts.onProgress, { phase, fileName, bytesReceived: buf.byteLength, totalBytes: buf.byteLength, startedAt });
+      return buf;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
 
   return new Promise((resolve, reject) => {
     let lastEmitAt = 0;

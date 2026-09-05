@@ -1,3 +1,5 @@
+import { canPrepareAuditSearchIndex } from '../src/lib/performanceAuditProfile';
+import type { Manifest } from '../src/types';
 import { SECTION_ORDER } from '../src/constants';
 import { DEFAULT_PREFS, type Prefs } from '../src/data/storeTypes';
 import {
@@ -59,4 +61,13 @@ describe('maximum performance audit profile', () => {
     expect(maximumPerformanceAuditProfileWasEnabled({ maximumSafeFeaturesEnabled: false })).toBe(false);
     expect(maximumPerformanceAuditProfileWasEnabled(undefined)).toBe(false);
   });
+});
+
+it('requires live authorization for the exact pinned search descriptor', () => {
+  const pinned = { files: { core: { sha256: 'core' }, search_index: { sha256: 'index', url: 'https://github.com/index' } } } as Manifest;
+  expect(canPrepareAuditSearchIndex('live-source', pinned, pinned)).toBe(true);
+  expect(canPrepareAuditSearchIndex('local', pinned, pinned)).toBe(false);
+  expect(canPrepareAuditSearchIndex('live-source', pinned, null)).toBe(false);
+  expect(canPrepareAuditSearchIndex('live-source', pinned, { ...pinned, files: { ...pinned.files, core: { ...pinned.files.core, sha256: 'new-core' } } })).toBe(false);
+  expect(canPrepareAuditSearchIndex('live-source', pinned, { ...pinned, files: { ...pinned.files, search_index: { ...pinned.files.search_index!, url: 'https://other.test/index' } } })).toBe(false);
 });

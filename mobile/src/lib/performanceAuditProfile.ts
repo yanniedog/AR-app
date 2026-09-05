@@ -1,3 +1,5 @@
+import type { Manifest } from '../types';
+import type { AppHealthAuditMode } from './appHealth';
 import { SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
 
@@ -29,4 +31,17 @@ export function maximumPerformanceAuditPrefs(original: Prefs): Prefs {
     onboarded: true,
     dismissedUpdateBuild: null,
   };
+}
+
+/** Only the exact pinned descriptor authenticated in this session may be warmed. */
+export function canPrepareAuditSearchIndex(
+  mode: AppHealthAuditMode,
+  pinned: Manifest | null | undefined,
+  live: Manifest | null | undefined,
+): boolean {
+  const file = live?.files.search_index;
+  return mode === 'live-source' && Boolean(file?.sha256) &&
+    live?.files.core.sha256 === pinned?.files.core.sha256 &&
+    file?.sha256 === pinned?.files.search_index?.sha256 &&
+    file?.url === pinned?.files.search_index?.url;
 }
