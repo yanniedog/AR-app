@@ -181,6 +181,8 @@ export interface WaitForPerformanceAuditReadinessOptions {
    * this set are ignored — used before invoking mounted actions so logo/list
    * decoration cannot block unrelated navigation taps. */
   onlyKinds?: readonly PerformanceAuditReadinessKind[];
+  /** A callback acknowledgement alone cannot certify a deferred UI update. */
+  changedRender?: { surfaceId: string; previousRevision: string | null };
 }
 
 type MutableProbe = PerformanceAuditProbeSnapshot;
@@ -786,7 +788,12 @@ export class PerformanceAuditReadinessRegistry {
           ));
           return;
         }
-        if (!snapshot.ready) {
+        const changedRender = options.changedRender;
+        const renderedChange = !changedRender || snapshot.surfaces.some((surface) =>
+          surface.id === changedRender.surfaceId &&
+          surface.renderRevision !== changedRender.previousRevision,
+        );
+        if (!snapshot.ready || !renderedChange) {
           stableFingerprint = null;
           return;
         }

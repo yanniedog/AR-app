@@ -48,6 +48,23 @@ describe('installAppHealthTransportGuard', () => {
     guard.restore();
   });
 
+  it('accepts cache-busted contract URLs without URLSearchParams.size on native', async () => {
+    const descriptor = Object.getOwnPropertyDescriptor(URLSearchParams.prototype, 'size');
+    Object.defineProperty(URLSearchParams.prototype, 'size', { configurable: true, get: () => undefined });
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    try {
+      await expect(target.fetch(`${contract.datesIndexUrl}?_=12345`)).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(`${contract.manifestUrl}?_=12345`)).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(`${contract.datesIndexUrl}?_=12345&extra=1`)).rejects.toThrow('blocked');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    } finally {
+      guard.restore();
+      if (descriptor) Object.defineProperty(URLSearchParams.prototype, 'size', descriptor);
+      else Reflect.deleteProperty(URLSearchParams.prototype, 'size');
+    }
+  });
+
   it('admits only manifest-declared assets after the manifest is read', async () => {
     const { target, fetchSpy } = targetWithSpies();
     const githubContract = createV1AppHealthSourceContract();

@@ -824,10 +824,6 @@ async function runDeepAuditStepBody(
       `terminal availability evidence: ${step.semanticActionId}`,
     );
     actionSource = source.id;
-    const sourceBefore = performanceAuditReadinessRegistry.snapshot().surfaces
-      .find((surface) => surface.id === source.id);
-    actionRevisionBefore = sourceBefore?.actionRevision ?? null;
-    renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     // Settle interactable readiness before invoking — exclude logo/list/graphic
     // decoration so stale off-screen asset probes cannot block unrelated taps.
     const preActionAbort = new AbortController();
@@ -850,6 +846,10 @@ async function runDeepAuditStepBody(
     }
     assertSessionActive(watchdog);
     preActionWaitMs = now() - preActionStarted;
+    const sourceBefore = performanceAuditReadinessRegistry.snapshot().surfaces
+      .find((surface) => surface.id === source.id);
+    actionRevisionBefore = sourceBefore?.actionRevision ?? null;
+    renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     execution.attempted = true;
     measuredAction = await measureAuditAction(
       () => {
@@ -957,6 +957,12 @@ async function runDeepAuditStepBody(
     readiness = await performanceAuditReadinessRegistry.waitForReady({
       surfaceIds: [step.expectedSurface],
       requiredKinds: requiredProbeKinds(step),
+      ...(actionSource === step.expectedSurface &&
+        pathMatches(currentPath(), pathBeforeAction) &&
+        step.safety.stateImpact !== 'none' &&
+        !step.semanticActionId.includes('.scroll.')
+        ? { changedRender: { surfaceId: actionSource, previousRevision: renderRevisionBefore } }
+        : {}),
       quietWindowMs: READINESS_QUIET_WINDOW_MS,
       timeoutMs: readinessTimeoutMs(watchdog),
       signal: readinessAbort.signal,
