@@ -1,3 +1,4 @@
+import { commissionerFamily } from '../src/theme/fonts';
 import { prepareProjectionAuditScenario } from '../src/lib/performanceAuditScenario';
 import Ionicons from '../src/components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -153,6 +154,7 @@ function NumericField({
           editable={editable}
           maxLength={20}
           style={{
+            fontFamily: commissionerFamily(),
             flex: 1,
             minWidth: 0,
             color: theme.colors.text,

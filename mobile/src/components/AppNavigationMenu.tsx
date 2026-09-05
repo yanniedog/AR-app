@@ -56,7 +56,7 @@ export function NavigationMenuButton() {
       accessibilityState={{ expanded: menu.open }}
       style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
-      <LedgerIcon name="utility" size={25} color={theme.ledger.ink} />
+      <LedgerIcon name="menu" size={25} color={theme.ledger.ink} />
     </TouchTarget>
   );
 }

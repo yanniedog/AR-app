@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import Svg, { Line, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Line, Rect } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { EconomicMomentumModel } from '../../data/economicModels';
 import { withAlpha } from '../../theme/colors';

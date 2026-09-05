@@ -534,9 +534,6 @@ export default function RootLayout() {
     Commissioner_500Medium: require('../assets/fonts/Commissioner-Medium.ttf'),
     Commissioner_600SemiBold: require('../assets/fonts/Commissioner-SemiBold.ttf'),
     Commissioner_700Bold: require('../assets/fonts/Commissioner-Bold.ttf'),
-    Newsreader_500Medium: require('../assets/fonts/Newsreader-Medium.ttf'),
-    Newsreader_600SemiBold: require('../assets/fonts/Newsreader-SemiBold.ttf'),
-    Newsreader_500Medium_Italic: require('../assets/fonts/Newsreader-MediumItalic.ttf'),
   });
 
   useEffect(() => {

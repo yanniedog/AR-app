@@ -16,7 +16,7 @@ import {
 
 import { hapticLightImpact, hapticSelection } from '../lib/haptics';
 import type { Palette } from '../theme/colors';
-import { commissionerFamily, newsreaderFamily, type LedgerUiWeight } from '../theme/fonts';
+import { commissionerFamily, type LedgerUiWeight } from '../theme/fonts';
 import type { FontVariant } from '../theme/theme';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
@@ -51,10 +51,7 @@ export function AppText({
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
   const requestedWeight = weight === '800' ? '700' : (weight ?? VARIANT_WEIGHT[variant] ?? '400');
-  const heading = variant === 'h1' || variant === 'h2' || variant === 'h3';
-  const fontFamily = heading
-    ? newsreaderFamily(requestedWeight === '600' || requestedWeight === '700' ? '600' : '500')
-    : commissionerFamily(requestedWeight);
+  const fontFamily = commissionerFamily(requestedWeight);
   return (
     <Text
       allowFontScaling
@@ -162,7 +159,7 @@ export function Chip({
       <Text
         style={{
           color: selected ? theme.colors.primary : theme.colors.chipText,
-          fontWeight: selected ? '700' : '500',
+          fontFamily: commissionerFamily(selected ? '700' : '500'),
           fontSize: theme.font.small,
         }}
       >

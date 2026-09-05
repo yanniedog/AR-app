@@ -1,3 +1,4 @@
+import { commissionerFamily } from '../theme/fonts';
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { Image, Text, View } from 'react-native';
 import { SvgUri } from 'react-native-svg';
@@ -152,7 +153,7 @@ export function BankAvatar({
       accessible
       accessibilityLabel={provider}
     >
-      <Text accessible={false} style={{ color: contrastText(color), fontWeight: '800', fontSize }}>
+      <Text accessible={false} style={{ color: contrastText(color), fontFamily: commissionerFamily('700'), fontSize }}>
         {short}
       </Text>
     </View>

@@ -67,14 +67,6 @@ export const THIRD_PARTY_NOTICES: readonly ThirdPartyNotice[] = [
     noticeText: `Copyright 2019 The Commissioner Project Authors (https://github.com/kosbarts/Commissioner)\n\n${OFL_1_1}`,
   },
   {
-    name: 'Newsreader',
-    purpose: 'Editorial heading typeface',
-    licence: 'SIL Open Font License 1.1',
-    sourceUrl: 'https://github.com/productiontype/Newsreader/tree/cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155',
-    pinnedRevision: 'cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155',
-    noticeText: `Copyright 2020 The Newsreader Project Authors (http://github.com/productiontype/Newsreader)\n\n${OFL_1_1}`,
-  },
-  {
     name: 'Iconoir',
     purpose: 'Source geometry for selected utility icons adapted to the Rate Ledger registry',
     licence: 'MIT',

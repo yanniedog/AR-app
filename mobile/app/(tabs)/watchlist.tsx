@@ -1,3 +1,4 @@
+import { commissionerFamily } from '../../src/theme/fonts';
 import Ionicons from '../../src/components/icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -700,6 +701,7 @@ export default function MyRates() {
               maxLength={10}
               accessibilityLabel="Date in year month day format"
               style={{
+                fontFamily: commissionerFamily(),
                 minHeight: 48,
                 borderWidth: 1,
                 borderColor: theme.colors.border,

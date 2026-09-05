@@ -45,6 +45,7 @@ export type LedgerIconName =
   | 'link'
   | 'lock'
   | 'message'
+  | 'menu'
   | 'money'
   | 'my-rates'
   | 'offline'
@@ -155,6 +156,8 @@ function IconDrawing({ name, color }: { name: LedgerIconName; color: string }) {
       return <><Path d="M6 4.5h12a1.5 1.5 0 0 1 1.5 1.5v14l-3-2-3 2-3-2-3 2-3-2V6A1.5 1.5 0 0 1 6 4.5Z" {...line} /><Line x1="8" y1="9" x2="16" y2="9" {...line} /><Line x1="8" y1="13" x2="14" y2="13" {...line} /></>;
     case 'search':
       return <><Circle cx="10.5" cy="10.5" r="5.5" {...line} /><Line x1="14.7" y1="14.7" x2="20" y2="20" {...line} /></>;
+    case 'menu':
+      return <><Line x1="4" y1="6" x2="20" y2="6" {...line} /><Line x1="4" y1="12" x2="20" y2="12" {...line} /><Line x1="4" y1="18" x2="20" y2="18" {...line} /></>;
     case 'utility':
       return <><Circle cx="12" cy="12" r="2.25" {...line} /><Path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3M6 6l2.1 2.1M15.9 15.9 18 18M18 6l-2.1 2.1M8.1 15.9 6 18" {...line} /></>;
     case 'profile':

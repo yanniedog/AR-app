@@ -1,3 +1,4 @@
+import { commissionerFamily } from '../src/theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
@@ -561,7 +562,7 @@ export default function Calculator() {
         keyboardType="numeric"
         editable={scenarioStorageStatus === 'ready'}
         maxLength={20}
-        style={inputStyle}
+        style={[{ fontFamily: commissionerFamily() }, inputStyle]}
         accessibilityLabel={a11y}
       />
     </View>

@@ -12,11 +12,6 @@ export const LEDGER_FONT_FAMILIES = {
     semibold: 'Commissioner_600SemiBold',
     bold: 'Commissioner_700Bold',
   },
-  newsreader: {
-    medium: 'Newsreader_500Medium',
-    semibold: 'Newsreader_600SemiBold',
-    mediumItalic: 'Newsreader_500Medium_Italic',
-  },
   mono: {
     ios: 'Menlo',
     android: 'monospace',
@@ -33,16 +28,6 @@ export function commissionerFamily(weight: LedgerUiWeight = '400'): string {
   return LEDGER_FONT_FAMILIES.commissioner.regular;
 }
 
-export function newsreaderFamily(
-  weight: Extract<LedgerUiWeight, '500' | '600'> = '500',
-  italic = false,
-): string {
-  if (italic) return LEDGER_FONT_FAMILIES.newsreader.mediumItalic;
-  return weight === '600'
-    ? LEDGER_FONT_FAMILIES.newsreader.semibold
-    : LEDGER_FONT_FAMILIES.newsreader.medium;
-}
-
 /**
  * Provenance metadata only. The files are not loaded from the network at
  * runtime; checked-in asset hashes and licences are recorded separately.
@@ -52,12 +37,6 @@ export const LEDGER_FONT_PROVENANCE = {
     project: 'Commissioner',
     source: 'https://github.com/kosbarts/Commissioner',
     commit: '16865a9483b54bd633b5471b109792db44f7786e',
-    licence: 'SIL Open Font License 1.1',
-  },
-  newsreader: {
-    project: 'Newsreader',
-    source: 'https://github.com/productiontype/Newsreader',
-    commit: 'cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155',
     licence: 'SIL Open Font License 1.1',
   },
 } as const;

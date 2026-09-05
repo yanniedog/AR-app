@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react';
 import { type LayoutChangeEvent, useWindowDimensions, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import {
   metricValue,

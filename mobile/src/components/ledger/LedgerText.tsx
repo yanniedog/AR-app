@@ -12,7 +12,6 @@ import {
   commissionerFamily,
   LEDGER_FONT_FAMILIES,
   type LedgerUiWeight,
-  newsreaderFamily,
 } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -42,7 +41,6 @@ const METRICS: Record<LedgerTextVariant, { size: number; lineHeight: number; wei
 function familyFor(
   variant: LedgerTextVariant,
   weight: LedgerUiWeight,
-  italic: boolean,
 ): string {
   if (variant === 'mono') {
     return Platform.select({
@@ -51,9 +49,6 @@ function familyFor(
       web: LEDGER_FONT_FAMILIES.mono.web,
       default: LEDGER_FONT_FAMILIES.mono.android,
     });
-  }
-  if (variant === 'display' || variant === 'title' || variant === 'heading') {
-    return newsreaderFamily(weight === '400' || weight === '500' ? '500' : '600', italic);
   }
   return commissionerFamily(weight);
 }
@@ -78,7 +73,7 @@ export function LedgerText({
   const tabular = variant === 'rate' || variant === 'rateLarge';
   const base: TextStyle = {
     color: theme.ledger[tone],
-    fontFamily: familyFor(variant, resolvedWeight, italic),
+    fontFamily: familyFor(variant, resolvedWeight),
     fontSize: metrics.size,
     lineHeight: fontScale > 1 ? undefined : metrics.lineHeight,
     fontStyle: italic ? 'italic' : 'normal',
