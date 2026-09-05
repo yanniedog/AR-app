@@ -222,3 +222,9 @@ describe('performanceAuditLog compaction', () => {
     expect(encoded).not.toContain(sha);
   });
 });
+
+it('keeps raw and quiet-window-adjusted navigation timings in passing exports', () => {
+  const check = compactAuditCheckForLog({ id: 'route', label: 'Route', kind: 'journey', status: 'pass',
+    durationMs: 1500, metrics: { forwardMs: 1000, forwardWorkMs: 350, readinessQuietWindowMs: 650 } });
+  expect(check.metrics).toMatchObject({ forwardMs: 1000, forwardWorkMs: 350, readinessQuietWindowMs: 650 });
+});

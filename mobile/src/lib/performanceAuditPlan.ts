@@ -743,7 +743,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'Registered projection field/selection callbacks apply restorable canned parameter sets before chart interactions; financial-input.edit remains excluded.',
     unsafeActionsExcluded: ['financial-input.edit'],
   }, [
-    { depth: 0, semanticActionId: 'projections.open', parameters: { section: section ?? null } },
+    { depth: 0, semanticActionId: 'projections.open', parameters: { section: 'Mortgage' } },
     {
       depth: 1,
       semanticActionId: 'projections.inputs.apply-primary',

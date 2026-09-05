@@ -17,6 +17,13 @@ interface XhrPrototype {
   send: (body?: unknown) => void;
 }
 
+const guardedFetches = new WeakSet<typeof fetch>();
+
+/** The payload transport must use guarded fetch so final redirects are checked. */
+export function hasAppHealthFetchGuard(): boolean {
+  return guardedFetches.has(globalThis.fetch);
+}
+
 export interface AuditTransportTarget {
   fetch: typeof fetch;
   XMLHttpRequest?: { prototype: XhrPrototype };
@@ -133,6 +140,7 @@ export function installAppHealthTransportGuard(options: {
     }
     return response;
   };
+  guardedFetches.add(guardedFetch);
   target.fetch = guardedFetch;
 
   const xhrPrototype = target.XMLHttpRequest?.prototype;

@@ -1,3 +1,4 @@
+import { prepareProjectionAuditScenario } from '../src/lib/performanceAuditScenario';
 import Ionicons from '../src/components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
@@ -482,31 +483,34 @@ export default function Projections() {
           unavailableReason: 'Mortgage projection apply requires mortgage and/or projection input parameters',
         };
       }
-      updateScenario((current) => ({
-        ...current,
-        mortgage: {
-          ...current.mortgage,
-          ...(modeRaw === 'buy' || modeRaw === 'refi' ? { mode: modeRaw } : {}),
-          ...(propertyValue ? { propertyValue } : {}),
-          ...(loanBalance ? { loanBalance } : {}),
-          ...(currentRate ? { currentRate } : {}),
-          ...(years ? { years } : {}),
-        },
-        projections: {
-          ...current.projections,
+      updateScenario((previous) => {
+        const current = prepareProjectionAuditScenario(previous);
+        return {
+          ...current,
           mortgage: {
-            ...current.projections.mortgage,
-            ...(lowerRate ? { lowerRate } : {}),
-            ...(higherRate ? { higherRate } : {}),
-            ...(offsetBalance ? { offsetBalance } : {}),
-            ...(extraRepaymentAmount ? { extraRepaymentAmount } : {}),
-            ...(mortgageRateStructure === 'fixed' || mortgageRateStructure === 'variable'
-              ? { mortgageRateStructure }
-              : {}),
-            ...(fixedPeriodMonths ? { fixedPeriodMonths } : {}),
+            ...current.mortgage,
+            ...(modeRaw === 'buy' || modeRaw === 'refi' ? { mode: modeRaw } : {}),
+            ...(propertyValue ? { propertyValue } : {}),
+            ...(loanBalance ? { loanBalance } : {}),
+            ...(currentRate ? { currentRate } : {}),
+            ...(years ? { years } : {}),
           },
-        },
-      }));
+          projections: {
+            ...current.projections,
+            mortgage: {
+              ...current.projections.mortgage,
+              ...(lowerRate ? { lowerRate } : {}),
+              ...(higherRate ? { higherRate } : {}),
+              ...(offsetBalance ? { offsetBalance } : {}),
+              ...(extraRepaymentAmount ? { extraRepaymentAmount } : {}),
+              ...(mortgageRateStructure === 'fixed' || mortgageRateStructure === 'variable'
+                ? { mortgageRateStructure }
+                : {}),
+              ...(fixedPeriodMonths ? { fixedPeriodMonths } : {}),
+            },
+          },
+        };
+      });
       return { applied: 'mortgage', currentRate: currentRate ?? null, years: years ?? null };
     }
     if (!balance && !currentRate && !horizonYears && !lowerRate && !higherRate && !termMonths) {
@@ -514,7 +518,8 @@ export default function Projections() {
         unavailableReason: 'Deposit projection apply requires balance, rate, horizon, and/or term parameters',
       };
     }
-    updateScenario((current) => {
+    updateScenario((previous) => {
+      const current = prepareProjectionAuditScenario(previous);
       const key = section === 'TD' ? 'termDeposit' : 'savings';
       return {
         ...current,
@@ -615,8 +620,8 @@ export default function Projections() {
         id: 'projections.model',
         kind: 'data',
         required: false,
-        status: result.ready ? 'ready' : 'error',
-        error: result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
+        status: deferredScenario !== scenario ? 'pending' : result.ready ? 'ready' : 'error',
+        error: deferredScenario !== scenario || result.ready ? null : `Incomplete scenario: ${result.missing.join(', ')}`,
       },
       {
         id: 'projections.chart',

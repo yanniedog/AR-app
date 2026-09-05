@@ -27,6 +27,8 @@ const AUDIT_PROOF_METRIC_KEYS = [
   'actionResultEvidence',
   'actionMs',
   'forwardMs',
+  'forwardWorkMs',
+  'readinessQuietWindowMs',
   'backMs',
   'backgroundSettleMs',
   'expectedPath',

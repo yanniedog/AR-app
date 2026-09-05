@@ -448,6 +448,7 @@ function RootNavigator() {
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
+                  freezeOnBlur: true,
                   headerStyle: { backgroundColor: theme.colors.surface },
                   headerTitleStyle: {
                     color: theme.colors.text,

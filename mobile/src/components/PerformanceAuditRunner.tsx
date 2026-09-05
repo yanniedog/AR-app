@@ -1,3 +1,5 @@
+import { canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
 import * as Device from 'expo-device';
@@ -1165,7 +1167,7 @@ function resolveMountedActionSurface(
     const root = `/${routeKey.split('/').filter(Boolean)[0] ?? ''}`;
     return currentPath === root || currentPath.startsWith(`${root}/`);
   });
-  return onRoute.find((s) => s.id !== expectedSurface)
+  return onRoute.find((s) => s.id === expectedSurface)
     ?? onRoute[0]
     ?? null;
 }
@@ -1322,6 +1324,7 @@ async function runMaximumCoverageProfileCheck(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   auditMode: AppHealthAuditMode,
+  liveSnapshot: AppHealthDataSnapshot | null,
 ): Promise<AuditCheck> {
   const started = now();
   const responsiveAt = monitor.snapshot();
@@ -1330,9 +1333,22 @@ async function runMaximumCoverageProfileCheck(
   useStore.setState({ prefs, activeSection: prefs.defaultSection });
   await yieldToUi();
 
-  // Audit only what is already cached. Preparing an absent optional asset would
-  // make the audit mutate its subject and either violate local zero-network mode
-  // or authenticate an asset from state that predates the live-source manifest.
+  // Only prepare the pinned edition after its descriptor was authenticated in
+  // this live session. Local runs remain cache-only; newer publications cannot
+  // silently change the rates being exercised by the route checks.
+  if (canPrepareAuditSearchIndex(auditMode, original.manifest, liveSnapshot?.manifest)) {
+    await awaitAuditWork(useStore.getState().ensureSearchIndex(), watchdog, 'Preparing authenticated search index');
+    const prepared = useStore.getState();
+    if (liveSnapshot) {
+      liveSnapshot.assets ??= {};
+      liveSnapshot.assets.search_index = {
+        state: prepared.searchIndexStatus === 'ready' && prepared.searchIndex ? 'ready'
+          : prepared.searchIndexStatus === 'error' ? 'failed' : 'not-requested',
+        runDate: prepared.searchIndex?.run_date ?? null,
+        itemCount: prepared.searchIndex ? Object.keys(prepared.searchIndex.products).length : null,
+      };
+    }
+  }
   assertSessionActive(watchdog);
 
   const state = useStore.getState();
@@ -1699,6 +1715,8 @@ async function runNetworkCheck(
         metrics: {
           executionAttempted: true,
           allowlistedSource: true,
+          validationStatus: 'pass',
+          performanceStatus: responsivenessStatus(responsiveness),
           manifestValidated: true,
           datesIndexValidated: true,
           coreHashValidated: true,
@@ -2364,10 +2382,11 @@ export async function runJourney(
   const errors = routeErrorMessages(logCursor);
   const backContractStatus =
     backReturnedToAudit && backChangedPath && backMs != null && backMs > 0 ? 'pass' : 'fail';
+  const forwardWorkMs = forwardMs == null ? null : Math.max(0, forwardMs - READINESS_QUIET_WINDOW_MS);
   const status = routeError || errors.journey.length
     ? 'fail'
     : worstStatus(
-        scoreLatency(forwardMs ?? 0, 900, 2_500),
+        scoreLatency(forwardWorkMs ?? 0, 900, 2_500),
         scoreLatency(backgroundSettleMs ?? 0, 2_000, 10_000),
         scoreLatency(backMs ?? 0, 800, 2_000),
         responsivenessStatus(responsiveness),
@@ -2381,6 +2400,9 @@ export async function runJourney(
     durationMs: roundMetric(now() - started),
     metrics: {
       measurementMode: 'route-round-trip',
+      // Retain wall-clock evidence while excluding the deliberate quiet wait from scoring.
+      readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
+      forwardWorkMs: forwardWorkMs == null ? null : roundMetric(forwardWorkMs),
       executionAttempted: true,
       actionInvoked: true,
       actionCompleted: routeError == null,
@@ -2746,6 +2768,28 @@ export function PerformanceAuditRunner() {
           return false;
         };
 
+        updatePerformanceAuditProgress(
+          completed,
+          total,
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local zero-network boundary',
+        );
+        await recordContinuable(
+          auditMode === 'live-source'
+            ? 'Validating the current public publication'
+            : 'Recording the local-only network exclusion',
+          () => runNetworkCheck(
+            monitor,
+            watchdog,
+            auditMode,
+            transportGuard,
+            (snapshot) => { liveSourceSnapshot = snapshot; },
+          ),
+        );
+        assertSessionActive(watchdog);
+        assertDatasetRevision(datasetRevision);
+
         updatePerformanceAuditProgress(completed, total, 'Preparing maximum safe feature coverage');
         const maximumProfileResult: { check: AuditCheck | null } = { check: null };
         await recordContinuable(
@@ -2755,6 +2799,7 @@ export function PerformanceAuditRunner() {
               monitor,
               watchdog,
               auditMode,
+              liveSourceSnapshot,
             );
             return maximumProfileResult.check;
           },
@@ -2884,28 +2929,6 @@ export function PerformanceAuditRunner() {
 
         assertSessionActive(watchdog);
         assertDatasetRevision(datasetRevision);
-        updatePerformanceAuditProgress(
-          completed,
-          total,
-          auditMode === 'live-source'
-            ? 'Validating the current public publication'
-            : 'Recording the local zero-network boundary',
-        );
-        await recordContinuable(
-          auditMode === 'live-source'
-            ? 'Validating the current public publication'
-            : 'Recording the local-only network exclusion',
-          () => runNetworkCheck(
-            monitor,
-            watchdog,
-            auditMode,
-            transportGuard,
-            (snapshot) => { liveSourceSnapshot = snapshot; },
-          ),
-        );
-        assertSessionActive(watchdog);
-        assertDatasetRevision(datasetRevision);
-
         if (Platform.OS === 'android') {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
@@ -3184,7 +3207,9 @@ export function PerformanceAuditRunner() {
           `app_version=${app.appVersion}`,
           `build_version=${app.buildVersion}`,
           `overall=${summary.overall}`,
-          `checks=${checks.length}`,
+          `checks=${combinedTotal}`,
+          `performance_checks=${checks.length}`,
+          `health_checks=${appHealth.summary.total}`,
           `pass=${summary.pass}`,
           `warn=${summary.warn}`,
           `fail=${summary.fail}`,
@@ -3261,6 +3286,8 @@ export function PerformanceAuditRunner() {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
             summary,
+            performanceSummary,
+            appHealth: toPublicAppHealthReport(appHealth),
             routeAggregates: report.routeAggregates,
             completeReportStored,
           });
