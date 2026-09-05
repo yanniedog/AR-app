@@ -39,10 +39,4 @@ export const LEDGER_FONT_PROVENANCE = {
     commit: '16865a9483b54bd633b5471b109792db44f7786e',
     licence: 'SIL Open Font License 1.1',
   },
-  newsreader: {
-    project: 'Newsreader',
-    source: 'https://github.com/productiontype/Newsreader',
-    commit: 'cfcb4f7af0e52c25e8df2a2431814c8e5fe2e155',
-    licence: 'SIL Open Font License 1.1',
-  },
 } as const;
