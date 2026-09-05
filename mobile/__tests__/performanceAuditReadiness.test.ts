@@ -76,6 +76,44 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('waits for a delayed rendered action beyond the quiet window', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-deferred');
+    const surface = registry.registerSurface({
+      id: 'chart', renderRevision: 'before',
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+    })!;
+    let finished = false;
+    const wait = registry.waitForReady({
+      surfaceIds: ['chart'], quietWindowMs: 50, timeoutMs: 1000,
+      changedRender: { surfaceId: 'chart', previousRevision: 'before' },
+    }).then((snapshot) => { finished = true; return snapshot; });
+    clock.advanceBy(200);
+    await Promise.resolve();
+    expect(finished).toBe(false);
+    registry.updateSurface(surface, { renderRevision: 'after' });
+    clock.advanceBy(50);
+    await expect(wait).resolves.toMatchObject({ ready: true });
+  });
+
+  it('does not turn an acknowledged no-op into rendered action proof', async () => {
+    const clock = new FakeClock();
+    const registry = new PerformanceAuditReadinessRegistry(clock);
+    registry.beginCapture('pa-no-op');
+    registry.registerSurface({
+      id: 'chart', renderRevision: 'before', actions: { next: () => undefined },
+      probes: [{ id: 'layout', kind: 'layout', status: 'ready' }],
+    });
+    await registry.invokeAction('chart', 'next');
+    const wait = registry.waitForReady({
+      surfaceIds: ['chart'], quietWindowMs: 50, timeoutMs: 100,
+      changedRender: { surfaceId: 'chart', previousRevision: 'before' },
+    });
+    clock.advanceBy(100);
+    await expect(wait).rejects.toBeInstanceOf(PerformanceAuditReadinessTimeoutError);
+  });
+
   it('keeps every display probe parseable without embedding long revisions', () => {
     const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
     registry.beginCapture('pa-compact');

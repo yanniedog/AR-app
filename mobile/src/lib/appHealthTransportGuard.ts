@@ -44,7 +44,7 @@ function requestUrl(input: RequestInfo | URL): string {
 function canonical(value: string): string | null {
   try {
     const url = new URL(value);
-    if (url.searchParams.size === 1 && /^\d+$/.test(url.searchParams.get('_') ?? '')) {
+    if ([...url.searchParams.entries()].length === 1 && /^\d+$/.test(url.searchParams.get('_') ?? '')) {
       url.search = '';
     }
     url.hostname = url.hostname.toLowerCase();
