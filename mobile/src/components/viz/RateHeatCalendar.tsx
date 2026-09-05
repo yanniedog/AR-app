@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import Svg, { G, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { G, Rect } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import { SECTIONS } from '../../constants';
 import { rateHeatmapModel } from '../../data/vizModels';

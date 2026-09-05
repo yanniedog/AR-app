@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { formatRate } from '../../data/format';

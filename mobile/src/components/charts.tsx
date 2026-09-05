@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import Animated, {
   useAnimatedProps,
 } from 'react-native-reanimated';
-import Svg, { Circle, Line, Path, Polygon, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Polygon } from 'react-native-svg';
+import { ChartText as SvgText } from './charts/ChartText';
 
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from './decorativeSvgAccessibility';
 

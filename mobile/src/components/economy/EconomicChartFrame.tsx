@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
-import Svg, { Circle, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Polygon, Rect } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
 import { economicPointAtOrBefore } from '../../data/economicModels';

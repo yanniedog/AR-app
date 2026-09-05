@@ -1,3 +1,4 @@
+import { commissionerFamily } from '../src/theme/fonts';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -363,6 +364,7 @@ function PerformanceAuditScreenInner() {
               maxLength={4}
               selectTextOnFocus
               style={{
+                fontFamily: commissionerFamily(),
                 minWidth: 112,
                 minHeight: 48,
                 paddingHorizontal: 12,

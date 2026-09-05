@@ -12,11 +12,6 @@ export const LEDGER_FONT_FAMILIES = {
     semibold: 'Commissioner_600SemiBold',
     bold: 'Commissioner_700Bold',
   },
-  newsreader: {
-    medium: 'Newsreader_500Medium',
-    semibold: 'Newsreader_600SemiBold',
-    mediumItalic: 'Newsreader_500Medium_Italic',
-  },
   mono: {
     ios: 'Menlo',
     android: 'monospace',
@@ -31,16 +26,6 @@ export function commissionerFamily(weight: LedgerUiWeight = '400'): string {
   if (weight === '600') return LEDGER_FONT_FAMILIES.commissioner.semibold;
   if (weight === '500') return LEDGER_FONT_FAMILIES.commissioner.medium;
   return LEDGER_FONT_FAMILIES.commissioner.regular;
-}
-
-export function newsreaderFamily(
-  weight: Extract<LedgerUiWeight, '500' | '600'> = '500',
-  italic = false,
-): string {
-  if (italic) return LEDGER_FONT_FAMILIES.newsreader.mediumItalic;
-  return weight === '600'
-    ? LEDGER_FONT_FAMILIES.newsreader.semibold
-    : LEDGER_FONT_FAMILIES.newsreader.medium;
 }
 
 /**

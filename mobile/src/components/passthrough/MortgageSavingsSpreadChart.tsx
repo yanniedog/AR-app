@@ -1,7 +1,8 @@
 import Ionicons from '../icons/AppIcon';
 import React, { memo, useMemo } from 'react';
 import { Pressable, View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { BankSpreadChartModel, BankSpreadPlotLine } from '../../data/bankSpreadHistory';
 import { resolveBrandShort } from '../../data/bankBrand';

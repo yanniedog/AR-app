@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
-import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import { formatAxisDateLabel, historyDatesInWindow, sliceIndexFromPlotX } from '../../data/bankHistoryTransform';
 import { spreadGapModel } from '../../data/vizModels';

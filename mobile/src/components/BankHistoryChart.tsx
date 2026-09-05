@@ -3,7 +3,8 @@ import { Platform, View, type GestureResponderEvent, type PointerEvent } from 'r
 import Animated, {
   useAnimatedProps,
 } from 'react-native-reanimated';
-import Svg, { Circle, G, Line, Path, Polygon, Rect, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, G, Line, Path, Polygon, Rect } from 'react-native-svg';
+import { ChartText as SvgText } from './charts/ChartText';
 
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from './decorativeSvgAccessibility';
 

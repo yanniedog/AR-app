@@ -1,7 +1,8 @@
 import Ionicons from '../icons/AppIcon';
 import React, { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
-import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
+import Svg, { Circle, Line } from 'react-native-svg';
+import { ChartText as SvgText } from '../charts/ChartText';
 
 import { SECTIONS } from '../../constants';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
