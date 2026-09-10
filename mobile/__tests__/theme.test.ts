@@ -166,11 +166,11 @@ describe('theme palettes', () => {
   });
 
   it('includes rate typography tokens and line heights', () => {
-    expect(lightTheme.font.rate).toBe(21);
-    expect(lightTheme.font.rateHero).toBe(30);
-    expect(lightTheme.lineHeight.rate).toBe(26);
-    expect(lightTheme.lineHeight.rateHero).toBe(36);
-    expect(darkTheme.lineHeight.body).toBe(22);
+    expect(lightTheme.font.rate).toBe(24);
+    expect(lightTheme.font.rateHero).toBe(32);
+    expect(lightTheme.lineHeight.rate).toBe(32);
+    expect(lightTheme.lineHeight.rateHero).toBe(40);
+    expect(darkTheme.lineHeight.body).toBe(24);
   });
 
   it('exports brand seed for Material You fallback', () => {

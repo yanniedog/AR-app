@@ -56,7 +56,7 @@ export function LedgerField({
             backgroundColor: theme.ledger.raised,
             color: theme.ledger.ink,
             fontFamily: commissionerFamily('400'),
-            fontSize: 16,
+            fontSize: theme.font.body,
             textAlignVertical: multiline ? 'top' : 'center',
           },
           style,

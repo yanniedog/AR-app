@@ -36,6 +36,17 @@ assets/             icon/splash (scripts/make-icons.mjs) + sample/ payload
 __tests__/          selectors · format · notifications (jest-expo)
 ```
 
+## Typography
+
+Use the bundled Commissioner faces for app text, inputs, charts, and navigation.
+`src/theme/typography.ts` owns sizes, line heights, and default weights for both
+`AppText` and `LedgerText`: body 16, supporting text 14/12, headings 18/22/28,
+and rates 24/32. Use the shared variants instead of adding screen-specific scales.
+Headers use `HEADER_TYPOGRAPHY`, including Android's stack overrides. Static
+font faces carry their own weight; navigation must not apply synthetic bolding.
+Keep accessibility scaling enabled and use tabular numerals for rate figures.
+Diagnostic logs may use monospace for aligned technical output.
+
 ## Scripts
 
 | Command | What |
