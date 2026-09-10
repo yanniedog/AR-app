@@ -94,7 +94,7 @@ export function BrandLockup({
       >
         <ArMarkLogo size={markSize} />
       </View>
-      <AppText variant="h3" weight="700" style={{ letterSpacing: -0.3 }}>
+      <AppText variant="h3">
         {compact ? 'Rates' : 'Australian Rates'}
       </AppText>
     </View>
