@@ -709,7 +709,7 @@ export default function MyRates() {
                 paddingHorizontal: 12,
                 color: theme.colors.text,
                 backgroundColor: theme.colors.surfaceAlt,
-                fontSize: 16,
+                fontSize: theme.font.body,
               }}
             />
             <Row gap={8} style={{ flexWrap: 'wrap' }}>

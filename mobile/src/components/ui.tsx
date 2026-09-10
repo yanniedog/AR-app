@@ -16,18 +16,11 @@ import {
 
 import { hapticLightImpact, hapticSelection } from '../lib/haptics';
 import type { Palette } from '../theme/colors';
-import { commissionerFamily, type LedgerUiWeight } from '../theme/fonts';
+import { commissionerFamily } from '../theme/fonts';
 import type { FontVariant } from '../theme/theme';
+import { TYPOGRAPHY } from '../theme/typography';
 import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
-
-const VARIANT_WEIGHT: Partial<Record<FontVariant, LedgerUiWeight>> = {
-  h1: '600',
-  h2: '600',
-  h3: '600',
-  rate: '700',
-  rateHero: '700',
-};
 
 export function androidRipple(color: string, borderless = false) {
   return Platform.OS === 'android' ? { color, borderless } : undefined;
@@ -50,7 +43,7 @@ export function AppText({
 }) {
   const theme = useTheme();
   const { fontScale } = useWindowDimensions();
-  const requestedWeight = weight === '800' ? '700' : (weight ?? VARIANT_WEIGHT[variant] ?? '400');
+  const requestedWeight = weight === '800' ? '700' : (weight ?? TYPOGRAPHY[variant].weight);
   const fontFamily = commissionerFamily(requestedWeight);
   return (
     <Text
@@ -62,10 +55,9 @@ export function AppText({
           // Fixed line heights clip glyphs at large accessibility text sizes.
           lineHeight: fontScale > 1 ? undefined : theme.lineHeight[variant],
           fontFamily,
+          fontWeight: 'normal',
+          letterSpacing: 0,
         },
-        variant === 'h1' && { letterSpacing: -0.35 },
-        variant === 'h2' && { letterSpacing: -0.2 },
-        variant === 'rateHero' && { letterSpacing: -0.5 },
         (variant === 'rate' || variant === 'rateHero') && { fontVariant: ['tabular-nums'] },
         style,
         // Compact caller overrides are useful at normal scale, but become

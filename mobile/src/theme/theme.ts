@@ -11,16 +11,9 @@ import {
 } from './colors';
 import { LEDGER_RADIUS, LEDGER_SPACE } from './layout';
 import { paletteFromM3Scheme } from './m3Palette';
+import { TYPOGRAPHY, type FontVariant } from './typography';
 
-export type FontVariant =
-  | 'h1'
-  | 'h2'
-  | 'h3'
-  | 'body'
-  | 'small'
-  | 'tiny'
-  | 'rate'
-  | 'rateHero';
+export type { FontVariant } from './typography';
 
 export interface Theme {
   dark: boolean;
@@ -43,8 +36,8 @@ const base = {
     xl: LEDGER_RADIUS.sheet,
     pill: LEDGER_RADIUS.pill,
   },
-  font: { h1: 28, h2: 22, h3: 17, body: 15, small: 14, tiny: 12, rate: 21, rateHero: 30 },
-  lineHeight: { h1: 35, h2: 29, h3: 23, body: 22, small: 20, tiny: 17, rate: 26, rateHero: 36 },
+  font: Object.fromEntries(Object.entries(TYPOGRAPHY).map(([key, value]) => [key, value.size])) as Record<FontVariant, number>,
+  lineHeight: Object.fromEntries(Object.entries(TYPOGRAPHY).map(([key, value]) => [key, value.lineHeight])) as Record<FontVariant, number>,
 };
 
 export const darkTheme: Theme = { dark: true, colors: DARK, ledger: LEDGER_DARK, ...base };

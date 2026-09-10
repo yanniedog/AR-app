@@ -539,7 +539,7 @@ export default function Calculator() {
     color: theme.colors.text,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 16,
+    fontSize: theme.font.body,
   } as const;
 
   const field = (
