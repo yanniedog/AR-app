@@ -36,7 +36,8 @@ const LABEL_W = 108;
 const COL_W = 136;
 const HEADER_H = 88;
 const ROW_H = 44;
-const RATE_ROW_H = 52;
+// Fit the 32px rate line, padded Best badge and 4px gap with breathing room.
+const RATE_ROW_H = 72;
 const CHANGE_ROW_H = 64;
 
 interface Entry {

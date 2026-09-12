@@ -62,7 +62,7 @@ import {
   setSessionReplayEnabled,
 } from '../src/lib/observability';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
-import { commissionerFamily } from '../src/theme/fonts';
+import { HEADER_TYPOGRAPHY } from '../src/theme/typography';
 
 // Gives cold-start deep links a real back destination instead of relying on
 // the bottom bar that focused routes deliberately hide.
@@ -229,7 +229,7 @@ function BrandedSplashOverlay({
         <RateMark size={SPLASH_MARK - 8} accessibilityLabel="Australian Rates" />
       </Animated.View>
       <Animated.View style={[{ position: 'absolute', top: screenH / 2 + SPLASH_MARK / 2 - 4 }, titleStyle]}>
-        <AppText variant="h2" weight="700" style={{ letterSpacing: -0.3 }}>
+        <AppText variant="h2">
           Australian Rates
         </AppText>
       </Animated.View>
@@ -452,7 +452,7 @@ function RootNavigator() {
                   headerStyle: { backgroundColor: theme.colors.surface },
                   headerTitleStyle: {
                     color: theme.colors.text,
-                    fontFamily: commissionerFamily('600'),
+                    ...HEADER_TYPOGRAPHY,
                   },
                   headerTintColor: theme.colors.primary,
                   headerShadowVisible: false,

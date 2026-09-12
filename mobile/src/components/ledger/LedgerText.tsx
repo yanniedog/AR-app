@@ -14,6 +14,7 @@ import {
   type LedgerUiWeight,
 } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
+import { TYPOGRAPHY } from '../../theme/typography';
 
 export type LedgerTextVariant =
   | 'display'
@@ -27,15 +28,15 @@ export type LedgerTextVariant =
   | 'mono';
 
 const METRICS: Record<LedgerTextVariant, { size: number; lineHeight: number; weight: LedgerUiWeight }> = {
-  display: { size: 40, lineHeight: 44, weight: '600' },
-  title: { size: 30, lineHeight: 36, weight: '600' },
-  heading: { size: 22, lineHeight: 28, weight: '600' },
-  body: { size: 16, lineHeight: 24, weight: '400' },
-  label: { size: 14, lineHeight: 19, weight: '600' },
-  caption: { size: 12, lineHeight: 17, weight: '500' },
-  rate: { size: 24, lineHeight: 29, weight: '600' },
-  rateLarge: { size: 38, lineHeight: 42, weight: '600' },
-  mono: { size: 12, lineHeight: 18, weight: '400' },
+  display: TYPOGRAPHY.rateHero,
+  title: TYPOGRAPHY.h1,
+  heading: TYPOGRAPHY.h2,
+  body: TYPOGRAPHY.body,
+  label: { ...TYPOGRAPHY.small, weight: '600' },
+  caption: TYPOGRAPHY.tiny,
+  rate: TYPOGRAPHY.rate,
+  rateLarge: TYPOGRAPHY.rateHero,
+  mono: TYPOGRAPHY.tiny,
 };
 
 function familyFor(
@@ -74,6 +75,8 @@ export function LedgerText({
   const base: TextStyle = {
     color: theme.ledger[tone],
     fontFamily: familyFor(variant, resolvedWeight),
+    fontWeight: variant === 'mono' ? resolvedWeight : 'normal',
+    letterSpacing: 0,
     fontSize: metrics.size,
     lineHeight: fontScale > 1 ? undefined : metrics.lineHeight,
     fontStyle: italic ? 'italic' : 'normal',
@@ -85,8 +88,6 @@ export function LedgerText({
       allowFontScaling
       style={[
         base,
-        (variant === 'display' || variant === 'title') && { letterSpacing: -0.45 },
-        tabular && { letterSpacing: -0.2 },
         style,
         fontScale > 1 && { lineHeight: undefined },
       ]}

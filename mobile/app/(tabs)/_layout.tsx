@@ -12,7 +12,7 @@ import { openSearch } from '../../src/lib/nav';
 import { primaryTabLabel } from '../../src/lib/tabRouting';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
-import { commissionerFamily } from '../../src/theme/fonts';
+import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import { LedgerIcon } from '../../src/components/icons/LedgerIcon';
 
 // Preserve Today behind direct links into a legacy tab route or Settings.
@@ -72,9 +72,7 @@ export default function TabsLayout() {
         },
         headerTitleStyle: {
           color: theme.colors.text,
-          fontFamily: commissionerFamily('600'),
-          letterSpacing: isAndroid ? 0 : -0.3,
-          fontSize: isAndroid ? 22 : undefined,
+          ...HEADER_TYPOGRAPHY,
         },
         headerTitleAlign: isAndroid ? 'center' : 'left',
         headerShadowVisible: false,
