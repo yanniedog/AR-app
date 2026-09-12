@@ -2,6 +2,9 @@ version: 2
 updates:
   - package-ecosystem: npm
     directory: /mobile
+    # Expo SDK upgrades must update React Native and native modules together.
+    # Keep routine updates within the app's reviewed package.json constraints.
+    versioning-strategy: lockfile-only
     schedule:
       interval: weekly
       day: monday
