@@ -101,7 +101,7 @@ jobs:
           && github.event_name == 'pull_request_target'
         run: Start-Sleep -Seconds 90
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
           ref: main
@@ -109,7 +109,7 @@ jobs:
           persist-credentials: false
           clean: true
 
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
         with:
           ref: ${{ steps.pr.outputs.head_sha }}

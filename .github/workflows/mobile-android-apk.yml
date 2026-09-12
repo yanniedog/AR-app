@@ -17,7 +17,7 @@
 name: mobile-android-apk
 run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches this only after the final patch-version PR
+# Queue-drain automation dispatches this after the final patch-version PR
 # merges. Building on every preceding main push produced duplicate/stale APKs.
 on:
   workflow_dispatch:
@@ -78,17 +78,17 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           ref: ${{ inputs.release_source_sha || github.sha }}
 
-      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: npm
@@ -100,7 +100,7 @@ jobs:
           RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: node scripts/verify-github-release-source.mjs
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
 
       - name: Install APK identity tools
         run: sdkmanager "build-tools;35.0.0"
@@ -247,9 +247,21 @@ jobs:
             --repo "${{ github.repository }}" \
             --manifest build/apk-publish/app-apk-latest.json
 
+      - name: Reconcile the PR queue after ARM publication
+        if: success() && github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # GITHUB_TOKEN-dispatched builds do not reliably emit workflow_run.
+          # The README publisher above waits for its generated PR to merge.
+          # Re-enter the trusted-main queue check; it skips published content.
+          gh workflow run mobile-auto-release-on-queue-drain.yml \
+            --ref main \
+            --repo "${{ github.repository }}"
+
       - name: Upload workflow artifact
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
           path: |
