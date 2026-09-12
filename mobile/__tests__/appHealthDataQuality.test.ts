@@ -11,6 +11,7 @@ import {
 import { evaluateAppHealthDataQuality } from '../src/lib/appHealth/dataQuality';
 import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../src/lib/appHealth/sourceContract';
 import { APP_HEALTH_CHECK_CODES, type AppHealthCheck } from '../src/lib/appHealth/types';
+import retainedNegativeRates from '../__fixtures__/cdr-negative-rates.json';
 
 function byCode(checks: readonly AppHealthCheck[], code: AppHealthCheck['code']): AppHealthCheck {
   const found = checks.find((check) => check.code === code);
@@ -32,6 +33,47 @@ describe('app-health v1 source contract', () => {
 });
 
 describe('app-health data quality', () => {
+  it.each(retainedNegativeRates.observations)(
+    'accepts retained CommBank foreign currency rates from $source',
+    ({ records }) => {
+      const { snapshot, contract } = makeHealthyDataFixture();
+      snapshot.core!.sections.Savings.rates = records;
+      expect(records.every((row) => Number(row.rate) < 0)).toBe(true);
+      expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+        APP_HEALTH_CHECK_CODES.RATE_VALUES)).toMatchObject({
+        status: 'pass', metrics: { invalidHeadlineRates: 0, invalidOptionalRates: 0 },
+      });
+    },
+  );
+
+  it.each(['-1.234567', '-0.056', '0', '1', '23.456'])(
+    'accepts the CDR common-field-types RateString example %s',
+    (rate) => {
+      const { snapshot, contract } = makeHealthyDataFixture();
+      Object.assign(snapshot.core!.sections.Savings.rates[0], {
+        rate, ongoing_rate: rate, comparison_rate: rate,
+      });
+      expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+        APP_HEALTH_CHECK_CODES.RATE_VALUES)).toMatchObject({
+        status: 'pass', metrics: { invalidHeadlineRates: 0, invalidOptionalRates: 0 },
+      });
+    },
+  );
+
+  it.each(['not-a-number', 'NaN', 'Infinity', '-Infinity', '1,000', '0.05%'])(
+    'retains integrity failures for malformed or non-finite rates: %s',
+    (rate) => {
+      const { snapshot, contract } = makeHealthyDataFixture();
+      Object.assign(snapshot.core!.sections.Savings.rates[0], {
+        rate, ongoing_rate: rate, comparison_rate: rate,
+      });
+      expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+        APP_HEALTH_CHECK_CODES.RATE_VALUES)).toMatchObject({
+        status: 'fail', metrics: { invalidHeadlineRates: 1, invalidOptionalRates: 2 },
+      });
+    },
+  );
+
   it('passes a coherent, complete, fresh v1 publication', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
