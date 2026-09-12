@@ -1,22 +1,31 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import yaml from 'js-yaml';
 
 import {
+  AUTO_BUMP_PREFIX,
   checkedGhOutput,
+  countOpenPrs,
   dispatchApkBuild,
   ensureApkForMainHead,
+  findRecoverableAutoBumps,
   hasApkBuildInFlight,
+  hasPendingMainRelease,
+  hasPublishedMainRelease,
+  listOpenAutoBumpPrs,
   missingApkChannels,
   nextAutoReleaseVersion,
+  ownedAutoBumpVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
   releaseAssetApiEndpoint,
   releaseAssetTextFromGhResult,
   releaseSnapshotFromGhResult,
+  releaseWhenQueueEmpty,
   recoveryIdentityForMissingChannel,
   validatePublishedChannelSnapshot,
-  waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
 import {
   APK_ASSET,
@@ -26,6 +35,22 @@ import {
   ROLLING_TAG,
 } from './app-release-meta.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
+
+test('queue reconciliation wakes on all PR closures and successful APK completion using only trusted main', () => {
+  const workflow = yaml.load(readFileSync(new URL(
+    '../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url,
+  ), 'utf8'));
+  assert.deepEqual(workflow.on.pull_request_target, { types: ['closed'] });
+  assert.deepEqual(workflow.on.workflow_run, {
+    workflows: ['mobile-android-apk'], types: ['completed'], branches: ['main'],
+  });
+  const job = workflow.jobs['maybe-release'];
+  assert.equal(job.if, "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'");
+  const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
+  assert.equal(checkout.with.ref, 'main');
+  assert.equal(checkout.with['persist-credentials'], false);
+  assert.equal(workflow.concurrency['cancel-in-progress'], false);
+});
 
 test('release inspection distinguishes absence from infrastructure failure', () => {
   assert.equal(
@@ -208,35 +233,199 @@ test('generated PRs dispatch required checks only when PR-event runs are missing
   );
 });
 
-test('waitForQueueDrain refreshes main after a queued PR closes', async () => {
-  const openCounts = [1, 0];
-  let syncCount = 0;
+function queueReleaseHarness(openPrs = [], overrides = {}) {
+  const calls = [];
+  const options = {
+    countOpen: () => countOpenPrs(() => JSON.stringify([openPrs])),
+    findRecoverableBumps: () => [],
+    sync: () => calls.push('sync'),
+    alreadyPublished: () => false,
+    releasePending: () => false,
+    alreadyBumped: () => false,
+    readVersion: () => '1.0.187',
+    readPublished: async () => '1.0.187',
+    findBumps: (next) => listOpenAutoBumpPrs(next, () => JSON.stringify(openPrs)),
+    createBump: async (next) => calls.push(['bump', next]),
+    settleBump: async (number) => calls.push(['settle', number]),
+    ensureApk: () => calls.push('apk'),
+    simulate: false,
+    ...overrides,
+  };
+  return { calls, run: () => releaseWhenQueueEmpty(options) };
+}
 
-  const remaining = await waitForQueueDrain({
-    countOpen: () => openCounts.shift() ?? 0,
-    sleep: async () => {},
-    syncAfterDrain: () => {
-      syncCount += 1;
-    },
-  });
-
-  assert.equal(remaining, 0);
-  assert.equal(syncCount, 1);
+test('merges defer release while any unrelated PR remains open', async () => {
+  const unrelated = Array.from({ length: 8 }, (_, index) => ({
+    number: index + 1, title: 'build(deps): bump a dependency',
+  }));
+  const release = queueReleaseHarness(unrelated);
+  await release.run();
+  assert.deepEqual(release.calls, []);
 });
 
-test('waitForQueueDrain skips without refreshing when multiple PRs remain', async () => {
-  let syncCount = 0;
+test('closing the last PR without merge releases accumulated main changes', async () => {
+  const release = queueReleaseHarness();
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', ['bump', '1.0.188'], 'sync', 'apk']);
+});
 
-  const remaining = await waitForQueueDrain({
-    countOpen: () => 2,
-    sleep: async () => {},
-    syncAfterDrain: () => {
-      syncCount += 1;
-    },
+test('a new PR opened while the version PR merges defers APK dispatch', async () => {
+  const counts = [0, 1];
+  const release = queueReleaseHarness([], { countOpen: () => counts.shift() });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', ['bump', '1.0.188'], 'sync']);
+});
+
+test('closing a PR with no unpublished app changes creates no release', async () => {
+  const release = queueReleaseHarness([], { alreadyPublished: () => true });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync']);
+});
+
+test('an in-flight release does not create another version PR on a repeated empty-queue event', async () => {
+  const release = queueReleaseHarness([], { releasePending: () => true });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync']);
+});
+
+test('the queue includes drafts and other base branches across every API page', () => {
+  const pages = [[{ number: 1, draft: true, base: { ref: 'main' } }],
+    [{ number: 2, base: { ref: 'another-branch' } }]];
+  assert.equal(countOpenPrs((args) => {
+    assert.ok(args.includes('--paginate'));
+    assert.ok(args.includes('--slurp'));
+    assert.match(args.at(-1), /pulls\?state=open&per_page=100$/);
+    return JSON.stringify(pages);
+  }), 2);
+  assert.equal(countOpenPrs(() => '[[]]'), 0);
+  assert.throws(() => countOpenPrs(() => '{"message":"denied"}'), /open PR queue/);
+  assert.throws(() => countOpenPrs(() => { throw new Error('API failed'); }), /API failed/);
+});
+
+test('queue inspection failure cannot produce a release', async () => {
+  const release = queueReleaseHarness([], { countOpen: () => { throw new Error('API failed'); } });
+  await assert.rejects(release.run, /API failed/);
+  assert.deepEqual(release.calls, []);
+});
+
+const ownedBumpPr = {
+  number: 247, state: 'open', title: `${AUTO_BUMP_PREFIX}1.0.188`,
+  user: { login: 'github-actions[bot]', type: 'Bot' },
+  base: { ref: 'main', repo: { full_name: 'owner/app' } },
+  head: { ref: 'chore/mobile-auto-release-v1.0.188', repo: { full_name: 'owner/app' } },
+};
+
+test('an interrupted generated version PR is resumed before the empty-queue check', async () => {
+  const counts = [1, 0, 0];
+  const release = queueReleaseHarness([], {
+    countOpen: () => counts.shift(),
+    findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+    alreadyBumped: () => true,
   });
+  await release.run();
+  assert.deepEqual(release.calls, [['settle', 247], 'sync', 'sync', 'apk']);
+});
 
-  assert.equal(remaining, 2);
-  assert.equal(syncCount, 0);
+test('dry-run never settles a live generated PR or mutates an empty-queue checkout', async () => {
+  for (const open of [0, 1]) {
+    const release = queueReleaseHarness([], {
+      simulate: true,
+      countOpen: () => open,
+      findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+    });
+    await release.run();
+    assert.deepEqual(release.calls, []);
+  }
+});
+
+test('recovering a generated PR still leaves APK dispatch blocked by ordinary PRs', async () => {
+  const counts = [2, 1];
+  const release = queueReleaseHarness([], {
+    countOpen: () => counts.shift(),
+    findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+  });
+  await release.run();
+  assert.deepEqual(release.calls, [['settle', 247]]);
+});
+
+test('recovery rejects lookalike titles, foreign branches and fork PRs', () => {
+  assert.equal(ownedAutoBumpVersion(ownedBumpPr, 'owner/app'), '1.0.188');
+  for (const candidate of [
+    { ...ownedBumpPr, user: { login: 'human', type: 'User' } },
+    { ...ownedBumpPr, head: { ...ownedBumpPr.head, repo: { full_name: 'fork/app' } } },
+    { ...ownedBumpPr, head: { ...ownedBumpPr.head, ref: 'feature/fix' } },
+    { ...ownedBumpPr, base: { ...ownedBumpPr.base, ref: 'development' } },
+    { ...ownedBumpPr, title: `${AUTO_BUMP_PREFIX}1.0.1880` },
+    { ...ownedBumpPr, state: 'closed' },
+  ]) assert.equal(ownedAutoBumpVersion(candidate, 'owner/app'), null);
+});
+
+test('only generated PRs limited to version and changelog files can be recovered', () => {
+  const inspect = (files) => findRecoverableAutoBumps((args) => JSON.stringify(
+    args.at(-1).includes('/files?') ? [files.map((filename) => ({ filename }))] : [[ownedBumpPr]],
+  ), 'owner/app');
+  assert.deepEqual(inspect(['mobile/app.json', 'mobile/changelog/versions/1.0.188.json']), [
+    { number: 247, branchName: ownedBumpPr.head.ref },
+  ]);
+  assert.deepEqual(inspect(['mobile/app.json', 'mobile/app/index.tsx']), []);
+  assert.deepEqual(inspect([]), []);
+  assert.throws(() => findRecoverableAutoBumps(() => '{"message":"denied"}', 'owner/app'), /pending release PRs/);
+});
+
+test('version PR lookup ignores unrelated open PRs', () => {
+  const result = listOpenAutoBumpPrs('1.0.188', () => JSON.stringify([
+    { number: 244, title: 'build(deps): bump dependencies' },
+    { number: 246, title: `${AUTO_BUMP_PREFIX}1.0.188` },
+  ]));
+  assert.deepEqual(result.map((pr) => pr.number), [246]);
+});
+
+test('a failed version PR cannot dispatch an APK', async () => {
+  const release = queueReleaseHarness([], {
+    createBump: async () => { throw new Error('required CI failed'); },
+  });
+  await assert.rejects(release.run, /required CI failed/);
+  assert.deepEqual(release.calls, ['sync']);
+});
+
+test('a generated version merge ensures its APK without another version PR', async () => {
+  const release = queueReleaseHarness([], { alreadyBumped: () => true });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', 'sync', 'apk']);
+});
+
+test('an unpublished source version dispatches directly after a merge', async () => {
+  const release = queueReleaseHarness([], { readVersion: () => '1.0.188' });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', 'sync', 'apk']);
+});
+
+const publishedIdentity = { version: '1.0.189', versionCode: 260, sourceSha: 'a'.repeat(40) };
+
+test('published paired APKs prevent a README-only QR merge from recursively releasing', () => {
+  const options = {
+    readHeadSha: () => 'b'.repeat(40),
+    readChannels: () => ({ arm: publishedIdentity, universal: publishedIdentity }),
+    changedPaths: () => ['README.md'],
+  };
+  assert.equal(hasPublishedMainRelease(options), true);
+  assert.equal(hasPublishedMainRelease({ ...options, changedPaths: () => [] }), true);
+  assert.equal(hasPublishedMainRelease({ ...options, changedPaths: () => ['README.md', 'mobile/app/index.tsx'] }), false);
+  assert.equal(hasPublishedMainRelease({ ...options, readChannels: () => ({ arm: publishedIdentity, universal: null }) }), false);
+  assert.equal(hasPublishedMainRelease({ ...options, readChannels: () => ({
+    arm: publishedIdentity, universal: { ...publishedIdentity, versionCode: 259 },
+  }) }), false);
+  assert.throws(() => hasPublishedMainRelease({ ...options, changedPaths: () => { throw new Error('missing commit'); } }), /missing commit/);
+});
+
+test('universal completion waits for the already-queued ARM partner', () => {
+  const checked = [];
+  assert.equal(hasPendingMainRelease({
+    readHeadSha: () => publishedIdentity.sourceSha,
+    readChannels: () => ({ universal: publishedIdentity, arm: null }),
+    buildInFlight: (head, missing) => { checked.push([head, missing]); return true; },
+  }), true);
+  assert.deepEqual(checked, [[publishedIdentity.sourceSha, ['arm']]]);
 });
 
 test('hasApkBuildInFlight matches the exact head and every required channel', () => {
