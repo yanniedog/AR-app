@@ -227,8 +227,10 @@ async function downloadBytes(
 export async function fetchManifest(
   url: string = MANIFEST_URL,
   onProgress?: PayloadProgressHandler,
+  expectedSha?: string,
 ): Promise<Manifest> {
   const buf = await downloadBytes(manifestFetchUrl(url), {
+    maxCompressedBytes: 4 * 1024 * 1024,
     fileName: 'manifest.json',
     onProgress,
     phase: 'manifest',
@@ -244,6 +246,9 @@ export async function fetchManifest(
     phaseComplete: true,
   });
   const text = strFromU8(new Uint8Array(buf));
+  if (expectedSha && toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(buf))) !== expectedSha) {
+    throw new Error('Selected manifest sha256 mismatch');
+  }
   const m = await parseJsonHeavy<Manifest>(text);
   if (typeof m.schema_version === 'number' && m.schema_version > SUPPORTED_SCHEMA) {
     throw new Error(`payload schema v${m.schema_version} unsupported (app supports v${SUPPORTED_SCHEMA}); update the app`);

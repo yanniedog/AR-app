@@ -3,6 +3,8 @@ import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
   downloadCore,
+  downloadDetails,
+  downloadInflate,
   fetchManifest,
 } from './payload';
 import {
@@ -29,6 +31,7 @@ import {
   cachedAssetStateForProviderCoverage,
   liveAssetStateForProviderCoverage,
 } from './assetState';
+import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -276,6 +279,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
           }
         } else {
+          if (get().manifest?.payload_revision) throw new Error('Revision index unavailable; update pending');
           // dates-index unreachable — do not jump to a newer rolling day than
           // what we already trust on disk.
           const live = get();
@@ -317,10 +321,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         optionalWork = optionalRefreshWork(get(), remote);
 
         const meta = await cache.readMeta();
+        assertNoRevisionRollback(meta?.manifest, remote);
         const upToDate =
           !repairCache &&
           meta?.source === 'remote' &&
-          meta.manifest.run_date === remote.run_date &&
+          samePayloadIdentity(meta.manifest, remote) &&
           meta.coreSha === remote.files.core.sha256;
         if (upToDate) {
           debugLog.debug('store', `refresh up-to-date run_date=${remote.run_date}`);
@@ -351,6 +356,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             );
           }
           const liveMatches =
+            samePayloadIdentity(live.manifest, remote) &&
             live.core?.run_date === remote.run_date &&
             live.manifest?.files.core.sha256 === remote.files.core.sha256;
           if (!liveMatches) {
@@ -437,9 +443,35 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           {
             fileName: remote.files.core.name,
             expectedBytes: remote.files.core.bytes,
+            requireExactBytes: !!remote.payload_revision,
+            ...(remote.payload_revision ? { maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 } : {}),
             onProgress,
           },
         );
+        if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
+        // Verify the entire immutable edition before advertising it. Staging
+        // details by content hash keeps the installed offline edition usable if
+        // any subsequent asset download or cache write fails.
+        let stagedDetails: DetailsPayload | null = null;
+        if (remote.payload_revision) {
+          const downloaded = await downloadDetails(remote.files.details.url, remote.files.details.sha256, {
+            expectedBytes: remote.files.details.bytes, requireExactBytes: true,
+            maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024,
+          });
+          if (downloaded.details.run_date !== remote.run_date) throw new Error('Details publication date mismatch');
+          for (const [key, file] of Object.entries(remote.files)) {
+            if (key === 'core' || key === 'details') continue;
+            const assetText = await downloadInflate(file.url, file.sha256, {
+              expectedBytes: file.bytes, requireExactBytes: true,
+              maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024,
+            });
+            if (key === 'search_index') await cache.writeSearchIndex(assetText, file.sha256);
+            if (key === 'history_banks') await cache.writeHistoryBanks(assetText, file.sha256);
+            if (key === 'bank_history') await cache.writeBankInsights(assetText, file.sha256);
+          }
+          await cache.writeDetails(downloaded.text, remote.files.details.sha256);
+          stagedDetails = downloaded.details;
+        }
         const detailsUnchanged = !!meta && meta.detailsSha === remote.files.details.sha256;
         onProgress({
           phase: 'install',
@@ -456,7 +488,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             source: 'remote',
             savedAt: new Date().toISOString(),
             coreSha: remote.files.core.sha256,
-            detailsSha: detailsUnchanged ? remote.files.details.sha256 : null,
+            detailsSha: stagedDetails || detailsUnchanged ? remote.files.details.sha256 : null,
           },
           text,
         );
@@ -493,7 +525,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           status: 'ready',
           error: null,
           pendingIngestRunDate,
-          details: detailsUnchanged ? get().details : null,
+          details: stagedDetails ?? (detailsUnchanged ? get().details : null),
+          ...(remote.payload_revision ? {
+            historyBanks: null, historyBanksError: null,
+            bankInsights: null, bankInsightsError: null,
+            rbaCalendar: null, rbaCalendarSha: null, rbaCalendarError: null,
+          } : {}),
           searchIndex: null,
           searchIndexStatus: 'idle',
           searchIndexError: null,
@@ -528,6 +565,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           coreAssetState: { status: 'error', data: retainedIntegrity, error: msg },
           lastCheckedAt: new Date().toISOString(),
           refreshOutcome: 'failure',
+          ...(get().manifest?.payload_revision ? { pendingIngestRunDate: get().manifest?.run_date } : {}),
         });
         return false;
       } finally {

@@ -1,6 +1,8 @@
 import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
 import { versionLt } from '../versionCompare';
 import { isValidCalendarDate } from '../calendarDate';
+import { validatePayloadAccounting } from './payloadAccounting';
+import { revisionTag } from '../../data/payloadRevision';
 import {
   APP_HEALTH_ASSET_KEYS,
   APP_HEALTH_CHECK_CODES,
@@ -164,6 +166,8 @@ function evaluateManifest(
   const expectedTag =
     manifest.tag === contract.rollingTag ||
     manifest.tag === `${contract.datedTagPrefix}${manifest.run_date}` ||
+    (manifest.payload_revision?.schema_version === 1 && Number.isSafeInteger(manifest.payload_revision.revision) &&
+      manifest.payload_revision.revision > 0 && manifest.tag === revisionTag(manifest.run_date, manifest.payload_revision.revision)) ||
     (snapshot.source === 'sample' && manifest.tag === 'bundled-sample');
   const schemaSupported = contract.supportedManifestSchemas.includes(manifest.schema_version);
   const appCompatible = Boolean(
@@ -506,8 +510,13 @@ function evaluateRibbonReconciliation(
 ): AppHealthCheck {
   let invalidSections = 0;
   let checkedSections = 0;
+  let nonPositiveRateRows = 0;
   for (const section of contract.requiredSections) {
-    const rows = rowsFor(snapshot, section);
+    // Producer ribbons summarize positive rates. Zero-rate tiers remain real
+    // catalogue rows and are checked by RATE_VALUES, not missing ribbon rows.
+    const allSectionRows = rowsFor(snapshot, section);
+    const rows = allSectionRows.filter((row) => Number.isFinite(Number(row.rate)) && Number(row.rate) > 0);
+    nonPositiveRateRows += allSectionRows.length - rows.length;
     const ribbon = snapshot.core?.sections?.[section]?.ribbon;
     if (!ribbon) {
       invalidSections += 1;
@@ -594,6 +603,7 @@ function evaluateRibbonReconciliation(
     0,
   );
   const quarantineImpacts = snapshot.quarantine?.countImpacts;
+  const accounting = validatePayloadAccounting(snapshot);
   for (const [name, actual] of Object.entries(actualManifestCounts) as
     ['rates' | 'products' | 'providers', number][]) {
     if (!snapshot.manifest || !(name in snapshot.manifest.counts)) continue;
@@ -603,14 +613,17 @@ function evaluateRibbonReconciliation(
       declaredCountMismatches += 1;
     } else if (declared !== actual) {
       const positiveDelta = declared - actual;
-      if (positiveDelta > 0 && positiveDelta === (quarantineImpacts?.[name] ?? 0)) {
+      const sourceExclusion = accounting.valid
+        ? name === 'rates' ? accounting.excludedRates : name === 'products' ? accounting.productsWithoutRates : 0
+        : 0;
+      if (positiveDelta > 0 && positiveDelta === sourceExclusion + (quarantineImpacts?.[name] ?? 0)) {
         declaredCountAdjustments += 1;
       } else {
         declaredCountMismatches += 1;
       }
     }
   }
-  const status: AppHealthStatus = invalidSections || declaredCountMismatches
+  const status: AppHealthStatus = invalidSections || declaredCountMismatches || (accounting.present && !accounting.valid)
     ? 'fail'
     : checkedSections
       ? 'pass'
@@ -623,6 +636,11 @@ function evaluateRibbonReconciliation(
     {
       checkedSections,
       invalidSections,
+      nonPositiveRateRows,
+      accountingPresent: accounting.present,
+      accountingValid: accounting.valid,
+      explainedSourceRateExclusions: accounting.excludedRates,
+      explainedProductsWithoutRates: accounting.productsWithoutRates,
       declaredCountComparisons,
       declaredCountAdjustments,
       declaredCountMismatches,
@@ -820,10 +838,13 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
     ? Math.min(100, Math.round((matchedProducts / coreProducts) * 10_000) / 100)
     : null;
   const runMatches = snapshot.details.runDate === snapshot.core.run_date;
+  const accounting = validatePayloadAccounting(snapshot);
+  const explainedOrphans = accounting.valid && detailProducts === accounting.sourceProducts
+    ? accounting.productsWithoutRates + (snapshot.quarantine?.countImpacts?.products ?? 0) : 0;
   const impossibleCounts = matchedProducts > coreProducts || matchedProducts + orphanProducts > detailProducts;
   const status: AppHealthStatus = !runMatches || impossibleCounts || (coreProducts > 0 && matchedProducts === 0)
     ? 'fail'
-    : (coveragePercent != null && coveragePercent < 100) || orphanProducts > 0
+    : (coveragePercent != null && coveragePercent < 100) || orphanProducts !== explainedOrphans
       ? 'warn'
       : 'pass';
   return check(
@@ -837,6 +858,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
       matchedProducts,
       missingProducts,
       orphanProducts,
+      explainedOrphanProducts: explainedOrphans,
       coveragePercent,
       runMatches,
       impossibleCounts,

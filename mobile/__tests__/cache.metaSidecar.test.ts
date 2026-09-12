@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
+import { revisionManifest } from '../testUtils/payloadRevision';
 
 const files = new Map<string, string>();
 
@@ -34,6 +35,20 @@ describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+  });
+
+  it('retains installed revision details while a new edition is staged', async () => {
+    const installed = revisionManifest(1);
+    const details = { schema_version: 1, run_date: installed.run_date, products: {} };
+    await cache.writeDetails(JSON.stringify(details), installed.files.details.sha256);
+    await cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: installed.files.details.sha256 }, JSON.stringify(sampleCore));
+    await cache.writeDetails('{}', 'f'.repeat(64));
+    await cache.writeHistoryBanks('{}');
+    expect(await cache.readDetails()).toEqual(details);
+    expect(await cache.readHistoryBanks()).toBeNull();
+    await cache.updateMeta({ manifest: revisionManifest(2), coreSha: installed.files.core.sha256, detailsSha: 'f'.repeat(64) });
+    expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(1);
   });
 
   it('writeBundle stores a tiny core-meta sidecar and updateMeta never rewrites the bundle', async () => {

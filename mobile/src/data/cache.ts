@@ -14,6 +14,7 @@ import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
+import { samePayloadIdentity } from './payloadRevision';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -38,6 +39,12 @@ const CORE_META_TMP = `${CORE_META}.tmp`;
 // rewrites the multi-MB core bundle. Keyed by coreSha so a new core run
 // automatically invalidates stale optional hashes.
 const OPTIONAL_META = `${DIR}optional-meta.json`;
+
+function versionedAsset(path: string, sha?: string): string {
+  if (!sha) return path;
+  if (!/^[a-f0-9]{64}$/.test(sha)) throw new Error('Invalid revision cache hash');
+  return `${path}.${sha}`;
+}
 
 export interface OptionalMeta {
   coreSha: string;
@@ -326,7 +333,9 @@ export const cache = {
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
     });
-    if (sidecar && sidecar.coreSha === b.meta.coreSha) {
+    if (sidecar && sidecar.coreSha === b.meta.coreSha &&
+        (!(sidecar.manifest.payload_revision || b.meta.manifest.payload_revision) ||
+          samePayloadIdentity(sidecar.manifest, b.meta.manifest))) {
       return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
     return { ...b, core: normalized.core, integrity: normalized.integrity };
@@ -353,7 +362,9 @@ export const cache = {
   },
 
   async readDetails(): Promise<DetailsPayload | null> {
-    return readJson<DetailsPayload>(DETAILS);
+    const meta = await cache.readMeta();
+    if (meta?.manifest.payload_revision && !meta.detailsSha) return null;
+    return readJson<DetailsPayload>(versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined));
   },
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
@@ -384,46 +395,53 @@ export const cache = {
       const existing = await cache.readMeta();
       if (!existing) return;
       if (existing.coreSha !== meta.coreSha) return;
+      if (existing.manifest.payload_revision && !samePayloadIdentity(existing.manifest, meta.manifest)) return;
       if (existing.manifest.generated_at > meta.manifest.generated_at) return;
       const merged: CacheMeta = { ...existing, ...meta };
       await writeCoreMeta(merged);
     });
   },
 
-  async writeDetails(json: string): Promise<void> {
+  async writeDetails(json: string, sha?: string): Promise<void> {
     await ensureDir();
-    await writeText(DETAILS, json);
+    await writeText(versionedAsset(DETAILS, sha), json);
   },
 
   async readSearchIndex(): Promise<SearchIndexPayload | null> {
-    return readJson<SearchIndexPayload>(SEARCH_INDEX);
+    const meta = await cache.readMeta();
+    if (meta?.manifest.payload_revision && !meta.manifest.files.search_index) return null;
+    return readJson<SearchIndexPayload>(versionedAsset(SEARCH_INDEX, meta?.manifest.payload_revision ? meta.manifest.files.search_index?.sha256 : undefined));
   },
 
-  async writeSearchIndex(json: string): Promise<void> {
+  async writeSearchIndex(json: string, sha?: string): Promise<void> {
     await ensureDir();
-    await writeText(SEARCH_INDEX, json);
+    await writeText(versionedAsset(SEARCH_INDEX, sha), json);
   },
 
   async readHistoryBanks(): Promise<HistoryBanksPayload | null> {
-    return readJson<HistoryBanksPayload>(HISTORY_BANKS);
+    const meta = await cache.readMeta();
+    if (meta?.manifest.payload_revision && !meta.manifest.files.history_banks) return null;
+    return readJson<HistoryBanksPayload>(versionedAsset(HISTORY_BANKS, meta?.manifest.payload_revision ? meta.manifest.files.history_banks?.sha256 : undefined));
   },
 
   async clearHistoryBanks(): Promise<void> {
     await deletePath(HISTORY_BANKS);
   },
 
-  async writeHistoryBanks(json: string): Promise<void> {
+  async writeHistoryBanks(json: string, sha?: string): Promise<void> {
     await ensureDir();
-    await writeText(HISTORY_BANKS, json);
+    await writeText(versionedAsset(HISTORY_BANKS, sha), json);
   },
 
   async readBankInsights(): Promise<BankInsightsPayload | null> {
-    return readJson<BankInsightsPayload>(BANK_INSIGHTS);
+    const meta = await cache.readMeta();
+    if (meta?.manifest.payload_revision && !meta.manifest.files.bank_history) return null;
+    return readJson<BankInsightsPayload>(versionedAsset(BANK_INSIGHTS, meta?.manifest.payload_revision ? meta.manifest.files.bank_history?.sha256 : undefined));
   },
 
-  async writeBankInsights(json: string): Promise<void> {
+  async writeBankInsights(json: string, sha?: string): Promise<void> {
     await ensureDir();
-    await writeText(BANK_INSIGHTS, json);
+    await writeText(versionedAsset(BANK_INSIGHTS, sha), json);
   },
 
   async clearBankInsights(): Promise<void> {

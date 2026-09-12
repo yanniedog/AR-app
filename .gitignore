@@ -4,6 +4,7 @@ node_modules/
 mobile/node_modules/
 mobile/.expo/
 mobile/dist/
+mobile/dist-audit/
 mobile/ios/
 mobile/android/
 mobile/build/

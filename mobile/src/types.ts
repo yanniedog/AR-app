@@ -107,6 +107,8 @@ export interface CoverageFailure {
 }
 
 export interface PayloadCoverage {
+  /** Producer's exhaustive source-to-published exclusions; verified by app health. */
+  payload_accounting?: unknown;
   schema_version?: number;
   /** Canonical producer observation date. */
   observed_on?: string;
@@ -279,6 +281,13 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  payload_revision?: {
+    schema_version: 1;
+    revision: number;
+    generation_id: string;
+    bundle_sha256: string;
+    parent_revision: number | null;
+  };
   schema_version: number;
   run_date: string;
   generated_at: string;
