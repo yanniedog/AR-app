@@ -254,10 +254,10 @@ export function visibleAccountRows(
   const allowed = getSuitabilityAllowed();
   if (allowed) {
     // The suitability index is product-key based. Recheck row-level rate
-    // conditionality so a product with both base and bonus rows cannot let its
-    // conditional variant through merely because the base row is allowed.
+    // restrictions so an allowed sibling cannot admit a non-standard or
+    // conditional variant of the same product.
     return rows.filter(
-      (row) => allowed.has(row.product_key) && !isConditionalDepositRate(row),
+      (row) => allowed.has(row.product_key) && !isNonStandard(row) && !isConditionalDepositRate(row),
     );
   }
   return rows.filter((row) => isBroadlyAvailable(row, detailsProducts?.[row.product_key] ?? null));

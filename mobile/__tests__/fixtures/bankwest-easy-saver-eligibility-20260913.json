@@ -1,0 +1,170 @@
+{
+  "provenance": {
+    "description": "Exact ordinary and prize rows plus shared detail extracted from the real Bankwest Easy Saver re-export. Tests explicitly label any controlled metadata variants; the retained source rates are unchanged.",
+    "run_date": "2026-09-13",
+    "raw_source_sha256": "779ec130510a3ea160979dfd27111746e332c84b38523f64e97bf5c1d69420fd",
+    "producer_commit": "db3ee85a25b4f11cbc2db78793f9369ede727b16",
+    "core_sha256": "a45374cec297cd5e90ab0eb4c43f8d4f4af8bbd64a771f1ada30bc5029c824e0",
+    "details_sha256": "76197221038e1620faec44f00cf9dec7e93aa88af250565a1de38e552b007070"
+  },
+  "rates": [
+    {
+      "provider": "Bankwest",
+      "product_id": "d10438974ab8417bab388149da5053bb",
+      "product_key": "Bankwest|d10438974ab8417bab388149da5053bb|TRANS_AND_SAVINGS_ACCOUNTS|Bankwest Easy Saver",
+      "product_name": "Bankwest Easy Saver",
+      "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+      "rate": "0.05",
+      "rate_type": "VARIABLE",
+      "ribbon_normalized": true,
+      "account_type": "savings",
+      "ribbon_deposit_kind": "base",
+      "balance_min": "0",
+      "balance_max": "250000.99",
+      "feature_set": "basic",
+      "account_class": "standard",
+      "rate_index": 4,
+      "last_updated": "2026-09-12T01:15:03.000Z",
+      "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+    },
+    {
+      "provider": "Bankwest",
+      "product_id": "d10438974ab8417bab388149da5053bb",
+      "product_key": "Bankwest|d10438974ab8417bab388149da5053bb|TRANS_AND_SAVINGS_ACCOUNTS|Bankwest Easy Saver",
+      "product_name": "Bankwest Easy Saver",
+      "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+      "rate": "0.115",
+      "rate_type": "FIXED",
+      "term_months": "4",
+      "ribbon_normalized": true,
+      "account_type": "savings",
+      "ribbon_deposit_kind": "introductory",
+      "balance_min": "0",
+      "balance_max": "250000.99",
+      "feature_set": "basic",
+      "account_class": "non_standard",
+      "rate_index": 5,
+      "last_updated": "2026-09-12T01:15:03.000Z",
+      "taxonomy_path": "SAVINGS.SAVINGS_ACCT.INTRO.TIERED",
+      "ongoing_rate": "0.05"
+    }
+  ],
+  "detail": {
+    "description": "The Easy Saver Account is our flexible savings account that lets you earn credit interest on a tiered basis on all balances in the account with no minimum monthly deposit (you can also move your money in and out of your account without affecting your interest rate). Credit interest is calculated at the applicable rate on that portion of the balance which falls within each of the tiers.",
+    "last_updated": "2026-09-12T01:15:03.000Z",
+    "fees": [
+      {
+        "label": "PERIODIC",
+        "name": "Maintenance Fee",
+        "value": "P1M",
+        "info": "No monthly maintenance fees apply to this product.",
+        "amountStatus": "fixed",
+        "currency": "AUD",
+        "additionalValue": "P1M",
+        "feeMethodUType": "fixedAmount",
+        "fixedAmount": {
+          "amount": "0.00"
+        }
+      },
+      {
+        "label": "EVENT",
+        "name": "Search Handling Fee",
+        "value": "40.00",
+        "info": "For completion of any search conducted by the Bank (per search)",
+        "amountStatus": "fixed",
+        "currency": "AUD",
+        "feeMethodUType": "fixedAmount",
+        "fixedAmount": {
+          "amount": "40.00"
+        }
+      }
+    ],
+    "features": [
+      {
+        "label": "OTHER",
+        "info": "You can bank over the phone."
+      },
+      {
+        "label": "DIGITAL_BANKING",
+        "info": "Bank on the go with the Bankwest App. Use Bankwest Online Banking (BOB) to access your money and manage your everyday banking subject to conditions of use. Limits may apply."
+      },
+      {
+        "label": "OTHER",
+        "info": "Create a goal, set up regular deposits and track your progress in the app."
+      },
+      {
+        "label": "OTHER",
+        "info": "Transferring funds in and out can only be made by via your linked Bankwest Easy Transaction Account with the exception of deposits via international money transfers and/or via the Real-Time Gross Settlement payment system."
+      },
+      {
+        "label": "NOTIFICATIONS",
+        "value": "Alerts",
+        "info": "Set up Alerts through the Bankwest App to get notified about important account activity."
+      },
+      {
+        "label": "Rate information",
+        "info": "Available only to eligible winners of the Interesting Rates Competition. The fixed promotional rate applies for four months on balances up to $250,000.99, then reverts to the standard variable Easy Saver rate.",
+        "name": "Deposit rate 5 (FIXED)"
+      },
+      {
+        "label": "Tier 1: OTHER",
+        "info": "Available only to eligible winners of the Bankwest Easy Saver 'Interesting Rates' competition, who opened a new Bankwest Easy Saver account in the Bankwest app during the relevant promotional/prize-pool period using a valid promo code, satisfy the T&Cs, and keep the account open when required. The fixed promotional rate applies for four months from the notified rate-change date, on balances up to $250,000.99, then reverts to the standard variable Easy Saver rate.",
+        "name": "Deposit rate 5 (FIXED)"
+      },
+      {
+        "label": "Tier 1: NEW_ACCOUNTS",
+        "name": "Deposit rate 5 (FIXED)"
+      },
+      {
+        "label": "Tier 1: ONLINE_ONLY",
+        "name": "Deposit rate 5 (FIXED)"
+      }
+    ],
+    "eligibility": [
+      {
+        "label": "MIN_AGE",
+        "value": "16",
+        "info": "The account is available to personal customers only, aged 16 years or older."
+      },
+      {
+        "label": "NATURAL_PERSON",
+        "info": "The account is available to personal customers only."
+      },
+      {
+        "label": "OTHER",
+        "info": "You don't have an existing Easy Saver Account already."
+      },
+      {
+        "label": "OTHER",
+        "info": "You need an Easy Transaction Account (you can open one at the same time)."
+      },
+      {
+        "label": "OTHER",
+        "info": "You're the only account holder (no joint account holders)."
+      },
+      {
+        "label": "RESIDENCY_STATUS",
+        "value": "Australian citizen or Australian permanent resident",
+        "info": "Customer must have a residential address in Australia (limited exceptions may apply subject to conditions)"
+      }
+    ],
+    "constraints": [
+      {
+        "label": "MAX_LIMIT",
+        "value": "2000000.00",
+        "info": "Withdrawals via a linked Easy Transaction Account. Maximum Daily Limit $2,000,000."
+      },
+      {
+        "label": "OPENING_BALANCE",
+        "value": "0.00",
+        "info": "No minimum deposit required to open the account."
+      }
+    ],
+    "links": {
+      "overview": "https://www.bankwest.com.au/savings-accounts/high-interest",
+      "eligibility": "https://www.bankwest.com.au/savings-accounts/high-interest",
+      "fees": "https://www.bankwest.com.au/savings-accounts/high-interest",
+      "terms": "https://www.bankwest.com.au/savings-accounts/high-interest"
+    }
+  }
+}
