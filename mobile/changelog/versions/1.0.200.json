@@ -1,0 +1,32 @@
+{
+  "version": "1.0.200",
+  "releaseTag": "app-arm-v1.0.200",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "fix(mobile): honor exact-tier availability in rate details (#268)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): honor exact-tier availability in rate details (#268)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.200"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.199"
+        }
+      ]
+    }
+  ]
+}
