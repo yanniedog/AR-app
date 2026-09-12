@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  AUTO_BUMP_PREFIX,
   checkedGhOutput,
   dispatchApkBuild,
   ensureApkForMainHead,
   hasApkBuildInFlight,
+  listOpenAutoBumpPrs,
   missingApkChannels,
   nextAutoReleaseVersion,
   pushBranchWithGhAuth,
@@ -14,9 +16,9 @@ import {
   releaseAssetApiEndpoint,
   releaseAssetTextFromGhResult,
   releaseSnapshotFromGhResult,
+  releaseAfterMerge,
   recoveryIdentityForMissingChannel,
   validatePublishedChannelSnapshot,
-  waitForQueueDrain,
 } from './mobile-auto-release-on-drain.mjs';
 import {
   APK_ASSET,
@@ -208,35 +210,59 @@ test('generated PRs dispatch required checks only when PR-event runs are missing
   );
 });
 
-test('waitForQueueDrain refreshes main after a queued PR closes', async () => {
-  const openCounts = [1, 0];
-  let syncCount = 0;
+function mergeReleaseHarness(openPrs = [], overrides = {}) {
+  const calls = [];
+  const options = {
+    sync: () => calls.push('sync'),
+    alreadyBumped: () => false,
+    readVersion: () => '1.0.187',
+    readPublished: async () => '1.0.187',
+    findBumps: (next) => listOpenAutoBumpPrs(next, () => JSON.stringify(openPrs)),
+    createBump: async (next) => calls.push(['bump', next]),
+    settleBump: async (number) => calls.push(['settle', number]),
+    ensureApk: () => calls.push('apk'),
+    simulate: false,
+    ...overrides,
+  };
+  return { calls, run: () => releaseAfterMerge(options) };
+}
 
-  const remaining = await waitForQueueDrain({
-    countOpen: () => openCounts.shift() ?? 0,
-    sleep: async () => {},
-    syncAfterDrain: () => {
-      syncCount += 1;
-    },
-  });
-
-  assert.equal(remaining, 0);
-  assert.equal(syncCount, 1);
+test('a merged change reaches APK dispatch with eight unrelated PRs still open', async () => {
+  const unrelated = Array.from({ length: 8 }, (_, index) => ({
+    number: index + 1, title: 'build(deps): bump a dependency',
+  }));
+  const release = mergeReleaseHarness(unrelated);
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', ['bump', '1.0.188'], 'sync', 'apk']);
 });
 
-test('waitForQueueDrain skips without refreshing when multiple PRs remain', async () => {
-  let syncCount = 0;
+test('another merge reuses its existing version PR and dispatches only after it merges', async () => {
+  const release = mergeReleaseHarness([
+    { number: 244, title: 'build(deps): bump dependencies' },
+    { number: 246, title: `${AUTO_BUMP_PREFIX}1.0.188` },
+  ]);
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', ['settle', 246], 'sync', 'apk']);
+});
 
-  const remaining = await waitForQueueDrain({
-    countOpen: () => 2,
-    sleep: async () => {},
-    syncAfterDrain: () => {
-      syncCount += 1;
-    },
+test('a failed version PR cannot dispatch an APK', async () => {
+  const release = mergeReleaseHarness([], {
+    createBump: async () => { throw new Error('required CI failed'); },
   });
+  await assert.rejects(release.run, /required CI failed/);
+  assert.deepEqual(release.calls, ['sync']);
+});
 
-  assert.equal(remaining, 2);
-  assert.equal(syncCount, 0);
+test('a generated version merge ensures its APK without another version PR', async () => {
+  const release = mergeReleaseHarness([], { alreadyBumped: () => true });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', 'apk']);
+});
+
+test('an unpublished source version dispatches directly after a merge', async () => {
+  const release = mergeReleaseHarness([], { readVersion: () => '1.0.188' });
+  await release.run();
+  assert.deepEqual(release.calls, ['sync', 'apk']);
 });
 
 test('hasApkBuildInFlight matches the exact head and every required channel', () => {

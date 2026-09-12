@@ -1,8 +1,9 @@
-# Auto mobile release when the last open PR to main is squash-merged.
+# Auto mobile release after each PR merge to main, regardless of other open PRs.
 # Bumps expo.version through a bot-authored pull request. Protected main never
 # needs a workflow-wide bypass.
+# Keep this workflow filename stable for existing dispatch links and history.
 
-name: mobile-auto-release-on-queue-drain
+name: mobile-auto-release-on-merge
 
 on:
   workflow_dispatch:
@@ -25,7 +26,7 @@ jobs:
       github.event_name == 'workflow_dispatch'
       || (github.event.pull_request.merged == true
           && !startsWith(github.event.pull_request.title, 'docs: refresh Android install QR'))
-    name: bump app version when queue drained
+    name: release merged app changes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -38,10 +39,9 @@ jobs:
         with:
           node-version: 24
 
-      - name: Queue drained - patch bump to main (APK via mobile-android-apk)
+      - name: Release current main (APK via mobile-android-apk)
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
-          AUTO_RELEASE_VIA_PR: "true"
         run: node mobile/scripts/mobile-auto-release-on-drain.mjs

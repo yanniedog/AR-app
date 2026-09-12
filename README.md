@@ -48,7 +48,13 @@ npm run ci
 
 - `app-ci` runs mobile typecheck, lint, unit tests, script tests, and export.
 - `mobile-android-apk` builds the internal Android preview APK and publishes it to this repo.
-- `mobile-auto-release-on-queue-drain` bumps `mobile/app.json` and dispatches `mobile-android-apk`.
+- `mobile-auto-release-on-merge` releases after every PR merge to `main`, even
+  while unrelated PRs remain open. It creates a protected version-bump PR when
+  needed, then automatically builds and publishes universal and ARM APKs.
+  Generated install-QR PRs are excluded to prevent recursive releases. The
+  workflow keeps its historical `mobile-auto-release-on-queue-drain.yml` filename.
+  Duplicate runs for the same source are deduplicated; newer merges supersede
+  stale build sources so an older APK cannot replace the latest release.
 - `mobile-eas-build` and `mobile-eas-submit` remain manual EAS workflows.
 - The [review bot control guide](docs/REVIEW-BOT-CONTROL.md) links the pinned
   GitHub dashboard for Qwen and repository-owned review automation.

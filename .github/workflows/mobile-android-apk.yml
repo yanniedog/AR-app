@@ -17,7 +17,7 @@
 name: mobile-android-apk
 run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches this only after the final patch-version PR
+# Merge-triggered automation dispatches this after the final patch-version PR
 # merges. Building on every preceding main push produced duplicate/stale APKs.
 on:
   workflow_dispatch:
@@ -226,7 +226,7 @@ jobs:
           RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
         run: |
           # Close the post-publication race as well: if main moved, leave the
-          # universal artifact alone and let queue-drain recovery rebuild a
+          # universal artifact alone and let the next merge release rebuild a
           # matched pair from the new head.
           node scripts/verify-github-release-source.mjs
           gh workflow run mobile-android-apk.yml \

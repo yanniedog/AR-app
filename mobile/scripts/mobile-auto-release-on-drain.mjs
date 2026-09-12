@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /* global AbortController, clearTimeout, setTimeout */
 /**
- * When the last open PR to main is squash-merged, bump expo.version through a
- * bot-authored pull request. Protected main is never pushed directly.
+ * After each PR merge to main, bump expo.version through a bot-authored pull
+ * request when needed. Unrelated open PRs never block a release. Protected main
+ * is never pushed directly. The historical filename is retained for callers.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import androidReleaseVersion from './android-release-version-pure.cjs';
 import {
@@ -43,8 +43,6 @@ const ghToken = process.env.GH_TOKEN?.trim() || process.env.GITHUB_TOKEN?.trim()
 const mergeSha = process.env.MERGE_SHA?.trim() || '';
 
 export const AUTO_BUMP_PREFIX = AUTO_RELEASE_BUMP_PREFIX;
-const POLL_ATTEMPTS = 6;
-const POLL_SECONDS = 20;
 const SPAWN_TIMEOUT_MS = 60_000;
 
 export function checkedGhOutput(result, args = []) {
@@ -461,41 +459,6 @@ function syncMain() {
   git(['checkout', '-B', 'main', 'origin/main']);
 }
 
-function countOpenPrsToMain() {
-  const raw = gh(['pr', 'list', '--state', 'open', '--base', 'main', '--json', 'number', '--repo', repo]);
-  const rows = JSON.parse(raw || '[]');
-  return Array.isArray(rows) ? rows.length : 0;
-}
-
-export async function waitForQueueDrain({
-  countOpen = countOpenPrsToMain,
-  sleep = delay,
-  syncAfterDrain = syncMain,
-} = {}) {
-  for (let attempt = 1; attempt <= POLL_ATTEMPTS; attempt++) {
-    const open = countOpen();
-    if (open === 0) {
-      syncAfterDrain();
-      return 0;
-    }
-    if (open > 1) {
-      console.log(
-        `mobile-auto-release-on-drain: ${open} open PR(s) to main — skip release (not queue drain)`,
-      );
-      return open;
-    }
-    console.log(
-      `mobile-auto-release-on-drain: ${open} open PR(s) — poll ${attempt}/${POLL_ATTEMPTS} (possible simultaneous merge)`,
-    );
-    if (attempt === POLL_ATTEMPTS) {
-      console.log('mobile-auto-release-on-drain: queue not drained after polling — skip release');
-      return open;
-    }
-    await sleep(POLL_SECONDS * 1000);
-  }
-  return countOpen();
-}
-
 function readHeadCommitMessage() {
   return git(['log', '-1', '--format=%s', 'origin/main']);
 }
@@ -508,8 +471,8 @@ function alreadyAutoBumpedOnHead() {
   return readHeadCommitMessage().startsWith(AUTO_BUMP_PREFIX);
 }
 
-function listOpenAutoBumpPrs(nextVersion) {
-  const raw = gh([
+export function listOpenAutoBumpPrs(nextVersion, runGh = gh) {
+  const raw = runGh([
     'pr', 'list', '--state', 'open', '--base', 'main', '--json', 'number,title,url', '--repo', repo,
   ]);
   const rows = JSON.parse(raw || '[]');
@@ -673,7 +636,7 @@ async function publishViaPullRequest(next, message) {
 
   const prHint = mergeSha ? `\n- Trigger merge: \`${mergeSha.slice(0, 7)}\`` : '';
   const body = [
-    'Automated patch version bump after the PR queue to `main` drained.',
+    'Automated patch version bump after a PR merged to `main`.',
     '',
     `- Version: **${next}**${prHint}`,
     '',
@@ -691,56 +654,63 @@ async function publishViaPullRequest(next, message) {
   return Number(prNumber);
 }
 
-async function main() {
-  if (!ghToken && !dryRun) {
-    console.error('mobile-auto-release-on-drain: GH_TOKEN is not set');
-    process.exit(1);
-  }
+export async function releaseAfterMerge({
+  sync = syncMain,
+  alreadyBumped = alreadyAutoBumpedOnHead,
+  readVersion = readCurrentVersion,
+  readPublished = readPublishedVersion,
+  findBumps = listOpenAutoBumpPrs,
+  settleBump = settleGeneratedPr,
+  createBump = createReleaseBump,
+  ensureApk = ensureApkForMainHead,
+  simulate = dryRun,
+} = {}) {
+  sync();
 
-  syncMain();
-
-  const remaining = dryRun ? 0 : await waitForQueueDrain();
-  if (dryRun) console.log('mobile-auto-release-on-drain: dry-run — skipping open PR count (assume drained)');
-  if (remaining !== 0) process.exit(0);
-
-  if (alreadyAutoBumpedOnHead()) {
-    console.log(`mobile-auto-release-on-drain: origin/main already at auto-release bump (${readHeadCommitSha()}) — skip`);
+  if (alreadyBumped()) {
+    console.log('mobile-auto-release-on-drain: main already at auto-release bump — ensure APK');
     // main carries a bumped version; ensure its APK exists (covers the fallback
     // bump-PR path, whose GITHUB_TOKEN merge can't trigger the build on push).
-    ensureApkForMainHead();
-    process.exit(0);
+    ensureApk();
+    return;
   }
 
-  const current = readCurrentVersion();
-  const published = await readPublishedVersion();
+  const current = readVersion();
+  const published = await readPublished();
   const next = nextAutoReleaseVersion(current, published);
   console.log(
-    `mobile-auto-release-on-drain: queue drained — source ${current}, published ${published}, next ${next}`,
+    `mobile-auto-release-on-drain: release after merge — source ${current}, published ${published}, next ${next}`,
   );
 
   if (next === current) {
     console.log(
       `mobile-auto-release-on-drain: source v${current} is already the next iteration — ensure APK`,
     );
-    ensureApkForMainHead();
-    process.exit(0);
+    ensureApk();
+    return;
   }
 
-  const pending = listOpenAutoBumpPrs(next);
+  const pending = findBumps(next);
   if (pending.length > 0) {
     console.log(`mobile-auto-release-on-drain: bump PR already open for v${next} (#${pending[0].number}) — skip`);
     const branchName = bumpBranchName(next);
-    await settleGeneratedPr(pending[0].number, branchName);
-    syncMain();
-    ensureApkForMainHead();
-    process.exit(0);
+    await settleBump(pending[0].number, branchName);
+    sync();
+    ensureApk();
+    return;
   }
 
-  if (dryRun) {
+  if (simulate) {
     console.log(`mobile-auto-release-on-drain: dry-run — would open an auto-release PR for v${next}`);
-    process.exit(0);
+    return;
   }
 
+  await createBump(next);
+  sync();
+  ensureApk();
+}
+
+async function createReleaseBump(next) {
   const bump = spawnSync(
     'node',
     ['scripts/bump-app-patch-version.mjs', '--to', next],
@@ -782,13 +752,14 @@ async function main() {
   git(['commit', '-m', message]);
 
   await publishViaPullRequest(next, message);
-  syncMain();
-  ensureApkForMainHead();
 }
 
 const invoked = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invoked) {
-  main().catch((err) => {
+  Promise.resolve().then(() => {
+    if (!ghToken && !dryRun) throw new Error('mobile-auto-release-on-drain: GH_TOKEN is not set');
+    return releaseAfterMerge();
+  }).catch((err) => {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
   });
