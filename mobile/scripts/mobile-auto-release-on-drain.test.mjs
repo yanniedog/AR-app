@@ -36,11 +36,12 @@ import {
 } from './app-release-meta.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
-test('queue reconciliation wakes on all PR closures and successful APK completion using only trusted main', () => {
+test('queue reconciliation accepts PR closures, explicit dispatch and APK completion using only trusted main', () => {
   const workflow = yaml.load(readFileSync(new URL(
     '../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url,
   ), 'utf8'));
   assert.deepEqual(workflow.on.pull_request_target, { types: ['closed'] });
+  assert.ok(Object.hasOwn(workflow.on, 'workflow_dispatch'));
   assert.deepEqual(workflow.on.workflow_run, {
     workflows: ['mobile-android-apk'], types: ['completed'], branches: ['main'],
   });
@@ -50,6 +51,27 @@ test('queue reconciliation wakes on all PR closures and successful APK completio
   assert.equal(checkout.with.ref, 'main');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
+});
+
+test('successful ARM publication reconciles after the README without depending on artifact upload', () => {
+  const workflow = yaml.load(readFileSync(new URL(
+    '../../.github/workflows/mobile-android-apk.yml', import.meta.url,
+  ), 'utf8'));
+  const steps = workflow.jobs['android-apk'].steps;
+  const publishIndex = steps.findIndex((step) => step.run?.includes('node scripts/publish-apk-manifest.mjs'));
+  const readmeIndex = steps.findIndex((step) => step.run?.includes('node scripts/publish-readme-app-install.mjs'));
+  const artifactIndex = steps.findIndex((step) => step.uses?.startsWith('actions/upload-artifact@'));
+  const reconcileIndex = steps.findIndex((step) => step.run?.includes('gh workflow run mobile-auto-release-on-queue-drain.yml'));
+  const reconcile = steps[reconcileIndex];
+  assert.ok(publishIndex >= 0 && readmeIndex > publishIndex);
+  assert.equal(reconcileIndex, readmeIndex + 1);
+  assert.ok(artifactIndex > reconcileIndex);
+  // Universal-to-ARM handoff must finish before reconciliation; a failed build
+  // or README merge must not wake the queue as if publication had succeeded.
+  assert.equal(reconcile.if, "success() && github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'");
+  assert.equal(reconcile.env.GH_TOKEN, '${{ github.token }}');
+  assert.equal(workflow.permissions.actions, 'write');
+  assert.match(reconcile.run, /gh workflow run mobile-auto-release-on-queue-drain\.yml\s+\\\s+--ref main\s+\\\s+--repo "\$\{\{ github\.repository \}\}"/);
 });
 
 test('release inspection distinguishes absence from infrastructure failure', () => {
