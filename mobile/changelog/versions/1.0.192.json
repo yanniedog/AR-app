@@ -1,0 +1,32 @@
+{
+  "version": "1.0.192",
+  "releaseTag": "app-arm-v1.0.192",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "Read selected CDR revisions and audit source coverage accounting (#256)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Read selected CDR revisions and audit source coverage accounting (#256)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.192"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.191"
+        }
+      ]
+    }
+  ]
+}
