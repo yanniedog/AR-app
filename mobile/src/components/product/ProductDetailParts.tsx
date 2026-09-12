@@ -24,6 +24,7 @@ import {
 } from '../../data/productFacts';
 import { useStore } from '../../data/store';
 import { rateQualifier } from '../../lib/rateQualifier';
+import { PRODUCT_HISTORY_SERIES_LABEL } from '../../lib/productHistoryCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { openProduct } from '../../lib/nav';
@@ -512,7 +513,7 @@ export function ProductSpecs({
 export function HistoryLegend({ productColor, sectionColor }: { productColor: string; sectionColor: string }) {
   return (
     <Row gap={16} style={{ marginTop: 10, flexWrap: 'wrap' }}>
-      <LegendItem color={productColor} label="This product" />
+      <LegendItem color={productColor} label={PRODUCT_HISTORY_SERIES_LABEL} />
       <LegendItem color={sectionColor} label="Median" dashed />
       <LegendItem color={sectionColor} label="Mean" />
     </Row>

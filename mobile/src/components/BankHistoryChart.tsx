@@ -58,6 +58,8 @@ export interface HighlightSeries {
   /** Value per timeline date (YMD). Missing/nullish dates render as gaps in the line. */
   values: Record<string, number | null>;
   label: string;
+  /** Optional scope shown beside the selected highlight value. */
+  valueScope?: string;
   color?: string;
 }
 
@@ -698,7 +700,7 @@ export function BankHistoryChart({
             if (date) handleSlicePress(date);
           }}
           valueLabel={activeHighlight != null
-            ? pct(activeHighlight)
+            ? [pct(activeHighlight), highlightSeries?.valueScope].filter(Boolean).join(' · ')
             : activePoint?.min != null && activePoint?.max != null
               ? `${pct(activePoint.min)} – ${pct(activePoint.max)}`
               : '—'}
