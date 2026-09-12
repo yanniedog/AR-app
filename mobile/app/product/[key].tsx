@@ -677,7 +677,7 @@ export default function ProductDetail() {
                   </Row>
                 ) : observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    {formatRate(currentBest)} best across all tiers today · gathering prior daily rates so the full line
+                    {formatRate(currentBest)} best across all tiers in this capture · gathering prior daily rates so the full line
                     can draw
                   </AppText>
                 ) : null}

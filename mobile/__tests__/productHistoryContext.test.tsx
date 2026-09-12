@@ -134,16 +134,32 @@ function copy(tree: InspectableRenderer): string {
 
 describe('product-wide history context on an exact-tier page', () => {
   beforeEach(() => {
+    mockState.core = core;
     mockParams.ri = '4';
     mockState.prefs.showHistoryRibbon = false;
     mockState.productHistory = null;
+  });
+
+  it.each([false, true])('does not call an older cached capture current with history enabled=%s', async (enabled) => {
+    // Controlled date context only: the rate rows remain the retained real fixture.
+    mockState.core = { ...core, run_date: '2026-09-12' };
+    mockState.prefs.showHistoryRibbon = enabled;
+    const tree = await renderProduct();
+    const renderedCopy = copy(tree);
+    expect(renderedCopy).toContain('Selected tier 5.00% · product best 11.50%');
+    expect(renderedCopy).not.toMatch(/product best 11\.50% today/);
+    if (enabled) {
+      expect(renderedCopy).toContain('11.50% best across all tiers in this capture');
+      expect(tree.root.findAllByType('BankHistoryChart')[0].props.highlightSeries.values['2026-09-12']).toBe(0.115);
+    }
+    act(() => tree.unmount());
   });
 
   it('explains all-tier scope and a differing selected rate before history is enabled', async () => {
     const tree = await renderProduct();
     expect(tree.root.findByProps({ text: 'Product-wide history' })).toBeTruthy();
     expect(copy(tree)).toContain('Includes conditional and restricted tiers. The best tier can change.');
-    expect(copy(tree)).toContain('Selected tier 5.00% · product best 11.50% today');
+    expect(copy(tree)).toContain('Selected tier 5.00% · product best 11.50%');
     expect(tree.root.findByProps({ title: 'Show product-wide history' })).toBeTruthy();
     act(() => tree.unmount());
   });
@@ -156,7 +172,7 @@ describe('product-wide history context on an exact-tier page', () => {
     expect(chart.props.highlightSeries.valueScope).toBe('best · all tiers');
     expect(chart.props.highlightSeries.values['2026-09-13']).toBe(0.115);
     expect(copy(tree)).toContain('Best advertised rate · all tiers');
-    expect(copy(tree)).toContain('11.50% best across all tiers today');
+    expect(copy(tree)).toContain('11.50% best across all tiers in this capture');
     expect(tree.root.findAllByType('ProductSpecs')[0].props.row.rate).toBe('0.05');
     act(() => tree.unmount());
   });

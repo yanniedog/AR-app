@@ -9,5 +9,5 @@ export const PRODUCT_HISTORY_SCOPE = 'Includes conditional and restricted tiers.
 export function selectedTierHistoryContext(row: RateRow, productBest: number | null): string | null {
   const selected = toFraction(row.rate);
   if (selected == null || productBest == null || Math.abs(selected - productBest) <= 1e-9) return null;
-  return `Selected tier ${formatRate(selected)} · product best ${formatRate(productBest)} today`;
+  return `Selected tier ${formatRate(selected)} · product best ${formatRate(productBest)}`;
 }
