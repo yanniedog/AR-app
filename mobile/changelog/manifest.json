@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-12T22:02:24.863Z",
+  "generated_at": "2026-09-12T23:08:33.485Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -946,6 +946,14 @@
         "fix(mobile): honor exact-tier availability in rate details (#268)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.200"
+    },
+    {
+      "version": "1.0.202",
+      "date": "2026-09-12",
+      "summaryBullets": [
+        "fix(mobile): disclose all-tier scope of product history (#271)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.202"
     }
   ]
 }

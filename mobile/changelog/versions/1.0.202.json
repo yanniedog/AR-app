@@ -1,0 +1,32 @@
+{
+  "version": "1.0.202",
+  "releaseTag": "app-arm-v1.0.202",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "fix(mobile): disclose all-tier scope of product history (#271)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(mobile): disclose all-tier scope of product history (#271)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.202"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.201"
+        }
+      ]
+    }
+  ]
+}
