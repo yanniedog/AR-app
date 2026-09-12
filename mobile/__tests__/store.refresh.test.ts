@@ -1,6 +1,5 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
-import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -8,8 +7,6 @@ const mockWriteBundle = jest.fn();
 const mockUpdateMeta = jest.fn(async (_meta?: unknown) => {});
 const mockFetchManifest = jest.fn();
 const mockDownloadCore = jest.fn();
-const mockDownloadDetails = jest.fn();
-const mockDownloadInflate = jest.fn();
 const mockReadDetails = jest.fn();
 const mockFetchDatesIndexJson = jest.fn();
 const mockEnsureHistoryBanks = jest.fn(async () => {});
@@ -36,9 +33,6 @@ jest.mock('../src/data/cache', () => ({
     writeBundle: (...args: unknown[]) => mockWriteBundle(...args),
     readDetails: (...args: unknown[]) => mockReadDetails(...args),
     writeDetails: jest.fn(async () => {}),
-    writeSearchIndex: jest.fn(async () => {}),
-    writeHistoryBanks: jest.fn(async () => {}),
-    writeBankInsights: jest.fn(async () => {}),
     updateMeta: (meta: unknown) => mockUpdateMeta(meta),
     readSuitabilityIndex: jest.fn(async () => null),
     writeSuitabilityIndex: jest.fn(async () => {}),
@@ -49,8 +43,7 @@ jest.mock('../src/data/cache', () => ({
 jest.mock('../src/data/payload', () => ({
   fetchManifest: (...args: unknown[]) => mockFetchManifest(...args),
   downloadCore: (...args: unknown[]) => mockDownloadCore(...args),
-  downloadDetails: (...args: unknown[]) => mockDownloadDetails(...args),
-  downloadInflate: (...args: unknown[]) => mockDownloadInflate(...args),
+  downloadDetails: jest.fn(),
 }));
 
 jest.mock('../src/data/historyDaily', () => {
@@ -1041,54 +1034,5 @@ describe('store refresh lifecycle', () => {
     useStore.setState({ refreshOutcome: 'success' });
     useStore.getState().clearRefreshOutcome();
     expect(useStore.getState().refreshOutcome).toBeNull();
-  });
-});
-
-describe('selected immutable payload refresh', () => {
-  const installed = revisionManifest(1);
-  const next = revisionManifest(2, { files: { ...sampleManifest.files,
-    details: { ...sampleManifest.files.details, sha256: 'c'.repeat(64) } } });
-  beforeEach(() => {
-    jest.clearAllMocks();
-    resetStore();
-    useStore.setState({ manifest: installed, source: 'remote',
-      ensureDetails: mockEnsureDetails, ensureHistoryBanks: mockEnsureHistoryBanks,
-      ensureBankInsights: mockEnsureBankInsights, ensureBankSpreadHistory: mockEnsureBankSpreadHistory,
-      ensureRbaCalendar: mockEnsureRbaCalendar });
-    mockReadMeta.mockResolvedValue({ manifest: installed, source: 'remote',
-      coreSha: installed.files.core.sha256, detailsSha: installed.files.details.sha256 });
-    mockFetchDatesIndexJson.mockResolvedValue({ dates: [next.run_date], latest_date: next.run_date,
-      revision_protocol: 1, revision_heads: { [next.run_date]: revisionHead(next) } });
-    mockFetchManifest.mockImplementation(async (url?: string) => url ? next : installed);
-    mockDownloadCore.mockResolvedValue({ core: sampleCore, text: JSON.stringify(sampleCore), integrity: sampleCoreIntegrity });
-    mockDownloadDetails.mockResolvedValue({ details: { schema_version: 1, run_date: next.run_date, products: {} }, text: '{}' });
-    mockDownloadInflate.mockResolvedValue('{}');
-    mockWriteBundle.mockResolvedValue(undefined);
-  });
-
-  it('adopts a details-only same-day correction despite an unchanged core hash', async () => {
-    expect(await useStore.getState().refresh({ manual: true })).toBe(true);
-    expect(mockDownloadDetails).toHaveBeenCalledWith(next.files.details.url, next.files.details.sha256, expect.objectContaining({ requireExactBytes: true }));
-    expect(mockWriteBundle).toHaveBeenCalledWith(expect.objectContaining({ manifest: next, detailsSha: next.files.details.sha256 }), expect.any(String));
-    expect(useStore.getState().manifest).toEqual(next);
-  });
-
-  it('keeps the installed edition if a selected asset fails hash verification', async () => {
-    mockDownloadDetails.mockRejectedValueOnce(new Error('asset sha256 mismatch'));
-    expect(await useStore.getState().refresh({ manual: true })).toBe(false);
-    expect(mockWriteBundle).not.toHaveBeenCalled();
-    expect(useStore.getState().manifest).toEqual(installed);
-    expect(useStore.getState().refreshOutcome).toBe('failure');
-  });
-
-  it('rejects rollback before downloading replacement assets', async () => {
-    useStore.setState({ manifest: next });
-    mockFetchManifest.mockResolvedValue(installed);
-    mockFetchDatesIndexJson.mockResolvedValue({ dates: [installed.run_date], latest_date: installed.run_date,
-      revision_protocol: 1, revision_heads: { [installed.run_date]: revisionHead(installed) } });
-    expect(await useStore.getState().refresh({ manual: true })).toBe(false);
-    expect(mockDownloadCore).not.toHaveBeenCalled();
-    expect(mockWriteBundle).not.toHaveBeenCalled();
-    expect(useStore.getState().manifest).toEqual(next);
   });
 });

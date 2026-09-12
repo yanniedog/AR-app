@@ -49,6 +49,11 @@ describe('cache core-meta sidecar', () => {
     expect(await cache.readHistoryBanks()).toBeNull();
     await cache.updateMeta({ manifest: revisionManifest(2), coreSha: installed.files.core.sha256, detailsSha: 'f'.repeat(64) });
     expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(1);
+    await cache.writeBundle({ manifest: revisionManifest(2), source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: installed.files.details.sha256 }, JSON.stringify(sampleCore));
+    await expect(cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: null }, JSON.stringify(sampleCore))).rejects.toThrow('stale');
+    expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(2);
   });
 
   it('writeBundle stores a tiny core-meta sidecar and updateMeta never rewrites the bundle', async () => {

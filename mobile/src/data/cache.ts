@@ -14,7 +14,7 @@ import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
-import { samePayloadIdentity } from './payloadRevision';
+import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -369,6 +369,7 @@ export const cache = {
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
     return serialize(async () => {
+      assertNoRevisionRollback((await cache.readMeta())?.manifest, meta.manifest);
       // Drop any prior sidecar first so a crash after the new bundle lands cannot
       // leave readMeta trusting stale detailsSha/coreSha from the old run.
       await deletePath(CORE_META);

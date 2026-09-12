@@ -14,7 +14,7 @@ import {
 import { debugLog } from '../lib/debugLog';
 import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
-import { yieldToUi } from '../lib/yieldToUi';
+import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { onWifi } from './storeHelpers';
 import {
@@ -375,6 +375,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
+            const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
+            if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
               onProgress({
                 phase: 'parse',
@@ -390,6 +392,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
+              ...(adoptingRevision ? { details: null } : {}),
               ...(searchIndexChanged ? {
                 // A corrected optional index can arrive without a core SHA
                 // change. Never let Search keep filtering with the previous
@@ -465,6 +468,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               expectedBytes: file.bytes, requireExactBytes: true,
               maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024,
             });
+            const decoded = await parseJsonHeavy<Record<string, unknown>>(assetText);
+            if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded) ||
+                (key !== 'rba_calendar' && decoded.run_date !== remote.run_date)) {
+              throw new Error(`Revision ${key} publication date or structure mismatch`);
+            }
             if (key === 'search_index') await cache.writeSearchIndex(assetText, file.sha256);
             if (key === 'history_banks') await cache.writeHistoryBanks(assetText, file.sha256);
             if (key === 'bank_history') await cache.writeBankInsights(assetText, file.sha256);
@@ -527,9 +535,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           pendingIngestRunDate,
           details: stagedDetails ?? (detailsUnchanged ? get().details : null),
           ...(remote.payload_revision ? {
-            historyBanks: null, historyBanksError: null,
-            bankInsights: null, bankInsightsError: null,
-            rbaCalendar: null, rbaCalendarSha: null, rbaCalendarError: null,
+            historyBanks: optionalWork.historyBanks ? null : get().historyBanks, historyBanksError: null,
+            bankInsights: optionalWork.bankInsights ? null : get().bankInsights, bankInsightsError: null,
+            rbaCalendar: optionalWork.rbaCalendar ? null : get().rbaCalendar,
+            rbaCalendarSha: optionalWork.rbaCalendar ? null : get().rbaCalendarSha, rbaCalendarError: null,
           } : {}),
           searchIndex: null,
           searchIndexStatus: 'idle',
