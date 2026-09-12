@@ -125,12 +125,17 @@ async function hydrate(): Promise<void> {
   if (hydratePromise) return hydratePromise;
   hydratePromise = (async () => {
     try {
-      const raw = await AsyncStorage.getItem(STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as ApkDownloadSnapshot;
-        if (parsed && typeof parsed === 'object' && typeof parsed.phase === 'string') {
-          snapshot = { ...IDLE_APK_DOWNLOAD, ...parsed };
+      try {
+        const raw = await AsyncStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as ApkDownloadSnapshot;
+          if (parsed && typeof parsed === 'object' && typeof parsed.phase === 'string') {
+            snapshot = { ...IDLE_APK_DOWNLOAD, ...parsed };
+          }
         }
+      } catch {
+        // A corrupt or unavailable receipt must not suppress installer cleanup.
+        snapshot = { ...IDLE_APK_DOWNLOAD };
       }
       await clearInstalledApkFiles();
       if (Platform.OS === 'android' && isInstalledBuild(snapshot.buildNumber)) {
@@ -172,15 +177,8 @@ async function clearInstalledApkFiles(): Promise<void> {
   const docs = FileSystem.documentDirectory;
   if (Platform.OS !== 'android' || !docs || !isInstalledBuild(Application.nativeBuildVersion)) return;
   try {
-    const entries = await FileSystem.readDirectoryAsync(docs);
-    const candidates = entries.filter((name) => {
-      const match = /^app-update-(\d+)(?:-[a-f0-9]{12})?\.apk$/.exec(name);
-      return match != null && isInstalledBuild(match[1]);
-    });
-    if (!candidates.length) return;
-
     // A manually installed update can supersede a transfer restored by Android.
-    // Stop only our obsolete tasks before removing their destination files.
+    // Stop obsolete tasks even if pending transfers have not created a file yet.
     const protectedBuilds = new Set<string>();
     const tasks = await getExistingDownloadTasks();
     for (const task of tasks) {
@@ -192,6 +190,11 @@ async function clearInstalledApkFiles(): Promise<void> {
         protectedBuilds.add(String(Number(match[1])));
       }
     }
+    const entries = await FileSystem.readDirectoryAsync(docs);
+    const candidates = entries.filter((name) => {
+      const match = /^app-update-(\d+)(?:-[a-f0-9]{12})?\.apk$/.exec(name);
+      return match != null && isInstalledBuild(match[1]);
+    });
     for (const name of candidates) {
       const build = /^app-update-(\d+)/.exec(name)![1];
       if (protectedBuilds.has(String(Number(build)))) continue;

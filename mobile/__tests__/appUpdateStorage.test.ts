@@ -77,6 +77,28 @@ describe('installed APK storage cleanup', () => {
     expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
   });
 
+  it('reclaims obsolete installers even when the persisted receipt is malformed', async () => {
+    await AsyncStorage.setItem(STORAGE_KEY, '{invalid JSON');
+
+    await expect(getHydratedApkDownloadSnapshot()).resolves.toEqual(IDLE_APK_DOWNLOAD);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledTimes(2);
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(`file:///docs/${oldApk}`, { idempotent: true });
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(`file:///docs/${installedApk}`, { idempotent: true });
+  });
+
+  it('stops an obsolete pending transfer before its destination file exists', async () => {
+    const task = {
+      id: 'apk-update-259', state: 'PENDING', bytesDownloaded: 0, bytesTotal: 46_011_301,
+      stop: jest.fn(async () => { task.state = 'STOPPED'; }),
+    };
+    jest.mocked(getExistingDownloadTasks).mockResolvedValue([task] as never);
+    jest.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([]);
+
+    await expect(getHydratedApkDownloadSnapshot()).resolves.toEqual(IDLE_APK_DOWNLOAD);
+    expect(task.stop).toHaveBeenCalledTimes(1);
+    expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+  });
+
   it('stops obsolete native transfers before deletion and preserves transfers that cannot stop', async () => {
     const stopOld = jest.fn(async () => {
       expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
