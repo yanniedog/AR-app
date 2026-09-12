@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-12T18:47:02.534Z",
+  "generated_at": "2026-09-12T20:01:26.798Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -930,6 +930,14 @@
         "fix: retain row eligibility after suitability cache warms (#262)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.196"
+    },
+    {
+      "version": "1.0.198",
+      "date": "2026-09-12",
+      "summaryBullets": [
+        "Preserve ordinary rate siblings in the suitability index (#265)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.198"
     }
   ]
 }

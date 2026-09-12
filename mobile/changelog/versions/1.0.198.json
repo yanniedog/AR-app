@@ -1,0 +1,32 @@
+{
+  "version": "1.0.198",
+  "releaseTag": "app-arm-v1.0.198",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "Preserve ordinary rate siblings in the suitability index (#265)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Preserve ordinary rate siblings in the suitability index (#265)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.198"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.197"
+        }
+      ]
+    }
+  ]
+}
