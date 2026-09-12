@@ -10,12 +10,14 @@ import {
   countOpenPrs,
   dispatchApkBuild,
   ensureApkForMainHead,
+  findRecoverableAutoBumps,
   hasApkBuildInFlight,
   hasPendingMainRelease,
   hasPublishedMainRelease,
   listOpenAutoBumpPrs,
   missingApkChannels,
   nextAutoReleaseVersion,
+  ownedAutoBumpVersion,
   pushBranchWithGhAuth,
   readPublishedVersion,
   releaseAssetApiEndpoint,
@@ -235,6 +237,7 @@ function queueReleaseHarness(openPrs = [], overrides = {}) {
   const calls = [];
   const options = {
     countOpen: () => countOpenPrs(() => JSON.stringify([openPrs])),
+    findRecoverableBumps: () => [],
     sync: () => calls.push('sync'),
     alreadyPublished: () => false,
     releasePending: () => false,
@@ -303,6 +306,58 @@ test('queue inspection failure cannot produce a release', async () => {
   const release = queueReleaseHarness([], { countOpen: () => { throw new Error('API failed'); } });
   await assert.rejects(release.run, /API failed/);
   assert.deepEqual(release.calls, []);
+});
+
+const ownedBumpPr = {
+  number: 247, state: 'open', title: `${AUTO_BUMP_PREFIX}1.0.188`,
+  user: { login: 'github-actions[bot]', type: 'Bot' },
+  base: { ref: 'main', repo: { full_name: 'owner/app' } },
+  head: { ref: 'chore/mobile-auto-release-v1.0.188', repo: { full_name: 'owner/app' } },
+};
+
+test('an interrupted generated version PR is resumed before the empty-queue check', async () => {
+  const counts = [1, 0, 0];
+  const release = queueReleaseHarness([], {
+    countOpen: () => counts.shift(),
+    findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+    alreadyBumped: () => true,
+  });
+  await release.run();
+  assert.deepEqual(release.calls, [['settle', 247], 'sync', 'sync', 'apk']);
+});
+
+test('recovering a generated PR still leaves APK dispatch blocked by ordinary PRs', async () => {
+  const counts = [2, 1];
+  const release = queueReleaseHarness([], {
+    countOpen: () => counts.shift(),
+    findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+  });
+  await release.run();
+  assert.deepEqual(release.calls, [['settle', 247]]);
+});
+
+test('recovery rejects lookalike titles, foreign branches and fork PRs', () => {
+  assert.equal(ownedAutoBumpVersion(ownedBumpPr, 'owner/app'), '1.0.188');
+  for (const candidate of [
+    { ...ownedBumpPr, user: { login: 'human', type: 'User' } },
+    { ...ownedBumpPr, head: { ...ownedBumpPr.head, repo: { full_name: 'fork/app' } } },
+    { ...ownedBumpPr, head: { ...ownedBumpPr.head, ref: 'feature/fix' } },
+    { ...ownedBumpPr, base: { ...ownedBumpPr.base, ref: 'development' } },
+    { ...ownedBumpPr, title: `${AUTO_BUMP_PREFIX}1.0.1880` },
+    { ...ownedBumpPr, state: 'closed' },
+  ]) assert.equal(ownedAutoBumpVersion(candidate, 'owner/app'), null);
+});
+
+test('only generated PRs limited to version and changelog files can be recovered', () => {
+  const inspect = (files) => findRecoverableAutoBumps((args) => JSON.stringify(
+    args.at(-1).includes('/files?') ? [files.map((filename) => ({ filename }))] : [[ownedBumpPr]],
+  ), 'owner/app');
+  assert.deepEqual(inspect(['mobile/app.json', 'mobile/changelog/versions/1.0.188.json']), [
+    { number: 247, branchName: ownedBumpPr.head.ref },
+  ]);
+  assert.deepEqual(inspect(['mobile/app.json', 'mobile/app/index.tsx']), []);
+  assert.deepEqual(inspect([]), []);
+  assert.throws(() => findRecoverableAutoBumps(() => '{"message":"denied"}', 'owner/app'), /pending release PRs/);
 });
 
 test('version PR lookup ignores unrelated open PRs', () => {

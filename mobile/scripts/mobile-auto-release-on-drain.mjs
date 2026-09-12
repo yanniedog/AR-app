@@ -26,7 +26,10 @@ import {
   waitForPullRequestMerge,
   workflowRunsForHead,
 } from '../../scripts/lib/generated-pr-automation.mjs';
-import { AUTO_RELEASE_BUMP_PREFIX } from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
+import {
+  AUTO_RELEASE_BUMP_PREFIX,
+  isAutoReleaseCommitOnly,
+} from '../../scripts/lib/pr-mobile-auto-release-commit.mjs';
 import { requiredPrCheckDispatches } from '../../scripts/lib/required-pr-check-dispatch.mjs';
 
 const { compareVersions, nextReleaseVersion } = androidReleaseVersion;
@@ -470,6 +473,38 @@ export function countOpenPrs(runGh = gh) {
   return pages.reduce((count, page) => count + page.length, 0);
 }
 
+export function ownedAutoBumpVersion(pr, repository = repo) {
+  const match = /^chore\/mobile-auto-release-v(\d+\.\d+\.\d+)$/.exec(pr?.head?.ref ?? '');
+  if (!match || pr?.state !== 'open'
+    || !Number.isSafeInteger(pr.number) || pr.number <= 0
+    || pr.user?.login !== 'github-actions[bot]' || pr.user?.type !== 'Bot'
+    || pr.base?.ref !== 'main' || pr.base?.repo?.full_name !== repository
+    || pr.head?.repo?.full_name !== repository) return null;
+  const prefix = `${AUTO_BUMP_PREFIX}${match[1]}`;
+  if (pr.title !== prefix && !pr.title?.startsWith(`${prefix} `)) return null;
+  return match[1];
+}
+
+export function findRecoverableAutoBumps(runGh = gh, repository = repo) {
+  const pages = JSON.parse(runGh([
+    'api', '--paginate', '--slurp', `repos/${repository}/pulls?state=open&per_page=100`,
+  ]));
+  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) {
+    throw new Error('Unable to inspect pending release PRs');
+  }
+  return pages.flat().filter((pr) => {
+    if (!ownedAutoBumpVersion(pr, repository)) return false;
+    const filePages = JSON.parse(runGh([
+      'api', '--paginate', '--slurp', `repos/${repository}/pulls/${pr.number}/files?per_page=100`,
+    ]));
+    if (!Array.isArray(filePages) || filePages.some((page) => !Array.isArray(page))) {
+      throw new Error('Unable to inspect pending release PR files');
+    }
+    const paths = filePages.flat().map((file) => file.filename);
+    return paths.includes('mobile/app.json') && isAutoReleaseCommitOnly(paths);
+  }).map((pr) => ({ number: pr.number, branchName: pr.head.ref }));
+}
+
 export function hasPublishedMainRelease({
   readHeadSha = readHeadCommitSha,
   readChannels = publishedApkChannels,
@@ -696,6 +731,7 @@ async function publishViaPullRequest(next, message) {
 
 export async function releaseWhenQueueEmpty({
   countOpen = countOpenPrs,
+  findRecoverableBumps = findRecoverableAutoBumps,
   sync = syncMain,
   alreadyPublished = hasPublishedMainRelease,
   releasePending = hasPendingMainRelease,
@@ -715,7 +751,15 @@ export async function releaseWhenQueueEmpty({
     console.log(`mobile-auto-release-on-drain: ${open} open PR(s) — defer release until the queue is empty`);
     return false;
   };
-  if (!queueIsEmpty()) return;
+  if (!queueIsEmpty()) {
+    // A prior run can die after creating its version PR but before arranging
+    // the required checks. Resume only our verified generated metadata PR;
+    // ordinary open work still prevents APK dispatch after it settles.
+    const recoverable = findRecoverableBumps();
+    if (recoverable.length !== 1) return;
+    await settleBump(recoverable[0].number, recoverable[0].branchName);
+    if (!queueIsEmpty()) return;
+  }
   sync();
   if (alreadyPublished()) {
     console.log('mobile-auto-release-on-drain: current app content is already published — no release');
