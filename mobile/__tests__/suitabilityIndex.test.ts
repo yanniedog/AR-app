@@ -150,7 +150,7 @@ describe('suitabilityIndex', () => {
 
   it('hydrates an exact core and details hash without loading details', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
-      schemaVersion: 2,
+      schemaVersion: 3,
       runDate: '2026-07-15',
       coreSha: 'core-sha',
       detailsSha: 'details-sha',
@@ -183,7 +183,7 @@ describe('suitabilityIndex', () => {
 
   it('rejects a persisted gate from another payload pair', async () => {
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue({
-      schemaVersion: 2,
+      schemaVersion: 3,
       runDate: '2026-07-14',
       coreSha: 'old-core',
       detailsSha: 'old-details',
@@ -208,7 +208,7 @@ describe('suitabilityIndex', () => {
 
     expect(cache.writeSuitabilityIndex).toHaveBeenCalledTimes(2);
     expect(jest.mocked(cache.writeSuitabilityIndex).mock.calls[1][0]).toMatchObject({
-      schemaVersion: 2,
+      schemaVersion: 3,
       coreSha: 'core-2',
       detailsSha: 'details-2',
       allowed: ['c|1'],

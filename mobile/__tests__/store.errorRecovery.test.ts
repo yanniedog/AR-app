@@ -278,7 +278,10 @@ describe('store error recovery', () => {
     expect(ensureDetails).toHaveBeenCalledWith({ force: true });
   });
 
-  it('uses an exact cached suitability index without closing or rebuilding it', async () => {
+  it.each([
+    { label: 'current', schemaVersion: 3, rebuild: false },
+    { label: 'legacy conditionality', schemaVersion: 2, rebuild: true },
+  ])('handles the $label cached suitability index without resetting the payload', async ({ schemaVersion, rebuild }) => {
     const ensureDetails = jest.fn(async () => {});
     useStore.setState({
       status: 'idle',
@@ -297,7 +300,7 @@ describe('store error recovery', () => {
       core: remoteCore,
     });
     mockReadSuitabilityIndex.mockResolvedValue({
-      schemaVersion: 2,
+      schemaVersion,
       runDate: remoteCore.run_date,
       coreSha: remoteManifest.files.core.sha256,
       detailsSha: remoteManifest.files.details.sha256,
@@ -306,8 +309,14 @@ describe('store error recovery', () => {
 
     await useStore.getState().bootstrap({ skipRefresh: true });
 
-    expect(getSuitabilityAllowed()).toEqual(new Set(['allowed-product']));
-    expect(ensureDetails).not.toHaveBeenCalled();
+    expect(useStore.getState().core).toBe(remoteCore);
+    if (rebuild) {
+      expect(getSuitabilityAllowed()).toEqual(new Set());
+      expect(ensureDetails).toHaveBeenCalledWith({ force: true });
+    } else {
+      expect(getSuitabilityAllowed()).toEqual(new Set(['allowed-product']));
+      expect(ensureDetails).not.toHaveBeenCalled();
+    }
   });
 
   it('bootstrap sets error when sample seed write fails', async () => {

@@ -1,0 +1,571 @@
+{
+  "provenance": {
+    "scope": "Exact unmodified rows/details from verified Sep13 private canary payload. Original source rates, row order, categories and conditions are retained.",
+    "producer_commit": "f246448df4e378f2f20d6257ad5483f633ad1311",
+    "run_date": "2026-09-13",
+    "manifest_sha256": "1b2212c4a292c24d0299b561933e4902d17196e7f17e131866124e8971312a61",
+    "core_sha256": "15e653265e67d74845c556423dbab2fa5f75bac853256bdc58cee7447ac27e5e",
+    "details_sha256": "b0751d651dff18f8fce718f60180cbe0d5d2e8fc5d3a4e62ef2a78cd4f50e0e1"
+  },
+  "cases": [
+    {
+      "section": "Mortgage",
+      "product_key": "Dnister|34|RESIDENTIAL_MORTGAGES|Simple Home Loan Plus",
+      "rates": [
+        {
+          "provider": "Dnister",
+          "product_id": "34",
+          "product_key": "Dnister|34|RESIDENTIAL_MORTGAGES|Simple Home Loan Plus",
+          "product_name": "Simple Home Loan Plus",
+          "category": "RESIDENTIAL_MORTGAGES",
+          "rate": "0.0599",
+          "comparison_rate": "0.0675",
+          "rate_type": "INTRODUCTORY",
+          "repayment_type": "PRINCIPAL_AND_INTEREST",
+          "loan_purpose": "OWNER_OCCUPIED",
+          "term": "P2Y",
+          "lvr_tier": "lvr_unspecified",
+          "ribbon_normalized": true,
+          "security_purpose": "owner_occupied",
+          "ribbon_repayment_type": "principal_and_interest",
+          "ribbon_rate_structure": "fixed",
+          "ribbon_fixed_term": "2",
+          "feature_set": "basic",
+          "account_class": "standard",
+          "rate_index": 1,
+          "last_updated": "2026-09-12T14:00:49.5327976Z",
+          "taxonomy_path": "HOME_LOAN.OO.PI.INTRO.LVR_UNSP"
+        },
+        {
+          "provider": "Dnister",
+          "product_id": "34",
+          "product_key": "Dnister|34|RESIDENTIAL_MORTGAGES|Simple Home Loan Plus",
+          "product_name": "Simple Home Loan Plus",
+          "category": "RESIDENTIAL_MORTGAGES",
+          "rate": "0.0645",
+          "comparison_rate": "0.0684",
+          "rate_type": "VARIABLE",
+          "repayment_type": "PRINCIPAL_AND_INTEREST",
+          "loan_purpose": "OWNER_OCCUPIED",
+          "lvr_tier": "lvr_unspecified",
+          "ribbon_normalized": true,
+          "security_purpose": "owner_occupied",
+          "ribbon_repayment_type": "principal_and_interest",
+          "ribbon_rate_structure": "variable",
+          "feature_set": "basic",
+          "account_class": "standard",
+          "rate_index": 2,
+          "last_updated": "2026-09-12T14:00:49.5327976Z",
+          "taxonomy_path": "HOME_LOAN.OO.PI.VARIABLE.LVR_UNSP"
+        }
+      ],
+      "detail": {
+        "description": "Simple Home Loan Plus",
+        "last_updated": "2026-09-12T14:00:49.5327976Z",
+        "fees": [
+          {
+            "label": "UPFRONT",
+            "name": "Company Search",
+            "value": "50.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "50.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Title Search",
+            "value": "49.50",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "49.50"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Bank Production",
+            "value": "150.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "150.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Withdrawal of Caveat",
+            "value": "100.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "100.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "ASIC Lodgement",
+            "value": "50.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "50.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Bank Cheque",
+            "value": "15.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "15.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Discharge of Mortgage",
+            "value": "200.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "200.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Redraw Fee",
+            "value": "25.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "25.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Redraw Fee",
+            "value": "10.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "10.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Redraw Fee",
+            "value": "0.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "0.00"
+            }
+          },
+          {
+            "label": "UPFRONT",
+            "name": "Loan Establishment Fee",
+            "value": "250.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "250.00"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Split Fee",
+            "value": "300.00",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "300.00"
+            }
+          },
+          {
+            "label": "PERIODIC",
+            "name": "Annual Fee Intro Var HL Pkg",
+            "value": "P1Y",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "additionalValue": "P1Y",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "395.00"
+            },
+            "discounts": [
+              {
+                "description": "The discount is only available during an introductory period",
+                "discountMethodUType": "rateBased",
+                "discountType": "ELIGIBILITY_ONLY",
+                "rateBased": {
+                  "rate": "1.0",
+                  "rateType": "FEE"
+                }
+              }
+            ]
+          }
+        ],
+        "features": [
+          {
+            "label": "DIGITAL_BANKING"
+          },
+          {
+            "label": "EXTRA_REPAYMENTS",
+            "info": "Repayments can be made weekly, fortnightly, or monthly subject to meeting the minimum repayment quoted in your contract. Amounts above the minimum repayments can be made to further reduce your outstanding balance and if required in future enable a redraw for your facility."
+          },
+          {
+            "label": "NPP_ENABLED"
+          },
+          {
+            "label": "OFFSET"
+          },
+          {
+            "label": "REDRAW"
+          }
+        ],
+        "eligibility": [
+          {
+            "label": "MIN_AGE",
+            "value": "18"
+          },
+          {
+            "label": "RESIDENCY_STATUS",
+            "value": "Australian Resident",
+            "info": "This product is only available to members who have a residential address in Australia."
+          }
+        ],
+        "constraints": [
+          {
+            "label": "MIN_LIMIT",
+            "value": "200000.00",
+            "info": "Minimum loan amount is $200,000."
+          }
+        ],
+        "links": {
+          "overview": "https://www.dnister.com.au/portfolio-items/simple-home-loan-plus/",
+          "eligibility": "https://www.dnister.com.au/portfolio-items/simple-home-loan-plus/",
+          "fees": "https://www.dnister.com.au/portfolio-items/simple-home-loan-plus/",
+          "terms": "https://www.dnister.com.au/wp-content/uploads/2025/10/PDS-FSG-Update-28-October-2025.pdf"
+        }
+      }
+    },
+    {
+      "section": "Savings",
+      "product_key": "BCU Bank|281|TRANS_AND_SAVINGS_ACCOUNTS|Boss Saver",
+      "rates": [
+        {
+          "provider": "BCU Bank",
+          "product_id": "281",
+          "product_key": "BCU Bank|281|TRANS_AND_SAVINGS_ACCOUNTS|Boss Saver",
+          "product_name": "Boss Saver",
+          "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+          "rate": "0.0505",
+          "rate_type": "BUNDLE_BONUS",
+          "term": "Bonus interest is applied on balances upto $100,000. When you deposit at least $500 into your eligible transaction account from an external source and make 5 eligible Visa Debit card transactions from your linked transaction account each month.",
+          "ribbon_normalized": true,
+          "account_type": "savings",
+          "ribbon_deposit_kind": "bonus",
+          "feature_set": "basic",
+          "account_class": "standard",
+          "rate_index": 1,
+          "last_updated": "2026-09-12T14:00:44.1232924Z",
+          "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BONUS.FLAT",
+          "ongoing_rate": "0.002"
+        },
+        {
+          "provider": "BCU Bank",
+          "product_id": "281",
+          "product_key": "BCU Bank|281|TRANS_AND_SAVINGS_ACCOUNTS|Boss Saver",
+          "product_name": "Boss Saver",
+          "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+          "rate": "0.002",
+          "rate_type": "VARIABLE",
+          "ribbon_normalized": true,
+          "account_type": "savings",
+          "ribbon_deposit_kind": "base",
+          "balance_min": "0",
+          "balance_max": "99999.99",
+          "feature_set": "basic",
+          "account_class": "standard",
+          "rate_index": 2,
+          "last_updated": "2026-09-12T14:00:44.1232924Z",
+          "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+        },
+        {
+          "provider": "BCU Bank",
+          "product_id": "281",
+          "product_key": "BCU Bank|281|TRANS_AND_SAVINGS_ACCOUNTS|Boss Saver",
+          "product_name": "Boss Saver",
+          "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+          "rate": "0.002",
+          "rate_type": "VARIABLE",
+          "ribbon_normalized": true,
+          "account_type": "savings",
+          "ribbon_deposit_kind": "base",
+          "balance_min": "100000",
+          "feature_set": "basic",
+          "account_class": "standard",
+          "rate_index": 3,
+          "last_updated": "2026-09-12T14:00:44.1232924Z",
+          "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+        }
+      ],
+      "detail": {
+        "description": "Want a savings account to deposit and hold or withdraw money for personal use without being penalised? A savings account that earns you additional bonus interest when the monthly bonus interest criteria is met each month.",
+        "last_updated": "2026-09-12T14:00:44.1232924Z",
+        "fees": [
+          {
+            "label": "TRANSACTION",
+            "name": "Overseas Telegraphic Transfer",
+            "value": "45.00",
+            "info": "$45 per staff assisted telegraphic transfer sent in AUD currency. $30 per staff assisted telegraphic transfer sent in a foreign currency.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "45.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "International Transfer Fee",
+            "value": "15.00",
+            "info": "Per online banking transfer sent in a foreign currency.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "15.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Cash Handling Fee",
+            "info": "Coin and note deposits are available at BCU branches. Coin deposits must be counted and bagged by customers or you will be charged 5% of the coin amount. Note deposits more than $10,000 per day will be charged at 0.25% of the deposit amount.",
+            "amountStatus": "rate",
+            "currency": "AUD",
+            "feeMethodUType": "rateBased",
+            "rateBased": {
+              "rate": "0.00025",
+              "rateType": "TRANSACTION"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Bank Cheque Fee",
+            "value": "10.00",
+            "info": "Per bank cheque requested by you.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "10.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Manual Trace Fee",
+            "value": "40.00",
+            "info": "Charged for your request to manually trace a payment to confirm receipt of payment.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "40.00"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Cash Passport Fee",
+            "value": "10.00",
+            "info": "For the initial activation and each currency top-up requested in branch.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "10.00"
+            }
+          },
+          {
+            "label": "REPLACEMENT",
+            "name": "Statement Retrieval Fee",
+            "value": "2.50",
+            "info": "Fee applies for statements over 12 months old. Payable on request to issue a copy of a previously issued statement.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "2.50"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Audit Certificate Fee",
+            "value": "30.00",
+            "info": "Charged per audit certificate request.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "30.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "RTGS From Another Bank",
+            "value": "8.00",
+            "info": "Per payment received into your account. To cover the cost of processing 'SWIFT' payments from overseas and same day local payments through 'RTGS' (Real Time Gross Settlement) systems.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "8.00"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "Manual External Transfer Fee",
+            "value": "2.50",
+            "info": "Staff assisted manual transfer to another organisation. Charged per transfer.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "2.50"
+            }
+          },
+          {
+            "label": "TRANSACTION",
+            "name": "RTGS To Another Bank",
+            "value": "25.00",
+            "info": "Per payment sent from your account. To cover the cost of processing 'SWIFT' payments as same day local payments through 'RTGS' (Real Time Gross Settlement) systems.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "25.00"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Referral Fee",
+            "value": "3.50",
+            "info": "Where an account has insufficient available funds to cover a direct debit transaction, and the transaction is honoured by BCU Bank.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "3.50"
+            }
+          },
+          {
+            "label": "DISHONOUR",
+            "name": "Dishonour Fee",
+            "value": "6.00",
+            "info": "Where a direct debit is dishonoured due to insufficient funds.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "6.00"
+            }
+          },
+          {
+            "label": "DISHONOUR",
+            "name": "Auto Transfer Dishonour Fee",
+            "value": "6.00",
+            "info": "Charged where there are insufficient funds in your account when an external auto transfer or BPAY payment is due to be made.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "6.00"
+            }
+          },
+          {
+            "label": "EVENT",
+            "name": "Overdrawn Account Management Fee",
+            "value": "10.00",
+            "info": "A fee applied in relation to any month where we allow the approved credit limit on your account to be exceeded by more than $50 or, if your account does not have an approved credit limit, if we allow you to overdraw your account by more than $50.",
+            "amountStatus": "fixed",
+            "currency": "AUD",
+            "feeMethodUType": "fixedAmount",
+            "fixedAmount": {
+              "amount": "10.00"
+            }
+          }
+        ],
+        "features": [
+          {
+            "label": "DIGITAL_BANKING",
+            "info": "Transfer or make payments using our mobile app or internet banking. Payments made with PayID or using Osko are received in near real-time."
+          },
+          {
+            "label": "NPP_ENABLED",
+            "info": "Transfer or make payments using our mobile app or internet banking. Payments made with PayID or using Osko are received in near real-time."
+          },
+          {
+            "label": "NPP_PAYID",
+            "info": "Use your phone or email address as your PayID to securely send payments to and from banks almost instantly."
+          },
+          {
+            "label": "OTHER",
+            "info": "Eligible members can deposit foreign cheques in branch. $10 fee for foreign cheque deposits up to $25,000 AUD and $60 fee for foreign cheque deposits over $25,000 AUD. Please contact us or visit your nearest branch for more information."
+          },
+          {
+            "label": "OTHER",
+            "info": "Earn bonus interest, when you deposit at least $500 into your eligible transaction account from an external source and make 5 eligible Visa Debit card transactions from your linked transaction account each month. For details refer to the website."
+          },
+          {
+            "label": "UNLIMITED_TXNS",
+            "info": "Save money with no monthly, minimum balance or transaction fees. Other fees and charges may apply. Please visit our website for full information."
+          }
+        ],
+        "eligibility": [
+          {
+            "label": "MIN_AGE",
+            "value": "18"
+          },
+          {
+            "label": "NATURAL_PERSON",
+            "info": "Member must be a natural person rather than another legal entity."
+          },
+          {
+            "label": "OTHER",
+            "info": "You must be or become a BCU Bank member"
+          },
+          {
+            "label": "RESIDENCY_STATUS",
+            "value": "You must be an Australian citizen and/or resident or a non-resident with a qualifying visa evidencing 12 months or longer residency. A valid Australian address is required to open an account. Membership eligibility applies."
+          }
+        ],
+        "constraints": [
+          {
+            "label": "MAX_BALANCE",
+            "value": "5000000.00",
+            "info": "Maximum balance is $5,000,000"
+          }
+        ],
+        "links": {
+          "overview": "https://www.bcu.com.au/everyday-banking/savings-accounts/boss-saver/",
+          "fees": "https://www.bcu.com.au/help-centre/fees-and-charges/everyday-savings-accounts-fees-and-charges/",
+          "terms": "https://www.bcu.com.au/important-information/terms-and-conditions/savings-accounts--access-channels/"
+        }
+      }
+    }
+  ]
+}
