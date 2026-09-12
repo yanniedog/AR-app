@@ -11,6 +11,7 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
+  isNonStandard,
 } from '../../data/format';
 import { accessExcludesFromStandard, assessAccess } from '../../data/access';
 import { ratePresentation } from '../../data/ratePresentation';
@@ -475,9 +476,10 @@ export function ProductSpecs({
   const access = detail ? assessAccess(row.product_name, detail, row.provider) : null;
   add(
     'Availability',
-    access
-      ? accessExcludesFromStandard(access) ? 'Special eligibility' : 'Widely available'
-      : 'Checking availability',
+    access && accessExcludesFromStandard(access)
+      ? 'Special eligibility'
+      : isNonStandard(row) ? 'Check tier availability'
+      : access ? 'Widely available' : 'Checking availability',
   );
 
   if (!specs.length) return null;
