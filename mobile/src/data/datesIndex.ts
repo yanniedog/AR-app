@@ -41,4 +41,3 @@ export function parseDatesIndex(raw: unknown, repo = 'yanniedog/AR-local'): Date
     latest_date: sorted.at(-1) ?? '',
   };
 }
-
