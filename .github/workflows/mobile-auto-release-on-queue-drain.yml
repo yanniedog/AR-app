@@ -1,14 +1,20 @@
-# Auto mobile release after each PR merge to main, regardless of other open PRs.
+# Auto mobile release when the repository's last open PR closes or merges.
 # Bumps expo.version through a bot-authored pull request. Protected main never
 # needs a workflow-wide bypass.
-# Keep this workflow filename stable for existing dispatch links and history.
 
-name: mobile-auto-release-on-merge
+name: mobile-auto-release-on-queue-drain
 
 on:
   workflow_dispatch:
-  pull_request:
+  # Run trusted main code even when the final closed PR came from a fork.
+  # Never check out or execute the closing PR's head in this write-capable job.
+  pull_request_target:
     types: [closed]
+  # GITHUB_TOKEN-generated QR PR merges do not emit another Actions PR run.
+  # APK completion follows that merge and provides a reliable reconciliation.
+  workflow_run:
+    workflows: [mobile-android-apk]
+    types: [completed]
     branches: [main]
 
 permissions:
@@ -22,11 +28,11 @@ concurrency:
 
 jobs:
   maybe-release:
-    if: >-
-      github.event_name == 'workflow_dispatch'
-      || (github.event.pull_request.merged == true
-          && !startsWith(github.event.pull_request.title, 'docs: refresh Android install QR'))
-    name: release merged app changes
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # A PR closed without merge (or against another base) can empty the queue.
+    # The script checks whether current main still needs a release, including
+    # after generated README PRs, instead of skipping events by title.
+    name: release app when the PR queue is empty
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

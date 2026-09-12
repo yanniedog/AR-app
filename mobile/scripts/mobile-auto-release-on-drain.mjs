@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /* global AbortController, clearTimeout, setTimeout */
 /**
- * After each PR merge to main, bump expo.version through a bot-authored pull
- * request when needed. Unrelated open PRs never block a release. Protected main
- * is never pushed directly. The historical filename is retained for callers.
+ * When the repository's last open PR closes or merges, release current main
+ * through a bot-authored version PR when needed. Protected main is never pushed
+ * directly. Already-published app content does not trigger another release.
  */
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -459,6 +459,46 @@ function syncMain() {
   git(['checkout', '-B', 'main', 'origin/main']);
 }
 
+export function countOpenPrs(runGh = gh) {
+  // The queue includes every base branch, including drafts and bot PRs.
+  const pages = JSON.parse(runGh([
+    'api', '--paginate', '--slurp', `repos/${repo}/pulls?state=open&per_page=100`,
+  ]));
+  if (!Array.isArray(pages) || pages.some((page) => !Array.isArray(page))) {
+    throw new Error('Unable to read the open PR queue');
+  }
+  return pages.reduce((count, page) => count + page.length, 0);
+}
+
+export function hasPublishedMainRelease({
+  readHeadSha = readHeadCommitSha,
+  readChannels = publishedApkChannels,
+  changedPaths = (source, head) => git(['diff', '--name-only', source, head]).split('\n').filter(Boolean),
+} = {}) {
+  const { arm, universal } = readChannels();
+  if (!arm || !universal
+    || arm.version !== universal.version
+    || arm.versionCode !== universal.versionCode
+    || arm.sourceSha !== universal.sourceSha) return false;
+  const head = readHeadSha();
+  if (arm.sourceSha === head) return true;
+  // APK publication creates a README-only install-QR PR. Its closure must
+  // still check the queue, but must not recursively create a new APK/QR pair.
+  // Any other changed path makes this a new release candidate.
+  return changedPaths(arm.sourceSha, head).every((path) => path === 'README.md');
+}
+
+export function hasPendingMainRelease({
+  readHeadSha = readHeadCommitSha,
+  readChannels = publishedApkChannels,
+  buildInFlight = apkBuildInFlight,
+} = {}) {
+  const head = readHeadSha();
+  const channels = readChannels();
+  const missing = ['universal', 'arm'].filter((channel) => channels[channel]?.sourceSha !== head);
+  return missing.length > 0 && buildInFlight(head, missing);
+}
+
 function readHeadCommitMessage() {
   return git(['log', '-1', '--format=%s', 'origin/main']);
 }
@@ -636,7 +676,7 @@ async function publishViaPullRequest(next, message) {
 
   const prHint = mergeSha ? `\n- Trigger merge: \`${mergeSha.slice(0, 7)}\`` : '';
   const body = [
-    'Automated patch version bump after a PR merged to `main`.',
+    'Automated patch version bump after the repository PR queue became empty.',
     '',
     `- Version: **${next}**${prHint}`,
     '',
@@ -654,8 +694,11 @@ async function publishViaPullRequest(next, message) {
   return Number(prNumber);
 }
 
-export async function releaseAfterMerge({
+export async function releaseWhenQueueEmpty({
+  countOpen = countOpenPrs,
   sync = syncMain,
+  alreadyPublished = hasPublishedMainRelease,
+  releasePending = hasPendingMainRelease,
   alreadyBumped = alreadyAutoBumpedOnHead,
   readVersion = readCurrentVersion,
   readPublished = readPublishedVersion,
@@ -665,13 +708,34 @@ export async function releaseAfterMerge({
   ensureApk = ensureApkForMainHead,
   simulate = dryRun,
 } = {}) {
+  const queueIsEmpty = () => {
+    const open = countOpen();
+    if (!Number.isSafeInteger(open) || open < 0) throw new Error('Invalid open PR count');
+    if (open === 0) return true;
+    console.log(`mobile-auto-release-on-drain: ${open} open PR(s) — defer release until the queue is empty`);
+    return false;
+  };
+  if (!queueIsEmpty()) return;
   sync();
+  if (alreadyPublished()) {
+    console.log('mobile-auto-release-on-drain: current app content is already published — no release');
+    return;
+  }
+  if (releasePending()) {
+    console.log('mobile-auto-release-on-drain: current main APK release is in flight — no new version PR');
+    return;
+  }
+  const dispatchIfQueueEmpty = () => {
+    // New work can arrive while the generated version PR is passing CI.
+    sync();
+    if (queueIsEmpty()) ensureApk();
+  };
 
   if (alreadyBumped()) {
     console.log('mobile-auto-release-on-drain: main already at auto-release bump — ensure APK');
     // main carries a bumped version; ensure its APK exists (covers the fallback
     // bump-PR path, whose GITHUB_TOKEN merge can't trigger the build on push).
-    ensureApk();
+    dispatchIfQueueEmpty();
     return;
   }
 
@@ -679,14 +743,14 @@ export async function releaseAfterMerge({
   const published = await readPublished();
   const next = nextAutoReleaseVersion(current, published);
   console.log(
-    `mobile-auto-release-on-drain: release after merge — source ${current}, published ${published}, next ${next}`,
+    `mobile-auto-release-on-drain: queue empty — source ${current}, published ${published}, next ${next}`,
   );
 
   if (next === current) {
     console.log(
       `mobile-auto-release-on-drain: source v${current} is already the next iteration — ensure APK`,
     );
-    ensureApk();
+    dispatchIfQueueEmpty();
     return;
   }
 
@@ -695,8 +759,7 @@ export async function releaseAfterMerge({
     console.log(`mobile-auto-release-on-drain: bump PR already open for v${next} (#${pending[0].number}) — skip`);
     const branchName = bumpBranchName(next);
     await settleBump(pending[0].number, branchName);
-    sync();
-    ensureApk();
+    dispatchIfQueueEmpty();
     return;
   }
 
@@ -706,8 +769,7 @@ export async function releaseAfterMerge({
   }
 
   await createBump(next);
-  sync();
-  ensureApk();
+  dispatchIfQueueEmpty();
 }
 
 async function createReleaseBump(next) {
@@ -758,7 +820,7 @@ const invoked = process.argv[1] && import.meta.url === pathToFileURL(process.arg
 if (invoked) {
   Promise.resolve().then(() => {
     if (!ghToken && !dryRun) throw new Error('mobile-auto-release-on-drain: GH_TOKEN is not set');
-    return releaseAfterMerge();
+    return releaseWhenQueueEmpty();
   }).catch((err) => {
     console.error(err instanceof Error ? err.message : err);
     process.exit(1);
