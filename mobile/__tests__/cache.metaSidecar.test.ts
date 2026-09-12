@@ -29,6 +29,8 @@ function resetFs() {
     files.delete(from);
   });
   (FileSystem.makeDirectoryAsync as jest.Mock).mockResolvedValue(undefined);
+  (FileSystem.readDirectoryAsync as jest.Mock).mockImplementation(async (path: string) =>
+    [...files.keys()].filter((file) => file.startsWith(path)).map((file) => file.slice(path.length)));
 }
 
 describe('cache core-meta sidecar', () => {
@@ -54,6 +56,30 @@ describe('cache core-meta sidecar', () => {
     await expect(cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at,
       coreSha: installed.files.core.sha256, detailsSha: null }, JSON.stringify(sampleCore))).rejects.toThrow('stale');
     expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(2);
+  });
+
+  it('prunes old unreferenced revision assets while protecting recent staging and the previous edition', async () => {
+    const current = revisionManifest(2);
+    const previous = revisionManifest(1, { files: { ...sampleManifest.files,
+      details: { ...sampleManifest.files.details, sha256: 'a'.repeat(64) } } });
+    const path = `${FileSystem.documentDirectory}payload/details.json.`;
+    await cache.writeDetails('{}', previous.files.details.sha256);
+    await cache.writeBundle({ manifest: previous, source: 'remote', savedAt: previous.generated_at,
+      coreSha: previous.files.core.sha256, detailsSha: previous.files.details.sha256 }, JSON.stringify(sampleCore));
+    files.set(`${path}${previous.files.details.sha256}.created`, String(Date.now() - 3 * 24 * 60 * 60 * 1000));
+    const old = path + 'e'.repeat(64);
+    const pending = path + 'f'.repeat(64);
+    files.set(old, '{}');
+    files.set(`${old}.created`, String(Date.now() - 2 * 24 * 60 * 60 * 1000));
+    files.set(pending, '{}');
+    files.set(`${pending}.created`, String(Date.now()));
+    await cache.writeDetails('{}', current.files.details.sha256);
+    await cache.writeBundle({ manifest: current, source: 'remote', savedAt: current.generated_at,
+      coreSha: current.files.core.sha256, detailsSha: current.files.details.sha256 }, JSON.stringify(sampleCore));
+    expect(files.has(old)).toBe(false);
+    expect(files.has(pending)).toBe(true);
+    expect(files.has(path + current.files.details.sha256)).toBe(true);
+    expect(files.has(path + previous.files.details.sha256)).toBe(true);
   });
 
   it('writeBundle stores a tiny core-meta sidecar and updateMeta never rewrites the bundle', async () => {

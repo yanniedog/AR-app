@@ -19,6 +19,11 @@ content hashes; assets from rolling, dated, or older editions are never merged
 into a selected revision. Legacy releases remain readable before adoption.
 The dormant v3 reader is not activated.
 
+The app keeps the installed and preceding revision's cache assets. Unreferenced
+staging files older than a day are cleaned after a successful commit, so daily
+updates do not accumulate every historical details file on the device. This
+does not affect the producer's immutable GitHub archives.
+
 ## Headless audit
 
 From `mobile/`, with the repository's Node dependencies installed:
