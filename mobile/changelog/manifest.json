@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-12T04:33:05.748Z",
+  "generated_at": "2026-09-12T06:00:35.362Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -895,6 +895,14 @@
         "Standardize app fonts and restore the hamburger menu icon (#243)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.188"
+    },
+    {
+      "version": "1.0.190",
+      "date": "2026-09-12",
+      "summaryBullets": [
+        "Reconcile the PR queue explicitly after ARM publication (#252)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.190"
     }
   ]
 }
