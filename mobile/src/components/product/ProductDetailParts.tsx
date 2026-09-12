@@ -476,8 +476,9 @@ export function ProductSpecs({
   const access = detail ? assessAccess(row.product_name, detail, row.provider) : null;
   add(
     'Availability',
-    isNonStandard(row) || (access && accessExcludesFromStandard(access))
+    access && accessExcludesFromStandard(access)
       ? 'Special eligibility'
+      : isNonStandard(row) ? 'Check tier availability'
       : access ? 'Widely available' : 'Checking availability',
   );
 

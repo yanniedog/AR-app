@@ -2,7 +2,10 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
+import { adaptCoreV3ToLegacy } from '../src/contracts/v3/canonicalCoreAdapter';
+import { sampleCore } from '../src/data/sample';
 import type { ProductDetail, RateRow } from '../src/types';
+import { buildGeneration, makeProduct } from '../testUtils/v3TestData';
 
 type TestNode = {
   props: Record<string, any>;
@@ -48,16 +51,16 @@ function displayedAvailability(row: RateRow, productDetail: ProductDetail | null
 }
 
 describe('exact-tier availability in Rate details', () => {
-  it('keeps the real winners-only tier restricted despite unrestricted shared account details', () => {
-    expect(displayedAvailability(prize, detail)).toBe('Special eligibility');
+  it('avoids a wide-availability claim for the real prize despite unrestricted shared account details', () => {
+    expect(displayedAvailability(prize, detail)).toBe('Check tier availability');
   });
 
   it('retains the real ordinary sibling as widely available', () => {
     expect(displayedAvailability(ordinary, detail)).toBe('Widely available');
   });
 
-  it('discloses an explicit tier restriction while shared details are still loading', () => {
-    expect(displayedAvailability(prize, null)).toBe('Special eligibility');
+  it('keeps the non-standard tier caveat while shared details are still loading', () => {
+    expect(displayedAvailability(prize, null)).toBe('Check tier availability');
   });
 
   it('waits for shared eligibility when the ordinary row has no explicit restriction', () => {
@@ -74,5 +77,17 @@ describe('exact-tier availability in Rate details', () => {
     // Controlled product-access variant; the retained source fixture is unchanged.
     const restrictedDetail = { ...detail, eligibility: [{ label: 'OTHER', info: 'Available only to medical practitioners.' }] };
     expect(displayedAvailability(ordinary, restrictedDetail)).toBe('Special eligibility');
+    expect(displayedAvailability(prize, restrictedDetail)).toBe('Special eligibility');
+  });
+
+  it.each(['pricing', 'identity'] as const)('does not call uncertain canonical %s restricted customer eligibility', (uncertainty) => {
+    // Synthetic contract fixture passed through the production v3 adapter.
+    const product = makeProduct({ kind: 'savings_account', pricing: uncertainty === 'pricing' ? 'partial' : 'complete' });
+    product.rates[0].exact_alert_eligible = false;
+    if (uncertainty === 'identity') product.rates[0].identity.rate_identity_status = 'ambiguous';
+    const canonical = buildGeneration({ products: [product] }).core;
+    const row = adaptCoreV3ToLegacy(canonical, { ...sampleCore, run_date: canonical.observation_date }).sections.Savings.rates[0];
+    expect(row.account_class).toBe('non_standard');
+    expect(displayedAvailability(row, {})).toBe('Check tier availability');
   });
 });
