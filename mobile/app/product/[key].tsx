@@ -46,6 +46,12 @@ import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { openBank, openRateReceipt } from '../../src/lib/nav';
 import { rateQualifier } from '../../src/lib/rateQualifier';
+import {
+  PRODUCT_HISTORY_TITLE,
+  PRODUCT_HISTORY_SERIES_LABEL,
+  PRODUCT_HISTORY_SCOPE,
+  selectedTierHistoryContext,
+} from '../../src/lib/productHistoryCopy';
 import { logSwallowedError } from '../../src/lib/degradationLog';
 import {
   effectiveBankInsights,
@@ -427,11 +433,13 @@ export default function ProductDetail() {
     values: chartDates.length
       ? forwardFillSeriesRecord(seededProductValues, chartDates)
       : seededProductValues,
-    label: row.product_name,
+    label: `${row.product_name} · ${PRODUCT_HISTORY_SERIES_LABEL}`,
+    valueScope: 'best · all tiers',
     color: productInk,
   };
   const observedProductPoints = countFiniteSeriesPoints(seededProductValues);
   const productHasHighlight = observedProductPoints > 0;
+  const selectedHistoryContext = selectedTierHistoryContext(row, currentBest);
 
   const onShare = () =>
     Share.share({
@@ -620,8 +628,16 @@ export default function ProductDetail() {
           onPress={() => openRateReceipt(productKey, row.rate_index)}
         />
 
-        <SectionTitle text="Rate history" icon="trending-up-outline" />
+        <SectionTitle text={PRODUCT_HISTORY_TITLE} icon="trending-up-outline" />
         <Card style={{ marginBottom: 16 }}>
+          <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
+            {PRODUCT_HISTORY_SCOPE}
+          </AppText>
+          {selectedHistoryContext ? (
+            <AppText variant="tiny" color="textMuted" style={{ marginBottom: 8 }}>
+              {selectedHistoryContext}
+            </AppText>
+          ) : null}
           {historyEnabled ? (
             historyWaitingForInsights ? (
               <AppText variant="small" color="textMuted">
@@ -651,7 +667,7 @@ export default function ProductDetail() {
                 {productHistoryError && observedProductPoints < 2 ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
-                      Couldn&apos;t load this product&apos;s history.
+                      Couldn&apos;t load this product-wide history.
                     </AppText>
                     <Button
                       title="Retry"
@@ -661,23 +677,23 @@ export default function ProductDetail() {
                   </Row>
                 ) : observedProductPoints < 2 ? (
                   <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-                    {formatRate(currentBest)} today · gathering prior daily rates so the full line
+                    {formatRate(currentBest)} best across all tiers today · gathering prior daily rates so the full line
                     can draw
                   </AppText>
                 ) : null}
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                Rate history appears once more daily observations are available.
+                Product-wide history appears once more daily observations are available.
               </AppText>
             )
           ) : (
             <>
               <AppText variant="small" color="textMuted" style={{ marginBottom: 10, lineHeight: 20 }}>
-                See how {row.product_name}&apos;s rate moved over time against the market&apos;s mean and median.
+                See {row.product_name}&apos;s best advertised rate across all tiers against the market&apos;s mean and median.
               </AppText>
               <Button
-                title="Show rate history"
+                title="Show product-wide history"
                 icon="analytics-outline"
                 variant="secondary"
                 onPress={() => setPref('showHistoryRibbon', true)}
