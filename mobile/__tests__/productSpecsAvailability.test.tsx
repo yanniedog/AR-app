@@ -20,7 +20,7 @@ jest.mock('../src/data/store', () => ({}));
 jest.mock('../src/lib/nav', () => ({}));
 jest.mock('../src/theme/ThemeProvider', () => ({}));
 jest.mock('../src/components/ui', () => {
-  const React = require('react');
+  const React = jest.requireActual<typeof import('react')>('react');
   return {
     AppText: 'AppText', Row: 'Row', Divider: 'Divider',
     Disclosure: ({ open, onToggle, children }: any) => React.createElement(
