@@ -47,7 +47,8 @@ test('release APKs shrink code/resources but keep the Hermes bundle uncompressed
   assert.equal(buildProperties.android.enableMinifyInReleaseBuilds, true);
   assert.equal(buildProperties.android.enableShrinkResourcesInReleaseBuilds, true);
   assert.equal(buildProperties.android.enablePngCrunchInReleaseBuilds, true);
-  assert.notEqual(buildProperties.android.enableBundleCompression, true);
+  assert.equal(buildProperties.android.enableBundleCompression, false);
+  assert.equal(buildProperties.android.useLegacyPackaging, false);
 });
 
 test('GHA and EAS production APK paths omit optional development tooling', async () => {
@@ -67,7 +68,8 @@ test('GHA and EAS production APK paths omit optional development tooling', async
 
 test('the ARM size budget locks in the optimized two-ABI APK', async () => {
   const budgets = await readJson('../performance-budgets.json');
-  assert.equal(budgets.apkBaselineByChannel.arm, 48_000_000);
+  assert.equal(budgets.apkBaselineByChannel.arm, 46_100_000);
+  assert.equal(budgets.baseline.apkBytes, 88_000_000);
   assert.equal(budgets.maximumGrowthFraction, 0.05);
 });
 

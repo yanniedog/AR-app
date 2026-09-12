@@ -5,12 +5,12 @@
     "androidBundleBytes": 8228226,
     "iosBundleBytes": 8208513,
     "webBundleBytes": 5572810,
-    "fontBytes": 2302456,
-    "assetBytes": 4717808,
-    "apkBytes": 132510218
+    "fontBytes": 805000,
+    "assetBytes": 1730000,
+    "apkBytes": 88000000
   },
   "apkBaselineByChannel": {
-    "arm": 48000000
+    "arm": 46100000
   },
-  "notes": "Bundle baselines refreshed after paste-audit log compaction and prior main growth that had consumed the previous +5% Android Hermes headroom. The optimized two-ABI ARM APK measured 47,536,083 bytes; its 48 MB baseline preserves a 5% regression guard without dropping device support or compressing the Hermes bundle."
+  "notes": "APK baselines measured from v1.0.191/build 260 on 2026-09-12: ARM 46,011,301 bytes and universal 87,736,345 bytes. Rounded baselines plus 5% cap ARM at 48,405,000 bytes and universal at 92,400,000 bytes. Keep both ARM ABIs, uncompressed native libraries (no extracted duplicate), and the uncompressed Hermes bundle. Fonts/assets measured from all-platform export on 2026-09-12: 804,852/1,722,600 bytes. Bundle baselines retain the earlier paste-audit compaction measurements."
 }
