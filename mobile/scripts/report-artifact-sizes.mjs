@@ -38,12 +38,11 @@ export async function collectArtifactSizes({
   const apkFiles = [];
   for (const apkPath of apkPaths) {
     if (!apkPath) continue;
-    try {
-      const info = await stat(apkPath);
-      if (info.isFile()) apkFiles.push({ path: apkPath, bytes: info.size });
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error;
-    }
+    // A native build that explicitly supplies an APK must not silently pass
+    // the release guard as "not built" when its path is missing or invalid.
+    const info = await stat(apkPath);
+    if (!info.isFile() || info.size === 0) throw new Error(`APK is not a non-empty file: ${apkPath}`);
+    apkFiles.push({ path: apkPath, bytes: info.size });
   }
 
   return {

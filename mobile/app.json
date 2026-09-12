@@ -87,7 +87,9 @@
           "android": {
             "enableMinifyInReleaseBuilds": true,
             "enableShrinkResourcesInReleaseBuilds": true,
-            "enablePngCrunchInReleaseBuilds": true
+            "enablePngCrunchInReleaseBuilds": true,
+            "useLegacyPackaging": false,
+            "enableBundleCompression": false
           },
           "ios": {
             "useFrameworks": "static",

@@ -47,6 +47,20 @@ font faces carry their own weight; navigation must not apply synthetic bolding.
 Keep accessibility scaling enabled and use tabular numerals for rate figures.
 Diagnostic logs may use monospace for aligned technical output.
 
+## APK storage
+
+Release builds use Hermes, code/resource shrinking, PNG crunching, and omit the
+optional development client. The ARM download retains both 32-bit and 64-bit phone
+support. Native libraries stay uncompressed so Android can load them from the APK
+without storing extracted copies; the Hermes bundle also stays uncompressed.
+
+`performance-budgets.json` caps the ARM APK at 48,405,000 bytes and the universal
+fallback at 92,400,000 bytes, based on the measured v1.0.191/build 260 releases.
+Both GitHub and EAS publication enforce these budgets. An explicitly supplied
+missing/empty APK fails the size check. On Android startup, the updater removes
+its versioned installer files for builds already installed, even offline, while
+preserving newer installers and native transfers that cannot be stopped.
+
 ## Scripts
 
 | Command | What |

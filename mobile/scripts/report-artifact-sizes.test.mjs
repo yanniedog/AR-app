@@ -57,6 +57,20 @@ test('fails only metrics that grow beyond the configured tolerance', () => {
   );
 });
 
+test('an explicitly supplied APK cannot bypass the release guard by being missing or empty', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'ar-app-missing-apk-'));
+  try {
+    const apk = path.join(root, 'app.apk');
+    await assert.rejects(collectArtifactSizes({ distDir: root, apkPaths: [apk] }), { code: 'ENOENT' });
+    await writeFile(apk, '');
+    await assert.rejects(collectArtifactSizes({ distDir: root, apkPaths: [apk] }), /not a non-empty file/);
+    await assert.rejects(collectArtifactSizes({ distDir: root, apkPaths: [root] }), /not a non-empty file/);
+    assert.equal((await collectArtifactSizes({ distDir: root })).apkBytes, null);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test('enforces the APK budget for every publisher path', () => {
   const budget = { maximumGrowthFraction: 0.05, baseline: { apkBytes: 200 } };
   assert.doesNotThrow(() => assertApkSizeBudget(210, budget));

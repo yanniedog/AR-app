@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Application from 'expo-application';
 import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
@@ -131,6 +132,12 @@ async function hydrate(): Promise<void> {
           snapshot = { ...IDLE_APK_DOWNLOAD, ...parsed };
         }
       }
+      await clearInstalledApkFiles();
+      if (Platform.OS === 'android' && isInstalledBuild(snapshot.buildNumber)) {
+        // The installer has finished when a process running this build starts.
+        // Discard its ready receipt even if best-effort file cleanup failed.
+        await persist({ ...IDLE_APK_DOWNLOAD });
+      }
     } catch {
       snapshot = { ...IDLE_APK_DOWNLOAD };
     } finally {
@@ -148,6 +155,58 @@ async function fileExists(uri: string | null | undefined): Promise<boolean> {
     return Boolean(info.exists);
   } catch {
     return false;
+  }
+}
+
+function isInstalledBuild(build: string | null): boolean {
+  const installed = Application.nativeBuildVersion;
+  if (!installed || !build || !/^\d+$/.test(installed) || !/^\d+$/.test(build)) return false;
+  const installedNumber = Number(installed);
+  const buildNumber = Number(build);
+  return Number.isSafeInteger(installedNumber) && installedNumber > 0
+    && Number.isSafeInteger(buildNumber) && buildNumber > 0 && buildNumber <= installedNumber;
+}
+
+/** Reclaim completed installers on startup, including when offline or updates are disabled. */
+async function clearInstalledApkFiles(): Promise<void> {
+  const docs = FileSystem.documentDirectory;
+  if (Platform.OS !== 'android' || !docs || !isInstalledBuild(Application.nativeBuildVersion)) return;
+  try {
+    const entries = await FileSystem.readDirectoryAsync(docs);
+    const candidates = entries.filter((name) => {
+      const match = /^app-update-(\d+)(?:-[a-f0-9]{12})?\.apk$/.exec(name);
+      return match != null && isInstalledBuild(match[1]);
+    });
+    if (!candidates.length) return;
+
+    // A manually installed update can supersede a transfer restored by Android.
+    // Stop only our obsolete tasks before removing their destination files.
+    const protectedBuilds = new Set<string>();
+    const tasks = await getExistingDownloadTasks();
+    for (const task of tasks) {
+      const match = /^apk-update-(\d+)(?:-[a-f0-9]{12})?$/.exec(task.id);
+      if (!match || !isInstalledBuild(match[1])) continue;
+      try {
+        await task.stop();
+      } catch {
+        protectedBuilds.add(String(Number(match[1])));
+      }
+    }
+    for (const name of candidates) {
+      const build = /^app-update-(\d+)/.exec(name)![1];
+      if (protectedBuilds.has(String(Number(build)))) continue;
+      try {
+        const uri = `${docs}${name}`;
+        const info = await FileSystem.getInfoAsync(uri);
+        if (info.exists && !info.isDirectory) {
+          await FileSystem.deleteAsync(uri, { idempotent: true });
+        }
+      } catch {
+        // Retry on the next process start; one locked file must not keep the others.
+      }
+    }
+  } catch (error) {
+    debugLog.warn('app-update', `installed APK cleanup deferred: ${String(error)}`);
   }
 }
 
