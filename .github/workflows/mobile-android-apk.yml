@@ -247,6 +247,18 @@ jobs:
             --repo "${{ github.repository }}" \
             --manifest build/apk-publish/app-apk-latest.json
 
+      - name: Reconcile the PR queue after ARM publication
+        if: success() && github.ref == 'refs/heads/main' && inputs.apk_channel == 'arm'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # GITHUB_TOKEN-dispatched builds do not reliably emit workflow_run.
+          # The README publisher above waits for its generated PR to merge.
+          # Re-enter the trusted-main queue check; it skips published content.
+          gh workflow run mobile-auto-release-on-queue-drain.yml \
+            --ref main \
+            --repo "${{ github.repository }}"
+
       - name: Upload workflow artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

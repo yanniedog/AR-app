@@ -10,8 +10,9 @@ on:
   # Never check out or execute the closing PR's head in this write-capable job.
   pull_request_target:
     types: [closed]
-  # GITHUB_TOKEN-generated QR PR merges do not emit another Actions PR run.
-  # APK completion follows that merge and provides a reliable reconciliation.
+  # Fallback for builds whose completion emits workflow_run. GITHUB_TOKEN can
+  # suppress that event, so the final ARM build explicitly dispatches this
+  # workflow after publishing the APK and merging the generated README PR.
   workflow_run:
     workflows: [mobile-android-apk]
     types: [completed]

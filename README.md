@@ -53,6 +53,9 @@ npm run ci
   through a protected version-bump PR and automatic universal/ARM APK builds.
   Closing the last PR without merging also triggers the check. It rechecks the
   queue after the version PR merges; a newly opened PR defers APK dispatch.
+  After ARM publication and the install-QR README PR merge, the build explicitly
+  dispatches another queue check. This also covers builds started with
+  `GITHUB_TOKEN`, whose completion may not trigger `workflow_run`.
   Already-published app content (including an install-QR-only README update)
   does not create another release. Older build sources cannot replace a newer
   `main` release.
