@@ -8,36 +8,11 @@ import {
 } from '../../config';
 import type { AppHealthSourceContract } from './types';
 
-const DAY_MS = 24 * 60 * 60 * 1_000;
+import { publishedV1SourceContract } from './v1Contract';
 
-/**
- * The app-health contract deliberately follows the app's shipping v1 reader.
- * It must not switch the consumer to a speculative producer or v3 endpoint.
- */
-export const CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT: AppHealthSourceContract = Object.freeze({
-  contract: 'v1',
-  repo: PAYLOAD_REPO,
-  rollingTag: RELEASE_TAG,
-  manifestUrl: MANIFEST_URL,
-  datesIndexUrl: DATES_INDEX_URL,
-  datedTagPrefix: DATED_TAG_PREFIX,
-  supportedManifestSchemas: Object.freeze([SUPPORTED_SCHEMA] as const),
-  supportedCoreSchemas: Object.freeze([SUPPORTED_SCHEMA] as const),
-  requiredSections: Object.freeze(['Mortgage', 'Savings', 'TD'] as const),
-  taxonomyRoots: Object.freeze({
-    Mortgage: 'HOME_LOAN',
-    Savings: 'SAVINGS',
-    TD: 'TERM_DEPOSIT',
-  }),
-  requiredAssets: Object.freeze(['core', 'details'] as const),
-  optionalAssets: Object.freeze([
-    'search_index',
-    'history_banks',
-    'bank_history',
-    'bank_spread_history',
-    'rba_calendar',
-  ] as const),
-  freshnessGraceMs: DAY_MS,
+export const CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT = publishedV1SourceContract({
+  repo: PAYLOAD_REPO, rollingTag: RELEASE_TAG, manifestUrl: MANIFEST_URL,
+  datesIndexUrl: DATES_INDEX_URL, datedTagPrefix: DATED_TAG_PREFIX, schema: SUPPORTED_SCHEMA,
 });
 
 /** Factory for deterministic tests and future contract versions. */

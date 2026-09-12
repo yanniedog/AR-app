@@ -8,6 +8,7 @@ import { parseJsonHeavy, yieldToUi } from './yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest, ManifestFile } from '../types';
 import type { AppHealthDataSnapshot, AppHealthSourceContract } from './appHealth';
 import type { AppHealthTransportGuard } from './appHealthTransportGuard';
+import { assertRevisionManifest } from '../data/payloadRevision';
 
 const MAX_COMPRESSED_BYTES = 64 * 1024 * 1024;
 const MAX_INFLATED_BYTES = 192 * 1024 * 1024;
@@ -87,12 +88,12 @@ export async function readLiveAppHealthSnapshot(options: {
   signal?: AbortSignal;
 }): Promise<AppHealthDataSnapshot> {
   const { guard, contract, appVersion, onProgress, signal } = options;
-  const manifestRaw = await fetchJson(contract.manifestUrl, 'Live manifest', signal);
+  let manifestRaw = await fetchJson(contract.manifestUrl, 'Live manifest', signal);
   await onProgress?.('manifest:fetched');
   const manifestObject = object(manifestRaw, 'Live manifest');
-  const files = object(manifestObject.files, 'Live manifest files');
-  const coreFile = manifestFile(files.core, 'Core asset');
-  const detailsFile = manifestFile(files.details, 'Details asset');
+  let files = object(manifestObject.files, 'Live manifest files');
+  let coreFile = manifestFile(files.core, 'Core asset');
+  let detailsFile = manifestFile(files.details, 'Details asset');
   const declaredUrls = Object.values(files)
     .flatMap((value) => {
       try { return [manifestFile(value, 'Manifest asset').url]; } catch { return []; }
@@ -101,8 +102,27 @@ export async function readLiveAppHealthSnapshot(options: {
 
   const datesRaw = await fetchJson(contract.datesIndexUrl, 'Dates index', signal);
   await onProgress?.('dates-index:fetched');
-  const dates = parseDatesIndex(datesRaw);
+  const dates = parseDatesIndex(datesRaw, contract.repo);
   if (!dates) throw new Error('Dates index payload is invalid');
+  if (dates.revision_protocol === 1) {
+    const head = dates.revision_heads![dates.latest_date];
+    guard.allowManifestAssets([head.manifest_url]);
+    const response = await globalThis.fetch(head.manifest_url, { cache: 'no-store', signal });
+    if (!response.ok) throw new Error(`Revision manifest returned HTTP ${response.status}`);
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > 4 * 1024 * 1024) throw new Error('Revision manifest exceeds byte limit');
+    if (toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes)) !== head.manifest_sha256) {
+      throw new Error('Selected manifest sha256 mismatch');
+    }
+    const selected = JSON.parse(strFromU8(bytes)) as Manifest;
+    assertRevisionManifest(selected, head, dates.latest_date, contract.repo);
+    manifestRaw = selected;
+    files = selected.files as unknown as Record<string, unknown>;
+    coreFile = manifestFile(files.core, 'Core asset');
+    detailsFile = manifestFile(files.details, 'Details asset');
+    guard.allowManifestAssets(Object.values(selected.files).map((file) => file.url));
+    await onProgress?.('revision:verified');
+  }
 
   const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress, signal);
   const coreResult = normalizeCoreWithIntegrity(coreRaw, { coreSha256: coreFile.sha256 });

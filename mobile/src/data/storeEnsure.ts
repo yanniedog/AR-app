@@ -45,6 +45,7 @@ import {
 } from './rbaOfficialLive';
 import { replaceAssetData } from './assetState';
 import { rebindCoreIntegrity } from './sectionIntegrity';
+import { samePayloadIdentity } from './payloadRevision';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -54,6 +55,15 @@ let detailsEnsureGeneration = 0;
 let searchIndexEnsureInFlight: { key: string; promise: Promise<void> } | null = null;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
+  const revisionBoundSet = (): StoreSet => {
+    const captured = get().manifest;
+    return (patch) => {
+      const current = get().manifest;
+      if ((captured?.payload_revision || current?.payload_revision) &&
+          (!current || !samePayloadIdentity(captured, current))) return;
+      set(patch);
+    };
+  };
   const datasetStillCurrent = (
     runDate: string,
     coreSha: string,
@@ -156,7 +166,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               manifest.files.details.sha256,
             );
             if (!datasetUnchanged()) return;
-            await cache.writeDetails(text);
+            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined);
             if (!datasetUnchanged()) return;
             await cache.updateMeta({
               manifest,
@@ -333,7 +343,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           }
           const { text, searchIndex: fresh } = await downloadSearchIndex(asset.url, asset.sha256);
           if (!editionStillCurrent()) return;
-          await cache.writeSearchIndex(text);
+          await cache.writeSearchIndex(text, manifest.payload_revision ? asset.sha256 : undefined);
           if (!editionStillCurrent()) return;
           await cache.writeOptionalMeta({ coreSha, searchIndexSha: asset.sha256 });
           if (!editionStillCurrent()) return;
@@ -358,6 +368,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     },
 
     async ensureHistoryBanks(opts: { force?: boolean } = {}) {
+      const set = revisionBoundSet();
       const { force = false } = opts;
       if (!effectiveHistoryRibbon(get().prefs)) {
         logEnsureSkipped('ensureHistoryBanks', 'proGate');
@@ -405,7 +416,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const installHistory = async (validated: HistoryBanksPayload, sha: string) => {
           await yieldToUi();
           const text = JSON.stringify(validated);
-          await cache.writeHistoryBanks(text);
+          await cache.writeHistoryBanks(text, manifest.payload_revision && /^[a-f0-9]{64}$/.test(sha) ? sha : undefined);
           await cache.writeOptionalMeta({ coreSha, historyBanksSha: sha });
           set({ historyBanks: validated, historyBanksError: null });
           debugLog.info(
@@ -421,6 +432,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         };
 
         const compactAsset = manifest.files.history_banks;
+        if (manifest.payload_revision && !compactAsset) {
+          set({ historyBanks: null, historyBanksError: 'history unavailable in this publication' });
+          return;
+        }
         if (compactAsset) {
           if (!force && cached && cached.run_date === core.run_date && shaMatches(compactAsset.sha256)) {
             set({ historyBanks: cached, historyBanksError: null });
@@ -463,7 +478,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             // dozens of dated 11 MB cores. Keep any usable cache and let the
             // explicit Retry action try this asset again.
             set({
-              historyBanks: cached?.run_dates.length ? cached : null,
+              historyBanks: !manifest.payload_revision && cached?.run_dates.length ? cached : null,
               historyBanksError: msg,
             });
             return;
@@ -537,6 +552,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     },
 
     async ensureBankInsights(opts: { force?: boolean } = {}) {
+      const set = revisionBoundSet();
       const { force = false } = opts;
       if (!effectiveBankInsights()) {
         logEnsureSkipped('ensureBankInsights', 'proGate');
@@ -573,7 +589,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       }
       try {
         const { bankInsights: downloaded } = await downloadBankInsights(asset.url, asset.sha256);
-        await cache.writeBankInsights(JSON.stringify(downloaded));
+        await cache.writeBankInsights(JSON.stringify(downloaded), manifest.payload_revision ? asset.sha256 : undefined);
         await cache.writeOptionalMeta({ coreSha, bankInsightsSha: asset.sha256 });
         set({ bankInsights: downloaded, bankInsightsError: null });
         debugLog.info(
@@ -584,7 +600,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureBankInsights failed: ${msg}`);
         logDegradation('warn', 'store.ensureFailed', { fn: 'ensureBankInsights', error: msg });
-        const fallback = force ? bankInsights : cached ?? bankInsights ?? null;
+        const fallback = manifest.payload_revision ? null : force ? bankInsights : cached ?? bankInsights ?? null;
         set({ bankInsights: fallback, bankInsightsError: msg });
       }
     },
@@ -689,6 +705,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     },
 
     async ensureRbaCalendar() {
+      const set = revisionBoundSet();
       const { core, manifest, source, rbaCalendar, rbaCalendarSha } = get();
       if (!core || source !== 'remote' || !manifest) {
         if (source !== 'remote' || !manifest) {

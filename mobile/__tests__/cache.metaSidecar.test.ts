@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
+import { revisionManifest } from '../testUtils/payloadRevision';
 
 const files = new Map<string, string>();
 
@@ -28,12 +29,57 @@ function resetFs() {
     files.delete(from);
   });
   (FileSystem.makeDirectoryAsync as jest.Mock).mockResolvedValue(undefined);
+  (FileSystem.readDirectoryAsync as jest.Mock).mockImplementation(async (path: string) =>
+    [...files.keys()].filter((file) => file.startsWith(path)).map((file) => file.slice(path.length)));
 }
 
 describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+  });
+
+  it('retains installed revision details while a new edition is staged', async () => {
+    const installed = revisionManifest(1);
+    const details = { schema_version: 1, run_date: installed.run_date, products: {} };
+    await cache.writeDetails(JSON.stringify(details), installed.files.details.sha256);
+    await cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: installed.files.details.sha256 }, JSON.stringify(sampleCore));
+    await cache.writeDetails('{}', 'f'.repeat(64));
+    await cache.writeHistoryBanks('{}');
+    expect(await cache.readDetails()).toEqual(details);
+    expect(await cache.readHistoryBanks()).toBeNull();
+    await cache.updateMeta({ manifest: revisionManifest(2), coreSha: installed.files.core.sha256, detailsSha: 'f'.repeat(64) });
+    expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(1);
+    await cache.writeBundle({ manifest: revisionManifest(2), source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: installed.files.details.sha256 }, JSON.stringify(sampleCore));
+    await expect(cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at,
+      coreSha: installed.files.core.sha256, detailsSha: null }, JSON.stringify(sampleCore))).rejects.toThrow('stale');
+    expect((await cache.readMeta())?.manifest.payload_revision?.revision).toBe(2);
+  });
+
+  it('prunes old unreferenced revision assets while protecting recent staging and the previous edition', async () => {
+    const current = revisionManifest(2);
+    const previous = revisionManifest(1, { files: { ...sampleManifest.files,
+      details: { ...sampleManifest.files.details, sha256: 'a'.repeat(64) } } });
+    const path = `${FileSystem.documentDirectory}payload/details.json.`;
+    await cache.writeDetails('{}', previous.files.details.sha256);
+    await cache.writeBundle({ manifest: previous, source: 'remote', savedAt: previous.generated_at,
+      coreSha: previous.files.core.sha256, detailsSha: previous.files.details.sha256 }, JSON.stringify(sampleCore));
+    files.set(`${path}${previous.files.details.sha256}.created`, String(Date.now() - 3 * 24 * 60 * 60 * 1000));
+    const old = path + 'e'.repeat(64);
+    const pending = path + 'f'.repeat(64);
+    files.set(old, '{}');
+    files.set(`${old}.created`, String(Date.now() - 2 * 24 * 60 * 60 * 1000));
+    files.set(pending, '{}');
+    files.set(`${pending}.created`, String(Date.now()));
+    await cache.writeDetails('{}', current.files.details.sha256);
+    await cache.writeBundle({ manifest: current, source: 'remote', savedAt: current.generated_at,
+      coreSha: current.files.core.sha256, detailsSha: current.files.details.sha256 }, JSON.stringify(sampleCore));
+    expect(files.has(old)).toBe(false);
+    expect(files.has(pending)).toBe(true);
+    expect(files.has(path + current.files.details.sha256)).toBe(true);
+    expect(files.has(path + previous.files.details.sha256)).toBe(true);
   });
 
   it('writeBundle stores a tiny core-meta sidecar and updateMeta never rewrites the bundle', async () => {

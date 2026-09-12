@@ -1,4 +1,5 @@
-import { datedManifestUrl } from '../config';
+import { datedManifestUrl, PAYLOAD_REPO } from '../config';
+import { assertNoRevisionRollback, assertRevisionManifest, type PayloadRevisionHead } from './payloadRevision';
 import { debugLog } from '../lib/debugLog';
 import type { Manifest, ManifestFile } from '../types';
 import { formatRunDate } from './format';
@@ -30,7 +31,7 @@ export function mergeOptionalManifestFiles(
   source: Manifest | null | undefined,
   replaceExisting = false,
 ): Manifest {
-  if (!source) return target;
+  if (!source || target.payload_revision || source.payload_revision) return target;
   const targetDate = String(target.run_date || '').slice(0, 10);
   const sourceDate = String(source.run_date || '').slice(0, 10);
   if (!targetDate || targetDate !== sourceDate) return target;
@@ -116,6 +117,7 @@ export async function resolveFinalizedManifest(
   opts: {
     fetchIndex?: () => Promise<DatesIndex>;
     fetchDated?: (runDate: string) => Promise<Manifest>;
+    fetchRevision?: (head: PayloadRevisionHead) => Promise<Manifest>;
     /** Previously adopted immutable manifest, normally the installed cache meta. */
     verifiedDated?: Manifest | null;
   } = {},
@@ -138,6 +140,20 @@ export async function resolveFinalizedManifest(
       pendingIngestRunDate: null,
       datesIndex: null,
     };
+  }
+
+  if (datesIndex.revision_protocol === 1) {
+    const date = datesIndex.latest_date;
+    const head = datesIndex.revision_heads?.[date];
+    if (!head) throw new Error(`No selected payload revision for ${date}`);
+    const manifest = await (opts.fetchRevision ?? ((selected) =>
+      fetchManifest(selected.manifest_url, undefined, selected.manifest_sha256)))(head);
+    assertRevisionManifest(manifest, head, date, PAYLOAD_REPO);
+    assertNoRevisionRollback(opts.verifiedDated, manifest);
+    return { status: 'finalized', manifest, pendingIngestRunDate: null, datesIndex };
+  }
+  if (opts.verifiedDated?.payload_revision) {
+    throw new Error('Revision index unavailable; retaining verified data');
   }
 
   if (isManifestFinalized(rolling, datesIndex)) {

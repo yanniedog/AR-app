@@ -1,42 +1,17 @@
-import { DATES_INDEX_URL, datedManifestUrl } from '../config';
+import { parseDatesIndex, type DatesIndex } from './datesIndex';
+import { DATES_INDEX_URL, PAYLOAD_REPO, datedManifestUrl } from '../config';
+import { assertRevisionManifest } from './payloadRevision';
 import { debugLog } from '../lib/debugLog';
-import { isValidCalendarDate } from '../lib/calendarDate';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
 import { downloadCore, fetchManifest } from './payload';
+export { parseDatesIndex, type DatesIndex } from './datesIndex';
 
 /** Earliest run_date published as an immutable dated GitHub release (app_payload.py). */
 export const HISTORY_MIN_DATE = '2026-05-13';
-
-export interface DatesIndex {
-  schema_version: number;
-  dates: string[];
-  count: number;
-  min_date: string;
-  latest_date: string;
-}
-
-/** Parse ``dates-index.json`` from the rolling GitHub release. */
-export function parseDatesIndex(raw: unknown): DatesIndex | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const obj = raw as Record<string, unknown>;
-  if (!Array.isArray(obj.dates)) return null;
-  const dates = obj.dates.map((date) => (typeof date === 'string' ? date.slice(0, 10) : ''));
-  // Reject the document rather than silently deleting corrupt publication days.
-  if (dates.some((date) => !isValidCalendarDate(date))) return null;
-  if (!dates.length) return null;
-  const sorted = normalizeTimelineDates(dates);
-  return {
-    schema_version: typeof obj.schema_version === 'number' ? obj.schema_version : 1,
-    dates: sorted,
-    count: typeof obj.count === 'number' ? obj.count : sorted.length,
-    min_date: typeof obj.min_date === 'string' ? obj.min_date.slice(0, 10) : HISTORY_MIN_DATE,
-    latest_date: sorted.at(-1) ?? '',
-  };
-}
 
 export function historyDatesUpTo(index: DatesIndex, targetRunDate: string): string[] {
   const floor =
@@ -119,13 +94,21 @@ export async function fetchDatesIndexJson(url: string = DATES_INDEX_URL): Promis
   return parsed;
 }
 
-export async function downloadDatedCore(runDate: string): Promise<CorePayload> {
-  const manifest = await fetchManifest(datedManifestUrl(runDate));
+export async function downloadDatedCore(runDate: string, index?: DatesIndex): Promise<CorePayload> {
+  const selected = index ?? await fetchDatesIndexJson();
+  const head = selected.revision_heads?.[runDate];
+  const manifest = head
+    ? await fetchManifest(head.manifest_url, undefined, head.manifest_sha256)
+    : await fetchManifest(datedManifestUrl(runDate));
+  if (head) assertRevisionManifest(manifest, head, runDate, PAYLOAD_REPO);
   const { core } = await downloadCore(
     manifest.files.core.url,
     manifest.files.core.sha256,
-    { fileName: manifest.files.core.name, expectedBytes: manifest.files.core.bytes },
+    { fileName: manifest.files.core.name, expectedBytes: manifest.files.core.bytes,
+      ...(head ? { requireExactBytes: true, maxCompressedBytes: 64 * 1024 * 1024,
+        maxInflatedBytes: 192 * 1024 * 1024 } : {}) },
   );
+  if (core.run_date !== runDate) throw new Error('Dated core publication date mismatch');
   return core;
 }
 
@@ -219,7 +202,7 @@ export async function syncHistoryFromDailyPayloads(
           const runDate = toFetch[next];
           next += 1;
           try {
-            const core = await downloadDatedCore(runDate);
+            const core = await downloadDatedCore(runDate, index);
             coresByDate.set(runDate, core);
             circuit.success();
             await yieldToUi();
