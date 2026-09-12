@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-03T13:53:01.266Z",
+  "generated_at": "2026-09-12T04:33:05.748Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -884,6 +884,17 @@
         "Finalize Australian Rates app quality, security, and release integrity (#227)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.183"
+    },
+    {
+      "version": "1.0.188",
+      "date": "2026-09-12",
+      "summaryBullets": [
+        "Keep dependency updates compatible with Expo SDK 54 (#244)",
+        "Release APKs when the last open PR closes or merges (#246)",
+        "Standardize app type scales and Android header fonts (#245)",
+        "Standardize app fonts and restore the hamburger menu icon (#243)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.188"
     }
   ]
 }
