@@ -326,6 +326,18 @@ test('an interrupted generated version PR is resumed before the empty-queue chec
   assert.deepEqual(release.calls, [['settle', 247], 'sync', 'sync', 'apk']);
 });
 
+test('dry-run never settles a live generated PR or mutates an empty-queue checkout', async () => {
+  for (const open of [0, 1]) {
+    const release = queueReleaseHarness([], {
+      simulate: true,
+      countOpen: () => open,
+      findRecoverableBumps: () => [{ number: 247, branchName: ownedBumpPr.head.ref }],
+    });
+    await release.run();
+    assert.deepEqual(release.calls, []);
+  }
+});
+
 test('recovering a generated PR still leaves APK dispatch blocked by ordinary PRs', async () => {
   const counts = [2, 1];
   const release = queueReleaseHarness([], {

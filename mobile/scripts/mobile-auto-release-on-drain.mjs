@@ -744,6 +744,14 @@ export async function releaseWhenQueueEmpty({
   ensureApk = ensureApkForMainHead,
   simulate = dryRun,
 } = {}) {
+  if (simulate) {
+    const open = countOpen();
+    if (!Number.isSafeInteger(open) || open < 0) throw new Error('Invalid open PR count');
+    const recovery = open > 0 ? findRecoverableBumps() : [];
+    console.log(`mobile-auto-release-on-drain: dry-run — ${open} open PR(s), ${recovery.length} recoverable version PR(s); no changes made`);
+    // No checkout/reset, PR settlement, workflow dispatch or version mutation.
+    return;
+  }
   const queueIsEmpty = () => {
     const open = countOpen();
     if (!Number.isSafeInteger(open) || open < 0) throw new Error('Invalid open PR count');
@@ -804,11 +812,6 @@ export async function releaseWhenQueueEmpty({
     const branchName = bumpBranchName(next);
     await settleBump(pending[0].number, branchName);
     dispatchIfQueueEmpty();
-    return;
-  }
-
-  if (simulate) {
-    console.log(`mobile-auto-release-on-drain: dry-run — would open an auto-release PR for v${next}`);
     return;
   }
 
