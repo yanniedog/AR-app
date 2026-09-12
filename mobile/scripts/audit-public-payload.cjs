@@ -22,7 +22,7 @@ const { evaluateAppHealthDataQuality } = require('../src/lib/appHealth/dataQuali
 const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.ts');
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
-const { assertRevisionManifest } = require('../src/data/payloadRevision.ts');
+const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -47,14 +47,26 @@ async function fetchBytes(url, maxBytes) {
 }
 
 function options(args) {
-  const out = { repo: 'yanniedog/AR-local', date: null, output: null };
+  const out = { repo: 'yanniedog/AR-local', date: null, output: null, directory: null };
   for (let i = 0; i < args.length; i += 2) {
     const key = args[i].replace(/^--/, '');
-    if (!Object.hasOwn(out, key) || !args[i + 1]) throw new Error('Usage: audit-public-payload.cjs [--repo owner/repo] [--date YYYY-MM-DD] [--output report.json]');
+    if (!Object.hasOwn(out, key) || !args[i + 1]) throw new Error('Usage: audit-public-payload.cjs [--repo owner/repo] [--date YYYY-MM-DD] [--directory private-candidate] [--output report.json]');
     out[key] = args[i + 1];
   }
   if (!/^[\w.-]+\/[\w.-]+$/.test(out.repo) || (out.date && !isValidCalendarDate(out.date))) throw new Error('Invalid repository or date');
   return out;
+}
+
+function privateFile(directory, name, maxBytes) {
+  if (typeof name !== 'string' || !/^[A-Za-z0-9_.-]+$/.test(name)) throw new Error('Unsafe candidate filename');
+  const filename = path.join(directory, name);
+  const stat = fs.lstatSync(filename);
+  if (!stat.isFile() || stat.nlink !== 1 || fs.realpathSync(filename) !== filename || stat.size > maxBytes) {
+    throw new Error('Candidate file must be a bounded, unique regular file');
+  }
+  const bytes = fs.readFileSync(filename);
+  if (bytes.length > maxBytes) throw new Error('Candidate file exceeds byte limit');
+  return bytes;
 }
 
 async function audit(opts) {
@@ -65,17 +77,26 @@ async function audit(opts) {
     datesIndexUrl: `${base}app-payload-latest/dates-index.json`,
     datedTagPrefix: 'app-payload-', schema: 1,
   });
-  const indexBytes = await fetchBytes(`${contract.datesIndexUrl}?_=${Date.now()}`, 4 * 1024 * 1024);
-  const index = parseDatesIndex(JSON.parse(indexBytes.toString('utf8')), opts.repo);
-  if (!index) throw new Error('Invalid dates index');
-  const date = opts.date ?? index.latest_date;
-  if (!index.dates.includes(date)) throw new Error('Requested date is not published');
-  const head = index.revision_heads?.[date];
-  const manifestUrl = head?.manifest_url ?? (opts.date ? `${base}app-payload-${date}/manifest.json` : contract.manifestUrl);
-  const manifestBytes = await fetchBytes(manifestUrl, 4 * 1024 * 1024);
+  const directory = opts.directory ? fs.realpathSync(path.resolve(opts.directory)) : null;
+  const indexBytes = directory ? null : await fetchBytes(`${contract.datesIndexUrl}?_=${Date.now()}`, 4 * 1024 * 1024);
+  const index = indexBytes ? parseDatesIndex(JSON.parse(indexBytes.toString('utf8')), opts.repo) : null;
+  if (!directory && !index) throw new Error('Invalid dates index');
+  const selectedDate = opts.date ?? index?.latest_date;
+  if (index && !index.dates.includes(selectedDate)) throw new Error('Requested date is not published');
+  const head = index?.revision_heads?.[selectedDate];
+  const manifestUrl = directory ? null : head?.manifest_url ?? (opts.date ? `${base}app-payload-${selectedDate}/manifest.json` : contract.manifestUrl);
+  const manifestBytes = directory ? privateFile(directory, 'manifest.json', 4 * 1024 * 1024) : await fetchBytes(manifestUrl, 4 * 1024 * 1024);
   if (head && hash(manifestBytes) !== head.manifest_sha256) throw new Error('Selected manifest sha256 mismatch');
   const manifest = JSON.parse(manifestBytes.toString('utf8'));
+  const date = selectedDate ?? manifest.run_date;
+  if (!isValidCalendarDate(date)) throw new Error('Invalid candidate date');
   if (head) assertRevisionManifest(manifest, head, date, opts.repo);
+  if (directory && manifest.payload_revision) {
+    const revision = manifest.payload_revision;
+    const binding = validateRevisionHead({ ...revision, manifest_sha256: hash(manifestBytes),
+      manifest_url: `${base}${manifest.tag}/manifest.json` }, date, opts.repo);
+    assertRevisionManifest(manifest, binding, date, opts.repo);
+  }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
   const decoded = {};
   const evidence = {};
@@ -86,12 +107,14 @@ async function audit(opts) {
           !/^[a-f0-9]{64}$/.test(file.sha256) || typeof file.name !== 'string' ||
           !/^[A-Za-z0-9_.-]+$/.test(file.name) || !file.url.startsWith(base) ||
           new URL(file.url).pathname.split('/').pop() !== file.name || file.enc) throw new Error('Invalid public asset descriptor');
-      const bytes = await fetchBytes(file.url, Math.min(MAX_COMPRESSED, file.bytes + 1));
+      const bytes = directory ? privateFile(directory, file.name, Math.min(MAX_COMPRESSED, file.bytes + 1))
+        : await fetchBytes(file.url, Math.min(MAX_COMPRESSED, file.bytes + 1));
       const digest = hash(bytes);
       if (bytes.length !== file.bytes || digest !== file.sha256) throw new Error('Asset size/hash mismatch');
       const body = bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes, { maxOutputLength: MAX_DECODED }) : bytes;
       decoded[key] = JSON.parse(body.toString('utf8'));
-      evidence[key] = { status: 'PASS', url: file.url, sha256: digest, bytes: bytes.length, decoded_bytes: body.length };
+      evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: digest, bytes: bytes.length,
+        decoded_bytes: body.length, acquisition: directory ? 'local_file' : 'public_http' };
       observations[key] = { state: 'ready', runDate: decoded[key].run_date ?? null, itemCount: null };
     } catch (error) {
       evidence[key] = { status: 'FAIL', error: error.message };
@@ -103,7 +126,7 @@ async function audit(opts) {
   const detailKeys = Object.keys(decoded.details?.products ?? {});
   const snapshot = {
     source: 'remote', manifest, core: normalized?.core ?? null, appVersion: '1.0.0',
-    datesIndex: { dates: index.dates, latestRunDate: index.latest_date },
+    datesIndex: index ? { dates: index.dates, latestRunDate: index.latest_date } : undefined,
     assets: observations,
     details: decoded.details ? { runDate: decoded.details.run_date, productCount: detailKeys.length,
       matchedProductCount: detailKeys.filter((key) => coreKeys.has(key)).length,
@@ -113,10 +136,19 @@ async function audit(opts) {
       countImpacts: normalized.integrity.quarantines.countImpacts } : null,
   };
   const checks = evaluateAppHealthDataQuality(snapshot, contract);
+  if (directory) {
+    const sourceCheck = checks.find((check) => check.code === 'data-source-state');
+    if (sourceCheck) {
+      sourceCheck.metrics.source = 'private_candidate';
+      sourceCheck.summary = 'Candidate bytes were read locally; public publication and index selection were not checked.';
+    }
+  }
   const failed = checks.some((check) => check.status === 'fail') || Object.values(evidence).some((asset) => asset.status === 'FAIL');
   return { schema_version: 1, audited_at: new Date().toISOString(), status: failed ? 'FAIL' : checks.some((check) => check.status !== 'pass') ? 'WARN' : 'PASS',
+    acquisition: directory ? 'private_candidate' : 'public_http', publication_verified: !directory && !failed,
     app_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim(),
-    run_date: date, manifest_url: manifestUrl, manifest_sha256: hash(manifestBytes), dates_index_sha256: hash(indexBytes),
+    app_worktree_clean: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: sourceRoot, encoding: 'utf8' }).trim() === '',
+    run_date: date, manifest_url: manifestUrl, manifest_sha256: hash(manifestBytes), dates_index_sha256: indexBytes ? hash(indexBytes) : null,
     payload_revision: manifest.payload_revision ?? null, assets: evidence, checks };
 }
 
@@ -130,7 +162,7 @@ async function main() {
     const target = path.resolve(opts.output);
     fs.mkdirSync(path.dirname(target), { recursive: true });
     fs.writeFileSync(target, json);
-    const markdown = [`# AR-app public payload audit`, '', `Status: ${report.status}`, ``,
+    const markdown = [`# AR-app ${report.acquisition === 'private_candidate' ? 'private candidate' : 'public payload'} audit`, '', `Status: ${report.status}`, ``,
       report.error ?? `Run: ${report.run_date}; manifest SHA-256: ${report.manifest_sha256}`, '',
       ...(report.checks ?? []).map((check) => `- ${check.status.toUpperCase()} ${check.code}: ${check.label}${check.summary ? ` — ${check.summary}` : ''}`), ''].join('\n');
     fs.writeFileSync(target + '.md', markdown);

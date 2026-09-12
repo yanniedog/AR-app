@@ -40,6 +40,19 @@ Exit codes are 0 for PASS/WARN, 2 for FAIL, and 3 for acquisition BLOCKED.
 WARN is actionable evidence; it must not be reported as complete coverage.
 Generated reports are ignored by Git.
 
+Before publication, audit a private candidate directory containing its original
+`manifest.json` and listed assets:
+
+```sh
+npm run audit:payload -- --directory /path/to/candidate --output dist-audit/candidate.json
+```
+
+This mode makes no network requests. It preserves manifest and asset hash
+bindings and labels the report `acquisition: private_candidate` with
+`publication_verified: false`. Public manifest/index evidence is null; a private
+audit never proves that GitHub published or selected this candidate. Warnings
+and failures remain visible with the same exit codes as a public audit.
+
 Producer `coverage.payload_accounting` can explain explicit source exclusions
 (for example, mortgage discount deltas) and products with no published rates.
 The app validates the full accounting equation against loaded rows and exact
@@ -47,6 +60,9 @@ quarantine impacts before accepting an offset. Unknown or inconsistent
 explanations fail reconciliation. Taxonomy and quarantine remain separate
 checks. Ribbon totals use the producer's positive-rate scope; legitimate
 zero-rate tiers still pass through rate-value checks and remain visible.
+Rate integrity accepts finite negative values and values above 100%, as allowed
+by the CDR [RateString definition](https://consumerdatastandardsaustralia.github.io/standards/#common-field-types).
+Retained CommBank foreign currency account rows cover this historical case.
 
 Run `cd mobile && npm run ci` before merging reader changes. The retained
 2026-09-11 public fixture tests cover source exclusions, positive-only ribbons,

@@ -379,7 +379,8 @@ function evaluateRequiredSections(
 function invalidRate(value: unknown, required: boolean): boolean {
   if (value == null || value === '') return required;
   const parsed = Number(value);
-  return !Number.isFinite(parsed) || parsed < 0 || parsed > 1;
+  // CDR RateString permits negative rates and rates above 100%.
+  return !Number.isFinite(parsed);
 }
 
 function evaluateRateValues(snapshot: AppHealthDataSnapshot): AppHealthCheck {
@@ -406,7 +407,7 @@ function evaluateRateValues(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     'data-integrity',
     status,
     { rows: rows.length, invalidHeadlineRates, invalidOptionalRates },
-    status === 'fail' ? 'One or more displayed rate values are missing, non-finite, or out of range.' : undefined,
+    status === 'fail' ? 'One or more displayed rate values are missing, malformed, or non-finite.' : undefined,
   );
 }
 
