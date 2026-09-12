@@ -1,0 +1,32 @@
+{
+  "version": "1.0.196",
+  "releaseTag": "app-arm-v1.0.196",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "fix: retain row eligibility after suitability cache warms (#262)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix: retain row eligibility after suitability cache warms (#262)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.196"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.195"
+        }
+      ]
+    }
+  ]
+}
