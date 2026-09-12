@@ -1,0 +1,44 @@
+{
+  "version": "1.0.194",
+  "releaseTag": "app-arm-v1.0.194",
+  "date": "2026-09-12",
+  "summaryBullets": [
+    "fix(audit): accept CDR rates and verify private candidate payloads (#259)",
+    "Reclaim installed APK downloads and enforce compact release budgets (#258)",
+    "chore(mobile): auto-release bump to v1.0.192 (after b7e81c0) (#257)",
+    "Read selected CDR revisions and audit source coverage accounting (#256)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "fix(audit): accept CDR rates and verify private candidate payloads (#259)"
+        },
+        {
+          "text": "Reclaim installed APK downloads and enforce compact release budgets (#258)"
+        },
+        {
+          "text": "chore(mobile): auto-release bump to v1.0.192 (after b7e81c0) (#257)"
+        },
+        {
+          "text": "Read selected CDR revisions and audit source coverage accounting (#256)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.194"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.191"
+        }
+      ]
+    }
+  ]
+}

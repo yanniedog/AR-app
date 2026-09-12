@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-09-12T07:27:23.476Z",
+  "generated_at": "2026-09-12T08:10:42.291Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -911,6 +911,17 @@
         "Read selected CDR revisions and audit source coverage accounting (#256)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.192"
+    },
+    {
+      "version": "1.0.194",
+      "date": "2026-09-12",
+      "summaryBullets": [
+        "fix(audit): accept CDR rates and verify private candidate payloads (#259)",
+        "Reclaim installed APK downloads and enforce compact release budgets (#258)",
+        "chore(mobile): auto-release bump to v1.0.192 (after b7e81c0) (#257)",
+        "Read selected CDR revisions and audit source coverage accounting (#256)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.194"
     }
   ]
 }
