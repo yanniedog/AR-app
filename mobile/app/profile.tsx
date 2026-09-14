@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
 import { ProfileEditor } from '../src/components/ProfileEditor';
+import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card } from '../src/components/ui';
 import {
@@ -85,6 +86,7 @@ export default function Profile() {
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       onLayout={() => setLayoutReady(true)}
     >
+      <CustomerProfilePanel />
       <AppText variant="body" color="textMuted" style={{ marginBottom: 16, lineHeight: 22 }}>
         Pick the product attributes that match your situation — owner-occupied, P&I, your LVR —
         and must-have features like an offset account or early repayment. They apply as default

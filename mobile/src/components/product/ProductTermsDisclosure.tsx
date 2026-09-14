@@ -6,6 +6,7 @@ import { loadProductTerms } from '../../data/productTermsTransport';
 import { humanizeEnum } from '../../data/format';
 import { AppText, Button, Disclosure } from '../ui';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { CustomerProfilePanel } from '../CustomerProfilePanel';
 
 const STAGE_LABELS: Record<TermsStage, string> = {
   discovery: 'Sources identified', acquisition: 'Documents captured', extraction: 'Text extracted',
@@ -89,6 +90,7 @@ export function ProductTermsDisclosure({ productKey }: { productKey: string }) {
   const hasAsset = !!manifest?.files.terms_index;
   return (
     <Disclosure title="Document coverage and terms" summary={hasAsset ? 'Open to check evidence and changes' : 'Document analysis not yet reported'} open={open} onToggle={() => setOpen(!open)}>
+      <CustomerProfilePanel productKey={productKey} />
       {selected?.terms ? <EvidenceRows terms={selected.terms} /> : selected?.error ? <View style={{ gap: 8 }}><AppText variant="small">{selected.error}</AppText><Button title="Retry" variant="secondary" onPress={() => setRetry(retry + 1)} /></View> :
         <AppText variant="small" color="textMuted">{hasAsset && !selected ? 'Loading document evidence…' : 'Complete document capture and interpretation have not been established for this product.'}</AppText>}
     </Disclosure>

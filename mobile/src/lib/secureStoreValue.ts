@@ -107,7 +107,7 @@ async function deleteManifestChunks(
  * Read a byte-bounded encrypted value. Direct pre-v1 values remain readable so
  * existing installations migrate without losing financial inputs.
  */
-async function readSecureStoreValueUnlocked(baseKey: SecureStoreKey): Promise<string | null> {
+async function readSecureStoreValueUnlocked(baseKey: SecureStoreKey, preserveIncomplete = false): Promise<string | null> {
   const raw = await SecureStore.getItemAsync(baseKey);
   const manifest = parseManifest(raw);
   if (!manifest) return raw;
@@ -115,6 +115,7 @@ async function readSecureStoreValueUnlocked(baseKey: SecureStoreKey): Promise<st
   for (let index = 0; index < manifest.chunks; index += 1) {
     const chunk = await SecureStore.getItemAsync(chunkKey(baseKey, manifest.generation, index));
     if (chunk == null) {
+      if (preserveIncomplete) throw new Error('Incomplete encrypted value retained unchanged.');
       // The committed generation can never become readable again. Remove the
       // manifest first so a future write is not permanently blocked, then make
       // best-effort cleanup of any surviving chunks.
@@ -127,8 +128,8 @@ async function readSecureStoreValueUnlocked(baseKey: SecureStoreKey): Promise<st
   return chunks.join('');
 }
 
-export function readSecureStoreValue(baseKey: SecureStoreKey): Promise<string | null> {
-  return withSecureValueLock(baseKey, () => readSecureStoreValueUnlocked(baseKey));
+export function readSecureStoreValue(baseKey: SecureStoreKey, options?: { preserveIncomplete?: boolean }): Promise<string | null> {
+  return withSecureValueLock(baseKey, () => readSecureStoreValueUnlocked(baseKey, options?.preserveIncomplete));
 }
 
 /**

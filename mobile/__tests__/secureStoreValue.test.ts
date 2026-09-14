@@ -40,6 +40,15 @@ describe('byte-bounded SecureStore values', () => {
     await expect(readSecureStoreValue(key)).resolves.toBe('{"legacy":true}');
   });
 
+  it('retains incomplete generations when a migration requests non-destructive reads', async () => {
+    await writeSecureStoreValue(key, 'x'.repeat(4000));
+    const chunk = [...values.keys()].find(k => k.includes('.chunk.'))!;
+    values.delete(chunk);
+    const before = new Map(values);
+    await expect(readSecureStoreValue(key, { preserveIncomplete: true })).rejects.toThrow('retained unchanged');
+    expect(values).toEqual(before);
+  });
+
   it('removes and reports an incomplete committed generation', async () => {
     values.set(key, JSON.stringify({
       kind: 'ar.secure-value',
