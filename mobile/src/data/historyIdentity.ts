@@ -1,4 +1,28 @@
 import type { DatesIndex } from './datesIndex';
+import { isValidCalendarDate } from '../lib/calendarDate';
+
+function verifiedRevision(value: unknown): number | null {
+  if (typeof value !== 'string' || value.length >= 512) return null;
+  const match = /^revision:([1-9]\d*):[^:]+:[^:]+$/.exec(value);
+  const revision = match ? Number(match[1]) : NaN;
+  return Number.isSafeInteger(revision) ? revision : null;
+}
+
+/** Keep verified revisions even when their values leave the renderable date axis. */
+export function historicalRevisionHighWater(...sources: unknown[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const source of sources) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) continue;
+    for (const [date, identity] of Object.entries(source)) {
+      const revision = verifiedRevision(identity);
+      if (!isValidCalendarDate(date) || revision == null) continue;
+      // Equal revisions retain the first verified identity, detecting equivocation
+      // rather than letting an inconsistent reusable-cache identity replace it.
+      if (revision > (verifiedRevision(result[date]) ?? 0)) result[date] = identity as string;
+    }
+  }
+  return result;
+}
 
 /** Identity of the selected immutable publication, including terms-only revisions. */
 export function historicalSourceIdentity(index: DatesIndex, date: string): string {

@@ -6,7 +6,7 @@ import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { DatesIndex } from './datesIndex';
-import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
+import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -30,6 +30,8 @@ export interface ProductHistoryPayload {
   core_sha?: string;
   /** Selected publication identity for each verified date. */
   source_identities?: Record<string, string>;
+  /** Verified rollback barriers; independent of available chart dates and values. */
+  revision_high_water?: Record<string, string>;
   run_dates: string[];
   products: Record<string, (number | null)[]>;
 }
@@ -537,11 +539,14 @@ export function normalizeProductHistoryPayload(raw: unknown): ProductHistoryPayl
   }
   if (!Object.keys(products).length) return null;
 
+  const revisionHighWater = historicalRevisionHighWater(obj.revision_high_water, obj.source_identities);
+
   return {
     schema_version: typeof obj.schema_version === 'number' ? obj.schema_version : 1,
     run_date,
     ...(typeof obj.core_sha === 'string' && obj.core_sha ? { core_sha: obj.core_sha } : {}),
     ...(obj.source_identities ? { source_identities: normalizeHistoryIdentities(obj.source_identities, run_dates) } : {}),
+    ...(Object.keys(revisionHighWater).length ? { revision_high_water: revisionHighWater } : {}),
     run_dates,
     products,
   };
@@ -590,10 +595,13 @@ export async function syncProductHistoryFromDailyPayloads(
 
   let indexedDates: string[] = [];
   let selectedIndex: DatesIndex | undefined;
+  const revisionHighWater = historicalRevisionHighWater(
+    opts.existing?.revision_high_water, opts.existing?.source_identities,
+  );
   try {
     const candidateIndex = await fetchDatesIndexJson();
     const candidateDates = historyDatesUpTo(candidateIndex, targetRunDate);
-    assertHistoricalIdentitiesAdvance(candidateIndex, candidateDates, opts.existing?.source_identities);
+    assertHistoricalIdentitiesAdvance(candidateIndex, candidateDates, revisionHighWater);
     selectedIndex = candidateIndex;
     indexedDates = candidateDates;
   } catch (err) {
@@ -678,6 +686,7 @@ export async function syncProductHistoryFromDailyPayloads(
       opts.coreSha,
     );
     built.source_identities = normalizeHistoryIdentities(sourceIdentities, availableDates);
+    built.revision_high_water = historicalRevisionHighWater(revisionHighWater, sourceIdentities);
     if (!Object.keys(built.products).length) {
       throw new Error('product history sync produced no series');
     }

@@ -31,6 +31,11 @@ progressively, one heavy core at a time, with durable checkpoints. It pins one
 index during each sync, refetches corrected dates and refuses lower/equivocating
 historical revisions. Newly fetched snapshots replace stale values even when a
 former product is absent. Zero rates remain zero, and chart gaps remain unknown.
+Both history caches retain `revision_high_water` independently of chart dates.
+Cache readers migrate earlier verified source identities before trimming the
+renderable axis. Failed refreshes, omitted index dates and a raised history
+floor cannot erase this rollback barrier; only acquired revisions advance it.
+The barrier alone never authorizes reuse of missing values or a current core.
 The series still represents each product's section-best published rate; it is
 not a complete tier ledger or proof that the rate applied to a customer.
 

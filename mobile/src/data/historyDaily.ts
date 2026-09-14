@@ -8,7 +8,7 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
 import { downloadCore, fetchManifest } from './payload';
-import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
+import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 export { parseDatesIndex, type DatesIndex } from './datesIndex';
 
 /** Earliest run_date published as an immutable dated GitHub release (app_payload.py). */
@@ -181,7 +181,10 @@ export async function syncHistoryFromDailyPayloads(
 
   const index = await fetchDatesIndexJson();
   const wantedDates = historyDatesUpTo(index, targetRunDate);
-  assertHistoricalIdentitiesAdvance(index, wantedDates, opts.existing?.source_identities);
+  const revisionHighWater = historicalRevisionHighWater(
+    opts.existing?.revision_high_water, opts.existing?.source_identities,
+  );
+  assertHistoricalIdentitiesAdvance(index, wantedDates, revisionHighWater);
   if (!wantedDates.length) throw new Error('dates-index has no history dates');
 
   const coresByDate = new Map<string, CorePayload>();
@@ -250,6 +253,7 @@ export async function syncHistoryFromDailyPayloads(
   }
   sourceIdentities[targetRunDate] = `core:${opts.coreSha ?? ''}`;
   built.source_identities = normalizeHistoryIdentities(sourceIdentities, availableDates);
+  built.revision_high_water = historicalRevisionHighWater(revisionHighWater, sourceIdentities);
   debugLog.info(
     'historyDaily',
     `sync ok run_date=${built.run_date} slices=${built.run_dates.length}`,
