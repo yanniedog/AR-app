@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, ScrollView, Share, View } from 'react-native';
 
 import { Screen } from '../src/components/Screen';
+import { ProductTermsRuntimeCheck } from '../src/components/ProductTermsRuntimeCheck';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEBUG_LOG_SHARE_FILE,
@@ -506,6 +507,7 @@ function DebugLogScreenInner() {
               {text || '(empty — use the app; logs appear here)'}
             </AppText>
           </View>
+          <ProductTermsRuntimeCheck />
         </ScrollView>
       </Screen>
   );

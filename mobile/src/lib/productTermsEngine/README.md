@@ -50,3 +50,11 @@ neither is silently promoted as the bank's validated ongoing-cost rule.
 Run focused checks with `npx jest src/lib/productTermsEngine/__tests__ --runInBand`
 from `mobile`, followed by repository mobile CI and native Hermes acceptance. Node
 tests and TypeScript compilation alone do not establish actual APK execution.
+
+Native acceptance entry point: About > Diagnostics > Debug log, or the
+existing `/debug-log` route. Open **Evaluator runtime**, then **Run runtime check**.
+The disclosure shows exact evaluator version, runtime and pass status. The local
+`productTermsRuntime` log entry retains every fixed check result; no customer facts
+are read. Accept a native primitive run only when the retained result reports
+`runtime: "hermes"` and `passed: true`. This does not establish financial contract
+coverage, whole-product eligibility, or the unimplemented catalogue adapter.
