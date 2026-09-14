@@ -2,7 +2,8 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
-import { EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { validateSavings } from './savingsValidation';
 
 export function hashText(text: string): string { return bytesToHex(sha256(utf8ToBytes(text))); }
 export function canonical(value: unknown, depth = 0): string {
@@ -34,7 +35,8 @@ export function rate(value: string): Decimal {
 }
 
 export function validateLedger(contract: LedgerContract, scenario: LedgerScenario): string[] {
-  if (contract.schemaVersion !== 1 || contract.evaluatorVersion !== EVALUATOR_VERSION) throw new Error('contract_version_unsupported');
+  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+      (contract.evaluatorVersion === LEGACY_EVALUATOR_VERSION && (contract.savingsSchedule !== undefined || scenario.savingsAssessments !== undefined))) throw new Error('contract_version_unsupported');
   if (!contract.id || !contract.productId || scenario.productId !== contract.productId) throw new Error('product_mismatch');
   if (contract.currency !== 'AUD' || !['asset', 'liability'].includes(contract.direction)) throw new Error('currency_or_direction_unsupported');
   const start = dayNumber(scenario.startDate), end = dayNumber(scenario.endDateExclusive);
@@ -118,5 +120,6 @@ export function validateLedger(contract: LedgerContract, scenario: LedgerScenari
       } else throw new Error('fee_pattern_unsupported');
     } else throw new Error('event_pattern_unsupported');
   }
+  validateSavings(contract, scenario, refs, ruleRefs);
   return issues;
 }

@@ -28,6 +28,7 @@ test('explicit diagnostics action executes real primitives and preserves the act
   expect(tag).toBe('productTermsRuntime');
   expect(result).toEqual({ evaluatorVersion: EVALUATOR_VERSION, runtime: 'other', passed: true, checks: {
     bigintBeyondSafeInteger: true, exactRational: true, negativeTieRounding: true, leapMonthEnd: true,
+    savingsMarginalBoundary: true, savingsWholeBalanceBoundary: true, savingsMissingQualification: true,
   } });
   const rendered = JSON.stringify(tree.toJSON());
   expect(rendered).toContain(EVALUATOR_VERSION);

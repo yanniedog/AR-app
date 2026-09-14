@@ -1,5 +1,7 @@
 /** Declarative calculation inputs. A source-evidence envelope alone is not this contract. */
-export const EVALUATOR_VERSION = 'product-terms-engine-v1' as const;
+import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from './savingsTypes';
+export const EVALUATOR_VERSION = 'product-terms-engine-v2' as const;
+export const LEGACY_EVALUATOR_VERSION = 'product-terms-engine-v1' as const;
 export type DecimalString = string;
 export type ISODate = string;
 export type Truth = 'meets' | 'does_not_meet' | 'needs_information';
@@ -41,7 +43,7 @@ export interface InterestPolicy {
 }
 export interface LedgerContract {
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION;
+  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION;
   id: string;
   productId: string;
   direction: 'asset' | 'liability';
@@ -62,6 +64,7 @@ export interface LedgerContract {
   interest: InterestPolicy;
   initialAnnualRate: DecimalString;
   initialRateEvidenceIds: string[];
+  savingsSchedule?: SavingsRateSchedule;
 }
 type EventBase = { id: string; date: ISODate; order: number };
 export type LedgerEvent = EventBase & (
@@ -84,6 +87,7 @@ export interface LedgerScenario {
   facts: Facts;
   events: LedgerEvent[];
   assumptions: string[];
+  savingsAssessments?: SavingsAssessment[];
 }
 export interface LedgerEntry {
   date: ISODate;
@@ -93,6 +97,7 @@ export interface LedgerEntry {
   balance: DecimalString;
   evidenceIds: string[];
   note?: string;
+  savingsContributions?: SavingsContribution[];
 }
 export interface LedgerTotals {
   openingBalance: DecimalString;

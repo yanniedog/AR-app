@@ -1,19 +1,11 @@
-import { calendarDate, dayNumber, isLeapYear } from './calendar';
+import { calendarDate, dayNumber } from './calendar';
 import { Decimal, decimalZero } from './decimal';
 import { evaluateEligibility } from './eligibility';
 import { canonical, hashText, money, nonNegative, rate, validateLedger } from './validation';
-import { EVALUATOR_VERSION, type CalculationReceipt, type InterestPolicy, type LedgerContract, type LedgerEvent, type LedgerScenario } from './types';
+import { EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerEvent, type LedgerScenario } from './types';
+import { dailyInterest } from './interestAccrual';
+import { savingsInterest, type SavingsActivityCache } from './savingsAccrual';
 
-function dailyInterest(balance: Decimal, annualRate: Decimal, date: string, policy: InterestPolicy): Decimal {
-  const divisor = policy.dayCount === 'actual_actual' && isLeapYear(Number(date.slice(0, 4))) ? '366' : '365';
-  let dailyRate = annualRate.div(Decimal.parse(divisor));
-  if (policy.dailyRateRounding) {
-    const rule = policy.dailyRateRounding, scale = Decimal.parse(rule.unit === 'percent' ? '100' : '1');
-    dailyRate = dailyRate.mul(scale).rounded(rule.scale, rule.mode).div(scale);
-  }
-  const exact = balance.mul(dailyRate);
-  return policy.dailyAccrualScale === null ? exact : exact.rounded(policy.dailyAccrualScale, policy.accrualRounding);
-}
 function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
   if (event.amount.type === 'fixed') return money(event.amount.value);
   const rule = event.amount;
@@ -30,7 +22,7 @@ export function calculateLedger(contract: LedgerContract, scenario: LedgerScenar
     dependencies: [], status: 'unsupported', claimAvailable: false, issues: [], assumptions: [], eligibility: null, totals: null, ledger: [],
   };
   try {
-    const input = canonical({ contract, scenario });
+    const input = canonical({ evaluatorVersion: EVALUATOR_VERSION, contract, scenario });
     if (input.length > 4_000_000) throw new Error('input_size_exceeded');
     receipt.inputSha256 = hashText(input);
     receipt.issues = validateLedger(contract, scenario);
@@ -56,6 +48,7 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
   const events = [...scenario.events].sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
   const postingDates = new Set(contract.interest.postingDates);
   let eventIndex = 0;
+  const activityCache: SavingsActivityCache = new Map();
   for (let day = dayNumber(scenario.startDate); day < dayNumber(scenario.endDateExclusive); day++) {
     const date = calendarDate(day);
     while (eventIndex < events.length && events[eventIndex].date === date) {
@@ -82,9 +75,12 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
     }
     let basis = balance.sub(offset);
     if (basis.compare(decimalZero()) < 0) basis = decimalZero();
-    const interest = dailyInterest(basis, annualRate, date, contract.interest);
+    const savings = contract.savingsSchedule ? savingsInterest(basis, date, contract.interest, contract.savingsSchedule, scenario.savingsAssessments ?? [], activityCache) : null;
+    const interest = savings?.amount ?? dailyInterest(basis, annualRate, date, contract.interest);
+    if (savings) receipt.issues.push(...savings.issues);
     accrued = accrued.add(interest); unposted = unposted.add(interest);
-    receipt.ledger.push({ date, id: `accrue:${date}`, type: 'interest_accrual', amount: interest.fixed(12), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds });
+    receipt.ledger.push({ date, id: `accrue:${date}`, type: 'interest_accrual', amount: interest.fixed(12), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
+      ...(savings ? { savingsContributions: savings.contributions } : {}) });
     if (postingDates.has(date)) {
       const payment = unposted.rounded(2, contract.interest.postingRounding);
       // The remainder is disclosed in accrued totals; no invented penny carry after posting.

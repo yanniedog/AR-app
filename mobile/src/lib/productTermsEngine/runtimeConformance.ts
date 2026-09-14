@@ -1,6 +1,7 @@
 import { Decimal } from './decimal';
 import { addCalendarMonths } from './calendar';
 import { EVALUATOR_VERSION } from './types';
+import { runtimeSavingsConformance } from './runtimeSavingsConformance';
 
 /** Call from the native acceptance harness; Node success is explicitly not Hermes proof. */
 export function runtimeConformance(): {
@@ -13,6 +14,7 @@ export function runtimeConformance(): {
     checks.exactRational = Decimal.parse('1').div(Decimal.parse('3')).mul(Decimal.parse('3')).fixed() === '1.00';
     checks.negativeTieRounding = Decimal.parse('-1.005').fixed(2, 'half_even') === '-1.00';
     checks.leapMonthEnd = addCalendarMonths('2024-01-31', 1, 'clamp') === '2024-02-29';
+    Object.assign(checks, runtimeSavingsConformance());
   } catch { checks.execution = false; }
   return { evaluatorVersion: EVALUATOR_VERSION, runtime, passed: Object.values(checks).every(Boolean), checks };
 }

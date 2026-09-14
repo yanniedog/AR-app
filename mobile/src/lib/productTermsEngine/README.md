@@ -30,10 +30,23 @@ fraction/percentage units, daily or posting accrual rounding, fixed/percentage
 fees with explicit rounding/caps and declarative waivers. A duplicate charge key
 is rejected rather than charged twice or silently deduplicated. Shared-package
 applicability and charge occurrence generation belong to a reviewed adapter.
-Mortgage repayment generation, complex bonus/tier rules, maturity/rollover
+Mortgage repayment generation, unreviewed savings policies, maturity/rollover
 generation, holidays, taxes and break-cost valuation remain unsupported until
 their complete source-bound contracts and benchmarks exist. Calendar month helpers
 require an explicit clamp or month-end convention; neither is inferred.
+
+Savings schedules now support explicitly dated additive base/bonus/intro components,
+marginal or whole-balance tiers, aggregate/per-tier rounding and account-scoped
+assessment windows. Structured activity rules support deposit totals, withdrawal
+counts, processed purchase counts with explicit refund handling, and balance growth
+with declared interest/fee/tax exclusions. Unknown coverage/classifications/policies
+remain incomplete; caller-supplied totals cannot override generated unknown metrics.
+These are supported primitives, not activated customer-product adapters. See
+`docs/SAVINGS_RULES.md` for source and acceptance limitations.
+
+The evaluator reports `product-terms-engine-v2`. Legacy v1 flat contracts remain
+accepted, but schedules/assessments require v2 so old clients cannot silently ignore
+the new terms and apply a flat rate.
 
 The fixture corpus records official-source byte hashes, exact short quote hashes,
 locators and retrieval timestamps. Macquarie's published daily-interest example
