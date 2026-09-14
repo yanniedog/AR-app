@@ -96,3 +96,51 @@ test('lazy acquisition verifies canonical identity, bounds downloads and reuses 
   download.mockResolvedValueOnce(JSON.stringify(terms));
   await expect(loadProductTerms(changed, 'protocol-fixture')).resolves.toEqual(terms);
 });
+
+test('sharded index follows only declared assets in the selected immutable revision', async () => {
+  const terms = evidence();
+  const { identity_sha256: _ignored, ...body } = terms;
+  terms.identity_sha256 = createHash('sha256').update(canonicalTermsJson(body)).digest('hex');
+  const tag = 'app-payload-2026-09-14-r000010';
+  const descriptor = (name: string, sha: string) => ({ name, bytes: 123, sha256: sha,
+    url: `https://github.com/yanniedog/AR-local/releases/download/${tag}/${name}` });
+  const manifest = { repo: 'yanniedog/AR-local', tag, run_date: '2026-09-14',
+    payload_revision: { revision: 10, bundle_sha256: hash('1') }, files: {
+      terms_index: descriptor('terms-index-v2.json.gz', hash('2')),
+      terms_shard_000: descriptor('terms-shard.json.gz', hash('3')) } } as unknown as Manifest;
+  const index = { schema_version: 2, run_date: manifest.run_date,
+    products: { 'protocol-fixture': 'terms_shard_000' } };
+  expect(validateProductTermsIndex(index, manifest)).toBe(index);
+  for (const reference of ['core', 'terms_shard_001', '__proto__', '../terms_shard_000']) {
+    expect(() => validateProductTermsIndex({ ...index, products: { 'protocol-fixture': reference } }, manifest)).toThrow();
+  }
+  const foreign = JSON.parse(JSON.stringify(manifest)) as Manifest;
+  (foreign.files as unknown as Record<string, { url: string }>).terms_shard_000.url =
+    'https://github.com/yanniedog/AR-local/releases/download/another/shard.json.gz';
+  expect(() => validateProductTermsIndex(index, foreign)).toThrow();
+  const download = jest.mocked(downloadInflate);
+  const before = download.mock.calls.length;
+  download.mockResolvedValueOnce(JSON.stringify(index)).mockResolvedValueOnce(JSON.stringify({
+    schema_version: 1, run_date: manifest.run_date, products: { 'protocol-fixture': terms },
+  }));
+  expect(await loadProductTerms(manifest, 'protocol-fixture')).toEqual(terms);
+  expect(await loadProductTerms(manifest, 'protocol-fixture')).toEqual(terms);
+  expect(download.mock.calls.length - before).toBe(2);
+});
+
+test('shards cannot substitute a different observation day or omit the indexed product', async () => {
+  const download = jest.mocked(downloadInflate);
+  for (const [revision, day] of [[11, '2026-09-13'], [12, '2026-09-14']] as const) {
+    const tag = `app-payload-2026-09-14-r0000${revision}`;
+    const descriptor = (name: string) => ({ name, bytes: 123, sha256: hash('4'),
+      url: `https://github.com/yanniedog/AR-local/releases/download/${tag}/${name}` });
+    const manifest = { repo: 'yanniedog/AR-local', tag, run_date: '2026-09-14',
+      payload_revision: { revision, bundle_sha256: hash(revision === 11 ? '5' : '6') },
+      files: { terms_index: descriptor('index.json.gz'), terms_shard_000: descriptor('shard.json.gz') },
+    } as unknown as Manifest;
+    download.mockResolvedValueOnce(JSON.stringify({ schema_version: 2, run_date: manifest.run_date,
+      products: { 'protocol-fixture': 'terms_shard_000' } }));
+    download.mockResolvedValueOnce(JSON.stringify({ schema_version: 1, run_date: day, products: {} }));
+    await expect(loadProductTerms(manifest, 'protocol-fixture')).rejects.toThrow();
+  }
+});

@@ -5,15 +5,21 @@ import { downloadInflate } from './payload';
 import { canonicalTermsJson, validateProductTerms, type ProductTerms } from './productTerms';
 
 export interface ProductTermsIndex {
-  schema_version: 1;
+  schema_version: 1 | 2;
   run_date: string;
-  products: Record<string, ManifestFile>;
+  products: Record<string, ManifestFile | string>;
 }
 const SHA = /^[a-f0-9]{64}$/;
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_INFLATED = 32 * 1024 * 1024;
 const indexes = new Map<string, Promise<ProductTermsIndex>>();
 const products = new Map<string, Promise<ProductTerms>>();
+const shards = new Map<string, Promise<Record<string, unknown>>>();
+
+function manifestAsset(manifest: Manifest, key: string): ManifestFile | undefined {
+  const files = manifest.files as unknown as Record<string, ManifestFile>;
+  return Object.hasOwn(files, key) ? files[key] : undefined;
+}
 
 function validDescriptor(value: unknown, manifest: Manifest): value is ManifestFile {
   if (!value || typeof value !== 'object') return false;
@@ -31,10 +37,13 @@ export function validateProductTermsIndex(raw: unknown, manifest: Manifest): Pro
     throw new Error('Terms require an immutable payload revision');
   }
   const index = raw as ProductTermsIndex;
-  if (index.schema_version !== 1 || index.run_date !== manifest.run_date || !index.products ||
+  if (![1, 2].includes(index.schema_version) || index.run_date !== manifest.run_date || !index.products ||
       typeof index.products !== 'object' || Array.isArray(index.products) ||
       Object.keys(index.products).length > 20000 ||
-      Object.entries(index.products).some(([key, item]) => !key || !validDescriptor(item, manifest))) {
+      Object.entries(index.products).some(([key, item]) => !key || (index.schema_version === 1
+        ? !validDescriptor(item, manifest)
+        : typeof item !== 'string' || !/^terms_shard_[0-9]{3}$/.test(item) ||
+          !validDescriptor(manifestAsset(manifest, item), manifest)))) {
     throw new Error('Invalid product terms index');
   }
   return index;
@@ -68,11 +77,25 @@ export async function loadProductTerms(manifest: Manifest, productKey: string): 
   const generationKey = `${manifest.payload_revision.bundle_sha256}:${file.sha256}`;
   const index = await memo(indexes, generationKey, 2, async () =>
     validateProductTermsIndex(await acquire(file), manifest));
-  const descriptor = Object.hasOwn(index.products, productKey) ? index.products[productKey] : undefined;
-  if (!descriptor) return null;
+  const reference = Object.hasOwn(index.products, productKey) ? index.products[productKey] : undefined;
+  if (!reference) return null;
+  const descriptor = typeof reference === 'string' ? manifestAsset(manifest, reference) : reference;
+  if (!descriptor) throw new Error('Missing declared terms shard');
   const key = `${generationKey}:${productKey}:${descriptor.sha256}`;
   return memo(products, key, 16, async () => {
-    const terms = validateProductTerms(await acquire(descriptor), productKey);
+    let raw: unknown;
+    if (index.schema_version === 2) {
+      const shard = await memo(shards, `${generationKey}:${descriptor.sha256}`, 4, async () => {
+        const value = await acquire(descriptor) as Record<string, unknown>;
+        if (!value || value.schema_version !== 1 || value.run_date !== manifest.run_date ||
+            !value.products || typeof value.products !== 'object' || Array.isArray(value.products) ||
+            Object.keys(value.products).length > 20000) throw new Error('Invalid product terms shard');
+        return value.products as Record<string, unknown>;
+      });
+      if (!Object.hasOwn(shard, productKey)) throw new Error('Product missing from declared terms shard');
+      raw = shard[productKey];
+    } else raw = await acquire(descriptor);
+    const terms = validateProductTerms(raw, productKey);
     const { identity_sha256, ...body } = terms;
     const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, canonicalTermsJson(body));
     if (hash !== identity_sha256) throw new Error('Product terms content identity mismatch');
