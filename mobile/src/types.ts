@@ -258,6 +258,8 @@ export interface ProductDetail {
   facts?: NormalizedProductFact[];
   /** Links to the lender's official overview / eligibility / fees / terms pages. */
   links?: ProductLinks;
+  /** Original references retained before generic URL cleaning. */
+  sourceDocuments?: { url: string; sourceUrl?: string; sourcePath: string; relation: string; label?: string }[];
 }
 
 export interface DetailsPayload {
@@ -307,6 +309,8 @@ export interface Manifest {
     bank_spread_history?: ManifestFile;
     /** RBA decision calendar + forward meeting schedule (countdown asset). */
     rba_calendar?: ManifestFile;
+    /** Lazy immutable per-product document evidence index. */
+    terms_index?: ManifestFile;
   };
   enc?: ManifestEnc;
 }

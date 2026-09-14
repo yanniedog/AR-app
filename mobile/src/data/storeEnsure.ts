@@ -815,10 +815,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         return;
       }
       const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
+      const currentBundleSha = get().manifest?.payload_revision?.bundle_sha256 ?? '';
       if (
         !force &&
         productHistorySyncState.inFlight &&
-        productHistorySyncState.inFlightCoreSha === currentCoreSha
+        productHistorySyncState.inFlightCoreSha === currentCoreSha &&
+        productHistorySyncState.inFlightBundleSha === currentBundleSha
       ) {
         return productHistorySyncState.inFlight;
       }
@@ -833,34 +835,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const coreSha = manifest?.files.core.sha256 ?? '';
         const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
         const current = get();
+        const manifestStillCurrent = () => {
+          const latest = get().manifest;
+          return !(manifest?.payload_revision || latest?.payload_revision) ||
+            (!!latest && samePayloadIdentity(manifest, latest));
+        };
         if (
           current.source !== 'remote' ||
           current.core?.run_date !== core.run_date ||
-          (current.manifest?.files.core.sha256 ?? '') !== coreSha
+          (current.manifest?.files.core.sha256 ?? '') !== coreSha || !manifestStillCurrent()
         ) {
           return;
         }
-        const trustedHistoryDates = current.historyBanks?.run_date === core.run_date
-          ? current.historyBanks.run_dates
-          : null;
-        if (
-          !force &&
-          cached &&
-          coreSha &&
-          cached.core_sha === coreSha &&
-          cached.run_date === core.run_date &&
-          trustedHistoryDates?.length === cached.run_dates.length &&
-          trustedHistoryDates.every((date, index) => date === cached.run_dates[index])
-        ) {
-          if (productHistory !== cached || current.productHistoryError) {
-            set({ productHistory: cached, productHistoryError: null });
-          }
-          debugLog.debug(
-            'perf',
-            `ensureProductHistory exact-cache slices=${cached.run_dates.length}`,
-          );
-          return;
-        }
+        // An unchanged date axis/current core does not prove historical assets
+        // are unchanged. The sync checks the small index before reusing slices.
         const requestId = ++productHistorySyncState.request;
         let lastPublished = cached ?? null;
         const revisionIsCurrent = () => {
@@ -869,7 +857,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             requestId === productHistorySyncState.request &&
             current.source === 'remote' &&
             current.core?.run_date === core.run_date &&
-            (current.manifest?.files.core.sha256 ?? '') === coreSha
+            (current.manifest?.files.core.sha256 ?? '') === coreSha && manifestStillCurrent()
           );
         };
         try {
@@ -941,10 +929,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
       })();
       productHistorySyncState.inFlightCoreSha = currentCoreSha;
+      productHistorySyncState.inFlightBundleSha = currentBundleSha;
       const promise = run.finally(() => {
         if (productHistorySyncState.inFlight === promise) {
           productHistorySyncState.inFlight = null;
           productHistorySyncState.inFlightCoreSha = null;
+          productHistorySyncState.inFlightBundleSha = null;
         }
       });
       productHistorySyncState.inFlight = promise;

@@ -70,7 +70,10 @@ export function formatFeeValue(item: DetailItem): string {
   const rateValue = rateLabel(rate, rateKind);
   if (rateValue) {
     const period = cadence(item.rateBased?.accrualFrequency ?? item.accrualFrequency);
-    return period ? `${rateValue}, ${period}` : rateValue;
+    const minimum = money(item.rateBased?.amountRange?.feeMinimum, item.currency);
+    const maximum = money(item.rateBased?.amountRange?.feeMaximum, item.currency);
+    return [rateValue, period, minimum ? `minimum ${minimum}` : null,
+      maximum ? `maximum ${maximum}` : null].filter(Boolean).join(', ');
   }
 
   if (amountStatus && amountStatus !== 'fixed') return 'Amount not published';
@@ -108,6 +111,17 @@ export function feeDiscountLabel(discount: FeeDiscount): string | null {
       ?? (discount.transactionRate !== undefined ? 'TRANSACTION' : undefined),
   );
   const value = fixed ?? rate;
-  const detail = [name, value, note].filter(Boolean).join(' · ');
+  const period = cadence(discount.rateBased?.accrualFrequency);
+  const limits = discount.rateBased?.amountRange;
+  const minimum = money(limits?.feeMinimum), maximum = money(limits?.feeMaximum);
+  const range = minimum || maximum ? `Amount bounds: ${minimum ?? 'unknown'}–${maximum ?? 'unknown'}` : null;
+  const criteria = (discount.eligibility ?? []).map((criterion) => [
+    humanizeEnum(criterion.discountEligibilityType),
+    criterion.additionalValue == null ? null : String(criterion.additionalValue),
+    criterion.additionalInfo,
+  ].filter((item) => item != null && item !== '').join(': ')).filter(Boolean);
+  const detail = [name, value, note, humanizeEnum(discount.discountType),
+    discount.additionalValue == null ? null : String(discount.additionalValue),
+    period, range, ...criteria].filter((item) => item != null && item !== '').join(' · ');
   return detail || null;
 }

@@ -824,7 +824,7 @@ describe('optional feature prefs', () => {
     expect(store.getState().productHistoryError).toBeNull();
   });
 
-  it('uses the trusted loaded history timeline to skip exact-cache network revalidation', async () => {
+  it('revalidates historical identities even when the loaded timeline is unchanged', async () => {
     const cached = {
       schema_version: 2,
       run_date: remoteCore.run_date,
@@ -847,9 +847,10 @@ describe('optional feature prefs', () => {
       productHistoryError: 'stale sync failure',
     });
 
+    mockSyncProductHistoryFromDailyPayloads.mockResolvedValue(cached);
     await store.getState().ensureProductHistory();
 
-    expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
     expect(store.getState().productHistory).toBe(cached);
     expect(store.getState().productHistoryError).toBeNull();
   });

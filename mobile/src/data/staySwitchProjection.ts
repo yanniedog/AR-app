@@ -43,7 +43,9 @@ export interface SwitchCostModel {
   pricedPeriodicFees: { name: string; amount: number; monthsPerCharge: number }[];
   unpricedUpfrontFees: string[];
   unpricedPeriodicFees: string[];
-  /** True only when both product fee records and every applicable amount are known. */
+  /** Recognized fee inputs only; does not certify full document/rule coverage. */
+  feeInputsComplete: boolean;
+  /** Requires reviewed material terms/applicability and a supported evaluator. */
   costClaimsAvailable: boolean;
   unknownFeeReasons: string[];
 }
@@ -72,6 +74,8 @@ export interface StaySwitchLeg {
   openingBalance: number;
   totalInterest: number;
   totalCost: number | null;
+  /** Illustrative interest plus known fee inputs only; not an exhaustive total. */
+  knownCostSubtotal: number;
   effectiveDebtFreeDate: string | null;
   contractualPayoffDate: string | null;
   endBalance: number;
@@ -112,6 +116,8 @@ const FEE_KEYS: SwitchFeeKey[] = [
 ];
 const MAX_MONTHS = 50 * 12;
 const MAX_AMOUNT = 1_000_000_000_000;
+export const UNVERIFIED_SWITCH_TERMS_REASON =
+  'Complete bank terms, customer applicability and cost calculation have not been verified.';
 
 function cleanAmount(value: string): number | null {
   if (!value.trim()) return null;
@@ -304,6 +310,11 @@ export function resolveSwitchCosts(
     ...unpricedUpfrontFees.map((name) => `${name} has no fixed published amount.`),
     ...unpricedPeriodicFees.map((name) => `${name} has no fixed amount and cadence.`),
   ])];
+  const feeInputsComplete = unknownFeeReasons.length === 0;
+  // Resolving six buckets cannot establish complete PDS/terms coverage. This
+  // monthly illustration has no reviewed product-rule adapter, so it must not
+  // authorize exhaustive total-cost, cheapest-product or break-even claims.
+  unknownFeeReasons.push(UNVERIFIED_SWITCH_TERMS_REASON);
   return {
     fees,
     publishedEvidence,
@@ -319,7 +330,8 @@ export function resolveSwitchCosts(
     pricedPeriodicFees,
     unpricedUpfrontFees,
     unpricedPeriodicFees,
-    costClaimsAvailable: unknownFeeReasons.length === 0,
+    feeInputsComplete,
+    costClaimsAvailable: false,
     unknownFeeReasons,
   };
 }
@@ -591,7 +603,7 @@ export function buildStaySwitchProjection({
   if (offsetEvidence === 'unavailable') {
     warnings.push('Target product details are unavailable; no target offset is assumed until they load.');
   }
-  if (!fees.costClaimsAvailable) warnings.push('Cost difference and break-even are unavailable until every applicable fee amount is confirmed.');
+  if (!fees.costClaimsAvailable) warnings.push('Total-cost difference and break-even require verified material terms, customer applicability and a supported calculation.');
   if (fees.netSwitchCost < 0) warnings.push('Entered cashback exceeds modelled fees; confirm eligibility and payment timing.');
   if (targetIsFixed) warnings.push('The comparison stops at the published fixed-period end; no unknown reversion rate is invented.');
 
@@ -617,6 +629,7 @@ export function buildStaySwitchProjection({
       openingBalance: balance,
       totalInterest: stay.interest,
       totalCost: stayTotalCost,
+      knownCostSubtotal: stay.interest + fees.currentPeriodicFeesMonthly * stayFeeMonths,
       effectiveDebtFreeDate: stay.effectiveDebtFreeDate,
       contractualPayoffDate: stay.contractualPayoffDate,
       endBalance: stay.balance,
@@ -631,6 +644,7 @@ export function buildStaySwitchProjection({
       openingBalance: switchOpeningBalance,
       totalInterest: switching.interest,
       totalCost: switchTotalCost,
+      knownCostSubtotal: switching.interest + fees.netSwitchCost + fees.targetPeriodicFeesMonthly * switchFeeMonths,
       effectiveDebtFreeDate: switching.effectiveDebtFreeDate,
       contractualPayoffDate: switching.contractualPayoffDate,
       endBalance: switching.balance,

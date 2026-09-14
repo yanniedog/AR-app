@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "reviewScope": "Manually checked official source clauses and examples; no complete product contract or published current rate assertion.",
+  "sources": [
+    {
+      "id": "ubank-daily-rate-rounding",
+      "url": "https://www.ubank.com.au/wp-content/uploads/home-loan-terms.pdf",
+      "locator": "PDF page 8, Part B, How we work out interest",
+      "quote": "rate divided by 365, rounded to six decimal places.",
+      "split": "benchmark",
+      "pattern": "daily-rate-rounding-unit-conflict",
+      "values": {
+        "balance": "528000.00",
+        "annualRate": "0.0289",
+        "expectedDailyInterest": "41.71",
+        "rateRoundingScale": 6,
+        "dailyAccrualScale": 2,
+        "literalPercentageRoundingResult": "41.81",
+        "fractionRoundingResult": "41.71"
+      },
+      "limitations": [
+        "Example and arithmetic clause only; loan offer, applicability and full fee inventory not established.",
+        "Prose refers to a daily percentage rate but the published numerical example matches rounding a fraction, not percentage units. Full execution mapping remains conflicted."
+      ],
+      "documentSha256": "bcd76122a14dba2858069fdd7f9910b7aed84e7242293d56a4b3cecfc42977cb",
+      "documentBytes": 203316,
+      "finalUrl": "https://www.ubank.com.au/wp-content/uploads/home-loan-terms.pdf",
+      "quoteSha256": "42cfe78bd818516bcbcd4d3b7f62bdfac5e57af0567a7c092b435314c3d33733",
+      "observedAt": "2026-09-14T10:14:41.391Z",
+      "contentType": "application/pdf"
+    },
+    {
+      "id": "macquarie-offset-example",
+      "url": "https://www.macquarie.com.au/help/personal/home-loans/understanding-your-home-loan-interest-rates-and-fees/understanding-your-home-loan-interest.html",
+      "locator": "Example 2",
+      "quote": "5.50% ÷ 365 × ($140,080 - $50,000) = $13.57.",
+      "split": "holdout",
+      "pattern": "daily-offset-example",
+      "values": {
+        "balance": "140080.00",
+        "offset": "50000.00",
+        "annualRate": "0.055",
+        "expectedDailyInterest": "13.57"
+      },
+      "limitations": [
+        "Displayed example verifies one-day result only; general rounding and all loan fees are not established."
+      ],
+      "documentSha256": "845e31e1f35cd64ac9e3bdc97b2f20b89a0f44e0739c21adc52986bbeb97d1b6",
+      "documentBytes": 40173,
+      "finalUrl": "https://www.macquarie.com.au/help/personal/home-loans/understanding-your-home-loan-interest-rates-and-fees/understanding-your-home-loan-interest.html",
+      "quoteSha256": "1d615af34e987af17e2243edaac3493858816844381f86da0eb522ab6c32bba6",
+      "observedAt": "2026-09-14T10:14:42.648Z",
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "id": "ubank-account-age",
+      "url": "https://www.ubank.com.au/help/current/everyday-banking/getting-started/who-can-open-a-ubank-account",
+      "locator": "Who can open a Ubank account?",
+      "quote": "16 years old or over",
+      "split": "benchmark",
+      "pattern": "decimal-gte",
+      "values": {
+        "minimumAge": "16"
+      },
+      "limitations": [
+        "Only age clause. Other current Ubank FAQ/TMD wording differs; full product eligibility remains pending."
+      ],
+      "documentSha256": "d6426b6b7734be4a6bf6a0775c344d42cad5d4f288c738a118ede0bd526e0a15",
+      "documentBytes": 263048,
+      "finalUrl": "https://www.ubank.com.au/help/current/everyday-banking/getting-started/who-can-open-a-ubank-account",
+      "quoteSha256": "5df74e2c64d93576df4eb15e0f35d42a84061ac45ca8756ee495a3c91c9e1257",
+      "observedAt": "2026-09-14T10:14:42.828Z",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "id": "ubank-loan-age",
+      "url": "https://www.ubank.com.au/help/current/home-loans/hl-eligibility/who-can-apply-for-a-home-loan",
+      "locator": "Who can apply for a home loan?",
+      "quote": "be 18 years old or over",
+      "split": "holdout",
+      "pattern": "decimal-gte",
+      "values": {
+        "minimumAge": "18"
+      },
+      "limitations": [
+        "Only age clause, not complete loan eligibility or loan approval."
+      ],
+      "documentSha256": "e21e84588a4efe3045cefec324695626fc439323f3cfa1cc63d08a66669410c5",
+      "documentBytes": 265457,
+      "finalUrl": "https://www.ubank.com.au/help/current/home-loans/hl-eligibility/who-can-apply-for-a-home-loan",
+      "quoteSha256": "89d498df75baf9458d9348742cde02fcc96cf3e78a21543832dff91ae2ac86fc",
+      "observedAt": "2026-09-14T10:14:47.286Z",
+      "contentType": "text/html; charset=utf-8"
+    },
+    {
+      "id": "macquarie-daily-example",
+      "url": "https://www.macquarie.com.au/assets/bfs/documents/personal-direct/home-loans/SAP-MBL-Terms-and-conditions.pdf",
+      "finalUrl": "https://www.macquarie.com.au/assets/bfs/documents/personal-direct/home-loans/MBL-Home-Loans-Terms-and-conditions.pdf",
+      "locator": "PDF page10, section3.1, Example1",
+      "quote": "The daily interest rate is the applicable rate divided by 365.",
+      "quoteSha256": "67c868b9c6b25a2b3d6a8b553b8e688c7884a029adf8a4b374fa055bba9bc5ea",
+      "documentSha256": "e1c1347ed271282b66b29c6bb8d8fd05f90aa6cb71022ef9c2da36adaff41b50",
+      "documentBytes": 371948,
+      "contentType": "application/pdf",
+      "observedAt": "2026-09-14T10:15:42.462Z",
+      "split": "benchmark",
+      "pattern": "daily-365-example",
+      "values": {
+        "balance": "140080.00",
+        "annualRate": "0.055",
+        "expectedDailyInterest": "21.11"
+      },
+      "limitations": [
+        "Published one-day example only; all financial terms, fee coverage and general rounding policy are not established."
+      ]
+    }
+  ]
+}

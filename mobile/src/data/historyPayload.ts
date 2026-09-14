@@ -7,12 +7,14 @@ import {
   sliceChartTimeline,
 } from './bankHistoryTransform';
 import { debugLog } from '../lib/debugLog';
+import { normalizeHistoryIdentities } from './historyIdentity';
 
 /** Pre-aggregated section ribbon series (see app_history_export.py). */
 export interface HistoryBanksPayload {
   schema_version: number;
   run_date: string;
   run_dates: string[];
+  source_identities?: Record<string, string>;
   sections: Partial<
     Record<
       SectionKey,
@@ -62,6 +64,7 @@ export function normalizeHistoryBanksPayload(raw: unknown): HistoryBanksPayload 
     schema_version: typeof obj.schema_version === 'number' ? obj.schema_version : 1,
     run_date,
     run_dates,
+    ...(obj.source_identities ? { source_identities: normalizeHistoryIdentities(obj.source_identities, run_dates) } : {}),
     sections,
   };
 }

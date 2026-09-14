@@ -1,3 +1,4 @@
+import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Share, View } from 'react-native';
@@ -708,7 +709,8 @@ export default function ProductDetail() {
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
 
-        <OfficialLinks links={detail?.links} />
+        <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
+        <ProductTermsDisclosure productKey={productKey} />
 
         <Button
           title={`View all ${row.provider} products`}

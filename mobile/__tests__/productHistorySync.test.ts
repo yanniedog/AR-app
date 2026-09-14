@@ -62,7 +62,8 @@ test('always includes the current core date and records its revision', async () 
 test('returns an exact immutable cached ledger without rebuilding or checkpointing it', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const existing: ProductHistoryPayload = {
-    schema_version: 2,
+    schema_version: 3,
+    source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-11',
     core_sha: 'sha-current',
     run_dates: ['2026-06-10', '2026-06-11'],
@@ -108,7 +109,8 @@ test('does not cache a failed date and retries it on the next sync', async () =>
 test('reuses prior dates when the catalog grows instead of refetching history', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const existing: ProductHistoryPayload = {
-    schema_version: 2,
+    schema_version: 3,
+    source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-10',
     run_dates: ['2026-06-10'],
     products: { 'P|1': [0.06] },
@@ -122,7 +124,7 @@ test('reuses prior dates when the catalog grows instead of refetching history', 
 
   expect(mockedDownload).not.toHaveBeenCalled();
   expect(result.products['P|1']).toEqual([0.06, 0.055]);
-  // New catalog keys keep null history until those dates are missing from cache.
+  // Version 3 stored the complete historical catalogue: a missing key is a real absence.
   expect(result.products['Q|2']).toEqual([null, 0.065]);
 });
 
@@ -131,7 +133,8 @@ test('preserves rates when a product temporarily leaves then returns to the cata
     ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= targetRunDate),
   );
   const existing: ProductHistoryPayload = {
-    schema_version: 2,
+    schema_version: 3,
+    source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-10',
     run_dates: ['2026-06-10'],
     products: { 'P|1': [0.06], 'Q|2': [0.07] },
@@ -147,6 +150,7 @@ test('preserves rates when a product temporarily leaves then returns to the cata
   // Absent catalog keys keep their historical series so reuse stays valid.
   expect(withoutQ.products['Q|2']).toEqual([0.07, null]);
 
+  mockedDownload.mockResolvedValueOnce(core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }));
   const restored = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-12',
     currentCore: core('2026-06-12', {
@@ -154,7 +158,7 @@ test('preserves rates when a product temporarily leaves then returns to the cata
     }),
     existing: withoutQ,
   });
-  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(mockedDownload).toHaveBeenCalledTimes(1);
   expect(restored.products['Q|2']).toEqual([0.07, null, 0.065]);
 });
 
@@ -354,4 +358,67 @@ test('stops stale revision work without publishing its downloaded core', async (
   expect(mockedDownload).toHaveBeenCalledTimes(1);
   expect(onCheckpoint).not.toHaveBeenCalled();
   expect(result.run_dates).toEqual(['2026-06-03']);
+});
+
+test('refetches revised dates with one pinned index and clears withdrawn values', async () => {
+  const index = { revision_heads: { '2026-06-10': {
+    revision: 2, bundle_sha256: 'new-bundle', manifest_sha256: 'new-manifest',
+  } } } as never;
+  mockedFetchIndex.mockResolvedValue(index);
+  mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
+  mockedDownload.mockResolvedValue(core('2026-06-10', { Savings: [rateRow('S|new', '0')] }));
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11', coreSha: 'same-core',
+    currentCore: core('2026-06-11', { Savings: [rateRow('S|old', '0.01')] }),
+    existing: { schema_version: 3, run_date: '2026-06-11', core_sha: 'same-core',
+      source_identities: { '2026-06-10': 'revision:1:old:old' },
+      run_dates: ['2026-06-10', '2026-06-11'], products: { 'S|old': [0.05, 0.01] } },
+  });
+  expect(mockedFetchIndex).toHaveBeenCalledTimes(1);
+  expect(mockedDownload).toHaveBeenCalledWith('2026-06-10', index);
+  expect(result.products['S|old']).toEqual([null, 0.01]);
+  expect(result.products['S|new']).toEqual([0, null]);
+  expect(result.source_identities?.['2026-06-10']).toBe('revision:2:new-bundle:new-manifest');
+});
+
+test('does not relabel a failed corrected date as verified or keep its old value', async () => {
+  mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
+  mockedDownload.mockRejectedValue(new Error('offline'));
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    existing: { schema_version: 2, run_date: '2026-06-11',
+      run_dates: ['2026-06-10', '2026-06-11'], products: { 'P|1': [0.09, 0.055] } },
+  });
+  expect(result.run_dates).toEqual(['2026-06-11']);
+  expect(result.source_identities?.['2026-06-10']).toBeUndefined();
+});
+
+test('migrates old catalog-restricted caches and discovers historic-only products', async () => {
+  mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
+  mockedDownload.mockResolvedValue(core('2026-06-10', {
+    Mortgage: [rateRow('P|1', '0.06'), rateRow('Q|historic', '0.07')],
+  }));
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    existing: { schema_version: 2, run_date: '2026-06-10',
+      run_dates: ['2026-06-10'], products: { 'P|1': [0.06] } },
+  });
+  expect(result.schema_version).toBe(3);
+  expect(result.products['Q|historic']).toEqual([0.07, null]);
+});
+
+test('a stale dates index cannot downgrade a previously verified corrected date', async () => {
+  mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
+  const result = await syncProductHistoryFromDailyPayloads({
+    targetRunDate: '2026-06-11',
+    currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
+    existing: { schema_version: 3, run_date: '2026-06-11',
+      source_identities: { '2026-06-10': 'revision:2:verified:verified' },
+      run_dates: ['2026-06-10', '2026-06-11'], products: { 'P|1': [0.06, 0.055] } },
+  });
+  expect(mockedDownload).not.toHaveBeenCalled();
+  expect(result.products['P|1']).toEqual([0.06, 0.055]);
+  expect(result.source_identities?.['2026-06-10']).toBe('revision:2:verified:verified');
 });

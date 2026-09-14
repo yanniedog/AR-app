@@ -8,6 +8,7 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
 import { downloadCore, fetchManifest } from './payload';
+import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 export { parseDatesIndex, type DatesIndex } from './datesIndex';
 
 /** Earliest run_date published as an immutable dated GitHub release (app_payload.py). */
@@ -71,6 +72,7 @@ export function mergeHistoryFromCores(
       if (!core) continue;
       const point = extractSectionPoint(core, section);
       if (point) byDate.set(date, point);
+      else byDate.delete(date);
     }
     const points = run_dates.map((d) => byDate.get(d)).filter((p): p is BankHistoryPoint => !!p);
     if (points.length) sections[section] = { points };
@@ -163,6 +165,7 @@ export interface SyncHistoryDailyOpts {
   currentCore: CorePayload;
   existing?: HistoryBanksPayload | null;
   cachedDates?: Set<string>;
+  coreSha?: string;
   maxConcurrent?: number;
 }
 
@@ -178,12 +181,16 @@ export async function syncHistoryFromDailyPayloads(
 
   const index = await fetchDatesIndexJson();
   const wantedDates = historyDatesUpTo(index, targetRunDate);
+  assertHistoricalIdentitiesAdvance(index, wantedDates, opts.existing?.source_identities);
   if (!wantedDates.length) throw new Error('dates-index has no history dates');
 
   const coresByDate = new Map<string, CorePayload>();
   coresByDate.set(targetRunDate, opts.currentCore);
 
-  const skip = opts.cachedDates ?? new Set(opts.existing?.run_dates ?? []);
+  const sourceIdentities = { ...opts.existing?.source_identities };
+  const skip = new Set((opts.existing?.run_dates ?? []).filter((date) =>
+    sourceIdentities[date] === historicalSourceIdentity(index, date),
+  ));
   const toFetch = wantedDates.filter((d) => d !== targetRunDate && !skip.has(d));
 
   debugLog.info(
@@ -204,6 +211,7 @@ export async function syncHistoryFromDailyPayloads(
           try {
             const core = await downloadDatedCore(runDate, index);
             coresByDate.set(runDate, core);
+            sourceIdentities[runDate] = historicalSourceIdentity(index, runDate);
             circuit.success();
             await yieldToUi();
           } catch (err) {
@@ -230,7 +238,7 @@ export async function syncHistoryFromDailyPayloads(
   for (const section of SECTION_KEYS) {
     for (const point of opts.existing?.sections?.[section]?.points ?? []) {
       const date = String(point.date || '').slice(0, 10);
-      if (date) cachedPointDates.add(date);
+      if (date && skip.has(date)) cachedPointDates.add(date);
     }
   }
   const availableDates = wantedDates.filter(
@@ -240,6 +248,8 @@ export async function syncHistoryFromDailyPayloads(
   if (!built || built.run_dates.length < 1) {
     throw new Error('daily history sync produced no section points');
   }
+  sourceIdentities[targetRunDate] = `core:${opts.coreSha ?? ''}`;
+  built.source_identities = normalizeHistoryIdentities(sourceIdentities, availableDates);
   debugLog.info(
     'historyDaily',
     `sync ok run_date=${built.run_date} slices=${built.run_dates.length}`,

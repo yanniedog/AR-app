@@ -53,7 +53,8 @@ export const productHistorySyncState: {
   request: number;
   inFlight: Promise<void> | null;
   inFlightCoreSha: string | null;
-} = { request: 0, inFlight: null, inFlightCoreSha: null };
+  inFlightBundleSha: string | null;
+} = { request: 0, inFlight: null, inFlightCoreSha: null, inFlightBundleSha: null };
 
 export const historyBanksSyncState: {
   inFlight: Promise<void> | null;

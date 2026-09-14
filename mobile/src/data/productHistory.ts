@@ -5,6 +5,8 @@ import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { toFraction } from './format';
 import { yieldToUi } from '../lib/yieldToUi';
+import type { DatesIndex } from './datesIndex';
+import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -18,14 +20,16 @@ const YMD = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Compact per-product rate history, derived on-device from the immutable dated `core`
  * payloads. Each product's representative (section-best) rate is stored per run_date,
- * aligned to `run_dates`; missing days are `null`. Restricted to the current catalog
- * (keys present in the latest core) to bound size.
+ * aligned to `run_dates`; missing days are `null`. Every downloaded catalogue is
+ * retained so previously absent products do not acquire artificial history gaps.
  */
 export interface ProductHistoryPayload {
   schema_version: number;
   run_date: string;
   /** SHA of the rolling core used for the current catalog and latest rates. */
   core_sha?: string;
+  /** Selected publication identity for each verified date. */
+  source_identities?: Record<string, string>;
   run_dates: string[];
   products: Record<string, (number | null)[]>;
 }
@@ -60,7 +64,7 @@ export interface CurrentProductBestRate {
 }
 
 function validObservedRate(value: number | null | undefined): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 /**
@@ -159,7 +163,7 @@ function bestRatesForCore(core: CorePayload, keys: Set<string>): Map<string, num
       const key = row.product_key;
       if (!key || !keys.has(key)) continue;
       const rate = toFraction(row.rate);
-      if (rate == null || rate <= 0) continue;
+      if (rate == null || rate < 0) continue;
       const prev = best.get(key);
       if (prev == null) best.set(key, rate);
       else best.set(key, lowerIsBetter ? Math.min(prev, rate) : Math.max(prev, rate));
@@ -222,8 +226,10 @@ export function buildProductHistoryFromCores(
   const target = String(latestRunDate || '').slice(0, 10);
   const latestCore = coresByDate.get(target) ?? coresByDate.get(run_dates.at(-1) ?? '');
 
-  // Current catalog = the keys a product page can actually open today.
   const keys = latestCore ? productKeysForCore(latestCore) : new Set<string>();
+  for (const core of coresByDate.values()) {
+    for (const key of productKeysForCore(core)) keys.add(key);
+  }
   const bestByDate = new Map<string, Map<string, number>>();
   for (const date of run_dates) {
     const core = coresByDate.get(date);
@@ -252,29 +258,22 @@ function buildProductHistoryFromRates(
   }
 
   const products: Record<string, (number | null)[]> = {};
-  for (const key of keys) {
+  const allKeys = new Set([...keys, ...existingByKey.keys()]);
+  for (const rates of bestByDate.values()) {
+    for (const key of rates.keys()) allKeys.add(key);
+  }
+  for (const key of allKeys) {
     const series = run_dates.map((d) => {
-      const fromCore = bestByDate.get(d)?.get(key);
-      if (fromCore != null) return fromCore;
+      // A corrected snapshot is authoritative even when a former row is absent.
+      if (bestByDate.has(d)) return bestByDate.get(d)!.get(key) ?? null;
       const fromExisting = existingByKey.get(key)?.get(d);
       return fromExisting != null ? fromExisting : null;
     });
     if (series.some((v) => v != null)) products[key] = series;
   }
 
-  // Keep series for products temporarily absent from today's catalog so a later
-  // reappearance can reuse cached rates without re-downloading dated cores.
-  for (const [key, byDate] of existingByKey) {
-    if (products[key]) continue;
-    const series = run_dates.map((d) => {
-      const fromExisting = byDate.get(d);
-      return fromExisting != null ? fromExisting : null;
-    });
-    if (series.some((v) => v != null)) products[key] = series;
-  }
-
   return {
-    schema_version: 2,
+    schema_version: 3,
     run_date: target,
     ...(coreSha ? { core_sha: coreSha } : {}),
     run_dates,
@@ -326,7 +325,7 @@ export function productSeriesRecordWithCurrent(
     date &&
     typeof currentRate === 'number' &&
     Number.isFinite(currentRate) &&
-    currentRate > 0 &&
+    currentRate >= 0 &&
     out[date] == null
   ) {
     out[date] = currentRate;
@@ -365,7 +364,7 @@ export function forwardFillSeriesRecord(
   let last: number | null = null;
   for (const date of orderedDates) {
     const raw = values[date];
-    if (typeof raw === 'number' && Number.isFinite(raw) && raw > 0) {
+    if (typeof raw === 'number' && Number.isFinite(raw) && raw >= 0) {
       last = raw;
       out[date] = raw;
     } else if (last != null) {
@@ -378,8 +377,8 @@ export function forwardFillSeriesRecord(
 }
 
 /**
- * Chart-ready product highlight: seed today's rate if needed, then forward-fill
- * across the chart's date axis so sparse daily history still reads as a line.
+ * Chart-ready product highlight. Unknown observations remain gaps; carrying an
+ * old value forward would make incomplete collection look like an observed rate.
  */
 export function productSeriesRecordForChart(
   payload: ProductHistoryPayload | null | undefined,
@@ -390,7 +389,7 @@ export function productSeriesRecordForChart(
 ): Record<string, number | null> {
   const seeded = productSeriesRecordWithCurrent(payload, productKey, runDate, currentRate);
   if (!chartDates.length) return seeded;
-  return forwardFillSeriesRecord(seeded, chartDates);
+  return Object.fromEntries(chartDates.map((date) => [date, seeded[date] ?? null]));
 }
 
 export interface ProductRateMove {
@@ -482,9 +481,9 @@ export function productMoveBreakdownForCatalog(
     const series = history.products[meta.productKey];
     if (!series) continue;
     const toRate = series[dateIndex];
-    if (toRate == null || !Number.isFinite(toRate) || toRate <= 0) continue;
+    if (toRate == null || !Number.isFinite(toRate) || toRate < 0) continue;
     const fromRate = lastFiniteBefore(series, dateIndex);
-    if (fromRate == null || fromRate <= 0) continue;
+    if (fromRate == null || fromRate < 0) continue;
     matched += 1;
     // Compare in rounded bps space — fraction subtraction can land just under
     // 0.0005 for a true 5 bps move (e.g. 0.0600 − 0.0595 → 0.0004999…).
@@ -529,8 +528,10 @@ export function normalizeProductHistoryPayload(raw: unknown): ProductHistoryPayl
   for (const [key, value] of Object.entries(productsRaw as Record<string, unknown>)) {
     if (!Array.isArray(value)) continue;
     const aligned = run_dates.map((_, i) => {
-      const n = Number(value[i]);
-      return Number.isFinite(n) && n > 0 ? n : null;
+      const raw = value[i];
+      if (raw == null || raw === '' || typeof raw === 'boolean') return null;
+      const n = Number(raw);
+      return Number.isFinite(n) && n >= 0 ? n : null;
     });
     if (aligned.some((v) => v != null)) products[key] = aligned;
   }
@@ -540,6 +541,7 @@ export function normalizeProductHistoryPayload(raw: unknown): ProductHistoryPayl
     schema_version: typeof obj.schema_version === 'number' ? obj.schema_version : 1,
     run_date,
     ...(typeof obj.core_sha === 'string' && obj.core_sha ? { core_sha: obj.core_sha } : {}),
+    ...(obj.source_identities ? { source_identities: normalizeHistoryIdentities(obj.source_identities, run_dates) } : {}),
     run_dates,
     products,
   };
@@ -576,10 +578,9 @@ export interface ProductHistorySyncProgress {
  * Incrementally download the dated cores missing from `existing` and (re)build the
  * per-product history. The current day is always recomputed from `currentCore`.
  *
- * Catalog growth/shrink does **not** invalidate already-fetched dates — new products
- * keep `null` for historical days until those dates are missing from cache for another
- * reason. Re-fetching ~60 full cores on every product add/remove was a multi-minute
- * JS/network stall in production logs.
+ * Version 3 retains every downloaded product, so catalogue growth needs no full
+ * re-download. Older caches migrate progressively once; corrected publication
+ * identities invalidate only their affected dates.
  */
 export async function syncProductHistoryFromDailyPayloads(
   opts: SyncProductHistoryOpts,
@@ -588,8 +589,13 @@ export async function syncProductHistoryFromDailyPayloads(
   if (!targetRunDate) throw new Error('syncProductHistoryFromDailyPayloads: missing targetRunDate');
 
   let indexedDates: string[] = [];
+  let selectedIndex: DatesIndex | undefined;
   try {
-    indexedDates = historyDatesUpTo(await fetchDatesIndexJson(), targetRunDate);
+    const candidateIndex = await fetchDatesIndexJson();
+    const candidateDates = historyDatesUpTo(candidateIndex, targetRunDate);
+    assertHistoricalIdentitiesAdvance(candidateIndex, candidateDates, opts.existing?.source_identities);
+    selectedIndex = candidateIndex;
+    indexedDates = candidateDates;
   } catch (err) {
     debugLog.warn(
       'productHistory',
@@ -603,13 +609,15 @@ export async function syncProductHistoryFromDailyPayloads(
   ]);
 
   const keys = productKeysForCore(opts.currentCore);
-  // Reuse every date already present in the cached payload. Catalog churn must not
-  // force a full historical re-download (see sync start fetch= count in debug logs).
-  const reusableDates = new Set(opts.existing?.run_dates ?? []);
+  const sourceIdentities = { ...opts.existing?.source_identities };
+  const reusableDates = new Set((opts.existing?.run_dates ?? []).filter((date) =>
+    !selectedIndex || !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
+      sourceIdentities[date] === historicalSourceIdentity(selectedIndex, date)),
+  ));
   // Recent dates are useful to product charts immediately; older dates continue
   // warming in the same background task after progressive checkpoints land.
   const toFetch = wantedDates
-    .filter((d) => d !== targetRunDate && !reusableDates.has(d))
+    .filter((d) => d !== targetRunDate && !reusableDates.has(d) && indexedDates.includes(d))
     .sort((a, b) => b.localeCompare(a));
 
   // Matching immutable core identity and date axis prove today's point and all
@@ -617,6 +625,8 @@ export async function syncProductHistoryFromDailyPayloads(
   // product/date cells merely to return and persist the same ledger.
   if (
     opts.existing &&
+    !!selectedIndex &&
+    opts.existing.schema_version === 3 &&
     !!opts.coreSha &&
     opts.existing.core_sha === opts.coreSha &&
     opts.existing.run_date === targetRunDate &&
@@ -630,6 +640,9 @@ export async function syncProductHistoryFromDailyPayloads(
   const bestByDate = new Map<string, Map<string, number>>([
     [targetRunDate, bestRatesForCore(opts.currentCore, keys)],
   ]);
+  // The installed core may precede a newly selected revision for today. Its hash
+  // remains authoritative; do not label it with an unacquired index head.
+  sourceIdentities[targetRunDate] = `core:${opts.coreSha ?? ''}`;
 
   debugLog.info(
     'productHistory',
@@ -664,6 +677,7 @@ export async function syncProductHistoryFromDailyPayloads(
       opts.existing,
       opts.coreSha,
     );
+    built.source_identities = normalizeHistoryIdentities(sourceIdentities, availableDates);
     if (!Object.keys(built.products).length) {
       throw new Error('product history sync produced no series');
     }
@@ -701,12 +715,12 @@ export async function syncProductHistoryFromDailyPayloads(
       attempted += 1;
       let datedRates: Map<string, number>;
       try {
-        const datedCore = await downloadDatedCore(runDate);
+        const datedCore = await downloadDatedCore(runDate, selectedIndex);
         if (!isCurrent()) {
           superseded = true;
           break;
         }
-        datedRates = bestRatesForCore(datedCore, keys);
+        datedRates = bestRatesForCore(datedCore, productKeysForCore(datedCore));
       } catch (err) {
         circuit.failure();
         debugLog.warn(
@@ -724,6 +738,7 @@ export async function syncProductHistoryFromDailyPayloads(
         continue;
       }
       bestByDate.set(runDate, datedRates);
+      if (selectedIndex) sourceIdentities[runDate] = historicalSourceIdentity(selectedIndex, runDate);
       circuit.success();
       fetchedOk += 1;
       lastRunDate = runDate;
