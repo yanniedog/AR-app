@@ -4,6 +4,7 @@ import { dailyInterest } from './interestAccrual';
 import type { InterestPolicy } from './types';
 import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from './savingsTypes';
 import { assessSavingsActivity } from './savingsActivity';
+import { allocateSavingsTiers } from './savingsAllocation';
 export type SavingsActivityCache = Map<string, ReturnType<typeof assessSavingsActivity>>;
 
 /** Call only after validateSavings. Unknown component accrual is omitted and explicitly incomplete. */
@@ -28,21 +29,11 @@ export function savingsInterest(balance: Decimal, date: string, policy: Interest
     contributions.push(trace);
     if (status === 'needs_information') { issues.push(`savings_qualification_unknown:${interval.id}:${c.id}`); continue; }
     if (status === 'does_not_meet') continue;
-    let lower = decimalZero();
-    for (const tier of c.tiers) {
-      const upper = tier.upperInclusive === null ? null : Decimal.parse(tier.upperInclusive);
-      const fits = upper === null || balance.compare(upper) <= 0;
-      let basis = balance;
-      if (c.allocation === 'marginal') {
-        basis = (upper !== null && balance.compare(upper) > 0 ? upper : balance).sub(lower);
-        if (basis.compare(decimalZero()) < 0) basis = decimalZero();
-      } else if (!fits) { lower = upper!; continue; }
+    for (const { tier, basis } of allocateSavingsTiers(balance, c)) {
       const tierPolicy = schedule.dailyAccrualRounding === 'aggregate' ? { ...policy, dailyAccrualScale: null } : policy;
       const amount = dailyInterest(basis, Decimal.parse(tier.annualRate), date, tierPolicy);
       total = total.add(amount);
       trace.tiers.push({ id: tier.id, basis: basis.fixed(), annualRate: tier.annualRate, accrual: amount.fixed(12), evidenceIds: tier.evidenceIds });
-      if (c.allocation === 'whole_balance' || fits) break;
-      lower = upper!;
     }
   }
   if (schedule.dailyAccrualRounding === 'aggregate' && policy.dailyAccrualScale !== null) total = total.rounded(policy.dailyAccrualScale, policy.accrualRounding);

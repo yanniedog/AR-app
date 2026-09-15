@@ -1,6 +1,7 @@
 import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { createHash } from 'node:crypto';
 
 const FONT_EXTENSIONS = new Set(['.otf', '.ttf', '.woff', '.woff2']);
 
@@ -28,6 +29,7 @@ function sumBy(files, predicate) {
 export async function collectArtifactSizes({
   distDir = path.resolve('dist'),
   apkPaths = [],
+  symbolsDir = path.resolve(distDir, '../.expo/export-symbols'),
 } = {}) {
   const distFiles = await Promise.all((await filesBelow(distDir)).map(async (filePath) => ({
     path: filePath,
@@ -35,6 +37,22 @@ export async function collectArtifactSizes({
     bytes: (await stat(filePath)).size,
   })));
   const assetFiles = distFiles.filter((file) => file.relative.startsWith('assets/'));
+  let debugSymbolBytes = 0;
+  let symbols;
+  try { symbols = JSON.parse(await readFile(path.join(symbolsDir, 'latest.json'), 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (symbols) {
+    if (symbols.schemaVersion !== 1 || !Array.isArray(symbols.entries)) throw new Error('Invalid symbol manifest');
+    for (const entry of symbols.entries) {
+      if (!['android', 'ios', 'web'].includes(entry.platform) || !/^[a-f0-9]{64}\/[A-Za-z0-9_.-]+\.(hbc|js)\.map$/.test(entry.file) ||
+          !/^[A-Za-z0-9_.-]+\.(hbc|js)$/.test(entry.runtimeFile)) throw new Error('Unrecognized symbol entry');
+      const data = await readFile(path.join(symbolsDir, entry.file));
+      const runtime = await readFile(path.join(distDir, '_expo/static/js', entry.platform, entry.runtimeFile));
+      const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+      if (hash(data) !== entry.sha256 || data.length !== entry.bytes || hash(runtime) !== entry.runtimeSha256) throw new Error('Symbol/runtime identity mismatch');
+      debugSymbolBytes += data.length;
+    }
+  }
   const apkFiles = [];
   for (const apkPath of apkPaths) {
     if (!apkPath) continue;
@@ -47,6 +65,7 @@ export async function collectArtifactSizes({
 
   return {
     schemaVersion: 1,
+    debugSymbolBytes,
     generatedAt: new Date().toISOString(),
     androidBundleBytes: sumBy(distFiles, (file) => file.relative.includes('_expo/static/js/android/')),
     iosBundleBytes: sumBy(distFiles, (file) => file.relative.includes('_expo/static/js/ios/')),
@@ -119,6 +138,7 @@ export function artifactSizeMarkdown(report, failures = []) {
     ['Web JS', 'webBundleBytes'],
     ['Exported fonts', 'fontBytes'],
     ['Exported assets', 'assetBytes'],
+    ['Private debug symbols (not shipped)', 'debugSymbolBytes'],
     ['APK', 'apkBytes'],
   ];
   return [

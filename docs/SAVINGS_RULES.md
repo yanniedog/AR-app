@@ -38,7 +38,9 @@ cached within a run, not recomputed from transactions every day.
 Input receipt hashes include the executing evaluator version, including when a
 legacy flat contract is executed. No separate evaluator-result cache currently
 exists in the app. Runtime diagnostics inherit v2 and add fixed marginal/whole-tier
-and missing-qualification self-checks without reading customer facts.
+and missing-fact self-checks without reading customer facts. These probes exercise
+shared allocation/accrual and generic eligibility primitives, not end-to-end
+savings assessment-window dispatch or customer-product qualification.
 
 Each daily receipt includes components, tiers, allocated balances, evidence IDs,
 qualification traces and derived-activity outcomes. Missing bonus accrual leaves
