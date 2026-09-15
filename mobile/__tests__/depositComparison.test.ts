@@ -1,3 +1,4 @@
+import { canonical, hashText } from '../src/lib/productTermsEngine/validation';
 import * as fs from 'fs';
 import * as path from 'path';
 import { comparisonSetup, inputs, profile } from '../test-support/executableDepositHarness';
@@ -49,4 +50,20 @@ test('percent conversion uses exact decimals and rejects unsupported precision',
   expect(annualRateFromPercent('3.65')).toBe('0.036500000000');
   expect(annualRateFromPercent('0')).toBe('0.000000000000');
   expect(() => annualRateFromPercent('3.650000000001')).toThrow();
+});
+
+
+test('export contains its exact hash input and child bindings, detached from later mutable inputs', async () => {
+  const x = await ready(), result = compareDeposits(x.context, x.alternatives, '0', profile);
+  const exported = JSON.parse(JSON.stringify(result));
+  expect(hashText(canonical(exported.comparisonInputs))).toBe(exported.inputSha256);
+  expect(exported.comparisonInputs.adoptedEdition.manifestSha256).toBe(hashText(canonical(x.context.manifest)));
+  expect(exported.comparisonInputs.adoptedEdition.coreSha256).toBe(x.context.manifest!.files.core.sha256);
+  for (let i = 0; i < 2; i++) {
+    expect(exported.comparisonInputs.alternatives[i].row).toEqual(x.rows[i]);
+    expect(exported.comparisonInputs.alternatives[i].childReceiptSha256).toBe(hashText(canonical(exported.results[i].data.receipt)));
+  }
+  x.alternatives[0].inputs.principal = '2000'; x.rows[0].rate = '0.99';
+  expect(result.comparisonInputs.alternatives[0].inputs.principal).toBe('1000');
+  expect(hashText(canonical(result.comparisonInputs))).toBe(result.inputSha256);
 });

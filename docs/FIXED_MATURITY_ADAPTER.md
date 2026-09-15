@@ -57,7 +57,10 @@ scope. Differences use exact maturity payouts; tied returns share a rank. Unmatc
 horizons stay unranked: no holding account or reinvestment rate is invented.
 
 The comparison receipt binds adopted manifest, exact rows/templates, reference,
-local confirmations and instantiated calculations. Changing a shared amount/date
+local confirmations, instantiated calculations and each child receipt hash. The
+exported comparisonInputs is the exact canonical hash input: bounded edition
+locators/hashes, original selected rows and scoped inputs; unrelated profile answers
+are excluded. It is detached from later caller mutations. Changing a shared amount/date
 clears confirmations; any input/profile/reference or adopted-edition change hides
 previous results. Source clauses use the existing trusted external-link flow.
 No current calculation template is available from an absent or historical-v7 asset.

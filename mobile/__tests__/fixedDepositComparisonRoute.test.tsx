@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import * as Clipboard from 'expo-clipboard';
+import { canonical, hashText } from '../src/lib/productTermsEngine/validation';
 import Compare from '../app/compare';
 import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
 import { comparisonSetup, inputs, profile } from '../test-support/executableDepositHarness';
@@ -49,6 +50,7 @@ test('actual compare route binds original rows, computes2.90 advantage and expor
   await act(async () => { tree.root.findByProps({ title: 'Comparison details' }).props.onToggle(); });
   await act(async () => { tree.root.findByProps({ title: 'Copy comparison receipt' }).props.onPress(); });
   const receipt = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
+  expect(hashText(canonical(receipt.comparisonInputs))).toBe(receipt.inputSha256);
   expect(receipt.rankAvailable).toBe(true); expect(receipt.results[1].data.receipt.localTdConfirmation.annualRate).toBe('0.073000000000');
   expect(receipt.results.map((r: any) => r.advantage)).toEqual(['0.00', '2.90']);
   expect(profile.answers).toEqual({});

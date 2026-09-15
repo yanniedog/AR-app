@@ -7,8 +7,14 @@ import type { ApprovedSelection, ContractContext } from './transport';
 import { calculateDeposit, type DepositInputs } from './instantiate';
 
 export interface DepositAlternative { id: string; row: RateRow; selection: ApprovedSelection | null; inputs: DepositInputs }
+export interface DepositComparisonInputs {
+  evaluatorVersion: typeof EVALUATOR_VERSION; referenceId: string;
+  adoptedEdition: { manifestSha256: string; repo: string | null; tag: string | null; runDate: string | null; coreSha256: string | null };
+  alternatives: { id: string; row: RateRow; inputs: DepositInputs; templateId: string | null;
+    calculation: ReturnType<typeof calculateDeposit>['calculationInputs'] | null; childReceiptSha256: string | null }[];
+}
 export interface DepositComparisonResult {
-  schemaVersion: 1; evaluatorVersion: typeof EVALUATOR_VERSION; inputSha256: string; referenceId: string;
+  schemaVersion: 1; evaluatorVersion: typeof EVALUATOR_VERSION; inputSha256: string; comparisonInputs: DepositComparisonInputs; referenceId: string;
   rankAvailable: boolean; reason: string; basis: string;
   results: { id: string; data: ReturnType<typeof calculateDeposit> | null; error: string | null; advantage: string | null; rank: number | null }[];
 }
@@ -21,9 +27,16 @@ export function compareDeposits(context: ContractContext, alternatives: DepositA
       return { id: a.id, data: calculateDeposit(a.selection, context, a.row, a.inputs, profile), error: null, advantage: null, rank: null };
     } catch (error) { return { id: a.id, data: null, error: error instanceof Error ? error.message : 'Calculation unavailable.', advantage: null, rank: null }; }
   });
+  // Export exactly what is hashed. Capture a snapshot so later input/source mutation
+  // cannot silently change the receipt's identity. Only scoped calculation facts enter it.
+  const comparisonInputs: DepositComparisonInputs = JSON.parse(canonical({ evaluatorVersion: EVALUATOR_VERSION, referenceId,
+    adoptedEdition: { manifestSha256: hashText(canonical(context.manifest)), repo: context.manifest?.repo ?? null,
+      tag: context.manifest?.tag ?? null, runDate: context.manifest?.run_date ?? null, coreSha256: context.manifest?.files.core.sha256 ?? null },
+    alternatives: alternatives.map((a, i) => ({ id: a.id, row: a.row, inputs: a.inputs, templateId: a.selection?.template.id ?? null,
+      calculation: results[i].data?.calculationInputs ?? null,
+      childReceiptSha256: results[i].data ? hashText(canonical(results[i].data!.receipt)) : null })) }));
   const result: DepositComparisonResult = { schemaVersion: 1, evaluatorVersion: EVALUATOR_VERSION,
-    inputSha256: hashText(canonical({ evaluatorVersion: EVALUATOR_VERSION, manifest: context.manifest, referenceId,
-      alternatives: alternatives.map((a, i) => ({ id: a.id, row: a.row, inputs: a.inputs, templateId: a.selection?.template.id ?? null, calculation: results[i].data?.calculationInputs ?? null })) })),
+    comparisonInputs, inputSha256: hashText(canonical(comparisonInputs)),
     referenceId, rankAvailable: false, basis: 'Maturity return before tax; bank confirmation reported by you, not independently verified. No reinvestment or full-portfolio comparison.', reason: '', results };
   if (results.some(r => !r.data?.receipt.claimAvailable || !r.data.receipt.totals)) { result.reason = 'Ranking unavailable: every selected rate needs complete approved terms and confirmed inputs.'; return result; }
   const baseline = results.find(r => r.id === referenceId)!.data!;
