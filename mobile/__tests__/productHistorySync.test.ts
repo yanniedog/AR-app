@@ -1,3 +1,6 @@
+import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
+import { resolveLegacyPublications } from '../src/data/historicalPublication';
+import { productMoveBreakdownForCatalog } from '../src/data/productHistory';
 import { syncProductHistoryFromDailyPayloads, type ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload, RateRow, SectionKey } from '../src/types';
 import { downloadDatedCore, fetchDatesIndexJson, historyDatesUpTo } from '../src/data/historyDaily';
@@ -11,6 +14,8 @@ jest.mock('../src/data/historyDaily', () => {
     historyDatesUpTo: jest.fn(),
   };
 });
+
+jest.mock('../src/data/historicalPublication', () => ({ resolveLegacyPublications: jest.fn(async (index: any, dates: string[]) => new Map(dates.filter(date => !index.revision_heads?.[date]).map(date => [date, { identity: `legacy:${date}`, manifest: {} }]))) }));
 
 const mockedDownload = jest.mocked(downloadDatedCore);
 const mockedFetchIndex = jest.mocked(fetchDatesIndexJson);
@@ -54,15 +59,15 @@ test('always includes the current core date and records its revision', async () 
     coreSha: 'sha-new',
   });
 
-  expect(result.run_dates).toEqual(['2026-06-11']);
-  expect(result.products['P|1']).toEqual([0.055]);
+  expect(result.run_dates).toEqual(['2026-06-10', '2026-06-11']);
+  expect(result.products['P|1']).toEqual([null, 0.055]);
   expect(result.core_sha).toBe('sha-new');
 });
 
 test('returns an exact immutable cached ledger without rebuilding or checkpointing it', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const existing: ProductHistoryPayload = {
-    schema_version: 3,
+    schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
     source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-11',
     core_sha: 'sha-current',
@@ -93,7 +98,8 @@ test('does not cache a failed date and retries it on the next sync', async () =>
     targetRunDate: '2026-06-11',
     currentCore: current,
   });
-  expect(first.run_dates).toEqual(['2026-06-11']);
+  expect(first.run_dates).toEqual(['2026-06-10', '2026-06-11']);
+  expect(first.date_status?.['2026-06-10']).toBe('unavailable');
 
   mockedDownload.mockResolvedValueOnce(core('2026-06-10', { Mortgage: [rateRow('P|1', '0.06')] }));
   const second = await syncProductHistoryFromDailyPayloads({
@@ -109,7 +115,7 @@ test('does not cache a failed date and retries it on the next sync', async () =>
 test('reuses prior dates when the catalog grows instead of refetching history', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10', '2026-06-11']);
   const existing: ProductHistoryPayload = {
-    schema_version: 3,
+    schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
     source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-10',
     run_dates: ['2026-06-10'],
@@ -133,7 +139,7 @@ test('preserves rates when a product temporarily leaves then returns to the cata
     ['2026-06-10', '2026-06-11', '2026-06-12'].filter((d) => d <= targetRunDate),
   );
   const existing: ProductHistoryPayload = {
-    schema_version: 3,
+    schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
     source_identities: { '2026-06-10': 'legacy:2026-06-10', '2026-06-11': 'legacy:2026-06-11' },
     run_date: '2026-06-10',
     run_dates: ['2026-06-10'],
@@ -179,7 +185,7 @@ test('stops dated fetches after consecutive network failures', async () => {
     circuitLimit: 3,
   });
 
-  expect(result.run_dates).toEqual(['2026-06-06']);
+  expect(result.run_dates).toEqual(['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06']);
   expect(mockedDownload.mock.calls.length).toBeLessThanOrEqual(3);
 });
 
@@ -247,6 +253,7 @@ test('publishes a checkpoint every five successful dates and a final checkpoint'
   expect(checkpoints).toHaveLength(2);
   expect(checkpoints[0]).toMatchObject({ successfulDates: 5, done: false });
   expect(checkpoints[0].dates).toEqual([
+    '2026-06-01',
     '2026-06-02',
     '2026-06-03',
     '2026-06-04',
@@ -325,10 +332,10 @@ test('final checkpoint preserves successful recent dates when the circuit opens'
     },
   });
 
-  expect(result.run_dates).toEqual(['2026-06-03', '2026-06-04', '2026-06-05']);
+  expect(result.run_dates).toEqual(['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05']);
   expect(checkpoints).toEqual([
     {
-      dates: ['2026-06-03', '2026-06-04', '2026-06-05'],
+      dates: ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05'],
       done: true,
       circuitOpen: true,
     },
@@ -357,7 +364,7 @@ test('stops stale revision work without publishing its downloaded core', async (
 
   expect(mockedDownload).toHaveBeenCalledTimes(1);
   expect(onCheckpoint).not.toHaveBeenCalled();
-  expect(result.run_dates).toEqual(['2026-06-03']);
+  expect(result.run_dates).toEqual(['2026-06-01', '2026-06-02', '2026-06-03']);
 });
 
 test('refetches revised dates with one pinned index and clears withdrawn values', async () => {
@@ -370,12 +377,12 @@ test('refetches revised dates with one pinned index and clears withdrawn values'
   const result = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-11', coreSha: 'same-core',
     currentCore: core('2026-06-11', { Savings: [rateRow('S|old', '0.01')] }),
-    existing: { schema_version: 3, run_date: '2026-06-11', core_sha: 'same-core',
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: '2026-06-11', core_sha: 'same-core',
       source_identities: { '2026-06-10': 'revision:1:old:old' },
       run_dates: ['2026-06-10', '2026-06-11'], products: { 'S|old': [0.05, 0.01] } },
   });
   expect(mockedFetchIndex).toHaveBeenCalledTimes(1);
-  expect(mockedDownload).toHaveBeenCalledWith('2026-06-10', index);
+  expect(mockedDownload).toHaveBeenCalledWith('2026-06-10', index, undefined);
   expect(result.products['S|old']).toEqual([null, 0.01]);
   expect(result.products['S|new']).toEqual([0, null]);
   expect(result.source_identities?.['2026-06-10']).toBe('revision:2:new-bundle:new-manifest');
@@ -390,7 +397,8 @@ test('does not relabel a failed corrected date as verified or keep its old value
     existing: { schema_version: 2, run_date: '2026-06-11',
       run_dates: ['2026-06-10', '2026-06-11'], products: { 'P|1': [0.09, 0.055] } },
   });
-  expect(result.run_dates).toEqual(['2026-06-11']);
+  expect(result.run_dates).toEqual(['2026-06-10', '2026-06-11']);
+  expect(result.products['P|1']).toEqual([null, 0.055]);
   expect(result.source_identities?.['2026-06-10']).toBeUndefined();
 });
 
@@ -414,11 +422,50 @@ test('a stale dates index cannot downgrade a previously verified corrected date'
   const result = await syncProductHistoryFromDailyPayloads({
     targetRunDate: '2026-06-11',
     currentCore: core('2026-06-11', { Mortgage: [rateRow('P|1', '0.055')] }),
-    existing: { schema_version: 3, run_date: '2026-06-11',
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: '2026-06-11',
       source_identities: { '2026-06-10': 'revision:2:verified:verified' },
       run_dates: ['2026-06-10', '2026-06-11'], products: { 'P|1': [0.06, 0.055] } },
   });
   expect(mockedDownload).not.toHaveBeenCalled();
   expect(result.products['P|1']).toEqual([0.06, 0.055]);
   expect(result.source_identities?.['2026-06-10']).toBe('revision:2:verified:verified');
+});
+
+
+test('failed corrected middle date stays null, prevents exact daily attribution, retries once then recognizes verified absence', async () => {
+  const dates = ['2026-06-09', '2026-06-10', '2026-06-11'];
+  mockedHistoryDates.mockReturnValue(dates);
+  mockedFetchIndex.mockResolvedValue({ revision_heads: { '2026-06-10': { revision: 2, bundle_sha256: 'b2', manifest_sha256: 'm2' } } } as never);
+  const existing: ProductHistoryPayload = { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: dates[2], run_dates: dates,
+    source_identities: { [dates[0]]: `legacy:${dates[0]}`, [dates[1]]: 'revision:1:b1:m1' }, products: { P: [0.05, 0.055, 0.06] } };
+  mockedDownload.mockRejectedValueOnce(new Error('offline'));
+  const opts = { targetRunDate: dates[2], coreSha: 'current-sha', currentCore: core(dates[2], { Savings: [rateRow('P', '0.06')] }) };
+  const failed = await syncProductHistoryFromDailyPayloads({ ...opts, existing });
+  expect(failed.run_dates).toEqual(dates); expect(failed.products.P).toEqual([0.05, null, 0.06]);
+  expect(failed.date_status?.[dates[1]]).toBe('unavailable'); expect(failed.revision_high_water?.[dates[1]]).toBe('revision:1:b1:m1');
+  expect(productMoveBreakdownForCatalog(failed, [{ productKey: 'P', productName: 'P', rateIndex: 1 }], { date: dates[2] })).toEqual({ matched: 0, moves: [] });
+  mockedDownload.mockResolvedValueOnce(core(dates[1], {}));
+  const retried = await syncProductHistoryFromDailyPayloads({ ...opts, existing: failed });
+  expect(retried.date_status?.[dates[1]]).toBe('verified'); expect(retried.products.P).toEqual([0.05, null, 0.06]);
+  mockedDownload.mockClear(); await syncProductHistoryFromDailyPayloads({ ...opts, existing: retried }); expect(mockedDownload).not.toHaveBeenCalled();
+});
+
+test('derivation change rebuilds unchanged-source cells while retaining rollback barriers', async () => {
+  const dates = ['2026-06-10', '2026-06-11']; mockedHistoryDates.mockReturnValue(dates);
+  mockedDownload.mockResolvedValue(core(dates[0], { Savings: [rateRow('P', '0.04')] }));
+  const opts = { targetRunDate: dates[1], coreSha: 'same', currentCore: core(dates[1], { Savings: [rateRow('P', '0.06')] }) };
+  const existing: ProductHistoryPayload = { schema_version: 3, derivation_version: 'older-normalizer', run_date: dates[1], core_sha: 'same', run_dates: dates, source_identities: { [dates[0]]: `legacy:${dates[0]}` }, products: { P: [0.9, 0.06] } };
+  const result = await syncProductHistoryFromDailyPayloads({ ...opts, existing }); expect(result.products.P).toEqual([0.04, 0.06]); expect(mockedDownload).toHaveBeenCalledTimes(1);
+  mockedDownload.mockClear(); existing.source_identities![dates[0]] = 'revision:2:verified:verified';
+  const stale = await syncProductHistoryFromDailyPayloads({ ...opts, existing }); expect(mockedDownload).not.toHaveBeenCalled();
+  expect(stale.products.P).toEqual([null, 0.06]); expect(stale.revision_high_water?.[dates[0]]).toBe('revision:2:verified:verified');
+});
+
+test('legacy manifest refresh failure leaves old value unavailable instead of endorsing cached content', async () => {
+  const dates = ['2026-06-10', '2026-06-11']; mockedHistoryDates.mockReturnValue(dates);
+  jest.mocked(resolveLegacyPublications).mockResolvedValueOnce(new Map());
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: dates[1], currentCore: core(dates[1], { Savings: [rateRow('P', '0.06')] }),
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: dates[1], run_dates: dates,
+      source_identities: { [dates[0]]: `legacy:${dates[0]}` }, products: { P: [0.05, 0.06] } } });
+  expect(result.products.P).toEqual([null, 0.06]); expect(result.date_status?.[dates[0]]).toBe('unavailable'); expect(mockedDownload).not.toHaveBeenCalled();
 });

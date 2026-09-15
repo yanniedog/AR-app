@@ -1,3 +1,4 @@
+import { historyDateStatuses, type HistoryDateStatus } from './historyDerivation';
 import type { BankHistoryPoint, HistoryWindow, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import {
@@ -12,6 +13,9 @@ import { historicalRevisionHighWater, normalizeHistoryIdentities } from './histo
 /** Pre-aggregated section ribbon series (see app_history_export.py). */
 export interface HistoryBanksPayload {
   schema_version: number;
+  derivation_version?: string;
+  normalization_version?: string;
+  date_status?: Record<string, HistoryDateStatus>;
   run_date: string;
   run_dates: string[];
   source_identities?: Record<string, string>;
@@ -68,6 +72,9 @@ export function normalizeHistoryBanksPayload(raw: unknown): HistoryBanksPayload 
     schema_version: typeof obj.schema_version === 'number' ? obj.schema_version : 1,
     run_date,
     run_dates,
+    ...(typeof obj.normalization_version === 'string' ? { normalization_version: obj.normalization_version } : {}),
+    ...(typeof obj.derivation_version === 'string' ? { derivation_version: obj.derivation_version } : {}),
+    ...(obj.date_status ? { date_status: historyDateStatuses(run_dates, normalizeHistoryIdentities(obj.source_identities, run_dates)) } : {}),
     ...(obj.source_identities ? { source_identities: normalizeHistoryIdentities(obj.source_identities, run_dates) } : {}),
     ...(Object.keys(revisionHighWater).length ? { revision_high_water: revisionHighWater } : {}),
     sections,

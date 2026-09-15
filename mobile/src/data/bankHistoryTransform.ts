@@ -32,6 +32,7 @@ export function normalizeTimelineDates(rawDates: string[]): string[] {
 }
 
 function finiteOrNull(value: unknown): number | null {
+  if (value == null || typeof value === 'boolean' || (typeof value === 'string' && !value.trim())) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }

@@ -471,9 +471,12 @@ export const cache = {
     await deletePath(HISTORY_BANKS);
   },
 
-  async writeHistoryBanks(json: string, sha?: string): Promise<void> {
-    await ensureDir();
-    await writeVersionedAsset(HISTORY_BANKS, json, sha);
+  async writeHistoryBanks(json: string, sha?: string, isCurrent: () => boolean = () => true): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      if (!isCurrent()) return;
+      await writeVersionedAsset(HISTORY_BANKS, json, sha);
+    });
   },
 
   async readBankInsights(): Promise<BankInsightsPayload | null> {
@@ -576,12 +579,13 @@ export const cache = {
    * mistaken for the current one. Serialized against the write chain so
    * concurrent prefetch writers don't clobber each other.
    */
-  async writeOptionalMeta(patch: OptionalMeta): Promise<void> {
+  async writeOptionalMeta(patch: OptionalMeta, isCurrent: () => boolean = () => true): Promise<void> {
     return serialize(async () => {
       await ensureDir();
       const existing = await readJson<OptionalMeta>(OPTIONAL_META);
       const base = existing && existing.coreSha === patch.coreSha ? existing : { coreSha: patch.coreSha };
       const merged: OptionalMeta = { ...base, ...patch };
+      if (!isCurrent()) return;
       await writeText(OPTIONAL_META, JSON.stringify(merged));
     });
   },

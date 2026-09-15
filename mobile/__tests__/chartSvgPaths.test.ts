@@ -75,3 +75,11 @@ describe('buildBandPath', () => {
     expect(path).toMatch(/ Z$/);
   });
 });
+
+
+test('history line and ribbon gap mode never connects an unobserved middle date', () => {
+  const dates = ['2026-06-09', '2026-06-10', '2026-06-11']; const values = [0.05, null, 0.06];
+  expect(buildLinePath(values, i => i, v => v, true)).toBe('M 0 0.05 M 2 0.06');
+  const band = buildBandPath(dates, values, values, i => i, v => v, true)!;
+  expect(band.match(/M /g)).toHaveLength(2); expect(band.match(/ Z/g)).toHaveLength(2);
+});
