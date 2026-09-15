@@ -1,3 +1,4 @@
+import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -706,6 +707,7 @@ export default function ProductDetail() {
 
         <ProductFacts detail={detail} />
         <SelectedRateConditions row={row} section={section} />
+        {section === 'TD' ? <FixedDepositCalculation row={row} /> : null}
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />

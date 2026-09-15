@@ -4,7 +4,7 @@ import { feeOccurrences } from './feeSchedule';
 import { nonNegative, rate } from './validation';
 import type { FeeDefinition } from './feeTypes';
 import type { LedgerContract, LedgerScenario, Rule } from './types';
-import { EVALUATOR_VERSION } from './types';
+import { EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION } from './types';
 import type { AccountAuthority } from './accountAuthority';
 
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,180}$/.test(v);
@@ -51,7 +51,7 @@ function priceAndDiscounts(fee: FeeDefinition, account: string, refs: (ids: stri
 export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: string[]) => void, ruleRefs: (r: Rule) => void, authority?: AccountAuthority): string[] {
   const f = c.feeSchedule;
   if (!f) return ['fee_inventory_not_proven'];
-  if (c.tdLifecycle && !authority?.tdExternalFees) throw new Error('general_fees_with_td_unsupported');
+  if (c.tdLifecycle && !authority?.tdExternalFees && !(c.tdLifecycle.mode === 'fixed_maturity' && f.fees.length === 0 && f.inventory.every(i => i.state === 'none_applicable'))) throw new Error('general_fees_with_td_unsupported');
   if (c.tdLifecycle && f.fees.some(fee => fee.debit.type !== 'external_account')) throw new Error('td_general_principal_fee_policy_unsupported');
   if (f.schemaVersion !== 1 || !id(f.accountId) || s.accountId !== f.accountId || dayNumber(f.toExclusive) <= dayNumber(f.from) || dayNumber(f.toExclusive) - dayNumber(f.from) > 18300) throw new Error('fee_scope_invalid');
   if (s.feeFacts !== undefined && (!Array.isArray(s.feeFacts) || s.feeFacts.length > 512)) throw new Error('fee_fact_limit');
@@ -103,7 +103,7 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
       for (const a of fee.ruleAssessments) {
         dayNumber(a.dueDate);
         const key = `${a.dueDate}:${a.triggerId ?? ''}`;
-        if ((a.triggerId !== undefined && (c.evaluatorVersion !== EVALUATOR_VERSION || !id(a.triggerId))) || dates.has(key) || a.accountId !== pricingAccount || dayNumber(a.toExclusive) <= dayNumber(a.from) || !Array.isArray(a.factNames) || !a.factNames.length || a.factNames.length > 128 || a.factNames.some(n => !id(n)) || new Set(a.factNames).size !== a.factNames.length) throw new Error('fee_assessment_scope_invalid');
+        if ((a.triggerId !== undefined && (![EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION].includes(c.evaluatorVersion as typeof EVALUATOR_VERSION) || !id(a.triggerId))) || dates.has(key) || a.accountId !== pricingAccount || dayNumber(a.toExclusive) <= dayNumber(a.from) || !Array.isArray(a.factNames) || !a.factNames.length || a.factNames.length > 128 || a.factNames.some(n => !id(n)) || new Set(a.factNames).size !== a.factNames.length) throw new Error('fee_assessment_scope_invalid');
         dates.add(key); refs(a.evidenceIds);
       }
     }
@@ -111,7 +111,7 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
   const categories = new Set<string>(), covered = new Set<string>();
   for (const item of f.inventory) {
     if (!id(item.categoryId) || categories.has(item.categoryId) || !['scheduled', 'none_applicable', 'unknown', 'lifecycle_owned'].includes(item.state) || !Array.isArray(item.feeIds) || item.feeIds.length > 128) throw new Error('fee_category_invalid');
-    if (item.state === 'lifecycle_owned' && (c.evaluatorVersion !== EVALUATOR_VERSION || !authority?.tdExternalFees || item.lifecycleOccurrenceId !== 'td:break-fee')) throw new Error('fee_lifecycle_owner_unproven');
+    if (item.state === 'lifecycle_owned' && (![EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION].includes(c.evaluatorVersion as typeof EVALUATOR_VERSION) || !authority?.tdExternalFees || item.lifecycleOccurrenceId !== 'td:break-fee')) throw new Error('fee_lifecycle_owner_unproven');
     if (item.state !== 'lifecycle_owned' && item.lifecycleOccurrenceId !== undefined) throw new Error('fee_lifecycle_scope_invalid');
     categories.add(item.categoryId); refs(item.evidenceIds);
     if (item.state === 'unknown') issues.push(`fee_category_unknown:${item.categoryId}`);
@@ -132,7 +132,7 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
     if (!fee.applicability && !fee.waiver && !fee.discounts.length) continue;
     const dueDates = new Set<string>();
     for (const occurrence of occurrences.filter(o => o.fee === fee)) {
-      if (dueDates.has(occurrence.dueDate) && (c.evaluatorVersion !== EVALUATOR_VERSION || !fee.ruleAssessments?.length || fee.ruleAssessments.some(a => a.dueDate === occurrence.dueDate && a.triggerId === undefined))) throw new Error('fee_same_day_conditional_triggers_unsupported');
+      if (dueDates.has(occurrence.dueDate) && (![EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION].includes(c.evaluatorVersion as typeof EVALUATOR_VERSION) || !fee.ruleAssessments?.length || fee.ruleAssessments.some(a => a.dueDate === occurrence.dueDate && a.triggerId === undefined))) throw new Error('fee_same_day_conditional_triggers_unsupported');
       dueDates.add(occurrence.dueDate);
     }
   }

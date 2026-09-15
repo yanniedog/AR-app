@@ -67,7 +67,7 @@ test('retained The Mac mortgage exposes all four fees and all three criteria', (
 });
 
 test('original published descriptive placeholders are hidden while labels remain visible', () => {
-  const { DetailGroup } = require('../src/components/product/ProductDetailParts');
+  const { DetailGroup } = jest.requireActual('../src/components/product/ProductDetailParts');
   for (const kind of ['features', 'eligibility']) {
     const items = placeholders.items.filter(i => i.kind === kind).map(i => i.item);
     let tree!: Inspectable;

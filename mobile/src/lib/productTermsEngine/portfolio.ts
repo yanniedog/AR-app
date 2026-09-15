@@ -5,7 +5,7 @@ import type { AccountDay, AccountMovement, AccountPort } from './accountPort';
 import type { PortfolioInput, PortfolioReceipt, PortfolioTransfer } from './portfolioTypes';
 import { validatePortfolio } from './portfolioValidation';
 import { canonical, hashText, money } from './validation';
-import { EVALUATOR_VERSION, type CalculationReceipt, type LedgerEntry } from './types';
+import { PORTFOLIO_EVALUATOR_VERSION, EVALUATOR_VERSION, type CalculationReceipt, type LedgerEntry } from './types';
 
 import { movementIdentity as identity, PortfolioAccounting } from './portfolioAccounting';
 import { dateIndex } from './dateIndex';
@@ -38,7 +38,7 @@ export function calculatePortfolio(input: PortfolioInput, budget = new Evaluatio
     if (input.frame.scopeCoverage !== 'reviewed_complete') result.issues.push('portfolio_scope_unverified');
     if (input.transfers.some(t => t.status === 'projected')) {
       const a = input.projectedTransferAssumption, sha = hashText(canonical(input.transfers));
-      if (a && typeof a.id === 'string' && /^[A-Za-z0-9_.:-]{1,180}$/.test(a.id) && a.acknowledged === true && a.transfersSha256 === sha && input.accounts.every(a => a.contract.evaluatorVersion === EVALUATOR_VERSION)) {
+      if (a && typeof a.id === 'string' && /^[A-Za-z0-9_.:-]{1,180}$/.test(a.id) && a.acknowledged === true && a.transfersSha256 === sha && input.accounts.every(a => [EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION].includes(a.contract.evaluatorVersion as typeof EVALUATOR_VERSION))) {
         result.assumptions.push({ id: a.id, kind: 'projected_transfer_schedule', inputSha256: sha });
         for (const authority of authorities.values()) authority.projectionAssumptionId = a.id;
       } else result.issues.push('portfolio_projected_transfer_assumption_unacknowledged');

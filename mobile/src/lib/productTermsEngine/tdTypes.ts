@@ -3,7 +3,7 @@ import type { ISODate } from './types';
 /** Bank-confirmed lifecycle, owned by the reviewed contract, never scenario events. */
 export interface TdLifecycle {
   schemaVersion: 1;
-  mode: 'digital_notice_no_interest' | 'legacy_noncompounding';
+  mode: 'digital_notice_no_interest' | 'legacy_noncompounding' | 'fixed_maturity';
   cohortKey: string;
   evidenceIds: string[];
   confirmationEvidenceIds: string[];

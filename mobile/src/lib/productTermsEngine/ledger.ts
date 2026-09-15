@@ -42,6 +42,7 @@ export function prepareAccount(contract: LedgerContract, scenario: LedgerScenari
   if (input.length > 4_000_000) throw new Error('input_size_exceeded');
   receipt.inputSha256 = hashText(input); receipt.issueDetails = [];
   receipt.issues = validateLedger(contract, scenario, receipt.issueDetails, authority);
+  if (scenario.tdConfirmation) receipt.localTdConfirmation = { ...scenario.tdConfirmation };
   receipt.dependencies = [...contract.dependencyIds]; receipt.assumptions = [...scenario.assumptions];
   receipt.eligibility = evaluateEligibility(contract.eligibility, scenario.facts);
   if (receipt.eligibility.status !== 'meets') receipt.issues.push(`eligibility:${receipt.eligibility.status}`);

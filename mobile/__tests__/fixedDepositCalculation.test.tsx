@@ -1,0 +1,36 @@
+import React from 'react';
+import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { setup, inputs, profile } from '../test-support/executableDepositHarness';
+import { downloadInflate } from '../src/data/payload';
+import { FixedDepositCalculation } from '../src/components/product/FixedDepositCalculation';
+let mockState: any;
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
+jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
+jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn() }));
+jest.mock('../src/hooks/useCustomerProfile', () => ({ useCustomerProfile: () => ({ profile: jest.requireActual('../test-support/executableDepositHarness').profile, busy: false, update: jest.fn() }) }));
+jest.mock('../src/components/CustomerProfilePanel', () => ({ CustomerAnswerEditor: 'CustomerAnswerEditor' }));
+jest.mock('../src/components/ledger/LedgerField', () => ({ LedgerField: 'LedgerField' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Disclosure: ({ children, open, ...props }: any) => jest.requireActual('react').createElement('Disclosure', { ...props, open }, open ? children : null) }));
+beforeEach(() => (downloadInflate as jest.Mock).mockReset());
+test('actual verified transport opens local form, calculates maturity, and removes result on adopted approval removal', async () => {
+  const x = setup();
+  // Seed identical verified network responses for the component, not an unbranded ready stub.
+  await x.load();
+  const calls = (downloadInflate as jest.Mock).mock.results.map(r => r.value);
+  for (const call of calls) (downloadInflate as jest.Mock).mockResolvedValueOnce(await call);
+  mockState = { manifest: x.context.manifest, core: x.context.core, coreIntegrity: x.context.coreIntegrity };
+  let tree!: ReactTestRenderer & { root: any; toJSON: () => unknown };
+  await act(async () => { tree = TestRenderer.create(<FixedDepositCalculation row={x.row} />) as typeof tree; });
+  await act(async () => { tree.root.findByType('Disclosure' as any).props.onToggle(); });
+  for (const [label, value] of [['Deposit amount (AUD)', inputs.principal], ['Bank-confirmed funding date', inputs.fundedDate], ['Bank-confirmed maturity date', inputs.maturityDate]]) act(() => tree.root.findByProps({ label }).props.onChangeText(value));
+  for (const label of ['Bank agreed this amount and these dates', 'No withholding applies to this payout']) act(() => tree.root.findByProps({ label }).props.onPress());
+  act(() => tree.root.findByProps({ title: 'Calculate maturity return' }).props.onPress());
+  expect(JSON.stringify(tree.toJSON())).toContain('Maturity payout: $1002.90');
+  expect(JSON.stringify(tree.toJSON())).toContain('Return before tax');
+  expect(profile.answers).toEqual({});
+  mockState = { ...mockState, manifest: { ...mockState.manifest, files: { core: mockState.manifest.files.core, details: mockState.manifest.files.details } } };
+  await act(async () => { tree.update(<FixedDepositCalculation row={x.row} />); });
+  expect(JSON.stringify(tree.toJSON())).not.toContain('1002.90');
+  expect(JSON.stringify(tree.toJSON())).toContain('unavailable for this exact rate');
+  act(() => tree.unmount());
+});

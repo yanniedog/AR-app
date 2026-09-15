@@ -101,7 +101,7 @@ test('TD lifecycle and external general fee route once, with identified linked p
 });
 
 test('acknowledged projected transfers enable conditional comparison without becoming cleared facts', () => {
-  const p = oracle('A'); p.frame.allowConditional = true; p.transfers[0].status = 'projected'; p.accounts[1].scenario.loan!.mode = 'projected';
+  const p = oracle('A'); for (const a of p.accounts) a.contract.evaluatorVersion = 'product-terms-engine-v6'; p.frame.allowConditional = true; p.transfers[0].status = 'projected'; p.accounts[1].scenario.loan!.mode = 'projected';
   p.projectedTransferAssumption = { id: 'future-payments', acknowledged: true, transfersSha256: hashText(canonical(p.transfers)) };
   const r = calculatePortfolio(p); expect(r.completeness).toBe('conditional_complete'); expect(r.transfers[0].status).toBe('projected');
   expect(r.accounts.loan.issueDetails?.[0].kind).toBe('acknowledged_assumption');
@@ -163,7 +163,7 @@ test('external fee funded by another portfolio account reduces wealth once with 
 });
 
 test('same-day fee assessments bind each distinct trigger and its period', () => {
-  const a = account('A', '1000'); fee(a, '10'); const f = a.contract.feeSchedule!.fees[0], evidenceIds = [a.contract.evidence[0].id];
+  const a = account('A', '1000'); a.contract.evaluatorVersion = 'product-terms-engine-v6'; fee(a, '10'); const f = a.contract.feeSchedule!.fees[0], evidenceIds = [a.contract.evidence[0].id];
   if (f.timing.type !== 'dated') throw new Error(); f.timing.occurrences.push({ incurredDate: '2026-01-21', dueDate: '2026-01-21', triggerId: 'two' });
   f.waiver = { id: 'waiver', op: 'compare', field: 'waived', comparison: 'eq', expected: { type: 'boolean', value: true }, evidenceIds };
   f.ruleAssessments = [{ triggerId: 'one', dueDate: '2026-01-21', accountId: 'A', from: '2026-01-01', toExclusive: '2026-01-02', factNames: ['waived'], evidenceIds }, { triggerId: 'two', dueDate: '2026-01-21', accountId: 'A', from: '2026-01-02', toExclusive: '2026-01-03', factNames: ['waived'], evidenceIds }];
@@ -202,4 +202,13 @@ test('final envelopes include UTF8 issues and comparison metadata in exact byte 
   const comparison = comparePortfolios({ schemaVersion: 1, referenceId: 'a', alternatives: [{ id: 'a', input: portfolio([account('A', '1000')]) }, { id: 'b', input: portfolio([account('A', '1000')]) }] });
   comparison.issues = ['\u754c'.repeat(8 * 1024 * 1024)];
   expect(() => budget.verifyComparison(comparison)).toThrow('evaluation_output_budget_exceeded');
+});
+
+test('literal v1-v6 flat input compatibility survives v7 execution', () => {
+  const { contract, scenario } = example(); const expected = calculateLedger(contract, scenario);
+  for (const version of ['product-terms-engine-v1', 'product-terms-engine-v2', 'product-terms-engine-v3', 'product-terms-engine-v4', 'product-terms-engine-v5', 'product-terms-engine-v6'] as const) {
+    const result = calculateLedger({ ...contract, evaluatorVersion: version }, scenario);
+    expect(result.totals).toEqual(expected.totals); expect(result.issues).toEqual(expected.issues);
+    expect(result.ledger).toEqual(expected.ledger);
+  }
 });

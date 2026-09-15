@@ -295,6 +295,7 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  source_observation?: { generation_id?: string; contract_digest?: string; [key: string]: unknown };
   payload_revision?: {
     schema_version: 1;
     revision: number;

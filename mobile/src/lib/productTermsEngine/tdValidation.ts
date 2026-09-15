@@ -1,16 +1,21 @@
 import { addCalendarMonths, calendarDate, dayNumber } from './calendar';
-import type { LedgerContract, LedgerScenario } from './types';
+import { EVALUATOR_VERSION, type LedgerContract, type LedgerScenario } from './types';
 import { tdSchedule } from './tdSchedule';
 import { Decimal } from './decimal';
 
 export function validateTd(contract: LedgerContract, scenario: LedgerScenario, refs: (ids: string[]) => void): string[] {
   const td = contract.tdLifecycle;
   if (!td) return [];
-  if (td.schemaVersion !== 1 || !['digital_notice_no_interest', 'legacy_noncompounding'].includes(td.mode)) throw new Error('td_mode_unsupported');
+  if (td.schemaVersion !== 1 || !['digital_notice_no_interest', 'legacy_noncompounding', 'fixed_maturity'].includes(td.mode)) throw new Error('td_mode_unsupported');
+  if (td.mode === 'fixed_maturity' && (contract.evaluatorVersion !== EVALUATOR_VERSION || td.calendar !== null || td.closure.kind !== 'maturity' || td.closure.acceptedNoticeDate !== null || td.closure.feeDecision !== 'waived' || td.payments.cadence !== 'maturity' || td.payments.destination !== 'linked_account' || td.accrualStartDate !== td.fundedDate)) throw new Error('td_fixed_maturity_policy_unsupported');
   if (contract.direction !== 'asset' || contract.savingsSchedule || scenario.events.length || contract.interest.postingDates.length ||
       contract.interest.offset !== 'none' || contract.interest.dayCount !== 'actual_365_fixed') throw new Error('td_mixed_scenario_unsupported');
   if (Decimal.parse(contract.initialAnnualRate).compare(Decimal.parse('0')) < 0) throw new Error('td_negative_rate_unsupported');
-  refs(td.evidenceIds); refs(td.confirmationEvidenceIds); refs(td.payments.evidenceIds); refs(td.closure.evidenceIds);
+  refs(td.evidenceIds);
+  if (td.mode === 'fixed_maturity') {
+    const c = scenario.tdConfirmation;
+    if (td.confirmationEvidenceIds.length || !c || c.source !== 'user_supplied_bank_confirmation' || !/^\d{4}-\d\d-\d\dT/.test(c.recordedAt) || !Number.isFinite(Date.parse(c.recordedAt)) || c.noWithholding !== true || c.principal !== td.investmentAmount || c.fundedDate !== td.fundedDate || c.maturityDate !== td.nominalMaturityDate) throw new Error('td_user_confirmation_missing');
+  } else refs(td.confirmationEvidenceIds); refs(td.payments.evidenceIds); refs(td.closure.evidenceIds);
   const amount = Decimal.parse(td.investmentAmount);
   if (amount.compare(amount.rounded(2, 'toward_zero')) !== 0 || amount.compare(Decimal.parse(scenario.openingBalance)) !== 0) throw new Error('td_confirmed_investment_amount_mismatch');
   if (!td.cohortKey || td.cohortKey !== scenario.cohortKey || td.cohortKey !== contract.applicability.cohortKey) throw new Error('td_cohort_mismatch');
