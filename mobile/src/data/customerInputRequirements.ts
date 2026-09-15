@@ -38,14 +38,30 @@ function validateContract(c: CustomerInputContract, productKey: string, date: st
   }
   return visit(c.rule, 0);
 }
+/** Shared question discovery for reviewed rules; preserves decisive compound branches. */
+export function relevantMissingFields(rule: Rule, facts: Facts): Set<string> {
+  const fields = new Set<string>();
+  function collect(r: Rule): void {
+    if (evaluateEligibility(r, facts).status !== 'needs_information') return;
+    if (r.op === 'compare') fields.add(r.field);
+    else if (r.op === 'not') collect(r.rule);
+    else if (r.op === 'and' || r.op === 'or') r.rules.forEach(collect);
+  }
+  collect(rule); return fields;
+}
 /** Decisive AND/OR branches need no more questions. Missing evidence never becomes a guessed prompt. */
 export function customerInputRequirements(
-  contract: CustomerInputContract | null, profile: CustomerProfile, productKey: string, date: string,
+  contract: CustomerInputContract | null, profile: CustomerProfile, productKey: string, date: string, resolvedFacts?: Facts,
 ): InputRequirements {
   const pending: InputRequirements = { status: 'pending_contract', needed: [], deferred: [], reason: 'Reviewed customer-input rules are not available for this product and date. Eligibility remains unassessed.' };
   if (!contract || !validateContract(contract, productKey, date)) return pending;
   const facts: Facts = Object.create(null) as Facts;
   for (const d of contract.inputs) {
+    if (resolvedFacts) {
+      const fact = own(resolvedFacts, d.id) ? resolvedFacts[d.id] : undefined;
+      if (fact && validFact(fact) && fact.type === d.type && (fact.type !== 'decimal' || fact.unit === d.unit)) facts[d.id] = fact;
+      continue;
+    }
     const a = own(profile.answers, d.id) ? profile.answers[d.id] : undefined;
     if (a?.state !== 'known' || a.fact.type !== d.type || (a.fact.type === 'decimal' && a.fact.unit !== d.unit)) continue;
     const p = a.provenance;
@@ -53,19 +69,10 @@ export function customerInputRequirements(
         (p.effectiveToExclusive && date >= p.effectiveToExclusive)) continue;
     facts[d.id] = a.fact;
   }
-  const fields = new Set<string>();
-  function collect(r: Rule): void {
-    if (evaluateEligibility(r, facts).status !== 'needs_information') return;
-    if (r.op === 'compare') { fields.add(r.field); return; }
-    if (r.op === 'not') collect(r.rule);
-    else if (r.op === 'and' || r.op === 'or') r.rules.forEach(collect);
-  }
-  collect(contract.rule);
+  const fields = relevantMissingFields(contract.rule, facts);
   const missing = contract.inputs.filter(d => fields.has(d.id));
   const deferred = missing.filter(d => ['unavailable', 'not_applicable'].includes(profile.answers[d.id]?.state));
   return { status: missing.length ? 'needs_inputs' : 'answered', needed: missing.filter(d => !deferred.includes(d)), deferred,
     reason: missing.length ? 'Only inputs relevant to the reviewed rules are shown. Unavailable answers remain unresolved.' : 'No further inputs requested by these rules. This is not product approval or an offer.' };
 }
 
-/** No reviewed customer-input adapter is published yet. Evidence-stage flags cannot authorize one. */
-export function reviewedCustomerInputContract(_productKey: string): CustomerInputContract | null { return null; }

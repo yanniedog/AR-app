@@ -248,6 +248,7 @@ export interface ProductLinks {
 }
 
 export interface ProductDetail {
+  displayIdentity?: { name?: string; provider?: string; productCategory?: string };
   /** Original per-rate wording; optional on older immutable payloads. */
   rateConditions?: RateConditions;
   description?: string;
@@ -295,6 +296,8 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  /** Optional lazy capability descriptors; deliberately outside legacy eager files. */
+  executable_v2?: { schema_version: 2; index: { name: string; bytes: number; sha256: string }; shards: Record<string, { name: string; bytes: number; sha256: string }> };
   source_observation?: { generation_id?: string; contract_digest?: string; [key: string]: unknown };
   payload_revision?: {
     schema_version: 1;

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { type AnswerState, type CustomerAnswer, type CustomerProfile, type InputDefinition, userProvenance, validFact } from '../data/customerProfile';
-import { customerInputRequirements, localCustomerDate, reviewedCustomerInputContract, type CustomerInputContract } from '../data/customerInputRequirements';
+import { customerInputRequirements, localCustomerDate, type CustomerInputContract } from '../data/customerInputRequirements';
 import { useCustomerProfile } from '../hooks/useCustomerProfile';
 import { LedgerField } from './ledger/LedgerField';
 import { AppText, Button, Chip, Disclosure, Row } from './ui';
@@ -47,7 +47,7 @@ export function CustomerProfileContent({ productKey, contract }: { productKey?: 
   const { profile, busy, error, retry, update } = useCustomerProfile();
   const [reviewSaved, setReviewSaved] = useState(false);
   const [assessmentDate, setAssessmentDate] = useState(localCustomerDate);
-  const reviewed = contract === undefined ? reviewedCustomerInputContract(productKey ?? '') : contract;
+  const reviewed = contract ?? null;
   const requirements = useMemo(() => profile && productKey
     ? customerInputRequirements(reviewed, profile, productKey, assessmentDate) : null, [profile, productKey, reviewed, assessmentDate]);
   const saveAnswer = (d: InputDefinition, answer: CustomerAnswer) => void update((p: CustomerProfile) => ({ ...p,

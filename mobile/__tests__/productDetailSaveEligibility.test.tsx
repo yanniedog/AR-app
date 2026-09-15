@@ -168,3 +168,20 @@ describe('Product detail save eligibility', () => {
     act(() => tree.unmount());
   });
 });
+
+it('opens verified details-only product through the actual route without fabricating a rate, while explicit ri refuses', async () => {
+  const f = rateConditionFixture(), key = 'details-only-technical';
+  f.details.products[key] = { description: 'Published descriptive text', links: { overview: 'https://example.org/product' } } as any;
+  Object.assign(mockState, { core: f.core, coreIntegrity: f.coreIntegrity, manifest: f.manifest, details: f.details, detailsLoading: false });
+  mockRoute.key = key; delete mockRoute.ri;
+  let tree!: InspectableRenderer; await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+  expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).toContain('Published descriptive text');
+  expect(tree.root.findAllByType('ProductRatesList')).toHaveLength(0);
+  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(1);
+  expect(tree.root.findAllByType('ProductTermsDisclosure')[0].props.productKey).toBe(key);
+  act(() => tree.unmount()); mockRoute.ri = 'bad';
+  await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+  expect(tree.root.findAllByProps({ title: 'Exact rate no longer available' })).toHaveLength(1);
+  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(0);
+  act(() => tree.unmount());
+});
