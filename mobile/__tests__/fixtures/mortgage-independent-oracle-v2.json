@@ -1,0 +1,754 @@
+{
+  "format": "independent-mortgage-technical-oracle-v1",
+  "policy": {
+    "dayCount": "ACT365_fixed",
+    "interestBearing": [
+      "principal"
+    ],
+    "dailyRounding": "none",
+    "allocation": [
+      "accruedInterest",
+      "postedInterest",
+      "capitalizedCharges",
+      "otherDebt",
+      "principal"
+    ],
+    "paymentSettlement": "round_before_each_payment",
+    "settlementRounding": "half_up unless vector explicitly says half_even",
+    "posting": "only when explicitly declared by vector",
+    "horizon": "start inclusive, end exclusive",
+    "openingNoCarriedArrears": "must be explicitly privately affirmed for adapter execution",
+    "sourceAuthority": "none; synthetic technical fixtures only"
+  },
+  "vectors": [
+    {
+      "id": "one_day_principal_1000",
+      "kind": "arithmetic",
+      "input": {},
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "1000",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.1",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "0",
+              "accruedInterest": "0.1",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1000.1"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "before_accrual_payment_30",
+      "kind": "arithmetic",
+      "input": {
+        "payment": "30",
+        "phase": "before_accrual",
+        "obligation": "30"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.097",
+        "roundingAdjustment": "0",
+        "payments": "30",
+        "paymentAllocation": {
+          "principal": "30",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "970",
+          "postedInterest": "0",
+          "accruedInterest": "0.097",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "970.097",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "970",
+            "interestAccrued": "0.097",
+            "payment": "30",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "970",
+              "postedInterest": "0",
+              "accruedInterest": "0.097",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "970.097"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "after_accrual_payment_30",
+      "kind": "arithmetic",
+      "input": {
+        "payment": "30",
+        "obligation": "30"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "30",
+        "paymentAllocation": {
+          "principal": "29.9",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "970.1",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "970.1",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "30",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "970.1",
+              "postedInterest": "0",
+              "accruedInterest": "0",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "970.1"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "opening_12_decimal_reconciliation",
+      "kind": "arithmetic",
+      "input": {
+        "opening": {
+          "principal": "1000",
+          "postedInterest": "2",
+          "accruedInterest": "0.123456789012",
+          "capitalizedCharges": "3",
+          "otherDebt": "4"
+        }
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1009.123456789012",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "1000",
+          "postedInterest": "2",
+          "accruedInterest": "0.223456789012",
+          "capitalizedCharges": "3",
+          "otherDebt": "4"
+        },
+        "outstandingDebt": "1009.223456789012",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "2",
+              "accruedInterest": "0.223456789012",
+              "capitalizedCharges": "3",
+              "otherDebt": "4"
+            },
+            "outstandingDebt": "1009.223456789012"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "opening_residue_settlement",
+      "kind": "arithmetic",
+      "input": {
+        "opening": {
+          "principal": "1000",
+          "postedInterest": "2",
+          "accruedInterest": "0.123456789012",
+          "capitalizedCharges": "3",
+          "otherDebt": "4"
+        },
+        "payment": "30",
+        "obligation": "30"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1009.123456789012",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "-0.003456789012",
+        "payments": "30",
+        "paymentAllocation": {
+          "principal": "20.78",
+          "postedInterest": "2",
+          "accruedInterest": "0.22",
+          "capitalizedCharges": "3",
+          "otherDebt": "4"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "979.22",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "979.22",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "30",
+            "roundingAdjustment": "-0.003456789012",
+            "components": {
+              "principal": "979.22",
+              "postedInterest": "0",
+              "accruedInterest": "0",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "979.22"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "leap_day_act365_end_exclusive",
+      "kind": "arithmetic",
+      "input": {
+        "start": "2024-02-28",
+        "end": "2024-03-01"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.2",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "1000",
+          "postedInterest": "0",
+          "accruedInterest": "0.2",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.2",
+        "rows": [
+          {
+            "date": "2024-02-28",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "0",
+              "accruedInterest": "0.1",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1000.1"
+          },
+          {
+            "date": "2024-02-29",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "0",
+              "accruedInterest": "0.2",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1000.2"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "external_settled_fee_10",
+      "kind": "arithmetic",
+      "input": {
+        "external_fee": "10"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "10",
+        "closingComponents": {
+          "principal": "1000",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.1",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "0",
+              "accruedInterest": "0.1",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1000.1"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "unpaid_due_is_incomplete_no_cash",
+      "kind": "arithmetic",
+      "input": {
+        "obligation": "30"
+      },
+      "expected": {
+        "status": "incomplete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "1000",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.1",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1000",
+              "postedInterest": "0",
+              "accruedInterest": "0.1",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1000.1"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "partial_due_is_incomplete",
+      "kind": "arithmetic",
+      "input": {
+        "payment": "20",
+        "obligation": "30"
+      },
+      "expected": {
+        "status": "incomplete",
+        "openingDebt": "1000",
+        "interestAccrued": "0.1",
+        "roundingAdjustment": "0",
+        "payments": "20",
+        "paymentAllocation": {
+          "principal": "19.9",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "980.1",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "980.1",
+        "rows": [
+          {
+            "date": "2024-01-01",
+            "interestBasis": "1000",
+            "interestAccrued": "0.1",
+            "payment": "20",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "980.1",
+              "postedInterest": "0",
+              "accruedInterest": "0",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "980.1"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "posting_half_even_residue",
+      "kind": "arithmetic",
+      "input": {
+        "principal": "50",
+        "start": "2024-01-31",
+        "end": "2024-02-01",
+        "post": true,
+        "rounding": "half_even"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "50",
+        "interestAccrued": "0.005",
+        "roundingAdjustment": "-0.005",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "50",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "50",
+        "rows": [
+          {
+            "date": "2024-01-31",
+            "interestBasis": "50",
+            "interestAccrued": "0.005",
+            "payment": "0",
+            "roundingAdjustment": "-0.005",
+            "components": {
+              "principal": "50",
+              "postedInterest": "0",
+              "accruedInterest": "0",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "50"
+          }
+        ],
+        "conservationResidual": "0"
+      }
+    },
+    {
+      "id": "uneven_holdout",
+      "kind": "arithmetic",
+      "input": {
+        "principal": "1234.56",
+        "rate": "0.045625",
+        "start": "2024-03-01",
+        "end": "2024-03-04"
+      },
+      "expected": {
+        "status": "complete",
+        "openingDebt": "1234.56",
+        "interestAccrued": "0.46296",
+        "roundingAdjustment": "0",
+        "payments": "0",
+        "paymentAllocation": {
+          "principal": "0",
+          "postedInterest": "0",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "feesPaidExternal": "0",
+        "closingComponents": {
+          "principal": "1234.56",
+          "postedInterest": "0",
+          "accruedInterest": "0.46296",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1235.02296",
+        "rows": [
+          {
+            "date": "2024-03-01",
+            "interestBasis": "1234.56",
+            "interestAccrued": "0.15432",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1234.56",
+              "postedInterest": "0",
+              "accruedInterest": "0.15432",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1234.71432"
+          },
+          {
+            "date": "2024-03-02",
+            "interestBasis": "1234.56",
+            "interestAccrued": "0.15432",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1234.56",
+              "postedInterest": "0",
+              "accruedInterest": "0.30864",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1234.86864"
+          },
+          {
+            "date": "2024-03-03",
+            "interestBasis": "1234.56",
+            "interestAccrued": "0.15432",
+            "payment": "0",
+            "roundingAdjustment": "0",
+            "components": {
+              "principal": "1234.56",
+              "postedInterest": "0",
+              "accruedInterest": "0.46296",
+              "capitalizedCharges": "0",
+              "otherDebt": "0"
+            },
+            "outstandingDebt": "1235.02296"
+          }
+        ],
+        "conservationResidual": "0"
+      },
+      "holdout": true
+    },
+    {
+      "id": "original_jan31_clamp",
+      "kind": "calendar",
+      "input": {
+        "anchor": "2024-01-31",
+        "convention": "clamp",
+        "start": "2024-01-31",
+        "end": "2024-04-30"
+      },
+      "expected": {
+        "originalAnchorDates": [
+          "2024-01-31",
+          "2024-02-29",
+          "2024-03-31",
+          "2024-04-30"
+        ],
+        "includedDueDates": [
+          "2024-01-31",
+          "2024-02-29",
+          "2024-03-31"
+        ],
+        "excludedEndDate": "2024-04-30"
+      }
+    },
+    {
+      "id": "original_jan31_preserve_month_end",
+      "kind": "calendar",
+      "input": {
+        "anchor": "2024-01-31",
+        "convention": "preserve_month_end",
+        "start": "2024-01-31",
+        "end": "2024-04-30"
+      },
+      "expected": {
+        "originalAnchorDates": [
+          "2024-01-31",
+          "2024-02-29",
+          "2024-03-31",
+          "2024-04-30"
+        ],
+        "includedDueDates": [
+          "2024-01-31",
+          "2024-02-29",
+          "2024-03-31"
+        ],
+        "excludedEndDate": "2024-04-30"
+      }
+    },
+    {
+      "id": "late_payment",
+      "kind": "adapter_refusal",
+      "input": {
+        "dueDate": "2024-01-01",
+        "paymentDate": "2024-01-02",
+        "due": "30",
+        "paid": "30"
+      },
+      "expected": {
+        "status": "refused",
+        "reason": "payment_date_not_due_date",
+        "financialReceipt": null
+      }
+    },
+    {
+      "id": "excess_payment",
+      "kind": "adapter_refusal",
+      "input": {
+        "due": "30",
+        "payments": [
+          "40"
+        ],
+        "debt": "1000"
+      },
+      "expected": {
+        "status": "refused",
+        "reason": "linked_payment_total_exceeds_obligation",
+        "financialReceipt": null
+      }
+    },
+    {
+      "id": "split_excess_payment",
+      "kind": "adapter_refusal",
+      "input": {
+        "due": "30",
+        "payments": [
+          "20",
+          "20"
+        ],
+        "debt": "1000"
+      },
+      "expected": {
+        "status": "refused",
+        "reason": "linked_payment_total_exceeds_obligation",
+        "financialReceipt": null
+      }
+    },
+    {
+      "id": "opening_reconciliation_mismatch",
+      "kind": "adapter_refusal",
+      "input": {
+        "components": {
+          "principal": "1000",
+          "postedInterest": "2",
+          "accruedInterest": "0.123456789012",
+          "capitalizedCharges": "3",
+          "otherDebt": "4"
+        },
+        "statedOutstanding": "1009.123456789013"
+      },
+      "expected": {
+        "status": "refused",
+        "reason": "opening_component_sum_mismatch",
+        "financialReceipt": null
+      }
+    },
+    {
+      "id": "external_fee_settlement_date_mismatch",
+      "kind": "adapter_refusal",
+      "input": {
+        "occurrence": "fee-1",
+        "externalAccount": "private-account-1",
+        "amount": "10",
+        "dueDate": "2024-01-01",
+        "settlementDate": "2024-01-02"
+      },
+      "expected": {
+        "status": "refused",
+        "reason": "external_fee_settlement_binding_mismatch",
+        "financialReceipt": null
+      }
+    }
+  ]
+}

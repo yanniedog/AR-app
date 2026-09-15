@@ -1,10 +1,13 @@
 import { dayNumber } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
-import schemas from './runtimeSchemas';
-const external: Record<string, any> = Object.fromEntries(Object.values(schemas).map(schema => [schema.$id, schema]));
+import schemas, { mortgageSchemas } from './runtimeSchemas';
+const external: Record<string, any> = Object.fromEntries(Object.values({ ...schemas, ...Object.fromEntries(Object.entries(mortgageSchemas).map(([k,v]) => [`mortgage_${k}`,v])) }).map(schema => [schema.$id, schema]));
 type Schema = Record<string, any>;
 /** Closed interpreter for checked-in frozen schemas only. No remote schema adoption. */
 export function assertMonetaryWire(value: unknown, kind: keyof typeof schemas) {
+  return assertMonetarySchema(value, schemas[kind]);
+}
+export function assertMonetarySchema(value: unknown, schema: Schema) {
   let nodes = 0;
   function valid(v: any, s: Schema, document: Schema, depth: number): boolean {
     if (++nodes > 250000 || depth > 128) return false;
@@ -48,5 +51,5 @@ export function assertMonetaryWire(value: unknown, kind: keyof typeof schemas) {
     }
     return true;
   }
-  if (!valid(value, schemas[kind], schemas[kind], 0)) throw new Error('Monetary wire is invalid or unsupported');
+  if (!valid(value, schema, schema, 0)) throw new Error('Monetary wire is invalid or unsupported');
 }

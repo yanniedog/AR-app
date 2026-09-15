@@ -8,7 +8,8 @@ export interface SavingsScope { productKey: string; family: 'Savings'; cohortKey
 export interface MonetaryRouting { productKey: string; sourceGenerationId: string; exportContractSha256: string; runDate: string; coreAssetSha256: string; detailsAssetSha256: string; productRecordSha256: string }
 export interface FieldCoverage { field: string; from: string; toExclusive: string; postingEventDates: string[]; evidenceIds: string[] }
 export interface HistoricalObservation { observationId: string; generationId: string; exportContractSha256: string; manifestSha256: string; coreAssetSha256: string; detailsAssetSha256: string; rawSourceSha256: string; productRecordSha256: string; observedAt: string; rateRows: { coreRowIndex: number; rateIndex: number; rowSha256: string }[] }
-interface AuthorityBase { id: string; scope: SavingsScope; from: string; toExclusive: string; evidenceIds: string[]; fieldCoverage: FieldCoverage[] }
+export type HistoricalScope = Omit<SavingsScope, 'family'> & { family: 'Savings' | 'Mortgage' };
+interface AuthorityBase { id: string; scope: HistoricalScope; from: string; toExclusive: string; evidenceIds: string[]; fieldCoverage: FieldCoverage[] }
 export type HistoricalAuthority = AuthorityBase & ({ kind: 'retained_observation'; observations: HistoricalObservation[]; coverageProof: { basis: 'dated_source_policy' | 'complete_daily_observations'; from: string; toExclusive: string; evidenceIds: string[] } } | { kind: 'dated_official_clause'; documentVersionIds: string[]; documentSha256s: string[]; datedRateAndPolicyClauseIds: string[]; observedRateRows: false });
 export interface AuthorityGraph {
   schemaVersion: 1; identitySha256: string;

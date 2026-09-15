@@ -1,0 +1,68 @@
+{
+  "id": "leap_day_calendar_month_end",
+  "kind": "arithmetic",
+  "input": {
+    "start": "2024-02-28",
+    "end": "2024-03-01",
+    "post": true
+  },
+  "expected": {
+    "status": "complete",
+    "openingDebt": "1000",
+    "interestAccrued": "0.2",
+    "roundingAdjustment": "0",
+    "payments": "0",
+    "paymentAllocation": {
+      "principal": "0",
+      "postedInterest": "0",
+      "accruedInterest": "0",
+      "capitalizedCharges": "0",
+      "otherDebt": "0"
+    },
+    "feesPaidExternal": "0",
+    "closingComponents": {
+      "principal": "1000",
+      "postedInterest": "0.2",
+      "accruedInterest": "0",
+      "capitalizedCharges": "0",
+      "otherDebt": "0"
+    },
+    "outstandingDebt": "1000.2",
+    "rows": [
+      {
+        "date": "2024-02-28",
+        "interestBasis": "1000",
+        "interestAccrued": "0.1",
+        "payment": "0",
+        "roundingAdjustment": "0",
+        "components": {
+          "principal": "1000",
+          "postedInterest": "0",
+          "accruedInterest": "0.1",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.1"
+      },
+      {
+        "date": "2024-02-29",
+        "interestBasis": "1000",
+        "interestAccrued": "0.1",
+        "payment": "0",
+        "roundingAdjustment": "0",
+        "components": {
+          "principal": "1000",
+          "postedInterest": "0.2",
+          "accruedInterest": "0",
+          "capitalizedCharges": "0",
+          "otherDebt": "0"
+        },
+        "outstandingDebt": "1000.2"
+      }
+    ],
+    "conservationResidual": "0"
+  },
+  "scope": "Independent adapter companion. Original no-posting leap vector retained for direct-v8 control; this source-policy-compatible case posts on actual leap month end. No bank approval.",
+  "oracleSha256": "6ebf361c9e68c52f9936272627dc309b6f000e5188fd72d98837388dc38c009c",
+  "originalVectorsSha256": "73835ab802e88f6372b2024ed6154c35dfa530ea0af38d313d03ecca59608676"
+}

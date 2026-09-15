@@ -1,13 +1,13 @@
 import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { dayNumber } from '../../lib/productTermsEngine/calendar';
-import type { SavingsSubject, HistoricalAuthority } from './types';
+import type { SavingsSubject, HistoricalAuthority, HistoricalScope, AuthorityGraph } from './types';
 import { exactList, includesInterval, interval } from './coverage';
 export const monetaryIdentity = (v: object, omit: string) => hashText(canonical(Object.fromEntries(Object.entries(v).filter(([key]) => key !== omit))));
 function civilDay(timestamp: string, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(timestamp));
   return ['year', 'month', 'day'].map(type => parts.find(part => part.type === type)!.value).join('-');
 }
-export function validateAuthorityGraph(s: SavingsSubject, refs: (ids: string[]) => void) {
+export function validateAuthorityGraph(s: { scope: HistoricalScope; authorityGraph: AuthorityGraph; evidence: SavingsSubject['evidence'] }, refs: (ids: string[]) => void) {
   const g = s.authorityGraph;
   if (monetaryIdentity(g, 'identitySha256') !== g.identitySha256) throw new Error('Historical authority graph identity mismatch');
   const members = new Map(g.members.map(m => [m.sha256, m])); if (members.size !== g.members.length) throw new Error('Duplicate historical members');

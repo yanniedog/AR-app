@@ -1,0 +1,28 @@
+import React from 'react';
+import mockReact from 'react';
+import TestRenderer,{act} from 'react-test-renderer';
+import { MortgagePeriodCalculation } from '../src/components/product/MortgagePeriodCalculation';
+import { mortgageHarness } from '../test-support/mortgageHarness';
+import { mortgageAnswerId } from '../src/data/mortgageContracts/facts';
+import { profile } from '../test-support/executableDepositHarness';
+import * as Clipboard from 'expo-clipboard';
+let mockState:any,mockProfile:any;
+jest.mock('../src/data/store',()=>({useStore:(selector:any)=>selector(mockState)}));
+jest.mock('../src/data/payload',()=>({downloadInflate:jest.fn()}));
+jest.mock('../src/hooks/useCustomerProfile',()=>({useCustomerProfile:()=>({profile:mockProfile,busy:false})}));
+jest.mock('../src/components/CustomerProfilePanel',()=>({CustomerAnswerEditor:'CustomerAnswerEditor'}));
+jest.mock('../src/components/ledger/LedgerField',()=>({LedgerField:'LedgerField'}));
+jest.mock('../src/components/product/DepositCriteria',()=>({ReviewedCriteria:'ReviewedCriteria'}));
+jest.mock('../src/components/ui',()=>({AppText:'AppText',Button:'Button',Chip:'Chip',Disclosure:({children,open,...props}:any)=>mockReact.createElement('Disclosure',props,open?children:null)}));
+jest.mock('expo-clipboard',()=>({setStringAsync:jest.fn(async()=>undefined)}));
+test('actual lazy mortgage flow calculates and exports local records, invalidating edits and editions',async()=>{
+ const h=await mortgageHarness();mockState={...h.context,ensureDetails:jest.fn(async()=>undefined)};mockProfile={...profile,answers:{[mortgageAnswerId(h.subject,'adult')]:{state:'known',fact:{type:'boolean',value:true},provenance:{source:'user_input',recordedAt:null,productKey:h.target.productKey,effectiveFrom:null,effectiveToExclusive:null}}}};
+ let tree:any;await act(async()=>{tree=TestRenderer.create(<MortgagePeriodCalculation productKey={h.target.productKey}/>);});expect(tree.root.findAllByProps({title:'Calculate mortgage period'})).toHaveLength(0);
+ await act(async()=>tree.root.findByProps({title:'Calculate a historical mortgage period'}).props.onToggle());act(()=>tree.root.findAllByType('Chip').find((n:any)=>n.props.label.startsWith('Choose ')).props.onPress());
+ for(const[label,value]of [['Local loan account reference','account'],['Local offer reference','offer'],['Offer version reference','version'],['Opening statement reference','opening'],['Confirmed annual rate (%)','3.65'],['Opening total debt (AUD)','1000'],['Principal (AUD)','1000'],['Posted interest (AUD)','0'],['Unposted interest (AUD)','0'],['Capitalised charges (AUD)','0'],['Other debt (AUD)','0'],['Confirmed monthly amount due (AUD)','30'],['Original monthly due date','2023-12-15']])act(()=>tree.root.findByProps({label}).props.onChangeText(value));
+ for(const label of ['No opening overdue obligations or default','No advances, redraw, offsets, reversals, rate changes or closure','All cleared payments for this period are recorded','I confirm these offer, statement and payment details'])act(()=>tree.root.findByProps({label}).props.onPress());
+ act(()=>tree.root.findByProps({title:'Calculate mortgage period'}).props.onPress());expect(JSON.stringify(tree.toJSON())).toContain('1000.100000000000');await act(async()=>tree.root.findByProps({title:'Copy mortgage receipt'}).props.onPress());const r=JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]);expect(r.receipt.claimAvailable).toBe(true);expect(r.adapterInputs.inputs.accountId).toBe('account');
+ act(()=>tree.root.findByProps({label:'Principal (AUD)'}).props.onChangeText('2000'));expect(tree.root.findAllByProps({title:'Copy mortgage receipt'})).toHaveLength(0);
+ mockState={...mockState,manifest:{...mockState.manifest}};delete mockState.manifest.executable_v3;await act(async()=>tree.update(<MortgagePeriodCalculation productKey={h.target.productKey}/>));expect(JSON.stringify(tree.toJSON())).toContain('unavailable for this product');
+});
+test('a savings rate cannot show the mortgage control',async()=>{mockState={manifest:null,core:null,details:null,coreIntegrity:null};let tree:any;await act(async()=>{tree=TestRenderer.create(<MortgagePeriodCalculation productKey="p" section="Savings" row={{product_key:'p'} as any}/>);});expect(tree.toJSON()).toBeNull();});

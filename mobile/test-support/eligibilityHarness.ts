@@ -26,7 +26,7 @@ export function eligibilityAsset(subject = eligibilitySubject()): EligibilityAss
 export async function eligibilityTransportHarness(change?: (subject: EligibilitySubject) => void) {
   const f = rateConditionFixture(), subject = eligibilitySubject(change);
   subject.source.runDate = f.core.run_date; subject.source.coreAssetSha256 = f.manifest.files.core.sha256; subject.source.detailsAssetSha256 = f.manifest.files.details.sha256;
-  const detail = { description: 'Engineering protocol only' };
+  const detail = { description: 'Engineering protocol only', displayIdentity: { productCategory: subject.scope.family === 'Mortgage' ? 'RESIDENTIAL_MORTGAGES' : subject.scope.family === 'TD' ? 'TERM_DEPOSITS' : 'TRANS_AND_SAVINGS_ACCOUNTS' } };
   f.details.products[subject.scope.productKey] = detail; bindVerifiedDetails(f.details, f.manifest.files.details.sha256);
   subject.source.productRecordSha256 = hashText(canonical(detail)); subject.id = eligibilityIdentity(subject, 'id');
   const asset = eligibilityAsset(subject);

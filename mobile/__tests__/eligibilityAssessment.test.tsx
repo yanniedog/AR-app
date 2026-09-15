@@ -6,6 +6,9 @@ import { eligibilityTransportHarness } from '../test-support/eligibilityHarness'
 import { profile as mockProfile } from '../test-support/executableDepositHarness';
 import { eligibilityAnswerId } from '../src/data/eligibilityContracts/facts';
 import { eligibilityIdentity, eligibilityScopeId } from '../src/data/eligibilityContracts/validation';
+import { canonical, hashText } from '../src/lib/productTermsEngine/validation';
+import { downloadInflate } from '../src/data/payload';
+import type { RateRow } from '../src/types';
 import * as Clipboard from 'expo-clipboard';
 let mockState: any;
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
@@ -17,9 +20,21 @@ jest.mock('../src/components/product/DepositCriteria', () => ({ ReviewedCriteria
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Chip: 'Chip', Disclosure: ({ children, open, ...props }: any) => mockReact.createElement('Disclosure', props, open ? children : null) }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => undefined) }));
 
-test('actual details-only eligibility flow requires choice, binds local scenario, exports and invalidates edition', async () => {
-  const h = await eligibilityTransportHarness(); mockState = { ...h.context, ensureDetails: jest.fn(async () => undefined) };
-  let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment productKey={h.target.productKey} />); });
+test.each(['product', 'rate_variant'] as const)('technical Mortgage %s flow requires choice, binds local scenario, exports and invalidates edition', async kind => {
+  (Clipboard.setStringAsync as jest.Mock).mockClear(); (downloadInflate as jest.Mock).mockClear();
+  const h = await eligibilityTransportHarness();
+  expect(h.target.detail.displayIdentity.productCategory).toBe('RESIDENTIAL_MORTGAGES');
+  const row: RateRow = { provider: 'Engineering protocol only', product_key: h.target.productKey, product_name: 'Technical mortgage', rate: '0.0365', rate_index: 1, repayment_type: 'PRINCIPAL_AND_INTEREST', loan_purpose: 'OWNER_OCCUPIED' };
+  if (kind === 'rate_variant') {
+    h.context.core.sections.Mortgage.rates.push(row);
+    h.subject.scope.coverage = 'rate_variants'; h.subject.scope.rateIndexes = [1];
+    h.subject.source.rateRows = [{ coreRowIndex: 0, rateIndex: 1, rowSha256: hashText(canonical(row)) }];
+    h.subject.scopeId = eligibilityScopeId(h.subject.scope); h.subject.id = eligibilityIdentity(h.subject, 'id');
+    h.asset.subjects[0].approval.subjectId = h.subject.id; h.asset.identitySha256 = eligibilityIdentity(h.asset, 'identitySha256');
+  } else expect(h.subject.source.rateRows).toEqual([]);
+  const props = { productKey: h.target.productKey, ...(kind === 'rate_variant' ? { row, section: 'Mortgage' as const } : {}) };
+  mockState = { ...h.context, ensureDetails: jest.fn(async () => undefined) };
+  let tree: any; await act(async () => { tree = TestRenderer.create(<EligibilityAssessment {...props} />); });
   expect(tree.root.findAllByProps({ title: 'Assess selected scope' })).toHaveLength(0);
   await act(async () => tree.root.findByProps({ title: 'Check recorded eligibility criteria' }).props.onToggle());
   act(() => tree.root.findByProps({ label: 'Assessment date' }).props.onChangeText('2028-01-02'));
@@ -32,11 +47,17 @@ test('actual details-only eligibility flow requires choice, binds local scenario
   await act(async () => tree.root.findByProps({ title: 'Copy eligibility receipt' }).props.onPress());
   const copied = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
   expect(copied.eligibility.status).toBe('meets'); expect(copied.evaluationInputs.scenario.values.scenario_amount.value).toBe('1000');
+  expect(copied.evaluationKind).toBe('eligibility_only'); expect(copied).not.toHaveProperty('totals');
+  expect(copied.evaluationInputs.target.kind).toBe(kind);
+  if (kind === 'rate_variant') expect(copied.evaluationInputs.target).toMatchObject({ section: 'Mortgage', coreRowIndex: 0, rateIndex: 1, rowSha256: hashText(canonical(row)) });
+  expect((downloadInflate as jest.Mock).mock.calls).toHaveLength(2);
+  expect((downloadInflate as jest.Mock).mock.calls.every(([url]) => /executable_v2_(index|shard_000)-/.test(url))).toBe(true);
   act(() => tree.root.findByProps({ label: 'Selected amount' }).props.onChangeText('0'));
   expect(tree.root.findAllByProps({ title: 'Copy eligibility receipt' })).toHaveLength(0);
   mockState = { ...mockState, manifest: { ...mockState.manifest } }; delete mockState.manifest.executable_v2;
-  await act(async () => tree.update(<EligibilityAssessment productKey={h.target.productKey} />));
+  await act(async () => tree.update(<EligibilityAssessment {...props} />));
   expect(JSON.stringify(tree.toJSON())).toContain('unavailable for this product');
+  act(() => tree.unmount());
 });
 
 test('failed refresh retry rejection remains handled and bounded', async () => {
