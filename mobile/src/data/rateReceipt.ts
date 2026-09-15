@@ -19,10 +19,18 @@ import {
   visibleAccountRows,
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
+import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
 
 export interface ReceiptFact {
   label: string;
   value: string;
+}
+
+export function rateConditionReceiptLines(receipt: RateReceipt): string[] {
+  const model = receipt.rateConditions;
+  return model.status === 'available'
+    ? ['Selected rate conditions:', ...model.entries.map(entry => entry.text), 'Published wording; eligibility remains unassessed.']
+    : [model.reason];
 }
 
 export interface OfficialReceiptSource {
@@ -51,6 +59,7 @@ export interface RateReceipt {
   cohort: 'standard' | 'non-standard';
   tier: ReceiptFact[];
   conditions: ReceiptFact[];
+  rateConditions: ScopedRateConditions;
   fees: ReceiptFact[];
   officialSources: OfficialReceiptSource[];
   limitations: string[];
@@ -153,6 +162,7 @@ export function buildRateReceipt(input: {
   section: SectionKey;
   evidenceDate: string;
   detail?: ProductDetail | null;
+  rateConditionContext?: RateConditionContext;
 }): RateReceipt {
   const { row, section, evidenceDate, detail } = input;
   const qualifier = rateQualifier(row, section);
@@ -175,6 +185,7 @@ export function buildRateReceipt(input: {
   addFact(tier, 'Product ID', row.product_id);
 
   const conditions = detailFacts(detail?.eligibility);
+  const rateConditions = scopedRateConditions(row, section, input.rateConditionContext);
   conditions.push(...detailFacts(detail?.constraints));
   if (qualifier.conditional) {
     conditions.unshift({ label: qualifier.label, value: qualifier.note });
@@ -222,6 +233,7 @@ export function buildRateReceipt(input: {
     cohort: isNonStandard(row) ? 'non-standard' : 'standard',
     tier,
     conditions,
+    rateConditions,
     fees: detailFacts(detail?.fees),
     officialSources,
     limitations,

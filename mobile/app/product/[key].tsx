@@ -21,6 +21,7 @@ import {
   ProductRatesList,
   ProductSpecs,
   SectionTitle,
+  SelectedRateConditions,
 } from '../../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
@@ -704,6 +705,7 @@ export default function ProductDetail() {
         </Card>
 
         <ProductFacts detail={detail} />
+        <SelectedRateConditions row={row} section={section} />
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />

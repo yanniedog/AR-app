@@ -248,6 +248,8 @@ export interface ProductLinks {
 }
 
 export interface ProductDetail {
+  /** Original per-rate wording; optional on older immutable payloads. */
+  rateConditions?: RateConditions;
   description?: string;
   last_updated?: string;
   fees?: DetailItem[];
@@ -260,6 +262,16 @@ export interface ProductDetail {
   links?: ProductLinks;
   /** Original references retained before generic URL cleaning. */
   sourceDocuments?: { url: string; sourceUrl?: string; sourcePath: string; relation: string; label?: string }[];
+}
+
+export interface RateConditions {
+  schemaVersion: 1;
+  sourceSha256: string;
+  entries: RateConditionEntry[];
+}
+export interface RateConditionEntry {
+  id: string; rateFamily: 'deposit' | 'lending'; rateIndex: number;
+  rateSourcePointer: string; tierSourcePointer?: string; sourcePointer: string; text: string;
 }
 
 export interface DetailsPayload {

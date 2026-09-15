@@ -9,6 +9,7 @@ import {
   downloadSearchIndex,
 } from './payload';
 import { shouldWarmDetails } from './optionalPrefs';
+import { verifiedDetailsSha } from './detailsIdentity';
 import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
@@ -120,7 +121,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           const meta = await cache.readMeta();
           if (myGeneration !== detailsEnsureGeneration) return;
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
-          if (details && details.run_date === core.run_date && shaOk) {
+          if (details && details.run_date === core.run_date && shaOk && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               await rebuildAndInstallSuitabilityIndex(
                 core,
@@ -147,7 +148,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           // already proves it cannot satisfy this core, so do not parse it merely
           // to throw it away before downloading the current asset.
           const cached = shaOk ? await cache.readDetails() : null;
-          if (cached && cached.run_date === core.run_date) {
+          if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               set({ details: cached });
               await rebuildAndInstallSuitabilityIndex(
@@ -166,7 +167,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               manifest.files.details.sha256,
             );
             if (!datasetUnchanged()) return;
-            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined);
+            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
             if (!datasetUnchanged()) return;
             await cache.updateMeta({
               manifest,

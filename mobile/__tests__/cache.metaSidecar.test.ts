@@ -1,4 +1,6 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as Crypto from 'expo-crypto';
+import { verifiedDetailsSha } from '../src/data/detailsIdentity';
 
 import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
@@ -37,6 +39,21 @@ describe('cache core-meta sidecar', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     resetFs();
+  });
+  it('binds the exact stored details bytes and rejects valid-JSON replacement or missing identity', async () => {
+    const digest = jest.spyOn(Crypto, 'digestStringAsync').mockImplementation(async (_algorithm, text) => jest.requireActual('crypto').createHash('sha256').update(text).digest('hex'));
+    try {
+      const installed = revisionManifest(1), sha = installed.files.details.sha256;
+      const details = { schema_version: 1, run_date: installed.run_date, products: {} };
+      await cache.writeDetails(JSON.stringify(details), sha);
+      await cache.writeBundle({ manifest: installed, source: 'remote', savedAt: installed.generated_at, coreSha: installed.files.core.sha256, detailsSha: sha }, JSON.stringify(sampleCore));
+      expect(verifiedDetailsSha((await cache.readDetails())!)).toBe(sha);
+      const file = `${FileSystem.documentDirectory}payload/details.json.${sha}`;
+      files.set(file, JSON.stringify({ ...details, products: { changed: {} } }));
+      expect(verifiedDetailsSha((await cache.readDetails())!)).toBeNull();
+      files.set(file, JSON.stringify(details)); files.delete(`${file}.verified`);
+      expect(verifiedDetailsSha((await cache.readDetails())!)).toBeNull();
+    } finally { digest.mockRestore(); }
   });
 
   it('retains installed revision details while a new edition is staged', async () => {

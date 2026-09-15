@@ -28,6 +28,7 @@ import { PRODUCT_HISTORY_SERIES_LABEL } from '../../lib/productHistoryCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { openProduct } from '../../lib/nav';
+export { SelectedRateConditions } from './RateConditionsDisclosure';
 
 export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
   const theme = useTheme();

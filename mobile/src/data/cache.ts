@@ -1,6 +1,7 @@
 // SDK 54 replaced the classic file API with a File/Directory API; the classic
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
+import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
@@ -74,6 +75,7 @@ async function pruneRevisionAssets(current: Manifest, previous?: Manifest): Prom
       if (!Number.isFinite(created) || created <= 0 || created >= before) continue;
       await deletePath(path);
       await deletePath(`${path}.created`);
+      await deletePath(`${path}.verified`);
     } catch { /* Missing age evidence or cleanup failure must preserve the cache. */ }
   }
 }
@@ -396,7 +398,12 @@ export const cache = {
   async readDetails(): Promise<DetailsPayload | null> {
     const meta = await cache.readMeta();
     if (meta?.manifest.payload_revision && !meta.detailsSha) return null;
-    return readJson<DetailsPayload>(versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined));
+    const file = versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined);
+    try {
+      const text = await readText(file);
+      const details = await parseJsonHeavy<DetailsPayload>(text);
+      return await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
+    } catch { return null; }
   },
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
@@ -437,9 +444,10 @@ export const cache = {
     });
   },
 
-  async writeDetails(json: string, sha?: string): Promise<void> {
+  async writeDetails(json: string, sha?: string, verifiedAssetSha = sha): Promise<void> {
     await ensureDir();
     await writeVersionedAsset(DETAILS, json, sha);
+    if (verifiedAssetSha) await writeText(`${versionedAsset(DETAILS, sha)}.verified`, JSON.stringify(await detailsCacheIdentity(json, verifiedAssetSha)));
   },
 
   async readSearchIndex(): Promise<SearchIndexPayload | null> {
