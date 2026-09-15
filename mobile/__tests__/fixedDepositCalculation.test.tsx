@@ -4,6 +4,7 @@ import { setup, inputs, profile } from '../test-support/executableDepositHarness
 import { downloadInflate } from '../src/data/payload';
 import { FixedDepositCalculation } from '../src/components/product/FixedDepositCalculation';
 let mockState: any;
+jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: jest.fn() }) }));
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
 jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
 jest.mock('../src/data/payload', () => ({ downloadInflate: jest.fn() }));
@@ -22,8 +23,8 @@ test('actual verified transport opens local form, calculates maturity, and remov
   let tree!: ReactTestRenderer & { root: any; toJSON: () => unknown };
   await act(async () => { tree = TestRenderer.create(<FixedDepositCalculation row={x.row} />) as typeof tree; });
   await act(async () => { tree.root.findByType('Disclosure' as any).props.onToggle(); });
-  for (const [label, value] of [['Deposit amount (AUD)', inputs.principal], ['Bank-confirmed funding date', inputs.fundedDate], ['Bank-confirmed maturity date', inputs.maturityDate]]) act(() => tree.root.findByProps({ label }).props.onChangeText(value));
-  for (const label of ['Bank agreed this amount and these dates', 'No withholding applies to this payout']) act(() => tree.root.findByProps({ label }).props.onPress());
+  for (const [label, value] of [['Deposit amount (AUD)', inputs.principal], ['Bank-confirmed annual rate (%)', '3.65'], ['Bank-confirmed funding date', inputs.fundedDate], ['Bank-confirmed maturity date', inputs.maturityDate]]) act(() => tree.root.findByProps({ label }).props.onChangeText(value));
+  for (const label of ['Bank agreed this amount, rate and these dates', 'No withholding applies to this payout']) act(() => tree.root.findByProps({ label }).props.onPress());
   act(() => tree.root.findByProps({ title: 'Calculate maturity return' }).props.onPress());
   expect(JSON.stringify(tree.toJSON())).toContain('Maturity payout: $1002.90');
   expect(JSON.stringify(tree.toJSON())).toContain('Return before tax');

@@ -8,7 +8,7 @@ import { Decimal } from '../../lib/productTermsEngine/decimal';
 import { addCalendarMonths, calendarDate, dayNumber } from '../../lib/productTermsEngine/calendar';
 import { EVALUATOR_VERSION, type Facts, type LedgerContract, type LedgerScenario } from '../../lib/productTermsEngine/types';
 import { calculateLedger } from '../../lib/productTermsEngine/ledger';
-export interface DepositInputs { principal: string; fundedDate: string; maturityDate: string; confirmed: boolean; confirmedAt: string | null; noWithholdingConfirmed: boolean }
+export interface DepositInputs { principal: string; confirmedAnnualRate: string; fundedDate: string; maturityDate: string; confirmed: boolean; confirmedAt: string | null; noWithholdingConfirmed: boolean }
 export function profileDefinitions(selection: ApprovedSelection): InputDefinition[] {
   return selection.template.inputDefinitions.filter(d => d.binding === 'customer_fact').map(d => ({ id: `td_${selection.template.id}_${d.key}`, label: d.label, type: d.type, ...(d.unit ? { unit: d.unit } : {}) }));
 }
@@ -31,7 +31,9 @@ function depositFacts(selection: ApprovedSelection, inputs: DepositInputs, profi
 /** Customer values only enter this local call, never the immutable transport. */
 export function instantiateDeposit(selection: ApprovedSelection, context: ContractContext, row: RateRow, inputs: DepositInputs, profile: CustomerProfile) {
   const dependencies = assertSelection(selection, context, row), t = selection.template;
-  if (inputs.confirmed !== true || !inputs.confirmedAt || !Number.isFinite(Date.parse(inputs.confirmedAt)) || inputs.noWithholdingConfirmed !== true) throw new Error('Confirm the bank-agreed amount and dates, and withholding treatment.');
+  if (t.evaluatorVersion !== EVALUATOR_VERSION) throw new Error('A reviewed rate-confirmation calculation template is unavailable for this publication.');
+  if (inputs.confirmed !== true || !inputs.confirmedAt || !Number.isFinite(Date.parse(inputs.confirmedAt)) || inputs.noWithholdingConfirmed !== true) throw new Error('Confirm the bank-agreed amount, rate and dates, and withholding treatment.');
+  if (!/^\d+(\.\d{1,12})?$/.test(inputs.confirmedAnnualRate) || Decimal.parse(inputs.confirmedAnnualRate).compare(Decimal.parse(t.annualRate)) !== 0) throw new Error('The bank-confirmed rate does not match this reviewed rate. Choose the matching rate; this calculation cannot substitute another offer.');
   const principal = Decimal.parse(inputs.principal);
   if (principal.compare(Decimal.parse('0')) <= 0 || principal.compare(principal.rounded(2, 'toward_zero')) !== 0) throw new Error('Enter a positive deposit amount in cents.');
   for (const [kind, bound] of [['minimum', t.principalBounds.minimum], ['maximum', t.principalBounds.maximum]] as const) {
@@ -58,7 +60,7 @@ export function instantiateDeposit(selection: ApprovedSelection, context: Contra
       payments: { cadence: 'maturity', destination: 'linked_account', firstPeriodEnd: null, monthConvention: t.term.monthConvention, periodEnds: [], evidenceIds: refs.postingPolicy },
       closure: { kind: 'maturity', confirmedDate: inputs.maturityDate, acceptedNoticeDate: null, feeDecision: 'waived', principalRecovery: 'unknown', evidenceIds: refs.postingPolicy } },
   };
-  const scenario: LedgerScenario = { tdConfirmation: { source: 'user_supplied_bank_confirmation', recordedAt: inputs.confirmedAt!, principal: principal.fixed(), fundedDate: inputs.fundedDate, maturityDate: inputs.maturityDate, noWithholding: true }, accountId, productId: t.productKey, cohortKey: t.cohortKey, startDate: inputs.fundedDate, endDateExclusive: end, openingBalance: principal.fixed(), initialOffset: '0', facts, events: [], assumptions: [] };
+  const scenario: LedgerScenario = { tdConfirmation: { source: 'user_supplied_bank_confirmation', recordedAt: inputs.confirmedAt!, annualRate: inputs.confirmedAnnualRate, principal: principal.fixed(), fundedDate: inputs.fundedDate, maturityDate: inputs.maturityDate, noWithholding: true }, accountId, productId: t.productKey, cohortKey: t.cohortKey, startDate: inputs.fundedDate, endDateExclusive: end, openingBalance: principal.fixed(), initialOffset: '0', facts, events: [], assumptions: [] };
   return { contract, scenario };
 }
 export function calculateDeposit(selection: ApprovedSelection, context: ContractContext, row: RateRow, inputs: DepositInputs, profile: CustomerProfile) {

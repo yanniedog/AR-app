@@ -42,7 +42,7 @@ test('scenario principal defeats stale profile value and missing confirmations r
 });
 test.each([[2, 'half_up', '0.10'], [2, 'half_even', '0.00'], [null, 'half_up', '0.05']] as const)('source daily rounding %s/%s yields%s', async (scale, mode, expected) => {
   const x = setup(t => { t.term = { unit: 'days', count: 10, monthConvention: 'clamp' }; t.annualRate = '0.01825'; t.interest.dailyAccrualScale = scale; t.interest.accrualRounding = mode; });
-  const selected = await x.load(), result = calculateDeposit(selected, x.context, x.row, { ...inputs, principal: '100', fundedDate: '2028-02-01', maturityDate: '2028-02-11' }, profile).receipt;
+  const selected = await x.load(), result = calculateDeposit(selected, x.context, x.row, { ...inputs, confirmedAnnualRate: '0.01825', principal: '100', fundedDate: '2028-02-01', maturityDate: '2028-02-11' }, profile).receipt;
   expect(result.totals?.interestPosted).toBe(expected); expect(result.totals?.closingBalance).toBe('0.00');
 });
 test('new mode rejects v6 and future versions while source policy/fee omissions fail closed', async () => {
@@ -84,19 +84,47 @@ test('customer questions follow decisive branches and preserve explicit unavaila
 
 test('cross-runtime bridge records actual adapter and evaluator positive/refusal receipts', async () => {
   const x = setup(), selected = await x.load(), positive = calculateDeposit(selected, x.context, x.row, inputs, profile);
-  const changed = structuredClone(positive.calculationInputs); changed.scenario.openingBalance = '500';
+  const changed = structuredClone(positive.calculationInputs); changed.scenario.tdConfirmation!.annualRate = '0.03';
   const refusal = calculateLedger(changed.contract, changed.scenario);
   expect(positive.receipt.claimAvailable).toBe(true); expect(refusal.claimAvailable).toBe(false); expect(refusal.totals).toBeNull();
   const directory = process.env.AR_EXECUTABLE_BRIDGE_DIR;
   if (directory) {
-    const evaluatorVersion = 'product-terms-engine-v7';
+    const evaluatorVersion = 'product-terms-engine-v8';
     const records = [
       { name: 'positive', template: selected.template, approval: selected.approval, localInput: inputs, instantiatedInput: { evaluatorVersion, ...positive.calculationInputs }, output: positive.receipt },
-      { name: 'refusal', template: selected.template, approval: selected.approval, localInput: inputs, instantiatedInput: { evaluatorVersion, ...changed }, output: refusal },
+      { name: 'refusal', template: selected.template, approval: selected.approval, localInput: { ...inputs, confirmedAnnualRate: '0.03' }, instantiatedInput: { evaluatorVersion, ...changed }, output: refusal },
     ].map(record => ({ ...record, inputCanonicalSha256: hashText(canonical(record.instantiatedInput)), outputCanonicalSha256: hashText(canonical(record.output)) }));
-    const files = ['src/data/executableContracts/instantiate.ts', 'src/data/executableContracts/validation.ts', 'src/data/executableContracts/transport.ts', 'src/lib/productTermsEngine/types.ts', 'src/lib/productTermsEngine/tdValidation.ts', 'src/lib/productTermsEngine/tdLedger.ts', 'src/lib/productTermsEngine/ledger.ts'];
+    const files = ['src/data/executableContracts/instantiate.ts', 'src/data/executableContracts/validation.ts', 'src/data/executableContracts/transport.ts', 'src/lib/productTermsEngine/types.ts', 'src/lib/productTermsEngine/tdValidation.ts', 'src/lib/productTermsEngine/tdLedger.ts', 'src/lib/productTermsEngine/ledger.ts', 'src/lib/productTermsEngine/decimal.ts', 'src/lib/productTermsEngine/calendar.ts', 'src/data/executableContracts/depositComparison.ts'];
     const code = files.map(file => ({ file, sha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(process.cwd(), file))).digest('hex') }));
     fs.mkdirSync(directory, { recursive: true });
-    fs.writeFileSync(path.join(directory, 'actual-v7-bridge.json'), JSON.stringify({ purpose: 'Technical protocol bridge only. No real product or bank approval.', schemaVersion: 1, adapterVersion: 'fixed-aud-td-v1', evaluatorVersion, code, records }, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(path.join(directory, 'actual-v8-bridge.json'), JSON.stringify({ purpose: 'Technical protocol bridge only. No real product or bank approval.', schemaVersion: 1, adapterVersion: 'fixed-aud-td-v1', evaluatorVersion, code, records }, null, 2) + '\n', 'utf8');
+  }
+});
+
+
+test('v8 requires reported actual rate; equivalent fractions bind receipt, mismatch and precision refuse', async () => {
+  const x = setup(), selected = await x.load();
+  const r = calculateDeposit(selected, x.context, x.row, { ...inputs, confirmedAnnualRate: '0.036500' }, profile);
+  expect(r.receipt.localTdConfirmation?.annualRate).toBe('0.036500');
+  for (const rate of ['', '0.03', 'NaN', '3.65e-2', '0.0365000000000']) expect(() => calculateDeposit(selected, x.context, x.row, { ...inputs, confirmedAnnualRate: rate }, profile)).toThrow();
+  const pair = r.calculationInputs; delete pair.scenario.tdConfirmation!.annualRate;
+  expect(calculateLedger(pair.contract, pair.scenario).issues).toContain('td_confirmed_rate_mismatch');
+  pair.contract.evaluatorVersion = 'product-terms-engine-v7';
+  expect(calculateLedger(pair.contract, pair.scenario).totals?.externalOutflows).toBe('1002.90');
+  const old = setup(t => { t.evaluatorVersion = 'product-terms-engine-v7'; });
+  const legacy = await old.load();
+  expect(() => calculateDeposit(legacy, old.context, old.row, inputs, profile)).toThrow('rate-confirmation');
+});
+
+
+test('frozen actual v7 bridge replays unchanged financial results under the v8 runner identity', () => {
+  const bridge = require('./fixtures/executable-deposit-v7-bridge.json');
+  expect(crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'fixtures/executable-deposit-v7-bridge.json'))).digest('hex')).toBe('6907314df8f7e6ca443143c55aedce3127aa9bd69e636b085da9c30af635d777');
+  for (const record of bridge.records) {
+    const result = calculateLedger(record.instantiatedInput.contract, record.instantiatedInput.scenario);
+    const { evaluatorVersion: oldVersion, inputSha256: oldHash, ...financial } = record.output;
+    const { evaluatorVersion, inputSha256, ...replayed } = result;
+    expect(oldVersion).toBe('product-terms-engine-v7'); expect(evaluatorVersion).toBe('product-terms-engine-v8');
+    expect(inputSha256).not.toBe(oldHash); expect(replayed).toEqual(financial);
   }
 });

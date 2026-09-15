@@ -5,6 +5,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
+import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
 import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
 import { AppText, Badge, Button, Card, Divider, Row } from '../src/components/ui';
@@ -103,6 +104,8 @@ export default function Compare() {
     () => comparison && comparison.issue == null ? comparison.entries : [],
     [comparison],
   );
+
+  const calculationRows = useMemo(() => entries.map(entry => entry.row), [entries]);
 
   useEffect(() => {
     if (entries.length >= 2 && !details) void ensureDetails();
@@ -294,7 +297,7 @@ export default function Compare() {
   return (
     <Screen onLayout={() => setLayoutReady(true)}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
-      <PersonalCostComparisonDisclosure />
+      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : <PersonalCostComparisonDisclosure />}
       {compact ? (
         <>
           <View style={styles.compactIntro}>

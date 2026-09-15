@@ -1,6 +1,6 @@
 import type { EvidenceReference, InterestPolicy, Rule } from '../../lib/productTermsEngine/types';
 export interface ExecutableTemplate {
-  schemaVersion: 1; kind: 'fixed_aud_td_maturity_v1'; adapterVersion: 'fixed-aud-td-v1'; evaluatorVersion: 'product-terms-engine-v7';
+  schemaVersion: 1; kind: 'fixed_aud_td_maturity_v1'; adapterVersion: 'fixed-aud-td-v1'; evaluatorVersion: 'product-terms-engine-v7' | 'product-terms-engine-v8';
   id: string; tierKey: string; packageKey: string; productKey: string; cohortKey: string; currency: 'AUD'; effectiveFrom: string; effectiveToExclusive: string;
   effectiveScope: 'funded_date' | 'whole_accrual_horizon'; sourceObservationId: string; sourceSha256: string; sourceGenerationId: string; runDate: string;
   selectedRate: { sourceManifestSha256: string; coreAssetSha256: string; coreRowIndex: number; rowSha256: string; rateIndex: number };

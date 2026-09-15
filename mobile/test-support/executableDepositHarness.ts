@@ -13,6 +13,7 @@ const sha = 'a'.repeat(64);
 export const profile: CustomerProfile = { version: 1, revision: 0, answers: {}, definitions: {}, negotiatedTerms: [], legacyScenario: null };
 export function setup(change?: (t: ExecutableTemplate) => void) {
   const t = structuredClone({ ...fixture.template, id: fixture.expectedId }) as ExecutableTemplate;
+  t.evaluatorVersion = 'product-terms-engine-v8';
   t.annualRate = '0.0365'; t.term = { unit: 'months', count: 1, monthConvention: 'clamp' }; t.effectiveFrom = '2028-01-01'; t.effectiveToExclusive = '2029-01-01';
   change?.(t);
   const row = { product_key: t.productKey, product_id: 'protocol', provider: 'Protocol mechanics only', product_name: 'Technical test', rate: t.annualRate, rate_type: 'FIXED', term: `P${t.term.count}${t.term.unit === 'days' ? 'D' : 'M'}`, rate_index: 1 } as RateRow;
@@ -28,4 +29,14 @@ export function setup(change?: (t: ExecutableTemplate) => void) {
   const load = async () => { download.mockResolvedValueOnce(JSON.stringify({ ...envelope, products: { [t.productKey]: 'executable_shard_000' } })).mockResolvedValueOnce(JSON.stringify({ ...envelope, products: { [t.productKey]: asset } })); return (await loadExecutableSelections(context, row))[0]; };
   return { t, row, context, asset, load };
 }
-export const inputs = { principal: '1000', fundedDate: '2028-01-31', maturityDate: '2028-02-29', confirmed: true, confirmedAt: '2028-01-30T00:00:00Z', noWithholdingConfirmed: true };
+export const inputs = { principal: '1000', confirmedAnnualRate: '0.0365', fundedDate: '2028-01-31', maturityDate: '2028-02-29', confirmed: true, confirmedAt: '2028-01-30T00:00:00Z', noWithholdingConfirmed: true };
+
+/** Engineering-only two-offer transport. Both exact rows share one verified adopted edition. */
+export function comparisonSetup(changeSecond?: (t: ExecutableTemplate) => void) {
+  const a = setup(), b = setup(t => { t.productKey += '_second'; t.annualRate = '0.073'; changeSecond?.(t); });
+  a.context.core!.sections.TD.rates.push(b.row);
+  b.t.selectedRate.coreRowIndex = 1; b.t.id = identity(b.t, 'id'); b.asset.templates[0].approval.templateId = b.t.id; b.asset.identitySha256 = identity(b.asset, 'identitySha256');
+  const envelope = { schema_version: 1, run_date: a.t.runDate, core_asset_sha256: sha };
+  download.mockImplementation(async url => JSON.stringify({ ...envelope, products: url.endsWith('/index.gz') ? { [a.t.productKey]: 'executable_shard_000', [b.t.productKey]: 'executable_shard_000' } : { [a.t.productKey]: a.asset, [b.t.productKey]: b.asset } }));
+  return { a, b, context: a.context, rows: [a.row, b.row], load: async () => Promise.all([a.row, b.row].map(async row => (await loadExecutableSelections(a.context, row))[0])) };
+}

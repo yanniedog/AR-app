@@ -204,9 +204,9 @@ test('final envelopes include UTF8 issues and comparison metadata in exact byte 
   expect(() => budget.verifyComparison(comparison)).toThrow('evaluation_output_budget_exceeded');
 });
 
-test('literal v1-v6 flat input compatibility survives v7 execution', () => {
+test('literal v1-v7 flat input compatibility survives v8 execution', () => {
   const { contract, scenario } = example(); const expected = calculateLedger(contract, scenario);
-  for (const version of ['product-terms-engine-v1', 'product-terms-engine-v2', 'product-terms-engine-v3', 'product-terms-engine-v4', 'product-terms-engine-v5', 'product-terms-engine-v6'] as const) {
+  for (const version of ['product-terms-engine-v1', 'product-terms-engine-v2', 'product-terms-engine-v3', 'product-terms-engine-v4', 'product-terms-engine-v5', 'product-terms-engine-v6', 'product-terms-engine-v7'] as const) {
     const result = calculateLedger({ ...contract, evaluatorVersion: version }, scenario);
     expect(result.totals).toEqual(expected.totals); expect(result.issues).toEqual(expected.issues);
     expect(result.ledger).toEqual(expected.ledger);
