@@ -1,6 +1,8 @@
 /** Declarative calculation inputs. A source-evidence envelope alone is not this contract. */
 import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from './savingsTypes';
-export const EVALUATOR_VERSION = 'product-terms-engine-v2' as const;
+import type { TdLifecycle } from './tdTypes';
+export const EVALUATOR_VERSION = 'product-terms-engine-v3' as const;
+export const SAVINGS_EVALUATOR_VERSION = 'product-terms-engine-v2' as const;
 export const LEGACY_EVALUATOR_VERSION = 'product-terms-engine-v1' as const;
 export type DecimalString = string;
 export type ISODate = string;
@@ -43,7 +45,7 @@ export interface InterestPolicy {
 }
 export interface LedgerContract {
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION;
+  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION;
   id: string;
   productId: string;
   direction: 'asset' | 'liability';
@@ -65,6 +67,7 @@ export interface LedgerContract {
   initialAnnualRate: DecimalString;
   initialRateEvidenceIds: string[];
   savingsSchedule?: SavingsRateSchedule;
+  tdLifecycle?: TdLifecycle;
 }
 type EventBase = { id: string; date: ISODate; order: number };
 export type LedgerEvent = EventBase & (

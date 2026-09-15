@@ -2,8 +2,9 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
-import { EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
 import { validateSavings } from './savingsValidation';
+import { validateTd } from './tdValidation';
 
 export function hashText(text: string): string { return bytesToHex(sha256(utf8ToBytes(text))); }
 export function canonical(value: unknown, depth = 0): string {
@@ -35,7 +36,8 @@ export function rate(value: string): Decimal {
 }
 
 export function validateLedger(contract: LedgerContract, scenario: LedgerScenario): string[] {
-  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+      (contract.evaluatorVersion !== EVALUATOR_VERSION && contract.tdLifecycle !== undefined) ||
       (contract.evaluatorVersion === LEGACY_EVALUATOR_VERSION && (contract.savingsSchedule !== undefined || scenario.savingsAssessments !== undefined))) throw new Error('contract_version_unsupported');
   if (!contract.id || !contract.productId || scenario.productId !== contract.productId) throw new Error('product_mismatch');
   if (contract.currency !== 'AUD' || !['asset', 'liability'].includes(contract.direction)) throw new Error('currency_or_direction_unsupported');
@@ -121,5 +123,6 @@ export function validateLedger(contract: LedgerContract, scenario: LedgerScenari
     } else throw new Error('event_pattern_unsupported');
   }
   validateSavings(contract, scenario, refs, ruleRefs);
+  issues.push(...validateTd(contract, scenario, refs));
   return issues;
 }

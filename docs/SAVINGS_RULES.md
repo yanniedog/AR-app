@@ -2,7 +2,7 @@
 
 The existing dated ledger now accepts version-2 savings schedules. This is one
 calculation engine; flat contracts retain their original arithmetic. Version-1
-flat contracts remain accepted, while new savings contracts must declare v2.
+flat contracts remain accepted, while savings contracts require v2 or v3.
 Older clients therefore reject the new contract rather than silently ignoring its
 tiers. Calculation receipts identify the evaluator actually used.
 
@@ -37,7 +37,7 @@ rule work, intervals and receipt contribution sizes are bounded; assessments are
 cached within a run, not recomputed from transactions every day.
 Input receipt hashes include the executing evaluator version, including when a
 legacy flat contract is executed. No separate evaluator-result cache currently
-exists in the app. Runtime diagnostics inherit v2 and add fixed marginal/whole-tier
+exists in the app. Runtime diagnostics inherit the current evaluator version and add fixed marginal/whole-tier
 and missing-fact self-checks without reading customer facts. These probes exercise
 shared allocation/accrual and generic eligibility primitives, not end-to-end
 savings assessment-window dispatch or customer-product qualification.
