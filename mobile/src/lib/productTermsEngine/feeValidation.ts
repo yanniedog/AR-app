@@ -1,3 +1,5 @@
+import { validatePrecedingActivity } from './savingsActivityAdmission';
+import { PRECEDING_ACTIVITY_EVALUATOR_VERSION } from './types';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
 import { feeOccurrences } from './feeSchedule';
@@ -136,6 +138,9 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
       dueDates.add(occurrence.dueDate);
     }
   }
-  if (c.savingsSchedule && s.savingsAssessments?.some(a => a.activity && !authority?.savingsAssessments?.has(a.id))) issues.push('fee_activity_reconciliation_unsupported');
+  if (c.savingsSchedule && s.savingsAssessments?.some(a => a.activity && !authority?.savingsAssessments?.has(a.id))) {
+    if (c.evaluatorVersion === PRECEDING_ACTIVITY_EVALUATOR_VERSION) validatePrecedingActivity(c, s);
+    else issues.push('fee_activity_reconciliation_unsupported');
+  }
   return issues;
 }

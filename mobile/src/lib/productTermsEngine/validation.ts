@@ -2,10 +2,11 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
-import { EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { PRECEDING_ACTIVITY_EVALUATOR_VERSION, EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerScenario, type Rule } from './types';
 import { validateLoan } from './loanValidation';
 import { nonNegativeComponent } from './loanComponents';
 import type { AccountAuthority } from './accountAuthority';
+import { validatePrecedingActivity } from './savingsActivityAdmission';
 import { validateSavings } from './savingsValidation';
 import { validateTd } from './tdValidation';
 import { validateFees } from './feeValidation';
@@ -39,10 +40,12 @@ export function rate(value: string): Decimal {
   return parsed;
 }
 
-export function validateLedger(contract: LedgerContract, scenario: LedgerScenario, details: NonNullable<CalculationReceipt['issueDetails']> = [], authority?: AccountAuthority): string[] {
-  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+export function validateLedger(contract: LedgerContract, scenario: LedgerScenario, details: NonNullable<CalculationReceipt['issueDetails']> = [], authority?: AccountAuthority, executionVersion: typeof EVALUATOR_VERSION | typeof PRECEDING_ACTIVITY_EVALUATOR_VERSION = EVALUATOR_VERSION): string[] {
+  const preceding = executionVersion === PRECEDING_ACTIVITY_EVALUATOR_VERSION;
+  if (preceding) validatePrecedingActivity(contract, scenario);
+  if (contract.schemaVersion !== 1 || (!preceding && ![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION)) ||
       (![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.tdLifecycle !== undefined) ||
-      (![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.feeSchedule !== undefined) ||
+      (![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.feeSchedule !== undefined && !preceding) ||
       (![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && (contract.loanContract !== undefined || scenario.loan !== undefined)) ||
       (![EVALUATOR_VERSION, FIXED_MATURITY_EVALUATOR_VERSION, PORTFOLIO_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && scenario.executionAssumption !== undefined) ||
       (contract.evaluatorVersion === LEGACY_EVALUATOR_VERSION && (contract.savingsSchedule !== undefined || scenario.savingsAssessments !== undefined))) throw new Error('contract_version_unsupported');

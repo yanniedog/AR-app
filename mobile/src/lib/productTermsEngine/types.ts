@@ -3,6 +3,7 @@ import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from
 import type { TdLifecycle } from './tdTypes';
 import type { FeeFact, FeeSchedule } from './feeTypes';
 import type { LoanContract, LoanInputs, LoanResult } from './loanTypes';
+export const PRECEDING_ACTIVITY_EVALUATOR_VERSION = 'product-terms-engine-v9' as const;
 export const EVALUATOR_VERSION = 'product-terms-engine-v8' as const;
 export const FIXED_MATURITY_EVALUATOR_VERSION = 'product-terms-engine-v7' as const;
 export const PORTFOLIO_EVALUATOR_VERSION = 'product-terms-engine-v6' as const;
@@ -52,7 +53,7 @@ export interface InterestPolicy {
 }
 export interface LedgerContract {
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION | typeof FIXED_MATURITY_EVALUATOR_VERSION | typeof PORTFOLIO_EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION | typeof TD_EVALUATOR_VERSION | typeof FEE_EVALUATOR_VERSION | typeof LOAN_EVALUATOR_VERSION;
+  evaluatorVersion: typeof PRECEDING_ACTIVITY_EVALUATOR_VERSION | typeof EVALUATOR_VERSION | typeof FIXED_MATURITY_EVALUATOR_VERSION | typeof PORTFOLIO_EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION | typeof TD_EVALUATOR_VERSION | typeof FEE_EVALUATOR_VERSION | typeof LOAN_EVALUATOR_VERSION;
   id: string;
   productId: string;
   direction: 'asset' | 'liability';
@@ -141,7 +142,7 @@ export interface CalculationReceipt {
   completeness?: 'factual_complete' | 'conditional_complete' | 'incomplete' | 'unsupported';
   issueDetails?: { index: number; code: string; kind: 'acknowledged_assumption'; assumptionId: string }[];
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION;
+  evaluatorVersion: typeof EVALUATOR_VERSION | typeof PRECEDING_ACTIVITY_EVALUATOR_VERSION;
   inputSha256: string;
   contractId: string;
   dependencies: string[];

@@ -2,7 +2,7 @@ import { calendarDate, dayNumber } from './calendar';
 import { Decimal, decimalZero } from './decimal';
 import { evaluateEligibility } from './eligibility';
 import { canonical, hashText, money, nonNegative, rate, validateLedger } from './validation';
-import { EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerEvent, type LedgerScenario } from './types';
+import { PRECEDING_ACTIVITY_EVALUATOR_VERSION, EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerEvent, type LedgerScenario } from './types';
 import { dailyInterest } from './interestAccrual';
 import { savingsInterest, type SavingsActivityCache } from './savingsAccrual';
 import { tdAccountPort } from './tdLedger';
@@ -23,12 +23,21 @@ function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
 
 /** Pure synchronous evaluator, bounded at fifty years/10k explicit events; performs no I/O. */
 export function calculateLedger(contract: LedgerContract, scenario: LedgerScenario): CalculationReceipt {
+  return calculateWithVersion(contract, scenario, EVALUATOR_VERSION);
+}
+
+/** Narrow preceding-assessment entry; legacy contracts are never upgraded. */
+export function calculateSavingsActivityLedger(contract: LedgerContract, scenario: LedgerScenario): CalculationReceipt {
+  return calculateWithVersion(contract, scenario, PRECEDING_ACTIVITY_EVALUATOR_VERSION);
+}
+
+function calculateWithVersion(contract: LedgerContract, scenario: LedgerScenario, executionVersion: typeof EVALUATOR_VERSION | typeof PRECEDING_ACTIVITY_EVALUATOR_VERSION): CalculationReceipt {
   const receipt: CalculationReceipt = {
-    schemaVersion: 1, evaluatorVersion: EVALUATOR_VERSION, inputSha256: '', contractId: contract?.id ?? '',
+    schemaVersion: 1, evaluatorVersion: executionVersion, inputSha256: '', contractId: contract?.id ?? '',
     dependencies: [], status: 'unsupported', completeness: 'unsupported', issueDetails: [], claimAvailable: false, issues: [], assumptions: [], eligibility: null, totals: null, ledger: [],
   };
   try {
-    return finalizeAccount(finishAccount(prepareAccount(contract, scenario, receipt)));
+    return finalizeAccount(finishAccount(prepareAccountWithVersion(contract, scenario, receipt, undefined, executionVersion)));
   } catch (error) {
     receipt.status = 'unsupported'; receipt.claimAvailable = false; receipt.totals = null; receipt.ledger = [];
     receipt.issues.push(error instanceof Error ? error.message : 'invalid_contract');
@@ -38,10 +47,13 @@ export function calculateLedger(contract: LedgerContract, scenario: LedgerScenar
 
 /** Shared validated state port; portfolio code supplies the same bound receipt. */
 export function prepareAccount(contract: LedgerContract, scenario: LedgerScenario, receipt: CalculationReceipt, authority?: AccountAuthority): AccountPort {
-  const input = canonical({ evaluatorVersion: EVALUATOR_VERSION, contract, scenario });
+  return prepareAccountWithVersion(contract, scenario, receipt, authority, EVALUATOR_VERSION);
+}
+function prepareAccountWithVersion(contract: LedgerContract, scenario: LedgerScenario, receipt: CalculationReceipt, authority: AccountAuthority | undefined, executionVersion: typeof EVALUATOR_VERSION | typeof PRECEDING_ACTIVITY_EVALUATOR_VERSION = EVALUATOR_VERSION): AccountPort {
+  const input = canonical({ evaluatorVersion: executionVersion, contract, scenario });
   if (input.length > 4_000_000) throw new Error('input_size_exceeded');
   receipt.inputSha256 = hashText(input); receipt.issueDetails = [];
-  receipt.issues = validateLedger(contract, scenario, receipt.issueDetails, authority);
+  receipt.issues = validateLedger(contract, scenario, receipt.issueDetails, authority, executionVersion);
   if (scenario.tdConfirmation) receipt.localTdConfirmation = { ...scenario.tdConfirmation };
   receipt.dependencies = [...contract.dependencyIds]; receipt.assumptions = [...scenario.assumptions];
   receipt.eligibility = evaluateEligibility(contract.eligibility, scenario.facts);
