@@ -31,6 +31,14 @@ test('Digital funded day accrues, accepted notice day and entire notice period d
   expect(r.ledger.some(e => e.type === 'interest_accrual' && e.date >= '2026-03-01')).toBe(false);
   expect(r.claimAvailable).toBe(false); // Captured clause evidence is not whole-product approval.
 });
+
+test('TD remains incomplete without lifecycle-aware general fee routing even with a verified legacy fee flag', () => {
+  const { c, s } = tdExample(); c.review.feeCoverage = 'verified';
+  const receipt = calculateLedger(c, s);
+  expect(receipt.issues).toContain('fee_inventory_not_proven');
+  expect(receipt.claimAvailable).toBe(false);
+  expect(receipt.totals?.interestAccrued).toBe('59.000000000000');
+});
 test('Digital leap year uses365 and excludes maturity day', () => {
   const { c, s, td } = tdExample(); td.fundedDate = td.accrualStartDate = s.startDate = '2024-02-28';
   td.term.count = 2; td.nominalMaturityDate = '2024-03-01';

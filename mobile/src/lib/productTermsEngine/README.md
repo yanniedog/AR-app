@@ -44,10 +44,13 @@ remain incomplete; caller-supplied totals cannot override generated unknown metr
 These are supported primitives, not activated customer-product adapters. See
 `docs/SAVINGS_RULES.md` for source and acceptance limitations.
 
-The evaluator reports `product-terms-engine-v3`. Legacy v1 flat and v2 savings contracts remain
-accepted, but savings schedules/assessments require v2 or v3, and term-deposit lifecycles
-require v3. Old clients cannot silently ignore these terms and apply a flat rate.
+The evaluator reports `product-terms-engine-v4`. Legacy v1 flat, v2 savings and v3 TD
+contracts remain accepted for their known arithmetic. Savings requires v2 or later,
+TD requires v3 or later, and contract-owned fee schedules require v4.
+Old clients cannot silently ignore these terms and apply a flat rate.
 See `docs/TERM_DEPOSIT_RULES.md` for supported lifecycle patterns and remaining source holds.
+See `docs/CONTRACT_FEE_RULES.md` for fee inventory, account cashflow semantics and
+the explicit TD/general-fee composition completeness limit.
 
 The fixture corpus records official-source byte hashes, exact short quote hashes,
 locators and retrieval timestamps. Macquarie's published daily-interest example

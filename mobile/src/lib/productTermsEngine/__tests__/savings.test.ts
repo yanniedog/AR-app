@@ -88,7 +88,9 @@ test('dated bonus qualification distinguishes unknown from explicit false and tr
   expect(no.ledger[0].savingsContributions?.[0].status).toBe('does_not_meet'); expect(no.totals?.interestAccrued).toBe('0.000000000000');
   expect(no.issues).not.toContain('savings_qualification_unknown:observed-model:base');
   s.savingsAssessments[0].facts.qualified = { type: 'boolean', value: true };
-  expect(calculateLedger(c, s).ledger[0].savingsContributions?.[0].status).toBe('applied');
+  const qualified = calculateLedger(c, s).ledger[0].savingsContributions?.[0];
+  expect(qualified?.qualification?.status).toBe('meets');
+  expect(qualified?.status).toBe('needs_information'); // Fee inventory still does not establish the interest basis.
   s.savingsAssessments[0].coverage = 'unknown';
   expect(calculateLedger(c, s).ledger[0].savingsContributions?.[0].status).toBe('needs_information');
   s.savingsAssessments[0].coverage = 'complete';

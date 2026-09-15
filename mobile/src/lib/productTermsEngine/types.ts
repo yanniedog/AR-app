@@ -1,7 +1,9 @@
 /** Declarative calculation inputs. A source-evidence envelope alone is not this contract. */
 import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from './savingsTypes';
 import type { TdLifecycle } from './tdTypes';
-export const EVALUATOR_VERSION = 'product-terms-engine-v3' as const;
+import type { FeeFact, FeeSchedule } from './feeTypes';
+export const EVALUATOR_VERSION = 'product-terms-engine-v4' as const;
+export const TD_EVALUATOR_VERSION = 'product-terms-engine-v3' as const;
 export const SAVINGS_EVALUATOR_VERSION = 'product-terms-engine-v2' as const;
 export const LEGACY_EVALUATOR_VERSION = 'product-terms-engine-v1' as const;
 export type DecimalString = string;
@@ -45,7 +47,7 @@ export interface InterestPolicy {
 }
 export interface LedgerContract {
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION;
+  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION | typeof TD_EVALUATOR_VERSION;
   id: string;
   productId: string;
   direction: 'asset' | 'liability';
@@ -68,6 +70,7 @@ export interface LedgerContract {
   initialRateEvidenceIds: string[];
   savingsSchedule?: SavingsRateSchedule;
   tdLifecycle?: TdLifecycle;
+  feeSchedule?: FeeSchedule;
 }
 type EventBase = { id: string; date: ISODate; order: number };
 export type LedgerEvent = EventBase & (
@@ -80,6 +83,8 @@ export type LedgerEvent = EventBase & (
           minimum?: DecimalString; maximum?: DecimalString } }
 );
 export interface LedgerScenario {
+  accountId?: string;
+  feeFacts?: FeeFact[];
   productId: string;
   cohortKey: string;
   startDate: ISODate;
@@ -101,6 +106,8 @@ export interface LedgerEntry {
   evidenceIds: string[];
   note?: string;
   savingsContributions?: SavingsContribution[];
+  feeDebitAccountId?: string;
+  feeRuleTraces?: RuleTrace[];
 }
 export interface LedgerTotals {
   openingBalance: DecimalString;
@@ -115,6 +122,8 @@ export interface LedgerTotals {
   interestRoundingAdjustment: DecimalString;
   feesCharged: DecimalString;
   closingBalance: DecimalString;
+  feesDebitedBalance?: DecimalString;
+  feesPaidExternal?: DecimalString;
 }
 export interface CalculationReceipt {
   schemaVersion: 1;

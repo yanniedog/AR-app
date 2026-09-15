@@ -6,6 +6,7 @@ import { EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type L
 import { dailyInterest } from './interestAccrual';
 import { savingsInterest, type SavingsActivityCache } from './savingsAccrual';
 import { runTdLedger } from './tdLedger';
+import { ContractFeeLedger } from './feeLedger';
 
 function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
   if (event.amount.type === 'fixed') return money(event.amount.value);
@@ -50,8 +51,11 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
   const postingDates = new Set(contract.interest.postingDates);
   let eventIndex = 0;
   const activityCache: SavingsActivityCache = new Map();
+  const contractFees = new ContractFeeLedger(contract, scenario, receipt);
   for (let day = dayNumber(scenario.startDate); day < dayNumber(scenario.endDateExclusive); day++) {
     const date = calendarDate(day);
+    const dayOpen = balance;
+    if (contract.feeSchedule?.ordering !== 'after_scenario_events') balance = contractFees.apply(date, balance, dayOpen);
     while (eventIndex < events.length && events[eventIndex].date === date) {
       const event = events[eventIndex++];
       let amount: Decimal | null = decimalZero(), note: string | undefined;
@@ -74,6 +78,7 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
       if (balance.compare(decimalZero()) < 0) throw new Error('negative_balance_unsupported');
       receipt.ledger.push({ date, id: event.id, type: event.type, amount: amount?.fixed() ?? null, balance: balance.fixed(), evidenceIds: 'evidenceIds' in event ? event.evidenceIds : [], ...(note ? { note } : {}) });
     }
+    if (contract.feeSchedule?.ordering === 'after_scenario_events') balance = contractFees.apply(date, balance, dayOpen);
     let basis = balance.sub(offset);
     if (basis.compare(decimalZero()) < 0) basis = decimalZero();
     const savings = contract.savingsSchedule ? savingsInterest(basis, date, contract.interest, contract.savingsSchedule, scenario.savingsAssessments ?? [], activityCache) : null;
@@ -81,19 +86,23 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
     if (savings) receipt.issues.push(...savings.issues);
     accrued = accrued.add(interest); unposted = unposted.add(interest);
     receipt.ledger.push({ date, id: `accrue:${date}`, type: 'interest_accrual', amount: interest.fixed(12), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
-      ...(savings ? { savingsContributions: savings.contributions } : {}) });
+      ...(contractFees.tainted ? { note: 'Balance and interest depend on unresolved fees; known-component arithmetic only.' } : {}),
+      ...(savings ? { savingsContributions: contractFees.tainted ? savings.contributions.map(c => c.status === 'applied' ? { ...c, status: 'needs_information' as const } : c) : savings.contributions } : {}) });
     if (postingDates.has(date)) {
       const payment = unposted.rounded(2, contract.interest.postingRounding);
       // The remainder is disclosed in accrued totals; no invented penny carry after posting.
       unposted = decimalZero(); posted = posted.add(payment); balance = balance.add(payment);
       if (balance.compare(decimalZero()) < 0) throw new Error('negative_balance_unsupported');
-      receipt.ledger.push({ date, id: `post:${date}`, type: 'interest_posting', amount: payment.fixed(), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds });
+      receipt.ledger.push({ date, id: `post:${date}`, type: 'interest_posting', amount: payment.fixed(), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
+        ...(contractFees.tainted ? { note: 'Known-component posting; unresolved fee dependencies remain.' } : {}) });
     }
   }
+  if (contractFees.tainted) receipt.issues.push('balance_interest_fee_dependency_unknown');
   receipt.totals = {
     openingBalance: money(scenario.openingBalance).fixed(), externalCashflowNet: inflows.sub(outflows).fixed(), principalRepaid: null,
     externalInflows: inflows.fixed(), externalOutflows: outflows.fixed(), interestAccrued: accrued.fixed(12),
-    interestPosted: posted.fixed(), interestUnposted: unposted.fixed(12), feesCharged: fees.fixed(), closingBalance: balance.fixed(),
+    interestPosted: posted.fixed(), interestUnposted: unposted.fixed(12), feesCharged: fees.add(contractFees.charged).fixed(), closingBalance: balance.fixed(),
+    feesDebitedBalance: fees.add(contractFees.debitedBalance).fixed(), feesPaidExternal: contractFees.paidExternal.fixed(),
     interestRoundingAdjustment: posted.add(unposted).sub(accrued).fixed(12),
   };
   return receipt;
