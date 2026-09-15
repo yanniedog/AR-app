@@ -1,3 +1,4 @@
+import { descriptiveValue } from './descriptiveValue';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
 import type {
@@ -143,12 +144,12 @@ function detailFacts(items: DetailItem[] | undefined): ReceiptFact[] {
   if (!items?.length) return [];
   return items.flatMap((item, index) => {
     const label = String(item.name ?? item.label ?? `Item ${index + 1}`).trim();
-    const value = [item.value, item.info]
+    const value = [descriptiveValue(item.value), item.info]
       .filter((part) => part !== null && part !== undefined && String(part).trim())
       .map(String)
       .join(' — ')
       .trim();
-    return label && value ? [{ label: humanizeEnum(label) || label, value }] : [];
+    return label && (value || item.name || item.label) ? [{ label: humanizeEnum(label) || label, value }] : [];
   });
 }
 

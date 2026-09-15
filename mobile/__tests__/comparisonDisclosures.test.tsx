@@ -1,3 +1,4 @@
+import placeholders from './fixtures/published-descriptive-placeholders-20260915.json';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
@@ -63,4 +64,18 @@ test('retained The Mac mortgage exposes all four fees and all three criteria', (
     if (item.info) expect(text).toContain(item.info);
   }
   act(() => tree.unmount());
+});
+
+test('original published descriptive placeholders are hidden while labels remain visible', () => {
+  const { DetailGroup } = require('../src/components/product/ProductDetailParts');
+  for (const kind of ['features', 'eligibility']) {
+    const items = placeholders.items.filter(i => i.kind === kind).map(i => i.item);
+    let tree!: Inspectable;
+    act(() => { tree = TestRenderer.create(<DetailGroup title={kind} icon="list" items={items} loading={false} />) as Inspectable; });
+    act(() => tree.root.findByType('Disclosure').props.onToggle());
+    const textNodes = tree.root.findAllByType('AppText').map((n: any) => n.children.join(''));
+    expect(textNodes.some((text: string) => /^(null|none)$/i.test(text.trim()))).toBe(false);
+    expect(textNodes.length).toBeGreaterThanOrEqual(items.length);
+    act(() => tree.unmount());
+  }
 });

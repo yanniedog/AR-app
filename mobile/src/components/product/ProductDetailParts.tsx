@@ -1,3 +1,4 @@
+import { descriptiveValue } from '../../data/descriptiveValue';
 import Ionicons from '../icons/AppIcon';
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -108,8 +109,8 @@ export function DetailGroup({
   if ((!items || items.length === 0) && !loading) return null;
   const displayValue = (item: DetailItem): string | null => {
     if (title === 'Fees') return formatFeeValue(item);
-    if (item.value === undefined || item.value === null || String(item.value).trim() === '') return null;
-    const raw = String(item.value).trim();
+    const raw = descriptiveValue(item.value);
+    if (raw === null) return null;
     const label = String(item.label ?? '').toUpperCase();
     if (title === 'Eligibility' && (label === 'MIN_AGE' || label === 'MAX_AGE') && /^\d+$/.test(raw)) {
       return `${raw} years`;
