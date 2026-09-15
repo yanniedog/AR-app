@@ -27,3 +27,5 @@ mobile/src/data/monetaryContracts/runtimeSchemas.ts text eol=lf
 mobile/src/data/mortgageContracts/schemas/*.json -text whitespace=cr-at-eol
 mobile/__tests__/fixtures/mortgage-independent-oracle-v2.json -text whitespace=cr-at-eol
 mobile/__tests__/fixtures/mortgage-leap-monthend-companion.json -text whitespace=cr-at-eol
+
+mobile/src/data/activityContracts/schemas/*.schema.json -text whitespace=cr-at-eol

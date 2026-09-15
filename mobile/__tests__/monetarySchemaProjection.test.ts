@@ -6,6 +6,7 @@ import { assertEligibilityWire } from '../src/data/eligibilityContracts/schemaVa
 import { eligibilitySubject } from '../test-support/eligibilityHarness';
 import { assertMonetaryWire } from '../src/data/monetaryContracts/schemaValidation';
 import { savingsSubject } from '../test-support/savingsMonetaryHarness';
+import { activitySchemas } from '../src/data/monetaryContracts/runtimeSchemas';
 test('generated runtime graph reconstructs all eight frozen schemas and every reference exactly', () => {
   execFileSync(process.execPath, [path.resolve('scripts/generate-monetary-schemas.mjs'), '--check']);
   const byId: Record<string, any> = Object.fromEntries(Object.values(schemas).map(s => [s.$id, s]));
@@ -48,4 +49,9 @@ test('seven pinned mortgage schemas reconstruct exactly with resolved shared ref
  const byId:Record<string,any>=Object.fromEntries(Object.values({...schemas,...Object.fromEntries(Object.entries(mortgageSchemas).map(([k,v])=>[`mortgage_${k}`,v]))}).map(s=>[s.$id,s]));
  function visit(v:any,document:any){if(!v||typeof v!=='object')return;if(v.$ref){const[id,fragment]=v.$ref.split('#'),root=id?byId[id]:document;expect(fragment?fragment.slice(1).split('/').reduce((o:any,k:string)=>o?.[k],root):root).toBeDefined();}Object.values(v).forEach(c=>visit(c,document));}
  for(const[name,schema]of Object.entries(mortgageSchemas)){expect(schema).toEqual(JSON.parse(fs.readFileSync(path.resolve(`src/data/mortgageContracts/schemas/${name.replaceAll('_','-')}.schema.json`),'utf8')));visit(schema,schema);}
+});
+test('fifteen activity integration schemas reconstruct exactly with closed local references',()=>{
+ const byId:Record<string,any>=Object.fromEntries(Object.values(activitySchemas).map(s=>[s.$id,s]));
+ const visit=(v:any,doc:any)=>{if(!v||typeof v!=='object')return;if(v.$ref){const[id,fragment]=v.$ref.split('#'),root=id?byId[id]:doc;expect(root).toBeDefined();expect(fragment?fragment.slice(1).split('/').reduce((o:any,k:string)=>o?.[k],root):root).toBeDefined();}Object.values(v).forEach(c=>visit(c,doc));};
+ for(const[name,schema]of Object.entries(activitySchemas)){expect(schema).toEqual(JSON.parse(fs.readFileSync(path.resolve(`src/data/activityContracts/schemas/${name.replaceAll('_','-')}.schema.json`),'utf8')));visit(schema,schema);}
 });

@@ -297,6 +297,7 @@ export interface ManifestFile {
 
 export interface Manifest {
   executable_v3?: import('./data/monetaryContracts/types').MonetaryNamespace;
+  executable_v4?: import('./data/activityContracts/types').ActivityNamespace;
   /** Optional lazy capability descriptors; deliberately outside legacy eager files. */
   executable_v2?: { schema_version: 2; index: { name: string; bytes: number; sha256: string }; shards: Record<string, { name: string; bytes: number; sha256: string }> };
   source_observation?: { generation_id?: string; contract_digest?: string; [key: string]: unknown };

@@ -1,10 +1,10 @@
 import { dayNumber, calendarDate } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
-import type { SavingsSubject, SavingsInterest } from './types';
+import type { SavingsSubject, SavingsInterest, AuthorityGraph } from './types';
 export function exactList(a: unknown, b: unknown, reason: string) { if (canonical(a) !== canonical(b)) throw new Error(reason); }
 export function interval(from: string, to: string) { const days = dayNumber(to) - dayNumber(from); if (days <= 0 || days > 366) throw new Error('Unsupported savings interval'); return days; }
 export function includesInterval(from: string, to: string, start: string, end: string) { return from <= start && to >= end; }
-export function postingDates(subject: SavingsSubject) {
+export function postingDates(subject: Pick<SavingsSubject, 'scope'> & { policy: Pick<SavingsSubject['policy'], 'postingInventory'> }) {
   const p = subject.policy.postingInventory; interval(p.from, p.toExclusive);
   if (p.from !== subject.scope.from || p.toExclusive !== subject.scope.toExclusive) throw new Error('Posting coverage differs from savings scope');
   let due: string[];
@@ -20,3 +20,9 @@ export function postingDates(subject: SavingsSubject) {
   return due;
 }
 export function stableInterest(value: SavingsInterest) { const { postingDates: _dates, evidenceIds: _refs, ...policy } = value; return policy; }
+
+/** Explicit v4 union of reviewed supersession ranges; no inferred winner or coverage. */
+export function supersessionUnion(g:AuthorityGraph,selected:string,other:string,from:string,end:string) {
+ const ranges=g.supersessions.filter(r=>r.selectedAuthorityId===selected&&r.supersededAuthorityId===other&&r.from<end&&r.toExclusive>from).sort((a,b)=>a.from.localeCompare(b.from));
+ let through=from;for(const r of ranges){if(r.from>through)break;if(r.toExclusive>through)through=r.toExclusive;}return through>=end;
+}

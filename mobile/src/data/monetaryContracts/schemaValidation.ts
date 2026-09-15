@@ -1,7 +1,7 @@
 import { dayNumber } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
-import schemas, { mortgageSchemas } from './runtimeSchemas';
-const external: Record<string, any> = Object.fromEntries(Object.values({ ...schemas, ...Object.fromEntries(Object.entries(mortgageSchemas).map(([k,v]) => [`mortgage_${k}`,v])) }).map(schema => [schema.$id, schema]));
+import schemas, { mortgageSchemas, activitySchemas } from './runtimeSchemas';
+const external: Record<string, any> = Object.fromEntries([...Object.values(schemas), ...Object.values(mortgageSchemas), ...Object.values(activitySchemas)].map(schema => [schema.$id, schema]));
 type Schema = Record<string, any>;
 /** Closed interpreter for checked-in frozen schemas only. No remote schema adoption. */
 export function assertMonetaryWire(value: unknown, kind: keyof typeof schemas) {

@@ -5,9 +5,10 @@ import type { Rule } from '../../lib/productTermsEngine/types';
 import { safeId, validFact } from '../customerProfile';
 import { assertMonetaryWire } from './schemaValidation';
 import { monetaryIdentity, validateAuthorityGraph, assertFieldCoverage } from './authority';
-import { exactList, includesInterval, interval, postingDates, stableInterest } from './coverage';
-import type { SavingsSubject, MonetaryAsset } from './types';
-export function operationBudget(subjects: SavingsSubject[]) {
+import { exactList, includesInterval, interval, postingDates, stableInterest, supersessionUnion } from './coverage';
+import type { SavingsSubject, SavingsPolicy, MonetaryAsset } from './types';
+export type SavingsStructure = Omit<SavingsSubject, 'schemaVersion' | 'capability' | 'kind' | 'adapterVersion' | 'evaluatorVersion' | 'policy'> & { policy: Omit<SavingsPolicy, 'kind' | 'bonus'> };
+export function operationBudget(subjects: SavingsStructure[]) {
   const members = new Map<string, string>(), authorities = new Set<string>(), observations = new Map<string, string>(), documents = new Set<string>();
   let raw = 0, decoded = 0, periods = 0, postings = 0, supersessions = 0, nodes = 0;
   const count = (r: Rule) => { if (++nodes > 512) throw new Error('Savings rule operation limit'); if (r.op === 'and' || r.op === 'or') r.rules.forEach(count); else if (r.op === 'not') count(r.rule); };
@@ -21,6 +22,10 @@ export function operationBudget(subjects: SavingsSubject[]) {
 export function validateSavingsSubject(raw: unknown): SavingsSubject {
   if (utf8ToBytes(JSON.stringify(raw)).length > 256 * 1024) throw new Error('Savings subject exceeds limit'); assertMonetaryWire(raw, 'subject'); const s = raw as SavingsSubject; operationBudget([s]);
   if (monetaryIdentity(s, 'id') !== s.id || hashText(canonical(['monetary-scope-v3', s.capability, s.scope])) !== s.scopeId || s.routing.productKey !== s.scope.productKey) throw new Error('Savings identity mismatch');
+  validateSavingsStructure(s); return s;
+}
+/** Shared source-policy checks; no synthetic no-bonus declaration. */
+export function validateSavingsStructure(s: SavingsStructure, unionSupersessions = false) {
   interval(s.scope.from, s.scope.toExclusive); if (interval(s.scope.from, s.scope.toExclusive) > s.policy.maxHorizonDays) throw new Error('Savings horizon exceeds policy');
   exactList(s.documentVersionIds, [...new Set(s.evidence.map(e => e.documentVersionId))].sort(), 'Savings document inventory mismatch'); exactList(s.termRevisionIds, [...new Set(s.termRevisionIds)].sort(), 'Savings revision inventory mismatch');
   const evidence = new Set<string>();
@@ -33,7 +38,7 @@ export function validateSavingsSubject(raw: unknown): SavingsSubject {
   for (const p of policy.intervals) {
     interval(p.from, p.toExclusive); if (p.from !== previous || p.toExclusive > s.scope.toExclusive || ids.has(p.id)) throw new Error('Savings intervals overlap or leave gap'); ids.add(p.id); previous = p.toExclusive;
     const a = authorities.get(p.authorityId); if (!a || !includesInterval(a.from, a.toExclusive, p.from, p.toExclusive)) throw new Error('Savings interval authority unavailable');
-    for (const other of authorities.values()) if (other.id !== a.id && other.from < p.toExclusive && other.toExclusive > p.from && !s.authorityGraph.supersessions.some(r => r.selectedAuthorityId === a.id && r.supersededAuthorityId === other.id && includesInterval(r.from, r.toExclusive, p.from > other.from ? p.from : other.from, p.toExclusive < other.toExclusive ? p.toExclusive : other.toExclusive))) throw new Error('Historical authority conflict unresolved');
+    for (const other of authorities.values()) if (other.id !== a.id && other.from < p.toExclusive && other.toExclusive > p.from && !(unionSupersessions ? supersessionUnion(s.authorityGraph,a.id,other.id,p.from > other.from ? p.from : other.from,p.toExclusive < other.toExclusive ? p.toExclusive : other.toExclusive) : s.authorityGraph.supersessions.some(r => r.selectedAuthorityId === a.id && r.supersededAuthorityId === other.id && includesInterval(r.from, r.toExclusive, p.from > other.from ? p.from : other.from, p.toExclusive < other.toExclusive ? p.toExclusive : other.toExclusive)))) throw new Error('Historical authority conflict unresolved');
     exactList(stableInterest(p.interest), stableInterest(policy.intervals[0].interest), 'Changing savings interest policy is unsupported');
     const dates = due.filter(d => d >= p.from && d < p.toExclusive); exactList(p.interest.postingDates, dates, 'Savings posting event missing or extra'); emittedDates.push(...dates);
     refs(p.interest.evidenceIds); for (const [field, values] of Object.entries(p.fieldEvidenceIds)) { refs(values); assertFieldCoverage(a, field, p.from, p.toExclusive, field.startsWith('posting') || field === 'balanceBasis' ? dates : [], values); }

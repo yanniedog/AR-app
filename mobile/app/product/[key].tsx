@@ -1,3 +1,4 @@
+import { ActivityPeriodCalculation } from '../../src/components/product/ActivityPeriodCalculation';
 import { MortgagePeriodCalculation } from '../../src/components/product/MortgagePeriodCalculation';
 import { SavingsPeriodCalculation } from '../../src/components/product/SavingsPeriodCalculation';
 import { EligibilityAssessment } from '../../src/components/product/EligibilityAssessment';
@@ -709,7 +710,7 @@ export default function ProductDetail() {
         <ProductFacts detail={detail} />
         <SelectedRateConditions row={row} section={section} />
         {section === 'TD' ? <FixedDepositCalculation row={row} /> : null}
-        <EligibilityAssessment productKey={productKey} row={row} section={section} /><SavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
+        <EligibilityAssessment productKey={productKey} row={row} section={section} /><SavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><ActivityPeriodCalculation productKey={row.product_key} row={row} section={section} /><MortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />

@@ -3,17 +3,18 @@ import type { Facts, Rule } from '../../lib/productTermsEngine/types';
 import { own, validFact, type CustomerProfile, type InputDefinition } from '../customerProfile';
 import { customerInputRequirements, type CustomerInputContract } from '../customerInputRequirements';
 import type { SavingsSubject } from './types';
+type SavingsFactSubject = Pick<SavingsSubject, 'id' | 'scope'> & { policy: Pick<SavingsSubject['policy'], 'inputDefinitions' | 'eligibility'> };
 export interface SavingsPeriodInputs {
   accountId: string; startDate: string; endDateExclusive: string; openingBalance: string;
   confirmedAnnualRates: { intervalId: string; tierId: string; annualRate: string }[];
   confirmedAt: string | null; openingAccrualZero: boolean; openingFundsCleared: boolean | null; noMovements: boolean; noWithholding: boolean;
 }
-export const savingsAnswerId = (s: SavingsSubject, key: string) => `sav_${hashText(canonical([s.id, key]))}`;
-export function savingsDefinition(s: SavingsSubject, key: string): InputDefinition {
+export const savingsAnswerId = (s: SavingsFactSubject, key: string) => `sav_${hashText(canonical([s.id, key]))}`;
+export function savingsDefinition(s: SavingsFactSubject, key: string): InputDefinition {
   const d = s.policy.inputDefinitions.find(d => d.key === key); if (!d) throw new Error('Savings input undeclared');
   return { id: savingsAnswerId(s, key), label: d.label, type: d.type, ...(d.unit ? { unit: d.unit } : {}) };
 }
-export function savingsFacts(s: SavingsSubject, inputs: SavingsPeriodInputs, profile: CustomerProfile) {
+export function savingsFacts(s: SavingsFactSubject, inputs: SavingsPeriodInputs, profile: CustomerProfile) {
   const facts: Facts = Object.create(null), customerAnswers: CustomerProfile['answers'] = Object.create(null);
   for (const d of s.policy.inputDefinitions) {
     let value;
@@ -28,7 +29,7 @@ export function savingsFacts(s: SavingsSubject, inputs: SavingsPeriodInputs, pro
   }
   return { facts, customerAnswers };
 }
-export function savingsRequirements(s: SavingsSubject, inputs: SavingsPeriodInputs, profile: CustomerProfile) {
+export function savingsRequirements(s: SavingsFactSubject, inputs: SavingsPeriodInputs, profile: CustomerProfile) {
   const { facts, customerAnswers } = savingsFacts(s, inputs, profile), rule = JSON.parse(canonical(s.policy.eligibility)) as Rule;
   function map(r: Rule) { if (r.op === 'compare') r.field = savingsAnswerId(s, r.field); else if (r.op === 'not') map(r.rule); else if (r.op === 'and' || r.op === 'or') r.rules.forEach(map); } map(rule);
   const contract: CustomerInputContract = { schemaVersion: 1, productKey: s.scope.productKey, revisionSha256: s.id, effectiveFrom: s.scope.from, effectiveToExclusive: s.scope.toExclusive, inputs: s.policy.inputDefinitions.map(d => savingsDefinition(s, d.key)), rule };
