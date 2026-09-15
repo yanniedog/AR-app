@@ -20,3 +20,5 @@
 .easignore text eol=lf
 .npmrc text eol=lf
 mobile/src/data/eligibilityContracts/*.schema.json -text whitespace=cr-at-eol
+
+mobile/src/data/monetaryContracts/schemas/*.schema.json -text whitespace=cr-at-eol

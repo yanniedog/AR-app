@@ -1,3 +1,4 @@
+import { SavingsPeriodCalculation } from './SavingsPeriodCalculation';
 import { detailsDisplayIdentity } from '../../data/detailsCatalogue';
 import { EligibilityAssessment } from './EligibilityAssessment';
 import React from 'react';
@@ -23,6 +24,7 @@ export function DetailsOnlyProduct({ productKey }: { productKey: string }) {
       <DetailGroup loading={false} icon="information-circle-outline" title="Features" items={detail.features} /><DetailGroup loading={false} icon="information-circle-outline" title="Constraints" items={detail.constraints} />
       <ProductFacts detail={detail} /><OfficialLinks links={detail.links} sourceDocuments={detail.sourceDocuments} />
       <EligibilityAssessment productKey={productKey} />
+      {identity.productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' && <SavingsPeriodCalculation productKey={productKey} />}
       <ProductTermsDisclosure productKey={productKey} />
     </> : loading ? <AppText variant="small">Loading verified product details...</AppText> : <>
       <AppText variant="small">{details ? 'Product not found in the verified details catalogue.' : 'Product details could not be verified for this publication.'}</AppText>
