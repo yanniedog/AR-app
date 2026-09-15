@@ -90,3 +90,13 @@ No actual product adapter, producer activation, native acceptance, cheapest-prod
 catalogue claim or real-bank eligibility approval follows from these mechanics.
 
 Final serialized UTF-8 envelopes are checked independently: each portfolio is limited to 12 MiB and 100,000 ledger rows even inside a comparison; the whole comparison is limited to 24 MiB with a shared 150,000-row emission budget. Incremental guards prevent oversized batches before final exact serialization. Rejection returns a compact unsupported result. Activity binding cannot relabel generated posted occurrences as pending. Negative interest postings remain explicitly unavailable for activity adjustment because activity v1 amounts are unsigned.
+
+## Current app boundary
+
+The portfolio evaluator is engine capability, not an enabled personal comparison
+feature. No executable approved-product contract payload, source approval resolver,
+or customer scenario assembly pipeline currently connects it to the compare route.
+That route continues to rank published rates and explicitly discloses personal cost
+comparison as unavailable. Full fees, conditions, applicable source scope and
+customer inputs need verification before a later integration can enable it. No ready
+branch, inferred adapter, or fabricated product contract is supplied by this change.

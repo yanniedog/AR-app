@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View } from 'react-native';
 import type { ProductDetail } from '../../types';
-import { AppText, Card } from '../ui';
+import { AppText, Card, Disclosure } from '../ui';
 import { DetailGroup, OfficialLinks, ProductFacts } from './ProductDetailParts';
 import { ProductTermsDisclosure } from './ProductTermsDisclosure';
 
@@ -39,4 +39,13 @@ export function ComparisonDisclosures({
       <ProductTermsDisclosure productKey={productKey} />
     </Card>
   );
+}
+
+/** Engine support does not establish approved product contracts or customer scenarios. */
+export function PersonalCostComparisonDisclosure() {
+  const [open, setOpen] = useState(false);
+  return <Disclosure title="Personal cost comparison" summary="Unavailable" open={open} onToggle={() => setOpen(value => !value)}>
+    <AppText variant="small">Complete fees and conditions are not yet verified for calculation.</AppText>
+    <AppText variant="small" color="textMuted">Rankings compare published rates. They do not compare your full costs or assess your eligibility.</AppText>
+  </Disclosure>;
 }

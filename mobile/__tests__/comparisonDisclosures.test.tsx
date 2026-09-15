@@ -23,7 +23,7 @@ jest.mock('../src/components/ui', () => {
   };
 });
 // eslint-disable-next-line import/first -- platform mocks above
-import { ComparisonDisclosures } from '../src/components/product/ComparisonDisclosures';
+import { ComparisonDisclosures, PersonalCostComparisonDisclosure } from '../src/components/product/ComparisonDisclosures';
 
 test('real Bankwest detail exposes every published fee and eligibility condition, including zero', () => {
   const detail = fixture.detail as ProductDetail;
@@ -78,4 +78,19 @@ test('original published descriptive placeholders are hidden while labels remain
     expect(textNodes.length).toBeGreaterThanOrEqual(items.length);
     act(() => tree.unmount());
   }
+});
+
+test('personal cost disclosure exposes the unavailable reason without suggesting a ready calculation', () => {
+  let tree!: Inspectable;
+  act(() => { tree = TestRenderer.create(<PersonalCostComparisonDisclosure />) as Inspectable; });
+  const disclosure = tree.root.findByType('Disclosure');
+  expect(disclosure.props.title).toBe('Personal cost comparison');
+  expect(disclosure.props.open).toBe(false);
+  act(() => disclosure.props.onToggle());
+  const content = JSON.stringify(tree.toJSON());
+  expect(content).toContain('Complete fees and conditions are not yet verified for calculation.');
+  expect(content).toContain('Rankings compare published rates.');
+  act(() => tree.root.findByType('Disclosure').props.onToggle());
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Complete fees');
+  act(() => tree.unmount());
 });
