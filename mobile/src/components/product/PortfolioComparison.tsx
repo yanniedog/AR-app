@@ -10,6 +10,20 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadSavingsSelections, type SavingsContext, type SavingsTarget } from '../../data/monetaryContracts/transport';
 import { compareSavingsHoldings, type HoldingsDraft } from '../../data/portfolioContracts/adapter';
 import { emptyHolding, holdingInput, PortfolioAccountEditor, type HoldingOption, type HoldingEditorValue } from './PortfolioAccountEditor';
+import type { ComparisonReceipt } from '../../lib/productTermsEngine/portfolioTypes';
+
+export function HoldingsResultDetails({ result, referenceId }: { result: ComparisonReceipt['results'][number]; referenceId: string }) {
+  const [open, setOpen] = useState(false), b = result.breakEven;
+  return <Disclosure title={`${result.id} result details`} open={open} onToggle={() => setOpen(!open)}>
+    <AppText variant="small">Advantage over {referenceId}: {result.advantage ?? 'unknown'} AUD. Positive means higher wealth or lower cost for the selected metric.</AppText>
+    <AppText variant="small">{!b ? 'Break-even unavailable.' : `First positive advantage: ${b.firstPositive ?? 'not reached'}. Sustained positive advantage: ${b.sustainedFrom ?? 'not reached'}${b.through ? ` through ${b.through}` : ''}. ${b.transient ? 'An earlier lead was temporary.' : ''}`}</AppText>
+    {!!b?.tiedDates.length && <AppText variant="small">Equal on {b.tiedDates.length} evaluated dates; first equality {b.tiedDates[0]}. Equality is not a positive advantage.</AppText>}
+    {Object.entries(result.receipt.accounts).map(([id, account]) => <View key={id}>
+      <AppText variant="small">{id}: opening amount {account.totals?.openingBalance ?? 'unknown'} AUD; interest accrued {account.totals?.interestAccrued ?? 'unknown'} AUD; fees {account.totals?.feesCharged ?? 'unknown'} AUD.</AppText>
+      {!account.claimAvailable && <AppText variant="small">Known components only; not a complete return or guaranteed bound.</AppText>}
+    </View>)}
+  </Disclosure>;
+}
 
 export function HoldingsForm({ context, options }: { context: SavingsContext; options: HoldingOption[] }) {
   const customer = useCustomerProfile(), [start, setStart] = useState(''), [end, setEnd] = useState('');
@@ -44,7 +58,7 @@ export function HoldingsForm({ context, options }: { context: SavingsContext; op
     {!!current?.error && <AppText>{current.error}</AppText>}
     {current?.value && <><AppText>{current.value.receipt.available ? 'Complete for the selected historical holdings.' : 'Comparison unavailable; all holdings remain unranked.'}</AppText>
       <AppText variant="small">{current.value.receipt.issues.join(', ')}</AppText>
-      {current.value.receipt.results.map(r => <View key={r.id}><AppText>{r.id}: {r.receipt.completeness}; closing wealth {r.receipt.closingNetWorth ?? 'unknown'} AUD; cost {r.receipt.netInterestFeeCost ?? 'unknown'} AUD{r.rank === null ? '' : `; rank ${r.rank}`}</AppText><AppText variant="small">{[...r.receipt.issues, ...Object.values(r.receipt.accounts).flatMap(a => a.issues)].join(', ')}</AppText></View>)}
+      {current.value.receipt.results.map(r => <View key={r.id}><AppText>{r.id}: {r.receipt.completeness}; closing wealth {r.receipt.closingNetWorth ?? 'unknown'} AUD; cost {r.receipt.netInterestFeeCost ?? 'unknown'} AUD{r.rank === null ? '' : `; rank ${r.rank}`}</AppText><AppText variant="small">{[...r.receipt.issues, ...Object.values(r.receipt.accounts).flatMap(a => a.issues)].join(', ')}</AppText><HoldingsResultDetails result={r} referenceId={current.value!.receipt.referenceId} /></View>)}
       <Button title="Copy holdings receipt" onPress={() => { try { const fresh = assemble(); if (fresh.inputSha256 !== current.value!.inputSha256) throw new Error('Inputs changed. Calculate again.'); void Clipboard.setStringAsync(JSON.stringify(fresh, null, 2)).then(() => setCopyStatus('Copied.'), () => setCopyStatus('Copy failed.')); } catch { setResult({ identity, error: 'Publication or inputs changed. Calculate again.' }); } }} />
     </>}
     {current && !!copyStatus && <AppText variant="small">{copyStatus}</AppText>}

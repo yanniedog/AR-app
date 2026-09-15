@@ -51,7 +51,10 @@ test('actual compare route binds original rows, computes2.90 advantage and expor
   expect(JSON.stringify(tree.toJSON())).toContain('1005.80'); expect(JSON.stringify(tree.toJSON())).toContain('2.90');
   await act(async () => { tree.root.findByProps({ title: 'Comparison details' }).props.onToggle(); });
   await act(async () => { tree.root.findByProps({ title: 'Copy comparison receipt' }).props.onPress(); });
-  const receipt = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
+  const exported = JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls[0][0]);
+  expect(exported.kind).toBe('private_calculation_export');
+  expect(hashText(canonical(exported.result))).toBe(exported.resultSha256);
+  const receipt = exported.result;
   expect(hashText(canonical(receipt.comparisonInputs))).toBe(receipt.inputSha256);
   expect(receipt.rankAvailable).toBe(true); expect(receipt.results[1].data.receipt.localTdConfirmation.annualRate).toBe('0.073000000000');
   expect(receipt.results.map((r: any) => r.advantage)).toEqual(['0.00', '2.90']);

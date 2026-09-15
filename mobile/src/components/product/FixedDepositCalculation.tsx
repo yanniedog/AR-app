@@ -1,3 +1,4 @@
+import { tdReopenItem, privateTdExport } from '../../data/receiptReplay/tdExport';
 import React, { useEffect, useState } from 'react';
 import * as Clipboard from 'expo-clipboard';
 import { View } from 'react-native';
@@ -54,7 +55,7 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
         </View> : null}
         {selection?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
         <AppText variant="small">The receipt includes your entered amounts, dates and relevant eligibility answers.</AppText>
-        <Button title="Copy calculation receipt" variant="secondary" onPress={() => void Clipboard.setStringAsync(JSON.stringify(current.data, null, 2)).then(() => setCopyStatus('Receipt copied.'), () => setCopyStatus('Receipt could not be copied.'))} />
+        <Button title="Copy calculation receipt" variant="secondary" onPress={() => { try { if (!selection) throw Error(); const exported=privateTdExport(current.data,[tdReopenItem(selection,context,row,inputs,profile)]); void Clipboard.setStringAsync(JSON.stringify(exported,null,2)).then(()=>setCopyStatus('Receipt copied.'),()=>setCopyStatus('Receipt could not be copied.')); } catch { setCopyStatus('Source changed. Calculate again.'); } }} />
         {copyStatus ? <AppText variant="small">{copyStatus}</AppText> : null}
       </Disclosure>
     </View> : null}

@@ -11,12 +11,25 @@ import { assertMortgageSelection, type MortgageSelection, type MortgageContext, 
 import { mortgageFacts, mortgageRequirements, mortgageAnswerId } from '../../data/mortgageContracts/facts';
 import { mortgageDueDates, mortgageObligationId } from '../../data/mortgageContracts/calendar';
 import type { MortgageInputs } from '../../data/mortgageContracts/types';
+import type { CalculationReceipt } from '../../lib/productTermsEngine/types';
 import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import { LedgerField } from '../ledger/LedgerField';
 import { AppText, Chip, Button, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
 const labels = {principal:'Principal',postedInterest:'Posted interest',accruedInterest:'Unposted interest',capitalizedCharges:'Capitalised charges',otherDebt:'Other debt'};
 const scopeLabel = (s:string) => s === 'all_source_declared' ? 'All reviewed customers' : s === 'none_source_declared' ? 'None' : s;
+export function MortgageResultDetails({ receipt }: { receipt: CalculationReceipt }) {
+ const [open,setOpen]=useState(false),loan=receipt.loan,t=receipt.totals;
+ return <><AppText>Closing debt: {loan?.outstandingDebt ?? 'unknown'} AUD</AppText>
+  {!receipt.claimAvailable&&<AppText variant="small">Known components only; not a complete borrowing cost or guaranteed bound.</AppText>}
+  <Disclosure title="Debt, interest and fee details" open={open} onToggle={()=>setOpen(!open)}>
+   <AppText variant="small">Known component debt: {loan?.knownComponentDebt ?? 'unknown'} AUD. Outstanding debt is not a fee.</AppText>
+   <AppText variant="small">Principal remaining: {loan?.closing.principal ?? 'unknown'} AUD; principal repaid: {loan?.principalRepaid ?? 'unknown'} AUD.</AppText>
+   <AppText variant="small">Interest accrued: {t?.interestAccrued ?? 'unknown'} AUD; interest paid: {loan?.interestPaid ?? 'unknown'} AUD.</AppText>
+   <AppText variant="small">Capitalised charges remaining: {loan?.closing.capitalizedCharges ?? 'unknown'} AUD; charges paid: {loan?.chargesPaid ?? 'unknown'} AUD.</AppText>
+   <AppText variant="small">Fees paid externally: {t?.feesPaidExternal ?? 'unknown'} AUD. External fees do not increase the loan balance. Tax effects are not calculated.</AppText>
+  </Disclosure></>;
+}
 export function MortgagePeriodForm({selections,context,target}:{selections:MortgageSelection[];context:MortgageContext;target:MortgageTarget}) {
  const customer=useCustomerProfile(),[selectedId,setSelectedId]=useState<string|null>(null),[text,setText]=useState<Record<string,string>>({}),[confirmed,setConfirmed]=useState(''),[clear,setClear]=useState(false),[noEffects,setNoEffects]=useState(false),[complete,setComplete]=useState(false),[feeConfirmed,setFeeConfirmed]=useState<Record<string,boolean>>({}),[detailOpen,setDetailOpen]=useState(false),[savedOpen,setSavedOpen]=useState(false),[copy,setCopy]=useState('');
  const selection=selections.find(s=>s.subject.id===selectedId),s=selection?.subject;
@@ -56,7 +69,7 @@ export function MortgagePeriodForm({selections,context,target}:{selections:Mortg
   {current?.error&&<AppText variant="small">{current.error}</AppText>}
   {current?.value&&<><AppText variant="small">{current.value.receipt.claimAvailable?'Complete for this confirmed account period.':`Incomplete: ${current.value.receipt.issues.join('; ')}`}</AppText>
    {current.value.receipt.loan?.obligations.map(o=><AppText key={o.id} variant="small">{o.dueDate}: due ${o.due??'unknown'}, cleared ${o.paid} — {o.status}.</AppText>)}
-   {current.value.receipt.claimAvailable&&<><AppText>Closing debt: ${current.value.receipt.loan?.outstandingDebt}</AppText><AppText>Interest accrued: ${current.value.receipt.totals?.interestAccrued}</AppText><AppText variant="small">Fees paid externally: ${current.value.receipt.totals?.feesPaidExternal}. External fees do not increase the loan balance. Tax effects are not calculated.</AppText></>}
+   <MortgageResultDetails receipt={current.value.receipt}/>
    <Button title="Copy mortgage receipt" onPress={()=>{try{assertMortgageSelection(selection!,context,target);void Clipboard.setStringAsync(JSON.stringify(current.value,null,2)).then(()=>setCopy('Receipt copied.'),()=>setCopy('Copy failed.'));}catch{setCopy('Source changed. Calculate again.');}}}/><AppText variant="small">Receipt includes private entries, due obligations, cleared executions, source identities and the daily trace.</AppText>
   </>}{!!copy&&current&&<AppText variant="small">{copy}</AppText>}
  </View>;

@@ -2,7 +2,7 @@ import React from 'react';
 import mockReact from 'react';
 import TestRenderer, { act } from 'react-test-renderer';
 import * as Clipboard from 'expo-clipboard';
-import { HoldingsForm, PortfolioComparison } from '../src/components/product/PortfolioComparison';
+import { HoldingsResultDetails, HoldingsForm, PortfolioComparison } from '../src/components/product/PortfolioComparison';
 import { downloadInflate } from '../src/data/payload';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { savingsHarness } from '../test-support/savingsMonetaryHarness';
@@ -61,4 +61,20 @@ test('technical comparison disclosure loads only reviewed savings and removes a 
   expect(tree.root.findAllByProps({ title: 'Calculate holdings comparison' })).toHaveLength(0);
   expect(JSON.stringify(tree.toJSON())).toContain('unavailable');
   act(() => tree.unmount());
+});
+
+// Technical receipt presentation controls; no claim of bank-approved products.
+test.each([
+ ['unavailable', null, 'Break-even unavailable.'],
+ ['no crossing', {firstPositive:null,sustainedFrom:null,through:'2026-01-10',transient:false,tiedDates:['2026-01-01']}, 'First positive advantage: not reached'],
+ ['temporary lead', {firstPositive:'2026-01-02',sustainedFrom:null,through:'2026-01-10',transient:true,tiedDates:[]}, 'An earlier lead was temporary.'],
+ ['sustained lead', {firstPositive:'2026-01-02',sustainedFrom:'2026-01-04',through:'2026-01-10',transient:true,tiedDates:[]}, 'Sustained positive advantage: 2026-01-04 through 2026-01-10'],
+])('shows receipt %s without manufacturing a crossing', (_name, breakEven, expected) => {
+ const result:any={id:'set-2',advantage:breakEven?'1.00':null,breakEven,receipt:{accounts:{savings:{claimAvailable:false,totals:{openingBalance:'1000.00',interestAccrued:'1.000000000000',feesCharged:null}}}}};
+ let tree:any;act(()=>{tree=TestRenderer.create(<HoldingsResultDetails result={result} referenceId="set-1"/>);});
+ expect(JSON.stringify(tree.toJSON())).not.toContain('Interest accrued');
+ act(()=>tree.root.findByProps({title:'set-2 result details'}).props.onToggle());
+ const rendered=JSON.stringify(tree.toJSON());expect(rendered).toContain(expected);expect(rendered).toContain('unknown');expect(rendered).toContain('Known components only');expect(rendered).toContain('1000.00');expect(rendered).toContain('1.000000000000');
+ if((breakEven as any)?.tiedDates.length)expect(rendered).toContain('Equality is not a positive advantage');
+ act(()=>tree.unmount());
 });

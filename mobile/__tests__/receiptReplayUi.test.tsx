@@ -1,0 +1,25 @@
+import React from 'react';
+import mockReact from 'react';
+import TestRenderer,{act} from 'react-test-renderer';
+import ReceiptScreen,{resultSummary} from '../app/calculation-receipt';
+import { savingsHarness,savingsInputs } from '../test-support/savingsMonetaryHarness';
+import { calculateSavingsPeriod } from '../src/data/monetaryContracts/adapter';
+import { profile } from '../test-support/executableDepositHarness';
+import * as Clipboard from 'expo-clipboard';
+let mockState:any;
+jest.mock('../src/data/store',()=>({useStore:(selector:any)=>selector(mockState)}));
+jest.mock('../src/data/payload',()=>({downloadInflate:jest.fn()}));
+jest.mock('expo-router',()=>({Stack:{Screen:'StackScreen'}}));
+jest.mock('../src/components/Screen',()=>({ScreenScrollView:({children}:any)=>children}));
+jest.mock('../src/components/CustomerProfilePanel',()=>({CustomerAnswerEditor:'CustomerAnswerEditor'}));
+jest.mock('../src/components/ledger/LedgerField',()=>({LedgerField:'LedgerField'}));
+jest.mock('../src/components/ui',()=>({AppText:'AppText',Button:'Button',Chip:'Chip',Disclosure:({children,open,...props}:any)=>mockReact.createElement('Disclosure',props,open?children:null)}));
+jest.mock('expo-clipboard',()=>({getStringAsync:jest.fn(),setStringAsync:jest.fn(async()=>undefined)}));
+test('untrusted output summaries tolerate missing fields and malformed result entries',()=>{for(const value of [{eligibility:{}},{receipt:{results:[null,{},'bad',{receipt:{closingNetWorth:{}}}]}},{receipt:{claimAvailable:false,issues:{}}},null])expect(()=>resultSummary(value)).not.toThrow();expect(resultSummary({eligibility:{}})).toContain('unavailable');});
+test('paste is explicit and actual fresh handle is selected before calculation/copy; edits invalidate',async()=>{
+ const h=await savingsHarness(),[s]=await h.load(),raw=calculateSavingsPeriod(s,h.context,h.target,savingsInputs,profile);mockState={...h.context,ensureDetails:jest.fn(async()=>undefined)};(Clipboard.getStringAsync as jest.Mock).mockResolvedValue(JSON.stringify(raw));let tree:any;await act(async()=>{tree=TestRenderer.create(<ReceiptScreen/>);});expect(Clipboard.getStringAsync).not.toHaveBeenCalled();await act(async()=>tree.root.findByProps({title:'Paste calculation receipt'}).props.onPress());await act(async()=>tree.root.findByProps({title:'Check current sources'}).props.onPress());
+ act(()=>tree.root.findByProps({title:'Recalculate with current sources'}).props.onPress());expect(JSON.stringify(tree.toJSON())).toContain('Choose a current scope');const scope=tree.root.findAllByType('Chip').find((n:any)=>n.props.label.includes(h.subject.scope.cohortKey));act(()=>scope.props.onPress());act(()=>tree.root.findByProps({label:'I reviewed these local inputs for recalculation'}).props.onPress());act(()=>tree.root.findByProps({title:'Recalculate with current sources'}).props.onPress());expect(tree.root.findAllByProps({title:'Copy recalculated receipt'})).toHaveLength(1);await act(async()=>tree.root.findByProps({title:'Copy recalculated receipt'}).props.onPress());expect(JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]).receipt.totals.interestPosted).toBe('1.00');
+ act(()=>tree.root.findByProps({title:'Review local inputs'}).props.onToggle());act(()=>tree.root.findByProps({label:'opening Balance'}).props.onChangeText('2000'));expect(tree.root.findAllByProps({title:'Copy recalculated receipt'})).toHaveLength(0);
+ mockState={...mockState,manifest:{...mockState.manifest}};delete mockState.manifest.executable_v3;await act(async()=>tree.update(<ReceiptScreen/>));expect(JSON.stringify(tree.toJSON())).toContain('No current reviewed scope');
+ act(()=>tree.root.findByProps({label:'Receipt text'}).props.onChangeText('{}'));expect(tree.root.findAllByProps({title:'Check current sources'})).toHaveLength(0);expect(tree.root.findAllByProps({title:'Copy recalculated receipt'})).toHaveLength(0);
+});
