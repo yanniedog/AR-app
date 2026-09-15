@@ -4,6 +4,8 @@ import { feeOccurrences } from './feeSchedule';
 import { nonNegative, rate } from './validation';
 import type { FeeDefinition } from './feeTypes';
 import type { LedgerContract, LedgerScenario, Rule } from './types';
+import { EVALUATOR_VERSION } from './types';
+import type { AccountAuthority } from './accountAuthority';
 
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,180}$/.test(v);
 function validFact(value: unknown): boolean {
@@ -46,10 +48,11 @@ function priceAndDiscounts(fee: FeeDefinition, account: string, refs: (ids: stri
   }
 }
 
-export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: string[]) => void, ruleRefs: (r: Rule) => void): string[] {
+export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: string[]) => void, ruleRefs: (r: Rule) => void, authority?: AccountAuthority): string[] {
   const f = c.feeSchedule;
   if (!f) return ['fee_inventory_not_proven'];
-  if (c.tdLifecycle) throw new Error('general_fees_with_td_unsupported');
+  if (c.tdLifecycle && !authority?.tdExternalFees) throw new Error('general_fees_with_td_unsupported');
+  if (c.tdLifecycle && f.fees.some(fee => fee.debit.type !== 'external_account')) throw new Error('td_general_principal_fee_policy_unsupported');
   if (f.schemaVersion !== 1 || !id(f.accountId) || s.accountId !== f.accountId || dayNumber(f.toExclusive) <= dayNumber(f.from) || dayNumber(f.toExclusive) - dayNumber(f.from) > 18300) throw new Error('fee_scope_invalid');
   if (s.feeFacts !== undefined && (!Array.isArray(s.feeFacts) || s.feeFacts.length > 512)) throw new Error('fee_fact_limit');
   for (const fact of s.feeFacts ?? []) if (!fact || !id(fact.name) || !id(fact.accountId) || dayNumber(fact.toExclusive) <= dayNumber(fact.from) || !validFact(fact.value)) throw new Error('fee_fact_scope_invalid');
@@ -72,7 +75,7 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
       const p = fee.scope;
       if (!id(p.packageInstanceId) || !Array.isArray(p.memberAccountIds) || !p.memberAccountIds.length || p.memberAccountIds.length > 128 ||
           p.memberAccountIds.some(a => !id(a)) || new Set(p.memberAccountIds).size !== p.memberAccountIds.length || !p.memberAccountIds.includes(f.accountId) || !p.memberAccountIds.includes(p.debtorAccountId)) throw new Error('fee_package_members_invalid');
-      issues.push('package_portfolio_coverage_unsupported');
+      if (!authority?.packageInstances.has(p.packageInstanceId)) issues.push('package_portfolio_coverage_unsupported');
     } else throw new Error('fee_scope_unsupported');
     if (!['product_balance', 'external_account', 'unknown'].includes(fee.debit.type) ||
         (fee.debit.type === 'external_account' && (!id(fee.debit.accountId) || fee.debit.accountId === f.accountId))) throw new Error('fee_debit_account_invalid');
@@ -92,20 +95,24 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
       if (t.from > f.from || t.toExclusive < f.toExclusive) issues.push(`fee_recurrence_coverage_unknown:${fee.id}`);
       if (t.calendarAdjustment === 'unknown' || t.settlement === 'unknown') issues.push(`fee_timing_unknown:${fee.id}`);
     } else throw new Error('fee_timing_unsupported');
-    priceAndDiscounts(fee, f.accountId, refs, ruleRefs);
+    const pricingAccount = fee.scope.type === 'package' ? fee.scope.debtorAccountId : f.accountId;
+    priceAndDiscounts(fee, pricingAccount, refs, ruleRefs);
     if (fee.ruleAssessments !== undefined) {
       if (!Array.isArray(fee.ruleAssessments) || fee.ruleAssessments.length > 1000) throw new Error('fee_assessment_limit');
       const dates = new Set<string>();
       for (const a of fee.ruleAssessments) {
         dayNumber(a.dueDate);
-        if (dates.has(a.dueDate) || a.accountId !== f.accountId || dayNumber(a.toExclusive) <= dayNumber(a.from) || !Array.isArray(a.factNames) || !a.factNames.length || a.factNames.length > 128 || a.factNames.some(n => !id(n)) || new Set(a.factNames).size !== a.factNames.length) throw new Error('fee_assessment_scope_invalid');
-        dates.add(a.dueDate); refs(a.evidenceIds);
+        const key = `${a.dueDate}:${a.triggerId ?? ''}`;
+        if ((a.triggerId !== undefined && (c.evaluatorVersion !== EVALUATOR_VERSION || !id(a.triggerId))) || dates.has(key) || a.accountId !== pricingAccount || dayNumber(a.toExclusive) <= dayNumber(a.from) || !Array.isArray(a.factNames) || !a.factNames.length || a.factNames.length > 128 || a.factNames.some(n => !id(n)) || new Set(a.factNames).size !== a.factNames.length) throw new Error('fee_assessment_scope_invalid');
+        dates.add(key); refs(a.evidenceIds);
       }
     }
   }
   const categories = new Set<string>(), covered = new Set<string>();
   for (const item of f.inventory) {
-    if (!id(item.categoryId) || categories.has(item.categoryId) || !['scheduled', 'none_applicable', 'unknown'].includes(item.state) || !Array.isArray(item.feeIds) || item.feeIds.length > 128) throw new Error('fee_category_invalid');
+    if (!id(item.categoryId) || categories.has(item.categoryId) || !['scheduled', 'none_applicable', 'unknown', 'lifecycle_owned'].includes(item.state) || !Array.isArray(item.feeIds) || item.feeIds.length > 128) throw new Error('fee_category_invalid');
+    if (item.state === 'lifecycle_owned' && (c.evaluatorVersion !== EVALUATOR_VERSION || !authority?.tdExternalFees || item.lifecycleOccurrenceId !== 'td:break-fee')) throw new Error('fee_lifecycle_owner_unproven');
+    if (item.state !== 'lifecycle_owned' && item.lifecycleOccurrenceId !== undefined) throw new Error('fee_lifecycle_scope_invalid');
     categories.add(item.categoryId); refs(item.evidenceIds);
     if (item.state === 'unknown') issues.push(`fee_category_unknown:${item.categoryId}`);
     if ((item.state === 'scheduled') !== (item.feeIds.length > 0)) throw new Error('fee_category_schedule_mismatch');
@@ -118,13 +125,17 @@ export function validateFees(c: LedgerContract, s: LedgerScenario, refs: (ids: s
     if (o.incurredDate >= s.startDate && o.incurredDate < s.endDateExclusive && o.dueDate >= s.endDateExclusive) issues.push(`fee_payable_after_horizon:${o.id}`);
   }
   for (const fee of f.fees) {
+    for (const a of fee.ruleAssessments ?? []) {
+      if (a.triggerId !== undefined && !occurrences.some(o => o.fee === fee && o.dueDate === a.dueDate && o.triggerId === a.triggerId)) throw new Error('fee_assessment_trigger_missing');
+      if (a.triggerId !== undefined && fee.ruleAssessments!.some(b => b.dueDate === a.dueDate && b.triggerId === undefined)) throw new Error('fee_assessment_scope_ambiguous');
+    }
     if (!fee.applicability && !fee.waiver && !fee.discounts.length) continue;
     const dueDates = new Set<string>();
     for (const occurrence of occurrences.filter(o => o.fee === fee)) {
-      if (dueDates.has(occurrence.dueDate)) throw new Error('fee_same_day_conditional_triggers_unsupported');
+      if (dueDates.has(occurrence.dueDate) && (c.evaluatorVersion !== EVALUATOR_VERSION || !fee.ruleAssessments?.length || fee.ruleAssessments.some(a => a.dueDate === occurrence.dueDate && a.triggerId === undefined))) throw new Error('fee_same_day_conditional_triggers_unsupported');
       dueDates.add(occurrence.dueDate);
     }
   }
-  if (c.savingsSchedule && s.savingsAssessments?.some(a => a.activity)) issues.push('fee_activity_reconciliation_unsupported');
+  if (c.savingsSchedule && s.savingsAssessments?.some(a => a.activity && !authority?.savingsAssessments?.has(a.id))) issues.push('fee_activity_reconciliation_unsupported');
   return issues;
 }

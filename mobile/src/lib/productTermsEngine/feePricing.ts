@@ -5,10 +5,10 @@ import type { Facts, LedgerScenario, RuleTrace } from './types';
 import { nonNegative } from './validation';
 
 export interface FeePriceResult { amount: Decimal | null; reason?: string; evidenceIds?: string[]; ruleTraces: RuleTrace[] }
-export function priceFee(fee: FeeDefinition, date: string, scenario: LedgerScenario, dayOpen: Decimal, beforeFee: Decimal, balanceTainted: boolean): FeePriceResult {
+export function priceFee(fee: FeeDefinition, date: string, scenario: LedgerScenario, dayOpen: Decimal, beforeFee: Decimal, balanceTainted: boolean, triggerId?: string): FeePriceResult {
   const ruleTraces: RuleTrace[] = [];
   const unknown = (reason: string): FeePriceResult => ({ amount: null, reason, ruleTraces });
-  const assessment = fee.ruleAssessments?.find(a => a.dueDate === date);
+  const assessment = fee.ruleAssessments?.find(a => a.dueDate === date && (a.triggerId === undefined || a.triggerId === triggerId));
   const facts: Facts = Object.create(null);
   for (const name of assessment?.factNames ?? []) {
     const matches = scenario.feeFacts?.filter(f => f.name === name && f.accountId === assessment!.accountId && f.from === assessment!.from && f.toExclusive === assessment!.toExclusive) ?? [];

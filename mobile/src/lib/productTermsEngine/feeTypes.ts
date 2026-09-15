@@ -22,7 +22,7 @@ export interface FeeDefinition {
   applicability: Rule | null;
   waiver: Rule | null;
   /** Source-owned assessment periods for each payable occurrence; global facts never waive fees. */
-  ruleAssessments?: { dueDate: string; accountId: string; from: string; toExclusive: string; factNames: string[]; evidenceIds: string[] }[];
+  ruleAssessments?: { triggerId?: string; dueDate: string; accountId: string; from: string; toExclusive: string; factNames: string[]; evidenceIds: string[] }[];
   discounts: { id: string; rule: Rule; type: 'fraction' | 'fixed'; value: string }[];
   discountPrecedence: 'exclusive' | 'first_match' | 'additive' | 'unknown';
   discountRounding: Rounding | 'unknown';
@@ -36,7 +36,7 @@ export interface FeeSchedule {
   /** Covers incurred obligations too; payable-after-horizon obligations remain unsettled. */
   deferredObligations: 'none_confirmed' | 'listed' | 'unknown';
   evidenceIds: string[];
-  inventory: { categoryId: string; state: 'scheduled' | 'none_applicable' | 'unknown'; feeIds: string[]; evidenceIds: string[] }[];
+  inventory: { categoryId: string; state: 'scheduled' | 'none_applicable' | 'unknown' | 'lifecycle_owned'; lifecycleOccurrenceId?: 'td:break-fee'; feeIds: string[]; evidenceIds: string[] }[];
   ordering: 'before_scenario_events' | 'after_scenario_events' | 'unknown';
   fees: FeeDefinition[];
 }

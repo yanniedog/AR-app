@@ -3,11 +3,13 @@ import { decimalZero } from './decimal';
 import { feeOccurrences } from './feeSchedule';
 import { LOAN_COMPONENTS } from './loanTypes';
 import type { LedgerContract, LedgerScenario } from './types';
-import { nonNegative, rate } from './validation';
+import { canonical, hashText, nonNegative, rate } from './validation';
 import { nonNegativeComponent } from './loanComponents';
+import type { AccountAuthority } from './accountAuthority';
+import { feeDebitsAccount } from './feeSchedule';
 
 const id = (s: unknown): s is string => typeof s === 'string' && /^[A-Za-z0-9_.:-]{1,180}$/.test(s);
-export function validateLoan(c: LedgerContract, s: LedgerScenario, refs: (ids: string[]) => void): string[] {
+export function validateLoan(c: LedgerContract, s: LedgerScenario, refs: (ids: string[]) => void, assumed?: (code: string, id: string) => void, authority?: AccountAuthority): string[] {
   const l = c.loanContract, input = s.loan;
   if (!l) { if (input) throw new Error('loan_contract_missing'); return []; }
   if (!input || l.schemaVersion !== 1 || !id(l.accountId) || l.accountId !== s.accountId || l.cohortKey !== s.cohortKey ||
@@ -41,7 +43,13 @@ export function validateLoan(c: LedgerContract, s: LedgerScenario, refs: (ids: s
   if (!['restore_components_no_interest_recalculation', 'unknown'].includes(l.reversalPolicy)) throw new Error('loan_reversal_policy_invalid');
   if (l.scheduleCoverage !== 'reviewed_complete') issues.push('loan_obligation_coverage_unknown');
   if (!['cleared', 'projected'].includes(input.mode)) throw new Error('loan_execution_mode_invalid');
-  if (input.mode === 'projected') issues.push('loan_projected_executions_assumption');
+  if (input.mode === 'projected') {
+    const a = s.executionAssumption;
+    if (a && id(a.id) && a.acknowledged === true && a.accountId === l.accountId && a.from === s.startDate && a.toExclusive === s.endDateExclusive &&
+        a.executionSha256 === hashText(canonical({ executions: input.executions, advances: l.advances, obligations: l.obligations })) && assumed) assumed('loan_projected_executions_assumption', a.id);
+    else if (authority?.projectionAssumptionId && !input.executions.length && !l.advances.some(a => a.status === 'projected') && assumed) assumed('loan_projected_executions_assumption', authority.projectionAssumptionId);
+    else issues.push('loan_projected_executions_assumption');
+  } else if (s.executionAssumption) throw new Error('loan_execution_assumption_mode_mismatch');
   const inHorizon = (date: string) => { if (dayNumber(date) < dayNumber(s.startDate) || dayNumber(date) >= dayNumber(s.endDateExclusive)) throw new Error('loan_date_outside_horizon'); };
   const identities = new Set<string>();
   const identify = (key: string) => { if (!id(key) || identities.has(key)) throw new Error('loan_identity_duplicate'); identities.add(key); };
@@ -81,8 +89,8 @@ export function validateLoan(c: LedgerContract, s: LedgerScenario, refs: (ids: s
     if (!occurrence || occurrence.fee.debit.type !== 'product_balance' || funded.has(f.occurrenceId) || !['capitalize', 'redraw'].includes(f.method)) throw new Error('loan_fee_funding_invalid');
     funded.add(f.occurrenceId); refs(f.evidenceIds);
   }
-  if (fees.some(o => o.fee.scope.type === 'package')) issues.push('loan_package_funding_unsupported');
-  if (fees.some(o => o.fee.debit.type === 'product_balance' && !funded.has(o.id))) throw new Error('loan_fee_funding_missing');
+  if (fees.some(o => o.fee.scope.type === 'package' && !authority?.packageInstances.has(o.fee.scope.packageInstanceId))) issues.push('loan_package_funding_unsupported');
+  if (fees.some(o => o.fee.debit.type === 'product_balance' && feeDebitsAccount(o.fee, l.accountId) && !funded.has(o.id))) throw new Error('loan_fee_funding_missing');
   const fundedRedrawDates = new Set(fees.filter(o => l.feeFunding.some(f => f.occurrenceId === o.id && f.method === 'redraw')).map(o => o.dueDate));
   if (input.executions.some(e => e.type === 'redraw' && fundedRedrawDates.has(e.date))) throw new Error('loan_same_day_fee_and_independent_redraw_unsupported');
   if (l.closure) { inHorizon(l.closure.date); refs(l.closure.evidenceIds); if (typeof l.closure.requireSettled !== 'boolean' || dayNumber(l.closure.date) !== dayNumber(s.endDateExclusive) - 1) throw new Error('loan_closure_scope_invalid'); }

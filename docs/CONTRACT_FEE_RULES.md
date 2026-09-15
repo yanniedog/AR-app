@@ -31,12 +31,13 @@ numeric totals then describe known components, not bounds or complete results.
 
 ## Remaining limits
 
-No actual bank fee adapter is approved by this implementation. Package arithmetic
-charges only the named debtor, but portfolio allocation/completeness remains
-unsupported. Structured savings activity requires separate fee reconciliation.
+No actual bank fee adapter is approved by this implementation. Standalone package
+allocation and savings activity/fee reconciliation remain unsupported. V6 portfolio
+execution supports explicitly reviewed complete package membership with one debtor,
+and generated-fee activity reconciliation; see `PORTFOLIO_COMPARISON_RULES.md`.
 Incurred obligations payable after the horizon prevent complete cost claims.
 
-TD lifecycle contracts currently cannot produce a complete v4 receipt: absent
-general fee inventory is unresolved, and combining feeSchedule with tdLifecycle
-is rejected until reviewed lifecycle/general-fee routing exists. The known TD
-arithmetic remains available. This is an explicit C008/C009 integration gap.
+Standalone TD lifecycle contracts remain incomplete without general fee inventory,
+and reject a feeSchedule until routing authority is supplied by v6 portfolio
+execution. That context supports explicit lifecycle-owned inventory and general
+fees paid externally; principal-funded general TD fees remain unsupported.

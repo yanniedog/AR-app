@@ -28,7 +28,7 @@ export class ContractFeeLedger {
       const result = !feeDebitsAccount(fee, schedule.accountId) ? { amount: decimalZero(), reason: 'Different designated package debtor.' } :
         schedule.ordering === 'unknown' ? { amount: null, reason: 'fee_ordering_unknown' } :
           fee.debit.type === 'unknown' ? { amount: null, reason: 'fee_debit_location_unknown' } :
-            priceFee(fee, date, this.scenario, dayOpen, balance, this.tainted);
+            priceFee(fee, date, this.scenario, dayOpen, balance, this.tainted, occurrence.triggerId);
       if (result.amount === null) {
         this.receipt.issues.push(`${result.reason}:${occurrence.id}`);
         if (fee.debit.type !== 'external_account') this.tainted = true;

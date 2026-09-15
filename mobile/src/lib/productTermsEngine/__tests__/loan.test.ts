@@ -1,6 +1,6 @@
 import { example } from '../testSupport';
 import { calculateLedger } from '../ledger';
-import { EVALUATOR_VERSION, FEE_EVALUATOR_VERSION } from '../types';
+import { EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION } from '../types';
 import { feeOccurrences } from '../feeSchedule';
 import type { LoanContract, LoanExecution } from '../loanTypes';
 
@@ -25,7 +25,9 @@ function model() {
 }
 
 test('v5 accepts existing v4 fees and v4 rejects a new loan contract', () => {
-  const { c, s } = model(); c.evaluatorVersion = FEE_EVALUATOR_VERSION;
+  const { c, s } = model(); c.evaluatorVersion = LOAN_EVALUATOR_VERSION;
+  expect(calculateLedger(c, s).totals?.closingBalance).toBe('100.00');
+  c.evaluatorVersion = FEE_EVALUATOR_VERSION;
   expect(calculateLedger(c, s).issues).toContain('contract_version_unsupported');
   delete c.loanContract; delete s.loan;
   c.interest.balanceBasis = 'closing_balance_before_posted_interest'; c.interest.eventOrder = 'ordered_events_then_accrual_then_posting';

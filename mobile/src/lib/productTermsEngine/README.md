@@ -44,7 +44,7 @@ remain incomplete; caller-supplied totals cannot override generated unknown metr
 These are supported primitives, not activated customer-product adapters. See
 `docs/SAVINGS_RULES.md` for source and acceptance limitations.
 
-The evaluator reports `product-terms-engine-v5`. Legacy v1 flat, v2 savings and v3 TD
+The evaluator reports `product-terms-engine-v6`. Legacy v1 flat, v2 savings and v3 TD
 contracts remain accepted for their known arithmetic. Savings requires v2 or later,
 TD requires v3 or later, contract-owned fee schedules require v4 or later, and
 loan component contracts require v5. Existing v4 fee schedules remain accepted.
@@ -78,3 +78,5 @@ The disclosure shows exact evaluator version, runtime and pass status. The local
 are read. Accept a native primitive run only when the retained result reports
 `runtime: "hermes"` and `passed: true`. This does not establish financial contract
 coverage, whole-product eligibility, or the unimplemented catalogue adapter.
+
+V6 adds shared account ports and bounded portfolio comparison, preserving standalone v1-v5 inputs. See `docs/PORTFOLIO_COMPARISON_RULES.md` for explicit conditional projections, routing, package and contextual TD fee support, activity reconciliation, and remaining unsupported policies.

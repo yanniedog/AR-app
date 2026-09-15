@@ -2,9 +2,10 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
-import { EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerScenario, type Rule } from './types';
 import { validateLoan } from './loanValidation';
 import { nonNegativeComponent } from './loanComponents';
+import type { AccountAuthority } from './accountAuthority';
 import { validateSavings } from './savingsValidation';
 import { validateTd } from './tdValidation';
 import { validateFees } from './feeValidation';
@@ -38,11 +39,12 @@ export function rate(value: string): Decimal {
   return parsed;
 }
 
-export function validateLedger(contract: LedgerContract, scenario: LedgerScenario): string[] {
-  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
-      (![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.tdLifecycle !== undefined) ||
-      (![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.feeSchedule !== undefined) ||
-      (contract.evaluatorVersion !== EVALUATOR_VERSION && (contract.loanContract !== undefined || scenario.loan !== undefined)) ||
+export function validateLedger(contract: LedgerContract, scenario: LedgerScenario, details: NonNullable<CalculationReceipt['issueDetails']> = [], authority?: AccountAuthority): string[] {
+  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+      (![EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.tdLifecycle !== undefined) ||
+      (![EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION, FEE_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.feeSchedule !== undefined) ||
+      (![EVALUATOR_VERSION, LOAN_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && (contract.loanContract !== undefined || scenario.loan !== undefined)) ||
+      (contract.evaluatorVersion !== EVALUATOR_VERSION && scenario.executionAssumption !== undefined) ||
       (contract.evaluatorVersion === LEGACY_EVALUATOR_VERSION && (contract.savingsSchedule !== undefined || scenario.savingsAssessments !== undefined))) throw new Error('contract_version_unsupported');
   if (!contract.id || !contract.productId || scenario.productId !== contract.productId) throw new Error('product_mismatch');
   if (contract.currency !== 'AUD' || !['asset', 'liability'].includes(contract.direction)) throw new Error('currency_or_direction_unsupported');
@@ -131,8 +133,10 @@ export function validateLedger(contract: LedgerContract, scenario: LedgerScenari
     } else throw new Error('event_pattern_unsupported');
   }
   validateSavings(contract, scenario, refs, ruleRefs);
-  issues.push(...validateFees(contract, scenario, refs, ruleRefs));
+  issues.push(...validateFees(contract, scenario, refs, ruleRefs, authority));
   issues.push(...validateTd(contract, scenario, refs));
-  issues.push(...validateLoan(contract, scenario, refs));
+  issues.push(...validateLoan(contract, scenario, refs, (code, assumptionId) => {
+    details.push({ index: issues.length, code, kind: 'acknowledged_assumption', assumptionId }); issues.push(code);
+  }, authority));
   return issues;
 }

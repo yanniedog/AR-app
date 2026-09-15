@@ -5,9 +5,12 @@ import { canonical, hashText, money, nonNegative, rate, validateLedger } from '.
 import { EVALUATOR_VERSION, type CalculationReceipt, type LedgerContract, type LedgerEvent, type LedgerScenario } from './types';
 import { dailyInterest } from './interestAccrual';
 import { savingsInterest, type SavingsActivityCache } from './savingsAccrual';
-import { runTdLedger } from './tdLedger';
+import { tdAccountPort } from './tdLedger';
 import { ContractFeeLedger } from './feeLedger';
-import { runLoanLedger } from './loanLedger';
+import { loanAccountPort } from './loanLedger';
+import { finishAccount, type AccountPort } from './accountPort';
+import { dateIndex } from './dateIndex';
+import type { AccountAuthority } from './accountAuthority';
 
 function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
   if (event.amount.type === 'fixed') return money(event.amount.value);
@@ -22,21 +25,10 @@ function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
 export function calculateLedger(contract: LedgerContract, scenario: LedgerScenario): CalculationReceipt {
   const receipt: CalculationReceipt = {
     schemaVersion: 1, evaluatorVersion: EVALUATOR_VERSION, inputSha256: '', contractId: contract?.id ?? '',
-    dependencies: [], status: 'unsupported', claimAvailable: false, issues: [], assumptions: [], eligibility: null, totals: null, ledger: [],
+    dependencies: [], status: 'unsupported', completeness: 'unsupported', issueDetails: [], claimAvailable: false, issues: [], assumptions: [], eligibility: null, totals: null, ledger: [],
   };
   try {
-    const input = canonical({ evaluatorVersion: EVALUATOR_VERSION, contract, scenario });
-    if (input.length > 4_000_000) throw new Error('input_size_exceeded');
-    receipt.inputSha256 = hashText(input);
-    receipt.issues = validateLedger(contract, scenario);
-    receipt.dependencies = [...contract.dependencyIds]; receipt.assumptions = [...scenario.assumptions];
-    receipt.eligibility = evaluateEligibility(contract.eligibility, scenario.facts);
-    if (receipt.eligibility.status !== 'meets') receipt.issues.push(`eligibility:${receipt.eligibility.status}`);
-    const result = contract.loanContract ? runLoanLedger(contract, scenario, receipt) : contract.tdLifecycle ? runTdLedger(contract, scenario, receipt) : runLedger(contract, scenario, receipt);
-    result.issues = [...new Set(result.issues)];
-    result.status = result.issues.length ? 'incomplete' : 'complete';
-    result.claimAvailable = result.status === 'complete';
-    return result;
+    return finalizeAccount(finishAccount(prepareAccount(contract, scenario, receipt)));
   } catch (error) {
     receipt.status = 'unsupported'; receipt.claimAvailable = false; receipt.totals = null; receipt.ledger = [];
     receipt.issues.push(error instanceof Error ? error.message : 'invalid_contract');
@@ -44,21 +36,48 @@ export function calculateLedger(contract: LedgerContract, scenario: LedgerScenar
   }
 }
 
-function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: CalculationReceipt): CalculationReceipt {
+/** Shared validated state port; portfolio code supplies the same bound receipt. */
+export function prepareAccount(contract: LedgerContract, scenario: LedgerScenario, receipt: CalculationReceipt, authority?: AccountAuthority): AccountPort {
+  const input = canonical({ evaluatorVersion: EVALUATOR_VERSION, contract, scenario });
+  if (input.length > 4_000_000) throw new Error('input_size_exceeded');
+  receipt.inputSha256 = hashText(input); receipt.issueDetails = [];
+  receipt.issues = validateLedger(contract, scenario, receipt.issueDetails, authority);
+  receipt.dependencies = [...contract.dependencyIds]; receipt.assumptions = [...scenario.assumptions];
+  receipt.eligibility = evaluateEligibility(contract.eligibility, scenario.facts);
+  if (receipt.eligibility.status !== 'meets') receipt.issues.push(`eligibility:${receipt.eligibility.status}`);
+  if (contract.loanContract && !contract.loanContract.opening.components) return (function* (): AccountPort { return receipt; })();
+  return contract.loanContract ? loanAccountPort(contract, scenario, receipt, authority) : contract.tdLifecycle ? tdAccountPort(contract, scenario, receipt) : genericAccountPort(contract, scenario, receipt, authority);
+}
+export function finalizeAccount(receipt: CalculationReceipt): CalculationReceipt {
+  const classified = new Set((receipt.issueDetails ?? []).filter(d => receipt.issues[d.index] === d.code).map(d => d.index));
+  receipt.completeness = !receipt.issues.length ? 'factual_complete' : receipt.issues.every((_, index) => classified.has(index)) ? 'conditional_complete' : 'incomplete';
+  receipt.status = receipt.issues.length ? 'incomplete' : 'complete'; receipt.claimAvailable = receipt.status === 'complete';
+  const whollyClassified = new Map<string, boolean>();
+  receipt.issues.forEach((code, index) => whollyClassified.set(code, (whollyClassified.get(code) ?? true) && classified.has(index)));
+  receipt.issues = [...new Set(receipt.issues)];
+  receipt.issueDetails = (receipt.issueDetails ?? []).filter(d => whollyClassified.get(d.code)).map(d => ({ ...d, index: receipt.issues.indexOf(d.code) }));
+  return receipt;
+}
+
+export function* genericAccountPort(contract: LedgerContract, scenario: LedgerScenario, receipt: CalculationReceipt, authority?: AccountAuthority): AccountPort {
   let balance = money(scenario.openingBalance), offset = money(scenario.initialOffset), annualRate = rate(contract.initialAnnualRate);
   let accrued = decimalZero(), unposted = decimalZero(), posted = decimalZero(), fees = decimalZero();
   let inflows = decimalZero(), outflows = decimalZero();
   const events = [...scenario.events].sort((a, b) => a.date.localeCompare(b.date) || a.order - b.order);
+  const eventsByDate = dateIndex(events, e => e.date);
   const postingDates = new Set(contract.interest.postingDates);
-  let eventIndex = 0;
   const activityCache: SavingsActivityCache = new Map();
   const contractFees = new ContractFeeLedger(contract, scenario, receipt);
   for (let day = dayNumber(scenario.startDate); day < dayNumber(scenario.endDateExclusive); day++) {
     const date = calendarDate(day);
     const dayOpen = balance;
+    const incoming = yield { phase: 'start', date, balance: balance.fixed(12), receipt };
+    const movementStatus = new Map(incoming.map(m => [m.id, m.status]));
+    if (authority?.balanceUncertain) contractFees.tainted = true;
+    const today: LedgerEvent[] = [...(eventsByDate.get(date) ?? []), ...incoming.map(m => ({ id: m.id, date, order: m.order, type: 'cashflow' as const, delta: m.delta, label: 'Portfolio-owned transfer leg.', evidenceIds: m.evidenceIds }))].sort((a, b) => a.order - b.order);
+    if (new Set(today.map(e => e.order)).size !== today.length) throw new Error('portfolio_event_order_collision');
     if (contract.feeSchedule?.ordering !== 'after_scenario_events') balance = contractFees.apply(date, balance, dayOpen);
-    while (eventIndex < events.length && events[eventIndex].date === date) {
-      const event = events[eventIndex++];
+    for (const event of today) {
       let amount: Decimal | null = decimalZero(), note: string | undefined;
       if (event.type === 'cashflow') {
         amount = money(event.delta); balance = balance.add(amount);
@@ -77,16 +96,16 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
         }
       }
       if (balance.compare(decimalZero()) < 0) throw new Error('negative_balance_unsupported');
-      receipt.ledger.push({ date, id: event.id, type: event.type, amount: amount?.fixed() ?? null, balance: balance.fixed(), evidenceIds: 'evidenceIds' in event ? event.evidenceIds : [], ...(note ? { note } : {}) });
+      receipt.ledger.push({ date, id: event.id, type: event.type, amount: amount?.fixed() ?? null, balance: balance.fixed(), evidenceIds: 'evidenceIds' in event ? event.evidenceIds : [], ...(movementStatus.has(event.id) ? { settlementStatus: movementStatus.get(event.id) } : {}), ...(note ? { note } : {}) });
     }
     if (contract.feeSchedule?.ordering === 'after_scenario_events') balance = contractFees.apply(date, balance, dayOpen);
     let basis = balance.sub(offset);
     if (basis.compare(decimalZero()) < 0) basis = decimalZero();
     const savings = contract.savingsSchedule ? savingsInterest(basis, date, contract.interest, contract.savingsSchedule, scenario.savingsAssessments ?? [], activityCache) : null;
-    const interest = savings?.amount ?? dailyInterest(basis, annualRate, date, contract.interest);
+    const interest = authority?.balanceUncertain ? decimalZero() : savings?.amount ?? dailyInterest(basis, annualRate, date, contract.interest);
     if (savings) receipt.issues.push(...savings.issues);
     accrued = accrued.add(interest); unposted = unposted.add(interest);
-    receipt.ledger.push({ date, id: `accrue:${date}`, type: 'interest_accrual', amount: interest.fixed(12), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
+    receipt.ledger.push({ date, id: `accrue:${date}`, type: 'interest_accrual', amount: authority?.balanceUncertain ? null : interest.fixed(12), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
       ...(contractFees.tainted ? { note: 'Balance and interest depend on unresolved fees; known-component arithmetic only.' } : {}),
       ...(savings ? { savingsContributions: contractFees.tainted ? savings.contributions.map(c => c.status === 'applied' ? { ...c, status: 'needs_information' as const } : c) : savings.contributions } : {}) });
     if (postingDates.has(date)) {
@@ -97,6 +116,7 @@ function runLedger(contract: LedgerContract, scenario: LedgerScenario, receipt: 
       receipt.ledger.push({ date, id: `post:${date}`, type: 'interest_posting', amount: payment.fixed(), balance: balance.fixed(), evidenceIds: contract.interest.evidenceIds,
         ...(contractFees.tainted ? { note: 'Known-component posting; unresolved fee dependencies remain.' } : {}) });
     }
+    yield { phase: 'end', date, balance: balance.fixed(12), receipt };
   }
   if (contractFees.tainted) receipt.issues.push('balance_interest_fee_dependency_unknown');
   receipt.totals = {
