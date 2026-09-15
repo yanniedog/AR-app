@@ -1,0 +1,101 @@
+{
+  "provenance": {
+    "description": "Exact product detail from the verified published immutable details asset, not a synthesized business fixture.",
+    "run_date": "2026-09-14",
+    "manifest_sha256": "2fb3615081d11ac159094faf76eb567c7b4058d10fd5ee7172ace4defcfa2bc6",
+    "details_sha256": "fcc3ba465bbc862ed98465e12d71d426702da90284da6ae9a56835852586c475",
+    "details_url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-09-14-r000001/details-2026-09-14-fcc3ba465bbc.json.gz"
+  },
+  "product_key": "The Mac|BRIDGINGLOAN|RESIDENTIAL_MORTGAGES|BRIDGING LOAN",
+  "detail": {
+    "description": "BRIDGING LOAN",
+    "last_updated": "2026-09-01T08:39:08.000+10:00",
+    "fees": [
+      {
+        "label": "UPFRONT",
+        "name": "APPLICATION_FEE_BRIDGING_LOAN",
+        "value": "800.00",
+        "amountStatus": "fixed",
+        "currency": "AUD",
+        "feeMethodUType": "fixedAmount",
+        "fixedAmount": {
+          "amount": "800.00"
+        }
+      },
+      {
+        "label": "CASH_ADVANCE",
+        "name": "VALUATION_FEE",
+        "info": "Valuation charged at cost",
+        "amountStatus": "variable",
+        "currency": "AUD",
+        "feeMethodUType": "variable"
+      },
+      {
+        "label": "UPFRONT",
+        "name": "MORTGAGE_DISCHARGE_FEE",
+        "value": "200.00",
+        "amountStatus": "fixed",
+        "currency": "AUD",
+        "feeMethodUType": "fixedAmount",
+        "fixedAmount": {
+          "amount": "200.00"
+        }
+      },
+      {
+        "label": "CASH_ADVANCE",
+        "name": "LEGAL_FEE",
+        "info": "At cost",
+        "amountStatus": "variable",
+        "currency": "AUD",
+        "feeMethodUType": "variable"
+      }
+    ],
+    "features": [
+      {
+        "label": "REDRAW"
+      },
+      {
+        "label": "DIGITAL_BANKING",
+        "info": "Online Banking The Mac App"
+      },
+      {
+        "label": "NPP_PAYID"
+      },
+      {
+        "label": "NPP_ENABLED"
+      },
+      {
+        "label": "FREE_TXNS"
+      },
+      {
+        "label": "EXTRA_REPAYMENTS",
+        "info": "Unlimited"
+      }
+    ],
+    "eligibility": [
+      {
+        "label": "MIN_AGE",
+        "value": "18"
+      },
+      {
+        "label": "NATURAL_PERSON"
+      },
+      {
+        "label": "OTHER",
+        "info": "Maximum Term"
+      }
+    ],
+    "constraints": [
+      {
+        "label": "MIN_BALANCE",
+        "value": "25000.00"
+      }
+    ],
+    "links": {
+      "overview": "https://www.themaccu.com.au/home-loans/all-home-loans/",
+      "eligibility": "https://www.themaccu.com.au/home-loans/all-home-loans/",
+      "fees": "https://www.themaccu.com.au/media/2722/loans-fees-charges-0525.pdf",
+      "terms": "https://www.themaccu.com.au/about-us/corporate-information/the-fine-print/"
+    }
+  }
+}

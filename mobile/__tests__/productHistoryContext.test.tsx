@@ -74,10 +74,12 @@ jest.mock('../src/components/BankHistoryChart', () => ({ BankHistoryChart: 'Bank
 jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: 'ChartErrorBoundary' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState' }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeLine: 'ProductRateChangeLine' }));
+jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({
   AccessNotice: 'AccessNotice',
   DetailGroup: 'DetailGroup',
   HistoryLegend: jest.requireActual('../src/components/product/ProductDetailParts').HistoryLegend,
+  SelectedRateConditions: jest.requireActual('../src/components/product/RateConditionsDisclosure').SelectedRateConditions,
   OfficialLinks: 'OfficialLinks',
   ProductFacts: 'ProductFacts',
   ProductRatesList: 'ProductRatesList',
@@ -86,7 +88,7 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({
 }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/ui', () => ({
-  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row',
+  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row', Disclosure: 'Disclosure',
 }));
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));
 jest.mock('../src/data/bankInsights', () => ({ filterBankInsightsForSuitability: () => null }));

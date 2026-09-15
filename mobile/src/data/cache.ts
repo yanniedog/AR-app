@@ -1,6 +1,7 @@
 // SDK 54 replaced the classic file API with a File/Directory API; the classic
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
+import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
@@ -74,6 +75,7 @@ async function pruneRevisionAssets(current: Manifest, previous?: Manifest): Prom
       if (!Number.isFinite(created) || created <= 0 || created >= before) continue;
       await deletePath(path);
       await deletePath(`${path}.created`);
+      await deletePath(`${path}.verified`);
     } catch { /* Missing age evidence or cleanup failure must preserve the cache. */ }
   }
 }
@@ -396,7 +398,12 @@ export const cache = {
   async readDetails(): Promise<DetailsPayload | null> {
     const meta = await cache.readMeta();
     if (meta?.manifest.payload_revision && !meta.detailsSha) return null;
-    return readJson<DetailsPayload>(versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined));
+    const file = versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined);
+    try {
+      const text = await readText(file);
+      const details = await parseJsonHeavy<DetailsPayload>(text);
+      return await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
+    } catch { return null; }
   },
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
@@ -437,9 +444,10 @@ export const cache = {
     });
   },
 
-  async writeDetails(json: string, sha?: string): Promise<void> {
+  async writeDetails(json: string, sha?: string, verifiedAssetSha = sha): Promise<void> {
     await ensureDir();
     await writeVersionedAsset(DETAILS, json, sha);
+    if (verifiedAssetSha) await writeText(`${versionedAsset(DETAILS, sha)}.verified`, JSON.stringify(await detailsCacheIdentity(json, verifiedAssetSha)));
   },
 
   async readSearchIndex(): Promise<SearchIndexPayload | null> {
@@ -463,9 +471,12 @@ export const cache = {
     await deletePath(HISTORY_BANKS);
   },
 
-  async writeHistoryBanks(json: string, sha?: string): Promise<void> {
-    await ensureDir();
-    await writeVersionedAsset(HISTORY_BANKS, json, sha);
+  async writeHistoryBanks(json: string, sha?: string, isCurrent: () => boolean = () => true): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      if (!isCurrent()) return;
+      await writeVersionedAsset(HISTORY_BANKS, json, sha);
+    });
   },
 
   async readBankInsights(): Promise<BankInsightsPayload | null> {
@@ -568,12 +579,13 @@ export const cache = {
    * mistaken for the current one. Serialized against the write chain so
    * concurrent prefetch writers don't clobber each other.
    */
-  async writeOptionalMeta(patch: OptionalMeta): Promise<void> {
+  async writeOptionalMeta(patch: OptionalMeta, isCurrent: () => boolean = () => true): Promise<void> {
     return serialize(async () => {
       await ensureDir();
       const existing = await readJson<OptionalMeta>(OPTIONAL_META);
       const base = existing && existing.coreSha === patch.coreSha ? existing : { coreSha: patch.coreSha };
       const merged: OptionalMeta = { ...base, ...patch };
+      if (!isCurrent()) return;
       await writeText(OPTIONAL_META, JSON.stringify(merged));
     });
   },

@@ -1,3 +1,5 @@
+import { cache } from '../src/data/cache';
+import { COMPACT_HISTORY_NORMALIZATION_VERSION } from '../src/data/historyDerivation';
 import type { CorePayload, Manifest } from '../src/types';
 import { needsDetailsForNotifications, shouldWarmDetails } from '../src/data/optionalPrefs';
 import { loadSampleDetails, sampleCore, sampleManifest } from '../src/data/sample';
@@ -824,7 +826,7 @@ describe('optional feature prefs', () => {
     expect(store.getState().productHistoryError).toBeNull();
   });
 
-  it('uses the trusted loaded history timeline to skip exact-cache network revalidation', async () => {
+  it('revalidates historical identities even when the loaded timeline is unchanged', async () => {
     const cached = {
       schema_version: 2,
       run_date: remoteCore.run_date,
@@ -847,9 +849,10 @@ describe('optional feature prefs', () => {
       productHistoryError: 'stale sync failure',
     });
 
+    mockSyncProductHistoryFromDailyPayloads.mockResolvedValue(cached);
     await store.getState().ensureProductHistory();
 
-    expect(mockSyncProductHistoryFromDailyPayloads).not.toHaveBeenCalled();
+    expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
     expect(store.getState().productHistory).toBe(cached);
     expect(store.getState().productHistoryError).toBeNull();
   });
@@ -1237,5 +1240,47 @@ describe('optional feature prefs', () => {
     expect(mockDownloadBankInsights).toHaveBeenCalled();
     expect(store.getState().bankInsights?.banks.AlphaBank).toBeDefined();
     expect(store.getState().bankInsightsError).toBeNull();
+  });
+});
+
+
+describe('history edition and normalization boundaries', () => {
+  beforeEach(() => { jest.clearAllMocks(); mockReadMeta.mockResolvedValue(null); });
+  const compact = () => ({ schema_version: 1, run_date: remoteCore.run_date, run_dates: ['2026-05-13', remoteCore.run_date],
+    sections: { Mortgage: { points: [{ date: remoteCore.run_date, min: 0.03, max: 0.06, mean: 0.04, median: 0.04, count: 1 }] } } });
+  it.each([undefined, 'old-normalizer'])('refreshes same compact SHA when cached normalization is%s', async normalization_version => {
+    const cached = { ...compact(), normalization_version };
+    store.setState({ prefs: historyRibbonPrefs, source: 'remote', manifest: remoteManifest, core: remoteCore, historyBanks: cached });
+    mockReadMeta.mockResolvedValue({ coreSha: remoteManifest.files.core.sha256, historyBanksSha: remoteManifest.files.history_banks!.sha256 });
+    mockDownloadHistoryBanks.mockResolvedValue({ historyBanks: compact() });
+    await store.getState().ensureHistoryBanks();
+    expect(mockDownloadHistoryBanks).toHaveBeenCalledTimes(1);
+    expect(store.getState().historyBanks?.normalization_version).toBe(COMPACT_HISTORY_NORMALIZATION_VERSION);
+    expect(store.getState().historyBanks?.derivation_version).toBeUndefined();
+    await store.getState().ensureHistoryBanks(); expect(mockDownloadHistoryBanks).toHaveBeenCalledTimes(1);
+  });
+  it('does not endorse mismatched compact cache after a failed refresh', async () => {
+    const cached = { ...compact(), normalization_version: COMPACT_HISTORY_NORMALIZATION_VERSION };
+    store.setState({ prefs: historyRibbonPrefs, source: 'remote', manifest: remoteManifest, core: remoteCore, historyBanks: cached });
+    mockReadMeta.mockResolvedValue({ coreSha: remoteManifest.files.core.sha256, historyBanksSha: 'different-history' });
+    mockDownloadHistoryBanks.mockRejectedValueOnce(new Error('refresh failed'));
+    await store.getState().ensureHistoryBanks();
+    expect(store.getState().historyBanks).toBeNull();
+    expect(store.getState().historyBanksError).toBe('refresh failed');
+  });
+  it.each(['resolve', 'reject'])('superseded aggregate%s cannot overwrite adopted state or cache', async action => {
+    let resolve!: (value: unknown) => void, reject!: (reason: unknown) => void;
+    mockDownloadHistoryBanks.mockReturnValue(new Promise((yes, no) => { resolve = yes; reject = no; }));
+    store.setState({ prefs: historyRibbonPrefs, source: 'remote', manifest: remoteManifest, core: remoteCore, historyBanks: null });
+    const pending = store.getState().ensureHistoryBanks();
+    for (let i = 0; i < 12 && !mockDownloadHistoryBanks.mock.calls.length; i++) await Promise.resolve();
+    expect(mockDownloadHistoryBanks).toHaveBeenCalledTimes(1);
+    const adopted = compact();
+    store.setState({ manifest: { ...remoteManifest, tag: 'different-edition' }, historyBanks: adopted, historyBanksError: 'new-edition-status' });
+    jest.mocked(cache.writeHistoryBanks).mockClear(); jest.mocked(cache.writeOptionalMeta).mockClear();
+    if (action === 'resolve') resolve({ historyBanks: compact() }); else reject(new Error('old request failed'));
+    await pending;
+    expect(store.getState().historyBanks).toBe(adopted); expect(store.getState().historyBanksError).toBe('new-edition-status');
+    expect(cache.writeHistoryBanks).not.toHaveBeenCalled(); expect(cache.writeOptionalMeta).not.toHaveBeenCalled();
   });
 });

@@ -574,6 +574,7 @@ export default function Calculator() {
       keyboardShouldPersistTaps="handled"
       onContentSizeChange={() => setLayoutReady(true)}
     >
+      <Button title="Open calculation receipt" variant="secondary" onPress={() => router.push('/calculation-receipt')} />
       {sectionOptions.length > 1 ? (
         <View style={{ marginBottom: 12 }}>
           <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />

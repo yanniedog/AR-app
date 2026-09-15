@@ -4,6 +4,11 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 
 import { BankAvatar } from '../src/components/BankAvatar';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
+import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
+import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
+import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
+import { MortgageComparison } from '../src/components/product/MortgageComparison';
+import { PortfolioComparison } from '../src/components/product/PortfolioComparison';
 import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
 import { AppText, Badge, Button, Card, Divider, Row } from '../src/components/ui';
@@ -13,7 +18,6 @@ import {
   formatRate,
   formatTerm,
   humanizeEnum,
-  isBroadlyAvailable,
 } from '../src/data/format';
 import { rankFraction, rankedRateLabelForRow } from '../src/data/selectors';
 import {
@@ -29,7 +33,7 @@ import {
   showCompactDetailRow,
   usesCompactCompareLayout,
 } from '../src/lib/comparePresentation';
-import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../src/types';
+import type { ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 const LABEL_W = 108;
@@ -68,44 +72,6 @@ function comparisonIssueCopy(issue: CompareSelectionIssue): { title: string; sub
   return { title: 'Nothing to compare', subtitle: 'Select at least two products.' };
 }
 
-function relevantDetailItems(
-  items: DetailItem[],
-  section: SectionKey,
-  kind: 'fees' | 'details',
-): DetailItem[] {
-  if (kind !== 'fees') return items;
-  const patterns: Record<SectionKey, RegExp> = {
-    Mortgage: /mortgage|home loan|rate lock|redraw|loan account/i,
-    Savings: /account|card|transaction|withdraw|transfer|cheque/i,
-    TD: /term deposit|deposit|maturity/i,
-  };
-  const relevant = items.filter((item) => patterns[section].test(String(item.name ?? item.info ?? '')));
-  return relevant.length ? relevant : items;
-}
-
-function detailSummary(
-  items: DetailItem[] | undefined,
-  section: SectionKey,
-  empty = 'None published',
-  kind: 'fees' | 'details' = 'details',
-): string {
-  if (!items?.length) return empty;
-  return relevantDetailItems(items, section, kind)
-    .slice(0, 2)
-    .map((item) => {
-      const rawLabel = String(item.name ?? item.label ?? '').trim();
-      const label = humanizeEnum(rawLabel) || rawLabel;
-      const rawValue = item.value ?? item.info;
-      const numericValue = kind === 'fees' && rawValue != null && /^\d+(?:\.\d+)?$/.test(String(rawValue))
-        ? `$${Number(rawValue).toLocaleString('en-AU', { maximumFractionDigits: 2 })}`
-        : rawValue;
-      if (rawLabel.toUpperCase() === 'OTHER' && item.info) return String(item.info);
-      return [label, numericValue].filter(Boolean).join(': ');
-    })
-    .filter(Boolean)
-    .join(' · ') || empty;
-}
-
 function valuesDiffer(row: AttrRow, entries: Entry[]): boolean {
   return new Set(entries.map((entry) => row.get(entry).trim().toLocaleLowerCase())).size > 1;
 }
@@ -141,6 +107,8 @@ export default function Compare() {
     () => comparison && comparison.issue == null ? comparison.entries : [],
     [comparison],
   );
+
+  const calculationRows = useMemo(() => entries.map(entry => entry.row), [entries]);
 
   useEffect(() => {
     if (entries.length >= 2 && !details) void ensureDetails();
@@ -258,17 +226,10 @@ export default function Compare() {
     },
     { label: 'LVR', get: (e) => humanizeEnum(e.row.lvr_tier) || '—' },
     { label: 'Balance', get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
-    {
-      label: 'Availability',
-      get: (e) => {
-        const detail = detailFor(e);
-        if (!detail) return 'Checking availability';
-        return isBroadlyAvailable(e.row, detail) ? 'Widely available' : 'Special eligibility';
-      },
-    },
-    { label: 'Fees', get: (e) => detailSummary(detailFor(e)?.fees, e.section, 'None published', 'fees') },
-    { label: 'Eligibility', get: (e) => detailSummary(detailFor(e)?.eligibility, e.section, 'No criteria published') },
-    { label: 'Features', get: (e) => detailSummary(detailFor(e)?.features, e.section) },
+    { label: 'Fees', get: (e) => publishedItemCount(detailFor(e)?.fees) },
+    { label: 'Eligibility', get: (e) => publishedItemCount(detailFor(e)?.eligibility) },
+    { label: 'Features', get: (e) => publishedItemCount(detailFor(e)?.features) },
+    { label: 'Constraints', get: (e) => publishedItemCount(detailFor(e)?.constraints) },
     { label: 'Observed', get: (e) => e.row.last_updated?.slice(0, 10) || core.run_date },
   ];
   const attrRows = commonRows.filter((item) => {
@@ -339,6 +300,8 @@ export default function Compare() {
   return (
     <Screen onLayout={() => setLayoutReady(true)}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
+      <CanonicalTermsComparison rows={calculationRows} />
+      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
       {compact ? (
         <>
           <View style={styles.compactIntro}>
@@ -376,7 +339,7 @@ export default function Compare() {
                     <AppText variant="body" weight="700">{entry.row.product_name}</AppText>
                     <AppText variant="small" color="textMuted">{entry.row.provider}</AppText>
                   </View>
-                  {isBest ? <Badge label="Best" tone={bestTone} /> : null}
+                  {isBest ? <Badge label={lowerIsBetter ? "Lowest rate" : "Highest rate"} tone={bestTone} /> : null}
                 </Row>
 
                 <View style={styles.compactRateBlock}>
@@ -509,7 +472,7 @@ export default function Compare() {
                       'rate',
                       RATE_ROW_H,
                       <View style={styles.rateCell}>
-                        {isBest ? <Badge label="Best" tone={bestTone} /> : null}
+                        {isBest ? <Badge label={lowerIsBetter ? "Lowest rate" : "Highest rate"} tone={bestTone} /> : null}
                         <AppText variant="rate" style={{ color: entryRateColor }}>
                           {f === null ? '—' : formatRate(f)}
                         </AppText>
@@ -553,6 +516,17 @@ export default function Compare() {
       </View>
       )}
 
+      <AppText variant="h3">Published product details</AppText>
+      {entries.map((entry, index) => (
+        <ComparisonDisclosures
+          key={`${entry.row.product_key}#${entry.row.rate_index ?? index}`}
+          name={entry.row.product_name}
+          provider={entry.row.provider}
+          productKey={entry.row.product_key}
+          detail={detailFor(entry)}
+          loading={!details}
+        />
+      ))}
       <Divider />
       <AppText variant="tiny" color="textFaint">
         {`${entries.length} products · Compared by ${entries[0].section === 'Mortgage'
@@ -560,7 +534,7 @@ export default function Compare() {
           : depositRankMetric === 'base' ? 'ongoing rate' : 'headline rate'}${compact ? '' : ' · scroll for more columns'}`}
       </AppText>
       <AppText variant="tiny" color="textFaint">
-        Missing means not published. Confirm current rates and conditions with the bank.
+        Missing details may reflect a collection gap. A rate ranking does not include all costs or establish eligibility.
       </AppText>
       </ScrollView>
     </Screen>

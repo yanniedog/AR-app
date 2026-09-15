@@ -1,0 +1,12 @@
+{
+  "status": "unfrozen_implementation_pin_not_bank_approval",
+  "schemas": {
+    "asset.schema.json": "d35b406b93552884bae270533889007c8acfc4e88b09e1601ece223bed15c1a4",
+    "authority-graph.schema.json": "6401993ecb8f6dad12cfc4e4f9862abd1d7ba69642b351e0e95e3acf78aef915",
+    "definitions.schema.json": "599545d919bc8d0ad655dc1428a2bd1ce4287bf373c8075a828efabc3695ffcf",
+    "index.schema.json": "4af13b04f525475ec7632f617303dec7f69dcb5e773c5d84093477c4e547b854",
+    "policy.schema.json": "66b7fe5c31bc06f2a6b3dfc34d117d2bf99214e4fd3da91c1dec3d675f956415",
+    "shard.schema.json": "a8438b67f7d914c27e8ccb50a8b32ff47243b6d98354b7556ce6dc23c10ad27d",
+    "subject.schema.json": "e998948887efa60a880974d2f2fbf5ae451fe01a0bd9e7f3eec9890dbf6eb948"
+  }
+}

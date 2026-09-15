@@ -1,0 +1,65 @@
+{
+  "purpose": "Technical manifest identity cross-language vector; no source approval",
+  "manifest": {
+    "schema_version": 1,
+    "run_date": "2026-09-15",
+    "generated_at": "2026-08-04T15:04:08Z",
+    "app_min_version": "1.0.0",
+    "repo": "yanniedog/AR-local",
+    "tag": "app-payload-2026-09-15-r000001",
+    "counts": {
+      "products": 520,
+      "providers": 104,
+      "rates": 520,
+      "fees": 3966,
+      "features": 2983,
+      "eligibility": 1467,
+      "constraints": 813,
+      "failures": 16
+    },
+    "schedule": {
+      "label": "Bundled historical sample; no live update schedule"
+    },
+    "files": {
+      "core": {
+        "name": "core.json",
+        "bytes": 402792,
+        "sha256": "a12ad87cbabaecd6ae0154c00092ecafd15b8f0431ccf63af2d5ecca6f665c9f",
+        "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-08-05-r000001/core.json"
+      },
+      "details": {
+        "name": "details.json",
+        "bytes": 1279812,
+        "sha256": "c45ca83e1cc560bb09580e423fed5ea05f3a5a40dbea8f06706ec1c28e499693",
+        "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-08-05-r000001/details.json"
+      }
+    },
+    "payload_revision": {
+      "schema_version": 1,
+      "revision": 1,
+      "generation_id": "sha256-1f644fd7f98c7df2e1d3b21e6f8760e69eb048dac5173b83b714cfef141fdc11",
+      "bundle_sha256": "1f644fd7f98c7df2e1d3b21e6f8760e69eb048dac5173b83b714cfef141fdc11",
+      "parent_revision": null
+    },
+    "source_observation": {
+      "generation_id": "protocol-generation",
+      "contract_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "executable_v2": {
+      "schema_version": 2,
+      "index": {
+        "name": "executable_v2_index-2026-09-15-bbbbbbbbbbbb.json.gz",
+        "bytes": 1,
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "shards": {
+        "executable_v2_shard_000": {
+          "name": "executable_v2_shard_000-2026-09-15-cccccccccccc.json.gz",
+          "bytes": 1,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    }
+  },
+  "expectedBundleSha256": "1f644fd7f98c7df2e1d3b21e6f8760e69eb048dac5173b83b714cfef141fdc11"
+}

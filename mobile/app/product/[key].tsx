@@ -1,3 +1,9 @@
+import { MortgagePeriodCalculation } from '../../src/components/product/MortgagePeriodCalculation';
+import { SavingsPeriodCalculation } from '../../src/components/product/SavingsPeriodCalculation';
+import { EligibilityAssessment } from '../../src/components/product/EligibilityAssessment';
+import { DetailsOnlyProduct } from '../../src/components/product/DetailsOnlyProduct';
+import { FixedDepositCalculation } from '../../src/components/product/FixedDepositCalculation';
+import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, InteractionManager, Share, View } from 'react-native';
@@ -20,6 +26,7 @@ import {
   ProductRatesList,
   ProductSpecs,
   SectionTitle,
+  SelectedRateConditions,
 } from '../../src/components/product/ProductDetailParts';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
@@ -78,6 +85,10 @@ export default function ProductDetail() {
   const parsedRateIndex = exactRateRequested ? Number(ri) : null;
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
+  const found = useMemo(
+    () => core ? findByKey(core.sections, productKey) : null,
+    [core, productKey],
+  );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
   const historyBanksSha = useStore((s) => s.manifest?.files.history_banks?.sha256 ?? null);
@@ -118,11 +129,11 @@ export default function ProductDetail() {
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
-    void ensureDetails({ forProductView: true });
-  }, [ensureDetails]);
+    if (found) void ensureDetails({ forProductView: true });
+  }, [ensureDetails, found]);
 
   useEffect(() => {
-    if (!showBankInsights) {
+    if (!showBankInsights || !found) {
       insightsRequestKey.current = null;
       return;
     }
@@ -130,10 +141,10 @@ export default function ProductDetail() {
     if (!key || insightsRequestKey.current === key) return;
     insightsRequestKey.current = key;
     void ensureBankInsights();
-  }, [core?.run_date, ensureBankInsights, showBankInsights]);
+  }, [core?.run_date, ensureBankInsights, showBankInsights, found]);
 
   useEffect(() => {
-    if (!historyEnabled) return;
+    if (!historyEnabled || !found) return;
     // Product-history dated-core fan-out is expensive; wait until the product
     // screen transition finishes so navigation stays instant (including during
     // performance audit — eager sync was starving browse/search journeys).
@@ -160,13 +171,10 @@ export default function ProductDetail() {
     ensureHistoryBanks,
     ensureBankInsights,
     ensureProductHistory,
+    found,
     productKey,
   ]);
 
-  const found = useMemo(
-    () => core ? findByKey(core.sections, productKey) : null,
-    [core, productKey],
-  );
   const row = found
     ? exactRateRequested
       ? rateIndex == null
@@ -376,12 +384,8 @@ export default function ProductDetail() {
   });
 
   if (!found) {
-    return (
-      <>
-        <Stack.Screen options={{ title: 'Product' }} />
-        <EmptyState icon="alert-circle-outline" title="Product not found" />
-      </>
-    );
+    if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
+    return <DetailsOnlyProduct productKey={productKey} />;
   }
 
   const { section, siblings } = found;
@@ -703,12 +707,16 @@ export default function ProductDetail() {
         </Card>
 
         <ProductFacts detail={detail} />
+        <SelectedRateConditions row={row} section={section} />
+        {section === 'TD' ? <FixedDepositCalculation row={row} /> : null}
+        <EligibilityAssessment productKey={productKey} row={row} section={section} /><SavingsPeriodCalculation productKey={row.product_key} row={row} section={section} /><MortgagePeriodCalculation productKey={row.product_key} row={row} section={section} />
         <DetailGroup title="Features" icon="checkmark-circle-outline" items={normalizedFactKinds.has('feature') ? undefined : detail?.features} loading={detailsLoading && !normalizedFactKinds.has('feature')} />
         <DetailGroup title="Fees" icon="cash-outline" items={detail?.fees} loading={detailsLoading} />
         <DetailGroup title="Eligibility" icon="person-outline" items={normalizedFactKinds.has('eligibility') ? undefined : detail?.eligibility} loading={detailsLoading && !normalizedFactKinds.has('eligibility')} />
         <DetailGroup title="Constraints" icon="lock-closed-outline" items={normalizedFactKinds.has('constraint') ? undefined : detail?.constraints} loading={detailsLoading && !normalizedFactKinds.has('constraint')} />
 
-        <OfficialLinks links={detail?.links} />
+        <OfficialLinks links={detail?.links} sourceDocuments={detail?.sourceDocuments} />
+        <ProductTermsDisclosure productKey={productKey} />
 
         <Button
           title={`View all ${row.provider} products`}

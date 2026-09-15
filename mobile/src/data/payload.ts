@@ -1,4 +1,5 @@
 import { hasAppHealthFetchGuard } from '../lib/appHealthTransportGuard';
+import { bindVerifiedDetails } from './detailsIdentity';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
 import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
@@ -443,7 +444,7 @@ export async function downloadDetails(
     startedAt: parseStarted,
     phaseComplete: true,
   });
-  return { text, details };
+  return { text, details: bindVerifiedDetails(details, expectedSha) };
 }
 
 export interface SearchIndexResult {

@@ -1,0 +1,37 @@
+import original from '../__tests__/fixtures/mortgage-technical-draft.json';
+import { eligibilityTransportHarness } from './eligibilityHarness';
+import { monetaryIdentity } from '../src/data/monetaryContracts/authority';
+import { hashText, canonical } from '../src/lib/productTermsEngine/validation';
+import { calendarDate, dayNumber } from '../src/lib/productTermsEngine/calendar';
+import { eligibilityBundleIdentity } from '../src/data/eligibilityContracts/transport';
+import { bindVerifiedDetails } from '../src/data/detailsIdentity';
+import { loadMortgageSelections } from '../src/data/mortgageContracts/transport';
+import { mortgagePostingDates, mortgageObligationId } from '../src/data/mortgageContracts/calendar';
+import { downloadInflate } from '../src/data/payload';
+import { Decimal } from '../src/lib/productTermsEngine/decimal';
+import type { MortgageSubject, MortgageAsset, MortgageInputs } from '../src/data/mortgageContracts/types';
+export async function mortgageHarness(input: any = {}, prepare?: (s: MortgageSubject) => void) {
+ const h = await eligibilityTransportHarness(), s = structuredClone(original) as MortgageSubject;
+ const start = input.start ?? '2024-01-01', end = input.end ?? '2024-01-02'; s.scope.from = start; s.scope.toExclusive = end; s.policy.annualRate = input.rate ?? '0.0365'; s.policy.paymentPhase = input.phase ?? 'after_accrual'; s.policy.paymentRounding = input.rounding ?? 'half_up'; s.policy.postingRounding = input.rounding ?? 'half_up'; s.policy.postingInventory.dueDates = mortgagePostingDates(s);
+ const a = s.authorityGraph.authorities[0]; a.scope = {...s.scope}; a.from = start; a.toExclusive = end;
+ const days = Array.from({length:dayNumber(end)-dayNumber(start)},(_,n) => calendarDate(dayNumber(start)+n));
+ a.fieldCoverage.forEach(f => { f.from=start;f.toExclusive=end;f.postingEventDates=days; });
+ s.authorityGraph.completedPeriod.completedThroughExclusive=end; s.authorityGraph.completedPeriod.asOf=`${end}T12:00:00Z`; a.id=monetaryIdentity(a,'id');s.policy.authorityIds=[a.id];
+ if (input.external_fee) s.policy.fees.occurrences=[{id:'fee-1',incurredDate:start,dueDate:start,order:0,amount:input.external_fee,debit:'external_account',settlement:'exact_cleared_due_date_amount_and_account',externalAccountRole:'fees',evidenceIds:s.policy.fieldEvidenceIds.feeInventory}];
+ prepare?.(s); s.authorityGraph.identitySha256=monetaryIdentity(s.authorityGraph,'identitySha256');s.scopeId=hashText(canonical(['monetary-scope-v3',s.capability,s.scope]));
+ delete (h.context.manifest as any).executable_v2;
+ const detail={description:'Technical mortgage test only; no bank approval',displayIdentity:{productCategory:'RESIDENTIAL_MORTGAGES'}};h.context.details.products[s.scope.productKey]=detail;bindVerifiedDetails(h.context.details,h.context.manifest.files.details.sha256);
+ s.routing={...s.routing,productKey:s.scope.productKey,runDate:h.context.manifest.run_date,sourceGenerationId:h.context.manifest.source_observation.generation_id,exportContractSha256:h.context.manifest.source_observation.contract_digest,coreAssetSha256:h.context.manifest.files.core.sha256,detailsAssetSha256:h.context.manifest.files.details.sha256,productRecordSha256:hashText(canonical(detail))};s.id=monetaryIdentity(s,'id');
+ const approval={subjectId:s.id,capability:'mortgage_calculation' as const,reviewId:'a'.repeat(64),reviewEvidenceSha256:'a'.repeat(64),benchmarkResultSha256:'a'.repeat(64),authorityGraphSha256:s.authorityGraph.identitySha256,reviewedAt:'2026-09-15T00:00:00Z',checks:Object.fromEntries(['source_alignment','historical_coverage','scope_coverage','input_bindings','rule_semantics','rate_schedule','material_terms','fee_coverage','posting_and_residue','benchmark'].map(k=>[k,'verified']))};
+ const asset={schemaVersion:3,capability:'mortgage_calculation',productKey:s.scope.productKey,routing:s.routing,approvalPolicy:'as_of_adopted_edition',identitySha256:'',subjects:[{subject:s,approval}]} as MortgageAsset;asset.identitySha256=monetaryIdentity(asset,'identitySha256');
+ const descriptor=(key:string,sha:string)=>({name:`${key}-${h.context.manifest.run_date}-${sha.slice(0,12)}.json.gz`,bytes:1,sha256:sha});
+ const manifest={...h.context.manifest,executable_v3:{schema_version:3 as const,capabilities:{mortgage_calculation:{index:descriptor('monetary_v3_mortgage_calculation_index','b'.repeat(64)),shards:{monetary_v3_mortgage_calculation_shard_000:descriptor('monetary_v3_mortgage_calculation_shard_000','c'.repeat(64))}}}}};
+ const bundle=eligibilityBundleIdentity(manifest);manifest.payload_revision={...manifest.payload_revision!,bundle_sha256:bundle,generation_id:`sha256-${bundle}`};
+ const context={...h.context,manifest},target={kind:'product' as const,productKey:s.scope.productKey,detail};
+ const common={schema_version:3,capability:'mortgage_calculation',run_date:manifest.run_date,core_asset_sha256:manifest.files.core.sha256,details_asset_sha256:manifest.files.details.sha256};
+ const index={...common,products:{[s.scope.productKey]:'monetary_v3_mortgage_calculation_shard_000'}},shard={...common,products:{[s.scope.productKey]:asset}};
+ (downloadInflate as jest.Mock).mockImplementation(async(url:string)=>JSON.stringify(url.includes('_index-')?index:shard));
+ const components=input.opening ?? {principal:input.principal??'1000',postedInterest:'0',accruedInterest:'0',capitalizedCharges:'0',otherDebt:'0'};
+ const inputs:MortgageInputs={accountId:'loan-account',offerId:'private-offer',sourceVersion:'offer-v1',snapshotId:'opening',from:start,toExclusive:end,confirmedAt:'2026-09-15T00:00:00Z',provenance:'user_reported_bank_offer_and_statement',confirmedAnnualRate:s.policy.annualRate,openingOutstanding:Object.values(components).reduce<Decimal>((sum,v)=>sum.add(Decimal.parse(String(v))),Decimal.parse('0')).fixed(12),openingComponents:components,noCarriedArrearsOrDefault:true,noExcludedMovements:true,obligationAmount:input.obligation??'30',originalAnchor:input.obligation?start:'2023-12-15',executionCoverage:'complete',payments:input.payment?[{id:'pay1',accountId:'loan-account',obligationId:mortgageObligationId(s,'loan-account',start),date:start,phase:s.policy.paymentPhase,order:0,amount:input.payment,status:'cleared'}]:[],feeSettlements:input.external_fee&&input.external_fee!=='0'?[{occurrenceId:'fee-1',externalAccountId:'fee-account',amount:input.external_fee,date:start,status:'cleared'}]:[],externalAccounts:input.external_fee&&input.external_fee!=='0'?[{role:'fees',accountId:'fee-account'}]:[],confirmedOfferFacts:{},customerFacts:[{field:'adult',state:'known',value:{type:'boolean',value:true}}]};
+ return {subject:s,context,target,inputs,asset,index,shard,load:()=>loadMortgageSelections(context,target)};
+}

@@ -1,4 +1,13 @@
 import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, SectionKey } from '../types';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
+
+const coreContents = new WeakMap<CoreIntegrityContext, string>();
+function contentDigest(core: CorePayload) { return bytesToHex(sha256(utf8ToBytes(JSON.stringify(core)))); }
+/** Checked only at calculation boundaries, never by rendering selectors. */
+export function verifiedCoreContents(integrity: CoreIntegrityContext | null | undefined): boolean {
+  return !!integrity && coreContents.get(integrity) === contentDigest(integrity.core);
+}
 
 export interface CoreIntegrityContext {
   schemaVersion: 1;
@@ -176,6 +185,7 @@ export function normalizeCoreWithIntegrity(
       }),
     },
   };
+  coreContents.set(integrity, contentDigest(normalized));
   return { core: normalized, integrity };
 }
 
@@ -193,9 +203,11 @@ export function rebindCoreIntegrity(
   integrity: CoreIntegrityContext,
   core: CorePayload,
 ): CoreIntegrityContext {
-  return {
+  const rebound: CoreIntegrityContext = {
     ...integrity,
     core,
     runDate: core.run_date,
   };
+  if (verifiedCoreContents(integrity)) coreContents.set(rebound, contentDigest(core));
+  return rebound;
 }

@@ -1,3 +1,4 @@
+import { COMPACT_HISTORY_NORMALIZATION_VERSION } from './historyDerivation';
 import type { DetailsPayload } from '../types';
 import { cache } from './cache';
 import {
@@ -9,6 +10,7 @@ import {
   downloadSearchIndex,
 } from './payload';
 import { shouldWarmDetails } from './optionalPrefs';
+import { verifiedDetailsSha } from './detailsIdentity';
 import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
@@ -53,6 +55,8 @@ let detailsEnsureInFlight: Promise<void> | null = null;
 let detailsEnsureGeneration = 0;
 /** Coalesce deep-search loads for the same content-addressed data edition. */
 let searchIndexEnsureInFlight: { key: string; promise: Promise<void> } | null = null;
+let historyBanksRequest = 0;
+let historyBanksInFlightManifest: AppState['manifest'] = null;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
   const revisionBoundSet = (): StoreSet => {
@@ -120,7 +124,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           const meta = await cache.readMeta();
           if (myGeneration !== detailsEnsureGeneration) return;
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
-          if (details && details.run_date === core.run_date && shaOk) {
+          if (details && details.run_date === core.run_date && shaOk && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
               await rebuildAndInstallSuitabilityIndex(
                 core,
@@ -147,7 +151,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           // already proves it cannot satisfy this core, so do not parse it merely
           // to throw it away before downloading the current asset.
           const cached = shaOk ? await cache.readDetails() : null;
-          if (cached && cached.run_date === core.run_date) {
+          if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               set({ details: cached });
               await rebuildAndInstallSuitabilityIndex(
@@ -166,7 +170,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               manifest.files.details.sha256,
             );
             if (!datasetUnchanged()) return;
-            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined);
+            await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
             if (!datasetUnchanged()) return;
             await cache.updateMeta({
               manifest,
@@ -368,7 +372,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
     },
 
     async ensureHistoryBanks(opts: { force?: boolean } = {}) {
-      const set = revisionBoundSet();
+      const boundSet = revisionBoundSet();
+      const requested = get(); let requestId = 0;
+      const isCurrent = () => get().core === requested.core && get().manifest === requested.manifest && get().source === requested.source &&
+        (!requestId || requestId === historyBanksRequest);
+      const set: StoreSet = patch => { if (isCurrent()) boundSet(patch); };
       const { force = false } = opts;
       if (!effectiveHistoryRibbon(get().prefs)) {
         logEnsureSkipped('ensureHistoryBanks', 'proGate');
@@ -384,10 +392,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         !force &&
         historyBanksSyncState.inFlight &&
         historyBanksSyncState.inFlightCoreSha === currentCoreSha &&
-        historyBanksSyncState.inFlightHistorySha === currentHistorySha
+        historyBanksSyncState.inFlightHistorySha === currentHistorySha && historyBanksInFlightManifest === requested.manifest
       ) {
         return historyBanksSyncState.inFlight;
       }
+      requestId = ++historyBanksRequest;
       const run = (async () => {
         if (force) set({ historyBanksError: null });
         debugLog.info('store', 'ensureHistoryBanks start');
@@ -410,14 +419,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
 
         const coreSha = manifest.files.core.sha256;
         const meta = await cache.readOptionalMeta();
+        if (!isCurrent()) return;
         const shaMatches = (sha?: string) => meta?.coreSha === coreSha && meta?.historyBanksSha === sha;
-        const cached = historyBanks ?? (await readValidatedHistoryBanks());
+        const cached = historyBanks ?? (await readValidatedHistoryBanks(isCurrent));
+        if (!isCurrent()) return;
 
         const installHistory = async (validated: HistoryBanksPayload, sha: string) => {
+          if (!isCurrent()) return;
           await yieldToUi();
+          if (!isCurrent()) return;
           const text = JSON.stringify(validated);
-          await cache.writeHistoryBanks(text, manifest.payload_revision && /^[a-f0-9]{64}$/.test(sha) ? sha : undefined);
-          await cache.writeOptionalMeta({ coreSha, historyBanksSha: sha });
+          await cache.writeHistoryBanks(text, manifest.payload_revision && /^[a-f0-9]{64}$/.test(sha) ? sha : undefined, isCurrent);
+          if (!isCurrent()) return;
+          await cache.writeOptionalMeta({ coreSha, historyBanksSha: sha }, isCurrent);
+          if (!isCurrent()) return;
           set({ historyBanks: validated, historyBanksError: null });
           debugLog.info(
             'store',
@@ -437,7 +452,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           return;
         }
         if (compactAsset) {
-          if (!force && cached && cached.run_date === core.run_date && shaMatches(compactAsset.sha256)) {
+          if (!force && cached && cached.run_date === core.run_date && cached.normalization_version === COMPACT_HISTORY_NORMALIZATION_VERSION && shaMatches(compactAsset.sha256)) {
             set({ historyBanks: cached, historyBanksError: null });
             // #region agent log
             debugLog.debug(
@@ -460,6 +475,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               );
               throw new Error('history_banks payload failed validation');
             }
+            validated.normalization_version = COMPACT_HISTORY_NORMALIZATION_VERSION;
             await installHistory(validated, compactAsset.sha256);
             return;
           } catch (err) {
@@ -478,17 +494,13 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             // dozens of dated 11 MB cores. Keep any usable cache and let the
             // explicit Retry action try this asset again.
             set({
-              historyBanks: !manifest.payload_revision && cached?.run_dates.length ? cached : null,
+              historyBanks: cached?.normalization_version === COMPACT_HISTORY_NORMALIZATION_VERSION && cached.run_date === core.run_date && shaMatches(compactAsset.sha256) ? cached : null,
               historyBanksError: msg,
             });
             return;
           }
         }
 
-        if (!force && cached && cached.run_date === core.run_date && cached.run_dates.length > 1) {
-          set({ historyBanks: cached, historyBanksError: null });
-          return;
-        }
 
         try {
           const synced = await syncHistoryFromDailyPayloads({
@@ -496,6 +508,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             currentCore: core,
             existing: cached,
             cachedDates: new Set(cached?.run_dates ?? []),
+            coreSha,
+            isCurrent,
           });
           if (synced.run_dates.length > 1) {
             await installHistory(synced, dailyHistorySha(synced.run_dates));
@@ -508,36 +522,10 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           );
         }
 
-        const asset = manifest.files.history_banks;
-        if (!asset) {
-          if (cached && cached.run_dates.length > 1) {
-            set({ historyBanks: cached, historyBanksError: null });
-            return;
-          }
-          set({ historyBanks: null, historyBanksError: 'history dates unavailable' });
-          return;
-        }
-
-        if (!force && cached && cached.run_date === core.run_date && shaMatches(asset.sha256)) {
-          set({ historyBanks: cached, historyBanksError: null });
-          return;
-        }
-
-        try {
-          const { historyBanks: fresh } = await downloadHistoryBanks(asset.url, asset.sha256);
-          const validated = normalizeHistoryBanksPayload(fresh);
-          if (!validated) {
-            debugLog.error('store', 'ensureHistoryBanks rejected payload after download (validation failed)');
-            set({ historyBanks: null, historyBanksError: 'history_banks payload failed validation' });
-            return;
-          }
-          await installHistory(validated, asset.sha256);
-        } catch (err) {
-          const msg = String((err as Error)?.message ?? err);
-          debugLog.error('store', `ensureHistoryBanks failed: ${msg}`);
-          set({ historyBanks: cached?.run_dates.length ? cached : null, historyBanksError: msg });
-        }
+        // An unsuccessful legacy refresh cannot certify the previous edition.
+        set({ historyBanks: null, historyBanksError: 'history dates unavailable' });
       })();
+      historyBanksInFlightManifest = requested.manifest;
       historyBanksSyncState.inFlightCoreSha = currentCoreSha;
       historyBanksSyncState.inFlightHistorySha = currentHistorySha;
       const promise = run.finally(() => {
@@ -815,10 +803,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         return;
       }
       const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
+      const currentBundleSha = get().manifest?.payload_revision?.bundle_sha256 ?? '';
       if (
         !force &&
         productHistorySyncState.inFlight &&
-        productHistorySyncState.inFlightCoreSha === currentCoreSha
+        productHistorySyncState.inFlightCoreSha === currentCoreSha &&
+        productHistorySyncState.inFlightBundleSha === currentBundleSha
       ) {
         return productHistorySyncState.inFlight;
       }
@@ -833,34 +823,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const coreSha = manifest?.files.core.sha256 ?? '';
         const cached = productHistory ?? normalizeProductHistoryPayload(await cache.readProductHistory());
         const current = get();
+        const manifestStillCurrent = () => {
+          const latest = get().manifest;
+          return !(manifest?.payload_revision || latest?.payload_revision) ||
+            (!!latest && samePayloadIdentity(manifest, latest));
+        };
         if (
           current.source !== 'remote' ||
           current.core?.run_date !== core.run_date ||
-          (current.manifest?.files.core.sha256 ?? '') !== coreSha
+          (current.manifest?.files.core.sha256 ?? '') !== coreSha || !manifestStillCurrent()
         ) {
           return;
         }
-        const trustedHistoryDates = current.historyBanks?.run_date === core.run_date
-          ? current.historyBanks.run_dates
-          : null;
-        if (
-          !force &&
-          cached &&
-          coreSha &&
-          cached.core_sha === coreSha &&
-          cached.run_date === core.run_date &&
-          trustedHistoryDates?.length === cached.run_dates.length &&
-          trustedHistoryDates.every((date, index) => date === cached.run_dates[index])
-        ) {
-          if (productHistory !== cached || current.productHistoryError) {
-            set({ productHistory: cached, productHistoryError: null });
-          }
-          debugLog.debug(
-            'perf',
-            `ensureProductHistory exact-cache slices=${cached.run_dates.length}`,
-          );
-          return;
-        }
+        // An unchanged date axis/current core does not prove historical assets
+        // are unchanged. The sync checks the small index before reusing slices.
         const requestId = ++productHistorySyncState.request;
         let lastPublished = cached ?? null;
         const revisionIsCurrent = () => {
@@ -869,7 +845,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             requestId === productHistorySyncState.request &&
             current.source === 'remote' &&
             current.core?.run_date === core.run_date &&
-            (current.manifest?.files.core.sha256 ?? '') === coreSha
+            (current.manifest?.files.core.sha256 ?? '') === coreSha && manifestStillCurrent()
           );
         };
         try {
@@ -941,10 +917,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
       })();
       productHistorySyncState.inFlightCoreSha = currentCoreSha;
+      productHistorySyncState.inFlightBundleSha = currentBundleSha;
       const promise = run.finally(() => {
         if (productHistorySyncState.inFlight === promise) {
           productHistorySyncState.inFlight = null;
           productHistorySyncState.inFlightCoreSha = null;
+          productHistorySyncState.inFlightBundleSha = null;
         }
       });
       productHistorySyncState.inFlight = promise;

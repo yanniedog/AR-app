@@ -2,6 +2,7 @@ import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { CorePayload, RateRow } from '../src/types';
+import { rateConditionFixture } from '../testUtils/rateConditions';
 
 type TestNode = {
   props: Record<string, any>;
@@ -65,6 +66,7 @@ const mockState: Record<string, any> = {
   ensureBankInsights: jest.fn(async () => undefined),
   ensureProductHistory: jest.fn(async () => undefined),
 };
+const mockRoute: { key: string; ri?: string } = { key: row.product_key };
 
 jest.mock('../src/data/store', () => ({
   useStore: (selector: (state: typeof mockState) => unknown) => selector(mockState),
@@ -72,7 +74,7 @@ jest.mock('../src/data/store', () => ({
 jest.mock('expo-router', () => ({
   router: { back: jest.fn(), push: jest.fn() },
   Stack: { Screen: 'StackScreen' },
-  useLocalSearchParams: () => ({ key: row.product_key }),
+  useLocalSearchParams: () => mockRoute,
 }));
 jest.mock('../src/components/BankAvatar', () => ({ BankAvatar: 'BankAvatar' }));
 jest.mock('../src/components/AppNavigationMenu', () => ({ NavigationMenuButton: 'NavigationMenuButton' }));
@@ -80,6 +82,7 @@ jest.mock('../src/components/BankHistoryChart', () => ({ BankHistoryChart: 'Bank
 jest.mock('../src/components/ChartErrorBoundary', () => ({ ChartErrorBoundary: 'ChartErrorBoundary' }));
 jest.mock('../src/components/feedback', () => ({ EmptyState: 'EmptyState' }));
 jest.mock('../src/components/product/ProductRateChangeLine', () => ({ ProductRateChangeLine: 'ProductRateChangeLine' }));
+jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
 jest.mock('../src/components/product/ProductDetailParts', () => ({
   AccessNotice: 'AccessNotice',
   DetailGroup: 'DetailGroup',
@@ -89,10 +92,11 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({
   ProductRatesList: 'ProductRatesList',
   ProductSpecs: 'ProductSpecs',
   SectionTitle: 'SectionTitle',
+  SelectedRateConditions: jest.requireActual('../src/components/product/RateConditionsDisclosure').SelectedRateConditions,
 }));
 jest.mock('../src/components/Screen', () => ({ ScreenScrollView: 'ScreenScrollView' }));
 jest.mock('../src/components/ui', () => ({
-  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row',
+  AppText: 'AppText', Button: 'Button', Card: 'Card', IconButton: 'IconButton', Row: 'Row', Disclosure: 'Disclosure',
 }));
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));
 jest.mock('../src/data/bankInsights', () => ({ filterBankInsightsForSuitability: () => null }));
@@ -149,4 +153,35 @@ describe('Product detail save eligibility', () => {
     act(() => header.unmount());
     act(() => tree.unmount());
   });
+  it('renders the exact requested real rate wording through the actual product route', async () => {
+    const f = rateConditionFixture();
+    Object.assign(mockState, { core: f.core, coreIntegrity: f.coreIntegrity, manifest: f.manifest, details: f.details });
+    mockRoute.key = f.productKey; mockRoute.ri = '5';
+    let tree!: InspectableRenderer;
+    await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+    const disclosure = tree.root.findAllByType('Disclosure').find(node => node.props.title === 'Rate conditions')!;
+    expect(disclosure.props.summary).toBe('1 published item');
+    act(() => disclosure.props.onToggle());
+    const visible = tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join('\n');
+    expect(visible).toContain('For balances of over 1 million dollars');
+    expect(visible).not.toContain('For balances of 1 million dollars and under');
+    act(() => tree.unmount());
+  });
+});
+
+it('opens verified details-only product through the actual route without fabricating a rate, while explicit ri refuses', async () => {
+  const f = rateConditionFixture(), key = 'details-only-technical';
+  f.details.products[key] = { description: 'Published descriptive text', links: { overview: 'https://example.org/product' } } as any;
+  Object.assign(mockState, { core: f.core, coreIntegrity: f.coreIntegrity, manifest: f.manifest, details: f.details, detailsLoading: false });
+  mockRoute.key = key; delete mockRoute.ri;
+  let tree!: InspectableRenderer; await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+  expect(tree.root.findAllByType('AppText').map(node => String(node.props.children ?? '')).join(' ')).toContain('Published descriptive text');
+  expect(tree.root.findAllByType('ProductRatesList')).toHaveLength(0);
+  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(1);
+  expect(tree.root.findAllByType('ProductTermsDisclosure')[0].props.productKey).toBe(key);
+  act(() => tree.unmount()); mockRoute.ri = 'bad';
+  await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
+  expect(tree.root.findAllByProps({ title: 'Exact rate no longer available' })).toHaveLength(1);
+  expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(0);
+  act(() => tree.unmount());
 });

@@ -7,12 +7,14 @@ import { Pressable, Share, type ScrollView, View } from 'react-native';
 import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
+import { RateConditionsDisclosure } from '../src/components/product/RateConditionsDisclosure';
 import { ScreenScrollView } from '../src/components/Screen';
 import { TOUCH_TARGET_MIN } from '../src/components/TouchTarget';
 import { AppText, Button, Card, Disclosure, Divider, Row } from '../src/components/ui';
 import {
   buildNegotiationBrief,
   buildRateReceipt,
+  rateConditionReceiptLines,
   type ReceiptFact,
 } from '../src/data/rateReceipt';
 import { findByKey } from '../src/data/selectors';
@@ -60,6 +62,9 @@ export default function RateReceiptScreen() {
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
   const validRateIndex = requestedRateIndex == null || Number.isInteger(requestedRateIndex);
   const core = useStore((state) => state.core);
+  const details = useStore((state) => state.details);
+  const manifest = useStore((state) => state.manifest);
+  const coreIntegrity = useStore((state) => state.coreIntegrity);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const detail = detailsProducts?.[productKey] ?? null;
   const ensureDetails = useStore((state) => state.ensureDetails);
@@ -83,9 +88,9 @@ export default function RateReceiptScreen() {
     : null;
   const receipt = useMemo(
     () => row && found && core
-      ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail })
+      ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail, rateConditionContext: { core, details, manifest, coreIntegrity } })
       : null,
-    [core, detail, found, row],
+    [core, detail, details, manifest, coreIntegrity, found, row],
   );
   const brief = useMemo(
     () => receipt && found
@@ -103,6 +108,7 @@ export default function RateReceiptScreen() {
     const lines = [
       `Bank-call brief · ${receipt.provider}`,
       `${receipt.productName} · ${receipt.advertisedRate} · observed ${receipt.evidenceDate}`,
+      ...rateConditionReceiptLines(receipt),
     ];
     if (brief.illustration) {
       lines.push(
@@ -111,7 +117,7 @@ export default function RateReceiptScreen() {
       );
     }
     if (brief.comparables.length) {
-      lines.push('', 'Comparable observed rates:');
+      lines.push('', 'Comparable observed rates (individual rate conditions unassessed):');
       for (const item of brief.comparables) {
         lines.push(`- ${item.provider}: ${item.advertisedRate} · ${item.productName}`);
       }
@@ -342,6 +348,7 @@ export default function RateReceiptScreen() {
         <Card style={{ marginBottom: 16 }}><Facts items={receipt.tier} /></Card>
 
         <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" />
+        <RateConditionsDisclosure model={receipt.rateConditions} />
         <Card style={{ marginBottom: 16 }}>
           <Facts
             items={receipt.conditions}

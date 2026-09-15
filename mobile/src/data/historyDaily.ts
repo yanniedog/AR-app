@@ -1,13 +1,17 @@
+import { HISTORY_DERIVATION_VERSION, historyDateStatuses } from './historyDerivation';
+import { resolveDatedPublication, resolveLegacyPublications, type HistoricalPublication } from './historicalPublication';
 import { parseDatesIndex, type DatesIndex } from './datesIndex';
-import { DATES_INDEX_URL, PAYLOAD_REPO, datedManifestUrl } from '../config';
-import { assertRevisionManifest } from './payloadRevision';
+import { DATES_INDEX_URL } from '../config';
 import { debugLog } from '../lib/debugLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
-import { downloadCore, fetchManifest } from './payload';
+import { downloadCore } from './payload';
+import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
+export { resolveDatedPublication } from './historicalPublication';
+
 export { parseDatesIndex, type DatesIndex } from './datesIndex';
 
 /** Earliest run_date published as an immutable dated GitHub release (app_payload.py). */
@@ -71,14 +75,16 @@ export function mergeHistoryFromCores(
       if (!core) continue;
       const point = extractSectionPoint(core, section);
       if (point) byDate.set(date, point);
+      else byDate.delete(date);
     }
-    const points = run_dates.map((d) => byDate.get(d)).filter((p): p is BankHistoryPoint => !!p);
+    const points = run_dates.map((d) => byDate.get(d) ?? sanitizeRibbonPoint(d));
     if (points.length) sections[section] = { points };
   }
   if (!Object.keys(sections).length) return null;
 
   return normalizeHistoryBanksPayload({
     schema_version: 1,
+    derivation_version: HISTORY_DERIVATION_VERSION,
     run_date: latestRunDate,
     run_dates,
     sections,
@@ -94,20 +100,12 @@ export async function fetchDatesIndexJson(url: string = DATES_INDEX_URL): Promis
   return parsed;
 }
 
-export async function downloadDatedCore(runDate: string, index?: DatesIndex): Promise<CorePayload> {
+export async function downloadDatedCore(runDate: string, index?: DatesIndex, publication?: HistoricalPublication): Promise<CorePayload> {
   const selected = index ?? await fetchDatesIndexJson();
-  const head = selected.revision_heads?.[runDate];
-  const manifest = head
-    ? await fetchManifest(head.manifest_url, undefined, head.manifest_sha256)
-    : await fetchManifest(datedManifestUrl(runDate));
-  if (head) assertRevisionManifest(manifest, head, runDate, PAYLOAD_REPO);
-  const { core } = await downloadCore(
-    manifest.files.core.url,
-    manifest.files.core.sha256,
-    { fileName: manifest.files.core.name, expectedBytes: manifest.files.core.bytes,
-      ...(head ? { requireExactBytes: true, maxCompressedBytes: 64 * 1024 * 1024,
-        maxInflatedBytes: 192 * 1024 * 1024 } : {}) },
-  );
+  const { manifest } = publication ?? await resolveDatedPublication(runDate, selected);
+  const { core } = await downloadCore(manifest.files.core.url, manifest.files.core.sha256,
+    { fileName: manifest.files.core.name, expectedBytes: manifest.files.core.bytes, requireExactBytes: true,
+      maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024 });
   if (core.run_date !== runDate) throw new Error('Dated core publication date mismatch');
   return core;
 }
@@ -163,7 +161,9 @@ export interface SyncHistoryDailyOpts {
   currentCore: CorePayload;
   existing?: HistoryBanksPayload | null;
   cachedDates?: Set<string>;
+  coreSha?: string;
   maxConcurrent?: number;
+  isCurrent?: () => boolean;
 }
 
 /**
@@ -177,14 +177,22 @@ export async function syncHistoryFromDailyPayloads(
   if (!targetRunDate) throw new Error('syncHistoryFromDailyPayloads: missing targetRunDate');
 
   const index = await fetchDatesIndexJson();
-  const wantedDates = historyDatesUpTo(index, targetRunDate);
+  const wantedDates = normalizeTimelineDates([...historyDatesUpTo(index, targetRunDate), targetRunDate]);
+  const revisionHighWater = historicalRevisionHighWater(
+    opts.existing?.revision_high_water, opts.existing?.source_identities,
+  );
+  assertHistoricalIdentitiesAdvance(index, wantedDates, revisionHighWater);
   if (!wantedDates.length) throw new Error('dates-index has no history dates');
 
   const coresByDate = new Map<string, CorePayload>();
   coresByDate.set(targetRunDate, opts.currentCore);
 
-  const skip = opts.cachedDates ?? new Set(opts.existing?.run_dates ?? []);
-  const toFetch = wantedDates.filter((d) => d !== targetRunDate && !skip.has(d));
+  const publications = await resolveLegacyPublications(index, wantedDates.filter(d => d !== targetRunDate), opts.isCurrent);
+  const selectedIdentity = (date: string): string | undefined => index.revision_heads?.[date] ? historicalSourceIdentity(index, date) : publications.get(date)?.identity;
+  const skip = new Set((opts.existing?.run_dates ?? []).filter(date => opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION &&
+    !!opts.existing.source_identities?.[date] && opts.existing.source_identities[date] === selectedIdentity(date)));
+  const sourceIdentities = Object.fromEntries([...skip].map(date => [date, opts.existing!.source_identities![date]]));
+  const toFetch = wantedDates.filter(d => d !== targetRunDate && !skip.has(d) && !!selectedIdentity(d));
 
   debugLog.info(
     'historyDaily',
@@ -198,12 +206,14 @@ export async function syncHistoryFromDailyPayloads(
       { length: Math.min(opts.maxConcurrent ?? 3, toFetch.length) },
       async () => {
         while (next < toFetch.length) {
-          if (circuit.isOpen) return;
+          if (circuit.isOpen || !(opts.isCurrent?.() ?? true)) return;
           const runDate = toFetch[next];
           next += 1;
           try {
-            const core = await downloadDatedCore(runDate, index);
+            const core = await downloadDatedCore(runDate, index, publications.get(runDate));
+            if (!(opts.isCurrent?.() ?? true)) return;
             coresByDate.set(runDate, core);
+            sourceIdentities[runDate] = selectedIdentity(runDate)!;
             circuit.success();
             await yieldToUi();
           } catch (err) {
@@ -226,20 +236,16 @@ export async function syncHistoryFromDailyPayloads(
     await Promise.all(workers);
   }
 
-  const cachedPointDates = new Set<string>();
-  for (const section of SECTION_KEYS) {
-    for (const point of opts.existing?.sections?.[section]?.points ?? []) {
-      const date = String(point.date || '').slice(0, 10);
-      if (date) cachedPointDates.add(date);
-    }
-  }
-  const availableDates = wantedDates.filter(
-    (d) => coresByDate.has(d) || cachedPointDates.has(d),
-  );
-  const built = mergeHistoryFromCores(opts.existing, coresByDate, availableDates, targetRunDate);
+  const reusable: HistoryBanksPayload | null = opts.existing ? { ...opts.existing, sections: Object.fromEntries(SECTION_KEYS.map(section =>
+    [section, { points: (opts.existing?.sections[section]?.points ?? []).filter(point => skip.has(point.date)) }])) } : null;
+  const built = mergeHistoryFromCores(reusable, coresByDate, wantedDates, targetRunDate);
   if (!built || built.run_dates.length < 1) {
     throw new Error('daily history sync produced no section points');
   }
+  if (opts.coreSha) sourceIdentities[targetRunDate] = `core:${opts.coreSha}`;
+  built.source_identities = normalizeHistoryIdentities(sourceIdentities, wantedDates);
+  built.date_status = historyDateStatuses(wantedDates, built.source_identities);
+  built.revision_high_water = historicalRevisionHighWater(revisionHighWater, sourceIdentities);
   debugLog.info(
     'historyDaily',
     `sync ok run_date=${built.run_date} slices=${built.run_dates.length}`,

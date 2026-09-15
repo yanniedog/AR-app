@@ -19,3 +19,11 @@
 .gitattributes text eol=lf
 .easignore text eol=lf
 .npmrc text eol=lf
+mobile/src/data/eligibilityContracts/*.schema.json -text whitespace=cr-at-eol
+
+mobile/src/data/monetaryContracts/schemas/*.schema.json -text whitespace=cr-at-eol
+mobile/src/data/monetaryContracts/runtimeSchemas.ts text eol=lf
+
+mobile/src/data/mortgageContracts/schemas/*.json -text whitespace=cr-at-eol
+mobile/__tests__/fixtures/mortgage-independent-oracle-v2.json -text whitespace=cr-at-eol
+mobile/__tests__/fixtures/mortgage-leap-monthend-companion.json -text whitespace=cr-at-eol

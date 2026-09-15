@@ -20,13 +20,13 @@ export async function onWifi(): Promise<boolean> {
   }
 }
 
-export async function readValidatedHistoryBanks(): Promise<HistoryBanksPayload | null> {
+export async function readValidatedHistoryBanks(isCurrent: () => boolean = () => true): Promise<HistoryBanksPayload | null> {
   const raw = await cache.readHistoryBanks();
   if (!raw) return null;
   const normalized = normalizeHistoryBanksPayload(raw);
   if (normalized) return normalized;
   debugLog.warn('store', 'discarding invalid cached history banks payload');
-  await cache.clearHistoryBanks();
+  if (isCurrent()) await cache.clearHistoryBanks();
   return null;
 }
 
@@ -53,7 +53,8 @@ export const productHistorySyncState: {
   request: number;
   inFlight: Promise<void> | null;
   inFlightCoreSha: string | null;
-} = { request: 0, inFlight: null, inFlightCoreSha: null };
+  inFlightBundleSha: string | null;
+} = { request: 0, inFlight: null, inFlightCoreSha: null, inFlightBundleSha: null };
 
 export const historyBanksSyncState: {
   inFlight: Promise<void> | null;

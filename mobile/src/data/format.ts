@@ -5,9 +5,9 @@ import { getSuitabilityAllowed } from './suitabilityGate';
 
 /** Parse a rate that may be a normalized fraction ("0.0634") or a raw percent ("6.34"). */
 export function toFraction(rate: string | number | null | undefined): number | null {
-  if (rate === null || rate === undefined || rate === '') return null;
+  if (rate === null || rate === undefined || (typeof rate === 'string' && !rate.trim())) return null;
   const n = typeof rate === 'number' ? rate : Number(rate);
-  if (!isFinite(n) || n <= 0) return null;
+  if (!isFinite(n) || n < 0) return null;
   return n > 1 ? n / 100 : n;
 }
 

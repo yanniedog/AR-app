@@ -33,9 +33,10 @@ describe('financial claim truth contracts', () => {
     const chart = read('src/components/scenario/StaySwitchChart.tsx');
     const editor = read('src/components/scenario/SwitchCostEditor.tsx');
 
-    expect(chart).toContain('Illustrative difference');
+    expect(chart).toContain('Total-cost difference');
     expect(chart).toContain("? 'Unavailable'");
-    expect(chart).toContain('Cost difference and break-even stay unavailable');
+    expect(chart).toContain('Complete terms and customer applicability remain unverified');
+    expect(chart).toContain('Known-cost subtotal');
     expect(chart).not.toContain("'Save '");
     expect(chart).not.toContain("'Costs '");
     expect(editor).toContain("'Unknown'");

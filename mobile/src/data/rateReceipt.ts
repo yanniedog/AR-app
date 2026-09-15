@@ -1,3 +1,4 @@
+import { descriptiveValue } from './descriptiveValue';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
 import type {
@@ -19,10 +20,18 @@ import {
   visibleAccountRows,
 } from './format';
 import type { UserRateScenario } from './userRateScenario';
+import { scopedRateConditions, type RateConditionContext, type ScopedRateConditions } from './rateConditions';
 
 export interface ReceiptFact {
   label: string;
   value: string;
+}
+
+export function rateConditionReceiptLines(receipt: RateReceipt): string[] {
+  const model = receipt.rateConditions;
+  return model.status === 'available'
+    ? ['Selected rate conditions:', ...model.entries.map(entry => entry.text), 'Published wording; eligibility remains unassessed.']
+    : [model.reason];
 }
 
 export interface OfficialReceiptSource {
@@ -51,6 +60,7 @@ export interface RateReceipt {
   cohort: 'standard' | 'non-standard';
   tier: ReceiptFact[];
   conditions: ReceiptFact[];
+  rateConditions: ScopedRateConditions;
   fees: ReceiptFact[];
   officialSources: OfficialReceiptSource[];
   limitations: string[];
@@ -134,12 +144,12 @@ function detailFacts(items: DetailItem[] | undefined): ReceiptFact[] {
   if (!items?.length) return [];
   return items.flatMap((item, index) => {
     const label = String(item.name ?? item.label ?? `Item ${index + 1}`).trim();
-    const value = [item.value, item.info]
+    const value = [descriptiveValue(item.value), item.info]
       .filter((part) => part !== null && part !== undefined && String(part).trim())
       .map(String)
       .join(' — ')
       .trim();
-    return label && value ? [{ label: humanizeEnum(label) || label, value }] : [];
+    return label && (value || item.name || item.label) ? [{ label: humanizeEnum(label) || label, value }] : [];
   });
 }
 
@@ -153,6 +163,7 @@ export function buildRateReceipt(input: {
   section: SectionKey;
   evidenceDate: string;
   detail?: ProductDetail | null;
+  rateConditionContext?: RateConditionContext;
 }): RateReceipt {
   const { row, section, evidenceDate, detail } = input;
   const qualifier = rateQualifier(row, section);
@@ -175,6 +186,7 @@ export function buildRateReceipt(input: {
   addFact(tier, 'Product ID', row.product_id);
 
   const conditions = detailFacts(detail?.eligibility);
+  const rateConditions = scopedRateConditions(row, section, input.rateConditionContext);
   conditions.push(...detailFacts(detail?.constraints));
   if (qualifier.conditional) {
     conditions.unshift({ label: qualifier.label, value: qualifier.note });
@@ -222,6 +234,7 @@ export function buildRateReceipt(input: {
     cohort: isNonStandard(row) ? 'non-standard' : 'standard',
     tier,
     conditions,
+    rateConditions,
     fees: detailFacts(detail?.fees),
     officialSources,
     limitations,

@@ -1,3 +1,4 @@
+import { descriptiveValue } from '../../data/descriptiveValue';
 import Ionicons from '../icons/AppIcon';
 import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
@@ -28,6 +29,7 @@ import { PRODUCT_HISTORY_SERIES_LABEL } from '../../lib/productHistoryCopy';
 import type { DetailItem, ProductDetail as ProductDetailData, RateRow, SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { openProduct } from '../../lib/nav';
+export { SelectedRateConditions } from './RateConditionsDisclosure';
 
 export function RateRowLine({ row, section, accent }: { row: RateRow; section: SectionKey; accent: string }) {
   const theme = useTheme();
@@ -107,8 +109,8 @@ export function DetailGroup({
   if ((!items || items.length === 0) && !loading) return null;
   const displayValue = (item: DetailItem): string | null => {
     if (title === 'Fees') return formatFeeValue(item);
-    if (item.value === undefined || item.value === null || String(item.value).trim() === '') return null;
-    const raw = String(item.value).trim();
+    const raw = descriptiveValue(item.value);
+    if (raw === null) return null;
     const label = String(item.label ?? '').toUpperCase();
     if (title === 'Eligibility' && (label === 'MIN_AGE' || label === 'MAX_AGE') && /^\d+$/.test(raw)) {
       return `${raw} years`;
@@ -310,16 +312,22 @@ export function AccessNotice({
   );
 }
 
-export function OfficialLinks({ links }: { links?: ProductDetailData['links'] }) {
+export function OfficialLinks({ links, sourceDocuments }: { links?: ProductDetailData['links']; sourceDocuments?: ProductDetailData['sourceDocuments'] }) {
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
   const [open, setOpen] = useState(false);
-  if (!links) return null;
+  if (!links && !sourceDocuments?.length) return null;
   const all: { label: string; url?: string; icon: keyof typeof Ionicons.glyphMap }[] = [
-    { label: 'Product overview', url: links.overview, icon: 'document-text-outline' },
-    { label: 'Eligibility criteria', url: links.eligibility, icon: 'person-outline' },
-    { label: 'Fees & pricing', url: links.fees, icon: 'cash-outline' },
-    { label: 'Terms & conditions', url: links.terms, icon: 'reader-outline' },
+    { label: 'Product overview', url: links?.overview, icon: 'document-text-outline' },
+    { label: 'Eligibility criteria', url: links?.eligibility, icon: 'person-outline' },
+    { label: 'Fees & pricing', url: links?.fees, icon: 'cash-outline' },
+    { label: 'Terms & conditions', url: links?.terms, icon: 'reader-outline' },
+    { label: 'Package & linked products', url: links?.bundle, icon: 'document-text-outline' },
+    ...(sourceDocuments ?? []).map((document) => ({
+      label: document.label || humanizeEnum(document.relation) || 'Additional document',
+      url: document.sourceUrl ?? document.url,
+      icon: 'document-text-outline' as const,
+    })),
   ];
   const items = all.filter((i) => !!i.url);
   if (!items.length) return null;
@@ -332,7 +340,7 @@ export function OfficialLinks({ links }: { links?: ProductDetailData['links'] })
     >
       <View>
         {items.map((it, i) => (
-          <View key={it.label}>
+          <View key={`${it.label}:${it.url}:${i}`}>
             {i > 0 ? <Divider style={{ marginVertical: 4 }} /> : null}
             <Pressable
               onPress={() => requestExternalUrl({

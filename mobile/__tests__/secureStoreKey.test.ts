@@ -9,6 +9,7 @@ import {
 describe('SecureStore key contract', () => {
   it('registers every static key with an Expo-compatible value', () => {
     expect(SECURE_STORE_KEYS).toEqual({
+      customerProfile: 'ar.customer-profile.v1',
       debugLogUploadReceipt: 'ar.debug-log.public-upload-receipt.v1',
       payloadDecryptionKey: 'ar.payload.deckey',
       performanceAuditRollbackScenario: 'performance-audit-rollback-scenario-v1',

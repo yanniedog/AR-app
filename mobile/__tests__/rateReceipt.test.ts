@@ -1,3 +1,4 @@
+import placeholders from './fixtures/published-descriptive-placeholders-20260915.json';
 import {
   buildNegotiationBrief,
   buildRateReceipt,
@@ -300,4 +301,16 @@ describe('local negotiation brief', () => {
     expect(brief.comparables.map((item) => item.productKey)).toEqual([open.product_key]);
     expect(brief.cohortSummary).toMatch(/^2 comparable/);
   });
+});
+
+test('published label-only eligibility survives descriptive placeholder suppression in receipts', () => {
+  const eligibility = placeholders.items.filter(i => i.kind === 'eligibility').map(i => i.item);
+  expect(eligibility.length).toBeGreaterThan(0);
+  const original = JSON.stringify(eligibility);
+  const receipt = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-09-15', detail: { eligibility } });
+  expect(receipt.conditions).toHaveLength(eligibility.length);
+  for (const fact of receipt.conditions) { expect(fact.label).toBeTruthy(); expect(fact.value).not.toMatch(/\bnull\b/i); }
+  expect(JSON.stringify(eligibility)).toBe(original);
+  const explicit = buildRateReceipt({ row: row(), section: 'Mortgage', evidenceDate: '2026-09-15', detail: { constraints: [{ label: 'Zero', value: 0 }, { label: 'False', value: 'false' }] } });
+  expect(explicit.conditions).toEqual([{ label: 'Zero', value: '0' }, { label: 'False', value: 'false' }]);
 });

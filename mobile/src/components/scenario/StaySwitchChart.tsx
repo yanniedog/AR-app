@@ -61,7 +61,7 @@ export function StaySwitchChart({
     + `${projection.targetProvider} total interest ${projectionCurrency(projection.switching?.totalInterest ?? 0)}. `
     + (costClaimsAvailable
       ? `Break-even ${shortDate(projection.breakEvenDate)}.`
-      : 'Cost difference and break-even unavailable until fee inputs are complete.');
+      : 'Total-cost difference and break-even unavailable until material terms and calculation are verified.');
 
   if (!projection.ready) return null;
   return (
@@ -69,7 +69,7 @@ export function StaySwitchChart({
       <View>
         <AppText variant={compact ? 'h3' : 'h2'}>Stay or switch</AppText>
         <AppText variant="small" color="textMuted">
-          Net loan after offset · advertised rates{projection.projectionScope === 'published-fixed-period' ? ' · fixed period only' : ''}
+          Monthly illustration · net loan after offset{projection.projectionScope === 'published-fixed-period' ? ' · fixed period only' : ''}
         </AppText>
       </View>
       <View accessibilityRole="image" accessibilityLabel={chartLabel}>
@@ -100,7 +100,7 @@ export function StaySwitchChart({
       </Row>
       <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <View style={{ flex: 1 }}>
-          <AppText variant="tiny" color="textMuted">Illustrative difference</AppText>
+          <AppText variant="tiny" color="textMuted">Total-cost difference</AppText>
           <AppText
             variant="body"
             weight="800"
@@ -123,7 +123,7 @@ export function StaySwitchChart({
       <AppText variant="tiny" color="textMuted">
         {costClaimsAvailable
           ? 'Illustrative only. Rates and the entered allocation are held constant; future rates, tax and refinancing timing are not forecast.'
-          : 'Cost difference and break-even stay unavailable until every applicable fee amount is confirmed.'}
+          : 'Complete terms and customer applicability remain unverified. Known-cost subtotals exclude unresolved costs and use monthly assumptions.'}
       </AppText>
       {!compact ? (
         <>
@@ -134,12 +134,12 @@ export function StaySwitchChart({
               <AppText variant="small">Switch {projectionCurrency(projection.switching?.totalInterest ?? 0)}</AppText>
             </View>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <AppText variant="tiny" color="textMuted">Modelled cost</AppText>
+              <AppText variant="tiny" color="textMuted">Known-cost subtotal</AppText>
               <AppText variant="small">
-                Stay {projection.stay?.totalCost == null ? 'Unavailable' : projectionCurrency(projection.stay.totalCost)}
+                Stay {projection.stay == null ? 'Unavailable' : projectionCurrency(projection.stay.knownCostSubtotal)}
               </AppText>
               <AppText variant="small">
-                Switch {projection.switching?.totalCost == null ? 'Unavailable' : projectionCurrency(projection.switching.totalCost)}
+                Switch {projection.switching == null ? 'Unavailable' : projectionCurrency(projection.switching.knownCostSubtotal)}
               </AppText>
             </View>
           </Row>
@@ -164,7 +164,7 @@ export function StaySwitchChart({
       ) : null}
       {!costClaimsAvailable ? (
         <AppText variant="tiny" color="textMuted">
-          {projection.fees.unknownFeeReasons.length} fee item{projection.fees.unknownFeeReasons.length === 1 ? '' : 's'} need checking.
+          {projection.fees.unknownFeeReasons.length} fee or terms check{projection.fees.unknownFeeReasons.length === 1 ? '' : 's'} unresolved.
         </AppText>
       ) : null}
       {!compact && (projection.warnings.length || projection.assumptions.length) ? (
