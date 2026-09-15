@@ -1,14 +1,6 @@
-import common from './schemas/common.schema.json';
-import authority_graph from './schemas/authority-graph.schema.json';
-import savings_policy from './schemas/savings-policy.schema.json';
-import subject from './schemas/subject.schema.json';
-import asset from './schemas/asset.schema.json';
-import index from './schemas/index.schema.json';
-import shard from './schemas/shard.schema.json';
-import namespace from './schemas/namespace.schema.json';
 import { dayNumber } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
-const schemas = { common, authority_graph, savings_policy, subject, asset, index, shard, namespace };
+import schemas from './runtimeSchemas';
 const external: Record<string, any> = Object.fromEntries(Object.values(schemas).map(schema => [schema.$id, schema]));
 type Schema = Record<string, any>;
 /** Closed interpreter for checked-in frozen schemas only. No remote schema adoption. */
