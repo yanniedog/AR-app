@@ -7,6 +7,7 @@ import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { ComparisonDisclosures, PersonalCostComparisonDisclosure, publishedItemCount } from '../src/components/product/ComparisonDisclosures';
 import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
 import { FixedDepositComparison } from '../src/components/product/FixedDepositComparison';
+import { MortgageComparison } from '../src/components/product/MortgageComparison';
 import { PortfolioComparison } from '../src/components/product/PortfolioComparison';
 import { ProductRateChangeLine } from '../src/components/product/ProductRateChangeLine';
 import { Screen } from '../src/components/Screen';
@@ -300,7 +301,7 @@ export default function Compare() {
     <Screen onLayout={() => setLayoutReady(true)}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
       <CanonicalTermsComparison rows={calculationRows} />
-      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
+      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
       {compact ? (
         <>
           <View style={styles.compactIntro}>

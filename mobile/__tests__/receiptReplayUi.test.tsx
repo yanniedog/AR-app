@@ -6,6 +6,12 @@ import { savingsHarness,savingsInputs } from '../test-support/savingsMonetaryHar
 import { calculateSavingsPeriod } from '../src/data/monetaryContracts/adapter';
 import { profile } from '../test-support/executableDepositHarness';
 import * as Clipboard from 'expo-clipboard';
+import { eligibilityTransportHarness } from '../test-support/eligibilityHarness';
+import { evaluateEligibilitySelection } from '../src/data/eligibilityContracts/adapter';
+import { eligibilityAnswerId } from '../src/data/eligibilityContracts/facts';
+import { parseReceipt } from '../src/data/receiptReplay/parse';
+import { recalculateReceipt } from '../src/data/receiptReplay/recalculate';
+import { ReplayAccount } from '../src/components/receiptReplay/ReplayAccount';
 let mockState:any;
 jest.mock('../src/data/store',()=>({useStore:(selector:any)=>selector(mockState)}));
 jest.mock('../src/data/payload',()=>({downloadInflate:jest.fn()}));
@@ -16,6 +22,20 @@ jest.mock('../src/components/ledger/LedgerField',()=>({LedgerField:'LedgerField'
 jest.mock('../src/components/ui',()=>({AppText:'AppText',Button:'Button',Chip:'Chip',Disclosure:({children,open,...props}:any)=>mockReact.createElement('Disclosure',props,open?children:null)}));
 jest.mock('expo-clipboard',()=>({getStringAsync:jest.fn(),setStringAsync:jest.fn(async()=>undefined)}));
 test('untrusted output summaries tolerate missing fields and malformed result entries',()=>{for(const value of [{eligibility:{}},{receipt:{results:[null,{},'bad',{receipt:{closingNetWorth:{}}}]}},{receipt:{claimAvailable:false,issues:{}}},null])expect(()=>resultSummary(value)).not.toThrow();expect(resultSummary({eligibility:{}})).toContain('unavailable');});
+test.each(['unavailable','not_applicable'] as const)('changed scope asks new scenario role despite imported profile %s',async state=>{
+ const old=await eligibilityTransportHarness(s=>{s.inputDefinitions=s.inputDefinitions.filter(d=>d.binding==='assessment_date');s.eligibility={id:'date',op:'compare',field:'assessment',comparison:'gte',expected:{type:'date',value:'2028-01-01'},evidenceIds:s.fieldClauseIds.eligibility};}),[selection]=await old.load();
+ const document=parseReceipt(JSON.stringify(evaluateEligibilitySelection(selection,old.context,old.target,{assessmentDate:'2028-01-02',values:{}},profile))),current=await eligibilityTransportHarness();
+ document.items[0].answers[eligibilityAnswerId(current.subject,'amount')]={state,provenance:{productKey:current.subject.scope.productKey,source:'user',recordedAt:'2028-01-02T00:00:00Z'}} as any;
+ let choice:any,tree:any;const onChange=(value:any)=>{choice=value;};await act(async()=>{tree=TestRenderer.create(<ReplayAccount item={document.items[0]} context={current.context} onChange={onChange}/>);});
+ act(()=>tree.root.findAllByType('Chip').find((n:any)=>n.props.label.includes(current.subject.scope.cohortKey)).props.onPress());
+ const field=tree.root.findByProps({label:'Selected amount'});expect(field.props.value).toBe('');act(()=>field.props.onChangeText('1000'));expect(tree.root.findAllByProps({label:'type'})).toHaveLength(0);
+ act(()=>tree.root.findByProps({label:'Use this changed current source'}).props.onPress());act(()=>tree.root.findByProps({label:'I reviewed these local inputs for recalculation'}).props.onPress());
+ expect(recalculateReceipt(document,current.context,[choice]).eligibility.status).toBe('meets');act(()=>tree.unmount());
+});
+test('decisive date branch does not prompt an irrelevant missing scenario amount',async()=>{
+ const h=await eligibilityTransportHarness(s=>{s.eligibility={id:'either',op:'or',rules:[{id:'date',op:'compare',field:'assessment',comparison:'gte',expected:{type:'date',value:'2028-01-01'},evidenceIds:s.fieldClauseIds.eligibility},s.eligibility]};}),[s]=await h.load(),document=parseReceipt(JSON.stringify(evaluateEligibilitySelection(s,h.context,h.target,{assessmentDate:'2028-01-02',values:{}},profile)));let tree:any;const onChange=()=>undefined;
+ await act(async()=>{tree=TestRenderer.create(<ReplayAccount item={document.items[0]} context={h.context} onChange={onChange}/>);});act(()=>tree.root.findAllByType('Chip').find((n:any)=>n.props.label.includes(h.subject.scope.cohortKey)).props.onPress());expect(tree.root.findAllByProps({label:'Selected amount'})).toHaveLength(0);act(()=>tree.unmount());
+});
 test('paste is explicit and actual fresh handle is selected before calculation/copy; edits invalidate',async()=>{
  const h=await savingsHarness(),[s]=await h.load(),raw=calculateSavingsPeriod(s,h.context,h.target,savingsInputs,profile);mockState={...h.context,ensureDetails:jest.fn(async()=>undefined)};(Clipboard.getStringAsync as jest.Mock).mockResolvedValue(JSON.stringify(raw));let tree:any;await act(async()=>{tree=TestRenderer.create(<ReceiptScreen/>);});expect(Clipboard.getStringAsync).not.toHaveBeenCalled();await act(async()=>tree.root.findByProps({title:'Paste calculation receipt'}).props.onPress());await act(async()=>tree.root.findByProps({title:'Check current sources'}).props.onPress());
  act(()=>tree.root.findByProps({title:'Recalculate with current sources'}).props.onPress());expect(JSON.stringify(tree.toJSON())).toContain('Choose a current scope');const scope=tree.root.findAllByType('Chip').find((n:any)=>n.props.label.includes(h.subject.scope.cohortKey));act(()=>scope.props.onPress());act(()=>tree.root.findByProps({label:'I reviewed these local inputs for recalculation'}).props.onPress());act(()=>tree.root.findByProps({title:'Recalculate with current sources'}).props.onPress());expect(tree.root.findAllByProps({title:'Copy recalculated receipt'})).toHaveLength(1);await act(async()=>tree.root.findByProps({title:'Copy recalculated receipt'}).props.onPress());expect(JSON.parse((Clipboard.setStringAsync as jest.Mock).mock.calls.at(-1)[0]).receipt.totals.interestPosted).toBe('1.00');

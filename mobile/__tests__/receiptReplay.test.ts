@@ -8,6 +8,8 @@ import { calculateSavingsPeriod } from '../src/data/monetaryContracts/adapter';
 import { calculateMortgagePeriod } from '../src/data/mortgageContracts/adapter';
 import { evaluateEligibilitySelection } from '../src/data/eligibilityContracts/adapter';
 import { compareSavingsHoldings } from '../src/data/portfolioContracts/adapter';
+import { compareMortgagePeriods } from '../src/data/portfolioContracts/mortgageAdapter';
+import { canonical,hashText } from '../src/lib/productTermsEngine/validation';
 import { privateTdExport,tdReopenItem } from '../src/data/receiptReplay/tdExport';
 import { parseReceipt } from '../src/data/receiptReplay/parse';
 import { resolveReplayItem } from '../src/data/receiptReplay/resolve';
@@ -29,3 +31,8 @@ test('mutated input digest refuses and a superseded current context cannot repla
 test('changed edition requires a new explicit confirmation even with the same reviewed subject',async()=>{const h=await savingsHarness(),[s]=await h.load(),raw=calculateSavingsPeriod(s,h.context,h.target,savingsInputs,profile),d=parseReceipt(JSON.stringify(raw)),context={...h.context,manifest:{...h.context.manifest,generated_at:'2026-09-16T00:00:00Z'}},[option]=await resolveReplayItem(d.items[0],context),choice={option,inputs:d.items[0].inputs,answers:{},confirmed:true,sourceChangeConfirmed:false};expect(option.changed).toBe(true);expect(()=>recalculateReceipt(d,context,[choice])).toThrow(/Confirm/);expect(recalculateReceipt(d,context,[{...choice,sourceChangeConfirmed:true}]).receipt.totals.interestPosted).toBe('1.00');});
 test('removed source produces no current selection, without using imported approval',async()=>{const h=await savingsHarness(),[s]=await h.load(),raw=calculateSavingsPeriod(s,h.context,h.target,savingsInputs,profile),d=parseReceipt(JSON.stringify(raw)),manifest={...h.context.manifest};delete (manifest as any).executable_v3;expect(await resolveReplayItem(d.items[0],{...h.context,manifest})).toEqual([]);});
 test('unknown local customer fact remains unknown on reopen',async()=>{const h=await mortgageHarness(),[s]=await h.load();h.inputs.customerFacts[0]={field:'adult',state:'unavailable',value:null};const raw=calculateMortgagePeriod(s,h.context,h.target,h.inputs,profile),r=await reopen(raw,h.context);expect(r.result.receipt.claimAvailable).toBe(false);expect(r.result.adapterInputs.inputs.customerFacts[0].state).toBe('unavailable');});
+test('mortgage comparison seventh receipt reopens both actual adapter accounts and refuses mismatched inventory',async()=>{
+ const h=await mortgageHarness(),[s]=await h.load(),raw=compareMortgagePeriods(h.context,profile,{startDate:h.inputs.from,endDateExclusive:h.inputs.toExclusive,timezone:h.subject.authorityGraph.completedPeriod.timezone,metric:'net_interest_fee_cost',referenceId:'one',independentLoansConfirmed:true,alternatives:['one','two'].map(id=>({id,selection:s,target:h.target,inputs:h.inputs}))}),r=await reopen(raw,h.context);
+ expect(r.result.receipt.results).toEqual(raw.receipt.results);expect(r.result.comparisonInputs.children).toHaveLength(2);expect(r.result.receipt.results[0].receipt.closingNetWorth).toBe('-1000.100000000000');
+ const altered=JSON.parse(JSON.stringify(raw));altered.comparisonInputs.children[1].inputs.accountId='unrelated';altered.inputSha256=hashText(canonical(altered.comparisonInputs));expect(()=>parseReceipt(JSON.stringify(altered))).toThrow(/inventory differs/);
+});

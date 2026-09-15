@@ -9,11 +9,12 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { evaluateEligibility } from '../../lib/productTermsEngine/eligibility';
 import { loadEligibilitySelections, type EligibilityContext, type EligibilitySelection, type EligibilityTarget } from '../../data/eligibilityContracts/transport';
 import { assertAssessment, evaluateEligibilitySelection, reviewedEligibilityInputs } from '../../data/eligibilityContracts/adapter';
-import { eligibilityDefinition, type EligibilityScenario, type ScenarioRole } from '../../data/eligibilityContracts/facts';
+import { eligibilityDefinition, type EligibilityScenario } from '../../data/eligibilityContracts/facts';
 import { CustomerAnswerEditor } from '../CustomerProfilePanel';
 import { LedgerField } from '../ledger/LedgerField';
 import { AppText, Button, Chip, Disclosure } from '../ui';
 import { ReviewedCriteria } from './DepositCriteria';
+import { EligibilityScenarioFields } from './EligibilityScenarioFields';
 
 function scopeLabel(value: string, part: 'cohort' | 'tier' | 'package') {
   if (value === 'all_source_declared') return part === 'cohort' ? 'All reviewed customers' : `All reviewed ${part}s`;
@@ -44,7 +45,6 @@ function EligibilityForm({ selections, context, target }: { selections: Eligibil
     {assessed.filter(item => item.evaluation?.status === 'meets').length > 1 && <AppText variant="small">More than one scope meets the recorded criteria. Choose explicitly; scopes are not combined.</AppText>}
     {assessed.map(({ selection, scenario, requirements, evaluation, error }) => {
       const s = selection.subject;
-      const scenarioFields = s.inputDefinitions.filter(d => !['customer_fact','assessment_date'].includes(d.binding) && (requirements?.needed.includes(d) || Object.hasOwn(scenario.values, d.binding)));
       const answers = [...(requirements?.needed.filter(d => d.binding === 'customer_fact') ?? []), ...(requirements?.saved ?? [])].filter((d, i, all) => all.findIndex(item => item.key === d.key) === i);
       return <View key={s.id} style={{ gap: 6 }}>
         <Chip label={`Choose ${scopeLabel(s.scope.cohortKey, 'cohort')} / ${scopeLabel(s.scope.tierKey, 'tier')} / ${scopeLabel(s.scope.packageKey, 'package')}`} selected={selectedId === s.id} onPress={() => setSelectedId(s.id)} />
@@ -52,11 +52,7 @@ function EligibilityForm({ selections, context, target }: { selections: Eligibil
         <Disclosure title={`Review scope ${scopeLabel(s.scope.cohortKey, 'cohort')}`} open={expanded === s.id} onToggle={() => setExpanded(expanded === s.id ? null : s.id)}>
           <AppText variant="small">Reviewed assessment coverage: {s.scope.effectiveFrom} to {s.scope.effectiveToExclusive} (end excluded). This is not a bank policy expiry date.</AppText>
           <AppText variant="small">{s.scope.family} · {s.scope.coverage === 'product' ? 'Product-wide criteria' : `Rate variants ${s.scope.rateIndexes.join(', ')}`}</AppText>
-          {scenarioFields.map(d => <LedgerField key={d.key} label={d.label} value={String(scenario.values[d.binding as ScenarioRole]?.value ?? '')} keyboardType={d.type === 'decimal' ? 'decimal-pad' : 'default'} onChangeText={value => setValuesById(old => {
-            const values = { ...old[s.id] }; if (!value) delete values[d.binding as ScenarioRole];
-            else values[d.binding as ScenarioRole] = d.type === 'decimal' ? { type: 'decimal', value, unit: d.unit! } : { type: 'text', value };
-            return { ...old, [s.id]: values };
-          })} />)}
+          <EligibilityScenarioFields definitions={s.inputDefinitions} needed={requirements?.needed??[]} values={scenario.values} onChange={values=>setValuesById(old=>({...old,[s.id]:values}))}/>
           {answers.map(d => { const definition = eligibilityDefinition(s, d.key); return <CustomerAnswerEditor key={definition.id} definition={definition} answer={customer.profile!.answers[definition.id]} productKey={s.scope.productKey} disabled={customer.busy} onSave={answer => void customer.update(p => ({ ...p, definitions: { ...p.definitions, [definition.id]: definition }, answers: { ...p.answers, [definition.id]: answer } }))} />; })}
           {!!requirements?.deferred.length && <AppText variant="small">Unresolved: {requirements.deferred.map(d => d.label).join(', ')}. Saved answers can be changed when available.</AppText>}
           {evaluation && <ReviewedCriteria contract={{ eligibility: s.eligibility, inputDefinitions: s.inputDefinitions, evidence: s.evidence }} trace={evaluation.trace} />}

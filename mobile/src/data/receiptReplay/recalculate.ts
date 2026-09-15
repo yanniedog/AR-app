@@ -10,6 +10,7 @@ import { savingsDefinition,savingsRequirements } from '../monetaryContracts/fact
 import { calculateMortgagePeriod } from '../mortgageContracts/adapter';
 import { mortgageDefinition,mortgageRequirements } from '../mortgageContracts/facts';
 import { compareSavingsHoldings } from '../portfolioContracts/adapter';
+import { compareMortgagePeriods } from '../portfolioContracts/mortgageAdapter';
 import { hashText,canonical } from '../../lib/productTermsEngine/validation';
 import { tdReopenItem,privateTdExport } from './tdExport';
 import type { ReplayDocument } from './types';
@@ -29,6 +30,7 @@ export function recalculateReceipt(document:ReplayDocument,c:ReplayOption['conte
  let result:any;
  if(document.kind==='td_comparison'){const alternatives=choices.map(x=>({id:x.option.item.id,row:x.option.target as any,selection:x.option.selection as any,inputs:x.inputs}));const r=compareDeposits(c,alternatives,document.frame.referenceId,merged);result=privateTdExport(r,choices.map(x=>tdReopenItem(x.option.selection as any,c,x.option.target as any,x.inputs,merged,x.option.item.id)),true);}
  else if(document.kind==='historical_savings_holdings'){let cursor=0;const f=document.frame,base=f.alternatives[0].input.frame;result=compareSavingsHoldings(c,merged,{startDate:base.startDate,endDateExclusive:base.endDateExclusive,timezone:base.timezone,metric:base.metric,referenceId:f.referenceId,independentHoldingsConfirmed:true,alternatives:f.alternatives.map((a:any)=>({id:a.id,accounts:a.input.accounts.map(()=>{const x=choices[cursor++];return {selection:x.option.selection as any,target:x.option.target as any,inputs:x.inputs};})}))});}
+ else if(document.kind==='historical_mortgage_comparison'){const f=document.frame,base=f.alternatives[0].input.frame;result=compareMortgagePeriods(c,merged,{startDate:base.startDate,endDateExclusive:base.endDateExclusive,timezone:base.timezone,metric:base.metric,referenceId:f.referenceId,independentLoansConfirmed:true,alternatives:choices.map((x,n)=>({id:f.alternatives[n].id,selection:x.option.selection as any,target:x.option.target as any,inputs:x.inputs}))});}
  else {const x=choices[0],o=x.option,s:any=o.selection,t:any=o.target,p=profiles[0];result=o.item.kind==='td'?privateTdExport(calculateDeposit(s,c,t,x.inputs,p),[tdReopenItem(s,c,t,x.inputs,p)]):o.item.kind==='eligibility_only'?evaluateEligibilitySelection(s,c,t,x.inputs,p):o.item.kind==='savings_calculation'?calculateSavingsPeriod(s,c,t,x.inputs,p):calculateMortgagePeriod(s,c,t,x.inputs,p);}
  return result;
 }

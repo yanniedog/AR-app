@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
@@ -30,7 +30,8 @@ export function MortgageResultDetails({ receipt }: { receipt: CalculationReceipt
    <AppText variant="small">Fees paid externally: {t?.feesPaidExternal ?? 'unknown'} AUD. External fees do not increase the loan balance. Tax effects are not calculated.</AppText>
   </Disclosure></>;
 }
-export function MortgagePeriodForm({selections,context,target}:{selections:MortgageSelection[];context:MortgageContext;target:MortgageTarget}) {
+export interface MortgageFormInput { selection: MortgageSelection; inputs: MortgageInputs }
+export function MortgagePeriodForm({selections,context,target,onComparisonInput}:{selections:MortgageSelection[];context:MortgageContext;target:MortgageTarget;onComparisonInput?:(value:MortgageFormInput|null)=>void}) {
  const customer=useCustomerProfile(),[selectedId,setSelectedId]=useState<string|null>(null),[text,setText]=useState<Record<string,string>>({}),[confirmed,setConfirmed]=useState(''),[clear,setClear]=useState(false),[noEffects,setNoEffects]=useState(false),[complete,setComplete]=useState(false),[feeConfirmed,setFeeConfirmed]=useState<Record<string,boolean>>({}),[detailOpen,setDetailOpen]=useState(false),[savedOpen,setSavedOpen]=useState(false),[copy,setCopy]=useState('');
  const selection=selections.find(s=>s.subject.id===selectedId),s=selection?.subject;
  function change(key:string,value:string){setText(v=>({...v,[key]:value}));setConfirmed('');setCopy('');}
@@ -39,6 +40,8 @@ export function MortgagePeriodForm({selections,context,target}:{selections:Mortg
  const positiveFees=s?.policy.fees.occurrences.filter(f=>Decimal.parse(f.amount).compare(Decimal.parse('0'))>0)??[],roles=[...new Set(positiveFees.map(f=>f.externalAccountRole))];
  const inputs:MortgageInputs={accountId:text.account??'',offerId:text.offer??'',sourceVersion:text.version??'',snapshotId:text.snapshot??'',from:s?.scope.from??'',toExclusive:s?.scope.toExclusive??'',confirmedAt:confirmed,provenance:'user_reported_bank_offer_and_statement',confirmedAnnualRate:annualRate,openingOutstanding:text.outstanding??'',openingComponents:Object.fromEntries(LOAN_COMPONENTS.map(k=>[k,text[k]??''])) as MortgageInputs['openingComponents'],noCarriedArrearsOrDefault:clear,noExcludedMovements:noEffects,obligationAmount:text.obligation??'',originalAnchor:text.anchor??'',executionCoverage:complete?'complete':'unknown',payments:due.filter(date=>!!text[`paid:${date}`]).map((date,n)=>({id:`payment_${n}`,accountId:text.account??'',obligationId:s?mortgageObligationId(s,text.account??'',date):'',date,phase:s!.policy.paymentPhase,order:n,amount:text[`paid:${date}`],status:'cleared'})),externalAccounts:roles.map(role=>({role,accountId:text[`external:${role}`]??''})),feeSettlements:positiveFees.filter(f=>feeConfirmed[f.id]).map(f=>({occurrenceId:f.id,externalAccountId:text[`external:${f.externalAccountRole}`]??'',date:f.dueDate,amount:f.amount,status:'cleared'})),confirmedOfferFacts:Object.fromEntries(['purpose','security','repaymentType'].filter(k=>!!text[k]).map(k=>[k,text[k]])),customerFacts:[]};
  const identity=hashText(canonical([selectedId,inputs,customer.profile?.revision??null])),[result,setResult]=useState<{identity:string;value?:ReturnType<typeof calculateMortgagePeriod>;error?:string}|null>(null),current=result?.identity===identity?result:null;
+ const inputKey=canonical(inputs);
+ useEffect(()=>{onComparisonInput?.(selection?{selection,inputs:JSON.parse(inputKey)}:null);},[selection,inputKey,onComparisonInput]);
  if(!customer.profile)return <AppText variant="small">{customer.error??'Opening encrypted local inputs...'}</AppText>;
  const requirements=s?mortgageRequirements(s,inputs,customer.profile):null,criteria=s?evaluateEligibility(s.policy.eligibility,mortgageFacts(s,inputs,customer.profile).facts):null;
  const field=(key:string,label:string,decimal=false,hint?:string)=><LedgerField key={key} label={label} value={text[key]??''} hint={hint} keyboardType={decimal?'decimal-pad':'default'} onChangeText={value=>change(key,value)}/>;
@@ -64,7 +67,7 @@ export function MortgagePeriodForm({selections,context,target}:{selections:Mortg
    <Disclosure title="Criteria and source evidence" open={detailOpen} onToggle={()=>setDetailOpen(!detailOpen)}><AppText variant="small">Recorded criteria: {criteria?.status.replace(/_/g,' ')}.</AppText><ReviewedCriteria contract={{eligibility:s.policy.eligibility,inputDefinitions:s.policy.inputDefinitions.map(d=>({key:d.field,label:d.label})),evidence:s.evidence}} trace={criteria!.trace}/></Disclosure>
    <Disclosure title="Saved criteria answers" open={savedOpen} onToggle={()=>setSavedOpen(!savedOpen)}>{requirements?.saved.map(d=><CustomerAnswerEditor key={d.id} definition={d} answer={customer.profile!.answers[d.id]} productKey={target.productKey} disabled={customer.busy} onSave={answer=>void customer.update(p=>({...p,answers:{...p.answers,[d.id]:answer}}))}/>)}</Disclosure>
    <Chip label="I confirm these offer, statement and payment details" selected={!!confirmed} onPress={()=>setConfirmed(confirmed?'':new Date().toISOString())}/>
-   <Button title="Calculate mortgage period" disabled={customer.busy} onPress={()=>{try{setResult({identity,value:calculateMortgagePeriod(selection!,context,target,inputs,customer.profile!)});}catch(e){setResult({identity,error:e instanceof Error?e.message:'Calculation unavailable'});}}}/>
+   {!onComparisonInput&&<Button title="Calculate mortgage period" disabled={customer.busy} onPress={()=>{try{setResult({identity,value:calculateMortgagePeriod(selection!,context,target,inputs,customer.profile!)});}catch(e){setResult({identity,error:e instanceof Error?e.message:'Calculation unavailable'});}}}/>}
   </>}
   {current?.error&&<AppText variant="small">{current.error}</AppText>}
   {current?.value&&<><AppText variant="small">{current.value.receipt.claimAvailable?'Complete for this confirmed account period.':`Incomplete: ${current.value.receipt.issues.join('; ')}`}</AppText>
