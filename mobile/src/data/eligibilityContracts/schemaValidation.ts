@@ -1,12 +1,7 @@
-import namespace from './executable-namespace-v2.schema.json';
-import subject from './executable-subject-v2.schema.json';
-import asset from './executable-asset-v2.schema.json';
-import index from './executable-index-v2.schema.json';
-import shard from './executable-shard-v2.schema.json';
+import { eligibilitySchemas as schemas } from '../monetaryContracts/runtimeSchemas';
 import { dayNumber } from '../../lib/productTermsEngine/calendar';
 import { canonical } from '../../lib/productTermsEngine/validation';
-const schemas = { subject, asset, index, shard, namespace };
-const external: Record<string, object> = { 'executable-subject-v2.schema.json': subject, 'executable-asset-v2.schema.json': asset };
+const external: Record<string, object> = { 'executable-subject-v2.schema.json': schemas.subject, 'executable-asset-v2.schema.json': schemas.asset };
 type Schema = Record<string, any>;
 /** Closed interpreter for checked-in frozen schemas only. No remote schema adoption. */
 export function assertEligibilityWire(value: unknown, kind: keyof typeof schemas) {

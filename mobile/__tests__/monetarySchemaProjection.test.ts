@@ -1,7 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import schemas from '../src/data/monetaryContracts/runtimeSchemas';
+import schemas, { eligibilitySchemas } from '../src/data/monetaryContracts/runtimeSchemas';
+import { assertEligibilityWire } from '../src/data/eligibilityContracts/schemaValidation';
+import { eligibilitySubject } from '../test-support/eligibilityHarness';
 import { assertMonetaryWire } from '../src/data/monetaryContracts/schemaValidation';
 import { savingsSubject } from '../test-support/savingsMonetaryHarness';
 test('generated runtime graph reconstructs all eight frozen schemas and every reference exactly', () => {
@@ -25,4 +27,19 @@ test('interpreter does not mutate shared runtime nodes on valid or invalid input
   const freeze = (value: any) => { if (value && typeof value === 'object' && !Object.isFrozen(value)) { Object.freeze(value); Object.values(value).forEach(freeze); } };
   freeze(schemas); expect(() => assertMonetaryWire(savingsSubject(), 'subject')).not.toThrow();
   expect(() => assertMonetaryWire({ ...savingsSubject(), unexpected: true }, 'subject')).toThrow(); expect(JSON.stringify(schemas)).toBe(before);
+});
+test('all five frozen eligibility schemas and external/local references reconstruct unchanged', () => {
+  const external: Record<string, any> = Object.fromEntries(Object.entries(eligibilitySchemas).map(([name, schema]) => [`executable-${name}-v2.schema.json`, schema]));
+  function visit(value: any, root: any) {
+    if (!value || typeof value !== 'object') return;
+    if (value.$ref) expect(value.$ref.startsWith('#/') ? value.$ref.slice(2).split('/').reduce((o: any, key: string) => o?.[key], root) : external[value.$ref]).toBeDefined();
+    Object.values(value).forEach(child => visit(child, root));
+  }
+  for (const [name, schema] of Object.entries(eligibilitySchemas)) {
+    expect(schema).toEqual(JSON.parse(fs.readFileSync(path.resolve(`src/data/eligibilityContracts/executable-${name}-v2.schema.json`), 'utf8'))); visit(schema, schema);
+  }
+  const before = JSON.stringify(eligibilitySchemas);
+  expect(() => assertEligibilityWire(eligibilitySubject(), 'subject')).not.toThrow();
+  expect(() => assertEligibilityWire({ ...eligibilitySubject(), unexpected: true }, 'subject')).toThrow();
+  expect(JSON.stringify(eligibilitySchemas)).toBe(before);
 });
