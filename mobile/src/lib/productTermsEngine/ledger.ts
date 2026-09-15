@@ -7,6 +7,7 @@ import { dailyInterest } from './interestAccrual';
 import { savingsInterest, type SavingsActivityCache } from './savingsAccrual';
 import { runTdLedger } from './tdLedger';
 import { ContractFeeLedger } from './feeLedger';
+import { runLoanLedger } from './loanLedger';
 
 function feeAmount(event: Extract<LedgerEvent, { type: 'fee' }>): Decimal {
   if (event.amount.type === 'fixed') return money(event.amount.value);
@@ -31,7 +32,7 @@ export function calculateLedger(contract: LedgerContract, scenario: LedgerScenar
     receipt.dependencies = [...contract.dependencyIds]; receipt.assumptions = [...scenario.assumptions];
     receipt.eligibility = evaluateEligibility(contract.eligibility, scenario.facts);
     if (receipt.eligibility.status !== 'meets') receipt.issues.push(`eligibility:${receipt.eligibility.status}`);
-    const result = contract.tdLifecycle ? runTdLedger(contract, scenario, receipt) : runLedger(contract, scenario, receipt);
+    const result = contract.loanContract ? runLoanLedger(contract, scenario, receipt) : contract.tdLifecycle ? runTdLedger(contract, scenario, receipt) : runLedger(contract, scenario, receipt);
     result.issues = [...new Set(result.issues)];
     result.status = result.issues.length ? 'incomplete' : 'complete';
     result.claimAvailable = result.status === 'complete';

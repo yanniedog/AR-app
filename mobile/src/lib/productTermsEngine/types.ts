@@ -2,7 +2,9 @@
 import type { SavingsAssessment, SavingsContribution, SavingsRateSchedule } from './savingsTypes';
 import type { TdLifecycle } from './tdTypes';
 import type { FeeFact, FeeSchedule } from './feeTypes';
-export const EVALUATOR_VERSION = 'product-terms-engine-v4' as const;
+import type { LoanContract, LoanInputs, LoanResult } from './loanTypes';
+export const EVALUATOR_VERSION = 'product-terms-engine-v5' as const;
+export const FEE_EVALUATOR_VERSION = 'product-terms-engine-v4' as const;
 export const TD_EVALUATOR_VERSION = 'product-terms-engine-v3' as const;
 export const SAVINGS_EVALUATOR_VERSION = 'product-terms-engine-v2' as const;
 export const LEGACY_EVALUATOR_VERSION = 'product-terms-engine-v1' as const;
@@ -34,8 +36,8 @@ export type ReviewState = 'verified' | 'unknown' | 'conflict';
 export type Rounding = 'half_up' | 'half_even' | 'toward_zero';
 export interface InterestPolicy {
   dayCount: 'actual_365_fixed' | 'actual_actual';
-  balanceBasis: 'closing_balance_before_posted_interest';
-  eventOrder: 'ordered_events_then_accrual_then_posting';
+  balanceBasis: 'closing_balance_before_posted_interest' | 'loan_declared_component_basis';
+  eventOrder: 'ordered_events_then_accrual_then_posting' | 'loan_declared_payment_phase_then_posting';
   dailyAccrualScale: number | null;
   /** Some banks round a daily percentage rate before multiplying, not a fraction. */
   dailyRateRounding: { scale: number; unit: 'fraction' | 'percent'; mode: Rounding } | null;
@@ -47,7 +49,7 @@ export interface InterestPolicy {
 }
 export interface LedgerContract {
   schemaVersion: 1;
-  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION | typeof TD_EVALUATOR_VERSION;
+  evaluatorVersion: typeof EVALUATOR_VERSION | typeof LEGACY_EVALUATOR_VERSION | typeof SAVINGS_EVALUATOR_VERSION | typeof TD_EVALUATOR_VERSION | typeof FEE_EVALUATOR_VERSION;
   id: string;
   productId: string;
   direction: 'asset' | 'liability';
@@ -71,6 +73,7 @@ export interface LedgerContract {
   savingsSchedule?: SavingsRateSchedule;
   tdLifecycle?: TdLifecycle;
   feeSchedule?: FeeSchedule;
+  loanContract?: LoanContract;
 }
 type EventBase = { id: string; date: ISODate; order: number };
 export type LedgerEvent = EventBase & (
@@ -85,6 +88,7 @@ export type LedgerEvent = EventBase & (
 export interface LedgerScenario {
   accountId?: string;
   feeFacts?: FeeFact[];
+  loan?: LoanInputs;
   productId: string;
   cohortKey: string;
   startDate: ISODate;
@@ -113,7 +117,7 @@ export interface LedgerTotals {
   openingBalance: DecimalString;
   externalCashflowNet: DecimalString;
   /** Repayment allocation is not inferred from a payment's total amount. */
-  principalRepaid: null;
+  principalRepaid: DecimalString | null;
   externalInflows: DecimalString;
   externalOutflows: DecimalString;
   interestAccrued: DecimalString;
@@ -139,4 +143,5 @@ export interface CalculationReceipt {
   /** Null for rejected input. Incomplete results are evaluated known components, not guaranteed bounds. */
   totals: LedgerTotals | null;
   ledger: LedgerEntry[];
+  loan?: LoanResult;
 }

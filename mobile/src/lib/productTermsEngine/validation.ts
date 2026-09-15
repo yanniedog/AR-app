@@ -2,7 +2,9 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import { dayNumber } from './calendar';
 import { Decimal } from './decimal';
-import { EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION, type LedgerContract, type LedgerScenario, type Rule } from './types';
+import { validateLoan } from './loanValidation';
+import { nonNegativeComponent } from './loanComponents';
 import { validateSavings } from './savingsValidation';
 import { validateTd } from './tdValidation';
 import { validateFees } from './feeValidation';
@@ -37,15 +39,17 @@ export function rate(value: string): Decimal {
 }
 
 export function validateLedger(contract: LedgerContract, scenario: LedgerScenario): string[] {
-  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
-      (![EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.tdLifecycle !== undefined) ||
-      (contract.evaluatorVersion !== EVALUATOR_VERSION && contract.feeSchedule !== undefined) ||
+  if (contract.schemaVersion !== 1 || ![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, LEGACY_EVALUATOR_VERSION, SAVINGS_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion) ||
+      (![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION, TD_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.tdLifecycle !== undefined) ||
+      (![EVALUATOR_VERSION, FEE_EVALUATOR_VERSION].includes(contract.evaluatorVersion as typeof EVALUATOR_VERSION) && contract.feeSchedule !== undefined) ||
+      (contract.evaluatorVersion !== EVALUATOR_VERSION && (contract.loanContract !== undefined || scenario.loan !== undefined)) ||
       (contract.evaluatorVersion === LEGACY_EVALUATOR_VERSION && (contract.savingsSchedule !== undefined || scenario.savingsAssessments !== undefined))) throw new Error('contract_version_unsupported');
   if (!contract.id || !contract.productId || scenario.productId !== contract.productId) throw new Error('product_mismatch');
   if (contract.currency !== 'AUD' || !['asset', 'liability'].includes(contract.direction)) throw new Error('currency_or_direction_unsupported');
   const start = dayNumber(scenario.startDate), end = dayNumber(scenario.endDateExclusive);
   if (end <= start || end - start > 18_300) throw new Error('scenario_horizon_unsupported');
-  nonNegative(scenario.openingBalance); nonNegative(scenario.initialOffset); rate(contract.initialAnnualRate);
+  if (contract.loanContract) nonNegativeComponent(scenario.openingBalance); else nonNegative(scenario.openingBalance);
+  nonNegative(scenario.initialOffset); rate(contract.initialAnnualRate);
   if (!Array.isArray(contract.evidence) || !contract.evidence.length || contract.evidence.length > 4096) throw new Error('source_evidence_required');
   const known = new Set<string>();
   for (const evidence of contract.evidence) {
@@ -73,8 +77,10 @@ export function validateLedger(contract: LedgerContract, scenario: LedgerScenari
   if (!Array.isArray(scenario.assumptions) || scenario.assumptions.some(value => typeof value !== 'string')) throw new Error('assumptions_invalid');
   if (!scenario.facts || typeof scenario.facts !== 'object' || Array.isArray(scenario.facts)) throw new Error('facts_invalid');
   const interest = contract.interest;
-  if (!['actual_365_fixed', 'actual_actual'].includes(interest.dayCount) || interest.balanceBasis !== 'closing_balance_before_posted_interest' ||
-      interest.eventOrder !== 'ordered_events_then_accrual_then_posting' || !['none', 'capped_at_balance'].includes(interest.offset)) throw new Error('interest_pattern_unsupported');
+  const expectedBasis = contract.loanContract ? 'loan_declared_component_basis' : 'closing_balance_before_posted_interest';
+  const expectedOrder = contract.loanContract ? 'loan_declared_payment_phase_then_posting' : 'ordered_events_then_accrual_then_posting';
+  if (!['actual_365_fixed', 'actual_actual'].includes(interest.dayCount) || interest.balanceBasis !== expectedBasis ||
+      interest.eventOrder !== expectedOrder || !['none', 'capped_at_balance'].includes(interest.offset)) throw new Error('interest_pattern_unsupported');
   if (interest.offset === 'none' && nonNegative(scenario.initialOffset).compare(Decimal.parse('0')) !== 0) throw new Error('offset_unsupported');
   if (contract.direction === 'asset' && interest.offset !== 'none') throw new Error('deposit_offset_unsupported');
   const scale = (value: number): void => { if (!Number.isInteger(value) || value < 0 || value > 12) throw new Error('rounding_scale_unsupported'); };
@@ -127,5 +133,6 @@ export function validateLedger(contract: LedgerContract, scenario: LedgerScenari
   validateSavings(contract, scenario, refs, ruleRefs);
   issues.push(...validateFees(contract, scenario, refs, ruleRefs));
   issues.push(...validateTd(contract, scenario, refs));
+  issues.push(...validateLoan(contract, scenario, refs));
   return issues;
 }
