@@ -4,7 +4,8 @@ import * as Clipboard from 'expo-clipboard';
 import { AppText, Button, Chip, Disclosure } from '../ui';
 import { LedgerField } from '../ledger/LedgerField';
 import { DepositSource } from './DepositSource';
-import { DepositInputFields, emptyDepositInputs } from './DepositInputFields';
+import { emptyDepositInputs } from './DepositInputFields';
+import { DepositCohorts } from './DepositCohorts';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { useStore } from '../../data/store';
 import type { RateRow } from '../../types';
@@ -15,13 +16,15 @@ import { compareDeposits, type DepositComparisonResult } from '../../data/execut
 import type { DepositInputs } from '../../data/executableContracts/instantiate';
 
 const rowId = (row: RateRow) => `${row.rate_index}#${row.product_key}`;
-function ComparisonForm({ rows, selections, context }: { rows: RateRow[]; selections: (ApprovedSelection | null)[]; context: ContractContext }) {
+function ComparisonForm({ rows, candidates, context }: { rows: RateRow[]; candidates: ApprovedSelection[][]; context: ContractContext }) {
+  const [selectedIds, setSelectedIds] = useState<(string | null)[]>(() => candidates.map(list => list.length === 1 ? list[0].template.id : null));
+  const selections = candidates.map((list, i) => list.find(item => item.template.id === selectedIds[i]) ?? null);
   const customer = useCustomerProfile();
   const [inputs, setInputs] = useState<DepositInputs[]>(() => rows.map(emptyDepositInputs));
   const [referenceId, setReferenceId] = useState(rowId(rows[0]));
   const [result, setResult] = useState<{ identity: string; data: DepositComparisonResult } | null>(null);
   const [error, setError] = useState(''), [details, setDetails] = useState(false), [copyStatus, setCopyStatus] = useState('');
-  const identity = canonical([inputs, referenceId, customer.profile?.revision ?? null]);
+  const identity = canonical([inputs, referenceId, customer.profile?.revision ?? null, selectedIds]);
   const current = result?.identity === identity ? result.data : null;
   if (!customer.profile) return <AppText variant="small">{customer.error ?? 'Opening encrypted local inputs...'}</AppText>;
   const shared = (field: 'principal' | 'fundedDate', value: string) => setInputs(old => old.map(input => ({ ...input, [field]: value, confirmed: false, confirmedAt: null })));
@@ -37,10 +40,7 @@ function ComparisonForm({ rows, selections, context }: { rows: RateRow[]; select
     {rows.map((row, i) => <View key={rowId(row)} style={{ gap: 8 }}>
       <AppText weight="700">{row.provider}: {row.product_name}</AppText>
       <Chip label={`Reference: ${row.product_name} (rate ${row.rate_index})`} selected={referenceId === rowId(row)} onPress={() => setReferenceId(rowId(row))} />
-      {selections[i] ? <>
-        <AppText variant="small">Approval as of publication {selections[i]!.edition}. This does not confirm a current bank offer.</AppText>
-        <DepositInputFields selection={selections[i]!} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared />
-      </> : <AppText variant="small">An approved calculation template is unavailable for this exact rate. It cannot be ranked.</AppText>}
+      {candidates[i].length ? <DepositCohorts candidates={candidates[i]} selectedId={selectedIds[i]} onSelect={id => setSelectedIds(old => old.map((value, j) => j === i ? id : value))} row={row} inputs={inputs[i]} onChange={value => setInputs(old => old.map((item, j) => j === i ? value : item))} customer={customer} shared /> : <AppText variant="small">An approved calculation template is unavailable for this exact rate. It cannot be ranked.</AppText>}
     </View>)}
     <Button title="Compare maturity returns" disabled={customer.busy} onPress={calculate} />
     {error ? <AppText variant="small">{error}</AppText> : null}
@@ -72,17 +72,17 @@ export function FixedDepositComparison({ rows }: { rows: RateRow[] }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity);
   const [open, setOpen] = useState(false);
   const identity = hashText(canonical([manifest, rows]));
-  const [loaded, setLoaded] = useState<{ identity: string; core: typeof core; integrity: typeof coreIntegrity; selections: (ApprovedSelection | null)[] } | null>(null);
+  const [loaded, setLoaded] = useState<{ identity: string; core: typeof core; integrity: typeof coreIntegrity; selections: ApprovedSelection[][] } | null>(null);
   const selected = loaded?.identity === identity && loaded.core === core && loaded.integrity === coreIntegrity ? loaded : null;
   useEffect(() => {
     if (!open || rows.length < 2 || rows.length > 4) return; let active = true;
-    void Promise.all(rows.map(row => loadExecutableSelections({ manifest, core, coreIntegrity }, row).then(list => { const current = list.filter(item => item.template.evaluatorVersion === EVALUATOR_VERSION); return current.length === 1 ? current[0] : null; }, () => null))).then(selections => {
+    void Promise.all(rows.map(row => loadExecutableSelections({ manifest, core, coreIntegrity }, row).then(list => { const current = list.filter(item => item.template.evaluatorVersion === EVALUATOR_VERSION); return current; }, () => []))).then(selections => {
       if (active) setLoaded({ identity, core, integrity: coreIntegrity, selections });
     });
     return () => { active = false; };
   }, [open, identity, manifest, core, coreIntegrity, rows]);
   return <Disclosure title="Personal cost comparison" summary="Check maturity returns" open={open} onToggle={() => setOpen(!open)}>
     <AppText variant="small">Published-rate rankings do not compare your full costs or assess eligibility. This calculation supports approved fixed-deposit maturity returns only.</AppText>
-    {selected ? <ComparisonForm key={identity} rows={rows} selections={selected.selections} context={{ manifest, core, coreIntegrity }} /> : <AppText variant="small">Checking reviewed calculation terms...</AppText>}
+    {selected ? <ComparisonForm key={identity} rows={rows} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} /> : <AppText variant="small">Checking reviewed calculation terms...</AppText>}
   </Disclosure>;
 }

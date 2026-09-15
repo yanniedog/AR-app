@@ -80,3 +80,8 @@ export function depositInputRequirements(selection: ApprovedSelection, inputs: D
   const definitions = profileDefinitions(selection), missing = definitions.filter(d => fields.has(d.id));
   return { needed: missing.filter(d => !['unavailable', 'not_applicable'].includes(profile.answers[d.id]?.state)), deferred: missing.filter(d => ['unavailable', 'not_applicable'].includes(profile.answers[d.id]?.state)), saved: definitions.filter(d => own(profile.answers, d.id)) };
 }
+
+/** Criteria status only; this does not approve financial execution or a bank offer. */
+export function depositEligibility(selection: ApprovedSelection, inputs: DepositInputs, profile: CustomerProfile) {
+  return evaluateEligibility(selection.template.eligibility, depositFacts(selection, inputs, profile));
+}

@@ -1,3 +1,4 @@
+import { retainTermsReference } from './termsReferenceStore';
 import * as Crypto from 'expo-crypto';
 import { PAYLOAD_REPO } from '../config';
 import type { Manifest, ManifestFile } from '../types';
@@ -99,6 +100,9 @@ export async function loadProductTerms(manifest: Manifest, productKey: string): 
     const { identity_sha256, ...body } = terms;
     const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, canonicalTermsJson(body));
     if (hash !== identity_sha256) throw new Error('Product terms content identity mismatch');
+    // Optional descriptive retention never grants execution approval or replaces current transport failures.
+    await retainTermsReference({ productKey, edition: manifest.payload_revision!.bundle_sha256, runDate: manifest.run_date,
+      indexSha256: file.sha256, assetSha256: descriptor.sha256, terms, retainedAt: new Date().toISOString() }).catch(() => undefined);
     return terms;
   });
 }

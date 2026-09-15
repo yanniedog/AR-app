@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useStore } from '../../data/store';
 import { TERMS_STAGES, type ProductTerms, type TermsStage } from '../../data/productTerms';
+import { previousTermsReference, type TermsReference } from '../../data/termsReferenceStore';
 import { loadProductTerms } from '../../data/productTermsTransport';
 import { humanizeEnum } from '../../data/format';
 import { AppText, Button, Disclosure } from '../ui';
@@ -73,6 +74,8 @@ function EvidenceRows({ terms }: { terms: ProductTerms }) {
 export function ProductTermsDisclosure({ productKey }: { productKey: string }) {
   const manifest = useStore((state) => state.manifest);
   const [open, setOpen] = useState(false);
+  const [prior, setPrior] = useState<{ identity: string; reference: TermsReference | null } | null>(null);
+  const [priorOpen, setPriorOpen] = useState(false);
   const [retry, setRetry] = useState(0);
   const identity = `${manifest?.payload_revision?.bundle_sha256 ?? ''}:${manifest?.files.terms_index?.sha256 ?? ''}:${productKey}`;
   const [result, setResult] = useState<{ identity: string; terms?: ProductTerms | null; error?: string } | null>(null);
@@ -80,7 +83,8 @@ export function ProductTermsDisclosure({ productKey }: { productKey: string }) {
   useEffect(() => {
     if (!open || !manifest) return;
     let active = true;
-    setResult(null);
+    setResult(null); setPrior(null); setPriorOpen(false);
+    void previousTermsReference(productKey, manifest.payload_revision?.bundle_sha256 ?? '', manifest.files.terms_index?.sha256).then(reference => { if (active) setPrior({ identity, reference }); });
     void loadProductTerms(manifest, productKey).then(
       (terms) => { if (active) setResult({ identity, terms }); },
       () => { if (active) setResult({ identity, error: 'Document evidence could not be verified.' }); },
@@ -93,6 +97,11 @@ export function ProductTermsDisclosure({ productKey }: { productKey: string }) {
       <CustomerProfilePanel productKey={productKey} />
       {selected?.terms ? <EvidenceRows terms={selected.terms} /> : selected?.error ? <View style={{ gap: 8 }}><AppText variant="small">{selected.error}</AppText><Button title="Retry" variant="secondary" onPress={() => setRetry(retry + 1)} /></View> :
         <AppText variant="small" color="textMuted">{hasAsset && !selected ? 'Loading document evidence…' : 'Complete document capture and interpretation have not been established for this product.'}</AppText>}
+      {!selected?.terms && selected && prior?.identity === identity && prior.reference && <Disclosure title="Saved descriptive evidence" open={priorOpen} onToggle={() => setPriorOpen(!priorOpen)}>
+        <AppText variant="small">{prior.reference.edition === manifest?.payload_revision?.bundle_sha256 && prior.reference.indexSha256 === manifest.files.terms_index?.sha256 ? 'Saved evidence from this publication' : 'Earlier publication'} {prior.reference.runDate}. This saved reference was not reverified by this request and is not calculation approval.</AppText>
+        <AppText variant="tiny">Edition {prior.reference.edition}</AppText>
+        <EvidenceRows terms={prior.reference.terms} />
+      </Disclosure>}
     </Disclosure>
   );
 }

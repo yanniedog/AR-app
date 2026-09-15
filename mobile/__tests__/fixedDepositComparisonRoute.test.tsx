@@ -1,3 +1,4 @@
+import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import * as Clipboard from 'expo-clipboard';
@@ -30,6 +31,7 @@ async function render() {
   let tree!: Renderer;
   await act(async () => { tree = TestRenderer.create(<Compare />) as Renderer; });
   expect(tree.root.findByType(FixedDepositComparison).props.rows[0]).toBe(x.rows[0]);
+  expect(tree.root.findByType(CanonicalTermsComparison).props.rows[0]).toBe(x.rows[0]);
   expect(tree.root.findByType(FixedDepositComparison).props.rows[1]).toBe(x.rows[1]);
   await act(async () => { tree.root.findByProps({ title: 'Personal cost comparison' }).props.onToggle(); });
   return { x, tree };

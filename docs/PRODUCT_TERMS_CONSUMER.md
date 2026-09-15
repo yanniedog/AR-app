@@ -52,3 +52,25 @@ interest projections and known-cost subtotals. It cannot set costClaimsAvailable
 until a reviewed adapter establishes complete material terms, customer
 applicability and a supported evaluator. Six resolved fee inputs therefore do
 not enable total-cost savings or break-even claims.
+
+## Scoped comparison and saved descriptive evidence
+
+The actual comparison route lazily aligns canonical parameter keys only when unit
+and all applicability dimensions match exactly. Unknown dimensions stay separate
+per product; missing cells remain unknown. Multiple revisions in a cell are shown
+without picking a price. Thirty groups are initially exposed, with explicit further
+pages; every supplied revision remains reachable with its clause and source link.
+This view performs no eligibility or fee calculation.
+
+Successfully verified descriptive terms may be retained in two fixed 2 MiB slots
+(maximum 4 MiB on disk), each containing at most sixteen records of at most 256 KiB.
+Serialized replacement writes the inactive slot and checks readback, preserving the
+previous complete slot through interruption. Reload revalidates the envelope digest,
+terms schema and terms content digest. Oversized references are not retained; the
+current verified view remains usable. These are local corruption checks, not signatures.
+
+On unavailable acquisition the disclosure can show the saved matching bundle/index,
+or an explicitly older publication, with exact edition and date. Saved data is labelled
+as not reverified by that request. It is never returned by current executable transport,
+never grants approval, and contains no customer inputs. Failed/corrupt replacements
+do not destroy the previous valid descriptive reference.

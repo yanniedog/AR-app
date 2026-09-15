@@ -1,6 +1,5 @@
 import { HISTORY_DERIVATION_VERSION, historyDateStatuses } from './historyDerivation';
 import { resolveDatedPublication, resolveLegacyPublications, type HistoricalPublication } from './historicalPublication';
-export { resolveDatedPublication } from './historicalPublication';
 import { parseDatesIndex, type DatesIndex } from './datesIndex';
 import { DATES_INDEX_URL } from '../config';
 import { debugLog } from '../lib/debugLog';
@@ -11,6 +10,8 @@ import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransf
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
 import { downloadCore } from './payload';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
+export { resolveDatedPublication } from './historicalPublication';
+
 export { parseDatesIndex, type DatesIndex } from './datesIndex';
 
 /** Earliest run_date published as an immutable dated GitHub release (app_payload.py). */

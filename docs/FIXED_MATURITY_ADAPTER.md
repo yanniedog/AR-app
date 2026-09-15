@@ -74,3 +74,16 @@ The original v7 bridge fixture is byte-preserved. Replaying its v7 source contra
 under v8 preserves financial ledger, totals, eligibility, issues and old local
 confirmation; the new execution receipt correctly uses the v8 runner identity
 and a new input hash. It does not rewrite or claim byte identity with the old receipt.
+
+## Distinct reviewed customer groups
+
+Multiple exact-row templates remain separate candidates. The UI evaluates each
+candidate's declared criteria against scenario-bound facts and scoped saved answers,
+shows the AND/OR/NOT comparison trace with reviewed labels and sources, and asks only
+relevant missing questions. Criteria status is not bank approval or full calculation
+applicability. Amount/rate/date/fee checks still run in the adapter.
+
+When more than one candidate exists, none is preselected. Overlapping criteria
+require an explicit customer-group choice; changing it invalidates displayed results.
+A selected failed or unresolved candidate cannot produce a complete return or ranking.
+Unselected customer-group answers remain separately scoped in encrypted storage.

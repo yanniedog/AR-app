@@ -3,7 +3,8 @@ import * as Clipboard from 'expo-clipboard';
 import { View } from 'react-native';
 import { AppText, Button, Disclosure } from '../ui';
 import { DepositSource } from './DepositSource';
-import { DepositInputFields, emptyDepositInputs } from './DepositInputFields';
+import { emptyDepositInputs } from './DepositInputFields';
+import { DepositCohorts } from './DepositCohorts';
 import { useCustomerProfile } from '../../hooks/useCustomerProfile';
 import { useStore } from '../../data/store';
 import type { RateRow } from '../../types';
@@ -12,24 +13,27 @@ import { canonical, hashText } from '../../lib/productTermsEngine/validation';
 import { loadExecutableSelections, type ApprovedSelection, type ContractContext } from '../../data/executableContracts/transport';
 import { calculateDeposit, type DepositInputs } from '../../data/executableContracts/instantiate';
 
-function DepositForm({ selection, context, row }: { selection: ApprovedSelection; context: ContractContext; row: RateRow }) {
+function DepositForm({ candidates, context, row }: { candidates: ApprovedSelection[]; context: ContractContext; row: RateRow }) {
+  const [selectedId, setSelectedId] = useState<string | null>(() => candidates.length === 1 ? candidates[0].template.id : null);
+  const selection = candidates.find(candidate => candidate.template.id === selectedId);
   const customer = useCustomerProfile();
   const { profile, busy, error } = customer;
   const [inputs, setInputs] = useState<DepositInputs>(emptyDepositInputs);
   const [result, setResult] = useState<{ identity: string; data?: ReturnType<typeof calculateDeposit>; error?: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
   const [trace, setTrace] = useState(false);
-  const identity = JSON.stringify([inputs, profile?.revision]);
+  const identity = JSON.stringify([inputs, profile?.revision, selectedId]);
   const current = result?.identity === identity ? result : null;
   if (!profile) return <AppText variant="small">{error ?? 'Opening encrypted local inputs...'}</AppText>;
   function calculate() {
+    if (!selection) { setResult({ identity, error: 'Choose the applicable reviewed customer group.' }); return; }
     try { setResult({ identity, data: calculateDeposit(selection, context, row, inputs, profile!) }); }
     catch (e) { setResult({ identity, error: e instanceof Error ? e.message : 'Calculation unavailable.' }); }
   }
   return <View style={{ gap: 12 }}>
-    <AppText variant="small">Approval as of publication {selection.edition}. This is not confirmation of a current bank offer.</AppText>
+    <AppText variant="small">Reviewed source terms apply only within their stated dates. This is not confirmation of a current bank offer.</AppText>
     <AppText variant="small">Return before tax. Amounts and dates stay on this device. Eligibility answers are stored encrypted locally.</AppText>
-    <DepositInputFields selection={selection} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
+    <DepositCohorts candidates={candidates} selectedId={selectedId} onSelect={setSelectedId} row={row} inputs={inputs} onChange={setInputs} customer={customer} />
     <Button title="Calculate maturity return" disabled={busy} onPress={calculate} />
     {current?.error ? <AppText variant="small">{current.error}</AppText> : null}
     {current?.data ? <View style={{ gap: 8 }}>
@@ -48,7 +52,7 @@ function DepositForm({ selection, context, row }: { selection: ApprovedSelection
           <AppText variant="small">Remaining deposit balance: ${current.data.receipt.totals.closingBalance}</AppText>
           <AppText variant="small">Interest rounding adjustment: ${current.data.receipt.totals.interestRoundingAdjustment}</AppText>
         </View> : null}
-        {selection.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
+        {selection?.template.evidence.map(source => <DepositSource key={source.id} source={source} />)}
         <AppText variant="small">The receipt includes your entered amounts, dates and relevant eligibility answers.</AppText>
         <Button title="Copy calculation receipt" variant="secondary" onPress={() => void Clipboard.setStringAsync(JSON.stringify(current.data, null, 2)).then(() => setCopyStatus('Receipt copied.'), () => setCopyStatus('Receipt could not be copied.'))} />
         {copyStatus ? <AppText variant="small">{copyStatus}</AppText> : null}
@@ -69,8 +73,8 @@ export function FixedDepositCalculation({ row }: { row: RateRow }) {
     return () => { active = false; };
   }, [open, identity, manifest, core, coreIntegrity, row]);
   return <Disclosure title="Maturity return before tax" summary="Check calculation availability" open={open} onToggle={() => setOpen(!open)}>
-    {!selected ? <AppText variant="small">Checking reviewed calculation terms...</AppText> : selected.selections?.length === 1 ?
-      <DepositForm key={identity} selection={selected.selections[0]} context={{ manifest, core, coreIntegrity }} row={row} /> :
-      <AppText variant="small">{selected.error ?? 'An unambiguous approved calculation template is unavailable for this exact rate. Early exit, rollover and variable rates are not supported.'}</AppText>}
+    {!selected ? <AppText variant="small">Checking reviewed calculation terms...</AppText> : !!selected.selections?.length ?
+      <DepositForm key={identity} candidates={selected.selections} context={{ manifest, core, coreIntegrity }} row={row} /> :
+      <AppText variant="small">{selected.error ?? 'An approved calculation template is unavailable for this exact rate. Early exit, rollover and variable rates are not supported.'}</AppText>}
   </Disclosure>;
 }
