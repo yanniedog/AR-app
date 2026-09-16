@@ -12,8 +12,8 @@ Scan with **Android Chrome** to install the latest preview APK. Asset path is st
 
 | | |
 |---|---|
-| Version | **1.0.203** (build 266) |
-| QR | ![Install QR](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview-qr.png?v=266) |
+| Version | **1.0.204** (build 267) |
+| QR | ![Install QR](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview-qr.png?v=267) |
 | ARM APK (most phones) | [app-preview.apk](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-preview.apk) |
 | Install page | [install.html](https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/install.html) |
 | Version history | [app-arm-v* releases](https://github.com/yanniedog/AR-app/releases?q=app-arm-v&expanded=true) |
