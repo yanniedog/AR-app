@@ -52,6 +52,10 @@ function encrypted(text: string): Uint8Array {
   result.set(header); result.set(nonce, 44); result.set(cipher, 56); return result;
 }
 
+test.each(['ARE1', 'ARE2'])('rejects authenticated nested %s transport', async prefix => {
+  await expect(decryptReleaseTransport(encrypted(prefix + 'x'.repeat(80)), resolver)).rejects.toThrow('could not be opened');
+});
+
 test('shared loader unwraps transport before unchanged domain bounds and hash checks', async () => {
   const previous = globalThis.XMLHttpRequest;
   let body = wire();

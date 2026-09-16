@@ -40,6 +40,17 @@ test('same full result set as UI, frozen source copies, exact decimals and expli
   expect(strFromU8(workbook['xl/worksheets/sheet4.xml'])).toContain('0.05000000000000000001');
 });
 
+test('PDF groups product identifiers without dropping their specifications', async () => {
+  const html = await searchReportHtml(capture(), () => undefined);
+  const products = html.split('<h2>Products</h2>')[1].split('</section>')[0];
+  expect(products.match(/<span>product-0<\/span>/g)).toHaveLength(1);
+  expect(products).toContain('<td>/name</td><td>string</td><td>Loan 0</td>');
+  expect(products).toContain('<td>/productId</td><td>unavailable</td><td></td>');
+  expect(products).toContain('日本語 😀');
+  expect(products).not.toContain('>product-1<');
+  expect(html).toContain('<td>/fees</td><td>array</td><td>[]</td>');
+});
+
 test('long Unicode terms retain every segment; formula and OOXML escapes stay literal', async () => {
   const text = '😀'.repeat(32001) + '_x0041_\u0001';
   const bytes = await writeReportWorkbook([{ name: 'Terms', rows: [['Value'], [text], ['+SUM(1,2)'], ['@x'], ['-1'], ['=1+1']] }]);

@@ -34,7 +34,9 @@ export async function decryptReleaseTransport(
     const key = await resolveKey(id);
     if (transportKeyId(key) !== id) throw new Error('Key ID mismatch');
     const nonce = bytes.slice(HEADER_BYTES, HEADER_BYTES + NONCE_BYTES);
-    return gcm(hexToBytes(key), nonce, bytes.slice(0, HEADER_BYTES)).decrypt(bytes.slice(HEADER_BYTES + NONCE_BYTES));
+    const plain = gcm(hexToBytes(key), nonce, bytes.slice(0, HEADER_BYTES)).decrypt(bytes.slice(HEADER_BYTES + NONCE_BYTES));
+    if (['ARE1', 'ARE2'].includes(String.fromCharCode(...plain.subarray(0, 4)))) throw new Error('Nested transport');
+    return plain;
   } catch {
     throw new Error('Encrypted data could not be opened. Check the setup key in Settings.');
   }
