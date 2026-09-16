@@ -24,6 +24,9 @@ import { loadTrackedRatesSecureResult, normalizeTrackedRates } from './trackedRa
 import { debugLog } from '../lib/debugLog';
 import { setCrashReportsEnabled } from '../lib/observability';
 import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollback';
+import { verifiedCatalogueDetails } from './detailsCatalogue';
+import { selectMandatoryEligibility } from './mandatoryEligibility';
+import { installMandatoryEligibility } from './eligibilityGate';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -171,6 +174,18 @@ export const useStore = create<AppState>()(
 );
 
 storeRef.current = useStore;
+
+function refreshMandatoryEligibility(state: AppState): void {
+  const verified = verifiedCatalogueDetails(state.core, state.coreIntegrity, state.manifest, state.details);
+  installMandatoryEligibility(selectMandatoryEligibility(state.core, state.prefs.profileFilters, verified?.products ?? null));
+}
+refreshMandatoryEligibility(useStore.getState());
+useStore.subscribe((state, previous) => {
+  if (state.core !== previous.core || state.coreIntegrity !== previous.coreIntegrity || state.manifest !== previous.manifest
+    || state.details !== previous.details || state.prefs.profileFilters !== previous.prefs.profileFilters) {
+    refreshMandatoryEligibility(state);
+  }
+});
 
 try {
   if (typeof TaskManager.isTaskDefined === 'function' && !TaskManager.isTaskDefined(BACKGROUND_TASK)) {

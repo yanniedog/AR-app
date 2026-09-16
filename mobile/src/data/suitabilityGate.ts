@@ -2,6 +2,7 @@
  * Tiny holder for the post-ingest suitability Set so format.ts can do O(1)
  * lookups without importing the builder (avoids a circular dependency).
  */
+import { isMandatoryEligibilityReady } from './eligibilityGate';
 let allowed: Set<string> | null = null;
 let allowedSnapshot: Set<string> | null = null;
 /** True while closeSuitabilityGateUntilRebuild has sealed the gate. */
@@ -34,6 +35,7 @@ export function getSuitabilityRevision(): number {
  * ready; a warm index (empty or not) clears the closed flag on install.
  */
 export function isSuitabilityFilterReady(includeNonStandard = false): boolean {
+  if (!isMandatoryEligibilityReady()) return false;
   if (includeNonStandard) return true;
   return !rebuildClosed;
 }

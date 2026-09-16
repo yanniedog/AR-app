@@ -24,7 +24,6 @@ import {
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
 import { logDegradation, logEnsureSkipped } from '../lib/degradationLog';
-import { loadSampleDetails } from './sample';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { yieldToUi } from '../lib/yieldToUi';
 import {
@@ -196,26 +195,11 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             );
             return;
           }
-          if (get().source === 'sample') {
-            const sampleDetails = loadSampleDetails() as DetailsPayload;
-            set({ details: sampleDetails as DetailsPayload });
-            const seeded = sampleDetails as DetailsPayload;
-            await rebuildAndInstallSuitabilityIndex(
-              core,
-              seeded,
-              detailsSha,
-              () => datasetStillCurrent(runDate, coreSha, detailsSha, seeded.run_date),
-              coreSha,
-            );
-          }
         } catch (err) {
           if (myGeneration !== detailsEnsureGeneration) return;
           const msg = String((err as Error)?.message ?? err);
           debugLog.warn('store', `ensureDetails failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
-          if (get().source === 'sample') {
-            set({ details: loadSampleDetails() as DetailsPayload });
-          }
         } finally {
           if (myGeneration !== detailsEnsureGeneration) return;
           set({ detailsLoading: false });

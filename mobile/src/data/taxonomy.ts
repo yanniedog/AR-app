@@ -1,3 +1,4 @@
+import { mandatoryEligibleRows } from './eligibilityGate';
 import { SECTIONS } from '../constants';
 import { isMeaningfulDepositRate } from '../config';
 import type { RateRow, SectionKey } from '../types';
@@ -21,7 +22,7 @@ export function rowsForSearchScope(
   path: string[],
   hierarchyScoped: boolean,
 ): RateRow[] {
-  return path.length || hierarchyScoped ? rowsUnder(rows, section, path) : rows;
+  return path.length || hierarchyScoped ? rowsUnder(rows, section, path) : mandatoryEligibleRows(rows);
 }
 
 const LABELS: Record<string, string> = {
@@ -133,7 +134,7 @@ export function statsFor(
   const fractions: number[] = [];
   const providers = new Set<string>();
   const products = new Set<string>();
-  for (const r of rows) {
+  for (const r of mandatoryEligibleRows(rows)) {
     if (!r) continue;
     if (!includeNonStandard && !isBroadlyAvailable(r)) continue;
     // Token floor always uses headline/effective rate so membership matches
@@ -169,7 +170,7 @@ export function statsFor(
  *  category cards always agree. Those rows remain findable via the flat Search. */
 export function rowsUnder(rows: RateRow[], section: SectionKey, path: string[]): RateRow[] {
   const root = ROOT[section];
-  return rows.filter((r) => {
+  return mandatoryEligibleRows(rows).filter((r) => {
     const segs = pathSegs(r.taxonomy_path);
     if (segs[0] !== root) return false;
     for (let i = 0; i < path.length; i++) {
@@ -237,7 +238,7 @@ export function childrenFromScoped(
   const root = ROOT[section];
   const depth = path.length + 1; // index of the "next" segment in the full path
   const buckets = new Map<string, RateRow[]>();
-  for (const r of scopedRows) {
+  for (const r of mandatoryEligibleRows(scopedRows)) {
     const segs = pathSegs(r.taxonomy_path);
     if (segs[0] !== root) continue;
     const next = segs[depth];
@@ -260,7 +261,7 @@ export function childrenFromScoped(
 }
 
 function childHasDeeper(rows: RateRow[], root: string, depth: number): boolean {
-  for (const r of rows) {
+  for (const r of mandatoryEligibleRows(rows)) {
     const segs = pathSegs(r.taxonomy_path);
     if (segs[0] === root && segs[depth + 1] !== undefined) return true;
   }

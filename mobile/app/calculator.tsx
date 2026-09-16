@@ -1,5 +1,6 @@
 import { commissionerFamily } from '../src/theme/fonts';
 import { router, useLocalSearchParams } from 'expo-router';
+import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
@@ -146,7 +147,9 @@ export default function Calculator() {
   const upd = (patch: Partial<CalcInputs>) =>
     updateScenario((prev) => ({ ...prev, mortgage: { ...prev.mortgage, ...patch } }));
   const scenarioSectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
-  const currentProduct = scenario.currentProducts[scenarioSectionKey];
+  const savedCurrentProduct = scenario.currentProducts[scenarioSectionKey];
+  const currentProduct = savedCurrentProduct.productKey && !mandatoryProductAllowed(savedCurrentProduct.productKey)
+    ? { provider: '', productKey: '', rateIndex: null } : savedCurrentProduct;
   const updateCurrentProduct = (value: CurrentProductReference) => updateScenario((prev) => ({
     ...prev,
     currentProducts: { ...prev.currentProducts, [scenarioSectionKey]: value },

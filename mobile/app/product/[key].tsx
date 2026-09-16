@@ -35,7 +35,8 @@ import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
 import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
-import { sortRows, findByKey } from '../../src/data/selectors';
+import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
+import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
 import {
   countFiniteSeriesPoints,
@@ -87,8 +88,8 @@ export default function ProductDetail() {
   const rateIndex = parsedRateIndex != null && Number.isInteger(parsedRateIndex) ? parsedRateIndex : null;
   const core = useStore((s) => s.core);
   const found = useMemo(
-    () => core ? findByKey(core.sections, productKey) : null,
-    [core, productKey],
+    () => core ? findEligibleByKey(core.sections, productKey) : null,
+    [core, productKey, suitabilityRevision],
   );
   const coreIntegrity = useStore((s) => s.coreIntegrity);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256);
@@ -130,7 +131,7 @@ export default function ProductDetail() {
   const { scenario } = useUserRateScenario();
 
   useEffect(() => {
-    if (found) void ensureDetails({ forProductView: true });
+    void ensureDetails({ forProductView: true });
   }, [ensureDetails, found]);
 
   useEffect(() => {
@@ -189,11 +190,11 @@ export default function ProductDetail() {
     return buildStaySwitchProjection({
       scenario,
       target: row,
-      currentDetail: currentRef.productKey ? detailsProducts[currentRef.productKey] : null,
+      currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts[currentRef.productKey] : null,
       targetDetail: detail,
     });
   }, [detail, detailsProducts, found?.section, row, scenario]);
-  const currentBankLabel = scenario.currentProducts.mortgage.provider
+  const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
     : 'Current bank';
@@ -384,6 +385,9 @@ export default function ProductDetail() {
     ],
   });
 
+  if (!isMandatoryEligibilityReady() || !mandatoryProductAllowed(productKey)) {
+    return <><Stack.Screen options={{ title: 'Product unavailable' }} /><EmptyState icon="alert-circle-outline" title={!isMandatoryEligibilityReady() ? 'Loading required evidence…' : 'Does not meet your requirements'} /></>;
+  }
   if (!found) {
     if (exactRateRequested) return <><Stack.Screen options={{ title: 'Product rate unavailable' }} /><EmptyState icon="alert-circle-outline" title="Exact rate no longer available" /></>;
     return <DetailsOnlyProduct productKey={productKey} />;

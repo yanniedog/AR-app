@@ -650,8 +650,8 @@ describe('selectors', () => {
       mk({ product_key: 'C|1', rate: '0.07' }),
     ];
     const details = {
-      'A|1': { features: [{ label: 'OFFSET' }, { label: 'REDRAW' }] },
-      'B|1': { features: [{ label: 'OFFSET' }] },
+      'A|1': { facts: ['OFFSET', 'REDRAW'].map(key => ({ id: key, kind: 'feature' as const, canonicalKey: key, value: true, unit: 'boolean' as const })), features: [{ label: 'OFFSET' }, { label: 'REDRAW' }] },
+      'B|1': { facts: [{ id: 'offset', kind: 'feature' as const, canonicalKey: 'OFFSET', value: true, unit: 'boolean' as const }], features: [{ label: 'OFFSET' }] },
       'C|1': { features: [{ label: 'REDRAW' }] },
     };
     const offsetOnly = filterRows(rows, { ...EMPTY_FILTERS, accountFeatures: ['OFFSET'] }, details);

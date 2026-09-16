@@ -5,7 +5,7 @@ import { syncHistoryFromDailyPayloads } from '../src/data/historyDaily';
 import { legacyPublicationIdentity } from '../src/data/historicalPublication';
 import { HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import { chartModelFromPrebuiltHistory } from '../src/data/historyPayload';
-jest.mock('../src/data/payload', () => ({ fetchManifest: jest.fn(), downloadCore: jest.fn() }));
+jest.mock('../src/data/payload', () => ({ fetchManifest: jest.fn(), downloadCore: jest.fn(), downloadInflate: async (url: string) => JSON.stringify(await (await global.fetch(url)).json()) }));
 const day = captured.run_date, today = new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
 const core = captured as CorePayload, current = { ...core, run_date: today };
 const manifest = (hash: string) => ({ schema_version: 1, run_date: day, repo: 'yanniedog/AR-local', files: { core: { sha256: hash.repeat(64), bytes: 1, name: 'core.json.gz', url: 'https://example.test/core.json.gz' } } } as Manifest);

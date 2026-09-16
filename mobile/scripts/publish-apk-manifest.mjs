@@ -41,6 +41,7 @@ import {
   versionTagForApkChannel,
 } from './app-release-utils.mjs';
 import { inspectApkIdentity } from './apk-identity.mjs';
+import { verifyNativeApkPrivacy } from './apk-payload-privacy.mjs';
 import {
   artifactBudgetForChannel,
   assertApkSizeBudget,
@@ -346,6 +347,8 @@ async function publishRelease({ apkBuf, version, buildNumber, source, easBuildId
     console.error('GH_TOKEN is not set');
     process.exit(1);
   }
+  // Verify exact native bytecode before creating or changing any public release.
+  verifyNativeApkPrivacy(apkBuf, mobileRoot);
 
   const performanceBudgets = JSON.parse(
     readFileSync(join(mobileRoot, 'performance-budgets.json'), 'utf8'),

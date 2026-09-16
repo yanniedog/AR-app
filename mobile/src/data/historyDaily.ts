@@ -8,7 +8,7 @@ import type { BankHistoryPoint, CorePayload, SectionKey } from '../types';
 import { SECTION_KEYS } from '../types';
 import { normalizeTimelineDates, sanitizeRibbonPoint } from './bankHistoryTransform';
 import { normalizeHistoryBanksPayload, type HistoryBanksPayload } from './historyPayload';
-import { downloadCore } from './payload';
+import { downloadCore, downloadInflate } from './payload';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 export { resolveDatedPublication } from './historicalPublication';
 
@@ -93,9 +93,11 @@ export function mergeHistoryFromCores(
 
 export async function fetchDatesIndexJson(url: string = DATES_INDEX_URL): Promise<DatesIndex> {
   const sep = url.includes('?') ? '&' : '?';
-  const res = await fetch(`${url}${sep}_=${Date.now()}`);
-  if (!res.ok) throw new Error(`dates-index HTTP ${res.status}`);
-  const parsed = parseDatesIndex(await res.json());
+  const text = await downloadInflate(`${url}${sep}_=${Date.now()}`, undefined, {
+    fileName: 'dates-index.json', maxCompressedBytes: 2 * 1024 * 1024,
+    maxInflatedBytes: 2 * 1024 * 1024, expectedEncoding: 'identity', allowEncrypted: false,
+  });
+  const parsed = parseDatesIndex(JSON.parse(text));
   if (!parsed) throw new Error('dates-index payload invalid');
   return parsed;
 }

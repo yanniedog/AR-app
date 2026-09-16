@@ -1,3 +1,4 @@
+import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { commissionerFamily } from '../../src/theme/fonts';
 import Ionicons from '../../src/components/icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
@@ -125,9 +126,9 @@ export default function MyRates() {
   const scrollRef = useRef<ScrollView>(null);
   useScrollToTop(scrollRef);
 
-  const items = useMemo(() => (core ? resolveSavedRates(core, savedRates) : []), [core, savedRates]);
+  const items = useMemo(() => (core ? resolveSavedRates(core, savedRates).filter(item => mandatoryEligibleRows([item.row]).length > 0) : []), [core, savedRates, suitabilityRevision]);
   const unavailableRefs = useMemo(
-    () => unresolvedSavedRateRefs(savedRates, items),
+    () => unresolvedSavedRateRefs(savedRates.filter(ref => mandatoryProductAllowed(ref.productKey)), items),
     [items, savedRates],
   );
   const trackedById = useMemo(

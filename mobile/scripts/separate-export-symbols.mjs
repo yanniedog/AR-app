@@ -16,6 +16,9 @@ export async function separateExportSymbols(dist = path.resolve('dist'), symbols
       const source = path.join(folder, name), runtime = path.join(folder, name.slice(0, -4));
       const data = await readFile(source), map = JSON.parse(data);
       if (map.version !== 3 || !Array.isArray(map.sources) || typeof map.mappings !== 'string') throw new Error(`Invalid source map: ${name}`);
+      if (map.sources.some(source => /(?:^|\/)assets\/sample\/|(?:^|\/)src\/data\/sample\.js$/.test(String(source).replaceAll('\\', '/')))) {
+        throw new Error('Export contains bundled product data; remove the runtime sample dependency');
+      }
       const bundle = await readFile(runtime);
       if (!bundle.length || !(await stat(runtime)).isFile()) throw new Error(`Missing runtime for ${name}`);
       // Content-addressed storage preserves earlier symbols and makes interrupted copies retryable.

@@ -10,8 +10,11 @@ jest.mock('../src/components/product/ProductDetailParts', () => ({ DetailGroup: 
 jest.mock('../src/components/product/ProductTermsDisclosure', () => ({ ProductTermsDisclosure: 'ProductTermsDisclosure' }));
 jest.mock('../src/components/product/EligibilityAssessment', () => ({ EligibilityAssessment: 'EligibilityAssessment' }));
 jest.mock('../src/components/product/SavingsPeriodCalculation', () => ({ SavingsPeriodCalculation: 'SavingsPeriodCalculation' }));
+jest.mock('../src/components/product/ActivityPeriodCalculation', () => ({ ActivityPeriodCalculation: 'ActivityPeriodCalculation' }));
+
 test.each(['HOME_LOANS', undefined, 'TRANS_AND_SAVINGS_ACCOUNTS'])('details-only calculator uses only explicit source category %s', async productCategory => {
   mockCatalogue = { details: { products: { product: { displayIdentity: { name: 'Savings named mortgage', ...(productCategory ? { productCategory } : {}) } } } }, manifest: { run_date: '2026-09-15' }, loading: false, retry: jest.fn() };
   let tree: any; await act(async () => { tree = TestRenderer.create(<DetailsOnlyProduct productKey="product" />); });
+  expect(tree.root.findAllByType('ActivityPeriodCalculation')).toHaveLength(productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' ? 1 : 0);
   expect(tree.root.findAllByType('SavingsPeriodCalculation')).toHaveLength(productCategory === 'TRANS_AND_SAVINGS_ACCOUNTS' ? 1 : 0);
 });

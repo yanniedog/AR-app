@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { getMandatoryEligibilityRevision, subscribeMandatoryEligibility } from '../data/eligibilityGate';
 
 import {
   getSuitabilityRevision,
@@ -11,10 +12,15 @@ import {
  * so consumers must subscribe explicitly instead of waiting for navigation to
  * incidentally change component state.
  */
+const revision = () => getSuitabilityRevision() + getMandatoryEligibilityRevision();
+const subscribe = (listener: () => void) => {
+  const suitability = subscribeSuitabilityGate(listener), mandatory = subscribeMandatoryEligibility(listener);
+  return () => { suitability(); mandatory(); };
+};
 export function useSuitabilityRevision(): number {
   return useSyncExternalStore(
-    subscribeSuitabilityGate,
-    getSuitabilityRevision,
-    getSuitabilityRevision,
+    subscribe,
+    revision,
+    revision,
   );
 }

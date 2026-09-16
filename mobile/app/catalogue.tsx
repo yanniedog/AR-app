@@ -1,3 +1,4 @@
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { router, Stack } from 'expo-router';
@@ -8,8 +9,9 @@ import { AppText, Button } from '../src/components/ui';
 import { LedgerField } from '../src/components/ledger/LedgerField';
 const PAGE = 25;
 export default function DetailsCatalogue() {
+  const suitabilityRevision = useSuitabilityRevision();
   const { core, details, loading, retry } = useDetailsCatalogue(), [query, setQuery] = useState(''), [page, setPage] = useState(0);
-  const entries = useMemo(() => core && details ? detailsOnlyCatalogue(core, details) : [], [core, details]);
+  const entries = useMemo(() => core && details ? detailsOnlyCatalogue(core, details) : [], [core, details, suitabilityRevision]);
   const matched = useMemo(() => { const term = query.trim().toLocaleLowerCase(); return entries.filter(item => !term || `${item.key} ${item.name ?? ''} ${item.provider ?? ''} ${item.productCategory ?? ''} ${item.description}`.toLocaleLowerCase().includes(term)); }, [entries, query]);
   const selectedPage = Math.min(page, Math.max(0, Math.ceil(matched.length / PAGE) - 1));
   return <ScreenScrollView><Stack.Screen options={{ title: 'Products without listed rates' }} /><View style={{ gap: 12 }}>

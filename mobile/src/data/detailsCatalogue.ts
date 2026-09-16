@@ -1,3 +1,4 @@
+import { mandatoryProductAllowed } from './eligibilityGate';
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest, type ProductDetail } from '../types';
 import type { CoreIntegrityContext } from './sectionIntegrity';
 import { verifiedDetailsSha } from './detailsIdentity';
@@ -14,5 +15,5 @@ export function detailsDisplayIdentity(detail: ProductDetail | null): NonNullabl
 }
 export function detailsOnlyCatalogue(core: CorePayload, details: DetailsPayload) {
   const rated = new Set(SECTION_KEYS.flatMap(section => core.sections[section].rates.map(row => row.product_key)));
-  return Object.entries(details.products).filter(([key]) => !rated.has(key)).map(([key, detail]) => ({ key, description: typeof detail.description === 'string' ? detail.description : '', ...detailsDisplayIdentity(detail) })).sort((a, b) => (a.name ?? a.key).localeCompare(b.name ?? b.key));
+  return Object.entries(details.products).filter(([key]) => !rated.has(key) && mandatoryProductAllowed(key)).map(([key, detail]) => ({ key, description: typeof detail.description === 'string' ? detail.description : '', ...detailsDisplayIdentity(detail) })).sort((a, b) => (a.name ?? a.key).localeCompare(b.name ?? b.key));
 }

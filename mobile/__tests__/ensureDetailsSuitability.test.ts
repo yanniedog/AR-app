@@ -145,7 +145,7 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details?.run_date).toBe(remoteCore.run_date);
   });
 
-  it('opens the fail-closed gate from bundled details when offline', async () => {
+  it('keeps the gate closed without trusted details instead of loading bundled data', async () => {
     store.setState({
       source: 'sample',
       manifest: sampleManifest,
@@ -158,10 +158,8 @@ describe('ensureDetails suitability unblock', () => {
 
     await store.getState().ensureDetails({ force: true });
 
-    expect(isSuitabilityFilterReady(false)).toBe(true);
-    expect(getSuitabilityIndex()?.detailsSha).toBe(sampleManifest.files.details.sha256);
-    expect(getSuitabilityIndex()?.allowed.size).toBeGreaterThan(0);
-    expect(store.getState().details?.run_date).toBe(sampleDetails.run_date);
+    expect(isSuitabilityFilterReady(false)).toBe(false);
+    expect(store.getState().details).toBeNull();
   });
 
   it('lets a second caller await the in-flight load instead of no-oping', async () => {

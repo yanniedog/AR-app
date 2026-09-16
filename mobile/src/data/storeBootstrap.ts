@@ -8,15 +8,7 @@ import { debugLog } from '../lib/debugLog';
 import { logRetry, logSuitabilityExclusions } from '../lib/degradationLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
-import {
-  sampleCore,
-  sampleCoreIntegrity,
-  sampleFallbackIsUsable,
-  sampleManifestIsUsable,
-  sampleManifest,
-} from './sample';
-import { sampleAgeErrorMessage } from './storeHelpers';
-import { installSampleSeed, readValidatedHistoryBanks } from './storeHelpers';
+import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
 import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
@@ -65,21 +57,8 @@ export function createBootstrapActions(
       try {
         const prefs = get().prefs;
         const cachedBundle = await cache.readBundle();
-        const staleSample =
-          cachedBundle?.meta.source === 'sample' &&
-          (
-            !sampleManifestIsUsable(cachedBundle.meta.manifest) ||
-            cachedBundle.meta.coreSha !== sampleManifest.files.core.sha256 ||
-            cachedBundle.meta.manifest.files.core.sha256 !== sampleManifest.files.core.sha256 ||
-            cachedBundle.core.run_date !== sampleCore.run_date
-          );
-        const bundle = staleSample ? null : cachedBundle;
-        if (staleSample) {
-          debugLog.warn(
-            'store',
-            `ignoring stale or replaced bundled sample cache observed ${cachedBundle?.meta.manifest.run_date}`,
-          );
-        }
+        // Retain old sample bytes on disk, but require a verified downloaded dataset.
+        const bundle = cachedBundle?.meta.source === 'sample' ? null : cachedBundle;
         const [rawCachedSearch, cachedOptionalMeta, cachedHistory, cachedProductHistory] = await Promise.all([
           effectiveDeepSearch(prefs) ? cache.readSearchIndex() : Promise.resolve(null),
           effectiveDeepSearch(prefs) ? cache.readOptionalMeta() : Promise.resolve(null),
@@ -151,37 +130,18 @@ export function createBootstrapActions(
           }
           // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
           deferSuitabilityReport(bundle.core, get);
-        } else if (sampleFallbackIsUsable()) {
-          debugLog.info('store', 'cache miss — seeding bundled sample');
-          clearSuitabilityIndex();
-          await installSampleSeed();
-          set({
-            core: sampleCore,
-            coreIntegrity: sampleCoreIntegrity,
-            coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
-            manifest: sampleManifest,
-            source: 'sample',
-            status: 'ready',
-            error: null,
-          });
-          // Defer diagnostics so the first paint is not blocked by ~3.6k regex scans.
-          deferSuitabilityReport(sampleCore, get);
         } else {
-          debugLog.warn(
-            'store',
-            `bundled sample observed ${sampleManifest.run_date} is too old; refreshing before display`,
-          );
           set({ status: 'idle', error: null });
           if (!opts.skipRefresh) {
             const refreshed = await get().refresh({});
             if (!refreshed && get().status !== 'ready' && get().status !== 'error') {
-              set({ status: 'error', error: sampleAgeErrorMessage() });
+              set({ status: 'error', error: noDataErrorMessage() });
             }
             return;
           }
           set({
             status: 'error',
-            error: sampleAgeErrorMessage(),
+            error: noDataErrorMessage(),
           });
           return;
         }
@@ -220,66 +180,18 @@ export function createBootstrapActions(
     },
 
     async loadSampleFallback() {
-      debugLog.info('store', 'loadSampleFallback');
-      set({ status: 'loading', error: null, refreshing: false, payloadProgress: null });
-      try {
-        await installSampleSeed();
-        clearSuitabilityIndex();
-        set({
-          core: sampleCore,
-          coreIntegrity: sampleCoreIntegrity,
-          coreAssetState: { status: 'sample', data: sampleCoreIntegrity },
-          manifest: sampleManifest,
-          source: 'sample',
-          status: 'ready',
-          error: null,
-          offline: true,
-          details: null,
-          searchIndex: null,
-          searchIndexStatus: 'unavailable',
-          searchIndexError: 'Deep search is not included in the offline sample.',
-          historyBanks: null,
-          historyBanksError: null,
-          bankInsights: null,
-          bankInsightsError: null,
-          bankSpreadHistory: null,
-          bankSpreadHistoryError: null,
-          rbaCalendar: null,
-          rbaCalendarSha: null,
-          rbaCalendarError: null,
-          productHistory: null,
-          productHistoryError: null,
-          pendingIngestRunDate: null,
-        });
-      } catch (err) {
-        const msg = String((err as Error)?.message ?? err);
-        debugLog.error('store', `loadSampleFallback failed: ${msg}`);
-        set({
-          status: 'error',
-          error: msg,
-          coreAssetState: { status: 'error', data: get().coreIntegrity, error: msg },
-        });
-      }
+      // Compatibility for persisted callers; never seed business data from the APK.
+      if (!get().core) set({ status: 'error', error: noDataErrorMessage() });
     },
 
     async ensureCoreLoaded() {
       if (get().core) return;
       const bundle = await cache.readBundle();
-      const sampleIsCurrent =
-        bundle?.meta.source !== 'sample' ||
-        (
-          sampleManifestIsUsable(bundle.meta.manifest) &&
-          bundle.meta.coreSha === sampleManifest.files.core.sha256 &&
-          bundle.meta.manifest.files.core.sha256 === sampleManifest.files.core.sha256 &&
-          bundle.core.run_date === sampleCore.run_date
-        );
-      if (bundle && sampleIsCurrent) {
+      if (bundle && bundle.meta.source !== 'sample') {
         set({
           core: bundle.core,
           coreIntegrity: bundle.integrity,
-          coreAssetState: bundle.meta.source === 'sample'
-            ? { status: 'sample', data: bundle.integrity }
-            : { status: 'cached', data: bundle.integrity },
+          coreAssetState: { status: 'cached', data: bundle.integrity },
           manifest: bundle.meta.manifest,
           source: bundle.meta.source,
         });

@@ -1,3 +1,4 @@
+import { hasMandatoryRequirements } from './eligibilityGate';
 import { SECTIONS } from '../constants';
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { CorePayload, ProductDetail, RateRow, SectionKey } from '../types';
@@ -369,7 +370,8 @@ export function computeSubscriptionChanges(
   depositRankMetric: RankMetric = 'base',
   mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
-  if (!oldCore || !subscriptions.length) return [];
+  // Historical product eligibility needs independently verified dated details.
+  if (!oldCore || !subscriptions.length || hasMandatoryRequirements()) return [];
   const messages: NotifyMessage[] = [];
   const oldDetails = oldDetailsProducts;
   const newDetails = newDetailsProducts ?? oldDetailsProducts;

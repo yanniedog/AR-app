@@ -9,7 +9,7 @@ import { buildProductHistoryFromCores, normalizeProductHistoryPayload,
   syncProductHistoryFromDailyPayloads, type ProductHistoryPayload } from '../src/data/productHistory';
 import type { CorePayload } from '../src/types';
 
-jest.mock('../src/data/payload', () => ({ downloadCore: jest.fn(), fetchManifest: jest.fn() }));
+jest.mock('../src/data/payload', () => ({ downloadCore: jest.fn(), fetchManifest: jest.fn(), downloadInflate: async (url: string) => JSON.stringify(await (await global.fetch(url)).json()) }));
 
 // Revision/network controls around captured rates, not financial acceptance data.
 const datedCore = captured as CorePayload;

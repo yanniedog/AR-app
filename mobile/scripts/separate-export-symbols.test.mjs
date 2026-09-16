@@ -14,6 +14,16 @@ async function fixture(run) {
   try { await run({ dist, symbols, folder }); } finally { await rm(root, { recursive: true, force: true }); }
 }
 const map = JSON.stringify({ version: 3, sources: ['input.js'], mappings: 'AAAA' });
+
+for (const source of ['../../assets/sample/core.json', '..\\src\\data\\sample.js']) {
+  test(`rejects bundled product data dependency ${source}`, async () => fixture(async ({ dist, symbols, folder }) => {
+    const original = JSON.stringify({ version: 3, sources: [source], mappings: 'AAAA' });
+    await writeFile(path.join(folder, 'entry.hbc'), 'bytecode');
+    await writeFile(path.join(folder, 'entry.hbc.map'), original);
+    await assert.rejects(separateExportSymbols(dist, symbols), /bundled product data/);
+    assert.equal(await readFile(path.join(folder, 'entry.hbc.map'), 'utf8'), original);
+  }));
+}
 test('separates verified symbols, preserves every runtime file, binds symbols to exact bytecode', async () => fixture(async ({ dist, symbols, folder }) => {
   await writeFile(path.join(folder, 'entry.hbc'), 'bytecode');
   await writeFile(path.join(folder, 'entry.hbc.map'), map);

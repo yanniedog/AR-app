@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams, type Href } from 'expo-router';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
@@ -77,6 +78,7 @@ function valuesDiffer(row: AttrRow, entries: Entry[]): boolean {
 }
 
 export default function Compare() {
+  const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const compact = usesCompactCompareLayout(width, fontScale);
@@ -102,7 +104,7 @@ export default function Compare() {
       list = keys ? keys.split(',') : [];
     }
     return validateCompareSelections(core, list);
-  }, [core, keys]);
+  }, [core, keys, suitabilityRevision]);
   const entries = useMemo<Entry[]>(
     () => comparison && comparison.issue == null ? comparison.entries : [],
     [comparison],
@@ -111,8 +113,8 @@ export default function Compare() {
   const calculationRows = useMemo(() => entries.map(entry => entry.row), [entries]);
 
   useEffect(() => {
-    if (entries.length >= 2 && !details) void ensureDetails();
-  }, [details, ensureDetails, entries.length]);
+    if (core && !details) void ensureDetails();
+  }, [core, details, ensureDetails]);
 
   const logoIds = useMemo(
     () => entries.map((entry) =>

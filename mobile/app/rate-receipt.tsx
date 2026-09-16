@@ -1,6 +1,7 @@
 import Ionicons from '../src/components/icons/AppIcon';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
@@ -17,7 +18,7 @@ import {
   rateConditionReceiptLines,
   type ReceiptFact,
 } from '../src/data/rateReceipt';
-import { findByKey } from '../src/data/selectors';
+import { findEligibleByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -55,6 +56,7 @@ function money(value: number): string {
 }
 
 export default function RateReceiptScreen() {
+  const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
   const { key, ri } = useLocalSearchParams<{ key?: string; ri?: string }>();
@@ -80,7 +82,8 @@ export default function RateReceiptScreen() {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
 
-  const found = core ? findByKey(core.sections, productKey) : null;
+  void suitabilityRevision;
+  const found = core ? findEligibleByKey(core.sections, productKey) : null;
   const row = found && validRateIndex
     ? requestedRateIndex == null
       ? found.row
