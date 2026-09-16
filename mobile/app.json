@@ -123,7 +123,6 @@
       "apkArmReleaseTag": "app-apk-arm-latest",
       "apkArmManifestUrl": "https://github.com/yanniedog/AR-app/releases/download/app-apk-arm-latest/app-apk-latest.json",
       "selfUpdateEnabled": true,
-      "payloadDecKeyHex": "",
       "router": {
         "origin": false,
         "scheme": "arrates",

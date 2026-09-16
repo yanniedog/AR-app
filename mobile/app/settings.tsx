@@ -1,4 +1,6 @@
 import Ionicons from '../src/components/icons/AppIcon';
+import { mandatoryEligibleRows } from '../src/data/eligibilityGate';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -52,6 +54,7 @@ import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditRead
 const THRESHOLDS = [1, 5, 10, 25];
 
 export default function Settings() {
+  useSuitabilityRevision();
   const router = useRouter();
   const prefs = useStore((s) => s.prefs);
   const hydrated = useStore((s) => s.hydrated);
@@ -535,14 +538,14 @@ export default function Settings() {
           <InfoRow label="Data set" value={core ? formatRunDate(core.run_date) : '—'} />
           <InfoRow label="Source" value={dataSourceLabel(source)} />
           <InfoRow label="Last checked" value={lastCheckedAt ? relativeDate(lastCheckedAt) : 'never'} />
-          <InfoRow label="Brands observed" value={core ? String(Object.keys(core.brands ?? {}).length) : '—'} />
+          <InfoRow label="Matching banks" value={core ? String(new Set(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).map(row => row.provider)).size) : '—'} />
           <InfoRow
-            label="Products observed"
-            value={core ? String(Object.values(core.sections).reduce((sum, item) => sum + (item.ribbon?.counts?.products ?? 0), 0)) : '—'}
+            label="Matching products"
+            value={core ? String(new Set(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).map(row => row.product_key)).size) : '—'}
           />
           <InfoRow
-            label="Rates observed"
-            value={core ? String(Object.values(core.sections).reduce((sum, item) => sum + item.rates.length, 0)) : '—'}
+            label="Matching rates"
+            value={core ? String(mandatoryEligibleRows(Object.values(core.sections).flatMap(item => item.rates)).length) : '—'}
           />
           <InfoRow
             label="Coverage observed"

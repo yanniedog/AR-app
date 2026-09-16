@@ -1,3 +1,5 @@
+import { SearchReportExport } from '../src/components/SearchReportExport';
+import { isMandatoryEligibilityReady } from '../src/data/eligibilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
@@ -181,7 +183,7 @@ export default function Search() {
   const baseRows = useMemo(() => {
     const all = core?.sections[section]?.rates ?? [];
     return rowsForSearchScope(all, section, path, hierarchyScoped);
-  }, [core, section, path, hierarchyScoped]);
+  }, [core, section, path, hierarchyScoped, suitabilityRevision]);
 
   const effectiveFilters = useMemo(
     () => ({
@@ -195,7 +197,7 @@ export default function Search() {
   // sorting thousands of rows again on every query and filter change.
   const sortedBaseRows = useMemo(
     () => sortRows(baseRows, sortKey, section, depositRankMetric, mortgageRateMetric),
-    [baseRows, sortKey, section, depositRankMetric, mortgageRateMetric],
+    [baseRows, sortKey, section, depositRankMetric, mortgageRateMetric, suitabilityRevision],
   );
   const rows = useMemo(
     () => (
@@ -249,7 +251,7 @@ export default function Search() {
     deepSearchActive &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
-  const detailFiltersPending =
+  const detailFiltersPending = !isMandatoryEligibilityReady() ||
     (effectiveFilters.accountFeatures.length > 0 ||
       effectiveFilters.eligibilityCriteria.length > 0 ||
       effectiveFilters.factCriteria.length > 0) &&
@@ -426,6 +428,7 @@ export default function Search() {
             onPress={() => void onToggleSearchAlert()}
           />
         </Row>
+        <SearchReportExport disabled={searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
         <AppText variant="tiny" color="textFaint">
           {rows.length} {rows.length === 1 ? 'product' : 'products'}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}

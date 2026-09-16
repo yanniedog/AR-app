@@ -15,10 +15,10 @@ describe('features', () => {
   test('productHasAllFeatures requires every selected featureType', () => {
     const lookup: Record<string, ProductDetail> = {
       'A|1': {
-        features: [{ label: 'OFFSET' }, { label: 'REDRAW' }],
+        facts: ['OFFSET', 'REDRAW'].map(key => ({ id: key, kind: 'feature', canonicalKey: key, value: true, unit: 'boolean' })), features: [{ label: 'OFFSET' }, { label: 'REDRAW' }],
       },
       'B|1': {
-        features: [{ label: 'OFFSET' }],
+        facts: [{ id: 'offset', kind: 'feature', canonicalKey: 'OFFSET', value: true, unit: 'boolean' }], features: [{ label: 'OFFSET' }],
       },
     };
     expect(productHasAllFeatures('A|1', [], lookup)).toBe(true);

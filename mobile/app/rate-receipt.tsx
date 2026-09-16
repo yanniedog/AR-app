@@ -1,21 +1,24 @@
 import Ionicons from '../src/components/icons/AppIcon';
 import * as Clipboard from 'expo-clipboard';
 import { Stack, router, useLocalSearchParams, type Href } from 'expo-router';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
+import { RateConditionsDisclosure } from '../src/components/product/RateConditionsDisclosure';
 import { ScreenScrollView } from '../src/components/Screen';
 import { TOUCH_TARGET_MIN } from '../src/components/TouchTarget';
 import { AppText, Button, Card, Disclosure, Divider, Row } from '../src/components/ui';
 import {
   buildNegotiationBrief,
   buildRateReceipt,
+  rateConditionReceiptLines,
   type ReceiptFact,
 } from '../src/data/rateReceipt';
-import { findByKey } from '../src/data/selectors';
+import { findEligibleByKey } from '../src/data/selectors';
 import { useStore } from '../src/data/store';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
@@ -53,6 +56,7 @@ function money(value: number): string {
 }
 
 export default function RateReceiptScreen() {
+  const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
   const { key, ri } = useLocalSearchParams<{ key?: string; ri?: string }>();
@@ -60,6 +64,9 @@ export default function RateReceiptScreen() {
   const requestedRateIndex = ri == null || ri === '' ? null : Number(ri);
   const validRateIndex = requestedRateIndex == null || Number.isInteger(requestedRateIndex);
   const core = useStore((state) => state.core);
+  const details = useStore((state) => state.details);
+  const manifest = useStore((state) => state.manifest);
+  const coreIntegrity = useStore((state) => state.coreIntegrity);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const detail = detailsProducts?.[productKey] ?? null;
   const ensureDetails = useStore((state) => state.ensureDetails);
@@ -75,7 +82,8 @@ export default function RateReceiptScreen() {
     void ensureDetails({ forProductView: true });
   }, [ensureDetails]);
 
-  const found = core ? findByKey(core.sections, productKey) : null;
+  void suitabilityRevision;
+  const found = core ? findEligibleByKey(core.sections, productKey) : null;
   const row = found && validRateIndex
     ? requestedRateIndex == null
       ? found.row
@@ -83,9 +91,9 @@ export default function RateReceiptScreen() {
     : null;
   const receipt = useMemo(
     () => row && found && core
-      ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail })
+      ? buildRateReceipt({ row, section: found.section, evidenceDate: core.run_date, detail, rateConditionContext: { core, details, manifest, coreIntegrity } })
       : null,
-    [core, detail, found, row],
+    [core, detail, details, manifest, coreIntegrity, found, row],
   );
   const brief = useMemo(
     () => receipt && found
@@ -103,6 +111,7 @@ export default function RateReceiptScreen() {
     const lines = [
       `Bank-call brief · ${receipt.provider}`,
       `${receipt.productName} · ${receipt.advertisedRate} · observed ${receipt.evidenceDate}`,
+      ...rateConditionReceiptLines(receipt),
     ];
     if (brief.illustration) {
       lines.push(
@@ -111,7 +120,7 @@ export default function RateReceiptScreen() {
       );
     }
     if (brief.comparables.length) {
-      lines.push('', 'Comparable observed rates:');
+      lines.push('', 'Comparable observed rates (individual rate conditions unassessed):');
       for (const item of brief.comparables) {
         lines.push(`- ${item.provider}: ${item.advertisedRate} · ${item.productName}`);
       }
@@ -342,6 +351,7 @@ export default function RateReceiptScreen() {
         <Card style={{ marginBottom: 16 }}><Facts items={receipt.tier} /></Card>
 
         <SectionTitle text="Conditions recorded" icon="checkmark-done-outline" />
+        <RateConditionsDisclosure model={receipt.rateConditions} />
         <Card style={{ marginBottom: 16 }}>
           <Facts
             items={receipt.conditions}

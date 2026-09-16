@@ -128,7 +128,7 @@ function candidateFilterKeys(fact: NormalizedProductFact): string[] {
   return Array.from(new Set([sourceType, canonicalLeaf].filter((key): key is string => Boolean(key))));
 }
 
-function curatedFeatureIdentityKey(fact: NormalizedProductFact): string | null {
+export function curatedFeatureIdentityKey(fact: NormalizedProductFact): string | null {
   if (fact.kind !== 'feature') return null;
   return candidateFilterKeys(fact).find((key) => CURATED_FEATURE_FACT_KEYS.has(key)) ?? null;
 }

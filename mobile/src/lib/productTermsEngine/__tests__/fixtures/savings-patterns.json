@@ -1,0 +1,45 @@
+{
+  "observedAt": "2026-09-15",
+  "sources": [
+    {
+      "id": "macquarie-stepped-example",
+      "url": "https://www.macquarie.com.au/help/personal/transaction-and-savings-accounts/understanding-interest-rates-and-fees/understanding-interest-rates-and-fees-for-tsa-and-bsa.html",
+      "documentSha256": "8600918fac7617f03f40bbfc477273fa0338610d2d4ff818a2ce5e4d88c0f340",
+      "locator": "How does stepped interest work?",
+      "quote": "different interest rates applicable to different portions of your account balance.",
+      "capture": "raw_html",
+      "allocation": "marginal",
+      "balance": "2100000.00",
+      "upperBalances": ["250000.00", "2000000.00", null],
+      "rates": ["0.05", "0.05", "0.0275"],
+      "expectedAnnual": "102750.00000000",
+      "limitations": ["Published illustration, not current customer rates", "Exact posting rounding stage and complete applicability unproven"]
+    },
+    {
+      "id": "gsb-youth-allocation-holdout",
+      "url": "https://www.greatsouthernbank.com.au/help-and-contact/managing-your-accounts/interest-rates",
+      "documentSha256": null,
+      "locator": "Youth eSaver rate tiers",
+      "capture": "web_reader_only_raw_http_403",
+      "allocation": "marginal",
+      "balance": "6000.00",
+      "upperBalances": ["5000.00", null],
+      "rates": ["0.055", "0.01"],
+      "expectedAnnual": "285.00000000",
+      "limitations": ["Developer-selected balance", "No raw document hash", "No complete day count, rounding, fees or cohort proof"]
+    },
+    {
+      "id": "heartland-whole-balance",
+      "url": "https://www.heartlandbank.com.au/savings-account",
+      "documentSha256": null,
+      "locator": "MySavings tier table and daily balance explanation",
+      "capture": "web_reader_only_raw_http_403",
+      "allocation": "whole_balance",
+      "balance": "2000000.01",
+      "upperBalances": ["300000.00", "2000000.00", null],
+      "rates": ["0.0455", "0.0455", "0.015"],
+      "expectedAnnual": "30000.00015000",
+      "limitations": ["Observed rates not backdated or guaranteed", "No raw document hash", "Complete day count, rounding and applicability unproven"]
+    }
+  ]
+}

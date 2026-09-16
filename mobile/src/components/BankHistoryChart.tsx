@@ -295,11 +295,11 @@ export function BankHistoryChart({
   const maxs = plotPoints.map((p) => p.max);
   const means = plotPoints.map((p) => p.mean);
   const medians = plotPoints.map((p) => p.median);
-  const band = buildBandPath(plotDates, mins, maxs, xAt, yAt);
-  const meanLine = buildLinePath(means, xAt, yAt);
-  const medianLine = buildLinePath(medians, xAt, yAt);
-  const minLine = buildLinePath(mins, xAt, yAt);
-  const maxLine = buildLinePath(maxs, xAt, yAt);
+  const band = buildBandPath(plotDates, mins, maxs, xAt, yAt, true);
+  const meanLine = buildLinePath(means, xAt, yAt, true);
+  const medianLine = buildLinePath(medians, xAt, yAt, true);
+  const minLine = buildLinePath(mins, xAt, yAt, true);
+  const maxLine = buildLinePath(maxs, xAt, yAt, true);
   const rbaLine = showRba ? stepPath(rbaSteps, xAt, yAt) : null;
   const highlightLine = highlightValues ? buildLinePath(highlightValues, xAt, yAt, true) : null;
 

@@ -1,3 +1,4 @@
+import { hasMandatoryRequirements, getMandatoryEligibilityRevision } from './eligibilityGate';
 import * as BackgroundTask from 'expo-background-task';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
@@ -347,7 +348,7 @@ export function computeChanges(
   mortgageRateMetric: MortgageRateMetric = 'comparison',
 ): NotifyMessage[] {
   if (!oldCore) return [];
-  const subscriptionMessages = computeSubscriptionChanges(
+  const subscriptionMessages = hasMandatoryRequirements() ? [] : computeSubscriptionChanges(
     oldCore,
     newCore,
     subscriptions,
@@ -360,7 +361,7 @@ export function computeChanges(
   const messages: NotifyMessage[] = [];
 
   // Per-category best-rate moves.
-  for (const section of SECTION_ORDER) {
+  for (const section of hasMandatoryRequirements() ? [] : SECTION_ORDER) {
     const before = bestTrackedRate(oldCore, section, depositRankMetric, mortgageRateMetric);
     const after = bestTrackedRate(newCore, section, depositRankMetric, mortgageRateMetric);
     if (!before || !after || before.fraction === null || after.fraction === null) continue;
@@ -409,7 +410,7 @@ export function computeChanges(
 
   // Watchlisted products — compare row-for-row by rate_index and report the largest
   // qualifying move (order-independent; catches changes to any rate row, not just the first).
-  for (const saved of favorites) {
+  for (const saved of hasMandatoryRequirements() ? [] : favorites) {
     const key = typeof saved === 'string' ? saved : saved.productKey;
     const exactIndex = typeof saved === 'string' || saved.scope === 'product' ? null : saved.rateIndex;
     const before = exactIndex == null
@@ -470,6 +471,7 @@ export async function ensurePermissions(): Promise<boolean> {
 
 export async function notify(messages: NotifyMessage[]): Promise<void> {
   if (!messages.length) return;
+  const eligibilityRevision = getMandatoryEligibilityRevision();
   debugLog.debug('notify', `scheduling ${messages.length} notification(s)`);
   if (!(await ensurePermissions())) {
     debugLog.warn('notify', 'permissions denied — skipped');
@@ -477,6 +479,8 @@ export async function notify(messages: NotifyMessage[]): Promise<void> {
   }
   // Collapse a flurry into at most a few notifications.
   for (const msg of messages.slice(0, 3)) {
+    if (eligibilityRevision !== getMandatoryEligibilityRevision()) return;
+    if (hasMandatoryRequirements() && (msg.productKey || msg.search)) continue;
     const data = notificationDataFromMessage(msg);
     await Notifications.scheduleNotificationAsync({
       content: { title: msg.title, body: msg.body, data: data as Record<string, unknown> },

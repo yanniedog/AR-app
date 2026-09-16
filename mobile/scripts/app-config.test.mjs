@@ -51,6 +51,11 @@ function configFor(channel, release, easRelease, iosInstallUrl) {
   }
 }
 
+test('build config rejects bundled payload key fields', () => {
+  const configure = require('../app.config.js');
+  assert.throws(() => configure({ config: { extra: { payloadDecKeyHex: 'fixture' } } }), /never bundled/);
+});
+
 test('sideload builds keep the verified installer permission and updater', () => {
   const config = configFor('sideload');
   assert.ok(config.android.permissions.includes('REQUEST_INSTALL_PACKAGES'));

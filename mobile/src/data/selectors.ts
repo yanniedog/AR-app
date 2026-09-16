@@ -1,4 +1,5 @@
 import { SECTIONS } from '../constants';
+import { mandatoryEligibleRows } from './eligibilityGate';
 import { isMeaningfulDepositRate, MIN_MEANINGFUL_DEPOSIT_RATE_FRACTION } from '../config';
 import type { ProductDetail, RateRow, SectionKey } from '../types';
 import {
@@ -315,7 +316,7 @@ export function sortRows(
   mortgageMetric: MortgageRateMetric = 'comparison',
 ): RateRow[] {
   const lowerIsBetter = SECTIONS[section].lowerIsBetter;
-  return rows
+  return mandatoryEligibleRows(rows)
     .map((row, originalIndex) => prepareSortRow(
       row,
       originalIndex,
@@ -377,7 +378,7 @@ export function filterRows(
     if (!inList(row.interest_payment, filters.interestPayments)) return false;
     if (
       filters.accountFeatures.length > 0 &&
-      !productHasAllFeatures(row.product_key, filters.accountFeatures, detailsProducts)
+      !productHasAllFeatures(row.product_key, filters.accountFeatures, detailsProducts, row, section ?? undefined)
     ) {
       return false;
     }
@@ -418,6 +419,7 @@ export function queryAndSort(
 
 /** Distinct non-empty values for a field, sorted by frequency then label. */
 export function distinctValues(rows: RateRow[], field: keyof RateRow): string[] {
+  rows = mandatoryEligibleRows(rows);
   const counts = new Map<string, number>();
   for (const row of rows) {
     const raw = row[field];
@@ -432,6 +434,7 @@ export function distinctValues(rows: RateRow[], field: keyof RateRow): string[] 
 
 /** Distinct provider names for filter UI, sorted A-Z (case-insensitive). */
 export function distinctProviders(rows: RateRow[]): string[] {
+  rows = mandatoryEligibleRows(rows);
   const names = new Set<string>();
   for (const row of rows) {
     const prov = row.provider;
@@ -581,6 +584,18 @@ export function findByKey(
     if (matches.length) {
       return { row: matches[0], section, siblings: matches };
     }
+  }
+  return null;
+}
+
+/** UI lookup; the raw lookup remains available to preserve saved/source evidence. */
+export function findEligibleByKey(
+  sections: Record<SectionKey, { rates: RateRow[] }>,
+  productKey: string,
+): ReturnType<typeof findByKey> {
+  for (const section of Object.keys(sections) as SectionKey[]) {
+    const siblings = mandatoryEligibleRows(sections[section].rates).filter(row => row.product_key === productKey);
+    if (siblings.length) return { row: siblings[0], section, siblings };
   }
   return null;
 }

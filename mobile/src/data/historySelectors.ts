@@ -1,3 +1,4 @@
+import { hasMandatoryRequirements } from './eligibilityGate';
 import type {
   BankHistoryCache,
   BankHistoryChartModel,
@@ -29,7 +30,7 @@ export function shouldEnsurePrebuiltBankHistory(
   historyEnabled: boolean,
   includeNonStandard: boolean,
 ): boolean {
-  return historyEnabled && includeNonStandard;
+  return historyEnabled && includeNonStandard && !hasMandatoryRequirements();
 }
 
 function medianOf(values: number[]): number | null {
@@ -237,6 +238,7 @@ export function selectBankHistoryChartModel(
       detailsProducts,
     } = state;
     if (!core) return null;
+    if (hasMandatoryRequirements()) return currentRibbonFallback(core, section, includeNonStandard, detailsProducts);
     if (!includeNonStandard && getSuitabilityAllowed()?.size === 0) return null;
 
     // Prebuilt section history contains the full catalogue and no product keys.

@@ -1,3 +1,4 @@
+import { hasMandatoryRequirements } from './eligibilityGate';
 import type {
   CorePayload,
   ProductDetail,
@@ -181,9 +182,9 @@ export function filterBankInsightsForSuitability(
   if (!payload) return null;
   if (!core) return null;
   const integrityPayload = filterBankInsightsForSectionIntegrity(payload, integrity);
-  if (includeNonStandard) return integrityPayload;
+  if (includeNonStandard && !hasMandatoryRequirements()) return integrityPayload;
   if (
-    suitabilityFilterCache?.payload === payload &&
+    !hasMandatoryRequirements() && suitabilityFilterCache?.payload === payload &&
     suitabilityFilterCache.core === core &&
     suitabilityFilterCache.detailsProducts === detailsProducts &&
     suitabilityFilterCache.integrity === integrity &&
@@ -210,7 +211,7 @@ export function filterBankInsightsForSuitability(
 
   for (const section of SECTION_KEYS) {
     const rows = core.sections[section]?.rates ?? [];
-    const visibleRows = explorerVisibleRows(rows, detailsProducts);
+    const visibleRows = includeNonStandard ? visibleAccountRows(rows, true, detailsProducts) : explorerVisibleRows(rows, detailsProducts);
     const visibleKeys = new Set(visibleRows.map((row) => row.product_key));
     const byProvider = new Map<string, typeof rows>();
     const visibleByProvider = new Map<string, typeof rows>();
@@ -229,7 +230,7 @@ export function filterBankInsightsForSuitability(
       const visibleProviderRows = visibleByProvider.get(provider) ?? [];
       if (visibleProviderRows.length) visibleByPair.set(key, visibleProviderRows);
       if (
-        providerRows.length > 0 &&
+        !hasMandatoryRequirements() && providerRows.length > 0 &&
         providerRows.every((row) => visibleKeys.has(row.product_key))
       ) {
         historicalPairs.add(key);

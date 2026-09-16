@@ -62,7 +62,7 @@ describe('buildProductHistoryFromCores', () => {
     expect(built.products['S|1']).toEqual([0.05]);
   });
 
-  it('restricts to the current catalog and leaves missing days null', () => {
+  it('retains delisted products and leaves missing days null', () => {
     const cores = new Map<string, CorePayload>([
       // Old day has a delisted product Q plus current product P.
       ['2026-05-13', core('2026-05-13', { Mortgage: [rateRow('P|1', '0.061'), rateRow('Q|9', '0.07')] })],
@@ -71,7 +71,7 @@ describe('buildProductHistoryFromCores', () => {
     ]);
     const built = buildProductHistoryFromCores(cores, ['2026-05-13', '2026-06-10'], '2026-06-10');
     expect(built.products['P|1']).toEqual([0.061, 0.055]);
-    expect(built.products['Q|9']).toBeUndefined(); // delisted → not in current catalog
+    expect(built.products['Q|9']).toEqual([0.07, null]);
   });
 
   it('fills days without a downloaded core from the existing payload (incremental sync)', () => {
@@ -226,7 +226,7 @@ describe('summarizeProductBestRateSeries', () => {
     expect(
       summarizeProductBestRateSeries(
         ['2026-07-20', '2026-07-29'],
-        [0, Number.NaN],
+        [-1, Number.NaN],
       ),
     ).toBeNull();
   });
@@ -246,7 +246,7 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
     });
   });
 
-  it('builds a chart series that seeds today and fills gaps across the axis', () => {
+  it('builds a chart series that seeds today and preserves unobserved gaps', () => {
     const history: ProductHistoryPayload = {
       schema_version: 1,
       run_date: '2026-06-10',
@@ -263,7 +263,7 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
       ),
     ).toEqual({
       '2026-05-13': 0.061,
-      '2026-05-19': 0.061,
+      '2026-05-19': null,
       '2026-06-10': 0.055,
     });
     expect(countFiniteSeriesPoints({ a: 1, b: null, c: 2 })).toBe(2);
@@ -366,7 +366,7 @@ describe('forwardFillSeriesRecord / productSeriesRecordForChart / productMovesFo
 });
 
 describe('normalizeProductHistoryPayload', () => {
-  it('accepts a well-formed payload and coerces non-positive/non-finite to null', () => {
+  it('preserves zero and coerces negative/non-finite values to null', () => {
     const out = normalizeProductHistoryPayload({
       schema_version: 1,
       run_date: '2026-06-10',
@@ -376,7 +376,7 @@ describe('normalizeProductHistoryPayload', () => {
     });
     expect(out?.run_dates).toEqual(['2026-05-13', '2026-06-10']);
     expect(out?.core_sha).toBe('sha-current');
-    expect(out?.products['P|1']).toEqual([0.06, null]); // 0 → null
+    expect(out?.products['P|1']).toEqual([0.06, 0]); // An observed zero is not unknown.
     expect(out?.products['Z|0']).toBeUndefined(); // no finite values → dropped
   });
 

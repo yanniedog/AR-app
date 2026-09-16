@@ -22,6 +22,7 @@ export function defineSecureStoreKey<const T extends string>(value: T): T & Secu
 }
 
 export const SECURE_STORE_KEYS = Object.freeze({
+  customerProfile: defineSecureStoreKey('ar.customer-profile.v1'),
   debugLogUploadReceipt: defineSecureStoreKey('ar.debug-log.public-upload-receipt.v1'),
   payloadDecryptionKey: defineSecureStoreKey('ar.payload.deckey'),
   performanceAuditRollbackScenario: defineSecureStoreKey(

@@ -22,6 +22,9 @@ function normalizeIosInstallUrl(value) {
 }
 
 module.exports = ({ config }) => {
+  if (Object.prototype.hasOwnProperty.call(config.extra ?? {}, 'payloadDecKeyHex')) {
+    throw new Error('Payload keys must be imported on the device, never bundled in app configuration');
+  }
   const playManaged = process.env.AR_APP_DISTRIBUTION_CHANNEL === 'play';
   const releaseVersion = (
     process.env.AR_APP_EAS_RELEASE_VERSION ?? process.env.AR_APP_RELEASE_VERSION

@@ -1,3 +1,5 @@
+import { mandatoryEligibleRows, mandatoryProductAllowed } from '../../data/eligibilityGate';
+import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
 import Ionicons from '../icons/AppIcon';
 import React, { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
@@ -29,23 +31,25 @@ export function CurrentBankPicker({
   onChange: (value: CurrentProductReference) => void;
   editable?: boolean;
 }) {
+  const revision = useSuitabilityRevision();
   const theme = useTheme();
+  if (value.productKey && !mandatoryProductAllowed(value.productKey)) value = { provider: '', productKey: '', rateIndex: null };
   const reducedMotion = useReducedMotion();
   const [open, setOpen] = useState<'bank' | 'product' | null>(null);
   const providers = useMemo(
     () => open === 'bank' ? alphabeticalScenarioProviders(rows) : [],
-    [open, rows],
+    [open, rows, revision],
   );
   const products = useMemo(() => {
     if (open !== 'product' || !value.provider || value.provider === NOT_LISTED_PROVIDER) return [];
     return currentProductOptions(rows, value.provider);
-  }, [open, rows, value.provider]);
+  }, [open, rows, value.provider, revision]);
   const selectedProduct = useMemo(() => {
     if (!value.productKey) return undefined;
-    return rows.find((row) =>
+    return mandatoryEligibleRows(rows).find((row) =>
       row.product_key === value.productKey && (row.rate_index ?? null) === value.rateIndex,
     );
-  }, [rows, value.productKey, value.rateIndex]);
+  }, [rows, value.productKey, value.rateIndex, revision]);
   const chooseBank = (provider: string) => {
     onChange({ provider, productKey: '', rateIndex: null });
     setOpen(null);

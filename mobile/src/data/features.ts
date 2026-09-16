@@ -1,6 +1,6 @@
-import type { DetailItem, ProductDetail, RateRow } from '../types';
+import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../types';
 import { sortByDisplayLabel } from './format';
-import { curatedFeatureFactKey, normalizedProductFacts } from './productFacts';
+import { curatedFeatureFactKey, curatedFeatureIdentityKey, normalizedProductFacts } from './productFacts';
 
 /** CDR featureType code from a details payload feature row (label or name). */
 export function featureTypeKey(item: DetailItem): string {
@@ -24,16 +24,24 @@ export function productFeatureTypes(detail: ProductDetail | null | undefined): S
   return out;
 }
 
-/** True when the product lists every selected featureType in details.features. */
+/** Only applicable positive boolean evidence can satisfy a required feature. */
 export function productHasAllFeatures(
   productKey: string,
   required: string[],
   lookup: Record<string, ProductDetail> | null | undefined,
+  row?: RateRow,
+  section?: SectionKey,
 ): boolean {
   if (required.length === 0) return true;
   if (!lookup) return false;
-  const types = productFeatureTypes(lookup[productKey]);
-  return required.every((f) => types.has(f));
+  const facts = normalizedProductFacts(lookup[productKey]);
+  const scope = new Set([productKey, section, row?.rate_type, row?.loan_purpose, row?.security_purpose,
+    row?.repayment_type, row?.ribbon_repayment_type].filter((value): value is string => typeof value === 'string').map(value => value.toUpperCase()));
+  return required.every(feature => {
+    const applicable = facts.filter(fact => curatedFeatureIdentityKey(fact) === feature
+      && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.has(value.toUpperCase()))));
+    return applicable.length > 0 && applicable.every(fact => fact.value === true && fact.unit === 'boolean');
+  });
 }
 
 /** Distinct featureType codes for products in rows, sorted alphabetically by display label. */

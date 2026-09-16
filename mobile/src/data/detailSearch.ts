@@ -1,3 +1,4 @@
+import { descriptiveValue } from './descriptiveValue';
 import type { ProductDetail } from '../types';
 import { productFactsSearchText } from './productFacts';
 
@@ -28,7 +29,8 @@ function detailItemsText(items: ProductDetail['fees']): string[] {
   for (const item of items) {
     if (item.label) parts.push(String(item.label));
     if (item.name) parts.push(String(item.name));
-    if (item.value != null && item.value !== '') parts.push(String(item.value));
+    const value = descriptiveValue(item.value);
+    if (value !== null) parts.push(value);
     if (item.info) parts.push(String(item.info));
   }
   return parts;

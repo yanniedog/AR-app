@@ -22,7 +22,9 @@ describe('format', () => {
     expect(toFraction('0.0634')).toBeCloseTo(0.0634);
     expect(toFraction('6.34')).toBeCloseTo(0.0634);
     expect(toFraction('')).toBeNull();
-    expect(toFraction('0')).toBeNull();
+    expect(toFraction('0')).toBe(0);
+    expect(toFraction('  ')).toBeNull();
+    expect(toFraction('-0.01')).toBeNull();
     expect(toFraction(undefined)).toBeNull();
   });
 
@@ -31,7 +33,7 @@ describe('format', () => {
     expect(formatRate('0.045', 2)).toBe('4.50%');
     expect(formatRate(null)).toBe('—');
     expect(formatRate(4.35)).toBe('4.35%');
-    expect(formatRate(0)).toBe('—');
+    expect(formatRate(0)).toBe('0.00%');
   });
 
   test('rate formatter digits are normalized and cached by normalized precision', () => {

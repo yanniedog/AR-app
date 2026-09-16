@@ -105,19 +105,11 @@ describe('store error recovery', () => {
       .mockResolvedValue({ type: 'WIFI' });
   });
 
-  it('loadSampleFallback installs bundled sample and clears error', async () => {
+  it('legacy sample action cannot install business data from the APK', async () => {
     await useStore.getState().loadSampleFallback();
-    const state = useStore.getState();
-    expect(state.status).toBe('ready');
-    expect(state.error).toBeNull();
-    expect(state.core).toEqual(sampleCore);
-    expect(state.source).toBe('sample');
-    expect(state.offline).toBe(true);
-    expect(state.details).toBeNull();
-    expect(state.searchIndex).toBeNull();
-    expect(state.historyBanks).toBeNull();
-    expect(state.historyBanksError).toBeNull();
-    expect(mockWriteBundle).toHaveBeenCalled();
+    expect(useStore.getState().status).toBe('error');
+    expect(useStore.getState().core).toBeNull();
+    expect(mockWriteBundle).not.toHaveBeenCalled();
   });
 
   it('retryDataLoad bootstraps from cache then refreshes when bundle exists', async () => {
@@ -166,7 +158,7 @@ describe('store error recovery', () => {
     }
   });
 
-  it('rejects an old cached sample even when this app bundles a fresh sample', async () => {
+  it('retains but does not display old sample cache', async () => {
     const bundledObserved = Date.parse(sampleManifest.generated_at);
     const oldGeneratedAt = new Date(
       bundledObserved - (SAMPLE_MAX_AGE_DAYS + 1) * 86400000,
@@ -190,8 +182,9 @@ describe('store error recovery', () => {
 
       await useStore.getState().bootstrap({ skipRefresh: true });
 
-      expect(useStore.getState().core?.run_date).toBe(sampleManifest.run_date);
-      expect(mockWriteBundle).toHaveBeenCalled();
+      expect(useStore.getState().core).toBeNull();
+      expect(useStore.getState().status).toBe('error');
+      expect(mockWriteBundle).not.toHaveBeenCalled();
     } finally {
       jest.useRealTimers();
     }
@@ -217,13 +210,13 @@ describe('store error recovery', () => {
 
       expect(useStore.getState().refreshOutcome).toBe('wifi-skip');
       expect(useStore.getState().status).toBe('error');
-      expect(useStore.getState().error).toContain('safety window');
+      expect(useStore.getState().error).toContain('No verified rates');
     } finally {
       jest.useRealTimers();
     }
   });
 
-  it('replaces an older cached sample when the embedded sample revision changes', async () => {
+  it('does not replace an old sample with another bundled dataset', async () => {
     const oldManifest: Manifest = {
       ...sampleManifest,
       run_date: '2026-05-19',
@@ -246,10 +239,10 @@ describe('store error recovery', () => {
 
     await useStore.getState().bootstrap({ skipRefresh: true });
 
-    expect(mockWriteBundle).toHaveBeenCalled();
-    expect(useStore.getState().status).toBe('ready');
-    expect(useStore.getState().manifest?.files.core.sha256).toBe(sampleManifest.files.core.sha256);
-    expect(useStore.getState().core?.run_date).toBe(sampleManifest.run_date);
+    expect(mockWriteBundle).not.toHaveBeenCalled();
+    expect(useStore.getState().status).toBe('error');
+    expect(useStore.getState().manifest).toBeNull();
+    expect(useStore.getState().core).toBeNull();
   });
 
   it('fails closed on cached startup until the exact post-ingest suitability index is rebuilt', async () => {
@@ -319,7 +312,7 @@ describe('store error recovery', () => {
     }
   });
 
-  it('bootstrap sets error when sample seed write fails', async () => {
+  it('bootstrap preserves failure when downloaded cache cannot be written', async () => {
     useStore.setState({ status: 'idle', core: null, error: null });
     mockReadBundle.mockResolvedValue(null);
     mockWriteBundle.mockRejectedValueOnce(new Error('disk full'));

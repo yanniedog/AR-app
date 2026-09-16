@@ -1,3 +1,4 @@
+import { mandatoryEligibleRows } from './eligibilityGate';
 import type { RateRow } from '../types';
 
 const compare = (a: string, b: string) => a.localeCompare(b, 'en-AU', {
@@ -8,7 +9,7 @@ const compare = (a: string, b: string) => a.localeCompare(b, 'en-AU', {
 /** Distinct non-empty CDR providers in stable Australian alphabetical order. */
 export function alphabeticalScenarioProviders(rows: RateRow[]): string[] {
   const canonical = new Map<string, string>();
-  for (const row of rows) {
+  for (const row of mandatoryEligibleRows(rows)) {
     const provider = row.provider.trim();
     if (provider && !canonical.has(provider.toLocaleLowerCase('en-AU'))) {
       canonical.set(provider.toLocaleLowerCase('en-AU'), provider);
@@ -21,7 +22,7 @@ export function alphabeticalScenarioProviders(rows: RateRow[]): string[] {
 export function currentProductOptions(rows: RateRow[], provider: string): RateRow[] {
   const seen = new Set<string>();
   const providerKey = provider.trim().toLocaleLowerCase('en-AU');
-  return rows
+  return mandatoryEligibleRows(rows)
     .filter((row) => row.provider.trim().toLocaleLowerCase('en-AU') === providerKey)
     .filter((row) => {
       const token = `${row.product_key}:${row.rate_index ?? ''}`;

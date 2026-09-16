@@ -1,10 +1,12 @@
 import { hasAppHealthFetchGuard } from '../lib/appHealthTransportGuard';
+import { bindVerifiedDetails } from './detailsIdentity';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
 import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
 
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
+import { decryptReleaseTransport, isReleaseTransport, MAX_TRANSPORT_ENCODED_BYTES, RELEASE_TRANSPORT_OVERHEAD } from '../lib/releaseTransport';
 
 import { MANIFEST_URL, SUPPORTED_SCHEMA } from '../config';
 import { debugLog } from '../lib/debugLog';
@@ -77,7 +79,7 @@ export interface DownloadOpts {
   requireExactBytes?: boolean;
   /** Optional immutable contract encoding assertion. */
   expectedEncoding?: 'gzip' | 'identity';
-  /** Legacy v1 may use ARE1; v3 descriptors currently may not. */
+  /** Legacy domain encoding ARE1; independent ARE2 release transport is unwrapped first. */
   allowEncrypted?: boolean;
   /** Receives a copy of the exact downloaded bytes after descriptor SHA verification. */
   onVerifiedBytes?: (bytes: Uint8Array) => void;
@@ -101,7 +103,7 @@ function manifestFetchUrl(url: string): string {
   return `${url}${sep}_=${Date.now()}`;
 }
 
-async function downloadBytes(
+async function downloadWireBytes(
   url: string,
   opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
 ): Promise<ArrayBuffer> {
@@ -217,6 +219,30 @@ async function downloadBytes(
     };
     xhr.send();
   });
+}
+
+/** Authenticate transport before validating unchanged domain sizes and hashes. */
+async function downloadBytes(
+  url: string,
+  opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
+): Promise<ArrayBuffer> {
+  const limit = opts.maxCompressedBytes ?? MAX_TRANSPORT_ENCODED_BYTES;
+  if (!Number.isSafeInteger(limit) || limit < 0 || limit > MAX_TRANSPORT_ENCODED_BYTES ||
+      (opts.requireExactBytes && (!Number.isSafeInteger(opts.expectedBytes) ||
+        opts.expectedBytes! <= 0 || opts.expectedBytes! > limit))) {
+    throw new Error('exact compressed asset size requires a positive safe-integer expectedBytes within the compressed byte limit');
+  }
+  const wire = new Uint8Array(await downloadWireBytes(url, {
+    ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
+  }));
+  const bytes = isReleaseTransport(wire)
+    ? await decryptReleaseTransport(wire, resolvePayloadKeyHex, limit)
+    : wire;
+  if (bytes.length > limit) throw new Error(`compressed asset exceeds ${limit} byte limit`);
+  if (opts.requireExactBytes && bytes.length !== opts.expectedBytes) {
+    throw new Error(`compressed asset size mismatch (expected ${opts.expectedBytes}, got ${bytes.length})`);
+  }
+  return bytes.slice().buffer as ArrayBuffer;
 }
 
 /**
@@ -443,7 +469,7 @@ export async function downloadDetails(
     startedAt: parseStarted,
     phaseComplete: true,
   });
-  return { text, details };
+  return { text, details: bindVerifiedDetails(details, expectedSha) };
 }
 
 export interface SearchIndexResult {

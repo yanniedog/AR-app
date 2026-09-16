@@ -70,13 +70,6 @@ export const IOS_INSTALL_URL = String(extra.iosInstallUrl ?? '').trim() || null;
 /** Schema version this build understands. Older payloads still load best-effort. */
 export const SUPPORTED_SCHEMA = 1;
 
-/**
- * AES-256-GCM key (64 hex chars) retained only for compatibility with legacy
- * encrypted payload assets. Empty means legacy decryption is unavailable.
- * New payload contracts must not depend on an account or remote key service.
- */
-export const PAYLOAD_DEC_KEY_HEX: string = extra.payloadDecKeyHex ?? '';
-
 /** Local-notification defaults. */
 export const RATE_MOVE_BPS_THRESHOLD = 5; // notify when a category best rate moves >= 5bps
 

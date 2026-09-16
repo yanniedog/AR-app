@@ -39,7 +39,7 @@ const mortgageRows: RateRow[] = [
 ];
 
 const details: Record<string, ProductDetail> = {
-  'A|1': { features: [{ label: 'OFFSET' }, { label: 'EXTRA_REPAYMENTS' }] },
+  'A|1': { facts: ['OFFSET', 'EXTRA_REPAYMENTS'].map(key => ({ id: key, kind: 'feature', canonicalKey: key, value: true, unit: 'boolean' })), features: [{ label: 'OFFSET' }, { label: 'EXTRA_REPAYMENTS' }] },
   'B|2': { features: [{ label: 'REDRAW' }] },
 };
 

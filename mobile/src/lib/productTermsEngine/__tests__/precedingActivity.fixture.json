@@ -1,0 +1,605 @@
+{
+  "contract": {
+    "schemaVersion": 1,
+    "evaluatorVersion": "product-terms-engine-v9",
+    "id": "cfe7b0bae2c7a2cb2d0008177d1dad2f2012ee7b225d46cf620f5c2d52c58c0c",
+    "productId": "technical-savings-only",
+    "direction": "asset",
+    "currency": "AUD",
+    "review": {
+      "applicability": "verified",
+      "materialTerms": "verified",
+      "feeCoverage": "verified",
+      "rateSchedule": "verified",
+      "benchmarkSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "applicability": {
+      "cohortKey": "technical-cohort",
+      "from": "2026-01-01",
+      "toExclusive": "2026-01-11"
+    },
+    "evidence": [
+      {
+        "id": "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe",
+        "clauseId": "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe",
+        "documentVersionId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "documentSha256": "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe",
+        "sourceUrl": "https://example.invalid/technical-only",
+        "locator": "Engineering schema example",
+        "quote": "Technical activity schema example only, no bank authority. Variant 0",
+        "quoteSha256": "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+      }
+    ],
+    "dependencyIds": [
+      "cfe7b0bae2c7a2cb2d0008177d1dad2f2012ee7b225d46cf620f5c2d52c58c0c"
+    ],
+    "unsupportedTerms": [],
+    "eligibility": {
+      "id": "nonnegative-balance",
+      "op": "compare",
+      "field": "balance",
+      "comparison": "gte",
+      "expected": {
+        "type": "decimal",
+        "value": "0",
+        "unit": "AUD"
+      },
+      "evidenceIds": [
+        "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+      ]
+    },
+    "initialAnnualRate": "0",
+    "initialRateEvidenceIds": [
+      "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+    ],
+    "interest": {
+      "dayCount": "actual_365_fixed",
+      "balanceBasis": "closing_balance_before_posted_interest",
+      "eventOrder": "ordered_events_then_accrual_then_posting",
+      "dailyAccrualScale": null,
+      "dailyRateRounding": null,
+      "accrualRounding": "half_up",
+      "postingRounding": "half_up",
+      "postingDates": [
+        "2026-01-10"
+      ],
+      "offset": "none",
+      "evidenceIds": [
+        "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+      ]
+    },
+    "savingsSchedule": {
+      "schemaVersion": 1,
+      "dailyAccrualRounding": "aggregate",
+      "intervals": [
+        {
+          "id": "period-1",
+          "from": "2026-01-01",
+          "toExclusive": "2026-01-11",
+          "evidenceIds": [
+            "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+          ],
+          "components": [
+            {
+              "id": "period-1:base",
+              "kind": "base",
+              "allocation": "marginal",
+              "rateMeaning": "additive",
+              "tiers": [
+                {
+                  "id": "tier-1",
+                  "upperInclusive": null,
+                  "annualRate": "0.0365",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                }
+              ],
+              "qualification": null,
+              "evidenceIds": [
+                "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+              ]
+            },
+            {
+              "id": "bonus",
+              "kind": "bonus",
+              "allocation": "marginal",
+              "rateMeaning": "additive",
+              "tiers": [
+                {
+                  "id": "Bonus.Tier0",
+                  "upperInclusive": "100.00",
+                  "annualRate": "0.00100",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier1",
+                  "upperInclusive": "200.00",
+                  "annualRate": "0.00101",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier2",
+                  "upperInclusive": "300.00",
+                  "annualRate": "0.00102",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier3",
+                  "upperInclusive": "400.00",
+                  "annualRate": "0.00103",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier4",
+                  "upperInclusive": "500.00",
+                  "annualRate": "0.00104",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier5",
+                  "upperInclusive": "600.00",
+                  "annualRate": "0.00105",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier6",
+                  "upperInclusive": "700.00",
+                  "annualRate": "0.00106",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier7",
+                  "upperInclusive": "800.00",
+                  "annualRate": "0.00107",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier8",
+                  "upperInclusive": "900.00",
+                  "annualRate": "0.00108",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier9",
+                  "upperInclusive": "1000.00",
+                  "annualRate": "0.00109",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier10",
+                  "upperInclusive": "1100.00",
+                  "annualRate": "0.00110",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier11",
+                  "upperInclusive": "1200.00",
+                  "annualRate": "0.00111",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier12",
+                  "upperInclusive": "1300.00",
+                  "annualRate": "0.00112",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier13",
+                  "upperInclusive": "1400.00",
+                  "annualRate": "0.00113",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier14",
+                  "upperInclusive": "1500.00",
+                  "annualRate": "0.00114",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier15",
+                  "upperInclusive": "1600.00",
+                  "annualRate": "0.00115",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier16",
+                  "upperInclusive": "1700.00",
+                  "annualRate": "0.00116",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier17",
+                  "upperInclusive": "1800.00",
+                  "annualRate": "0.00117",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier18",
+                  "upperInclusive": "1900.00",
+                  "annualRate": "0.00118",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier19",
+                  "upperInclusive": "2000.00",
+                  "annualRate": "0.00119",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier20",
+                  "upperInclusive": "2100.00",
+                  "annualRate": "0.00120",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier21",
+                  "upperInclusive": "2200.00",
+                  "annualRate": "0.00121",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier22",
+                  "upperInclusive": "2300.00",
+                  "annualRate": "0.00122",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier23",
+                  "upperInclusive": "2400.00",
+                  "annualRate": "0.00123",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier24",
+                  "upperInclusive": "2500.00",
+                  "annualRate": "0.00124",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier25",
+                  "upperInclusive": "2600.00",
+                  "annualRate": "0.00125",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier26",
+                  "upperInclusive": "2700.00",
+                  "annualRate": "0.00126",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier27",
+                  "upperInclusive": "2800.00",
+                  "annualRate": "0.00127",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier28",
+                  "upperInclusive": "2900.00",
+                  "annualRate": "0.00128",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier29",
+                  "upperInclusive": "3000.00",
+                  "annualRate": "0.00129",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier30",
+                  "upperInclusive": "3100.00",
+                  "annualRate": "0.00130",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                },
+                {
+                  "id": "Bonus.Tier31",
+                  "upperInclusive": null,
+                  "annualRate": "0.00131",
+                  "evidenceIds": [
+                    "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                  ]
+                }
+              ],
+              "evidenceIds": [
+                "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+              ],
+              "qualification": {
+                "assessmentKey": "preceding_window",
+                "accountId": "private-account",
+                "rule": {
+                  "id": "qualify",
+                  "op": "and",
+                  "rules": [
+                    {
+                      "id": "deposit_total_rule",
+                      "op": "compare",
+                      "field": "activity_deposit_total",
+                      "comparison": "gte",
+                      "expected": {
+                        "type": "decimal",
+                        "value": "100.25",
+                        "unit": "AUD"
+                      },
+                      "evidenceIds": [
+                        "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                      ]
+                    },
+                    {
+                      "id": "withdrawal_count_rule",
+                      "op": "compare",
+                      "field": "activity_withdrawal_count",
+                      "comparison": "eq",
+                      "expected": {
+                        "type": "decimal",
+                        "value": "0",
+                        "unit": "count"
+                      },
+                      "evidenceIds": [
+                        "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                      ]
+                    }
+                  ]
+                },
+                "windows": [
+                  {
+                    "from": "2025-12-01",
+                    "toExclusive": "2026-01-01",
+                    "appliesFrom": "2026-01-01",
+                    "appliesToExclusive": "2026-01-11",
+                    "evidenceIds": [
+                      "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                    ]
+                  }
+                ],
+                "activityMetrics": [
+                  {
+                    "id": "deposit_total",
+                    "kind": "deposit_total",
+                    "field": "activity_deposit_total",
+                    "accountRole": "primary_savings",
+                    "accountIds": [
+                      "private-account"
+                    ],
+                    "dateBasis": "processed",
+                    "settlement": "settled_only",
+                    "includedClassifications": [
+                      "customer"
+                    ],
+                    "excludedClassifications": [
+                      "excluded"
+                    ],
+                    "refundPolicy": null,
+                    "growthAdjustments": null,
+                    "evidenceIds": [
+                      "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                    ]
+                  },
+                  {
+                    "id": "withdrawal_count",
+                    "kind": "withdrawal_count",
+                    "field": "activity_withdrawal_count",
+                    "accountRole": "primary_savings",
+                    "accountIds": [
+                      "private-account"
+                    ],
+                    "dateBasis": "processed",
+                    "settlement": "settled_only",
+                    "includedClassifications": [
+                      "customer"
+                    ],
+                    "excludedClassifications": [
+                      "excluded"
+                    ],
+                    "refundPolicy": null,
+                    "growthAdjustments": null,
+                    "evidenceIds": [
+                      "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+                    ]
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "feeSchedule": {
+      "schemaVersion": 1,
+      "accountId": "private-account",
+      "from": "2026-01-01",
+      "toExclusive": "2026-01-11",
+      "inventoryCoverage": "reviewed_complete",
+      "deferredObligations": "none_confirmed",
+      "evidenceIds": [
+        "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+      ],
+      "inventory": [
+        {
+          "categoryId": "all_fees",
+          "state": "none_applicable",
+          "evidenceIds": [
+            "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+          ],
+          "feeIds": []
+        }
+      ],
+      "ordering": "before_scenario_events",
+      "fees": []
+    }
+  },
+  "scenario": {
+    "accountId": "private-account",
+    "productId": "technical-savings-only",
+    "cohortKey": "technical-cohort",
+    "startDate": "2026-01-01",
+    "endDateExclusive": "2026-01-11",
+    "openingBalance": "1000.25",
+    "initialOffset": "0",
+    "facts": {
+      "balance": {
+        "type": "decimal",
+        "value": "1000.25",
+        "unit": "AUD"
+      },
+      "start": {
+        "type": "date",
+        "value": "2026-01-01"
+      },
+      "end": {
+        "type": "date",
+        "value": "2026-01-11"
+      }
+    },
+    "events": [],
+    "assumptions": [],
+    "savingsAssessments": [
+      {
+        "id": "activity-assessment",
+        "assessmentKey": "preceding_window",
+        "accountId": "private-account",
+        "from": "2025-12-01",
+        "toExclusive": "2026-01-01",
+        "appliesFrom": "2026-01-01",
+        "appliesToExclusive": "2026-01-11",
+        "evidenceIds": [
+          "7c8a024f5a55a5dd67f17046cf604275db15eb62e2e4371df77c9de08517dabe"
+        ],
+        "coverage": "complete",
+        "facts": {},
+        "activity": {
+          "events": [
+            {
+              "id": "Deposit.1",
+              "accountId": "private-account",
+              "date": "2025-12-15",
+              "dateBasis": "processed",
+              "status": "settled",
+              "kind": "deposit",
+              "amount": "100.25",
+              "classification": "customer"
+            }
+          ],
+          "coverage": [
+            {
+              "accountId": "private-account",
+              "from": "2025-12-01",
+              "toExclusive": "2026-01-01",
+              "status": "complete"
+            }
+          ],
+          "balances": []
+        }
+      }
+    ]
+  },
+  "legacy": {
+    "inputSha256": "331ef792b9b1338027320f1479709e67a86ee07c260967776feeedd54565ad60",
+    "receiptSha256": "38a32a479d04023fcb7d000c7d7053e4d1d5bfa994bbd6dbd45564619640965e"
+  },
+  "purpose": "Engineering-only corrected activity draft projection; no bank approval. Independent root Fraction oracle gives 1.03 bonus / 1.00 base posting.",
+  "legacyVersions": [
+    {
+      "version": "product-terms-engine-v1",
+      "inputSha256": "40b5d846cf5fbe3ebbb1b9a5d25569829e84b618b2f016471492d16bfa13f752",
+      "receiptSha256": "55b07b37aff16e58bd5a4e2f5d651d87cd6b752fac3b3c2caeb516e1eaa41f8b"
+    },
+    {
+      "version": "product-terms-engine-v2",
+      "inputSha256": "a9f513a7dc3b3e7c6460f40822823169a8b071ffb5e4e09e32fe92f658269f06",
+      "receiptSha256": "2a7907a3d2a5ad8740bc65bb75889bfbbc253df3beafdb8e4def624fbc8b3cd1"
+    },
+    {
+      "version": "product-terms-engine-v3",
+      "inputSha256": "ac6e511d9a7b3d77084b47c0fca065f561c9c46805e2374c9e6a40430666c7b0",
+      "receiptSha256": "0a51520bf2b7b32cf404354b87bacda7f92a9e622f5c5e9d14611841ab7285d4"
+    },
+    {
+      "version": "product-terms-engine-v4",
+      "inputSha256": "90b5391f4bcf522c0c063abf4bbb850f017d56f2671f2591ad1d238c4952478a",
+      "receiptSha256": "930b891f3a4dc3cc291355d68bb38422cc514544e55f6ad29841043693810df1"
+    },
+    {
+      "version": "product-terms-engine-v5",
+      "inputSha256": "d00acb21670bbd2fe180c10e8ce65c25ae1dfd5bf5d567f0581648e426a5dfa8",
+      "receiptSha256": "fc2159f7363b9ecd79a57640161e0cc1e836aa91709309f2f60001ddb64e32d1"
+    },
+    {
+      "version": "product-terms-engine-v6",
+      "inputSha256": "4ba3beeb383ef6c7bc722be90fb9f4b0a2c3f5076805838c1e15d1bb6d0e836d",
+      "receiptSha256": "4ab7c428b727027c82eb0b620c83a6c10776ef63934dec724b49ab66a6d8ab32"
+    },
+    {
+      "version": "product-terms-engine-v7",
+      "inputSha256": "d807fb0f8db1a1e90f269678de3188ffa8c4c851f8a4ba914fa880364a2356d7",
+      "receiptSha256": "c5eb54afb2a037b2fc15615001ff2ef8a6f78f0cdcb612dc77c84e797ff17807"
+    },
+    {
+      "version": "product-terms-engine-v8",
+      "inputSha256": "9877d4dde62d2558f4096a089ae17ce2b56c2966072085ee315a39ee403b81c2",
+      "receiptSha256": "ac2e95bcbb604de2dcf853cb5d23091f6298630be4cdaa4edc3da364a420f6a5"
+    }
+  ]
+}

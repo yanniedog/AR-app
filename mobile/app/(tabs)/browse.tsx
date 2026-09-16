@@ -98,6 +98,7 @@ export default function Browse() {
             />
           </Row>
           <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
+            <Chip label="Products without listed rates" onPress={() => router.push('/catalogue')} />
             <Chip label="Banks" icon="business-outline" onPress={() => router.push('/banks')} />
             <Chip
               label="My scenario"

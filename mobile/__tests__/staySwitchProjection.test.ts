@@ -1,5 +1,6 @@
-import { buildStaySwitchProjection, extractPublishedSwitchFees, resolveSwitchCosts } from '../src/data/staySwitchProjection';
+import { UNVERIFIED_SWITCH_TERMS_REASON, buildStaySwitchProjection, extractPublishedSwitchFees, resolveSwitchCosts } from '../src/data/staySwitchProjection';
 import { normalizeUserRateScenario } from '../src/data/userRateScenario';
+import realDetail from './fixtures/the-mac-bridging-loan-details-20260914.json';
 import type { ProductDetail, RateRow } from '../src/types';
 
 const NOW = new Date('2026-08-13T10:00:00Z');
@@ -246,8 +247,9 @@ describe('stay versus switch projection', () => {
       now: NOW,
     });
     expect(withFee.fees.targetPeriodicFeesMonthly).toBe(10);
-    expect(withFee.switching!.totalCost!).toBeGreaterThan(noFee.switching!.totalCost!);
-    expect(withFee.totalCostSaving!).toBeLessThan(noFee.totalCostSaving!);
+    expect(withFee.switching!.knownCostSubtotal).toBeGreaterThan(noFee.switching!.knownCostSubtotal);
+    expect(withFee.totalCostSaving).toBeNull();
+    expect(noFee.totalCostSaving).toBeNull();
   });
 
   it('includes reliably priced current-product periodic fees on the stay path', () => {
@@ -265,8 +267,8 @@ describe('stay versus switch projection', () => {
       now: NOW,
     });
     expect(withCurrentFee.fees.currentPeriodicFeesMonthly).toBe(10);
-    expect(withCurrentFee.stay!.totalCost!).toBeGreaterThan(withoutCurrentFee.stay!.totalCost!);
-    expect(withCurrentFee.totalCostSaving!).toBeGreaterThan(withoutCurrentFee.totalCostSaving!);
+    expect(withCurrentFee.stay!.knownCostSubtotal).toBeGreaterThan(withoutCurrentFee.stay!.knownCostSubtotal);
+    expect(withCurrentFee.totalCostSaving).toBeNull();
   });
 
   it('does not report break-even for a zero-cost losing switch', () => {
@@ -278,7 +280,7 @@ describe('stay versus switch projection', () => {
       now: NOW,
     });
     expect(result.fees.netSwitchCost).toBe(0);
-    expect(result.points.at(-1)!.cumulativeSaving!).toBeLessThan(0);
+    expect(result.points.at(-1)!.cumulativeSaving).toBeNull();
     expect(result.breakEvenDate).toBeNull();
   });
 
@@ -300,7 +302,7 @@ describe('stay versus switch projection', () => {
     const payoffPoint = result.points.findIndex((point) => point.date === result.switching!.contractualPayoffDate);
     expect(payoffPoint).toBeGreaterThan(0);
     expect(payoffPoint).toBeLessThan(result.points.length - 1);
-    expect(result.switching!.totalCost! - result.switching!.totalInterest - result.fees.netSwitchCost)
+    expect(result.switching!.knownCostSubtotal - result.switching!.totalInterest - result.fees.netSwitchCost)
       .toBeCloseTo(result.fees.targetPeriodicFeesMonthly * payoffPoint, 8);
   });
 
@@ -364,7 +366,8 @@ describe('stay versus switch projection', () => {
       },
       now: NOW,
     });
-    expect(result.fees.costClaimsAvailable).toBe(true);
+    expect(result.fees.feeInputsComplete).toBe(true);
+    expect(result.fees.costClaimsAvailable).toBe(false);
     expect(result.fees.fees.find((fee) => fee.key === 'applicationFees')).toMatchObject({
       amount: 395,
       source: 'entered',
@@ -381,23 +384,27 @@ describe('stay versus switch projection', () => {
       targetDetail: OFFSET_DETAIL,
       now: NOW,
     });
-    expect(result.fees.costClaimsAvailable).toBe(true);
+    expect(result.fees.feeInputsComplete).toBe(true);
+    expect(result.fees.costClaimsAvailable).toBe(false);
     expect(result.fees.fees.find((fee) => fee.key === 'currentBankExitFees')).toMatchObject({
       amount: 900,
       source: 'entered',
     });
-    expect(result.totalCostSaving).not.toBeNull();
+    expect(result.totalCostSaving).toBeNull();
   });
 
-  it('publishes an illustrative difference only when every fee input is known', () => {
+  it('keeps known subtotals but withholds total claims when all entered fee buckets are known', () => {
     const result = buildStaySwitchProjection({
       scenario: scenarioWithKnownUpfrontFees(), target: TARGET, currentDetail: {}, targetDetail: OFFSET_DETAIL, now: NOW,
     });
-    expect(result.fees.costClaimsAvailable).toBe(true);
-    expect(result.fees.unknownFeeReasons).toEqual([]);
-    expect(result.totalCostSaving).not.toBeNull();
-    expect(result.stay?.totalCost).not.toBeNull();
-    expect(result.switching?.totalCost).not.toBeNull();
+    expect(result.fees.feeInputsComplete).toBe(true);
+    expect(result.fees.costClaimsAvailable).toBe(false);
+    expect(result.fees.unknownFeeReasons).toEqual([UNVERIFIED_SWITCH_TERMS_REASON]);
+    expect(result.totalCostSaving).toBeNull();
+    expect(result.stay?.totalCost).toBeNull();
+    expect(result.stay?.knownCostSubtotal).toBeGreaterThan(0);
+    expect(result.switching?.totalCost).toBeNull();
+    expect(result.switching?.knownCostSubtotal).toBeGreaterThan(0);
   });
 
   it('stops exact fixed-product comparisons at the published period without inventing reversion', () => {
@@ -422,4 +429,15 @@ describe('stay versus switch projection', () => {
     expect(result.ready).toBe(false);
     expect(result.missing.join(' ')).toMatch(/from \$0 to \$1 trillion/i);
   });
+});
+
+// Exact published baseline detail plus an explicitly hypothetical customer input.
+test('real published fee records cannot certify exhaustive bank costs without source terms', () => {
+  const detail = realDetail.detail as ProductDetail;
+  const costs = resolveSwitchCosts(scenarioWithKnownUpfrontFees().mortgageSwitch, detail, detail);
+  expect(detail.fees).toHaveLength(4);
+  expect(detail.links?.terms).toBeTruthy();
+  expect(costs.costClaimsAvailable).toBe(false);
+  expect(costs.unknownFeeReasons).toContain(UNVERIFIED_SWITCH_TERMS_REASON);
+  expect(Number.isFinite(costs.netSwitchCost)).toBe(true);
 });

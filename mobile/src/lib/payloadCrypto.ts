@@ -2,8 +2,6 @@ import { gcm } from '@noble/ciphers/aes';
 import { hexToBytes } from '@noble/ciphers/utils';
 import { sha256 } from '@noble/hashes/sha256';
 
-import { PAYLOAD_DEC_KEY_HEX } from '../config';
-
 /**
  * Decrypt support for AES-256-GCM payload assets produced by the Pi's
  * payload_crypto.py (Phase B of docs/SECURITY_CDR_PIPELINE.md).
@@ -29,17 +27,23 @@ export function isEncryptedAsset(bytes: Uint8Array): boolean {
 
 /** Short non-secret key identifier; must match manifest `enc.key_id`. */
 export function payloadKeyId(keyHex: string): string {
+  return transportKeyId(keyHex).slice(0, 8);
+}
+
+/** 128-bit identifier for versioned encrypted transport and private setup keys. */
+export function transportKeyId(keyHex: string): string {
   const prefix = 'ar-local-payload-key:'; // ASCII; avoids a TextEncoder dependency
   const key = hexToBytes(keyHex);
+  if (key.length !== KEY_LEN) throw new Error('Invalid data key length');
   const buf = new Uint8Array(prefix.length + key.length);
   for (let i = 0; i < prefix.length; i += 1) buf[i] = prefix.charCodeAt(i);
   buf.set(key, prefix.length);
-  return Array.from(sha256(buf).slice(0, 4))
+  return Array.from(sha256(buf).slice(0, 16))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
 }
 
-export function decryptAsset(bytes: Uint8Array, keyHex: string = PAYLOAD_DEC_KEY_HEX): Uint8Array {
+export function decryptAsset(bytes: Uint8Array, keyHex: string): Uint8Array {
   if (!keyHex) {
     throw new Error('payload asset is encrypted but no decryption key is configured');
   }

@@ -1,7 +1,9 @@
 import { commissionerFamily } from '../src/theme/fonts';
 import { prepareProjectionAuditScenario } from '../src/lib/performanceAuditScenario';
+import { mandatoryProductAllowed } from '../src/data/eligibilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react-native';
 
@@ -33,7 +35,7 @@ import type { SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 import { openBrowse } from '../src/lib/nav';
 import { buildStaySwitchProjection } from '../src/data/staySwitchProjection';
-import { findByKey } from '../src/data/selectors';
+import { findEligibleByKey } from '../src/data/selectors';
 import { NOT_LISTED_PROVIDER } from '../src/data/userRateScenario';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { OpaquePerformanceAuditRenderRevision } from '../src/lib/performanceAuditReadiness';
@@ -197,6 +199,7 @@ function FrequencyField({
 }
 
 export default function Projections() {
+  const suitabilityRevision = useSuitabilityRevision();
   const theme = useTheme();
   const params = useLocalSearchParams<{ section?: string; target?: string; ri?: string }>();
   const core = useStore((s) => s.core);
@@ -260,28 +263,28 @@ export default function Projections() {
   );
   const targetRow = useMemo(() => {
     if (!core || section !== 'Mortgage' || !params.target) return null;
-    const found = findByKey(core.sections, params.target);
+    const found = findEligibleByKey(core.sections, params.target);
     if (!found || found.section !== 'Mortgage') return null;
     const parsedIndex = params.ri != null && params.ri !== '' ? Number(params.ri) : null;
     return Number.isInteger(parsedIndex)
       ? found.siblings.find((row) => row.rate_index === parsedIndex) ?? null
       : found.row;
-  }, [core, params.ri, params.target, section]);
+  }, [core, params.ri, params.target, section, suitabilityRevision]);
   useEffect(() => {
-    if (!targetRow || detailsProducts) return;
+    if (!params.target || detailsProducts) return;
     void ensureDetails({ forProductView: true });
-  }, [detailsProducts, ensureDetails, targetRow]);
+  }, [detailsProducts, ensureDetails, params.target]);
   const staySwitch = useMemo(() => {
     if (!targetRow) return null;
     const currentRef = deferredScenario.currentProducts.mortgage;
     return buildStaySwitchProjection({
       scenario: deferredScenario,
       target: targetRow,
-      currentDetail: currentRef.productKey ? detailsProducts?.[currentRef.productKey] : null,
+      currentDetail: currentRef.productKey && mandatoryProductAllowed(currentRef.productKey) ? detailsProducts?.[currentRef.productKey] : null,
       targetDetail: detailsProducts?.[targetRow.product_key],
     });
   }, [deferredScenario, detailsProducts, targetRow]);
-  const currentBankLabel = scenario.currentProducts.mortgage.provider
+  const currentBankLabel = (!scenario.currentProducts.mortgage.productKey || mandatoryProductAllowed(scenario.currentProducts.mortgage.productKey)) && scenario.currentProducts.mortgage.provider
     && scenario.currentProducts.mortgage.provider !== NOT_LISTED_PROVIDER
     ? scenario.currentProducts.mortgage.provider
     : 'Current bank';

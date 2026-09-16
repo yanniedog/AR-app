@@ -94,9 +94,7 @@ export function SwitchCostEditor({
   return (
     <Disclosure
       title="Switch costs"
-      summary={costs.costClaimsAvailable
-        ? `${dollars(costs.netSwitchCost)} known net upfront`
-        : 'Cost difference unavailable'}
+      summary={`${dollars(costs.netSwitchCost)} known net upfront · full cost unverified`}
       open={open}
       onToggle={() => setOpen((value) => !value)}
     >
@@ -161,7 +159,7 @@ export function SwitchCostEditor({
       ) : null}
       {!costs.costClaimsAvailable ? (
         <AppText variant="tiny" color="danger" style={{ marginTop: 10 }}>
-          Confirm all applicable current and target fees before using a cost difference or break-even date.
+          Full-cost and break-even claims require verified bank terms, customer applicability and a supported calculation. Entered fees alone do not establish complete coverage.
         </AppText>
       ) : null}
     </Disclosure>

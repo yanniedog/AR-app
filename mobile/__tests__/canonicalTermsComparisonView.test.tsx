@@ -1,0 +1,27 @@
+import React from 'react';
+import TestRenderer, { act } from 'react-test-renderer';
+import { CanonicalTermsComparison } from '../src/components/product/CanonicalTermsComparison';
+import { loadProductTerms } from '../src/data/productTermsTransport';
+let mockState: any;
+const mockOpen = jest.fn();
+jest.mock('../src/data/store', () => ({ useStore: (selector: any) => selector(mockState) }));
+jest.mock('../src/data/productTermsTransport', () => ({ loadProductTerms: jest.fn() }));
+jest.mock('../src/components/ExternalLinkConfirmation', () => ({ useTrustedExternalUrl: () => ({ requestExternalUrl: mockOpen }) }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Button: 'Button', Disclosure: ({ children, open, ...props }: any) => jest.requireActual('react').createElement('Disclosure', { ...props, open }, open ? children : null) }));
+test('lazy comparison exposes source-bound cells and invalidates old edition before replacement', async () => {
+  const rows: any = ['a', 'b'].map(product_key => ({ product_key, product_name: product_key, provider: product_key }));
+  const terms: any = { revisions: [{ term_revision_id: 'r', parameter_key: 'fee.amount', value: '0', unit: 'AUD', applicability: { product_key: 'a', tier: 'standard', package: 'none', cohort: 'adult', effective_from: '2026-01-01', effective_to: '2027-01-01' }, clause_ids: ['c'], status: 'validated', observed_at: '2026-09-15' }], clauses: [{ clause_id: 'c', document_version_id: 'd', text: 'Technical clause' }], documents: [{ document_version_id: 'd', source_url: 'https://example.org/terms' }] };
+  mockState = { manifest: { payload_revision: { bundle_sha256: 'old' }, files: { terms_index: { sha256: 'index' } } } };
+  (loadProductTerms as jest.Mock).mockImplementation(async (_manifest, key) => key === 'a' ? terms : null);
+  let tree: any; await act(async () => { tree = TestRenderer.create(<CanonicalTermsComparison rows={rows} />); });
+  expect(loadProductTerms).not.toHaveBeenCalled();
+  await act(async () => tree.root.findByProps({ title: 'Compare scoped document terms' }).props.onToggle());
+  act(() => tree.root.findByProps({ title: 'fee.amount' }).props.onToggle());
+  expect(JSON.stringify(tree.toJSON())).toContain('Technical clause'); expect(JSON.stringify(tree.toJSON())).toContain('Unknown in this exact scope');
+  act(() => tree.root.findByProps({ title: 'Open source' }).props.onPress()); expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.org/terms' }));
+  mockState = { manifest: { ...mockState.manifest, payload_revision: { bundle_sha256: 'new' } } };
+  (loadProductTerms as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+  await act(async () => tree.update(<CanonicalTermsComparison rows={rows} />));
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Technical clause');
+  act(() => tree.unmount());
+});

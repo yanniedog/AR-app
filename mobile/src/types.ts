@@ -248,6 +248,9 @@ export interface ProductLinks {
 }
 
 export interface ProductDetail {
+  displayIdentity?: { name?: string; provider?: string; productCategory?: string };
+  /** Original per-rate wording; optional on older immutable payloads. */
+  rateConditions?: RateConditions;
   description?: string;
   last_updated?: string;
   fees?: DetailItem[];
@@ -258,6 +261,18 @@ export interface ProductDetail {
   facts?: NormalizedProductFact[];
   /** Links to the lender's official overview / eligibility / fees / terms pages. */
   links?: ProductLinks;
+  /** Original references retained before generic URL cleaning. */
+  sourceDocuments?: { url: string; sourceUrl?: string; sourcePath: string; relation: string; label?: string }[];
+}
+
+export interface RateConditions {
+  schemaVersion: 1;
+  sourceSha256: string;
+  entries: RateConditionEntry[];
+}
+export interface RateConditionEntry {
+  id: string; rateFamily: 'deposit' | 'lending'; rateIndex: number;
+  rateSourcePointer: string; tierSourcePointer?: string; sourcePointer: string; text: string;
 }
 
 export interface DetailsPayload {
@@ -281,6 +296,11 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  executable_v3?: import('./data/monetaryContracts/types').MonetaryNamespace;
+  executable_v4?: import('./data/activityContracts/types').ActivityNamespace;
+  /** Optional lazy capability descriptors; deliberately outside legacy eager files. */
+  executable_v2?: { schema_version: 2; index: { name: string; bytes: number; sha256: string }; shards: Record<string, { name: string; bytes: number; sha256: string }> };
+  source_observation?: { generation_id?: string; contract_digest?: string; [key: string]: unknown };
   payload_revision?: {
     schema_version: 1;
     revision: number;
@@ -307,6 +327,8 @@ export interface Manifest {
     bank_spread_history?: ManifestFile;
     /** RBA decision calendar + forward meeting schedule (countdown asset). */
     rba_calendar?: ManifestFile;
+    /** Lazy immutable per-product document evidence index. */
+    terms_index?: ManifestFile;
   };
   enc?: ManifestEnc;
 }

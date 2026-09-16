@@ -805,7 +805,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
   if (!snapshot.core) {
     return check(
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
-      'Product details completeness',
+      'Product detail record coverage',
       'data-completeness',
       'fail',
       { coreProducts: 0, detailProducts: 0, coveragePercent: null },
@@ -815,7 +815,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
   if (!snapshot.details) {
     return check(
       APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
-      'Product details completeness',
+      'Product detail record coverage',
       'data-completeness',
       'unavailable',
       { coreProducts: new Set(allRows(snapshot).map(([, row]) => row.product_key)).size, detailProducts: 0, coveragePercent: null },
@@ -850,7 +850,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
       : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS,
-    'Product details completeness',
+    'Product detail record coverage',
     'data-completeness',
     status,
     {
@@ -870,7 +870,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
         ? missingProducts > 0
           ? 'Some core products have no corresponding detail record.'
           : 'The details asset contains records that are not present in the active core snapshot.'
-        : undefined,
+        : 'This checks product record coverage only. Document and clause completeness are not established by these counts.',
   );
 }
 

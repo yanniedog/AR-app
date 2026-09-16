@@ -4,12 +4,12 @@ import type { Filters } from './selectors';
 
 /**
  * Per-section product attributes the user locks in once — e.g. owner-occupied,
- * P&I, variable, LVR 80–90% — applied as default filters across the app so the
+ * P&I, variable, LVR 80–90% — mandatory across the app so the
  * same choices never have to be re-selected screen by screen.
  *
  * `accountFeatures` holds CDR featureType codes (offset, extra repayments, …)
  * curated per section; Search and other surfaces seed from the subset that
- * applies to the active section.
+ * applies to the active section. Screen filters may only narrow these requirements.
  */
 export interface ProfileFilters {
   loanPurposes: string[];
@@ -86,7 +86,7 @@ export function profileFeaturesForSection(p: ProfileFilters, section: SectionKey
 /**
  * Seed screen filters from the saved profile — only the dimensions that apply
  * to `section` (a saved Mortgage rate type must not constrain a Savings
- * search); the user can still override per screen.
+ * search). Mandatory eligibility is independently enforced before this screen filter.
  */
 export function profileToFilters(p: ProfileFilters, section: SectionKey, base: Filters): Filters {
   const accountFeatures = profileFeaturesForSection(p, section);
@@ -197,7 +197,7 @@ export function profileFilterRows(
     // Fail closed until details are loaded — otherwise must-have features would
     // silently disappear and Home/Calculator could show non-matching winners.
     if (!detailsProducts) return [];
-    out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts));
+    out = out.filter((r) => productHasAllFeatures(r.product_key, features, detailsProducts, r, section));
   }
   return out;
 }
