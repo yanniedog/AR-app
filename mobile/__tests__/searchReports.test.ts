@@ -63,6 +63,17 @@ test('long Unicode terms retain every segment; formula and OOXML escapes stay li
   ]);
 });
 
+test('source carriage returns survive XML parsing without changing literal OOXML tokens', async () => {
+  const text = 'CR\rCRLF\r\nLF\nTAB\t_x000D_ 日本語';
+  const splitText = 'a'.repeat(31999) + '\r\nnext';
+  const bytes = await writeReportWorkbook([{ name: 'Terms', rows: [['Value'], [text], [splitText]] }]);
+  const xml = strFromU8(unzipSync(bytes)['xl/worksheets/sheet1.xml']);
+  expect(xml).not.toContain('\r');
+  expect(xml).toContain('CR_x000d_CRLF_x000d_\nLF\nTAB\t_x005F_x000D_ 日本語');
+  expect(xml).toContain('a_x000d_</t>');
+  expect(xml).toContain('>\nnext</t>');
+});
+
 test('empty result, Australian day rollover and cancellation are explicit', async () => {
   const snapshot = captureFilteredSearchSnapshot({ core, manifest, details, profile: EMPTY_PROFILE, request: { ...request, query: 'no-match-value' }, now: new Date('2026-09-15T15:00:00Z') });
   expect(snapshot.rows).toEqual([]); expect(australianPublicationDate(new Date('2026-09-15T15:00:00Z'))).toBe('2026-09-16');
