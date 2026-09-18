@@ -6,8 +6,9 @@ export function escapeReportMarkup(value: string): string {
 }
 function xmlText(value: string): string {
   // Excel decodes these escape sequences even in inline strings. Escape literal tokens first.
+  // XML normalizes raw CR/CRLF, so encode carriage returns to preserve source text exactly.
   return escapeReportMarkup(value.replace(/_x[\da-f]{4}_/gi, match => `_x005F_${match.slice(1)}`)
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, char => `_x${char.charCodeAt(0).toString(16).padStart(4, '0')}_`));
+    .replace(/[\x00-\x08\x0B-\x1F]/g, char => `_x${char.charCodeAt(0).toString(16).padStart(4, '0')}_`));
 }
 const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const MAIN = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
