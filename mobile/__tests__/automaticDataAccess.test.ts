@@ -9,6 +9,10 @@ jest.mock('../src/lib/yieldToUi', () => ({
 }));
 
 const source = 'https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json';
+it('routes frozen encrypted domain assets without local setup keys', () => {
+  expect(automaticDataUrl(source.replace('manifest.json', 'core-2026-09-18-123456789abc.json.gz.enc')))
+    .toBe(`${APP_DATA_ORIGIN}/v1/release/app-payload-latest/core-2026-09-18-123456789abc.json.gz.enc`);
+});
 
 it.each(['app-payload-latest', 'app-payload-2026-09-18', 'app-payload-2026-09-18-r000002'])(
   'maps %s while preserving immutable domain references', tag => {
