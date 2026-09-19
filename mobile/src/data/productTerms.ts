@@ -1,3 +1,5 @@
+import { isValidCalendarDate } from '../lib/calendarDate';
+
 /** Additive public evidence contract. Raw document bodies remain on the producer. */
 export const TERMS_STAGES = ['discovery', 'acquisition', 'extraction', 'interpretation', 'calculation'] as const;
 export type TermsStage = typeof TERMS_STAGES[number];
@@ -83,6 +85,27 @@ function fields(value: unknown, required: string[], optional: string[] = []): Re
 function text(value: unknown): value is string { return typeof value === 'string'; }
 function sha(value: unknown): value is string { return text(value) && SHA.test(value); }
 function nullableText(value: unknown): boolean { return value === null || text(value); }
+function effectiveDate(value: unknown): { precision: 'day' | 'instant'; order: bigint } | null {
+  if (value === null) return null;
+  requireValue(text(value), 'applicability calendar dates');
+  if (isValidCalendarDate(value)) return { precision: 'day', order: BigInt(Date.parse(value)) * 1000n };
+  const parts = /^([0-9]{4}-[0-9]{2}-[0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})(?:\.([0-9]{1,6}))?(Z|[+-][0-9]{2}:[0-9]{2})$/.exec(value);
+  requireValue(parts && isValidCalendarDate(parts[1]) && Number(parts[2]) < 24
+    && Number(parts[3]) < 60 && Number(parts[4]) < 60, 'applicability calendar dates');
+  const zone = parts[6];
+  requireValue(zone === 'Z' || (Number(zone.slice(1, 3)) < 24 && Number(zone.slice(4)) < 60), 'applicability timezone');
+  const millis = Date.parse(`${parts[1]}T${parts[2]}:${parts[3]}:${parts[4]}${zone}`);
+  requireValue(Number.isFinite(millis), 'applicability calendar dates');
+  return { precision: 'instant', order: BigInt(millis) * 1000n + BigInt((parts[5] ?? '').padEnd(6, '0')) };
+}
+function validateEffectiveDates(row: Record<string, unknown>): void {
+  const from = effectiveDate(row.effective_from), to = effectiveDate(row.effective_to);
+  if (from === null || to === null) return;
+  requireValue(from.precision === to.precision, 'mixed applicability date precision');
+  // Frozen producer evidence intervals permit equal endpoints; do not invent
+  // exclusive-end semantics or discard source timezone/microsecond precision.
+  requireValue(from.order <= to.order, 'reversed applicability interval');
+}
 function timestamp(value: unknown): boolean {
   return text(value) && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value));
 }
@@ -105,7 +128,8 @@ function validateDocument(value: unknown): void {
   let url: URL;
   try { url = new URL(String(row.source_url)); } catch { throw new Error('Invalid product terms: source URL'); }
   requireValue(['http:', 'https:'].includes(url.protocol) && !url.username && !url.password, 'source URL');
-  requireValue(timestamp(row.observed_at) && nullableText(row.effective_from) && nullableText(row.effective_to), 'document dates');
+  requireValue(timestamp(row.observed_at), 'document observation date');
+  validateEffectiveDates(row);
 }
 function validateClause(value: unknown, documents: Set<string>): void {
   const row = fields(value, ['clause_id', 'document_version_id', 'locator', 'text', 'disposition'], ['excerpt_truncated', 'reason']);
@@ -126,6 +150,7 @@ function validateRevision(value: unknown, productKey: string, clauses: Set<strin
   requireValue(refs.length > 0 && new Set(refs).size === refs.length && refs.every((id) => clauses.has(String(id))), 'revision source references');
   const scope = fields(row.applicability, ['product_key', 'tier', 'package', 'cohort', 'effective_from', 'effective_to']);
   requireValue(scope.product_key === productKey && Object.entries(scope).every(([key, item]) => key === 'product_key' || nullableText(item)), 'revision scope');
+  validateEffectiveDates(scope);
 }
 function validateCoverage(value: unknown): void {
   const row = fields(value, [...TERMS_STAGES, 'gaps']);
