@@ -1,4 +1,4 @@
-import { productHasAllFeatures } from '../src/data/features';
+import { distinctAccountFeatures, productHasAllFeatures } from '../src/data/features';
 import { featureEvidenceScope, normalizedProductFacts, productMatchesFactCriterion,
   publishedFactFilterOptions } from '../src/data/productFacts';
 import { filterRows, EMPTY_FILTERS } from '../src/data/selectors';
@@ -47,5 +47,37 @@ describe('required feature facts share fail-closed semantics', () => {
     expect(options).toHaveLength(1);
     expect(options[0].criterion.value).toBe(false);
     expect(productMatchesFactCriterion(detail, options[0].criterion)).toBe(true);
+  });
+
+  test('the exact requested variant must itself be applicable', () => {
+    const detail: ProductDetail = { facts: [positive, { ...positive, id: 'other', sourceType: 'OTHER', appliesTo: ['FIXED'] }] };
+    const criterion = { ...exists, sourceType: 'OTHER' };
+    expect(productHasAllFeatures('p', ['OFFSET'], { p: detail }, row, 'Mortgage')).toBe(true);
+    expect(filterRows([row], { ...EMPTY_FILTERS, factCriteria: [criterion] }, { p: detail }, null, 'Mortgage')).toEqual([]);
+    detail.facts![1].appliesTo = ['VARIABLE'];
+    expect(filterRows([row], { ...EMPTY_FILTERS, factCriteria: [criterion] }, { p: detail }, null, 'Mortgage')).toEqual([row]);
+  });
+
+  test.each([{ value: undefined }, { value: false }, { condition: 'Package only' }])(
+    'available options require aggregate evidence: %j', sibling => {
+      const detail: ProductDetail = { facts: [positive, { ...positive, ...sibling, id: 'sibling' }] };
+      expect(publishedFactFilterOptions([row], { p: detail }, 'Mortgage')).toEqual([]);
+      expect(distinctAccountFeatures([row], { p: detail }, 'Mortgage')).toEqual([]);
+    });
+
+  test('option generation considers later applicable rows of the same product', () => {
+    const detail: ProductDetail = { facts: [positive, { ...positive, id: 'fixed', appliesTo: ['FIXED'], value: undefined }] };
+    const rows = [{ ...row, rate_type: 'FIXED' }, row];
+    expect(publishedFactFilterOptions(rows, { p: detail }, 'Mortgage')).toHaveLength(1);
+    expect(distinctAccountFeatures(rows, { p: detail }, 'Mortgage')).toEqual(['OFFSET']);
+    detail.facts![1].appliesTo = ['Mortgage'];
+    expect(publishedFactFilterOptions(rows, { p: detail }, 'Mortgage')).toEqual([]);
+    expect(distinctAccountFeatures(rows, { p: detail }, 'Mortgage')).toEqual([]);
+  });
+
+  test('legacy display-only features do not advertise verified filter choices', () => {
+    const detail: ProductDetail = { features: [{ label: 'OFFSET' }] };
+    expect(distinctAccountFeatures([row], { p: detail }, 'Mortgage')).toEqual([]);
+    expect(detail.features).toEqual([{ label: 'OFFSET' }]);
   });
 });

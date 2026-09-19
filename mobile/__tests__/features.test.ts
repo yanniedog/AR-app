@@ -34,6 +34,10 @@ describe('features', () => {
       'B|1': { features: [{ label: 'OFFSET' }] },
       'C|1': { features: [{ label: 'DIGITAL_BANKING' }] },
     };
+    for (const detail of Object.values(lookup)) {
+      detail.facts = detail.features!.map(item => ({ id: item.label!, kind: 'feature',
+        canonicalKey: item.label!, value: true, unit: 'boolean' }));
+    }
     const rows = [
       { product_key: 'A|1', provider: 'X', product_name: 'A', rate: '0.05' },
       { product_key: 'A|1', provider: 'X', product_name: 'A', rate: '0.06' },

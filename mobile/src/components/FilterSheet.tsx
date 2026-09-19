@@ -83,16 +83,16 @@ export function FilterSheet({
   );
   const providers = useMemo(() => distinctProviders(rows), [rows]);
   const accountFeatures = useMemo(
-    () => distinctAccountFeatures(rows, detailsProducts).slice(0, 24),
-    [rows, detailsProducts],
+    () => distinctAccountFeatures(rows, detailsProducts, section).slice(0, 24),
+    [rows, detailsProducts, section],
   );
   const eligibilityCriteria = useMemo(
     () => distinctEligibilityCriteria(rows, detailsProducts).slice(0, 24),
     [rows, detailsProducts],
   );
   const availablePublishedDetails = useMemo(
-    () => publishedFactFilterOptions(rows, detailsProducts),
-    [rows, detailsProducts],
+    () => publishedFactFilterOptions(rows, detailsProducts, section),
+    [rows, detailsProducts, section],
   );
   const publishedDetails = useMemo(
     () => boundedPublishedFactFilterOptions(
