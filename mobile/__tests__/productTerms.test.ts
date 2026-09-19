@@ -39,6 +39,41 @@ test('preserves exact decimals and unknown applicability without claiming comple
   expect(result.coverage.calculation.status).toBe('unknown');
 });
 
+describe.each(['document', 'revision'] as const)('%s applicability dates', (kind) => {
+  function withDates(from: string | null, to: string | null) {
+    const fixture = validateProductTerms(evidence(), 'protocol-fixture');
+    const scope = kind === 'document' ? fixture.documents[0] : fixture.revisions[0].applicability;
+    scope.effective_from = from;
+    scope.effective_to = to;
+    return fixture;
+  }
+  test.each(['', 'unknown', '2026-02-29', '2026-02-30', '2026-04-31', '2026-13-01',
+    '2026-01-00', '2026-1-01', '2026-02-30T00:00:00Z', '2026-01-01T24:00:00Z',
+    '2026-01-01T00:00:00', '1900-02-29'])('rejects invalid boundary %s', (date) => {
+    expect(() => validateProductTerms(withDates(date, null), 'protocol-fixture')).toThrow('calendar dates');
+    expect(() => validateProductTerms(withDates(null, date), 'protocol-fixture')).toThrow('calendar dates');
+  });
+  test.each([
+    ['2026-09-20', '2026-09-19'],
+    ['2026-01-01T01:00:00Z', '2026-01-01T10:00:00+10:00'],
+    ['2026-01-01T00:00:00.000002Z', '2026-01-01T00:00:00.000001Z'],
+  ])('rejects reversed interval %s to %s', (from, to) => {
+    expect(() => validateProductTerms(withDates(from, to), 'protocol-fixture')).toThrow('applicability interval');
+  });
+  test.each([
+    [null, null], ['2024-02-29', null], [null, '2000-02-29'], ['2024-02-29', '2024-03-01'],
+    ['2026-09-19', '2026-09-19'],
+    ['2026-01-01T10:00:00+10:00', '2026-01-01T00:00:00.000000Z'],
+    ['2026-01-01T00:00:00.000001Z', '2026-01-01T00:00:00.000002Z'],
+  ])('preserves valid dates and independently unknown boundaries', (from, to) => {
+    const fixture = withDates(from, to);
+    expect(validateProductTerms(fixture, 'protocol-fixture')).toEqual(fixture);
+  });
+  test('rejects mixed precision without guessing a timezone for a calendar day', () => {
+    expect(() => validateProductTerms(withDates('2026-01-01', '2026-01-02T00:00:00Z'), 'protocol-fixture')).toThrow('mixed applicability');
+  });
+});
+
 test.each(['wrong-product', 'orphan-clause', 'orphan-revision', 'duplicate-id', 'unvalidated', 'float', 'false-completeness'])('rejects %s before display or calculation', (kind) => {
   const fixture = evidence();
   if (kind === 'wrong-product') fixture.product_key = 'another';
