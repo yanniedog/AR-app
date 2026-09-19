@@ -25,7 +25,7 @@ export async function readValidatedHistoryBanks(isCurrent: () => boolean = () =>
 }
 
 export function noDataErrorMessage(): string {
-  return 'No verified rates are available. Import your data key and connect to refresh.';
+  return 'No verified rates are available. Connect to refresh.';
 }
 
 /** Coalesce concurrent ensure* calls; `request` supersedes stale product-history writes. */

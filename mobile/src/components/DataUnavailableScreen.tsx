@@ -3,7 +3,6 @@ import React from 'react';
 import { View } from 'react-native';
 
 import { useStore } from '../data/store';
-import { DataKeyImport } from './settings/DataKeyImport';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
 import { Screen } from './Screen';
@@ -38,14 +37,13 @@ export function DataUnavailableScreen() {
           Data unavailable
         </AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-          Import your data key, check your connection and try again.
+          We couldn’t load the rates. Check your connection and try again.
         </AppText>
         <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }}>
           Technical details remain in the on-device Debug log.
         </AppText>
         <View style={{ marginTop: 22, width: '100%', gap: 10 }}>
           <Button title="Try again" icon="refresh" onPress={() => void retryDataLoad()} loading={busy} disabled={busy} />
-          <DataKeyImport />
         </View>
       </View>
     </Screen>

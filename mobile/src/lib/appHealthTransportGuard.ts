@@ -1,3 +1,4 @@
+import { automaticDataUrl } from './automaticDataAccess';
 import {
   AppHealthNetworkPolicy,
   AppHealthNetworkPolicyError,
@@ -75,6 +76,8 @@ function acceptedFinalFetchUrl(
   const requested = canonical(requestedUrl);
   if (!requested || !finalValue) return false;
   const finalCanonical = canonical(finalValue);
+  const automatic = automaticDataUrl(requestedUrl);
+  if (automatic && finalCanonical === canonical(automatic)) return true;
   if (finalCanonical === requested) return true;
   try {
     const requestedParsed = new URL(requested);
@@ -128,7 +131,10 @@ export function installAppHealthTransportGuard(options: {
         // direct XHR remains blocked because its redirect cannot be verified.
         approvedFetchDepth += 1;
         try {
-          return Reflect.apply(originalFetch, target, [input, init]) as ReturnType<typeof fetch>;
+          const delivery = automaticDataUrl(url);
+          const transported = delivery && typeof input !== 'string' && !(input instanceof URL)
+            ? new Request(delivery, input) : (delivery ?? input);
+          return Reflect.apply(originalFetch, target, [transported, init]) as ReturnType<typeof fetch>;
         } finally {
           approvedFetchDepth -= 1;
         }

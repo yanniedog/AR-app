@@ -4,7 +4,6 @@ import { Alert } from 'react-native';
 import { AppText } from '../ui';
 import { authenticateBiometric, biometricsAvailable } from '../../lib/appLock';
 import { SettingsGap, ToggleRow } from './settingsUi';
-import { DataKeyImport } from './DataKeyImport';
 
 export function AccountSecurityRows({
   appLockEnabled,
@@ -39,8 +38,6 @@ export function AccountSecurityRows({
         value={appLockEnabled}
         onChange={(v) => void handleAppLockChange(v)}
       />
-      <SettingsGap size={10} />
-      <DataKeyImport />
     </>
   );
 }
