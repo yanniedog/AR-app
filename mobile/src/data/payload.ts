@@ -5,6 +5,7 @@ import * as Crypto from 'expo-crypto';
 import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
 
 import { resolvePayloadKeyHex } from '../lib/keyVault';
+import { automaticDataUrl } from '../lib/automaticDataAccess';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
 import { decryptReleaseTransport, isReleaseTransport, MAX_TRANSPORT_ENCODED_BYTES, RELEASE_TRANSPORT_OVERHEAD } from '../lib/releaseTransport';
 
@@ -105,8 +106,13 @@ function manifestFetchUrl(url: string): string {
 
 async function downloadWireBytes(
   url: string,
-  opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
+  opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
 ): Promise<ArrayBuffer> {
+  const deliveryUrl = automaticDataUrl(url);
+  const legacyHeaders = opts.legacySha ? { 'X-AR-Legacy-SHA256': opts.legacySha } : undefined;
+  if (opts.legacySha && (!deliveryUrl || !/^[a-f0-9]{64}$/.test(opts.legacySha))) {
+    throw new Error('Historical data delivery identity is invalid');
+  }
   if (
     opts.requireExactBytes &&
     (
@@ -138,7 +144,7 @@ async function downloadWireBytes(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const response = await globalThis.fetch(url, { signal: controller.signal });
+      const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
       if (!response.ok) throw new Error(`asset HTTP ${response.status}`);
       const buf = await response.arrayBuffer();
       if (opts.maxCompressedBytes != null && buf.byteLength > opts.maxCompressedBytes) {
@@ -157,7 +163,8 @@ async function downloadWireBytes(
   return new Promise((resolve, reject) => {
     let lastEmitAt = 0;
     const xhr = new XMLHttpRequest();
-    xhr.open('GET', url);
+    xhr.open('GET', deliveryUrl ?? url);
+    if (opts.legacySha) xhr.setRequestHeader('X-AR-Legacy-SHA256', opts.legacySha);
     xhr.timeout = 30000;
     xhr.responseType = 'arraybuffer';
     xhr.ontimeout = () => reject(new Error('network timeout'));
@@ -232,9 +239,19 @@ async function downloadBytes(
         opts.expectedBytes! <= 0 || opts.expectedBytes! > limit))) {
     throw new Error('exact compressed asset size requires a positive safe-integer expectedBytes within the compressed byte limit');
   }
-  const wire = new Uint8Array(await downloadWireBytes(url, {
-    ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
-  }));
+  let wire: Uint8Array = new Uint8Array();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      wire = new Uint8Array(await downloadWireBytes(url, {
+        ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
+      }));
+      break;
+    } catch (error) {
+      if (!automaticDataUrl(url) || attempt >= 2 || !/asset HTTP (429|503)/.test(String(error))) throw error;
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
+  if (automaticDataUrl(url) && isReleaseTransport(wire)) throw new Error('Data service returned unopened transport');
   const bytes = isReleaseTransport(wire)
     ? await decryptReleaseTransport(wire, resolvePayloadKeyHex, limit)
     : wire;
@@ -355,7 +372,12 @@ export async function downloadInflate(
   // sha256 above was computed over the ciphertext, matching the manifest.
   if (isEncryptedAsset(bytes)) {
     if (opts.allowEncrypted === false) throw new Error('encrypted asset is not allowed by this contract');
-    bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
+    if (automaticDataUrl(url)) {
+      const sourceSha = expectedSha ?? toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(bytes)));
+      bytes = new Uint8Array(await downloadWireBytes(url, { ...opts, legacySha: sourceSha,
+        requireExactBytes: false, expectedBytes: undefined, maxCompressedBytes: opts.maxCompressedBytes ?? MAX_TRANSPORT_ENCODED_BYTES }));
+      if (isEncryptedAsset(bytes) || isReleaseTransport(bytes)) throw new Error('Historical data service returned unopened transport');
+    } else bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
   }
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.

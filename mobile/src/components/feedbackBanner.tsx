@@ -95,6 +95,7 @@ export function OfflineBanner({
   const refreshing = useStore((s) => s.refreshing);
   const pendingIngestRunDate = useStore((s) => s.pendingIngestRunDate);
   const showingRunDate = useStore((s) => s.core?.run_date ?? null);
+  const hasUsableData = useStore((s) => s.status !== 'error' && s.core !== null);
   const prevRefreshing = useRef(refreshing);
   const [showSuccess, setShowSuccess] = useState(false);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -132,7 +133,7 @@ export function OfflineBanner({
     pendingIngestRunDate,
     showingRunDate,
   );
-  if (!bannerView) return null;
+  if (!bannerView || !hasUsableData) return null;
 
   const { surface, message, showProgress } = bannerView;
   const sampleTone = surface === 'connecting' || surface === 'success';
