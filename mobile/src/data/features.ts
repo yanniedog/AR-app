@@ -1,6 +1,6 @@
 import type { DetailItem, ProductDetail, RateRow, SectionKey } from '../types';
 import { sortByDisplayLabel } from './format';
-import { curatedFeatureFactKey, curatedFeatureIdentityKey, normalizedProductFacts } from './productFacts';
+import { curatedFeatureFactKey, featureEvidenceMatches, featureEvidenceScope, normalizedProductFacts } from './productFacts';
 
 /** CDR featureType code from a details payload feature row (label or name). */
 export function featureTypeKey(item: DetailItem): string {
@@ -34,14 +34,8 @@ export function productHasAllFeatures(
 ): boolean {
   if (required.length === 0) return true;
   if (!lookup) return false;
-  const facts = normalizedProductFacts(lookup[productKey]);
-  const scope = new Set([productKey, section, row?.rate_type, row?.loan_purpose, row?.security_purpose,
-    row?.repayment_type, row?.ribbon_repayment_type].filter((value): value is string => typeof value === 'string').map(value => value.toUpperCase()));
-  return required.every(feature => {
-    const applicable = facts.filter(fact => curatedFeatureIdentityKey(fact) === feature
-      && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.has(value.toUpperCase()))));
-    return applicable.length > 0 && applicable.every(fact => fact.value === true && fact.unit === 'boolean');
-  });
+  const scope = featureEvidenceScope(productKey, row, section);
+  return required.every(feature => featureEvidenceMatches(lookup[productKey], feature, true, scope));
 }
 
 /** Distinct featureType codes for products in rows, sorted alphabetically by display label. */

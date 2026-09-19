@@ -62,7 +62,7 @@ describe('features', () => {
   test('resolves namespaced feature keys and excludes explicit negative facts', () => {
     const lookup: Record<string, ProductDetail> = {
       'A|1': { facts: [
-        { id: 'offset-true', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: true },
+        { id: 'offset-true', kind: 'feature', canonicalKey: 'feature.offset', sourceType: 'OFFSET', value: true, unit: 'boolean' },
         { id: 'redraw-false', kind: 'feature', canonicalKey: 'feature.redraw', sourceType: 'REDRAW', value: false },
       ] },
       'B|1': { facts: [
