@@ -5,6 +5,7 @@ import type {
   NormalizedProductFactUnit,
   ProductDetail,
   RateRow,
+  SectionKey,
 } from '../types';
 
 export type FactCriterionOperator = 'exists' | 'eq' | 'gte' | 'lte';
@@ -134,8 +135,24 @@ export function curatedFeatureIdentityKey(fact: NormalizedProductFact): string |
 }
 
 export function curatedFeatureFactKey(fact: NormalizedProductFact): string | null {
-  if (fact.kind !== 'feature' || fact.value === false) return null;
+  if (fact.value !== true || fact.unit !== 'boolean' || fact.condition?.trim()) return null;
   return curatedFeatureIdentityKey(fact);
+}
+
+export function featureEvidenceScope(productKey: string, row?: RateRow, section?: SectionKey): string[] {
+  return [productKey, section, row?.rate_type, row?.loan_purpose, row?.security_purpose,
+    row?.repayment_type, row?.ribbon_repayment_type]
+    .filter((value): value is string => typeof value === 'string').map(value => value.toUpperCase());
+}
+
+/** All applicable variants must agree; missing values and conditions stay unknown. */
+export function featureEvidenceMatches(
+  detail: ProductDetail | null | undefined, key: string, expected: boolean, scope: readonly string[] = [],
+): boolean {
+  const applicable = normalizedProductFacts(detail).filter(fact => curatedFeatureIdentityKey(fact) === key
+    && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
+  return applicable.length > 0 && applicable.every(fact => fact.value === expected
+    && fact.unit === 'boolean' && !fact.condition?.trim());
 }
 
 export function curatedEligibilityFactKey(fact: NormalizedProductFact): string | null {
@@ -280,7 +297,18 @@ function comparisonFactValue(fact: NormalizedProductFact, operator: 'gte' | 'lte
 export function productMatchesFactCriterion(
   detail: ProductDetail | null | undefined,
   criterion: FactCriterion,
+  scope: readonly string[] = [],
 ): boolean {
+  const key = curatedFeatureIdentityKey({ id: 'criterion', kind: 'feature',
+    canonicalKey: criterion.canonicalKey ?? '', sourceType: criterion.sourceType });
+  if (key) {
+    if (criterion.unit && criterion.unit !== 'boolean') return false;
+    const expected = criterion.operator === 'exists' ? true : criterion.value;
+    if (criterion.operator !== 'exists' && criterion.operator !== 'eq') return false;
+    if (typeof expected !== 'boolean') return false;
+    return normalizedProductFacts(detail).some(fact => factIdentityMatches(fact, criterion))
+      && featureEvidenceMatches(detail, key, expected, scope);
+  }
   return normalizedProductFacts(detail).some((fact) => {
     if (!factIdentityMatches(fact, criterion)) return false;
     if (criterion.unit && fact.unit !== criterion.unit) return false;
@@ -304,9 +332,10 @@ export function productMatchesFactCriterion(
 export function productMatchesAllFactCriteria(
   detail: ProductDetail | null | undefined,
   criteria: FactCriterion[] | null | undefined,
+  scope: readonly string[] = [],
 ): boolean {
   if (!criteria?.length) return true;
-  return criteria.every((criterion) => productMatchesFactCriterion(detail, criterion));
+  return criteria.every((criterion) => productMatchesFactCriterion(detail, criterion, scope));
 }
 
 export function factCriterionId(criterion: FactCriterion): string {
@@ -341,6 +370,8 @@ export function normalizeFactCriterion(value: unknown): FactCriterion | null {
 function optionCriterion(fact: NormalizedProductFact): FactCriterion | null {
   const curatedKey = curatedFeatureIdentityKey(fact) ?? curatedEligibilityFactKey(fact);
   if (!curatedKey) return null;
+  if (fact.kind === 'feature' && (typeof fact.value !== 'boolean'
+    || fact.unit !== 'boolean' || fact.condition?.trim() || fact.appliesTo?.length)) return null;
   // The canonical key is the curated identity. Generic source enums such as
   // OTHER are useful qualifiers but are never specific enough on their own.
   const identity: FactCriterionIdentity = {

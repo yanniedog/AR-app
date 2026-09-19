@@ -16,6 +16,7 @@ import {
 } from './format';
 import { rateConditionality } from '../lib/rateQualifier';
 import {
+  featureEvidenceScope,
   productMatchesAllFactCriteria,
   type FactCriterion,
 } from './productFacts';
@@ -390,7 +391,8 @@ export function filterRows(
     }
     if (
       filters.factCriteria?.length > 0 &&
-      !productMatchesAllFactCriteria(detailsProducts?.[row.product_key], filters.factCriteria)
+      !productMatchesAllFactCriteria(detailsProducts?.[row.product_key], filters.factCriteria,
+        featureEvidenceScope(row.product_key, row, section ?? undefined))
     ) {
       return false;
     }
