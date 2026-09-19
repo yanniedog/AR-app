@@ -7,19 +7,15 @@ export function featureTypeKey(item: DetailItem): string {
   return (item.label ?? item.name ?? '').trim();
 }
 
-export function productFeatureTypes(detail: ProductDetail | null | undefined): Set<string> {
+export function productFeatureTypes(detail: ProductDetail | null | undefined, scope: readonly string[] = []): Set<string> {
   const out = new Set<string>();
   const facts = normalizedProductFacts(detail).filter((fact) => fact.kind === 'feature');
   if (facts.length > 0) {
     for (const fact of facts) {
       const key = curatedFeatureFactKey(fact);
-      if (key) out.add(key);
+      if (key && featureEvidenceMatches(detail, key, true, scope)) out.add(key);
     }
     return out;
-  }
-  for (const it of detail?.features ?? []) {
-    const key = featureTypeKey(it);
-    if (key) out.add(key);
   }
   return out;
 }
@@ -42,14 +38,17 @@ export function productHasAllFeatures(
 export function distinctAccountFeatures(
   rows: RateRow[],
   lookup: Record<string, ProductDetail> | null | undefined,
+  section?: SectionKey,
 ): string[] {
   if (!lookup) return [];
   const keys = new Set<string>();
   const seen = new Set<string>();
   for (const row of rows) {
-    if (seen.has(row.product_key)) continue;
-    seen.add(row.product_key);
-    for (const key of productFeatureTypes(lookup[row.product_key])) {
+    const scope = featureEvidenceScope(row.product_key, row, section);
+    const scopeKey = JSON.stringify(scope);
+    if (seen.has(scopeKey)) continue;
+    seen.add(scopeKey);
+    for (const key of productFeatureTypes(lookup[row.product_key], scope)) {
       keys.add(key);
     }
   }

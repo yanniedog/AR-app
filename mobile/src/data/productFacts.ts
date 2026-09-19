@@ -148,10 +148,12 @@ export function featureEvidenceScope(productKey: string, row?: RateRow, section?
 /** All applicable variants must agree; missing values and conditions stay unknown. */
 export function featureEvidenceMatches(
   detail: ProductDetail | null | undefined, key: string, expected: boolean, scope: readonly string[] = [],
+  criterion?: FactCriterion,
 ): boolean {
   const applicable = normalizedProductFacts(detail).filter(fact => curatedFeatureIdentityKey(fact) === key
     && (!fact.appliesTo?.length || fact.appliesTo.every(value => scope.includes(value.toUpperCase()))));
-  return applicable.length > 0 && applicable.every(fact => fact.value === expected
+  return applicable.length > 0 && (!criterion || applicable.some(fact => factIdentityMatches(fact, criterion)))
+    && applicable.every(fact => fact.value === expected
     && fact.unit === 'boolean' && !fact.condition?.trim());
 }
 
@@ -306,8 +308,7 @@ export function productMatchesFactCriterion(
     const expected = criterion.operator === 'exists' ? true : criterion.value;
     if (criterion.operator !== 'exists' && criterion.operator !== 'eq') return false;
     if (typeof expected !== 'boolean') return false;
-    return normalizedProductFacts(detail).some(fact => factIdentityMatches(fact, criterion))
-      && featureEvidenceMatches(detail, key, expected, scope);
+    return featureEvidenceMatches(detail, key, expected, scope, criterion);
   }
   return normalizedProductFacts(detail).some((fact) => {
     if (!factIdentityMatches(fact, criterion)) return false;
@@ -407,16 +408,20 @@ function criterionOptionLabel(fact: NormalizedProductFact, criterion: FactCriter
 export function publishedFactFilterOptions(
   rows: RateRow[],
   lookup: Record<string, ProductDetail> | null | undefined,
+  section?: SectionKey,
 ): PublishedFactFilterOption[] {
   if (!lookup) return [];
   const options = new Map<string, PublishedFactFilterOption>();
   const seenProducts = new Set<string>();
   for (const row of rows) {
-    if (seenProducts.has(row.product_key)) continue;
-    seenProducts.add(row.product_key);
+    const scope = featureEvidenceScope(row.product_key, row, section);
+    const scopeKey = JSON.stringify(scope);
+    if (seenProducts.has(scopeKey)) continue;
+    seenProducts.add(scopeKey);
     for (const fact of normalizedProductFacts(lookup[row.product_key])) {
       const criterion = optionCriterion(fact);
       if (!criterion) continue;
+      if (fact.kind === 'feature' && !productMatchesFactCriterion(lookup[row.product_key], criterion, scope)) continue;
       const id = factCriterionId(criterion);
       if (!options.has(id)) options.set(id, { id, label: criterionOptionLabel(fact, criterion), criterion });
     }
