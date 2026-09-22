@@ -40,11 +40,15 @@ newer cached data. Cache recovery validates both primary and temporary files and
 preserves the newest source vintages after interrupted writes. Offline and partial
 refreshes retain each source's original dates. Only normalized public observations
 are cached; no user financial inputs are sent.
+Settings cache clearing invalidates outstanding requests and waits for active
+writes before deleting storage, so an earlier refresh cannot restore cleared data.
+It also removes any outlook still displayed by a mounted RBA page.
 
 Graphs have labelled percentage axes, a dashed cash-rate reference, written
 percentage-point differences, spoken summaries and date buttons at least 48dp
 high. Narrow graphs use fewer axis labels while keeping all date buttons.
 The page waits for catalogue hydration before loading the decision calendar.
+Cash-rate history includes recorded hold decisions reached from RBA notifications.
 
 App health now visits `rba.dashboard` and exercises both graph selectors.
 Local audits use the public-data cache without starting network requests; missing
@@ -54,7 +58,7 @@ chart layout.
 ## Verification
 
 - Canonical `cd mobile && npm run ci`: 18 Expo Doctor checks, TypeScript, ESLint
-  (12 existing warnings), 129 script tests, 227 Jest suites / 2,252 tests,
+  (12 existing warnings), 129 script tests, 227 Jest suites / 2,259 tests,
   Android/iOS/web exports and artifact-size guards.
 - Focused regressions cover real-source parsing, source dates, refresh races,
   offline/partial cache retries and interrupted writes, selection, layout readiness,
@@ -67,5 +71,8 @@ chart layout.
   direct browser requests did not return usable curves. The helper is not shipped.
 - Physical Android execution and native timing remain unverified; no connected
   device was available. Export/build evidence must not be described as device QA.
+- This release targets the installed app. Clean-browser outlook loading remains
+  unsupported until a CORS-capable source is provided; no hosted proxy or bundled
+  forecast snapshot is included.
 
 No AR-local, Pi, ingest or payload-publication changes are involved.

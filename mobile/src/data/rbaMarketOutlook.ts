@@ -18,9 +18,39 @@ let inFlight: { force: boolean; promise: Promise<RbaMarketOutlook> } | null = nu
 let requestSequence = 0;
 let latest: { sequence: number; payload: RbaMarketOutlook } | null = null;
 let commitQueue: Promise<void> = Promise.resolve();
+let generation = 0;
+let clearing: Promise<void> | null = null;
+const resetListeners = new Set<() => void>();
+
+export function subscribeRbaMarketOutlookCacheReset(listener: () => void): () => void {
+  resetListeners.add(listener);
+  return () => { resetListeners.delete(listener); };
+}
+
+/** Invalidate old requests, drain existing writes, and hold new loads until storage is cleared. */
+export function resetRbaMarketOutlookRuntimeCache(clearStorage: () => Promise<void>): Promise<void> {
+  if (clearing) return clearing;
+  generation += 1;
+  latest = null;
+  inFlight = null;
+  const run = (async () => {
+    await commitQueue;
+    await clearStorage();
+  })();
+  const tracked = run.finally(() => { if (clearing === tracked) clearing = null; });
+  clearing = tracked;
+  for (const listener of resetListeners) listener();
+  return tracked;
+}
+
+function assertCurrentGeneration(expected: number): void {
+  if (expected !== generation) throw new Error('RBA market cache was cleared during this request.');
+}
 
 /** Test isolation only: clear pending state after all test requests have settled. */
 export function resetRbaMarketOutlookRuntimeCacheForTests(): void {
+  generation += 1;
+  clearing = null;
   inFlight = null;
   requestSequence = 0;
   latest = null;
@@ -70,9 +100,10 @@ function mergeCached(stored: RbaMarketOutlook | null, memory: RbaMarketOutlook |
   };
 }
 
-async function readCached(): Promise<RbaMarketOutlook | null> {
+async function readCached(expectedGeneration: number): Promise<RbaMarketOutlook | null> {
   // Validate stored public data before allowing an offline audit to rely on it.
   const stored = normalizeRbaMarketOutlook(await cache.readRbaMarketOutlook());
+  assertCurrentGeneration(expectedGeneration);
   return mergeCached(stored, latest?.payload ?? null);
 }
 
@@ -96,11 +127,13 @@ async function fetchCsv(url: string): Promise<string> {
 
 async function commit(
   sequence: number,
+  expectedGeneration: number,
   incoming: RbaMarketOutlook,
   cached: RbaMarketOutlook | null,
 ): Promise<RbaMarketOutlook> {
   let accepted = incoming;
   const run = commitQueue.then(async () => {
+    assertCurrentGeneration(expectedGeneration);
     const previous = mergeCached(cached, latest?.payload ?? null);
     const isNewerRequest = sequence >= (latest?.sequence ?? 0);
     const sources = previous ? mergeSources(incoming, previous, isNewerRequest) : incoming;
@@ -130,6 +163,7 @@ async function commit(
     try {
       await cache.writeRbaMarketOutlook(accepted);
     } catch { /* This session can still use the validated in-memory copy. */ }
+    assertCurrentGeneration(expectedGeneration);
     latest = { sequence: Math.max(sequence, latest?.sequence ?? 0), payload: accepted };
   });
   commitQueue = run.catch(() => undefined);
@@ -139,12 +173,15 @@ async function commit(
 
 /** Public RBA context only: no personal preferences or portfolio data leave the device. */
 export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutlook> {
+  const localOnly = isLocalAppHealthAudit();
+  if (clearing) await clearing;
+  const expectedGeneration = generation;
   // Do not join a network refresh that began before a local audit installed its guard.
-  if (isLocalAppHealthAudit()) return offline(await readCached());
+  if (localOnly || isLocalAppHealthAudit()) return offline(await readCached(expectedGeneration));
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   const sequence = ++requestSequence;
   const run = (async () => {
-    const cached = await readCached();
+    const cached = await readCached(expectedGeneration);
     if (isLocalAppHealthAudit()) return offline(cached);
     const age = cached ? Date.now() - Date.parse(cached.checkedAt) : Infinity;
     if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
@@ -153,7 +190,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
       fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),
       fetchCsv(RBA_J1_FORECAST_URL).then((text) => parseRbaEconomistsCsv(text)),
     ]);
-    return commit(sequence, {
+    return commit(sequence, expectedGeneration, {
       schema_version: 1,
       fetchedAt: checkedAt,
       checkedAt,

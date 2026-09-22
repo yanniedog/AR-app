@@ -11,7 +11,7 @@ import { ScreenScrollView } from '../src/components/Screen';
 import { Disclosure } from '../src/components/ui';
 import { formatRunDate } from '../src/data/format';
 import { currentCashRate, formatRbaDate, nextMeeting, rbaCalendarCoverage, sydneyYmd } from '../src/data/rbaCalendar';
-import { loadRbaMarketOutlook, RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL, type RbaMarketOutlook } from '../src/data/rbaMarketOutlook';
+import { loadRbaMarketOutlook, RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL, subscribeRbaMarketOutlookCacheReset, type RbaMarketOutlook } from '../src/data/rbaMarketOutlook';
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
@@ -63,6 +63,17 @@ export default function RbaRates() {
       if (request === epoch.current) setLoading(false);
     }
   }, []);
+
+  useEffect(() => subscribeRbaMarketOutlookCacheReset(() => {
+    epoch.current += 1;
+    setOutlook(null);
+    setLoading(false);
+    setError(false);
+    setGraphReady({ forecast: '', bonds: '' });
+    setActiveAuditChart(null);
+    setForecastIndex(0);
+    setBondIndex(1);
+  }), []);
 
   useEffect(() => {
     if (!focused) return;
@@ -176,7 +187,7 @@ export default function RbaRates() {
           </View>
         </Disclosure>
         <Disclosure title="Cash-rate history" open={historyOpen} onToggle={() => setHistoryOpen((open) => !open)}>
-          {history.length ? <RbaChart data={history} height={220} /> : <LedgerText tone="mutedInk">Cash-rate history is unavailable.</LedgerText>}
+          {history.length ? <RbaChart data={history} holds={core?.rba_holds} height={220} /> : <LedgerText tone="mutedInk">Cash-rate history is unavailable.</LedgerText>}
         </Disclosure>
         <LedgerAction label="See bank responses" variant="secondary" onPress={() => router.push('/rba-response')} />
       </View>

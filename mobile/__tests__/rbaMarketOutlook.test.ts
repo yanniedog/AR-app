@@ -9,9 +9,12 @@ import {
   RBA_F17_FORWARD_URL,
   RBA_J1_FORECAST_URL,
   resetRbaMarketOutlookRuntimeCacheForTests,
+  subscribeRbaMarketOutlookCacheReset,
   type RbaMarketOutlook,
 } from '../src/data/rbaMarketOutlook';
 import { normalizeRbaMarketOutlook, rbaSourceToday } from '../src/data/rbaMarketOutlookParse';
+import type { AppState } from '../src/data/storeTypes';
+import { createUserActions } from '../src/data/storeUser';
 import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 
 jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false) }));
@@ -50,12 +53,17 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function clearAppCache() {
+  return createUserActions(jest.fn(), () => ({ bootstrap: async () => undefined }) as unknown as AppState).clearCache();
+}
+
 beforeEach(() => {
   jest.useFakeTimers().setSystemTime(NOW);
   resetRbaMarketOutlookRuntimeCacheForTests();
   localAudit.mockReturnValue(false);
   jest.spyOn(cache, 'readRbaMarketOutlook').mockResolvedValue(null);
   jest.spyOn(cache, 'writeRbaMarketOutlook').mockResolvedValue();
+  jest.spyOn(cache, 'clear').mockResolvedValue();
   globalThis.fetch = fetchOfficial();
 });
 
@@ -301,4 +309,85 @@ test('a disk write failure retains validated data for subsequent local audits', 
   localAudit.mockReturnValue(true);
   expect((await loadRbaMarketOutlook()).bondForwards).toEqual(fresh.bondForwards);
   expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('the app clear-cache action removes runtime data and the next ordinary visit downloads again', async () => {
+  await loadRbaMarketOutlook();
+  await clearAppCache();
+  expect(cache.clear).toHaveBeenCalledTimes(1);
+  localAudit.mockReturnValue(true);
+  await expect(loadRbaMarketOutlook()).rejects.toThrow('not cached');
+  expect(fetch).toHaveBeenCalledTimes(2);
+  localAudit.mockReturnValue(false);
+  await loadRbaMarketOutlook();
+  expect(fetch).toHaveBeenCalledTimes(4);
+});
+
+test('a cache read from before clearing cannot restore the removed runtime outlook', async () => {
+  const read = deferred<RbaMarketOutlook | null>();
+  jest.mocked(cache.readRbaMarketOutlook).mockReturnValueOnce(read.promise);
+  const old = loadRbaMarketOutlook().catch((error: Error) => error);
+  await clearAppCache();
+  read.resolve(payload(new Date(NOW).toISOString()));
+  expect(await old).toEqual(expect.objectContaining({ message: expect.stringContaining('was cleared') }));
+  expect(fetch).not.toHaveBeenCalled();
+  await loadRbaMarketOutlook();
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test('an audit call waiting for cache deletion stays local even after its guard is removed', async () => {
+  const deleting = deferred<void>();
+  jest.mocked(cache.clear).mockReturnValueOnce(deleting.promise);
+  const clearing = clearAppCache();
+  localAudit.mockReturnValue(true);
+  const audit = loadRbaMarketOutlook().catch((error: Error) => error);
+  localAudit.mockReturnValue(false);
+  deleting.resolve();
+  await clearing;
+  expect(await audit).toEqual(expect.objectContaining({ message: expect.stringContaining('not cached') }));
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+test('a pre-clear network response cannot overwrite a newly downloaded outlook', async () => {
+  const pending = [deferred<Response>(), deferred<Response>()];
+  globalThis.fetch = fetchOfficial()
+    .mockImplementationOnce(() => pending[0].promise)
+    .mockImplementationOnce(() => pending[1].promise);
+  const old = loadRbaMarketOutlook().catch((error: Error) => error);
+  await jest.advanceTimersByTimeAsync(0);
+  await clearAppCache();
+  const fresh = await loadRbaMarketOutlook();
+  pending[0].resolve(response(bondsCsv.replace('31-Aug-2026,4.35,4.57', '31-Aug-2026,4.35,1.11')));
+  pending[1].resolve(response(economistsCsv));
+  expect(await old).toEqual(expect.objectContaining({ message: expect.stringContaining('was cleared') }));
+  expect(cache.writeRbaMarketOutlook).toHaveBeenCalledTimes(1);
+  expect(await loadRbaMarketOutlook()).toBe(fresh);
+});
+
+test('clearing drains an active write and holds new loads until deletion completes', async () => {
+  const writing = deferred<void>();
+  const deleting = deferred<void>();
+  jest.mocked(cache.writeRbaMarketOutlook).mockReturnValueOnce(writing.promise);
+  jest.mocked(cache.clear).mockReturnValueOnce(deleting.promise);
+  const old = loadRbaMarketOutlook().catch((error: Error) => error);
+  await jest.advanceTimersByTimeAsync(0);
+  expect(cache.writeRbaMarketOutlook).toHaveBeenCalledTimes(1);
+  let next: Promise<RbaMarketOutlook> | undefined;
+  const unsubscribe = subscribeRbaMarketOutlookCacheReset(() => { next = loadRbaMarketOutlook(); });
+  const clearing = clearAppCache();
+  unsubscribe();
+  expect(next).toBeDefined();
+  await jest.advanceTimersByTimeAsync(0);
+  expect(cache.clear).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(2);
+  writing.resolve();
+  await jest.advanceTimersByTimeAsync(0);
+  expect(cache.clear).toHaveBeenCalledTimes(1);
+  expect(fetch).toHaveBeenCalledTimes(2);
+  deleting.resolve();
+  await clearing;
+  expect(await old).toEqual(expect.objectContaining({ message: expect.stringContaining('was cleared') }));
+  expect((await next!).refreshStatus).toBe('current');
+  expect(fetch).toHaveBeenCalledTimes(4);
+  expect(cache.writeRbaMarketOutlook).toHaveBeenCalledTimes(2);
 });

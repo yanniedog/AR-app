@@ -5,6 +5,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import RbaRates from '../app/rba';
 import type { RbaMarketOutlook } from '../src/data/rbaMarketOutlookTypes';
 import type { PerformanceAuditSurfaceDefinition } from '../src/lib/performanceAuditReadiness';
+import { usePerformanceAuditProbe } from '../src/hooks/usePerformanceAuditReadiness';
 
 type TestNode = {
   props: Record<string, unknown>;
@@ -15,6 +16,7 @@ type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const mockLoad = jest.fn();
 const mockExternal = jest.fn();
 const mockEnsureCalendar = jest.fn(async () => undefined);
+let mockCacheReset: () => void;
 let mockSurface: PerformanceAuditSurfaceDefinition;
 const mockState: Record<string, unknown> = {};
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
@@ -22,6 +24,7 @@ jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
 jest.mock('../src/data/store', () => ({ useStore: (select: (state: typeof mockState) => unknown) => select(mockState) }));
 jest.mock('../src/data/rbaMarketOutlook', () => ({
   loadRbaMarketOutlook: (...args: unknown[]) => mockLoad(...args),
+  subscribeRbaMarketOutlookCacheReset: (listener: () => void) => { mockCacheReset = listener; return jest.fn(); },
   RBA_F17_FORWARD_URL: 'https://www.rba.gov.au/statistics/tables/csv/f17-forward-rates.csv',
   RBA_J1_FORECAST_URL: 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv',
 }));
@@ -96,6 +99,14 @@ test('loads the decision calendar when a direct launch receives its catalogue af
   expect(mockEnsureCalendar).toHaveBeenCalledTimes(1);
 });
 
+test('preserves recorded hold decisions in the history reached from RBA notifications', async () => {
+  mockState.core = { ...(mockState.core as object), rba_holds: ['2026-09-01'] };
+  await mount();
+  const history = tree!.root.findAllByType('RbaChart')[0];
+  expect(history.props.holds).toEqual(['2026-09-01']);
+  expect(history.props.data).toEqual([{ date: '2026-08-12', rate: 4.35 }]);
+});
+
 test('executes chart audit controls and preserves good graphs after a failed manual refresh', async () => {
   await mount();
   act(() => { mockSurface.actions!['rba.forecast.next'](); mockSurface.actions!['rba.bonds.next'](); });
@@ -107,6 +118,26 @@ test('executes chart audit controls and preserves good graphs after a failed man
   expect(mockLoad).toHaveBeenLastCalledWith(true);
   expect(tree!.root.findAllByType('RateOutlookChart')).toHaveLength(2);
   expect(text()).toContain('could not be refreshed');
+});
+
+test('explicit cache clearing removes page state and ignores a pending refresh response', async () => {
+  await mount();
+  act(() => { mockSurface.actions!['rba.forecast.next'](); });
+  mockLoad.mockRejectedValueOnce(new Error('offline'));
+  await press('Refresh outlook');
+  expect(text()).toContain('could not be refreshed');
+  let resolve!: (value: RbaMarketOutlook) => void;
+  mockLoad.mockReturnValueOnce(new Promise<RbaMarketOutlook>((accept) => { resolve = accept; }));
+  await press('Refresh outlook');
+  act(() => mockCacheReset());
+  await act(async () => { resolve(outlook); });
+  expect(tree!.root.findAllByType('RateOutlookChart')).toHaveLength(0);
+  expect(text()).not.toContain('could not be refreshed');
+  expect(text()).not.toContain('Refreshing outlook');
+  expect(mockSurface.actions!['rba.forecast.next']()).toEqual({ unavailableReason: expect.any(String) });
+  expect(jest.mocked(usePerformanceAuditProbe).mock.calls.at(-1)?.[1]).toMatchObject({
+    id: 'rba.chart', required: false, actualCount: 0, accessibleSummary: false,
+  });
 });
 
 test('uses explicit unavailable audit results when public data has never been cached', async () => {

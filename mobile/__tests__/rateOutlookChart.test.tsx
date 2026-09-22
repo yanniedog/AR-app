@@ -170,7 +170,9 @@ test('an out-of-range selection remains usable after the source shortens', () =>
     layout(tree, 320);
     expect(buttons(tree)[0].props.accessibilityState).toEqual({ selected: true });
     const circle = tree.root.findByType(Circle);
-    expect(Number.isFinite(circle.props.cx)).toBe(true);
+    expect(circle.props.cx).toBe(48 + (320 - 48 - 28) / 2);
+    layout(tree, 600);
+    expect(tree.root.findByType(Circle).props.cx).toBe(48 + (600 - 48 - 28) / 2);
     expect(Number.isFinite(circle.props.cy)).toBe(true);
     expect(tree.root.findAllByType(LedgerText).some((node) => content(node).includes('Dashed line'))).toBe(false);
   } finally {
