@@ -1,6 +1,7 @@
 export type TrustedExternalUrlPurpose =
   | 'app_release'
   | 'official_economic_source'
+  | 'official_market_source'
   | 'lender_source';
 
 export interface TrustedExternalUrlRequest {
@@ -81,6 +82,11 @@ function purposeAllowsUrl(parsed: URL, purpose: TrustedExternalUrlPurpose): bool
   }
   if (purpose === 'official_economic_source') {
     return isHostOrSubdomain(host, 'rba.gov.au') || isHostOrSubdomain(host, 'abs.gov.au');
+  }
+  if (purpose === 'official_market_source') {
+    return (host === 'www.asx.com.au' || host === 'asx.com.au')
+      && /^\/markets\/trade-our-derivatives-market\/futures-market\/rba-rate-tracker\/?$/.test(parsed.pathname)
+      && !parsed.search;
   }
   // Lender links come only from the CDR additionalInformation contract. Keep
   // that purpose separate and constrain it to Australian financial domains or

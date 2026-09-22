@@ -804,14 +804,16 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'moves.response-chart.provider.next', readiness: ['graphics'], stateImpact: 'local-only' },
   ]);
 
-  scenario(templates, 'redirect.rba', {
-    expectedPath: '/research',
-    expectedSurface: 'outlook.rba-response',
-    readiness: ['app', 'redirect', 'data', 'rba-calendar', 'graphics'],
+  scenario(templates, 'route.rba', {
+    expectedPath: '/rba',
+    expectedSurface: 'rba.dashboard',
+    readiness: ['app', 'data', 'rba-calendar'],
     optional: true,
     ...optionalFeatureSkip,
   }, [
-    { depth: 1, semanticActionId: 'redirect.rba.verify' },
+    { depth: 0, semanticActionId: 'rba.open' },
+    { depth: 1, semanticActionId: 'rba.forecast.next', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'rba.bonds.next', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'route.outlook', {

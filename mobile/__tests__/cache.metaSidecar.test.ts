@@ -5,6 +5,7 @@ import { verifiedDetailsSha } from '../src/data/detailsIdentity';
 import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
 import { revisionManifest } from '../testUtils/payloadRevision';
+import type { RbaMarketOutlook } from '../src/data/rbaMarketOutlookTypes';
 
 const files = new Map<string, string>();
 
@@ -40,6 +41,29 @@ describe('cache core-meta sidecar', () => {
     jest.clearAllMocks();
     resetFs();
   });
+
+  it('stores RBA market context separately and recovers a completed temporary write after an interrupted move', async () => {
+    const context: RbaMarketOutlook = {
+      schema_version: 1,
+      fetchedAt: '2026-09-22T00:00:00.000Z',
+      checkedAt: '2026-09-22T00:00:00.000Z',
+      refreshStatus: 'partial',
+      bondForwards: null,
+      economists: {
+        surveyDate: '2026-08-01', publicationDate: '2026-08-28',
+        points: [{ date: '2026-12-01', value: 4.35 }],
+      },
+    };
+    files.set(`${FileSystem.documentDirectory}payload/rba-economic-outlook.json`, '{"existing":"untouched"}');
+    (FileSystem.moveAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted move'));
+    await expect(cache.writeRbaMarketOutlook(context)).rejects.toThrow('interrupted move');
+    expect(await cache.readRbaMarketOutlook()).toEqual(context);
+    expect(files.get(`${FileSystem.documentDirectory}payload/rba-economic-outlook.json`)).toBe('{"existing":"untouched"}');
+    await cache.writeRbaMarketOutlook(context);
+    expect(files.has(`${FileSystem.documentDirectory}payload/rba-market-outlook.json.tmp`)).toBe(false);
+    expect(await cache.readRbaMarketOutlook()).toEqual(context);
+  });
+
   it('binds the exact stored details bytes and rejects valid-JSON replacement or missing identity', async () => {
     const digest = jest.spyOn(Crypto, 'digestStringAsync').mockImplementation(async (_algorithm, text) => jest.requireActual('crypto').createHash('sha256').update(text).digest('hex'));
     try {

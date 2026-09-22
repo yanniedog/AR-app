@@ -510,6 +510,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         params: section ? { section } : {},
       } as unknown as Href;
     case 'moves.open': return '/rba-response' as Href;
+    case 'rba.open': return '/rba' as Href;
     case 'outlook.open': return '/research' as Href;
     case 'saved.open': return '/watchlist' as Href;
     case 'profile.open': return '/profile' as Href;
@@ -518,7 +519,6 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'debug-log.open': return '/debug-log' as Href;
     case 'not-found.open': return '/__audit-not-found__' as Href;
     case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
-    case 'redirect.rba.verify': return '/rba' as Href;
     case 'redirect.root.verify': return '/' as Href;
     case 'redirect.node.verify': {
       const taxonomyPath = stringArrayParameter(step, 'taxonomyPath');
@@ -573,6 +573,7 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
     case 'today': return '/';
     case 'changes': return '/passthrough';
     case 'moves': return '/rba-response';
+    case 'rba': return '/rba';
     case 'outlook': return '/research';
     default: return null;
   }
@@ -2102,7 +2103,7 @@ function journeyDataRequirements(
   const needsRbaCalendar =
     source === 'remote' &&
     !!manifest?.files.rba_calendar &&
-    ['response', 'outlook', 'rba-redirect'].includes(journey.id);
+    ['response', 'outlook', 'rba'].includes(journey.id);
   if (needsRbaCalendar) {
     add(
       'RBA calendar',

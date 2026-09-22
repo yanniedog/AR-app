@@ -480,7 +480,7 @@ function RootNavigator() {
               />
               <Stack.Screen
                 name="rba"
-                options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
+                options={{ title: 'RBA rates', animation: 'none' }}
               />
               <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />

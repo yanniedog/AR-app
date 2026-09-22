@@ -52,7 +52,7 @@ export function NavigationMenuButton() {
       square
       onPress={menu.show}
       accessibilityRole="button"
-      accessibilityLabel="Open account and app menu"
+      accessibilityLabel="Open app menu"
       accessibilityState={{ expanded: menu.open }}
       style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
     >
@@ -105,7 +105,7 @@ export function AppNavigationMenu() {
           }}
         >
           <Row style={{ justifyContent: 'space-between', paddingHorizontal: 16 }}>
-            <AppText variant="h2">Account and app</AppText>
+            <AppText variant="h2">Menu</AppText>
             <TouchTarget
               square
               onPress={menu.hide}

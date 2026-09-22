@@ -6,22 +6,35 @@ import {
 } from '../src/lib/appDestinations';
 
 describe('app destination registry', () => {
-  it('keeps the utility menu to account and app destinations', () => {
+  it('includes RBA rates alongside account and app destinations', () => {
     const destinations = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations);
     expect(new Set(destinations.map((destination) => destination.id)).size).toBe(destinations.length);
     expect(destinations.map((destination) => destination.id)).toEqual([
+      'rba',
       'profile',
       'settings',
       'about',
     ]);
   });
 
-  it('builds stable utility destinations', () => {
+  it('builds stable menu destinations', () => {
     const destinations = APP_DESTINATION_GROUPS.flatMap((group) => group.destinations);
-    expect(destinationHref(destinations[0], 'Savings')).toBe('/profile');
-    expect(destinationHref(destinations[1], 'Savings')).toBe('/settings');
-    expect(destinationHref(destinations[2], 'Savings')).toBe('/about');
+    expect(destinationHref(destinations[0], 'Savings')).toBe('/rba');
+    expect(destinations[0]).toMatchObject({ label: 'RBA rates', icon: 'bank' });
+    expect(destinationHref(destinations[1], 'Savings')).toBe('/profile');
+    expect(destinationHref(destinations[2], 'Savings')).toBe('/settings');
+    expect(destinationHref(destinations[3], 'Savings')).toBe('/about');
   });
+
+  it.each(['/rba', '/rba/', '/rba?source=menu', '/rba#markets', '/(tabs)/rba'])(
+    'selects RBA rates for %s',
+    (pathname) => expect(destinationIsActive('rba', pathname)).toBe(true),
+  );
+
+  it.each(['/rba-response', '/research', '/about', '/browse', '/rba-other'])(
+    'does not select RBA rates for unrelated route %s',
+    (pathname) => expect(destinationIsActive('rba', pathname)).toBe(false),
+  );
 
   it('maps focused routes back to their menu destination', () => {
     expect(destinationIsActive('profile', '/profile')).toBe(true);

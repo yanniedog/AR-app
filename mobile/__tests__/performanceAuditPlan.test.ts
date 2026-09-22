@@ -173,7 +173,7 @@ describe('deep performance audit plan', () => {
       'route.calculator',
       'route.projections',
       'route.moves',
-      'redirect.rba',
+      'route.rba',
       'route.outlook',
       'route.saved',
       'route.profile',
@@ -207,6 +207,9 @@ describe('deep performance audit plan', () => {
       'moves.decision.previous',
       'moves.section.next',
       'moves.response-chart.provider.next',
+      'rba.open',
+      'rba.forecast.next',
+      'rba.bonds.next',
       'outlook.history.mode.spread',
       'outlook.history.mode.calendar',
       'outlook.history.mode.pulse',
@@ -250,6 +253,34 @@ describe('deep performance audit plan', () => {
     expected.add('redirect.node.verify');
     expect([...expected].filter((action) => !planned.has(action))).toEqual([]);
     expect([...planned].filter((action) => !expected.has(action))).toEqual([]);
+  });
+
+  test('opens the RBA page before exercising its optional market chart controls', () => {
+    const plan = buildDeepPerformanceAuditPlan(corePayload());
+    for (const pass of plan.passes) {
+      const steps = pass.steps.filter((step) => step.scenarioId === 'route.rba');
+      expect(steps.map((step) => step.semanticActionId)).toEqual([
+        'rba.open', 'rba.forecast.next', 'rba.bonds.next',
+      ]);
+      expect(steps.every((step) => step.expectedPath === '/rba' && step.expectedSurface === 'rba.dashboard')).toBe(true);
+      expect(steps[0]).toMatchObject({
+        depth: 0,
+        readiness: ['app', 'data', 'rba-calendar'],
+      });
+      for (const step of steps.slice(1)) {
+        expect(step).toMatchObject({
+          depth: 1,
+          optional: true,
+          skipReason: null,
+          skipSafety: { maySkip: true },
+          safety: { stateImpact: 'local-only' },
+        });
+        expect(step.readiness).toEqual(expect.arrayContaining(['economic-data', 'graphics']));
+        expect(step.readiness).not.toContain('redirect');
+        expect(step.readiness).not.toContain('bank-history');
+      }
+      expect(pass.steps.some((step) => step.semanticActionId === 'redirect.rba.verify')).toBe(false);
+    }
   });
 
   test('derives exact deterministic same-section comparison inputs and preserves rate_index', () => {
