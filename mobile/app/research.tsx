@@ -341,7 +341,6 @@ export default function Market() {
     id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
     renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
     actions: {
-      'redirect.rba.verify': () => undefined,
       'outlook.rba-response.decision.previous': previousRbaDate,
     },
   });

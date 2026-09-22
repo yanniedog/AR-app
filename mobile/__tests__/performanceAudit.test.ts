@@ -208,7 +208,7 @@ describe('performance audit journeys', () => {
         'browse-td',
         'response',
         'outlook',
-        'rba-redirect',
+        'rba',
         'watchlist',
         'settings',
         'search',
@@ -235,6 +235,13 @@ describe('performance audit journeys', () => {
     expect(journeys.find((journey) => journey.id === 'response')).toMatchObject({
       expectedPath: '/rba-response',
       expectedSurface: 'moves.response-chart',
+      navigationKind: 'stack',
+    });
+    expect(journeys.find((journey) => journey.id === 'rba')).toMatchObject({
+      label: 'RBA rates',
+      href: '/rba',
+      expectedPath: '/rba',
+      expectedSurface: 'rba.dashboard',
       navigationKind: 'stack',
     });
   });
@@ -327,6 +334,19 @@ describe('performance audit optional data', () => {
         true,
       ).bankHistory,
     ).toBe(true);
+  });
+
+  it('does not wait for bank-specific assets on the RBA market page', () => {
+    expect(resolveAuditJourneyOptionalData(
+      'rba',
+      { ...freeBetaPrefs, includeNonStandard: true },
+      true,
+    )).toEqual({
+      deepSearch: false,
+      bankInsights: false,
+      bankHistory: false,
+      productHistory: false,
+    });
   });
 });
 

@@ -1,6 +1,21 @@
 import { trustedExternalUrl } from '../src/lib/trustedExternalUrl';
 
 describe('trustedExternalUrl', () => {
+  it('allows only the ASX tracker page for the market-source purpose', () => {
+    const path = '/markets/trade-our-derivatives-market/futures-market/rba-rate-tracker';
+    for (const host of ['asx.com.au', 'www.asx.com.au']) {
+      expect(trustedExternalUrl({ url: `https://${host}${path}`, purpose: 'official_market_source', label: 'ASX tracker' }).ok).toBe(true);
+    }
+    for (const url of [
+      'https://www.asx.com.au/',
+      `https://other.asx.com.au${path}`,
+      `https://www.asx.com.au${path}?redirect=https://example.com`,
+      'https://www.asx.com.au/content/dam/asx/data/market_exp.csv',
+    ]) {
+      expect(trustedExternalUrl({ url, purpose: 'official_market_source', label: 'ASX tracker' }).ok).toBe(false);
+    }
+    expect(trustedExternalUrl({ url: `https://www.asx.com.au${path}`, purpose: 'official_economic_source', label: 'ASX tracker' }).ok).toBe(false);
+  });
   it('accepts only purpose-matched official destinations and strips fragments', () => {
     expect(trustedExternalUrl({
       url: 'https://www.rba.gov.au/statistics/tables/#cash-rate',

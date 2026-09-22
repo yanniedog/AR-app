@@ -1,0 +1,12 @@
+F17 ZERO-COUPON INTEREST RATES – ANALYTICAL SERIES,,,,,
+Title,Zero-coupon forward rate – 0 yrs,Zero-coupon forward rate – 0.25 yrs,Zero-coupon forward rate – 0.5 yrs,Zero-coupon forward rate – 0.75 yrs,Zero-coupon forward rate – 1 yr
+Description,"Zero-coupon forward rate – 0 yrs: daily, per cent per annum; See notes for more details","Zero-coupon forward rate – 0.25 yrs: daily, per cent per annum; See notes for more details","Zero-coupon forward rate – 0.5 yrs: daily, per cent per annum; See notes for more details","Zero-coupon forward rate – 0.75 yrs: daily, per cent per annum; See notes for more details","Zero-coupon forward rate – 1 yr: daily, per cent per annum; See notes for more details"
+Frequency,Daily,Daily,Daily,Daily,Daily
+Type,Original,Original,Original,Original,Original
+Units,Per cent per annum,Per cent per annum,Per cent per annum,Per cent per annum,Per cent per annum
+Source,RBA,RBA,RBA,RBA,RBA
+Publication date,04-Sep-2026,04-Sep-2026,04-Sep-2026,04-Sep-2026,04-Sep-2026
+Series ID,FZCF0D,FZCF25D,FZCF50D,FZCF75D,FZCF100D
+27-Aug-2026,4.35,4.57,4.68,4.69,4.65
+28-Aug-2026,4.35,4.56,4.68,4.69,4.65
+31-Aug-2026,4.35,4.57,4.67,4.68,4.65

@@ -59,7 +59,7 @@ const FIXED_CHECK_IDS = new Set([
   'audit-state-restoration',
 ]);
 const JOURNEY_IDS = [
-  'home', 'response', 'outlook', 'rba-redirect', 'watchlist', 'settings', 'search',
+  'home', 'response', 'outlook', 'rba', 'rba-redirect', 'watchlist', 'settings', 'search',
   'calculator', 'projections', 'lenders', 'profile', 'product', 'rate-receipt',
   'lender', 'compare', 'terms', 'debug-log',
 ].join('|');

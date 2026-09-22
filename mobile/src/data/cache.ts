@@ -11,6 +11,8 @@ import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
+import type { RbaMarketOutlook } from './rbaMarketOutlookTypes';
+import { normalizeRbaMarketOutlook } from './rbaMarketOutlookParse';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
 import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
@@ -29,6 +31,8 @@ const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
+const RBA_MARKET_OUTLOOK = `${DIR}rba-market-outlook.json`;
+const RBA_MARKET_OUTLOOK_TMP = `${RBA_MARKET_OUTLOOK}.tmp`;
 const SUITABILITY_INDEX = `${DIR}suitability-index.json`;
 const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
 // Tiny sidecars so metadata reads/writes never re-parse or re-stringify the
@@ -554,6 +558,46 @@ export const cache = {
   async writeEconomicOutlook(payload: EconomicOutlookPayload): Promise<void> {
     await ensureDir();
     await writeText(ECONOMIC_OUTLOOK, JSON.stringify(payload));
+  },
+
+  async readRbaMarketOutlook(): Promise<RbaMarketOutlook | null> {
+    const [primary, temporary] = (await Promise.all([
+      readJson<unknown>(RBA_MARKET_OUTLOOK),
+      readJson<unknown>(RBA_MARKET_OUTLOOK_TMP),
+    ])).map((value) => normalizeRbaMarketOutlook(value));
+    if (!primary) return temporary;
+    if (!temporary) return primary;
+    const preferred = temporary.checkedAt > primary.checkedAt ? temporary : primary;
+    const fallback = preferred === primary ? temporary : primary;
+    const newerSource = <T extends { publicationDate: string }>(
+      current: T | null, prior: T | null, observed: (source: T) => string,
+    ): T | null => {
+      if (!current) return prior;
+      if (!prior) return current;
+      const order = observed(prior).localeCompare(observed(current))
+        || prior.publicationDate.localeCompare(current.publicationDate);
+      return order > 0 ? prior : current;
+    };
+    const bondForwards = newerSource(preferred.bondForwards, fallback.bondForwards, (source) => source.observationDate);
+    const economists = newerSource(preferred.economists, fallback.economists, (source) => source.surveyDate);
+    return {
+      ...preferred,
+      fetchedAt: [primary.fetchedAt, temporary.fetchedAt].sort().at(-1)!,
+      refreshStatus: preferred.refreshStatus === 'offline' ? 'offline'
+        : bondForwards !== preferred.bondForwards || economists !== preferred.economists ? 'partial'
+          : preferred.refreshStatus,
+      bondForwards,
+      economists,
+    };
+  },
+
+  async writeRbaMarketOutlook(payload: RbaMarketOutlook): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      await writeText(RBA_MARKET_OUTLOOK_TMP, JSON.stringify(payload));
+      await deletePath(RBA_MARKET_OUTLOOK);
+      await movePath(RBA_MARKET_OUTLOOK_TMP, RBA_MARKET_OUTLOOK);
+    });
   },
 
   async readSuitabilityIndex(): Promise<PersistedSuitabilityIndex | null> {

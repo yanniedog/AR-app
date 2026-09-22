@@ -5,11 +5,12 @@ import type { SectionKey } from '../types';
 import type { LedgerIconName } from '../components/icons/LedgerIcon';
 
 export type AppDestinationId =
+  | 'rba'
   | 'profile'
   | 'settings'
   | 'about';
 
-export type AppDestinationIcon = Extract<LedgerIconName, 'profile' | 'settings' | 'about'>;
+export type AppDestinationIcon = Extract<LedgerIconName, 'bank' | 'profile' | 'settings' | 'about'>;
 
 export interface AppDestination {
   id: AppDestinationId;
@@ -27,8 +28,9 @@ export interface AppDestinationGroup {
 export const APP_DESTINATION_GROUPS: readonly AppDestinationGroup[] = [
   {
     id: 'more',
-    label: 'Account and app',
+    label: 'Menu',
     destinations: [
+      { id: 'rba', label: 'RBA rates', icon: 'bank', href: '/rba' },
       { id: 'profile', label: 'Your profile', icon: 'profile', href: '/profile' },
       { id: 'settings', label: 'Settings', icon: 'settings', href: '/settings' },
       { id: 'about', label: 'About', icon: 'about', href: '/about' },
@@ -51,6 +53,7 @@ export function destinationSectionFromParam(
 
 export function destinationIsActive(id: AppDestinationId, pathname: string): boolean {
   const path = pathname.split(/[?#]/, 1)[0]?.replace('/(tabs)', '') || '/';
+  if (id === 'rba') return path === '/rba' || path.startsWith('/rba/');
   if (id === 'profile') return path.startsWith('/profile');
   if (id === 'settings') return path.startsWith('/settings');
   return path.startsWith('/about')

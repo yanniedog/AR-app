@@ -234,14 +234,14 @@ export function resolveAuditJourneyOptionalData(
     deepSearch: journeyId === 'search' && hasSearchIndex && effectiveDeepSearch(prefs),
     bankInsights:
       effectiveBankInsights() &&
-      ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
+      ['response', 'outlook', 'product', 'lender'].includes(journeyId),
     // Product and lender screens intentionally suppress their deferred history
     // fan-out while an audit is active. Waiting for that suppressed work caused
     // deterministic 30-second false failures on a cold product-history cache.
     bankHistory:
       historyEnabled &&
       prefs.includeNonStandard &&
-      ['outlook', 'rba-redirect'].includes(journeyId),
+      journeyId === 'outlook',
     productHistory: false,
   };
 }
@@ -703,12 +703,12 @@ export function buildPerformanceAuditJourneys(
       navigationKind: 'tab',
     },
     {
-      id: 'rba-redirect',
-      label: 'Why rates move',
+      id: 'rba',
+      label: 'RBA rates',
       href: '/rba' as Href,
-      expectedPath: '/research',
-      expectedSurface: 'outlook.rba-response',
-      navigationKind: 'tab',
+      expectedPath: '/rba',
+      expectedSurface: 'rba.dashboard',
+      navigationKind: 'stack',
     },
     {
       id: 'watchlist',
