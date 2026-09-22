@@ -1,4 +1,5 @@
-import { canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
@@ -1342,7 +1343,7 @@ async function runMaximumCoverageProfileCheck(
   // Only prepare the pinned edition after its descriptor was authenticated in
   // this live session. Local runs remain cache-only; newer publications cannot
   // silently change the rates being exercised by the route checks.
-  if (canPrepareAuditSearchIndex(auditMode, original.manifest, liveSnapshot?.manifest)) {
+  if (auditMode === 'local' || canPrepareAuditSearchIndex(auditMode, original.manifest, liveSnapshot?.manifest)) {
     await awaitAuditWork(useStore.getState().ensureSearchIndex(), watchdog, 'Preparing authenticated search index');
     const prepared = useStore.getState();
     if (liveSnapshot) {
@@ -2081,8 +2082,9 @@ function journeyDataRequirements(
     );
     if (optionalData.deepSearch) {
       add(
-        'Deep-search index',
-        (state) => !!state.searchIndex,
+        'Search index availability',
+        (state) => (state.searchIndexStatus === 'ready' && !!state.searchIndex) ||
+          auditSearchUsesBasicFallback(isLocalAppHealthAudit(), state.searchIndexStatus, !!state.searchIndex),
         () => {
           const failure = [...debugLog.getEntriesAfter(logCursor)]
             .reverse()
@@ -2412,6 +2414,10 @@ export async function runJourney(
       executionAttempted: true,
       actionInvoked: true,
       actionCompleted: routeError == null,
+      ...(journey.id === 'search' ? {
+        searchMode: useStore.getState().searchIndexStatus === 'ready' && useStore.getState().searchIndex ? 'deep' : 'basic',
+        deepSearchAvailable: useStore.getState().searchIndexStatus === 'ready' && !!useStore.getState().searchIndex,
+      } : {}),
       journeyId: journey.id,
       journeyLabel: journey.label,
       iteration,

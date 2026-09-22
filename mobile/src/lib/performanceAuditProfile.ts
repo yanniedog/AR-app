@@ -1,7 +1,16 @@
 import type { Manifest } from '../types';
 import type { AppHealthAuditMode } from './appHealth';
 import { SECTION_ORDER } from '../constants';
-import type { Prefs } from '../data/storeTypes';
+import type { AppState, Prefs } from '../data/storeTypes';
+
+/** Basic search is a real route; an absent offline deep index is separate coverage. */
+export function auditSearchUsesBasicFallback(
+  localMode: boolean,
+  status: AppState['searchIndexStatus'],
+  hasIndex: boolean,
+): boolean {
+  return localMode && status === 'unavailable' && !hasIndex;
+}
 
 export const MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID = 'maximum-safe-coverage-v1' as const;
 

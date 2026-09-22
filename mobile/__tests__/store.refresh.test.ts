@@ -73,6 +73,7 @@ const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
 const originalEnsureBankSpreadHistory = useStore.getState().ensureBankSpreadHistory;
 const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
 const originalEnsureDetails = useStore.getState().ensureDetails;
+const originalEnsureSearchIndex = useStore.getState().ensureSearchIndex;
 const originalPrefs = useStore.getState().prefs;
 
 const remoteManifest: Manifest = sampleManifest;
@@ -105,6 +106,7 @@ function resetStore() {
     ensureBankInsights: originalEnsureBankInsights,
     ensureBankSpreadHistory: originalEnsureBankSpreadHistory,
     ensureRbaCalendar: originalEnsureRbaCalendar,
+    ensureSearchIndex: originalEnsureSearchIndex,
     ensureDetails: originalEnsureDetails,
     bankSpreadHistory: null,
     bankSpreadHistoryError: null,
@@ -267,6 +269,11 @@ describe('store refresh lifecycle', () => {
   });
 
   it('invalidates a loaded deep-search index when a same-core manifest revises its hash', async () => {
+    const prepareSearch = jest.fn(async () => {
+      expect(useStore.getState().searchIndex).toBeNull();
+      expect(useStore.getState().manifest?.files.search_index?.sha256).toBe('search-new');
+    });
+    useStore.setState({ ensureSearchIndex: prepareSearch });
     const searchAsset = (sha256: string) => ({
       name: 'search-index.json.gz',
       bytes: 100,
@@ -313,6 +320,7 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().searchIndex).toBeNull();
     expect(useStore.getState().searchIndexStatus).toBe('idle');
     expect(useStore.getState().searchIndexError).toBeNull();
+    expect(prepareSearch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps OS-scheduled refresh bounded when optional asset hashes change', async () => {

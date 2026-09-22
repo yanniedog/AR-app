@@ -6,6 +6,8 @@ import {
   normalizeCoreSectionIntegrity,
   normalizeCoreWithIntegrity,
   quarantinedBankHistoryPairs,
+  rebindCoreIntegrity,
+  verifiedCoreContents,
 } from '../src/data/sectionIntegrity';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
 
@@ -53,6 +55,22 @@ function coreWithSavings(savingsRates: RateRow[], tdRates: RateRow[] = []): Core
 }
 
 describe('core section integrity', () => {
+  it('reuses an unchanged core without hashing it again and retains tamper detection', () => {
+    const { core, integrity } = normalizeCoreWithIntegrity(coreWithSavings([row({})]));
+    const stringify = jest.spyOn(JSON, 'stringify');
+    try {
+      for (let index = 0; index < 20; index += 1) {
+        expect(rebindCoreIntegrity(integrity, core)).toBe(integrity);
+      }
+      expect(stringify).not.toHaveBeenCalled();
+    } finally {
+      stringify.mockRestore();
+    }
+    expect(verifiedCoreContents(integrity)).toBe(true);
+    core.sections.Savings.rates[0].rate = '0.99';
+    expect(verifiedCoreContents(rebindCoreIntegrity(integrity, core))).toBe(false);
+  });
+
   it('recognizes only an explicit leading term-deposit product identity', () => {
     expect(isExplicitTermDepositProduct(row({ product_name: 'Term Deposit' }))).toBe(true);
     expect(isExplicitTermDepositProduct(row({ product_name: ' Term   Deposit 1 year ' }))).toBe(true);

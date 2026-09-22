@@ -63,14 +63,22 @@ const LOG_LINE_RE = /^(\S+)\s+\[(\w+)\s*\]\s+([^:]+):\s(.*)$/;
 
 /** Strip likely secrets before lines are stored or uploaded. */
 export function redactSecrets(text: string): string {
-  return text
-    .replace(SECRET_PATTERN, (match) => {
+  // Most audit records contain none of these fields. Avoid expensive value
+  // matching (especially the email pattern) across megabytes of ordinary JSON.
+  let result = text;
+  if (/EXPO_TOKEN|Bearer|Authorization|api[_-]?key|secret|password|token/i.test(result)) {
+    result = result.replace(SECRET_PATTERN, (match) => {
       const key = match.split(/[=:\s]/)[0] ?? 'secret';
       return `${key}=[REDACTED]`;
-    })
-    .replace(PRIVATE_IDENTIFIER_PATTERN, (_match, key: string) => `${key}=[REDACTED]`)
-    .replace(EMAIL_PATTERN, '[REDACTED_EMAIL]');
+    });
+  }
+  if (/uid|user[_-]?id|subscription[_-]?id|subscriptionId/i.test(result)) {
+    result = result.replace(PRIVATE_IDENTIFIER_PATTERN, (_match, key: string) => `${key}=[REDACTED]`);
+  }
+  return result.includes('@') ? result.replace(EMAIL_PATTERN, '[REDACTED_EMAIL]') : result;
 }
+
+const yieldLogExport = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export function formatEntry(entry: LogEntry): string {
   const level = entry.level.toUpperCase().padEnd(5);
@@ -616,7 +624,9 @@ function parseStoredPerformanceAudit(
     return {
       schemaVersion: expectedSchema,
       summaryMarker: redactSecrets(value.summaryMarker),
-      reportJson: redactSecrets(value.reportJson),
+      // Private intermediate only. The export redacts the compacted body once,
+      // including decoded JSON escapes, immediately before returning it.
+      reportJson: value.reportJson,
     };
   } catch {
     return null;
@@ -880,6 +890,7 @@ export const debugLog = {
       : await FileSystem.readAsStringAsync(LOG_FILE).catch(() => buffer.getText());
     assertExportCurrent();
     const clean = redactSecrets(text);
+    await yieldLogExport();
     await removeLegacyPerformanceAuditSnapshots();
     assertExportCurrent();
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
@@ -902,12 +913,19 @@ export const debugLog = {
     // report is already durable and the audit screen already has its results.
     let compactJson: string;
     try {
-      compactJson = redactSecrets(
-        JSON.stringify(compactPerformanceAuditReportForLog(JSON.parse(latest.reportJson))),
-      );
+      const parsed: unknown = JSON.parse(latest.reportJson);
+      await yieldLogExport();
+      assertExportCurrent();
+      const compact = compactPerformanceAuditReportForLog(parsed);
+      await yieldLogExport();
+      assertExportCurrent();
+      compactJson = JSON.stringify(compact);
     } catch {
       compactJson = latest.reportJson;
     }
+    await yieldLogExport();
+    assertExportCurrent();
+    compactJson = redactSecrets(compactJson);
     const complete = [
       clean,
       '',

@@ -1,4 +1,4 @@
-import { installAppHealthTransportGuard } from '../src/lib/appHealthTransportGuard';
+import { installAppHealthTransportGuard, isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth/sourceContract';
 
 function targetWithSpies() {
@@ -20,6 +20,14 @@ function targetWithSpies() {
     FakeXhr,
   };
 }
+
+it('reports local mode only while the global fetch guard is installed', () => {
+  const contract = createV1AppHealthSourceContract();
+  expect(isLocalAppHealthAudit()).toBe(false);
+  const guard = installAppHealthTransportGuard({ target: globalThis, mode: 'local', contract });
+  try { expect(isLocalAppHealthAudit()).toBe(true); } finally { guard.restore(); }
+  expect(isLocalAppHealthAudit()).toBe(false);
+});
 
 describe('installAppHealthTransportGuard', () => {
   const contract = createV1AppHealthSourceContract({
