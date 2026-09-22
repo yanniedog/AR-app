@@ -18,11 +18,16 @@ interface XhrPrototype {
   send: (body?: unknown) => void;
 }
 
-const guardedFetches = new WeakSet<typeof fetch>();
+const guardedFetches = new WeakMap<typeof fetch, AppHealthAuditMode>();
 
 /** The payload transport must use guarded fetch so final redirects are checked. */
 export function hasAppHealthFetchGuard(): boolean {
   return guardedFetches.has(globalThis.fetch);
+}
+
+/** Optional cache misses must not initiate downloads during an offline audit. */
+export function isLocalAppHealthAudit(): boolean {
+  return guardedFetches.get(globalThis.fetch) === 'local';
 }
 
 export interface AuditTransportTarget {
@@ -146,7 +151,7 @@ export function installAppHealthTransportGuard(options: {
     }
     return response;
   };
-  guardedFetches.add(guardedFetch);
+  guardedFetches.set(guardedFetch, options.mode);
   target.fetch = guardedFetch;
 
   const xhrPrototype = target.XMLHttpRequest?.prototype;

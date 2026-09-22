@@ -122,6 +122,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             while (get().detailsLoading) await yieldToUi();
           }
           await warmDetails();
+          if (!background && get().prefs.enableDeepSearch && get().manifest?.files.search_index) {
+            await get().ensureSearchIndex();
+          }
           const afterWarm = get();
           const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
           const afterDetailsSha = afterWarm.manifest?.files.details.sha256 ?? '';

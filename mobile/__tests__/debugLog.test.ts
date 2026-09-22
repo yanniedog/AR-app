@@ -56,6 +56,16 @@ const crashlyticsApi: CrashlyticsLike = {
 };
 
 describe('redactSecrets', () => {
+  it('keeps every redaction family protected behind the fast prefilters', () => {
+    const inputs = [
+      'ExPo_ToKeN=confidential', 'Bearer confidential', 'Authorization: confidential',
+      'API-KEY=confidential', 'secret:confidential', 'Password confidential', 'token=confidential',
+      '"api_key":"confidential"', "'password':'confidential'",
+      'uid=confidential', 'user-id=confidential', 'subscription_id=confidential', 'subscriptionId=confidential',
+      'confidential@example.com',
+    ];
+    for (const input of inputs) expect(redactSecrets(input)).not.toContain('confidential');
+  });
   it('redacts EXPO_TOKEN and bearer tokens', () => {
     const input = 'auth EXPO_TOKEN=abc123 Bearer sk-live-xyz token=secretval';
     const out = redactSecrets(input);
@@ -795,6 +805,20 @@ describe('persistent log file', () => {
     const complete = await debugLog.readCompleteText();
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
+  });
+
+  it('redacts decoded JSON escapes in an older sidecar before export', async () => {
+    const files = installPathAwareFiles();
+    files[AUDIT_SIDECAR_PATH] = JSON.stringify({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY token=marker-private',
+      reportJson: String.raw`{"schemaVersion":7,"sentinel":"\u0074oken=body-private contact=person@example.com"}`,
+    });
+    const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('[REDACTED]');
+    expect(complete).not.toContain('body-private');
+    expect(complete).not.toContain('marker-private');
+    expect(complete).not.toContain('person@example.com');
   });
 
   it('keeps the audit block when the physical log is already near capacity', async () => {

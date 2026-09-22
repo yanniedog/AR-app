@@ -203,6 +203,10 @@ export function rebindCoreIntegrity(
   integrity: CoreIntegrityContext,
   core: CorePayload,
 ): CoreIntegrityContext {
+  // Calendar checks usually return the same core. Keep its original digest and
+  // context instead of serializing and hashing the entire catalogue twice.
+  // verifiedCoreContents still detects any in-place mutation at calculation time.
+  if (integrity.core === core) return integrity;
   const rebound: CoreIntegrityContext = {
     ...integrity,
     core,

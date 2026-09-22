@@ -228,3 +228,9 @@ it('keeps raw and quiet-window-adjusted navigation timings in passing exports', 
     durationMs: 1500, metrics: { forwardMs: 1000, forwardWorkMs: 350, readinessQuietWindowMs: 650 } });
   expect(check.metrics).toMatchObject({ forwardMs: 1000, forwardWorkMs: 350, readinessQuietWindowMs: 650 });
 });
+
+it('preserves the distinction between basic and deep search in a passing export', () => {
+  const check = compactAuditCheckForLog({ id: 'search', label: 'Search', kind: 'journey', status: 'pass',
+    durationMs: 10, metrics: { searchMode: 'basic', deepSearchAvailable: false } });
+  expect(check.metrics).toMatchObject({ searchMode: 'basic', deepSearchAvailable: false });
+});

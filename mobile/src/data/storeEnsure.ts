@@ -23,6 +23,7 @@ import {
 } from './productHistory';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
 import { debugLog } from '../lib/debugLog';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { logDegradation, logEnsureSkipped } from '../lib/degradationLog';
 import type { AppState, StoreGet, StoreSet } from './storeTypes';
 import { yieldToUi } from '../lib/yieldToUi';
@@ -58,6 +59,30 @@ let historyBanksRequest = 0;
 let historyBanksInFlightManifest: AppState['manifest'] = null;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
+  // Only values verified by this action may bypass the disk cache. A bare
+  // bankSpreadHistory value in the store is not evidence of its generation.
+  let verifiedSpread: {
+    coreSha: string;
+    spreadSha: string;
+    runDate: string;
+    payload: AppState['bankSpreadHistory'];
+  } | null = null;
+  const retainVerifiedSpread = (
+    identity: { coreSha: string; spreadSha: string; runDate: string },
+    payload: NonNullable<AppState['bankSpreadHistory']>,
+  ) => {
+    // A reused verification must not allow later in-place edits to bypass the
+    // disk validator. These normalized records contain only objects/arrays.
+    for (const series of Object.values(payload.banks)) {
+      for (const values of Object.values(series)) Object.freeze(values);
+      Object.freeze(series);
+    }
+    Object.freeze(payload.banks);
+    Object.freeze(payload.cohorts);
+    Object.freeze(payload.run_dates);
+    Object.freeze(payload);
+    verifiedSpread = { ...identity, payload };
+  };
   const revisionBoundSet = (): StoreSet => {
     const captured = get().manifest;
     return (patch) => {
@@ -320,6 +345,14 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           if (!editionStillCurrent()) return;
           if (cached && cached.run_date === core.run_date && shaFresh) {
             set({ searchIndex: cached, searchIndexStatus: 'ready', searchIndexError: null });
+            return;
+          }
+          if (isLocalAppHealthAudit()) {
+            set({
+              searchIndex: null,
+              searchIndexStatus: 'unavailable',
+              searchIndexError: 'Deep search is not cached for this data edition. Basic name search still works.',
+            });
             return;
           }
           if (source !== 'remote') {
@@ -616,6 +649,14 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         };
       };
       if (!force) {
+        if (verifiedSpread &&
+            verifiedSpread.coreSha === snapshot.coreSha &&
+            verifiedSpread.spreadSha === snapshot.spreadSha &&
+            verifiedSpread.runDate === snapshot.runDate &&
+            verifiedSpread.payload === get().bankSpreadHistory) {
+          set({ bankSpreadHistoryError: null });
+          return;
+        }
         const cached = await cache.readBankSpreadHistoryFor(
           snapshot.coreSha,
           snapshot.spreadSha,
@@ -625,6 +666,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           .catch(() => null);
         if (!currentMatches()) return;
         if (cached?.run_date === snapshot.runDate) {
+          retainVerifiedSpread(snapshot, cached);
           set({ bankSpreadHistory: cached, bankSpreadHistoryError: null });
           return;
         }
@@ -651,6 +693,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           () => currentMatches(snapshot),
         );
         if (!currentMatches()) return;
+        retainVerifiedSpread(snapshot, downloaded);
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
         const message = String((error as Error)?.message ?? error);
@@ -666,6 +709,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           .catch(() => null);
         if (!currentMatches(live)) return;
         if (fallback?.run_date === live.runDate) {
+          retainVerifiedSpread(live, fallback);
           set({
             bankSpreadHistory: fallback,
             bankSpreadHistoryError: failedGenerationStillCurrent ? message : null,
@@ -706,6 +750,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         const nextIntegrity = nextCore && live.coreIntegrity
           ? rebindCoreIntegrity(live.coreIntegrity, nextCore)
           : live.coreIntegrity;
+        if (nextCore === live.core && nextIntegrity === live.coreIntegrity &&
+            reconciled === live.rbaCalendar && live.rbaCalendarSha === asset.sha256 &&
+            live.rbaCalendarError === null) return;
         set({
           core: nextCore,
           coreIntegrity: nextIntegrity,
