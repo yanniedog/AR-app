@@ -9,6 +9,20 @@ import type { RbaMarketOutlook } from '../src/data/rbaMarketOutlookTypes';
 
 const files = new Map<string, string>();
 
+function marketContext(checkedAt = '2026-09-22T00:00:00.000Z'): RbaMarketOutlook {
+  return {
+    schema_version: 1,
+    fetchedAt: checkedAt,
+    checkedAt,
+    refreshStatus: 'partial',
+    bondForwards: null,
+    economists: {
+      surveyDate: '2026-08-01', publicationDate: '2026-08-28',
+      points: [{ date: '2026-12-01', value: 4.35 }],
+    },
+  };
+}
+
 function resetFs() {
   files.clear();
   (FileSystem.getInfoAsync as jest.Mock).mockImplementation(async (path: string) => ({
@@ -43,17 +57,7 @@ describe('cache core-meta sidecar', () => {
   });
 
   it('stores RBA market context separately and recovers a completed temporary write after an interrupted move', async () => {
-    const context: RbaMarketOutlook = {
-      schema_version: 1,
-      fetchedAt: '2026-09-22T00:00:00.000Z',
-      checkedAt: '2026-09-22T00:00:00.000Z',
-      refreshStatus: 'partial',
-      bondForwards: null,
-      economists: {
-        surveyDate: '2026-08-01', publicationDate: '2026-08-28',
-        points: [{ date: '2026-12-01', value: 4.35 }],
-      },
-    };
+    const context = marketContext();
     files.set(`${FileSystem.documentDirectory}payload/rba-economic-outlook.json`, '{"existing":"untouched"}');
     (FileSystem.moveAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted move'));
     await expect(cache.writeRbaMarketOutlook(context)).rejects.toThrow('interrupted move');
@@ -62,6 +66,45 @@ describe('cache core-meta sidecar', () => {
     await cache.writeRbaMarketOutlook(context);
     expect(files.has(`${FileSystem.documentDirectory}payload/rba-market-outlook.json.tmp`)).toBe(false);
     expect(await cache.readRbaMarketOutlook()).toEqual(context);
+  });
+
+  it.each(['{broken', '{"schema_version":99}'])(
+    'recovers a valid temporary RBA cache when the primary is malformed: %s',
+    async (broken) => {
+      const path = `${FileSystem.documentDirectory}payload/rba-market-outlook.json`;
+      const temporary = marketContext();
+      files.set(path, broken);
+      files.set(`${path}.tmp`, JSON.stringify(temporary));
+      expect(await cache.readRbaMarketOutlook()).toEqual(temporary);
+    },
+  );
+
+  it('recovers the latest completed RBA write without letting an older temporary file replace it', async () => {
+    const path = `${FileSystem.documentDirectory}payload/rba-market-outlook.json`;
+    const old = marketContext('2026-09-21T00:00:00.000Z');
+    const recent = marketContext();
+    recent.economists!.points[0].value = 4.5;
+    files.set(path, JSON.stringify(old));
+    files.set(`${path}.tmp`, JSON.stringify(recent));
+    expect(await cache.readRbaMarketOutlook()).toEqual(recent);
+    files.set(path, JSON.stringify(recent));
+    files.set(`${path}.tmp`, JSON.stringify(old));
+    expect(await cache.readRbaMarketOutlook()).toEqual(recent);
+  });
+
+  it('keeps a newer source vintage even when the temporary cache was checked more recently', async () => {
+    const path = `${FileSystem.documentDirectory}payload/rba-market-outlook.json`;
+    const primary = marketContext('2026-09-21T00:00:00.000Z');
+    primary.economists!.surveyDate = '2026-09-01';
+    primary.economists!.publicationDate = '2026-09-04';
+    const temporary = marketContext();
+    files.set(path, JSON.stringify(primary));
+    files.set(`${path}.tmp`, JSON.stringify(temporary));
+    expect(await cache.readRbaMarketOutlook()).toMatchObject({
+      checkedAt: temporary.checkedAt,
+      economists: primary.economists,
+      refreshStatus: 'partial',
+    });
   });
 
   it('binds the exact stored details bytes and rejects valid-JSON replacement or missing identity', async () => {

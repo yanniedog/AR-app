@@ -166,6 +166,26 @@ test('coalesces simultaneous requests and respects cached recheck interval', asy
   expect(fetch).toHaveBeenCalledTimes(4);
 });
 
+test.each(['partial', 'offline'] as const)(
+  'retries a recent %s refresh on the next normal visit when sources recover',
+  async (status) => {
+    jest.mocked(cache.readRbaMarketOutlook).mockResolvedValue(payload());
+    globalThis.fetch = jest.fn(async (url) => {
+      if (status === 'offline' || String(url) === RBA_F17_FORWARD_URL) throw new Error('offline');
+      return response(economistsCsv);
+    });
+    const failed = await loadRbaMarketOutlook();
+    expect(failed.refreshStatus).toBe(status);
+    expect(failed.checkedAt).toBe(new Date(NOW).toISOString());
+    globalThis.fetch = fetchOfficial();
+    const recovered = await loadRbaMarketOutlook();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(recovered.refreshStatus).toBe('current');
+    expect(recovered.bondForwards).toEqual(failed.bondForwards);
+    expect(recovered.economists).toEqual(failed.economists);
+  },
+);
+
 test('keeps cached bonds when only the economist source refreshes', async () => {
   const cached = payload();
   jest.mocked(cache.readRbaMarketOutlook).mockResolvedValue(cached);

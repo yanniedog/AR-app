@@ -147,7 +147,7 @@ export async function loadRbaMarketOutlook(force = false): Promise<RbaMarketOutl
     const cached = await readCached();
     if (isLocalAppHealthAudit()) return offline(cached);
     const age = cached ? Date.now() - Date.parse(cached.checkedAt) : Infinity;
-    if (!force && cached && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
+    if (!force && cached?.refreshStatus === 'current' && age >= 0 && age < ECONOMIC_RECHECK_MS) return freezePayload(cached);
     const checkedAt = new Date().toISOString();
     const [bonds, economists] = await Promise.allSettled([
       fetchCsv(RBA_F17_FORWARD_URL).then((text) => parseRbaBondForwardsCsv(text)),

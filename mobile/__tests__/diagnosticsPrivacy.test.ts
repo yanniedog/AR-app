@@ -60,6 +60,25 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it.each(['rba', 'rba-redirect'])(
+    'retains fixed %s journey IDs and the slowest check while rejecting private suffixes',
+    (journey) => {
+      const checks: AuditCheck[] = [
+        { id: `journey-${journey}-cold`, label: 'Private label', kind: 'journey', status: 'pass', durationMs: 20, metrics: { forwardMs: 20 } },
+        { id: `journey-${journey}-warm`, label: 'Private label', kind: 'journey', status: 'warn', durationMs: 40, metrics: { forwardMs: 40 } },
+        { id: `journey-${journey}-private-account-cold`, label: 'Private label', kind: 'journey', status: 'pass', durationMs: 10, metrics: { forwardMs: 10 } },
+      ];
+      const prepared = createDeidentifiedDiagnosticsShare(reportFixture(checks));
+      const parsed = JSON.parse(prepared.body);
+      expect(parsed.checks.map((check: { id: string | null }) => check.id)).toEqual([
+        `journey-${journey}-cold`, `journey-${journey}-warm`, null,
+      ]);
+      expect(parsed.summary.slowestCheckId).toBe(`journey-${journey}-warm`);
+      expect(prepared.body).not.toContain('private-account');
+      expect(prepared.body).not.toContain('Private label');
+    },
+  );
+
   it('shares only fixed identities, allowlisted metrics and proven zero measurements', () => {
     const report = reportFixture([
       {

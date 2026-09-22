@@ -33,10 +33,13 @@ production values. Reduced official source extracts are retained only as tests.
 
 ## Reliability and accessibility
 
-The two sources refresh independently with an eight-second request timeout and
-a fifteen-minute recheck interval. A failed or older response cannot erase newer
-cached data. Offline and partial refreshes retain each source's original dates.
-Only normalized public observations are cached; no user financial inputs are sent.
+The two sources refresh independently with an eight-second request timeout.
+Successful refreshes use a fifteen-minute recheck interval; partial and offline
+results retry on the next visit or resume. A failed or older response cannot erase
+newer cached data. Cache recovery validates both primary and temporary files and
+preserves the newest source vintages after interrupted writes. Offline and partial
+refreshes retain each source's original dates. Only normalized public observations
+are cached; no user financial inputs are sent.
 
 Graphs have labelled percentage axes, a dashed cash-rate reference, written
 percentage-point differences, spoken summaries and date buttons at least 48dp
@@ -50,11 +53,13 @@ chart layout.
 
 ## Verification
 
-- Canonical `cd mobile && npm run ci`: Expo Doctor, TypeScript, ESLint, script
-  tests, Jest, Android/iOS/web exports and artifact-size guards.
+- Canonical `cd mobile && npm run ci`: 18 Expo Doctor checks, TypeScript, ESLint
+  (12 existing warnings), 129 script tests, 227 Jest suites / 2,252 tests,
+  Android/iOS/web exports and artifact-size guards.
 - Focused regressions cover real-source parsing, source dates, refresh races,
-  offline/partial caches, selection, layout readiness, menu navigation, external
-  destination restrictions and delayed catalogue hydration.
+  offline/partial cache retries and interrupted writes, selection, layout readiness,
+  menu navigation, diagnostics export identities, external destination restrictions
+  and delayed catalogue hydration.
 - External Chrome: normal onboarding, hamburger navigation, empty source state,
   dated graphs, selection changes, explanations, source confirmation and history.
   Desktop and narrow phone layouts checked. The isolated browser test cache was

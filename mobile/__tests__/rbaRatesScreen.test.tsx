@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatRunDate } from '../src/data/format';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import RbaRates from '../app/rba';
@@ -77,7 +78,7 @@ test('shows dated distinct sources, upcoming survey quarters and explicitly open
   expect(text()).toContain('29 Sep');
   expect(text()).toContain('Bond forwards include risk premiums');
   expect(text()).toContain('separate from market pricing');
-  expect(text()).toContain('4 Sep');
+  expect(text()).toContain(formatRunDate(outlook.bondForwards!.publicationDate));
   await press('View ASX market expectations');
   expect(mockExternal).toHaveBeenCalledWith(expect.objectContaining({ purpose: 'official_market_source', url: expect.stringContaining('/rba-rate-tracker') }));
 });
