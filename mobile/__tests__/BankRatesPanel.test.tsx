@@ -14,7 +14,7 @@ const core = { run_date: '2026-09-22', sections: {
   Savings: { rates: [{ provider: 'Alpha', product_key: 's', product_name: 'Savings', rate: '0.04' }] },
   TD: { rates: [{ provider: 'Term Bank', product_key: 't', product_name: 'Term Deposit', rate: '0.05' }] },
 } } as unknown as CorePayload;
-core.bank_rate_history = { schema_version: 1, run_dates: ['2026-08-01', '2026-09-22'], sections: { Mortgage: [[[0, 2, [6]]], [[0, 2, [9]]]], Savings: [[[0, 2, [4]]]], TD: [[[0, 2, [5]]]] } };
+core.bank_rate_history = { schema_version: 1, row_tiers: { Mortgage: [0, 1], Savings: [0], TD: [0] }, run_dates: ['2026-08-01', '2026-09-22'], sections: { Mortgage: [[[0, 2, [6]]], [[0, 2, [9]]]], Savings: [[[0, 2, [4]]]], TD: [[[0, 2, [5]]]] } };
 for (const section of ['Mortgage', 'Savings', 'TD'] as const) core.sections[section].rates.forEach((row, i) => { row.bank_rate_tier = i; });
 const mockState = { core, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
   ensureDetails: jest.fn(), ensureRbaCalendar: jest.fn(), details: null };

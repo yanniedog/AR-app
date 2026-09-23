@@ -7,6 +7,7 @@ function fixture(): CorePayload {
     Mortgage: { rates: [row(0), row(0, '0.07'), row(1, '0.09', { rate_type: 'FIXED' })] },
     Savings: { rates: [row(0, '0.02')] }, TD: { rates: [] },
   }, bank_rate_history: { schema_version: 1, run_dates: ['2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22'],
+    row_tiers: { Mortgage: [0, 0, 1], Savings: [0], TD: [] },
     sections: { Mortgage: [[[0, 2, [0, 2]], [3, 1, [6, 7]]], [[0, 4, [9]]]], Savings: [[[0, 4, [2]]]], TD: [] } },
   } as unknown as CorePayload;
 }

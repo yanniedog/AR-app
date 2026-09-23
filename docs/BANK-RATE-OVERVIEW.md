@@ -14,7 +14,7 @@ produce no matching rows. A gap requires both selected product lines and
 matching rates on both sides for the bank and date.
 
 The complete history is embedded in the normal verified core catalogue as
-`bank_rate_history`. Current rows reference section-local `bank_rate_tier` IDs.
+`bank_rate_history`. A separate row map becomes internal `bank_rate_tier` IDs before row quarantine; original catalogue rows remain unchanged on the wire.
 Each tier stores run-length encoded `[start, length, ratesPercent]` observations
 against a shared date axis. Missing observations remain blank, duplicate rate
 tiers retain their statistical weight, and each admitted tier group is counted

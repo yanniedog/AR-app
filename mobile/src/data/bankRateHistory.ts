@@ -1,14 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type SectionKey, type RateRow } from '../types';
+import type { PackedBankRateHistory } from './bankRateHistoryWire';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { RATE_OBSERVATION_FIELDS, snapshotBankRates, summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
-
-/** [first date index, number of observed dates, matching advertised rates (%)]. */
-export type BankRateSpan = [number, number, number[]];
-export interface PackedBankRateHistory {
-  schema_version: 1;
-  run_dates: string[];
-  sections: Record<SectionKey, BankRateSpan[][]>;
-}
 
 const verified = new WeakMap<CorePayload, PackedBankRateHistory | null>();
 const calculated = new WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>();

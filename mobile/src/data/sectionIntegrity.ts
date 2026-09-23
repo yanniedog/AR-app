@@ -1,4 +1,5 @@
 import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, SectionKey } from '../types';
+import { attachBankRateHistoryTiers } from './bankRateHistoryWire';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
@@ -134,6 +135,7 @@ export function normalizeCoreWithIntegrity(
   core: CorePayload,
   provenance: CoreIntegrityProvenance = {},
 ): { core: CorePayload; integrity: CoreIntegrityContext } {
+  core = attachBankRateHistoryTiers(core);
   const savings = core?.sections?.Savings;
   const contaminated = savings && Array.isArray(savings.rates)
     ? savings.rates.filter(isExplicitTermDepositProduct)
