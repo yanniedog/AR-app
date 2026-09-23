@@ -2,7 +2,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
 import { gunzipSync, strFromU8 } from 'fflate';
 import { withBundledBankRateHistory } from '../src/data/bundledBankRateHistory';
-import bundled from '../src/data/bundledBankRateHistory.snapshot.json';
+import * as bundled from '../src/data/bundledBankRateHistory.snapshot.json';
 import type { CorePayload } from '../src/types';
 
 const catalogue = () => ({ run_date: bundled.run_date, sections: {
@@ -40,4 +40,5 @@ test('exact catalogue gets the complete history once without mutating catalogue 
   expect(withBundledBankRateHistory(core, bundled.core_sha256).bank_rate_history).toBe(first.bank_rate_history);
   expect(withBundledBankRateHistory(first, bundled.core_sha256)).toBe(first);
 });
+
 
