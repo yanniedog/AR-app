@@ -2,7 +2,7 @@ import { gunzipSync, strFromU8 } from 'fflate';
 import { hexToBytes } from '@noble/hashes/utils';
 import type { CorePayload } from '../types';
 import type { PackedBankRateHistory } from './bankRateHistoryWire';
-import bundled from './bundledBankRateHistory.json';
+import bundled from './bundledBankRateHistory.snapshot.json';
 
 let history: PackedBankRateHistory | undefined;
 /** Signed-app fallback for one exact verified catalogue, including offline cache.
@@ -12,3 +12,4 @@ export function withBundledBankRateHistory(core: CorePayload, coreSha: string | 
   history ??= JSON.parse(strFromU8(gunzipSync(hexToBytes(bundled.gzip_hex)))) as PackedBankRateHistory;
   return { ...core, bank_rate_history: history };
 }
+
