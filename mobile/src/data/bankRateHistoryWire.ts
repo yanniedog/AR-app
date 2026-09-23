@@ -9,8 +9,8 @@ export interface PackedBankRateHistory {
   sections: Record<SectionKey, BankRateSpan[][]>;
 }
 
-/** Bind IDs before quarantine can remove rows. The wire catalogue stays unchanged
- * for older clients; its verified text/bytes, including this map, are cached. */
+/** Bind IDs before quarantine can remove rows. Non-enumerable metadata preserves
+ * exact catalogue row hashes used by executable contracts and saved receipts. */
 export function attachBankRateHistoryTiers(core: CorePayload): CorePayload {
   const pack = core.bank_rate_history;
   if (pack?.schema_version !== 1 || !SECTION_KEYS.every(section => {
@@ -18,8 +18,11 @@ export function attachBankRateHistoryTiers(core: CorePayload): CorePayload {
     return Array.isArray(ids) && Array.isArray(spans) && ids.length === core.sections[section].rates.length &&
       ids.every(id => Number.isInteger(id) && id >= 0 && id < spans.length);
   })) return core;
-  if (SECTION_KEYS.every(section => core.sections[section].rates.every((row, index) => row.bank_rate_tier === pack.row_tiers[section][index]))) return core;
+  if (SECTION_KEYS.every(section => core.sections[section].rates.every((row, index) => row.bank_rate_tier === pack.row_tiers[section][index] &&
+    !Object.prototype.propertyIsEnumerable.call(row, 'bank_rate_tier')))) return core;
   return { ...core, sections: Object.fromEntries(SECTION_KEYS.map(section => [section, {
-    ...core.sections[section], rates: core.sections[section].rates.map((row, index) => ({ ...row, bank_rate_tier: pack.row_tiers[section][index] })),
+    ...core.sections[section], rates: core.sections[section].rates.map((row, index) => Object.defineProperty(
+      { ...row }, 'bank_rate_tier', { value: pack.row_tiers[section][index], enumerable: false },
+    )),
   }])) as CorePayload['sections'] };
 }

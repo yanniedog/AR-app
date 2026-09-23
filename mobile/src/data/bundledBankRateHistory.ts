@@ -22,5 +22,3 @@ export function withBundledBankRateHistory(core: CorePayload, coreSha: string | 
   if (history === undefined) history = decodeBundledHistory(bundled);
   return history ? { ...core, bank_rate_history: history } : core;
 }
-
-

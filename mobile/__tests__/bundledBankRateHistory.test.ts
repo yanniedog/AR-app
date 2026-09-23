@@ -50,5 +50,3 @@ test('exact catalogue gets the complete history once without mutating catalogue 
   expect(withBundledBankRateHistory(core, bundled.core_sha256).bank_rate_history).toBe(first.bank_rate_history);
   expect(withBundledBankRateHistory(first, bundled.core_sha256)).toBe(first);
 });
-
-
