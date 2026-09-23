@@ -7,6 +7,7 @@ export type RateStatistic = 'min' | 'mean' | 'median' | 'max';
 export interface RateSummary { min: number; mean: number; median: number; max: number; count: number }
 export type BankRateSnapshot = Partial<Record<SectionKey, Record<string, RateSummary>>>;
 export interface BankRateScope { rows: Record<SectionKey, RateRow[]>; signatures: Record<SectionKey, Set<string>> }
+export const RATE_OBSERVATION_FIELDS = new Set(['rate', 'comparison_rate', 'ongoing_rate', 'last_updated', 'rate_index', 'exact_alert_eligible', 'bank_rate_tier']);
 export interface BankRatePoint { date: string; value: number; count: number }
 export interface BankRateChartModel {
   dates: string[];
@@ -21,13 +22,16 @@ export interface BankRateChartModel {
  * metadata may change without changing the tier's scope. */
 export function rateTierSignature(row: RateRow): string {
   return JSON.stringify(Object.entries(row)
-    .filter(([key]) => !['rate', 'comparison_rate', 'ongoing_rate', 'last_updated', 'rate_index', 'exact_alert_eligible'].includes(key))
+    .filter(([key]) => !RATE_OBSERVATION_FIELDS.has(key))
     .sort(([a], [b]) => a.localeCompare(b)));
 }
 
 export function bankRateScope(rows: Record<SectionKey, RateRow[]>): BankRateScope {
-  return { rows, signatures: Object.fromEntries(SECTION_KEYS.map(section =>
-    [section, new Set(rows[section].map(rateTierSignature))])) as BankRateScope['signatures'] };
+  let signatures: BankRateScope['signatures'] | undefined;
+  return { rows, get signatures() {
+    return signatures ??= Object.fromEntries(SECTION_KEYS.map(section =>
+      [section, new Set(rows[section].map(rateTierSignature))])) as BankRateScope['signatures'];
+  } };
 }
 
 export function summarizeBankRates(rows: RateRow[]): Record<string, RateSummary> {
@@ -38,14 +42,17 @@ export function summarizeBankRates(rows: RateRow[]): Record<string, RateSummary>
     const values = banks.get(row.provider) ?? [];
     values.push(value * 100); banks.set(row.provider, values);
   }
-  return Object.fromEntries([...banks].map(([provider, values]) => {
-    values.sort((a, b) => a - b);
-    const middle = values.length >> 1;
-    return [provider, { min: values[0], max: values.at(-1)!,
-      mean: values.reduce((a, b) => a + b, 0) / values.length,
-      median: values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2,
-      count: values.length }];
-  }));
+  return Object.fromEntries([...banks].map(([provider, values]) => [provider, summarizeRateValues(values)]));
+}
+
+/** Values are percentage points; the caller owns this array. */
+export function summarizeRateValues(values: number[]): RateSummary {
+  values.sort((a, b) => a - b);
+  const middle = values.length >> 1;
+  return { min: values[0], max: values.at(-1)!,
+    mean: values.reduce((a, b) => a + b, 0) / values.length,
+    median: values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2,
+    count: values.length };
 }
 
 export function snapshotBankRates(scope: BankRateScope, historicalCore?: CorePayload): BankRateSnapshot {

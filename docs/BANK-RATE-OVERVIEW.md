@@ -13,16 +13,19 @@ sections to selected interests. Required features without verified details
 produce no matching rows. A gap requires both selected product lines and
 matching rates on both sides for the bank and date.
 
-The current snapshot renders immediately. After navigation settles, the focused
-screen warms at most seven missing historical catalogues, respecting automatic
-Wi-Fi preferences. Load more history requests up to 30 prior observations.
-When Wi-Fi-only preferences prevent automatic network use, history validation
-is deferred entirely; current rates remain visible. Older cached observations
-are retained across interrupted backfills and reused beyond the download cap.
-Only one historical catalogue is processed at a time. The optional local cache
-contains scoped aggregates, not product catalogues. Historical publication
-identities are revalidated before reuse, including correction/rollback checks.
-Four consecutive failures stop loading; missing dates break graph lines.
+The complete history is embedded in the normal verified core catalogue as
+`bank_rate_history`. Current rows reference section-local `bank_rate_tier` IDs.
+Each tier stores run-length encoded `[start, length, ratesPercent]` observations
+against a shared date axis. Missing observations remain blank, duplicate rate
+tiers retain their statistical weight, and each admitted tier group is counted
+once. The producer scans retained observations once during packaging.
+
+The app validates and aggregates this local data synchronously after applying
+its ordinary eligibility and profile filters. Home and Bank response show all
+history together. There are no graph-history requests, daily-catalogue downloads,
+progressive backfills, or Load more controls. Existing verified core caching,
+refresh, correction, encryption, and Wi-Fi preferences cover the entire graph.
+Older catalogues without this extension show current rates only.
 
 Historical scope means the history of **currently matching tiers**, not a claim
 that the user's present profile was applicable on every historical date. Exact

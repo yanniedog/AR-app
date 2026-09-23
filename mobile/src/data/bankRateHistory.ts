@@ -1,87 +1,137 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
-import { SECTION_KEYS } from '../types';
-import { yieldToUi } from '../lib/yieldToUi';
-import { downloadDatedCore, fetchDatesIndexJson, historyDatesUpTo } from './historyDaily';
-import { resolveDatedPublication } from './historicalPublication';
-import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater } from './historyIdentity';
-import { snapshotBankRates, type BankRateScope, type BankRateSnapshot } from './bankRateOverview';
+import { SECTION_KEYS, type CorePayload, type SectionKey, type RateRow } from '../types';
+import { isValidCalendarDate } from '../lib/calendarDate';
+import { RATE_OBSERVATION_FIELDS, snapshotBankRates, summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 
-const CACHE_KEY = 'bank-rate-overview-v1';
-interface HistoryCache { scope: string; identities: Record<string, string>; snapshots: Record<string, BankRateSnapshot> }
-function validSnapshot(snapshot: unknown): snapshot is BankRateSnapshot {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || !Object.keys(snapshot).length) return false;
-  return Object.entries(snapshot).every(([section, banks]) => SECTION_KEYS.includes(section as typeof SECTION_KEYS[number]) &&
-    banks && typeof banks === 'object' && Object.values(banks).every(raw => {
-      const s = raw as Record<string, number> | null;
-      return s && ['min', 'mean', 'median', 'max', 'count'].every(k => typeof s[k] === 'number' && Number.isFinite(s[k])) &&
-        s.count > 0 && Number.isInteger(s.count) && s.min >= 0 && s.min - 1e-9 <= s.mean && s.mean <= s.max + 1e-9 && s.min <= s.median && s.median <= s.max;
-    }));
-}
-export function bankRateScopeKey(scope: BankRateScope): string {
-  return bytesToHex(sha256(utf8ToBytes(JSON.stringify(SECTION_KEYS.map(section =>
-    [section, [...scope.signatures[section]].sort()])))));
+/** [first date index, number of observed dates, matching advertised rates (%)]. */
+export type BankRateSpan = [number, number, number[]];
+export interface PackedBankRateHistory {
+  schema_version: 1;
+  run_dates: string[];
+  sections: Record<SectionKey, BankRateSpan[][]>;
 }
 
-/** Explicit, bounded history loading. One catalogue in memory at a time; only
- * scoped aggregates persist. Revalidate publication identity before cache reuse. */
-export async function loadBankRateHistory(
-  scope: BankRateScope, runDate: string, isCurrent: () => boolean,
-  onProgress: (snapshots: Record<string, BankRateSnapshot>) => void,
-  cachedOnly = false,
-  maxDownloads = 30,
-): Promise<void> {
-  // Identity verification requires the network. Defer all history, including
-  // cached observations, when the automatic network preference forbids it.
-  if (!isCurrent() || cachedOnly) return;
-  const key = bankRateScopeKey(scope);
-  let cached: HistoryCache | null = null;
-  try { cached = JSON.parse(await AsyncStorage.getItem(CACHE_KEY) ?? 'null') as HistoryCache | null; } catch { /* Cache is optional. */ }
-  if (!isCurrent()) return;
-  const index = await fetchDatesIndexJson();
-  const dates = historyDatesUpTo(index, runDate).filter(date => date < runDate).slice(-30);
-  assertHistoricalIdentitiesAdvance(index, dates, cached?.identities);
-  const next: HistoryCache = { scope: key, identities: historicalRevisionHighWater(cached?.identities), snapshots: {} };
-  // Keep unvisited entries on disk until they can be revalidated; never expose
-  // them through onProgress. Cancellation must not destroy prior observations.
-  const retained = cached?.scope === key ? Object.fromEntries(dates.flatMap(date =>
-    validSnapshot(cached?.snapshots?.[date]) ? [[date, cached!.snapshots[date]]] : [])) : {};
-  let failures = 0;
-  let downloads = 0;
-  for (const date of dates.slice().reverse()) {
-    if (!isCurrent()) return;
-    try {
-      const publication = await resolveDatedPublication(date, index);
-      if (!isCurrent()) return;
-      const saved = cached?.snapshots?.[date];
-      const reusable = cached?.scope === key && cached.identities?.[date] === publication.identity && validSnapshot(saved) && saved;
-      if (!reusable && downloads >= maxDownloads) {
-        next.snapshots[date] = {};
-        delete retained[date];
-        continue;
+const verified = new WeakMap<CorePayload, PackedBankRateHistory | null>();
+const calculated = new WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>();
+function sameTier(left: RateRow, right: RateRow): boolean {
+  const a = Object.entries(left).filter(([key]) => !RATE_OBSERVATION_FIELDS.has(key));
+  const b = Object.keys(right).filter(key => !RATE_OBSERVATION_FIELDS.has(key));
+  return a.length === b.length && a.every(([key, value]) => value === right[key as keyof RateRow]);
+}
+/** History shares the core's verified hash, transport and offline cache. */
+export function packedBankRateHistory(core: CorePayload): PackedBankRateHistory | null {
+  if (verified.has(core)) return verified.get(core)!;
+  const pack = core.bank_rate_history;
+  let cells = 0, tiers = 0;
+  const valid = pack?.schema_version === 1 && Array.isArray(pack.run_dates) && pack.run_dates.length > 0 &&
+    pack.run_dates.length <= 5000 && pack.run_dates.at(-1) === core.run_date &&
+    pack.run_dates.every((day, i) => isValidCalendarDate(day) && (!i || day > pack.run_dates[i - 1])) &&
+    SECTION_KEYS.every(section => {
+      const series = pack.sections?.[section];
+      if (!Array.isArray(series) || (tiers += series.length) > 100_000) return false;
+      const bindings = new Map<number, RateRow>();
+      for (const row of core.sections[section].rates) {
+        const id = row.bank_rate_tier;
+        if (!Number.isInteger(id) || id! < 0 || id! >= series.length) return false;
+        const previous = bindings.get(id!);
+        if (previous && !sameTier(previous, row)) return false;
+        bindings.set(id!, row);
       }
-      if (!reusable) downloads += 1;
-      const snapshot = reusable || snapshotBankRates(scope, await downloadDatedCore(date, index, publication));
-      if (!isCurrent()) return;
-      next.snapshots[date] = snapshot;
-      next.identities[date] = publication.identity;
-      onProgress({ ...next.snapshots });
-      try {
-        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ ...next,
-          identities: { ...(cached?.scope === key ? cached.identities : {}), ...next.identities },
-          snapshots: { ...retained, ...next.snapshots },
-        }));
-      } catch { /* Storage failure must not erase verified chart points. */ }
-      failures = 0;
-      await yieldToUi();
-    } catch {
-      // Keep the missing date on the axis so the chart never bridges an outage.
-      next.snapshots[date] = {};
-      onProgress({ ...next.snapshots });
-      failures += 1;
-      if (failures >= 4) throw new Error('Some history could not be loaded. Retry to fill the gaps.');
-    }
+      return series.every(spans => {
+        if (!Array.isArray(spans)) return false;
+        let end = 0;
+        return spans.every(span => {
+          if (!Array.isArray(span) || span.length !== 3) return false;
+          const [start, count, rates] = span;
+          if (!Number.isInteger(start) || !Number.isInteger(count) || start < end || count < 1 ||
+              start + count > pack.run_dates.length || !Array.isArray(rates) || !rates.length ||
+              rates.length > 10_000 || !rates.every(rate => typeof rate === 'number' && Number.isFinite(rate) && rate >= 0)) return false;
+          end = start + count;
+          cells += count * rates.length;
+          return cells <= 10_000_000;
+        });
+      });
+    });
+  verified.set(core, valid ? pack! : null);
+  return valid ? pack! : null;
+}
+
+/** Exact weighted statistics from rate frequencies, without expanding tier rows. */
+function summarizeCounts(counts: Map<number, number>): RateSummary {
+  const ordered = [...counts].sort(([a], [b]) => a - b);
+  let count = 0, sum = 0;
+  for (const [rate, frequency] of ordered) { count += frequency; sum += rate * frequency; }
+  const left = Math.floor((count - 1) / 2), right = Math.floor(count / 2);
+  let seen = 0, low: number | undefined, high = 0;
+  for (const [rate, frequency] of ordered) {
+    seen += frequency;
+    if (low === undefined && seen > left) low = rate;
+    if (seen > right) { high = rate; break; }
   }
-  if (isCurrent()) onProgress({ ...next.snapshots });
+  return { min: ordered[0][0], max: ordered.at(-1)![0], mean: sum / count, median: (low! + high) / 2, count };
+}
+
+function sectionSnapshots(pack: PackedBankRateHistory, section: SectionKey, members: Map<number, string>) {
+  const events = pack.run_dates.map(() => new Map<string, Map<number, number>>());
+  const add = (index: number, provider: string, rates: number[], direction: number) => {
+    if (index >= events.length) return;
+    const changes = events[index].get(provider) ?? new Map<number, number>();
+    for (const value of rates) changes.set(value, (changes.get(value) ?? 0) + direction);
+    events[index].set(provider, changes);
+  };
+  for (const [id, provider] of members) for (const [start, count, rates] of pack.sections[section][id]) {
+    add(start, provider, rates, 1); add(start + count, provider, rates, -1);
+  }
+  const banks = new Map<string, Map<number, number>>();
+  let current: Record<string, RateSummary> = {};
+  return events.map(changesByBank => {
+    if (!changesByBank.size) return current;
+    current = { ...current };
+    for (const [provider, changes] of changesByBank) {
+      const counts = banks.get(provider) ?? new Map<number, number>();
+      let changed = false;
+      for (const [rate, delta] of changes) if (delta) {
+        changed = true;
+        const count = (counts.get(rate) ?? 0) + delta;
+        if (count) counts.set(rate, count); else counts.delete(rate);
+      }
+      banks.set(provider, counts);
+      if (changed) {
+        if (counts.size) current[provider] = summarizeCounts(counts); else delete current[provider];
+      }
+    }
+    return current;
+  });
+}
+
+/** One complete local calculation, with no per-date requests or partial renders. */
+export function packedBankRateSnapshots(core: CorePayload, scope: BankRateScope): Record<string, BankRateSnapshot> {
+  const pack = packedBankRateHistory(core);
+  const result: Record<string, BankRateSnapshot> = {};
+  if (pack) {
+    const rowKeys: string[] = [];
+    const currentRows = { Mortgage: [], Savings: [], TD: [] } as BankRateScope['rows'];
+    const members = SECTION_KEYS.map(section => {
+      const admitted = new Map(core.sections[section].rates.map((row, index) => [row, index]));
+      const rows = scope.rows[section].filter(row => admitted.has(row));
+      currentRows[section] = rows;
+      rowKeys.push(rows.map(row => admitted.get(row)).join(','));
+      return new Map(rows.map(row => [row.bank_rate_tier!, row.provider]));
+    });
+    const key = rowKeys.join('|');
+    const cache = calculated.get(core) ?? new Map<string, Record<string, BankRateSnapshot>>();
+    if (cache.has(key)) return cache.get(key)!;
+    for (const day of pack.run_dates) result[day] = {};
+    SECTION_KEYS.forEach((section, sectionIndex) => {
+      const days = sectionSnapshots(pack, section, members[sectionIndex]);
+      days.forEach((banks, index) => {
+        result[pack.run_dates[index]][section] = banks;
+      });
+    });
+    result[core.run_date] = Object.fromEntries(SECTION_KEYS.map(section => [section, summarizeBankRates(currentRows[section])]));
+    if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+    cache.set(key, result); calculated.set(core, cache);
+    return result;
+  }
+  result[core.run_date] = snapshotBankRates(scope);
+  return result;
 }

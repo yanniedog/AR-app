@@ -14,7 +14,9 @@ const core = { run_date: '2026-09-22', sections: {
   Savings: { rates: [{ provider: 'Alpha', product_key: 's', product_name: 'Savings', rate: '0.04' }] },
   TD: { rates: [{ provider: 'Term Bank', product_key: 't', product_name: 'Term Deposit', rate: '0.05' }] },
 } } as unknown as CorePayload;
-const mockState = { core, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'sample', rbaCalendar: null,
+core.bank_rate_history = { schema_version: 1, run_dates: ['2026-08-01', '2026-09-22'], sections: { Mortgage: [[[0, 2, [6]]], [[0, 2, [9]]]], Savings: [[[0, 2, [4]]]], TD: [[[0, 2, [5]]]] } };
+for (const section of ['Mortgage', 'Savings', 'TD'] as const) core.sections[section].rates.forEach((row, i) => { row.bank_rate_tier = i; });
+const mockState = { core, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
   ensureDetails: jest.fn(), ensureRbaCalendar: jest.fn(), details: null };
 jest.mock('../src/data/store', () => ({ useStore: (selector: (s: typeof mockState) => unknown) => selector(mockState) }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
@@ -22,7 +24,6 @@ jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
-jest.mock('../src/data/bankRateHistory', () => ({ loadBankRateHistory: jest.fn(async () => undefined) }));
 beforeEach(() => { mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 test('opens Rates/Mean; all statistics, product sections and secondary Gap are selectable', () => {
@@ -30,6 +31,8 @@ test('opens Rates/Mean; all statistics, product sections and secondary Gap are s
   act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   const controls = () => tree.root.findAll(n => n.type === ('SegmentedControl' as unknown));
   const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
+  expect(chart().props.model.dates).toEqual(['2026-08-01', '2026-09-22']);
+  expect(chart().props.model.lines.every(line => line.points.length === 2)).toBe(true);
   expect(controls()[0].props.value).toBe('rates'); expect(chart().props.label).toBe('Mean');
   for (const statistic of ['min', 'mean', 'median', 'max']) act(() => controls()[2].props.onChange(statistic));
   act(() => controls()[1].props.onChange('TD'));

@@ -41,6 +41,8 @@ export interface RateRow {
   /** Canonical semantic-tier identity is safe for an exact saved-rate alert. */
   exact_alert_eligible?: boolean;
   rate_index?: number;
+  /** Section-local reference into the core's compressed bank-rate history. */
+  bank_rate_tier?: number;
   last_updated?: string;
   /** Dot-delimited hierarchy, e.g. "HOME_LOAN.OO.PI.VARIABLE.LVR_70_80". */
   taxonomy_path?: string;
@@ -87,6 +89,7 @@ export interface RbaEntry {
 }
 
 export interface CorePayload {
+  bank_rate_history?: import('./data/bankRateHistory').PackedBankRateHistory;
   schema_version: number;
   run_date: string;
   sections: Record<SectionKey, SectionData>;
