@@ -1,6 +1,7 @@
+import { BankRatesPanel } from '../src/components/passthrough/BankRatesPanel';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { BankResponseDashboard } from '../src/components/passthrough/BankResponseDashboard';
 import { ScreenSkeleton } from '../src/components/feedback';
@@ -85,7 +86,8 @@ export default function RbaResponseScreen() {
     const filteredEmpty = rawPayload !== null && !error && suitabilityReady;
     return (
       <Screen>
-        <ScreenContent style={{ flex: 1, justifyContent: 'center' }}>
+        <ScrollView><ScreenContent>
+        <BankRatesPanel section={initialSection} />
         <Card variant="outlined" style={{ gap: 12 }}>
           <AppText variant="h3">
             {suitabilityWarming
@@ -119,7 +121,7 @@ export default function RbaResponseScreen() {
             />
           ) : null}
         </Card>
-        </ScreenContent>
+        </ScreenContent></ScrollView>
       </Screen>
     );
   }

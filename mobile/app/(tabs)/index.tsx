@@ -1,3 +1,4 @@
+import { BankRatesPanel } from '../../src/components/passthrough/BankRatesPanel';
 import Ionicons from '../../src/components/icons/AppIcon';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
@@ -526,6 +527,8 @@ export default function Home() {
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
       ) : null}
+
+      <BankRatesPanel section={section} onSectionChange={changeSection} showSections={false} />
 
       {scenarioStatus === 'ready' && scenarioSummary.currentRate != null ? (
         <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>

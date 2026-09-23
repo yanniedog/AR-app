@@ -1,11 +1,13 @@
+import { sectionSegmentOptions } from '../../data/interests';
 import Ionicons from '../icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import React, { memo, useEffect, useMemo, useState } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { buildCompactBankResponseWindows, bankResponseDecisionLabel, type CompactBankResponseRow } from '../../data/bankResponseModel';
-import { buildBankSpreadChartModel, type BankSpreadHistoryPayload } from '../../data/bankSpreadHistory';
+import type { BankSpreadHistoryPayload } from '../../data/bankSpreadHistory';
+import type { BankRateChartModel } from '../../data/bankRateOverview';
 import { resolveBrandShort } from '../../data/bankBrand';
 import type { RbaCalendar } from '../../data/rbaCalendar';
 import { useStore } from '../../data/store';
@@ -18,14 +20,8 @@ import type { SectionKey } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { BankAvatar } from '../BankAvatar';
 import { SegmentedControl } from '../controls';
-import { AppText, Button, Card, Row } from '../ui';
-import { MortgageSavingsSpreadChart } from './MortgageSavingsSpreadChart';
-
-const SECTIONS = [
-  { value: 'Mortgage' as const, label: 'Mortgage' },
-  { value: 'Savings' as const, label: 'Savings' },
-  { value: 'TD' as const, label: 'Term deposits' },
-];
+import { AppText, Card, Row } from '../ui';
+import { BankRatesPanel } from './BankRatesPanel';
 
 function DecisionArrow({ newer, onPress }: { newer: boolean; onPress: () => void }) {
   const theme = useTheme();
@@ -63,7 +59,7 @@ const CompactRow = memo(function CompactRow({ row }: { row: CompactBankResponseR
 });
 
 export function BankResponseDashboard({
-  payload, spreadHistory, calendar, initialDecisionDate, initialSection = 'Mortgage', spreadError, onRetrySpread,
+  payload, calendar, initialDecisionDate, initialSection = 'Mortgage',
 }: {
   payload: BankInsightsPayload;
   spreadHistory: BankSpreadHistoryPayload | null;
@@ -73,12 +69,15 @@ export function BankResponseDashboard({
   spreadError?: string | null;
   onRetrySpread?: () => void;
 }) {
+  const interests = useStore(state => state.prefs.interests);
+  const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [section, setSection] = useState<SectionKey>(initialSection);
+  useEffect(() => { if (!sectionOptions.some(option => option.value === section)) setSection(sectionOptions[0].value); }, [section, sectionOptions]);
   const windows = useMemo(() => buildCompactBankResponseWindows(payload, calendar, section), [calendar, payload, section]);
   const initialIndex = Math.max(0, windows.findIndex((window) => window.decision.date === initialDecisionDate));
   const [decisionIndex, setDecisionIndex] = useState(initialIndex);
   const active = windows[Math.min(decisionIndex, Math.max(0, windows.length - 1))];
-  const spreadModel = useMemo(() => spreadHistory ? buildBankSpreadChartModel(spreadHistory, calendar) : null, [calendar, spreadHistory]);
+  const [chartModel, setChartModel] = useState<BankRateChartModel | null>(null);
   const [selectedProvider, setSelectedProvider] = useState('');
   const [listMounted, setListMounted] = useState(false);
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
@@ -87,9 +86,9 @@ export function BankResponseDashboard({
   const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
   useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
-    if (!spreadModel?.lines.length) return;
-    if (!spreadModel.lines.some((line) => line.provider === selectedProvider)) setSelectedProvider(spreadModel.lines[0].provider);
-  }, [selectedProvider, spreadModel]);
+    if (!chartModel?.lines.length) return;
+    if (!chartModel.lines.some((line) => line.provider === selectedProvider)) setSelectedProvider(chartModel.lines[0].provider);
+  }, [selectedProvider, chartModel]);
   useEffect(() => setDecisionIndex(0), [section]);
   useEffect(() => {
     if (!initialDecisionDate) return;
@@ -106,7 +105,7 @@ export function BankResponseDashboard({
     return () => cancelAnimationFrame(frame);
   }, [active, listMounted, renderRevision]);
   useEffect(() => {
-    if (!spreadModel || !selectedProvider) {
+    if (!chartModel || !selectedProvider) {
       setChartMounted(false);
       setChartReadyRevision(null);
       return;
@@ -114,7 +113,7 @@ export function BankResponseDashboard({
     if (!chartMounted) return;
     const frame = requestAnimationFrame(() => setChartReadyRevision(renderRevision));
     return () => cancelAnimationFrame(frame);
-  }, [chartMounted, renderRevision, selectedProvider, spreadModel]);
+  }, [chartMounted, renderRevision, selectedProvider, chartModel]);
 
   const actions = useMemo(() => ({
     'moves.open': () => undefined,
@@ -127,26 +126,26 @@ export function BankResponseDashboard({
     },
     'moves.section.next': (...args: unknown[]) => {
       const requested = auditActionString(args, 'section');
-      const requestedSection = SECTIONS.find((option) => option.value === requested)?.value;
+      const requestedSection = sectionOptions.find((option) => option.value === requested)?.value;
       if (requestedSection && requestedSection !== section) {
         setSection(requestedSection);
         return;
       }
-      const index = Math.max(0, SECTIONS.findIndex((option) => option.value === section));
-      setSection(SECTIONS[(index + 1) % SECTIONS.length].value);
+      const index = Math.max(0, sectionOptions.findIndex((option) => option.value === section));
+      setSection(sectionOptions[(index + 1) % sectionOptions.length].value);
     },
     'moves.response-chart.provider.next': () => {
-      if (!spreadModel?.lines.length) {
-        return { unavailableReason: 'Mortgage-savings history is unavailable' };
+      if (!chartModel?.lines.length) {
+        return { unavailableReason: 'Matching rate history is unavailable' };
       }
-      if (spreadModel.lines.length < 2) {
+      if (chartModel.lines.length < 2) {
         return { unavailableReason: 'Only one eligible bank is available in the chart' };
       }
-      const index = Math.max(0, spreadModel.lines.findIndex((line) => line.provider === selectedProvider));
-      setSelectedProvider(spreadModel.lines[(index + 1) % spreadModel.lines.length].provider);
+      const index = Math.max(0, chartModel.lines.findIndex((line) => line.provider === selectedProvider));
+      setSelectedProvider(chartModel.lines[(index + 1) % chartModel.lines.length].provider);
       return undefined;
     },
-  }), [decisionIndex, section, selectedProvider, spreadModel, windows]);
+  }), [decisionIndex, section, sectionOptions, selectedProvider, chartModel, windows]);
   const auditSurface = usePerformanceAuditSurface({
     id: 'moves.response-chart',
     routeKey: '/rba-response',
@@ -182,9 +181,9 @@ export function BankResponseDashboard({
     renderRevision,
     layoutMeasured: layoutReadyRevision === renderRevision,
   });
-  const selectedLine = spreadModel?.lines.find((line) => line.provider === selectedProvider) ?? null;
+  const selectedLine = chartModel?.lines.find((line) => line.provider === selectedProvider) ?? null;
   usePerformanceAuditProbe(auditSurface, {
-    id: 'mortgage-savings-chart',
+    id: 'bank-rates-chart',
     kind: 'graphic',
     required: false,
     status: !selectedLine || chartReadyRevision === renderRevision ? 'ready' : 'pending',
@@ -194,9 +193,11 @@ export function BankResponseDashboard({
     actualCount: selectedLine && chartReadyRevision === renderRevision ? selectedLine.points.length : 0,
     accessibleSummary: Boolean(selectedLine && chartReadyRevision === renderRevision),
   });
-  if (!active) return <Card><AppText>No recorded RBA decisions overlap the available history.</AppText></Card>;
+  const overview = <BankRatesPanel section={section} onSectionChange={setSection} selectedProvider={selectedProvider} onProviderChange={setSelectedProvider} onModelChange={setChartModel} onChartReady={setChartMounted} />;
+  if (!active) return <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>{overview}<Card><AppText>No recorded RBA decisions overlap the available history.</AppText></Card></ScrollView>;
 
   const header = <View style={{ gap: 12, paddingBottom: 10 }}>
+    {overview}
     <Card>
       <Row style={{ alignItems: 'center', justifyContent: 'space-between' }}>
         <DecisionArrow newer={false} onPress={() => setDecisionIndex((index) => Math.min(windows.length - 1, index + 1))} />
@@ -214,37 +215,7 @@ export function BankResponseDashboard({
         <DecisionArrow newer onPress={() => setDecisionIndex((index) => Math.max(0, index - 1))} />
       </Row>
     </Card>
-    {spreadModel && selectedProvider ? <>
-      <View>
-        <AppText variant="h3">Mortgage–savings gap</AppText>
-        <AppText variant="tiny" color="textMuted">Provider means · percentage points</AppText>
-      </View>
-      <View
-        onLayout={(event) => {
-          if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
-            setChartMounted(true);
-            setChartReadyRevision(renderRevision);
-          }
-        }}
-      >
-        <MortgageSavingsSpreadChart model={spreadModel} selectedProvider={selectedProvider} onSelectedProviderChange={setSelectedProvider} />
-      </View>
-    </> : <Card variant="outlined" style={{ gap: 8 }}>
-      <AppText variant="small" weight="700">
-        {spreadError ? 'Mortgage–savings history unavailable' : 'Mortgage–savings history is building'}
-      </AppText>
-      <AppText variant="tiny" color="textMuted">The bank response table remains available.</AppText>
-      {spreadError && onRetrySpread ? (
-        <Button title="Retry history" icon="refresh" variant="secondary" onPress={onRetrySpread} />
-      ) : null}
-    </Card>}
-    <Card variant="outlined">
-      <AppText variant="small" weight="700">What this can show</AppText>
-      <AppText variant="tiny" color="textMuted" style={{ marginTop: 4 }}>
-        A wider mortgage–savings gap can reveal asymmetric repricing. It does not prove intent or measure funding costs, margins or individual pricing.
-      </AppText>
-    </Card>
-    <SegmentedControl options={SECTIONS} value={section} onChange={setSection} />
+    <SegmentedControl options={sectionOptions} value={section} onChange={setSection} />
     <View>
       <AppText variant="h3">Bank Response</AppText>
       <AppText variant="tiny" color="textMuted">
