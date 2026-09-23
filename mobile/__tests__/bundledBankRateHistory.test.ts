@@ -1,13 +1,23 @@
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, hexToBytes } from '@noble/hashes/utils';
-import { gunzipSync, strFromU8 } from 'fflate';
-import { withBundledBankRateHistory } from '../src/data/bundledBankRateHistory';
+import { gzipSync, gunzipSync, strFromU8, strToU8 } from 'fflate';
+import { decodeBundledHistory, withBundledBankRateHistory } from '../src/data/bundledBankRateHistory';
 import * as bundled from '../src/data/bundledBankRateHistory.snapshot.json';
 import type { CorePayload } from '../src/types';
 
 const catalogue = () => ({ run_date: bundled.run_date, sections: {
   Mortgage: { rates: [] }, Savings: { rates: [] }, TD: { rates: [] },
 } }) as unknown as CorePayload;
+
+test('corrupt bytes and digest mismatches safely reject the optional bundle', () => {
+  expect(decodeBundledHistory({ ...bundled, gzip_hex: '00' })).toBeNull();
+  expect(decodeBundledHistory({ ...bundled, history_sha256: 'wrong' })).toBeNull();
+});
+
+test.each(['null', '{', '{"schema_version":1,"run_dates":[]}'])('malformed bundled JSON/shape remains optional (%s)', text => {
+  const bytes = strToU8(text);
+  expect(decodeBundledHistory({ ...bundled, gzip_hex: bytesToHex(gzipSync(bytes)), history_sha256: bytesToHex(sha256(bytes)) })).toBeNull();
+});
 
 test('bundled observations match their recorded digest and full date range', () => {
   const bytes = gunzipSync(hexToBytes(bundled.gzip_hex));
