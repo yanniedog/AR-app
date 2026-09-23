@@ -16,6 +16,9 @@ matching rates on both sides for the bank and date.
 The current snapshot renders immediately. After navigation settles, the focused
 screen warms at most seven missing historical catalogues, respecting automatic
 Wi-Fi preferences. Load more history requests up to 30 prior observations.
+When Wi-Fi-only preferences prevent automatic network use, history validation
+is deferred entirely; current rates remain visible. Older cached observations
+are retained across interrupted backfills and reused beyond the download cap.
 Only one historical catalogue is processed at a time. The optional local cache
 contains scoped aggregates, not product catalogues. Historical publication
 identities are revalidated before reuse, including correction/rollback checks.

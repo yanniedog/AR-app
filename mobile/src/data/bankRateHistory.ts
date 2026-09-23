@@ -11,12 +11,12 @@ import { snapshotBankRates, type BankRateScope, type BankRateSnapshot } from './
 const CACHE_KEY = 'bank-rate-overview-v1';
 interface HistoryCache { scope: string; identities: Record<string, string>; snapshots: Record<string, BankRateSnapshot> }
 function validSnapshot(snapshot: unknown): snapshot is BankRateSnapshot {
-  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot) || !Object.keys(snapshot).length) return false;
   return Object.entries(snapshot).every(([section, banks]) => SECTION_KEYS.includes(section as typeof SECTION_KEYS[number]) &&
     banks && typeof banks === 'object' && Object.values(banks).every(raw => {
       const s = raw as Record<string, number> | null;
       return s && ['min', 'mean', 'median', 'max', 'count'].every(k => typeof s[k] === 'number' && Number.isFinite(s[k])) &&
-        s.count > 0 && Number.isInteger(s.count) && s.min >= 0 && s.min <= s.mean && s.mean <= s.max && s.min <= s.median && s.median <= s.max;
+        s.count > 0 && Number.isInteger(s.count) && s.min >= 0 && s.min - 1e-9 <= s.mean && s.mean <= s.max + 1e-9 && s.min <= s.median && s.median <= s.max;
     }));
 }
 export function bankRateScopeKey(scope: BankRateScope): string {
@@ -32,14 +32,21 @@ export async function loadBankRateHistory(
   cachedOnly = false,
   maxDownloads = 30,
 ): Promise<void> {
+  // Identity verification requires the network. Defer all history, including
+  // cached observations, when the automatic network preference forbids it.
+  if (!isCurrent() || cachedOnly) return;
   const key = bankRateScopeKey(scope);
   let cached: HistoryCache | null = null;
   try { cached = JSON.parse(await AsyncStorage.getItem(CACHE_KEY) ?? 'null') as HistoryCache | null; } catch { /* Cache is optional. */ }
-  if (!isCurrent() || (cachedOnly && cached?.scope !== key)) return;
+  if (!isCurrent()) return;
   const index = await fetchDatesIndexJson();
   const dates = historyDatesUpTo(index, runDate).filter(date => date < runDate).slice(-30);
   assertHistoricalIdentitiesAdvance(index, dates, cached?.identities);
   const next: HistoryCache = { scope: key, identities: historicalRevisionHighWater(cached?.identities), snapshots: {} };
+  // Keep unvisited entries on disk until they can be revalidated; never expose
+  // them through onProgress. Cancellation must not destroy prior observations.
+  const retained = cached?.scope === key ? Object.fromEntries(dates.flatMap(date =>
+    validSnapshot(cached?.snapshots?.[date]) ? [[date, cached!.snapshots[date]]] : [])) : {};
   let failures = 0;
   let downloads = 0;
   for (const date of dates.slice().reverse()) {
@@ -49,15 +56,23 @@ export async function loadBankRateHistory(
       if (!isCurrent()) return;
       const saved = cached?.snapshots?.[date];
       const reusable = cached?.scope === key && cached.identities?.[date] === publication.identity && validSnapshot(saved) && saved;
-      if (cachedOnly && !reusable) { next.snapshots[date] = {}; continue; }
-      if (!reusable && downloads >= maxDownloads) break;
+      if (!reusable && downloads >= maxDownloads) {
+        next.snapshots[date] = {};
+        delete retained[date];
+        continue;
+      }
       if (!reusable) downloads += 1;
       const snapshot = reusable || snapshotBankRates(scope, await downloadDatedCore(date, index, publication));
       if (!isCurrent()) return;
       next.snapshots[date] = snapshot;
       next.identities[date] = publication.identity;
       onProgress({ ...next.snapshots });
-      if (!cachedOnly) try { await AsyncStorage.setItem(CACHE_KEY, JSON.stringify(next)); } catch { /* Storage failure must not erase verified chart points. */ }
+      try {
+        await AsyncStorage.setItem(CACHE_KEY, JSON.stringify({ ...next,
+          identities: { ...(cached?.scope === key ? cached.identities : {}), ...next.identities },
+          snapshots: { ...retained, ...next.snapshots },
+        }));
+      } catch { /* Storage failure must not erase verified chart points. */ }
       failures = 0;
       await yieldToUi();
     } catch {
@@ -68,4 +83,5 @@ export async function loadBankRateHistory(
       if (failures >= 4) throw new Error('Some history could not be loaded. Retry to fill the gaps.');
     }
   }
+  if (isCurrent()) onProgress({ ...next.snapshots });
 }

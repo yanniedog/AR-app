@@ -13,23 +13,6 @@ type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
 const mockRetryBankInsights = jest.fn(async () => undefined);
 const mockEnsureBankInsights = jest.fn(async () => undefined);
-const cachedSpread = {
-  schema_version: 1,
-  run_date: '2026-08-15',
-  run_dates: ['2026-08-15'],
-  method: 'mean_rate_rows_per_product_then_mean_products_per_provider',
-  cohorts: { mortgage: 'mortgage', savings: 'savings' },
-  banks: {
-    Clean: {
-      mortgage_mean: [0.06], savings_mean: [0.04], gap: [0.02],
-      mortgage_count: [1], savings_count: [1], mortgage_hash: ['m'], savings_hash: ['s'], quality: ['complete'],
-    },
-    Tainted: {
-      mortgage_mean: [0.061], savings_mean: [0.041], gap: [0.02],
-      mortgage_count: [1], savings_count: [1], mortgage_hash: ['tm'], savings_hash: ['ts'], quality: ['complete'],
-    },
-  },
-};
 const mockState: Record<string, unknown> = {
   core: {
     run_date: '2026-08-15',
@@ -141,30 +124,15 @@ describe('Bank response trust state', () => {
     act(() => tree.unmount());
   });
 
-  it('filters a cold cached spread through core integrity while retaining clean providers', async () => {
-    mockState.bankSpreadHistory = cachedSpread;
-    mockState.coreIntegrity = {
-      schemaVersion: 1,
-      core: mockState.core,
-      contract: 'v1',
-      runDate: '2026-08-15',
-      generationDigest: null,
-      coreSha256: 'a'.repeat(64),
-      normalizationVersion: 'test',
-      quarantines: {
-        bankHistoryPairs: new Set(['Savings\u0000Tainted']),
-        rowsByReason: { explicit_term_deposit_in_savings: 1 },
-      },
-    };
+  it('leaves calendar warmup to the panel and never requests the retired spread asset', async () => {
+    jest.mocked(mockState.ensureBankSpreadHistory as () => Promise<void>).mockClear();
+    jest.mocked(mockState.ensureRbaCalendar as () => Promise<void>).mockClear();
     let tree!: InspectableRenderer;
-    await act(async () => {
-      tree = TestRenderer.create(<RbaResponseScreen />) as InspectableRenderer;
-      await Promise.resolve();
-    });
-
+    await act(async () => { tree = TestRenderer.create(<RbaResponseScreen />) as InspectableRenderer; });
     const dashboard = tree.root.findAllByType('BankResponseDashboard')[0];
-    expect(dashboard).toBeDefined();
-    expect(Object.keys((dashboard.props.spreadHistory as typeof cachedSpread).banks)).toEqual(['Clean']);
+    expect(dashboard.props.spreadHistory).toBeUndefined();
+    expect(mockState.ensureBankSpreadHistory).not.toHaveBeenCalled();
+    expect(mockState.ensureRbaCalendar).not.toHaveBeenCalled();
     act(() => tree.unmount());
   });
 

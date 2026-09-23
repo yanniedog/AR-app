@@ -6,7 +6,6 @@ import { Pressable, ScrollView, View } from 'react-native';
 
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import { buildCompactBankResponseWindows, bankResponseDecisionLabel, type CompactBankResponseRow } from '../../data/bankResponseModel';
-import type { BankSpreadHistoryPayload } from '../../data/bankSpreadHistory';
 import type { BankRateChartModel } from '../../data/bankRateOverview';
 import { resolveBrandShort } from '../../data/bankBrand';
 import type { RbaCalendar } from '../../data/rbaCalendar';
@@ -62,12 +61,9 @@ export function BankResponseDashboard({
   payload, calendar, initialDecisionDate, initialSection = 'Mortgage',
 }: {
   payload: BankInsightsPayload;
-  spreadHistory: BankSpreadHistoryPayload | null;
   calendar: RbaCalendar | null;
   initialDecisionDate?: string | null;
   initialSection?: SectionKey;
-  spreadError?: string | null;
-  onRetrySpread?: () => void;
 }) {
   const interests = useStore(state => state.prefs.interests);
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);

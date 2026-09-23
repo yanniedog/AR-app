@@ -8,7 +8,6 @@ import { ScreenSkeleton } from '../src/components/feedback';
 import { Screen, ScreenContent } from '../src/components/Screen';
 import { AppText, Button, Card } from '../src/components/ui';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
-import { filterBankSpreadHistoryForIntegrity } from '../src/data/bankSpreadHistory';
 import { useStore } from '../src/data/store';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
@@ -19,17 +18,12 @@ export default function RbaResponseScreen() {
   const coreIntegrity = useStore((state) => state.coreIntegrity);
   const calendar = useStore((state) => state.rbaCalendar);
   const rawPayload = useStore((state) => state.bankInsights);
-  const spreadHistory = useStore((state) => state.bankSpreadHistory);
-  const spreadError = useStore((state) => state.bankSpreadHistoryError);
   const error = useStore((state) => state.bankInsightsError);
   const detailsProducts = useStore((state) => state.details?.products ?? null);
   const includeNonStandard = useStore((state) => state.prefs.includeNonStandard);
   const ensureBankInsights = useStore((state) => state.ensureBankInsights);
-  const ensureBankSpreadHistory = useStore((state) => state.ensureBankSpreadHistory);
   const retryBankInsights = useStore((state) => state.retryBankInsights);
-  const retryBankSpreadHistory = useStore((state) => state.retryBankSpreadHistory);
   const ensureDetails = useStore((state) => state.ensureDetails);
-  const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const suitabilityRevision = useSuitabilityRevision();
   const [retrying, setRetrying] = useState(false);
   const activeSection = useStore((state) => state.activeSection);
@@ -46,9 +40,7 @@ export default function RbaResponseScreen() {
   useEffect(() => {
     if (!core) return;
     void ensureBankInsights();
-    void ensureBankSpreadHistory();
-    void ensureRbaCalendar();
-  }, [core, ensureBankInsights, ensureBankSpreadHistory, ensureRbaCalendar]);
+  }, [core, ensureBankInsights]);
 
   const suitabilityReady = useMemo(() => {
     void suitabilityRevision;
@@ -64,11 +56,6 @@ export default function RbaResponseScreen() {
     void suitabilityRevision;
     return filterBankInsightsForSuitability(rawPayload, core, includeNonStandard, detailsProducts, suitabilityRevision, coreIntegrity);
   }, [core, coreIntegrity, detailsProducts, includeNonStandard, rawPayload, suitabilityRevision]);
-  const trustedSpreadHistory = useMemo(
-    () => filterBankSpreadHistoryForIntegrity(spreadHistory, coreIntegrity),
-    [coreIntegrity, spreadHistory],
-  );
-
   const retryInsights = () => {
     setRetrying(true);
     void retryBankInsights().finally(() => setRetrying(false));
@@ -153,12 +140,9 @@ export default function RbaResponseScreen() {
       <View style={{ flex: 1 }}>
         <BankResponseDashboard
           payload={payload}
-          spreadHistory={trustedSpreadHistory}
           calendar={calendar}
           initialDecisionDate={decisionDate}
           initialSection={initialSection}
-          spreadError={spreadError}
-          onRetrySpread={() => void retryBankSpreadHistory()}
         />
       </View>
     </Screen>
