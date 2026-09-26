@@ -363,7 +363,7 @@ describe('uploadDebugLog', () => {
         }),
       }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1 });
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1, mayHaveUploaded: true });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -379,9 +379,7 @@ describe('uploadDebugLog', () => {
         }),
       }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog('small log', mockFetch)).rejects.toThrow(
-      'may have been accepted',
-    );
+    await expect(uploadDebugLog('small log', mockFetch)).rejects.toMatchObject({ mayHaveUploaded: true });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 

@@ -19,4 +19,10 @@ describe('debug-log upload receipt recovery copy', () => {
     expect(service).toContain('await deleteDebugLogUpload(receipt.url, receipt.deleteKey)');
     expect(service).not.toContain('await deleteDebugLogUploadAndReceipt(');
   });
+
+  it('keeps receipt copying unavailable until successful verification is persisted', () => {
+    const screen = readScreen();
+    expect(screen).toContain('if (!uploadReceipt.verified) return;');
+    expect(screen).toContain('disabled={uploadBusy || !uploadReceipt.verified}');
+  });
 });

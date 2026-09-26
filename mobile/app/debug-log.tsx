@@ -251,15 +251,17 @@ function DebugLogScreenInner() {
   const onUpload = useCallback(() => {
     Alert.alert(
       'Upload full log?',
-      'The log and complete audit report will be sent to paste.rs or paste.c-net.org. Anyone with the link can read it. After verification, the link is copied to your clipboard.',
+      'The log and complete audit report will be sent to paste.rs or paste.c-net.org. Anyone with the link can read it. After verification, the link is copied to your clipboard.' +
+        (uploadState.mayHaveUploaded ? ' An earlier upload was not confirmed and may already exist without a deletion receipt. This creates another public copy.' : ''),
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Upload and copy link', onPress: () => void runUpload() },
       ],
     );
-  }, [runUpload]);
+  }, [runUpload, uploadState.mayHaveUploaded]);
 
   const onCopyUrl = useCallback(async (uploadReceipt: DebugLogUploadReceipt) => {
+    if (!uploadReceipt.verified) return;
     try {
       if (await Clipboard.setStringAsync(uploadReceipt.url) === false) {
         throw new Error('Clipboard access was unavailable.');
@@ -409,7 +411,7 @@ function DebugLogScreenInner() {
               <Button
                 title="Copy link"
                 icon="link-outline"
-                disabled={uploadBusy}
+                disabled={uploadBusy || !uploadReceipt.verified}
                 onPress={() => void onCopyUrl(uploadReceipt)}
               />
               <Button

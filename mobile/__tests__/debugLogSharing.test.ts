@@ -4,6 +4,7 @@ jest.mock('../src/lib/debugLog', () => ({
   deleteDebugLogUpload: jest.fn(),
   formatVersionedLogExport: jest.fn((text: string) => `versioned\n${text}`),
   loadDebugLogUploadReceipts: jest.fn(),
+  markDebugLogUploadReceiptVerified: jest.fn(),
   saveDebugLogUploadReceipt: jest.fn(),
   uploadDebugLog: jest.fn(),
   verifyDebugLogUpload: jest.fn(),
@@ -33,6 +34,7 @@ describe('automatic audit log sharing', () => {
     (log.uploadDebugLog as jest.Mock).mockResolvedValue(result);
     (log.saveDebugLogUploadReceipt as jest.Mock).mockResolvedValue(receipt);
     (log.verifyDebugLogUpload as jest.Mock).mockResolvedValue(undefined);
+    (log.markDebugLogUploadReceiptVerified as jest.Mock).mockResolvedValue({ ...receipt, verified: true });
     (log.deleteDebugLogUpload as jest.Mock).mockResolvedValue(undefined);
     (clipboard.setStringAsync as jest.Mock).mockResolvedValue(undefined);
   });
@@ -49,6 +51,8 @@ describe('automatic audit log sharing', () => {
     expect((log.saveDebugLogUploadReceipt as jest.Mock).mock.invocationCallOrder[0])
       .toBeLessThan((log.verifyDebugLogUpload as jest.Mock).mock.invocationCallOrder[0]);
     expect((log.verifyDebugLogUpload as jest.Mock).mock.invocationCallOrder[0])
+      .toBeLessThan((log.markDebugLogUploadReceiptVerified as jest.Mock).mock.invocationCallOrder[0]);
+    expect((log.markDebugLogUploadReceiptVerified as jest.Mock).mock.invocationCallOrder[0])
       .toBeLessThan((clipboard.setStringAsync as jest.Mock).mock.invocationCallOrder[0]);
     expect(state).toMatchObject({ phase: 'copied', verified: true, sessionId: 'audit-1' });
     unsubscribe();
@@ -67,6 +71,7 @@ describe('automatic audit log sharing', () => {
     (log.verifyDebugLogUpload as jest.Mock).mockRejectedValueOnce(new Error('404 missing'));
     expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', error: '404 missing' });
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
+    expect(log.markDebugLogUploadReceiptVerified).not.toHaveBeenCalled();
     expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied' });
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     expect(log.verifyDebugLogUpload).toHaveBeenCalledTimes(2);
@@ -94,6 +99,17 @@ describe('automatic audit log sharing', () => {
     expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', verified: true });
   });
 
+  it('requires an explicit duplicate-copy acknowledgement after an ambiguous POST failure', async () => {
+    (log.uploadDebugLog as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('response lost'), { mayHaveUploaded: true }),
+    );
+    expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', mayHaveUploaded: true });
+    await sharing.retryDebugLogUpload();
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+    expect(await sharing.retryDebugLogUpload({ acceptDuplicateRisk: true })).toMatchObject({ phase: 'copied' });
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(2);
+  });
+
   it('does not upload when existing deletion receipts cannot be read', async () => {
     (log.loadDebugLogUploadReceipts as jest.Mock).mockRejectedValueOnce(new Error('locked'));
     expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed' });
@@ -116,12 +132,15 @@ describe('automatic audit log sharing', () => {
     await sharing.retryDebugLogUpload();
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
-    expect(await sharing.startDebugLogUpload({ ...request, sessionId: 'audit-2' })).toMatchObject({
+    const laterRequest = { ...request, sessionId: 'audit-2', audit: { summaryMarker: 'SUMMARY audit-2', report: { sessionId: 'audit-2', checks: ['new-check'] } } };
+    expect(await sharing.startDebugLogUpload(laterRequest)).toMatchObject({
       phase: 'failed', sessionId: 'audit-2',
       recoveryReceipt: { url: result.url, deleteKey: result.deleteKey },
     });
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     sharing.forgetDeletedDebugLogUpload(result.url);
-    expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'idle', recoveryReceipt: null });
+    expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'failed', sessionId: 'audit-2', recoveryReceipt: null });
+    expect(await sharing.retryDebugLogUpload()).toMatchObject({ phase: 'copied', sessionId: 'audit-2' });
+    expect(log.debugLog.readCompleteText).toHaveBeenLastCalledWith(laterRequest.audit);
   });
 });

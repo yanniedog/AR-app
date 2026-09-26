@@ -3,6 +3,7 @@ import {
   DEBUG_LOG_UPLOAD_RECEIPT_KEY,
   deleteDebugLogUploadAndReceipt,
   loadDebugLogUploadReceipts,
+  markDebugLogUploadReceiptVerified,
   saveDebugLogUploadReceipt,
   verifyDebugLogUpload,
 } from '../src/lib/debugLog';
@@ -46,6 +47,22 @@ describe('verified full paste read-back', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls.every((call) => call[1].signal.aborted)).toBe(true);
   });
+
+  it('allows a slow full-body read beyond the former 20-second timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      const fetcher = jest.fn().mockResolvedValue({
+        status: 200,
+        text: () => new Promise((resolve) => setTimeout(() => resolve('full log'), 30_000)),
+      });
+      const verification = verifyDebugLogUpload(receipt, 'full log', fetcher);
+      await jest.advanceTimersByTimeAsync(30_000);
+      await expect(verification).resolves.toBeUndefined();
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
 
 describe('multiple upload deletion receipts', () => {
@@ -63,5 +80,12 @@ describe('multiple upload deletion receipts', () => {
     expect(await loadDebugLogUploadReceipts()).toEqual([second, first, old]);
     await deleteDebugLogUploadAndReceipt(first, jest.fn().mockResolvedValue({ status: 204 }));
     expect(await loadDebugLogUploadReceipts()).toEqual([second, old]);
+  });
+
+  it('persists successful verification without marking legacy or unfinished uploads verified', async () => {
+    const first = await saveDebugLogUploadReceipt({ url: 'https://paste.rs/first', provider: 'paste.rs' });
+    const second = await saveDebugLogUploadReceipt({ url: 'https://paste.rs/second', provider: 'paste.rs' });
+    await markDebugLogUploadReceiptVerified(first);
+    expect(await loadDebugLogUploadReceipts()).toEqual([second, { ...first, verified: true }]);
   });
 });

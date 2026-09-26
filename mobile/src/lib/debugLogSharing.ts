@@ -5,6 +5,7 @@ import {
   deleteDebugLogUpload,
   formatVersionedLogExport,
   loadDebugLogUploadReceipts,
+  markDebugLogUploadReceiptVerified,
   saveDebugLogUploadReceipt,
   uploadDebugLog,
   verifyDebugLogUpload,
@@ -19,6 +20,8 @@ export interface DebugLogUploadSnapshot {
   error: string | null;
   /** Retain deletion access in memory if secure storage and cleanup both fail. */
   recoveryReceipt: DebugLogUploadReceipt | null;
+  /** A lost POST response may have left an unknown public copy. */
+  mayHaveUploaded: boolean;
 }
 
 interface UploadRequest {
@@ -30,6 +33,7 @@ interface UploadRequest {
 
 let snapshot: DebugLogUploadSnapshot = {
   sessionId: null, phase: 'idle', url: null, verified: false, error: null, recoveryReceipt: null,
+  mayHaveUploaded: false,
 };
 const listeners = new Set<() => void>();
 let inFlight: Promise<DebugLogUploadSnapshot> | null = null;
@@ -37,6 +41,7 @@ let lastRequest: UploadRequest | null = null;
 let preparedBody: string | null = null;
 let pendingReceipt: DebugLogUploadReceipt | null = null;
 let lastAuditSession: string | null = null;
+let blockedRequest: UploadRequest | null = null;
 
 export const getDebugLogUploadSnapshot = () => snapshot;
 export function subscribeDebugLogUpload(listener: () => void): () => void {
@@ -93,6 +98,7 @@ async function executeUpload(): Promise<DebugLogUploadSnapshot> {
     if (!snapshot.verified) {
       update({ phase: 'verifying', error: null });
       await verifyDebugLogUpload(pendingReceipt, preparedBody!);
+      pendingReceipt = await markDebugLogUploadReceiptVerified(pendingReceipt);
       update({ verified: true });
     }
     update({ phase: 'copying', error: null });
@@ -101,10 +107,15 @@ async function executeUpload(): Promise<DebugLogUploadSnapshot> {
     update({ phase: 'copied' });
     preparedBody = null;
   } catch (error) {
+    const mayHaveUploaded = error instanceof Error &&
+      'mayHaveUploaded' in error && error.mayHaveUploaded === true;
     update({
       phase: 'failed',
+      mayHaveUploaded,
       error: snapshot.verified
         ? 'The full log was uploaded and verified, but the link could not be copied. Tap Copy link to try again.'
+        : mayHaveUploaded
+          ? `${error.message} A public copy may already exist without a saved deletion receipt. Upload another copy only if you accept that risk.`
         : error instanceof Error ? error.message : 'The full log could not be uploaded. Try again or share the local log.',
     });
     debugLog.warn('debugLogUpload', snapshot.error ?? 'Upload failed');
@@ -124,21 +135,25 @@ export function startDebugLogUpload(request: UploadRequest): Promise<DebugLogUpl
   if (snapshot.recoveryReceipt) {
     // A later audit must still show why its automatic upload is blocked.
     // Keep the existing deletion capability until the user removes that copy.
+    blockedRequest = request;
     update({ sessionId: request.sessionId, phase: 'failed' });
     return Promise.resolve(snapshot);
   }
   lastRequest = request;
+  blockedRequest = null;
   if (request.sessionId) lastAuditSession = request.sessionId;
   preparedBody = null;
   pendingReceipt = null;
-  update({ sessionId: request.sessionId, phase: 'preparing', url: null, verified: false, error: null });
+  update({ sessionId: request.sessionId, phase: 'preparing', url: null, verified: false, error: null, mayHaveUploaded: false });
   return run();
 }
 
-/** Retry a known link's verification/copy without creating another public paste. */
-export function retryDebugLogUpload(): Promise<DebugLogUploadSnapshot> {
+/** Reuse known links; an ambiguous POST requires explicit duplicate-risk acknowledgement. */
+export function retryDebugLogUpload(options: { acceptDuplicateRisk?: boolean } = {}): Promise<DebugLogUploadSnapshot> {
   if (inFlight) return inFlight;
   if (!lastRequest) return Promise.resolve(snapshot);
+  if (snapshot.mayHaveUploaded && !options.acceptDuplicateRisk) return Promise.resolve(snapshot);
+  update({ mayHaveUploaded: false });
   return run();
 }
 
@@ -146,5 +161,16 @@ export function forgetDeletedDebugLogUpload(url: string): void {
   if (snapshot.url !== url) return;
   pendingReceipt = null;
   preparedBody = null;
+  if (blockedRequest) {
+    lastRequest = blockedRequest;
+    lastAuditSession = blockedRequest.sessionId;
+    blockedRequest = null;
+    update({
+      phase: 'failed', sessionId: lastRequest.sessionId, url: null, verified: false,
+      error: 'The earlier upload was removed. Retry upload to share the completed audit.',
+      recoveryReceipt: null, mayHaveUploaded: false,
+    });
+    return;
+  }
   update({ phase: 'idle', url: null, verified: false, error: null, recoveryReceipt: null });
 }

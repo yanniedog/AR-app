@@ -31,10 +31,10 @@ export function DebugLogUploadStatus({ sessionId }: { sessionId?: string | null 
       {state.error ? <AppText variant="small" color="danger">{state.error}</AppText> : null}
       {state.phase === 'failed' || state.phase === 'copied' ? (
         <Button
-          title={state.verified ? 'Copy link' : state.url ? 'Retry verification' : 'Retry upload'}
+          title={state.verified ? 'Copy link' : state.url ? 'Retry verification' : state.mayHaveUploaded ? 'Upload another copy' : 'Retry upload'}
           variant="secondary"
           disabled={state.recoveryReceipt != null}
-          onPress={() => void retryDebugLogUpload()}
+          onPress={() => void retryDebugLogUpload({ acceptDuplicateRisk: state.mayHaveUploaded })}
         />
       ) : null}
     </Card>

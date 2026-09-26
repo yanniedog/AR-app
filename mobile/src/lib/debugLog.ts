@@ -1029,6 +1029,8 @@ export interface DebugLogUploadReceipt {
   provider: DebugLogUploadResult['provider'];
   deleteKey?: string;
   createdAt: string;
+  /** Persisted only after an exact full-body read-back succeeds. */
+  verified?: boolean;
 }
 
 // Serialize read/modify/write so a completed upload cannot erase another
@@ -1077,7 +1079,8 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     !Number.isFinite(Date.parse(receipt.createdAt)) ||
     (expectedProvider === 'paste.c-net.org' &&
       (typeof receipt.deleteKey !== 'string' || !receipt.deleteKey)) ||
-    (receipt.deleteKey != null && typeof receipt.deleteKey !== 'string')
+    (receipt.deleteKey != null && typeof receipt.deleteKey !== 'string') ||
+    (receipt.verified != null && typeof receipt.verified !== 'boolean')
   ) {
     throw new Error('The saved upload deletion receipt is invalid.');
   }
@@ -1087,6 +1090,7 @@ function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
     provider: expectedProvider,
     ...(receipt.deleteKey ? { deleteKey: receipt.deleteKey } : {}),
     createdAt: receipt.createdAt,
+    ...(receipt.verified ? { verified: true } : {}),
   };
 }
 
@@ -1110,6 +1114,19 @@ export async function saveDebugLogUploadReceipt(
 
 export async function loadDebugLogUploadReceipt(): Promise<DebugLogUploadReceipt | null> {
   return (await loadDebugLogUploadReceipts())[0] ?? null;
+}
+
+export async function markDebugLogUploadReceiptVerified(
+  receipt: DebugLogUploadReceipt,
+): Promise<DebugLogUploadReceipt> {
+  return mutateUploadReceipts(async () => {
+    const receipts = await loadDebugLogUploadReceipts();
+    const existing = receipts.find((item) => item.url === receipt.url);
+    if (!existing) throw new Error('The upload deletion receipt is no longer available.');
+    const verified = { ...existing, verified: true };
+    await writeUploadReceipts(receipts.map((item) => item.url === receipt.url ? verified : item));
+    return verified;
+  });
 }
 
 export async function loadDebugLogUploadReceipts(): Promise<DebugLogUploadReceipt[]> {
@@ -1159,7 +1176,7 @@ export async function verifyDebugLogUpload(
             timedOut = true;
             controller.abort();
             reject(new Error('The paste link verification timed out.'));
-          }, Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS));
+          }, Math.max(1, options.attemptTimeoutMs ?? 60_000));
         }),
       ]);
       return;
@@ -1215,6 +1232,7 @@ export class PasteRsUploadError extends Error {
   constructor(
     message: string,
     readonly attempts: number,
+    readonly mayHaveUploaded = false,
   ) {
     super(message);
     this.name = 'PasteRsUploadError';
@@ -1503,16 +1521,18 @@ export async function uploadDebugLog(
           `paste.rs accepted only part of the log, and the app could not remove ` +
           `the partial public copy at ${result.url}. No second copy was created.`,
           attempts,
+          true,
         );
       }
     } catch (error) {
       if (error instanceof PasteRsUploadError) throw error;
       const primaryFailure = error as PasteRsAttemptError;
-      if (primaryFailure.kind === 'timeout' || primaryFailure.kind === 'network') {
+      if (['timeout', 'network', 'invalid-response'].includes(primaryFailure.kind)) {
         throw new PasteRsUploadError(
           'The public upload result was not confirmed. It may have been accepted, so the app ' +
           'will not create a second copy automatically. Do not retry unless you accept that risk.',
           attempts,
+          true,
         );
       }
       if (!primaryFailure.transient) {
@@ -1548,6 +1568,7 @@ export async function uploadDebugLog(
   throw new PasteRsUploadError(
     `${triedPrimary ? 'The complete debug-log upload failed.' : 'The log was too large for paste.rs.'} ${detail}`,
     attempts,
+    ['timeout', 'network', 'invalid-response'].includes(backupFailure.kind),
   );
 }
 
