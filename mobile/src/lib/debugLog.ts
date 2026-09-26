@@ -4,9 +4,6 @@ import * as SecureStore from 'expo-secure-store';
 
 import { bridgeLogToCrashlytics } from './observability';
 import {
-  compactPerformanceAuditReportForLog,
-} from './performanceAuditLog';
-import {
   LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
@@ -507,15 +504,6 @@ function ensureTrailingNewline(content: string): string {
 export const MAX_AUDIT_SNAPSHOT_STORAGE_CHARS = 128 * 1024;
 /** Body budget leaving room for JSON escaping to expand the stored record. */
 export const MAX_AUDIT_SNAPSHOT_BODY_CHARS = Math.floor(MAX_AUDIT_SNAPSHOT_STORAGE_CHARS / 2);
-/**
- * Bounds only the recovery copy this module *appends* to an export when the
- * physical log no longer carries the audit block. The log itself is already
- * capped at MAX_LOG_FILE_BYTES, so a block the log did keep is returned as-is:
- * re-splitting a 2MB log to strip it would cost exactly the extra full copies
- * this path exists to avoid.
- */
-export const MAX_APPENDED_AUDIT_REPORT_CHARS = 512 * 1024;
-
 async function removeLegacyPerformanceAuditSnapshots(): Promise<void> {
   await Promise.all(
     LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS
@@ -868,8 +856,8 @@ export const debugLog = {
       }
     }
   },
-  /** Read the flushed on-disk log plus a paste-sized audit snapshot. */
-  async readCompleteText(): Promise<string> {
+  /** Export the full retained log and canonical audit, without paste-size truncation. */
+  async readCompleteText(audit?: { summaryMarker: string; report: unknown }): Promise<string> {
     if (clearState !== 'ready') {
       throw new Error('Debug log export is blocked until the incomplete Clear operation succeeds.');
     }
@@ -894,8 +882,10 @@ export const debugLog = {
     await removeLegacyPerformanceAuditSnapshots();
     assertExportCurrent();
     // Prefer the sidecar so a failed/stale AsyncStorage write cannot hide a newer disk report.
-    const latest =
-      (await readPerformanceAuditSidecar()) ??
+    const latest = audit ? {
+      summaryMarker: audit.summaryMarker,
+      reportJson: JSON.stringify(audit.report),
+    } : (await readPerformanceAuditSidecar()) ??
       parseStoredPerformanceAudit(
         await AsyncStorage.getItem(LATEST_PERFORMANCE_AUDIT_STORAGE_KEY).catch(() => null),
       ) ??
@@ -907,36 +897,27 @@ export const debugLog = {
       );
     assertExportCurrent();
     if (!latest) return clean;
-    // The physical log carries only the begin/sidecar/end markers, so an export
-    // always appends the body from the sidecar. Compaction happens here rather
-    // than during persistence: by the time anything reads a complete export the
-    // report is already durable and the audit screen already has its results.
-    let compactJson: string;
+    // The local sidecar path is inaccessible to the recipient. Include its
+    // actual JSON, even for large reports; the uploader selects a suitable host.
+    // Normalize JSON escapes before redaction so older reports cannot conceal
+    // a secret behind an escaped key or value. Preserve every report field.
+    let reportJson = latest.reportJson;
     try {
-      const parsed: unknown = JSON.parse(latest.reportJson);
+      const parsed: unknown = JSON.parse(reportJson);
       await yieldLogExport();
       assertExportCurrent();
-      const compact = compactPerformanceAuditReportForLog(parsed);
-      await yieldLogExport();
-      assertExportCurrent();
-      compactJson = JSON.stringify(compact);
+      reportJson = JSON.stringify(parsed);
     } catch {
-      compactJson = latest.reportJson;
+      assertExportCurrent();
     }
     await yieldLogExport();
     assertExportCurrent();
-    compactJson = redactSecrets(compactJson);
     const complete = [
       clean,
       '',
       '# Latest complete performance audit',
-      latest.summaryMarker,
-      compactJson.length > MAX_APPENDED_AUDIT_REPORT_CHARS
-        // An export that carries a body this large is rejected by the paste
-        // service anyway, and building it costs several full copies of the log.
-        ? `${PERFORMANCE_AUDIT_REPORT_SIDECAR} ${PERFORMANCE_AUDIT_SIDECAR_FILE} ` +
-          `(compact report omitted from this export: ${compactJson.length} chars)`
-        : compactJson,
+      redactSecrets(latest.summaryMarker),
+      redactSecrets(reportJson),
     ].join('\n');
     assertExportCurrent();
     return complete;
@@ -1050,6 +1031,25 @@ export interface DebugLogUploadReceipt {
   createdAt: string;
 }
 
+// Serialize read/modify/write so a completed upload cannot erase another
+// upload's deletion capability (or resurrect a concurrently deleted receipt).
+let receiptWriteQueue: Promise<unknown> = Promise.resolve();
+function mutateUploadReceipts<T>(operation: () => Promise<T>): Promise<T> {
+  const result = receiptWriteQueue.then(operation);
+  receiptWriteQueue = result.catch(() => {});
+  return result;
+}
+
+async function writeUploadReceipts(receipts: DebugLogUploadReceipt[]): Promise<void> {
+  if (!receipts.length) {
+    await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
+    return;
+  }
+  await SecureStore.setItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY, JSON.stringify(receipts), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+}
+
 function validateDebugLogUploadReceipt(value: unknown): DebugLogUploadReceipt {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error('The saved upload deletion receipt is invalid.');
@@ -1101,22 +1101,74 @@ export async function saveDebugLogUploadReceipt(
     ...(result.deleteKey ? { deleteKey: result.deleteKey } : {}),
     createdAt,
   });
-  await SecureStore.setItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY, JSON.stringify(receipt), {
-    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  await mutateUploadReceipts(async () => {
+    const receipts = await loadDebugLogUploadReceipts();
+    await writeUploadReceipts([receipt, ...receipts.filter((item) => item.url !== receipt.url)]);
   });
   return receipt;
 }
 
 export async function loadDebugLogUploadReceipt(): Promise<DebugLogUploadReceipt | null> {
+  return (await loadDebugLogUploadReceipts())[0] ?? null;
+}
+
+export async function loadDebugLogUploadReceipts(): Promise<DebugLogUploadReceipt[]> {
   const raw = await SecureStore.getItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
-  if (raw == null) return null;
+  if (raw == null) return [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch {
     throw new Error('The saved upload deletion receipt cannot be read.');
   }
-  return validateDebugLogUploadReceipt(parsed);
+  // Migrate the original single receipt on the next write without losing it.
+  return (Array.isArray(parsed) ? parsed : [parsed]).map(validateDebugLogUploadReceipt);
+}
+
+/** Read back the exact submitted text before claiming the link is usable. */
+export async function verifyDebugLogUpload(
+  receipt: DebugLogUploadReceipt,
+  body: string,
+  fetchImpl: typeof fetch = fetch,
+  options: PasteRsUploadOptions = {},
+): Promise<void> {
+  const validated = validateDebugLogUploadReceipt(receipt);
+  const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          const response = await fetchImpl(validated.url, {
+            method: 'GET',
+            headers: { Accept: 'text/plain', 'Cache-Control': 'no-cache' },
+            signal: controller.signal,
+          });
+          if (response.status !== 200) {
+            throw new Error(`The paste link could not be read (status ${response.status}).`);
+          }
+          if (await response.text() !== body) {
+            throw new Error('The paste link did not return the complete log.');
+          }
+        })(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(new Error('The paste link verification timed out.'));
+          }, Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS));
+        }),
+      ]);
+      return;
+    } catch (error) {
+      lastError = error;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    if (attempt < 2) await sleep(1_000 * (attempt + 1));
+  }
+  throw new Error(`${lastError instanceof Error ? lastError.message : 'The paste link could not be verified.'} The link was not copied; retry verification or share the local log.`);
 }
 
 export interface PasteRsUploadOptions {
@@ -1402,7 +1454,7 @@ export async function uploadDebugLog(
   fetchImpl: typeof fetch = fetch,
   options: PasteRsUploadOptions = {},
 ): Promise<DebugLogUploadResult> {
-  const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS);
+  const timeoutMs = Math.max(1, options.attemptTimeoutMs ?? 60_000);
   const sleep = options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const originalBytes = textEncoder.encode(body).length;
   let attempts = 0;
@@ -1556,7 +1608,10 @@ export async function deleteDebugLogUploadAndReceipt(
 ): Promise<void> {
   const validated = validateDebugLogUploadReceipt(receipt);
   await deleteDebugLogUpload(validated.url, validated.deleteKey, fetchImpl, timeoutMs);
-  await SecureStore.deleteItemAsync(DEBUG_LOG_UPLOAD_RECEIPT_KEY);
+  await mutateUploadReceipts(async () => {
+    const receipts = await loadDebugLogUploadReceipts();
+    await writeUploadReceipts(receipts.filter((item) => item.url !== validated.url));
+  });
 }
 
 type GlobalErrorUtils = {

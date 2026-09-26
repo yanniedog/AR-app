@@ -13,10 +13,10 @@ describe('debug-log upload receipt recovery copy', () => {
     );
   });
 
-  it('removes a just-uploaded public copy without deleting a receipt that was never stored', () => {
-    const screen = readScreen();
+  it('removes only the new public copy if its deletion receipt cannot be stored', () => {
+    const service = readFileSync(require.resolve('../src/lib/debugLogSharing.ts'), 'utf8');
 
-    expect(screen).toContain('await deleteDebugLogUpload(url, deleteKey)');
-    expect(screen).not.toContain('await deleteDebugLogUploadAndReceipt({');
+    expect(service).toContain('await deleteDebugLogUpload(receipt.url, receipt.deleteKey)');
+    expect(service).not.toContain('await deleteDebugLogUploadAndReceipt(');
   });
 });

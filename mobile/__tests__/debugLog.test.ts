@@ -6,7 +6,6 @@ import * as SecureStore from 'expo-secure-store';
 import {
   ANDROID_LOG_PATH_HINT,
   DEBUG_LOG_UPLOAD_RECEIPT_KEY,
-  MAX_APPENDED_AUDIT_REPORT_CHARS,
   MAX_AUDIT_SNAPSHOT_BODY_CHARS,
   MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
   MAX_LOG_BYTES,
@@ -487,7 +486,7 @@ describe('durable debug-log upload deletion receipt', () => {
     await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       DEBUG_LOG_UPLOAD_RECEIPT_KEY,
-      JSON.stringify(receipt),
+      JSON.stringify([receipt]),
       { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
     );
     await expect(saveDebugLogUploadReceipt({
@@ -872,8 +871,8 @@ describe('persistent log file', () => {
     const complete = await debugLog.readCompleteText();
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain('oversized-audit-body');
-    // Log compaction still drops the giant blob from the export.
-    expect(complete).not.toContain(report.blob.slice(0, 64));
+    // The full export includes even fields larger than the rotating log budget.
+    expect(JSON.parse(complete.split(`${marker}\n`).at(-1)!).blob).toBe(report.blob);
   });
 
   it('appends ordinary flushes instead of rewriting the whole log', async () => {
@@ -1099,7 +1098,7 @@ describe('persistent log file', () => {
     expect(files[AUDIT_SIDECAR_PATH]).toContain('escaping-headroom');
   });
 
-  it('omits an oversized compact report from the export instead of building it', async () => {
+  it('includes the complete canonical report even above the old paste export cutoff', async () => {
     const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=huge-export app_version=9.8.7 build_version=654`;
     const detail = 'D'.repeat(2_048);
@@ -1116,9 +1115,11 @@ describe('persistent log file', () => {
 
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain(marker);
-    expect(complete).toContain('compact report omitted from this export');
-    expect(complete).not.toContain(detail);
-    expect(complete.length).toBeLessThan(MAX_APPENDED_AUDIT_REPORT_CHARS);
+    expect(complete).not.toContain('compact report omitted from this export');
+    expect(complete).toContain(detail);
+    const exported = JSON.parse(complete.split(`${marker}\n`)[1]);
+    expect(exported.checks).toHaveLength(400);
+    expect(exported.checks[399]).toEqual({ id: 'c399', detail });
   });
 
   it('does not report physical audit persistence when the filesystem write fails', async () => {
