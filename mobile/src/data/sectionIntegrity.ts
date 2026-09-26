@@ -4,11 +4,85 @@ import { withBundledBankRateHistory } from './bundledBankRateHistory';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
-const coreContents = new WeakMap<CoreIntegrityContext, string>();
-function contentDigest(core: CorePayload) { return bytesToHex(sha256(utf8ToBytes(JSON.stringify(core)))); }
+interface CoreContents { digest: string; history: CorePayload['bank_rate_history_catalogue']; detachedHistory: boolean }
+const coreContents = new WeakMap<CoreIntegrityContext, CoreContents>();
+const sealedHistories = new WeakSet<object>();
+const sealingHistories = new WeakMap<object, Promise<boolean>>();
+
+/** Transport JSON has plain data properties. Seal that graph once so its exact
+ * object identity can remain bound without repeatedly serializing all history.
+ * Accessors/custom objects retain full hashing instead of receiving this trust. */
+function* sealHistorySteps(value: unknown): Generator<void, boolean, void> {
+  if (value === null || typeof value !== 'object') return true;
+  if (sealedHistories.has(value)) return true;
+  const seen = new WeakSet<object>(), active = new WeakSet<object>();
+  const pending: { value: object; exit: boolean }[] = [{ value, exit: false }];
+  while (pending.length) {
+    const next = pending.pop()!, item = next.value;
+    if (next.exit) { active.delete(item); continue; }
+    if (active.has(item)) return false;
+    if (seen.has(item)) continue;
+    const prototype = Object.getPrototypeOf(item);
+    if (prototype !== null && prototype !== (Array.isArray(item) ? Array.prototype : Object.prototype)) return false;
+    seen.add(item); active.add(item); pending.push({ value: item, exit: true });
+    // Lock references before yielding; a child is inspected when visited.
+    // A rejected graph is never marked sealed, even if some nodes froze.
+    Object.freeze(item);
+    for (const key of Reflect.ownKeys(item)) {
+      const descriptor = Object.getOwnPropertyDescriptor(item, key)!;
+      if (!Object.hasOwn(descriptor, 'value') || typeof descriptor.value === 'function') return false;
+      if (descriptor.value !== null && typeof descriptor.value === 'object') pending.push({ value: descriptor.value, exit: false });
+      yield;
+    }
+  }
+  sealedHistories.add(value);
+  return true;
+}
+
+function sealHistory(value: unknown): boolean {
+  const steps = sealHistorySteps(value);
+  let result = steps.next();
+  while (!result.done) result = steps.next();
+  return result.value;
+}
+
+/** Await before exposing a freshly decoded core to application consumers. */
+export async function sealCoreHistoryAsync(core: CorePayload,
+  yieldWork: () => Promise<void> = async () => (await import('../lib/yieldToUi')).yieldToUi(0)): Promise<void> {
+  const history = core.bank_rate_history_catalogue;
+  if (!history || typeof history !== 'object' || sealedHistories.has(history)) return;
+  let task = sealingHistories.get(history);
+  if (!task) {
+    task = (async () => {
+      await yieldWork();
+      const steps = sealHistorySteps(history);
+      let result = steps.next(), count = 0, started = Date.now();
+      while (!result.done) {
+        if (++count % 32 === 0 && Date.now() - started >= 8) { await yieldWork(); started = Date.now(); }
+        result = steps.next();
+      }
+      return result.value;
+    })();
+    sealingHistories.set(history, task);
+  }
+  try { await task; } finally { sealingHistories.delete(history); }
+}
+
+function contentDigest(core: CorePayload, detachedHistory: boolean) {
+  const projection = detachedHistory ? { ...core } : core;
+  if (detachedHistory) delete projection.bank_rate_history_catalogue;
+  return bytesToHex(sha256(utf8ToBytes(JSON.stringify(projection))));
+}
+
+function bindCoreContents(core: CorePayload): CoreContents {
+  const history = core.bank_rate_history_catalogue, detachedHistory = sealHistory(history);
+  return { history, detachedHistory, digest: contentDigest(core, detachedHistory) };
+}
 /** Checked only at calculation boundaries, never by rendering selectors. */
 export function verifiedCoreContents(integrity: CoreIntegrityContext | null | undefined): boolean {
-  return !!integrity && coreContents.get(integrity) === contentDigest(integrity.core);
+  const bound = integrity && coreContents.get(integrity);
+  return !!bound && bound.history === integrity!.core.bank_rate_history_catalogue &&
+    bound.digest === contentDigest(integrity!.core, bound.detachedHistory);
 }
 
 export interface CoreIntegrityContext {
@@ -188,7 +262,7 @@ export function normalizeCoreWithIntegrity(
       }),
     },
   };
-  coreContents.set(integrity, contentDigest(normalized));
+  coreContents.set(integrity, bindCoreContents(normalized));
   return { core: normalized, integrity };
 }
 
@@ -215,6 +289,8 @@ export function rebindCoreIntegrity(
     core,
     runDate: core.run_date,
   };
-  if (verifiedCoreContents(integrity)) coreContents.set(rebound, contentDigest(core));
+  if (verifiedCoreContents(integrity) && core.bank_rate_history_catalogue === integrity.core.bank_rate_history_catalogue) {
+    coreContents.set(rebound, bindCoreContents(core));
+  }
   return rebound;
 }

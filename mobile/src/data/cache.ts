@@ -5,7 +5,7 @@ import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
-import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
+import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
@@ -14,7 +14,7 @@ import type { EconomicOutlookPayload } from './economicOutlook';
 import type { RbaMarketOutlook } from './rbaMarketOutlookTypes';
 import { normalizeRbaMarketOutlook } from './rbaMarketOutlookParse';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
-import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
@@ -369,6 +369,7 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
+    await sealCoreHistoryAsync(b.core, () => yieldToUi(0));
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
     });
@@ -639,13 +640,13 @@ export const cache = {
     await deletePath(DIR);
   },
 
-  async readBankRateHistory<T>(decode: (text: string) => T | null): Promise<T | null> {
+  async readBankRateHistory<T>(decode: (text: string) => T | null | Promise<T | null>): Promise<T | null> {
     // A complete temporary write is newer than the primary. Decode before
     // choosing it so an interrupted write cannot hide the last valid cache.
     for (const path of [`${BANK_RATE_HISTORY}.tmp`, BANK_RATE_HISTORY]) {
       try {
         if (!await pathExists(path)) continue;
-        const value = decode(await readText(path));
+        const value = await decode(await readText(path));
         if (value !== null) return value;
       } catch { /* Try the other checkpoint if this read or decode failed. */ }
     }

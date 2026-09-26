@@ -1,6 +1,8 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
-import { prepareBankRateHistory } from './bankRateHistorySync';
+import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
+import { warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { normalizeInterests } from './interests';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -11,7 +13,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
-import type { CorePayload } from '../types';
+import { SECTION_KEYS, type CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
 import {
   clearSuitabilityIndex,
@@ -93,7 +95,11 @@ export function createBootstrapActions(
           debugLog.warn('store', 'ignoring search index that does not match the cached core revision');
         }
         if (bundle) {
-          await prepareBankRateHistory(bundle.core, bundle.meta.manifest);
+          await prepareHistoricalBankRateHistory(bundle.core, bundle.meta.manifest);
+          await warmHistoricalBankRateCatalogue(bundle.core, {
+            profileFilters: prefs.profileFilters, includeNonStandard: prefs.includeNonStandard,
+            interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
+          });
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
           const suitabilityIndex = await hydrateSuitabilityIndex(

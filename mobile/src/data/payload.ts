@@ -15,7 +15,7 @@ import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
 import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
-import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
@@ -444,10 +444,9 @@ export async function downloadCore(
     startedAt: parseStarted,
     phaseComplete: false,
   });
-  const normalized = normalizeCoreWithIntegrity(
-    await parseJsonHeavy<CorePayload>(text),
-    { coreSha256: expectedSha ?? null },
-  );
+  const core = await parseJsonHeavy<CorePayload>(text);
+  await sealCoreHistoryAsync(core, () => yieldToUi(0));
+  const normalized = normalizeCoreWithIntegrity(core, { coreSha256: expectedSha ?? null });
   // Leave parse incomplete until the caller finishes cache install — otherwise
   // the bar hits 100% while writeBundle is still flushing multi-MB JSON.
   emit(opts.onProgress, {

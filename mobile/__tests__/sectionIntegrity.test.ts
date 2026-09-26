@@ -7,9 +7,19 @@ import {
   normalizeCoreWithIntegrity,
   quarantinedBankHistoryPairs,
   rebindCoreIntegrity,
+  sealCoreHistoryAsync,
   verifiedCoreContents,
 } from '../src/data/sectionIntegrity';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
+import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
+
+function catalogue(): HistoricalBankRateCatalogue {
+  return { schema_version: 2, run_dates: ['2026-08-09'], sources: { '2026-08-09': {
+    kind: 'published_core', core_sha256: 'a'.repeat(64), details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64),
+  } }, unavailable_dates: {}, evidence: [{ status: 'unknown' }], sections: { Mortgage: [{
+    row: { provider: 'Bank', product_key: 'Bank|loan', product_name: 'Ordinary loan' }, spans: [[0, 1, [5], 0]],
+  }], Savings: [], TD: [] } };
+}
 
 function row(overrides: Partial<RateRow>): RateRow {
   return {
@@ -69,6 +79,69 @@ describe('core section integrity', () => {
     expect(verifiedCoreContents(integrity)).toBe(true);
     core.sections.Savings.rates[0].rate = '0.99';
     expect(verifiedCoreContents(rebindCoreIntegrity(integrity, core))).toBe(false);
+  });
+
+  it('binds immutable history separately without serializing it during normalization or repeated current-core verification', () => {
+    const history = catalogue(), input = { ...coreWithSavings([row({})]), bank_rate_history_catalogue: history };
+    const stringify = jest.spyOn(JSON, 'stringify');
+    let result: ReturnType<typeof normalizeCoreWithIntegrity>;
+    try {
+      result = normalizeCoreWithIntegrity(input, { coreSha256: 'd'.repeat(64) });
+      for (let index = 0; index < 5; index++) expect(verifiedCoreContents(result.integrity)).toBe(true);
+      expect(stringify.mock.calls.every(([value]) => value !== history &&
+        !(value && typeof value === 'object' && 'bank_rate_history_catalogue' in value))).toBe(true);
+    } finally { stringify.mockRestore(); }
+    expect(result!.integrity.coreSha256).toBe('d'.repeat(64));
+    expect(Object.isFrozen(history)).toBe(true);
+    expect(Object.isFrozen(history.sources['2026-08-09'])).toBe(true);
+    expect(Object.isFrozen(history.sections.Mortgage[0].row)).toBe(true);
+    expect(Reflect.set(history.sections.Mortgage[0].spans[0][2], '0', 9)).toBe(false);
+    expect(Reflect.set(history.evidence[0], 'status', 'known')).toBe(false);
+    expect(verifiedCoreContents(result!.integrity)).toBe(true);
+    input.sections.Savings.rates[0].rate = '0.99';
+    expect(verifiedCoreContents(result!.integrity)).toBe(false);
+  });
+
+  it('retains the exact history binding when rebinding calendar metadata and rejects catalogue replacement', () => {
+    const history = catalogue();
+    const result = normalizeCoreWithIntegrity({ ...coreWithSavings([row({})]), bank_rate_history_catalogue: history });
+    const updated = { ...result.core, rba: [...result.core.rba] };
+    expect(verifiedCoreContents(rebindCoreIntegrity(result.integrity, updated))).toBe(true);
+    const replaced = { ...updated, bank_rate_history_catalogue: JSON.parse(JSON.stringify(history)) };
+    expect(verifiedCoreContents(rebindCoreIntegrity(result.integrity, replaced))).toBe(false);
+    result.core.bank_rate_history_catalogue = replaced.bank_rate_history_catalogue;
+    expect(verifiedCoreContents(result.integrity)).toBe(false);
+  });
+
+  it('keeps full content hashing for history accessors instead of trusting shallow immutability', () => {
+    const history = catalogue();
+    let rate = 5;
+    Object.defineProperty(history.sections.Mortgage[0].spans[0][2], '0', { enumerable: true, configurable: true, get: () => rate });
+    const result = normalizeCoreWithIntegrity({ ...coreWithSavings([row({})]), bank_rate_history_catalogue: history });
+    expect(verifiedCoreContents(result.integrity)).toBe(true);
+    rate = 6;
+    expect(verifiedCoreContents(result.integrity)).toBe(false);
+  });
+
+  it('cooperatively seals a fresh history once before synchronous normalization and rejects unsupported async graphs', async () => {
+    const history = catalogue(), input = { ...coreWithSavings([row({})]), bank_rate_history_catalogue: history };
+    const pause = jest.fn(async () => {});
+    await Promise.all([sealCoreHistoryAsync(input, pause), sealCoreHistoryAsync(input, pause)]);
+    expect(pause).toHaveBeenCalled();
+    const before = pause.mock.calls.length;
+    await sealCoreHistoryAsync(input, pause);
+    expect(pause).toHaveBeenCalledTimes(before);
+    expect(verifiedCoreContents(normalizeCoreWithIntegrity(input).integrity)).toBe(true);
+    expect(Object.isFrozen(history.sections.Mortgage[0].spans[0][2])).toBe(true);
+    let rate = 5;
+    const unsupported = catalogue();
+    Object.defineProperty(unsupported.sections.Mortgage[0].spans[0][2], '0', { enumerable: true, get: () => rate });
+    const other = { ...coreWithSavings([row({})]), bank_rate_history_catalogue: unsupported };
+    await sealCoreHistoryAsync(other, pause);
+    const { integrity } = normalizeCoreWithIntegrity(other);
+    expect(verifiedCoreContents(integrity)).toBe(true);
+    rate = 6;
+    expect(verifiedCoreContents(integrity)).toBe(false);
   });
 
   it('recognizes only an explicit leading term-deposit product identity', () => {

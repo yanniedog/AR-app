@@ -1,4 +1,4 @@
-import { bankRateScope, buildBankRateChart, snapshotBankRates, summarizeBankRates } from '../src/data/bankRateOverview';
+import { bankRateScope, buildBankRateChart, snapshotBankRates, summarizeBankRates, MAX_BANK_RATE_PERCENT } from '../src/data/bankRateOverview';
 import { EMPTY_PROFILE, profileFilterRows } from '../src/data/profile';
 import type { CorePayload, RateRow } from '../src/types';
 
@@ -9,6 +9,17 @@ test('all four statistics use eligible tiers, including zero; odd and even media
   const rates = [row('0'), row('0.02'), row('0.06'), row('0.12'), row('invalid')];
   expect(summarizeBankRates(rates).Alpha).toEqual({ min: 0, mean: 5, median: 4, max: 12, count: 4 });
   expect(summarizeBankRates(rates.slice(0, 3)).Alpha.median).toBe(2);
+});
+
+test('unrepresentable current rates are excluded while bounded extreme chart coordinates remain finite', () => {
+  const stats = summarizeBankRates([row(String(Number.MAX_VALUE)), row('0.06')]);
+  expect(stats.Alpha).toEqual({ min: 6, mean: 6, median: 6, max: 6, count: 1 });
+  const boundary = summarizeBankRates([row(String(MAX_BANK_RATE_PERCENT)), row(String(MAX_BANK_RATE_PERCENT))]);
+  const model = buildBankRateChart({ '2026-09-26': { Mortgage: boundary } }, 'Mortgage', 'mean', false, null);
+  expect(Number.isFinite(model.min)).toBe(true);
+  expect(Number.isFinite(model.max)).toBe(true);
+  expect(model.max).toBeGreaterThan(model.min);
+  expect(Number.isFinite((model.max - model.lines[0].points[0].value) / (model.max - model.min))).toBe(true);
 });
 
 test('profile filtering precedes every statistic, excludes sibling tiers and unknown features', () => {

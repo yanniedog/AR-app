@@ -1,13 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { SECTION_KEYS, type RateRow, type SectionKey } from '../../types';
+import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../../types';
 import { bankRateScope, buildBankRateChart, type BankRateChartModel, type RateStatistic } from '../../data/bankRateOverview';
 import { availableBankRateHistory, missingBankRateHistoryDates, packedBankRateSnapshots } from '../../data/bankRateHistory';
+import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshotsAsync } from '../../data/historicalBankRateCatalogue';
+import { cachedHistoricalBankRateCatalogue, missingHistoricalCatalogueDates, prepareAvailableHistoricalBankRateCatalogue } from '../../data/historicalBankRateCatalogueStore';
 import { visibleAccountRows } from '../../data/format';
 import { profileFeaturesForSection, profileFilterRows, profileSelectionCount } from '../../data/profile';
 import { normalizeInterests, sectionSegmentOptions } from '../../data/interests';
 import { useStore } from '../../data/store';
 import { useSuitabilityRevision } from '../../hooks/useSuitabilityRevision';
+import { yieldToUi } from '../../lib/yieldToUi';
 import { BankRateChart } from './BankRateChart';
 import { SegmentedControl } from '../controls';
 import { AppText, Card } from '../ui';
@@ -52,10 +55,45 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   useEffect(() => {
     if (core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(prefs.profileFilters, key).length))) void ensureDetails();
   }, [core, details, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);
-  const snapshots = useMemo(() => core ? packedBankRateSnapshots(core, scope) : {}, [core, scope, historyRevision]);
-  const historyAvailable = core ? availableBankRateHistory(core) !== null : false;
-  const model = useMemo(() => buildBankRateChart(snapshots, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
-  useEffect(() => { onModelChange?.(tab === 'gap' && !gapAllowed ? null : model); }, [gapAllowed, model, onModelChange, tab]);
+  const request = useMemo(() => ({ core, scope, historyRevision, revision, filters: {
+    profileFilters: prefs.profileFilters,
+    interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
+    includeNonStandard: prefs.includeNonStandard,
+  } }), [core, scope, historyRevision, revision, prefs.profileFilters, prefs.onboarded, prefs.interests, prefs.includeNonStandard]);
+  const [settled, setSettled] = useState<{ request: typeof request; failed: boolean } | null>(null);
+  const [invalidRich, setInvalidRich] = useState<{ core: CorePayload; value: unknown } | null>(null);
+  const catalogue = core ? cachedHistoricalBankRateCatalogue(core) : null;
+  const rejectedRich = invalidRich?.core === core && invalidRich?.value === core?.bank_rate_history_catalogue;
+  const richHistory = !!catalogue || (!!core?.bank_rate_history_catalogue && !rejectedRich);
+  const snapshots = useMemo(() => {
+    void settled;
+    return core ? richHistory ? catalogue ? cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters) : null
+      : packedBankRateSnapshots(core, scope) : {};
+  }, [catalogue, core, scope, request, richHistory, settled]);
+  useEffect(() => {
+    if (!core || !richHistory) return;
+    if (catalogue && cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters)) return;
+    let active = true;
+    void (async () => {
+      const ready = catalogue ?? await prepareAvailableHistoricalBankRateCatalogue(core);
+      if (!ready) {
+        // A rejected optional rich extension must not hide valid legacy history.
+        // Only the active request may reject it; fallback uses the latest scope.
+        if (active) setInvalidRich({ core, value: core.bank_rate_history_catalogue });
+        return;
+      }
+      await historicalBankRateSnapshotsAsync(ready, core, scope, request.filters, () => yieldToUi(0));
+      if (active) setSettled({ request, failed: false });
+    })().catch(() => { if (active) setSettled({ request, failed: true }); });
+    return () => { active = false; };
+  }, [catalogue, core, scope, request, richHistory]);
+  const updating = richHistory && snapshots === null;
+  const failed = settled?.request === request && settled.failed;
+  const historyAvailable = richHistory || (core ? availableBankRateHistory(core) !== null : false);
+  const missingDates = core ? catalogue ? missingHistoricalCatalogueDates(core) : richHistory ? [] : missingBankRateHistoryDates(core) : [];
+  const model = useMemo(() => buildBankRateChart(snapshots ?? {}, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
+  useEffect(() => { onModelChange?.(updating || (tab === 'gap' && !gapAllowed) ? null : model); }, [gapAllowed, model, onModelChange, tab, updating]);
+  useEffect(() => { if (updating) onChartReady?.(false); }, [onChartReady, updating]);
   return <View style={{ gap: 12 }} testID="bank-rates-panel">
     <AppText variant="h3">Bank rates</AppText>
     <SegmentedControl options={[{ value: 'rates' as const, label: 'Rates' }, { value: 'gap' as const, label: 'Gap' }]} value={tab} onChange={setTab} />
@@ -64,9 +102,9 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
       <AppText variant="tiny" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
       {core && !historyAvailable ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
-      {core && missingBankRateHistoryDates(core).length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical updates could not be loaded. Refresh to retry; missing observations stay blank.</AppText> : null}
-      {model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <Card><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></Card>}
-      <AppText variant="tiny" color="textMuted">Each matching rate tier has equal weight. History follows currently matching tiers; missing observations stay blank.{gap ? ' The gap does not measure bank margins.' : ''}</AppText>
+      {missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical observations are unavailable in this update and stay blank.</AppText> : null}
+      {updating ? <Card><AppText variant="small" accessibilityRole="alert">{failed ? 'Historical rates could not be prepared. Please try again.' : 'Updating historical rates for your filters…'}</AppText></Card> : model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <Card><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></Card>}
+      <AppText variant="tiny" color="textMuted">Each matching rate tier has equal weight. {catalogue ? 'History includes products matching your filters on each observed date, including products since withdrawn.' : 'History follows currently matching tiers.'} Missing observations stay blank.{gap ? ' The gap does not measure bank margins.' : ''}</AppText>
     </>}
   </View>;
 }
