@@ -87,6 +87,13 @@ and Android/Hermes, so it is not a phone launch-time guarantee.
 
 ## Reproduce the bundled catalogue
 
+The selected immutable history index is saved atomically with each installed
+core before deferred preparation starts. An offline restart after an interrupted
+preparation uses this receipt and verified cached details to recover history.
+Index-only corrections also update the receipt, and cache writes reject older,
+missing or conflicting previously verified historical heads. Malformed optional
+receipts do not prevent the current core from opening.
+
 First use AR-local's canonical local prepacker with verified public inputs:
 `dates-index.json`, selected bytes at `manifests/YYYY-MM-DD.json`, and gzip bytes
 at `cores/<sha256>.gz` and `details/<sha256>.gz`. It validates every indexed

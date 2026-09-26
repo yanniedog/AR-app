@@ -1,6 +1,7 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
+import { parseHistoryDatesIndex } from './historyDatesIndex';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -126,7 +127,9 @@ export function createBootstrapActions(
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
           debugLog.info('store', `cached core ready elapsed_ms=${Date.now() - started}`);
-          void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest);
+          void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest,
+            parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,
+            { readCachedDetails: true });
           if (!suitabilityIndex) {
             // Start with matching cached details when available, independent of
             // the manifest refresh/network. ensureDetails claims the load

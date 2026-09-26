@@ -1,5 +1,6 @@
 import { cache } from './cache';
 import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
+import { parseHistoryDatesIndex } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
@@ -327,6 +328,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
 
         const meta = await cache.readMeta();
         assertNoRevisionRollback(meta?.manifest, remote);
+        const historyDatesIndex = parseHistoryDatesIndex(resolution.datesIndex, remote);
         const upToDate =
           !repairCache &&
           meta?.source === 'remote' &&
@@ -350,14 +352,17 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               (key) =>
                 meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
             );
-          if (cachedOptionalChanged) {
+          const historyIndexChanged = historyDatesIndex &&
+            JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
+          if (cachedOptionalChanged || historyIndexChanged) {
             await cache.updateMeta({
               coreSha: remote.files.core.sha256,
               manifest: remote,
+              ...(historyDatesIndex ? { historyDatesIndex } : {}),
             });
             debugLog.info(
               'store',
-              `refresh persisted optional assets onto cached manifest run_date=${remote.run_date}`,
+              `refresh persisted assets and history selection onto cached manifest run_date=${remote.run_date}`,
             );
           }
           const liveMatches =
@@ -508,6 +513,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             savedAt: new Date().toISOString(),
             coreSha: remote.files.core.sha256,
             detailsSha: stagedDetails || detailsUnchanged ? remote.files.details.sha256 : null,
+            ...(historyDatesIndex ? { historyDatesIndex } : {}),
           },
           text,
         );
