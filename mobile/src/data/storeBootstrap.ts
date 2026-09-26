@@ -1,8 +1,6 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
-import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
-import { warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
-import { normalizeInterests } from './interests';
+import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -13,7 +11,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { countSuitabilityExclusions } from './access';
 import { noDataErrorMessage, readValidatedHistoryBanks } from './storeHelpers';
 import { SECTION_ORDER } from '../constants';
-import { SECTION_KEYS, type CorePayload } from '../types';
+import type { CorePayload } from '../types';
 import { normalizeProductHistoryPayload } from './productHistory';
 import {
   clearSuitabilityIndex,
@@ -45,6 +43,7 @@ export function createBootstrapActions(
     async bootstrap(opts: { skipRefresh?: boolean } = {}) {
       if (get().status === 'ready' || get().status === 'loading') return;
       debugLog.info('store', 'bootstrap');
+      const started = Date.now();
       set({
         status: 'loading',
         error: null,
@@ -95,11 +94,6 @@ export function createBootstrapActions(
           debugLog.warn('store', 'ignoring search index that does not match the cached core revision');
         }
         if (bundle) {
-          await prepareHistoricalBankRateHistory(bundle.core, bundle.meta.manifest);
-          await warmHistoricalBankRateCatalogue(bundle.core, {
-            profileFilters: prefs.profileFilters, includeNonStandard: prefs.includeNonStandard,
-            interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
-          });
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
           const suitabilityIndex = await hydrateSuitabilityIndex(
@@ -124,12 +118,15 @@ export function createBootstrapActions(
             source: bundle.meta.source,
             status: 'ready',
             error: null,
+            bankRateHistoryLoading: true,
             ...(cachedSearch
               ? { searchIndex: cachedSearch, searchIndexStatus: 'ready' as const, searchIndexError: null }
               : { searchIndexStatus: 'idle' as const, searchIndexError: null }),
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
+          debugLog.info('store', `cached core ready elapsed_ms=${Date.now() - started}`);
+          void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest);
           if (!suitabilityIndex) {
             // Start with matching cached details when available, independent of
             // the manifest refresh/network. ensureDetails claims the load
@@ -215,6 +212,7 @@ export const bootstrapInitialState = {
   status: 'idle' as const,
   refreshing: false,
   postRefreshWarming: false,
+  bankRateHistoryLoading: false,
   source: 'sample' as const,
   manifest: null,
   core: null,

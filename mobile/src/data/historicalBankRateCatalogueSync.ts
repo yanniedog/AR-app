@@ -9,9 +9,8 @@ import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity } from './h
 import { assertRevisionManifest } from './payloadRevision';
 import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from './historicalBankRateCatalogueMerge';
-import { clearHistoricalBankRateCatalogue, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { cachedHistoricalBankRateCatalogue, clearHistoricalBankRateCatalogue, historicalCatalogueOwner, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { compressCatalogueAsync, decompressCatalogue, decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
-import { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogueAsync } from './bundledHistoricalBankRateCatalogue';
 import { HISTORICAL_CATALOGUE_LIMITS,
   type HistoricalBankRateCatalogue, type HistoricalCatalogueSpan } from './historicalBankRateCatalogueWire';
 
@@ -29,8 +28,23 @@ interface SavedCatalogue {
 const MAX_CACHE_CHARS = 24 * 1024 * 1024;
 const SHA = /^[a-f0-9]{64}$/;
 let preparation = Promise.resolve(false);
-let decodedCheckpoint: { text: string; value: SavedCatalogue } | null = null;
+type DecodedCheckpoint = { text: string; value: SavedCatalogue };
+let decodedCheckpoint: DecodedCheckpoint | null = null;
+let lastPrepared: {
+  core: CorePayload;
+  embedded: unknown;
+  receipt: string;
+  catalogue: NonNullable<ReturnType<typeof cachedHistoricalBankRateCatalogue>>;
+  checkpoint: DecodedCheckpoint | null;
+} | null = null;
 const yieldHistoryWork = () => yieldToUi(0);
+
+function bundledHistory(): typeof import('./bundledHistoricalBankRateCatalogue') {
+  // Metro keeps this module lazy: importing sync must not initialize the large
+  // bundled JSON before the caller has scheduled history work after first paint.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./bundledHistoricalBankRateCatalogue');
+}
 
 export function decodeSavedHistoricalCatalogue(text: string | null): SavedCatalogue | null {
   try {
@@ -152,18 +166,35 @@ function discardSupersededPublicDates(catalogue: HistoricalBankRateCatalogue, in
 /** One rich cache prepares every bank and filter. It never fetches dated cores. */
 export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Manifest,
   index: DatesIndex | null = null, details: DetailsPayload | null = null): Promise<boolean> {
-  const work = preparation.then(() => prepare(core, manifest, index, details));
+  const work = preparation.then(async () => {
+    // Only the last serialized successful preparation can be reused. An
+    // intervening core/index may advance the revision high-water mark, even if
+    // its adoption fails, so never retain a per-core collection of shortcuts.
+    const receipt = JSON.stringify([manifest, index, details ? [details.run_date, verifiedDetailsSha(details)] : null]);
+    if (lastPrepared && historicalCatalogueOwner(lastPrepared.core) === historicalCatalogueOwner(core) &&
+        lastPrepared.embedded === core.bank_rate_history_catalogue &&
+        lastPrepared.receipt === receipt && lastPrepared.checkpoint === decodedCheckpoint &&
+        lastPrepared.catalogue === cachedHistoricalBankRateCatalogue(core)) return true;
+    lastPrepared = null;
+    const completion = { reusable: false };
+    const ready = await prepare(core, manifest, index, details, completion);
+    const catalogue = ready ? cachedHistoricalBankRateCatalogue(core) : null;
+    if (catalogue && completion.reusable) lastPrepared = { core, embedded: core.bank_rate_history_catalogue, receipt, catalogue, checkpoint: decodedCheckpoint };
+    return ready;
+  });
   preparation = work.catch(() => false);
   return preparation;
 }
 
-async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null, details: DetailsPayload | null): Promise<boolean> {
+async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null, details: DetailsPayload | null,
+  completion: { reusable: boolean }): Promise<boolean> {
   clearHistoricalBankRateCatalogue(core);
   const embedded = (await prepareHistoricalBankRateCatalogueAsync(core.bank_rate_history_catalogue, yieldHistoryWork))?.catalogue;
+  const { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogueAsync } = bundledHistory();
   const selected = freshIndex ?? bundledHistoricalCatalogueBinding.index;
   if (embedded && !Object.values(embedded.sources).some(source => source.kind === 'published_core') &&
       !embedded.run_dates.some(day => day < core.run_date && (!embedded.sources[day] || embedded.unavailable_dates[day])) &&
-      !selected?.dates.some(day => day < core.run_date && !embedded.sources[day])) return true;
+      !selected?.dates.some(day => day < core.run_date && !embedded.sources[day])) { completion.reusable = true; return true; }
   if (!manifest.payload_revision) return !!embedded;
   let knownIndex = bundledHistoricalCatalogueBinding.index;
   const fallback = () => {
@@ -232,6 +263,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
       (!catalogue.sources[day] || catalogue.unavailable_dates[day])))].sort();
     await yieldToUi();
     if (!installHistoricalBankRateCatalogue(core, catalogue, missing)) return false;
+    completion.reusable = true;
     const bundledReusable = catalogue === baseline && bundledMatches && baselineIndex && sameHeads(index, baselineIndex) &&
       !public_fallback && !saved?.public_fallback;
     const savedReusable = saved && catalogue === saved.catalogue && cachedMatches && sameHeads(index, saved.index) &&
@@ -255,7 +287,10 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
         const text = JSON.stringify(await compressCatalogueAsync(value, { yieldControl: yieldHistoryWork }));
         await cache.writeBankRateHistory(text);
         decodedCheckpoint = { text, value };
-      } catch { debugLog.warn('bank-history-catalogue', 'History is ready; its offline cache could not be saved.'); }
+      } catch {
+        completion.reusable = false;
+        debugLog.warn('bank-history-catalogue', 'History is ready; its offline cache could not be saved.');
+      }
     }
     return true;
   } catch (error) {

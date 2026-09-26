@@ -1,6 +1,6 @@
 import { prepareHistoricalBankRateHistory, decodeSavedHistoricalCatalogue, decodeSavedHistoricalCatalogueAsync } from '../src/data/historicalBankRateCatalogueSync';
 import { upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
-import { availableHistoricalBankRateCatalogue, missingHistoricalCatalogueDates } from '../src/data/historicalBankRateCatalogueStore';
+import { availableHistoricalBankRateCatalogue, clearHistoricalBankRateCatalogue, missingHistoricalCatalogueDates } from '../src/data/historicalBankRateCatalogueStore';
 import { cache } from '../src/data/cache';
 import { bindVerifiedDetails } from '../src/data/detailsIdentity';
 import * as compression from '../src/data/historicalBankRateCatalogueCompression';
@@ -9,6 +9,8 @@ import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRate
 import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
 import type { DatesIndex } from '../src/data/datesIndex';
 import type { PayloadRevisionHead } from '../src/data/payloadRevision';
+import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
+import type { RbaCalendar } from '../src/data/rbaCalendar';
 
 let mockBaseline: HistoricalBankRateCatalogue;
 let mockCache: string | null = null;
@@ -424,6 +426,82 @@ test('repeated saved-checkpoint reads reuse one decoded object and up-to-date re
   await prepareHistoricalBankRateHistory(current, manifest(current.run_date), mockIndex(current.run_date), details(current.run_date));
   expect(inflate).not.toHaveBeenCalled();
   expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(1);
+});
+
+test('consecutive identical verified preparations reuse the installed catalogue without cache IO or decoding', async () => {
+  const current = core('2026-09-27'), edition = manifest(current.run_date), index = mockIndex(current.run_date);
+  await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
+  const first = history(current), reads = jest.mocked(cache.readBankRateHistory).mock.calls.length;
+  const inflate = jest.spyOn(compression, 'decompressCatalogueAsync');
+  const encode = jest.spyOn(compression, 'compressCatalogueAsync');
+  jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockClear();
+  await prepareHistoricalBankRateHistory(current, { ...edition }, JSON.parse(JSON.stringify(index)), details(current.run_date));
+  expect(history(current)).toBe(first);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads);
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(1);
+  expect(inflate).not.toHaveBeenCalled(); expect(encode).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  clearHistoricalBankRateCatalogue(current);
+  await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads + 1);
+  expect(history(current)).toBe(first);
+});
+
+test('later verified details and same-core terms revisions invalidate the preparation shortcut', async () => {
+  const current = core('2026-09-27'), edition = manifest(current.run_date), index = mockIndex(current.run_date);
+  await prepareHistoricalBankRateHistory(current, edition, index);
+  expect(history(current).sources[current.run_date]).toBeUndefined();
+  await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
+  expect(rates(history(current), current.run_date)).toEqual([6]);
+  const revised = mockIndex(current.run_date); revised.revision_heads![current.run_date] = head(current.run_date, 2);
+  await prepareHistoricalBankRateHistory(current, manifest(current.run_date, 'a'.repeat(64), 2), revised, details(current.run_date));
+  expect(history(current).sources[current.run_date]).toEqual({ ...source(current.run_date), manifest_sha256: head(current.run_date, 2).manifest_sha256 });
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(3);
+});
+
+test('an explicit RBA-only wrapper reuses its historical owner without clearing or reading the cache', async () => {
+  const current = core('2026-09-27'), edition = manifest(current.run_date), index = mockIndex(current.run_date);
+  current.rba = [];
+  await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
+  const prepared = availableHistoricalBankRateCatalogue(current);
+  const reads = jest.mocked(cache.readBankRateHistory).mock.calls.length;
+  const writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
+  const replacement = integrateRbaCalendarIntoCore(current, {
+    decisions: [{ date: '2026-09-01', outcome: 'hold', rate: 4.1 }],
+  } as RbaCalendar);
+  expect(replacement).not.toBe(current);
+  expect(availableHistoricalBankRateCatalogue(replacement)).toBe(prepared);
+  const inflate = jest.spyOn(compression, 'decompressCatalogueAsync');
+  const encode = jest.spyOn(compression, 'compressCatalogueAsync');
+  jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockClear();
+  expect(await prepareHistoricalBankRateHistory(replacement, { ...edition }, JSON.parse(JSON.stringify(index)), details(current.run_date))).toBe(true);
+  expect(availableHistoricalBankRateCatalogue(replacement)).toBe(prepared);
+  expect(availableHistoricalBankRateCatalogue(current)).toBe(prepared);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads);
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(writes);
+  expect(inflate).not.toHaveBeenCalled(); expect(encode).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+});
+
+test('an intervening different core advances historical revision checks before an earlier core can reuse history', async () => {
+  const installed = core(), installedManifest = manifest(), original = mockIndex();
+  await prepareHistoricalBankRateHistory(installed, installedManifest, original);
+  await prepareHistoricalBankRateHistory(core('2026-09-27'), manifest('2026-09-27'), mockIndex('2026-09-27', true), details('2026-09-27'));
+  expect(await prepareHistoricalBankRateHistory(installed, installedManifest, original)).toBe(false);
+  expect(availableHistoricalBankRateCatalogue(installed)).toBeNull();
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(3);
+});
+
+test('failed preparation and failed persistence remain retryable on identical input', async () => {
+  const current = core('2026-09-27'), edition = manifest(current.run_date), index = mockIndex(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(current, edition)).toBe(false);
+  expect(await prepareHistoricalBankRateHistory(current, edition)).toBe(false);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(2);
+  jest.mocked(cache.writeBankRateHistory).mockRejectedValueOnce(new Error('Temporary storage failure'));
+  expect(await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date))).toBe(true);
+  expect(await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date))).toBe(true);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(4);
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(2);
 });
 
 test('old numerical envelopes, invalid compression and mismatched edition bindings are rejected', async () => {

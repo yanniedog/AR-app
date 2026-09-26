@@ -63,6 +63,7 @@ jest.mock('../src/data/historyDaily', () => {
 
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: () => mockYieldToUi(),
+  yieldToPaintFrames: async () => {},
   parseJsonHeavy: async (text: string) => JSON.parse(text),
 }));
 

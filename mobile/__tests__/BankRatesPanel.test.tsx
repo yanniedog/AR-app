@@ -20,7 +20,7 @@ const core = { run_date: '2026-09-22', sections: {
 } } as unknown as CorePayload;
 core.bank_rate_history = { schema_version: 1, row_tiers: { Mortgage: [0, 1], Savings: [0], TD: [0] }, run_dates: ['2026-08-01', '2026-09-22'], sections: { Mortgage: [[[0, 2, [6]]], [[0, 2, [9]]]], Savings: [[[0, 2, [4]]]], TD: [[[0, 2, [5]]]] } };
 for (const section of ['Mortgage', 'Savings', 'TD'] as const) core.sections[section].rates.forEach((row, i) => { row.bank_rate_tier = i; });
-const mockState = { core, bankRateHistoryRevision: 0, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
+const mockState = { core, bankRateHistoryRevision: 0, bankRateHistoryLoading: false, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
   ensureDetails: jest.fn(), ensureRbaCalendar: jest.fn(), details: null };
 jest.mock('../src/data/store', () => ({ useStore: (selector: (s: typeof mockState) => unknown) => selector(mockState) }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
@@ -29,8 +29,25 @@ jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedCon
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => undefined) }));
-beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.bankRateHistoryRevision = 0; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
+beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.bankRateHistoryRevision = 0; mockState.bankRateHistoryLoading = false; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
+
+test('startup history preparation hides the current-only fallback until complete', async () => {
+  mockState.bankRateHistoryLoading = true;
+  const onModelChange = jest.fn(), onChartReady = jest.fn();
+  let tree!: Renderer;
+  await act(async () => { tree = TestRenderer.create(<BankRatesPanel onModelChange={onModelChange} onChartReady={onChartReady} />) as Renderer; });
+  expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
+  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable');
+  expect(onModelChange).toHaveBeenLastCalledWith(null);
+  expect(onChartReady).toHaveBeenLastCalledWith(false);
+  mockState.bankRateHistoryLoading = false;
+  mockState.bankRateHistoryRevision++;
+  await act(async () => tree.update(<BankRatesPanel onModelChange={onModelChange} onChartReady={onChartReady} />));
+  expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(1);
+  act(() => tree.unmount());
+});
 test('opens Rates/Mean; all statistics, product sections and secondary Gap are selectable', () => {
   let tree!: Renderer;
   act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });

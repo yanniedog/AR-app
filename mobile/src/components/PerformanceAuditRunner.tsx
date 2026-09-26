@@ -384,7 +384,7 @@ function datasetRevisionLabel(revision: AuditDatasetRevision): string {
 
 function assertDatasetRevision(expected: AuditDatasetRevision): void {
   const state = useStore.getState();
-  if (state.refreshing || state.postRefreshWarming) {
+  if (state.refreshing || state.postRefreshWarming || state.bankRateHistoryLoading) {
     throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
   }
   const actual = captureDatasetRevision();
@@ -399,13 +399,13 @@ async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog):
   while (true) {
     assertSessionActive(watchdog);
     const state = useStore.getState();
-    if (!state.refreshing && !state.postRefreshWarming) {
+    if (!state.refreshing && !state.postRefreshWarming && !state.bankRateHistoryLoading) {
       // Require a short quiet window so the refresh finally block cannot move
       // into post-warm between the check and the audit snapshot.
       await delay(150);
       assertSessionActive(watchdog);
       const settled = useStore.getState();
-      if (!settled.refreshing && !settled.postRefreshWarming) return;
+      if (!settled.refreshing && !settled.postRefreshWarming && !settled.bankRateHistoryLoading) return;
     }
     await delay(50);
   }

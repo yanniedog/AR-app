@@ -269,6 +269,7 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
       clearSuitabilityIndex();
       set({
         core: null,
+        bankRateHistoryLoading: false,
         coreIntegrity: null,
         coreAssetState: {
           status: 'unavailable',

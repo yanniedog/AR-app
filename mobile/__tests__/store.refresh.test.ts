@@ -57,6 +57,7 @@ jest.mock('../src/data/historyDaily', () => {
 
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: () => mockYieldToUi(),
+  yieldToPaintFrames: async () => {},
 }));
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
@@ -132,6 +133,32 @@ describe('store refresh lifecycle', () => {
       min_date: remoteManifest.run_date,
       latest_date: remoteManifest.run_date,
     });
+  });
+
+  it.each([false, true])('installs current rates before history finishes (quiet refresh=%s)', async background => {
+    mockReadMeta.mockResolvedValue(null);
+    mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<boolean>(resolve => { release = () => resolve(true); });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+      entered();
+      return waiting;
+    });
+    useStore.setState({ status: 'loading', core: null, manifest: null,
+      ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureHistoryBanks: mockEnsureHistoryBanks, ensureBankInsights: mockEnsureBankInsights,
+      ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+    const refreshing = useStore.getState().refresh({ background });
+    await started;
+    expect(useStore.getState()).toMatchObject({ core: remoteCore, status: 'ready', refreshing: false,
+      payloadProgress: null, bankRateHistoryLoading: true, postRefreshWarming: true });
+    release();
+    await refreshing;
+    expect(useStore.getState().bankRateHistoryLoading).toBe(false);
+    expect(useStore.getState().postRefreshWarming).toBe(false);
+    prepare.mockRestore();
   });
 
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
