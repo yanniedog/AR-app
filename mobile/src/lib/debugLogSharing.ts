@@ -121,7 +121,12 @@ function run(): Promise<DebugLogUploadSnapshot> {
 export function startDebugLogUpload(request: UploadRequest): Promise<DebugLogUploadSnapshot> {
   if (inFlight) return inFlight;
   if (request.sessionId && request.sessionId === lastAuditSession) return Promise.resolve(snapshot);
-  if (snapshot.recoveryReceipt) return Promise.resolve(snapshot);
+  if (snapshot.recoveryReceipt) {
+    // A later audit must still show why its automatic upload is blocked.
+    // Keep the existing deletion capability until the user removes that copy.
+    update({ sessionId: request.sessionId, phase: 'failed' });
+    return Promise.resolve(snapshot);
+  }
   lastRequest = request;
   if (request.sessionId) lastAuditSession = request.sessionId;
   preparedBody = null;

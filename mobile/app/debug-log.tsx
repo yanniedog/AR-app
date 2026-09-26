@@ -335,7 +335,8 @@ function DebugLogScreenInner() {
           </Card>
           <AppText variant="tiny" color="textMuted">
             Copy stays on this device. Share uses the operating-system share sheet and removes its
-            temporary file afterward. Public hosting is a separate two-confirmation expert flow.
+            temporary file afterward. Upload sends the full log to public hosting and copies the
+            verified link.
           </AppText>
           {clearFailed ? (
             <AppText accessibilityRole="alert" variant="tiny" color="danger">
@@ -382,6 +383,17 @@ function DebugLogScreenInner() {
           </Row>
           {/* Upload status survives navigation and audit completion. */}
           <DebugLogUploadStatus />
+        </View>
+        <ScrollView
+          ref={scrollRef}
+          onContentSizeChange={() => setLogLayoutReady(true)}
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingBottom: 32,
+            gap: 12,
+          }}
+        >
           {visibleReceipts.map((uploadReceipt) => (
             <Card key={uploadReceipt.url} style={{ gap: 8 }}>
               <AppText variant="tiny" color="textMuted">
@@ -410,16 +422,6 @@ function DebugLogScreenInner() {
               />
             </Card>
           ))}
-        </View>
-        <ScrollView
-          ref={scrollRef}
-          onContentSizeChange={() => setLogLayoutReady(true)}
-          style={{ flex: 1 }}
-          contentContainerStyle={{
-            paddingHorizontal: 16,
-            paddingBottom: 32,
-          }}
-        >
           <View
             style={{
               backgroundColor: theme.dark ? theme.colors.surface : theme.colors.chip,

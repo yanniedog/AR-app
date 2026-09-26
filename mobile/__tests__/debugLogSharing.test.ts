@@ -116,6 +116,11 @@ describe('automatic audit log sharing', () => {
     await sharing.retryDebugLogUpload();
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     expect(clipboard.setStringAsync).not.toHaveBeenCalled();
+    expect(await sharing.startDebugLogUpload({ ...request, sessionId: 'audit-2' })).toMatchObject({
+      phase: 'failed', sessionId: 'audit-2',
+      recoveryReceipt: { url: result.url, deleteKey: result.deleteKey },
+    });
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     sharing.forgetDeletedDebugLogUpload(result.url);
     expect(sharing.getDebugLogUploadSnapshot()).toMatchObject({ phase: 'idle', recoveryReceipt: null });
   });
