@@ -73,6 +73,15 @@ describe('redactSecrets', () => {
     expect(out).toContain('[REDACTED]');
   });
 
+  it.each(['Authorization: Bearer', 'authorization: bearer', 'Authorization: Basic'])(
+    'redacts the complete %s credential', (header) => {
+      const out = redactSecrets(`${header} sk-live-xyz request=completed`);
+      expect(out).not.toContain('sk-live-xyz');
+      expect(out).toContain('[REDACTED]');
+      expect(out).toContain('request=completed');
+    },
+  );
+
   it('redacts account identifiers and email addresses', () => {
     const out = redactSecrets(
       'auth signed in uid=firebase-123 email=person@example.com subscriptionId=sub-secret',

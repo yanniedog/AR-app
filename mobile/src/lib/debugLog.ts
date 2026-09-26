@@ -40,7 +40,7 @@ const SECRET_VALUE = String.raw`[^\s,;}"']+`;
 const SECRET_SOURCES: string[] = [
   String.raw`EXPO_TOKEN[=:\s]${SECRET_VALUE}`,
   String.raw`Bearer\s+${SECRET_VALUE}`,
-  String.raw`Authorization:\s*${SECRET_VALUE}`,
+  String.raw`Authorization:\s*(?:(?:Bearer|Basic)\s+)?${SECRET_VALUE}`,
   String.raw`(?:api[_-]?key|secret|password|token)[=:\s]${SECRET_VALUE}`,
   String.raw`"(?:EXPO_TOKEN|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`,
   String.raw`'(?:EXPO_TOKEN|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`,
