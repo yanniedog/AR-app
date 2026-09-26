@@ -44,7 +44,7 @@ import {
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
-import { startDebugLogUpload } from '../lib/debugLogSharing';
+import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
   buildDeepPerformanceAuditPlan,
   ScenarioReentryGate,
@@ -2483,6 +2483,9 @@ export function PerformanceAuditRunner() {
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const state = usePerformanceAuditState();
+  const uploadBusy = useSyncExternalStore(
+    subscribeDebugLogUpload, isDebugLogUploadBusy, isDebugLogUploadBusy,
+  );
   const runGate = usePerformanceAuditRunGate();
   const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
   const pathnameRef = useRef(pathname);
@@ -2490,6 +2493,10 @@ export function PerformanceAuditRunner() {
 
   useEffect(() => {
     if (state.status !== 'queued' || !state.sessionId || !state.startedAt) return;
+    // A run can be queued after the prior result publishes but before its
+    // final flush starts sharing. Do not install a new measurement transport
+    // guard until that sharing finishes; the subscription wakes this effect.
+    if (isDebugLogUploadBusy()) return;
     // Teardown outlives the previous audit's terminal state; releaseCount
     // re-runs this effect once that run lets go of the gate.
     if (!claimRun(state.sessionId)) return;
@@ -3574,6 +3581,7 @@ export function PerformanceAuditRunner() {
     state.startedAt,
     state.auditMode,
     state.status,
+    uploadBusy,
   ]);
 
   useEffect(() => {
