@@ -18,6 +18,8 @@ import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityCon
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
+import type { DatesIndex } from './datesIndex';
+import { assertHistoryDatesIndexAdvances, parseHistoryDatesIndex } from './historyDatesIndex';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -41,6 +43,9 @@ const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
 // seconds after every fresh ingest when detailsSha was patched).
 const CORE_META = `${DIR}core-meta.json`;
 const CORE_META_TMP = `${CORE_META}.tmp`;
+// Preserve index-only corrections while replacing a bundle whose embedded
+// receipt can be older than its metadata sidecar.
+const CORE_HISTORY_RECOVERY = `${DIR}core-history-recovery.json`;
 // Optional-asset content hashes live in a tiny sidecar so updating them never
 // rewrites the multi-MB core bundle. Keyed by coreSha so a new core run
 // automatically invalidates stale optional hashes.
@@ -98,6 +103,8 @@ export interface CacheMeta {
   savedAt: string;
   coreSha: string;
   detailsSha: string | null;
+  /** Selected immutable heads committed before deferred history preparation. */
+  historyDatesIndex?: DatesIndex;
   searchIndexSha?: string | null;
   historyBanksSha?: string | null;
   bankInsightsSha?: string | null;
@@ -294,18 +301,18 @@ async function readJson<T>(path: string): Promise<T | null> {
   }
 }
 
-async function writeCoreMeta(meta: CacheMeta): Promise<void> {
+async function writeCoreMeta(meta: CacheMeta, path = CORE_META): Promise<void> {
   await ensureDir();
-  await writeText(CORE_META_TMP, JSON.stringify(meta));
-  await deletePath(CORE_META);
-  await movePath(CORE_META_TMP, CORE_META);
+  await writeText(`${path}.tmp`, JSON.stringify(meta));
+  await deletePath(path);
+  await movePath(`${path}.tmp`, path);
 }
 
-async function readCoreMetaSidecar(): Promise<CacheMeta | null> {
-  const primary = await readJson<CacheMeta>(CORE_META);
+async function readCoreMetaSidecar(path = CORE_META): Promise<CacheMeta | null> {
+  const primary = await readJson<CacheMeta>(path);
   if (isCacheMeta(primary)) return primary;
   // Crash window after writeCoreMeta wrote the tmp but before moveAsync finished.
-  const tmp = await readJson<CacheMeta>(CORE_META_TMP);
+  const tmp = await readJson<CacheMeta>(`${path}.tmp`);
   return isCacheMeta(tmp) ? tmp : null;
 }
 
@@ -320,6 +327,29 @@ function isCacheMeta(value: unknown): value is CacheMeta {
     typeof m.coreSha === 'string' &&
     typeof m.source === 'string'
   );
+}
+
+function assertHistoryReceiptWrite(next: CacheMeta, previous: CacheMeta | null): void {
+  const index = parseHistoryDatesIndex(next.historyDatesIndex, next.manifest);
+  const prior = previous && parseHistoryDatesIndex(previous.historyDatesIndex, previous.manifest);
+  if ((next.historyDatesIndex !== undefined || prior) && !index) {
+    throw new Error('Historical publication recovery index is unavailable or invalid');
+  }
+  if (index && prior) assertHistoryDatesIndexAdvances(index, prior);
+}
+
+async function recoverHistoryReceipt(meta: CacheMeta): Promise<CacheMeta> {
+  const recovery = await readCoreMetaSidecar(CORE_HISTORY_RECOVERY);
+  if (!recovery || recovery.coreSha !== meta.coreSha || !samePayloadIdentity(recovery.manifest, meta.manifest)) return meta;
+  const recovered = parseHistoryDatesIndex(recovery.historyDatesIndex, meta.manifest);
+  if (!recovered) return meta;
+  const embedded = parseHistoryDatesIndex(meta.historyDatesIndex, meta.manifest);
+  try {
+    // A same-core repair may already have committed newer heads. A recovery
+    // receipt must never replace them or alter details/optional-asset metadata.
+    if (embedded) assertHistoryDatesIndexAdvances(recovered, embedded);
+    return { ...meta, historyDatesIndex: recovered };
+  } catch { return meta; }
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -378,7 +408,7 @@ export const cache = {
           samePayloadIdentity(sidecar.manifest, b.meta.manifest))) {
       return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
-    return { ...b, core: normalized.core, integrity: normalized.integrity };
+    return { ...b, meta: await recoverHistoryReceipt(b.meta), core: normalized.core, integrity: normalized.integrity };
   },
 
   async readMeta(): Promise<CacheMeta | null> {
@@ -394,7 +424,7 @@ export const cache = {
       (await readJson<CoreBundle>(BUNDLE))?.meta ??
       (await readJson<CoreBundle>(BUNDLE_TMP))?.meta ??
       null;
-    return isCacheMeta(fromBundle) ? fromBundle : null;
+    return isCacheMeta(fromBundle) ? recoverHistoryReceipt(fromBundle) : null;
   },
 
   async readCore(): Promise<CorePayload | null> {
@@ -414,8 +444,13 @@ export const cache = {
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
     return serialize(async () => {
-      const previous = (await cache.readMeta())?.manifest;
+      const previousMeta = await cache.readMeta();
+      const previous = previousMeta?.manifest;
       assertNoRevisionRollback(previous, meta.manifest);
+      assertHistoryReceiptWrite(meta, previousMeta);
+      if (previousMeta && parseHistoryDatesIndex(previousMeta.historyDatesIndex, previousMeta.manifest)) {
+        await writeCoreMeta(previousMeta, CORE_HISTORY_RECOVERY);
+      }
       // Drop any prior sidecar first so a crash after the new bundle lands cannot
       // leave readMeta trusting stale detailsSha/coreSha from the old run.
       await deletePath(CORE_META);
@@ -427,6 +462,8 @@ export const cache = {
       // the multi-MB bundle is already committed (embedded meta remains valid).
       try {
         await writeCoreMeta(meta);
+        await deletePath(CORE_HISTORY_RECOVERY);
+        await deletePath(`${CORE_HISTORY_RECOVERY}.tmp`);
       } catch {
         // leave CORE_META_TMP if present — readCoreMetaSidecar recovers it
       }
@@ -446,6 +483,12 @@ export const cache = {
       if (existing.manifest.payload_revision && !samePayloadIdentity(existing.manifest, meta.manifest)) return;
       if (existing.manifest.generated_at > meta.manifest.generated_at) return;
       const merged: CacheMeta = { ...existing, ...meta };
+      // A corrupt optional receipt must not stop details/suitability recovery.
+      // Only drop invalid inherited data; explicit replacements are validated below.
+      if (meta.historyDatesIndex === undefined && !parseHistoryDatesIndex(existing.historyDatesIndex, existing.manifest)) {
+        delete merged.historyDatesIndex;
+      }
+      assertHistoryReceiptWrite(merged, existing);
       await writeCoreMeta(merged);
     });
   },

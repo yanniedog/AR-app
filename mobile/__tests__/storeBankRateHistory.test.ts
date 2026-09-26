@@ -10,6 +10,7 @@ import { closeSuitabilityGateUntilRebuild } from '../src/data/suitabilityIndex';
 import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
 import { cachedHistoricalBankRateCatalogue, installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
+import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
 
 jest.mock('../src/data/cache', () => ({ cache: {
   readBundle: jest.fn(), readDetails: jest.fn(async () => null),
@@ -43,7 +44,37 @@ beforeEach(() => {
   jest.mocked(yieldToPaintFrames).mockResolvedValue(undefined);
   jest.mocked(prepareHistoricalBankRateHistory).mockResolvedValue(true);
   jest.mocked(warmHistoricalBankRateCatalogue).mockResolvedValue(undefined);
+  jest.mocked(cache.readDetails).mockResolvedValue(null);
 });
+
+test.each(['valid', 'malformed', 'oversized', 'wrong-head'])(
+  'offline bootstrap recovers the saved selection after first paint, ignoring %s optional receipts safely', async kind => {
+    const manifest = revisionManifest(1), day = manifest.run_date;
+    const index = { schema_version: 1, revision_protocol: 1 as const, dates: [day], count: 1,
+      min_date: day, latest_date: day, revision_heads: { [day]: revisionHead(manifest) } };
+    const receipt = kind === 'malformed' ? { dates: [null] } : kind === 'oversized' ?
+      { ...index, dates: Array(5001).fill(day) } : kind === 'wrong-head' ?
+        { ...index, revision_heads: { [day]: revisionHead(revisionManifest(2)) } } : index;
+    const details = { schema_version: 1, run_date: day, products: {} };
+    jest.mocked(cache.readDetails).mockResolvedValue(details);
+    jest.mocked(cache.readBundle).mockResolvedValue({ core: sampleCore, integrity: null,
+      meta: { manifest, source: 'remote', coreSha: manifest.files.core.sha256, historyDatesIndex: receipt },
+    } as unknown as NonNullable<Awaited<ReturnType<typeof cache.readBundle>>>);
+    const paint = deferred();
+    jest.mocked(yieldToPaintFrames).mockReturnValueOnce(paint.promise);
+    const { get, set } = store();
+    set({ status: 'idle', core: null, manifest: null });
+    await createBootstrapActions(set, get, () => ({})).bootstrap({ skipRefresh: true });
+    expect(get().status).toBe('ready');
+    expect(cache.readDetails).not.toHaveBeenCalled();
+    paint.resolve();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest,
+      kind === 'valid' ? index : null, details);
+    expect(get().bankRateHistoryLoading).toBe(false);
+    expect(get().refresh).not.toHaveBeenCalled();
+  },
+);
 
 test('cached bootstrap exposes a gated ready core before any history or paint work completes', async () => {
   const paint = deferred();

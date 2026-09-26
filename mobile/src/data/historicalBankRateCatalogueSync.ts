@@ -5,7 +5,8 @@ import { yieldToUi } from '../lib/yieldToUi';
 import { cache } from './cache';
 import { parseDatesIndex, type DatesIndex } from './datesIndex';
 import { verifiedDetailsSha } from './detailsIdentity';
-import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity } from './historyIdentity';
+import { historicalSourceIdentity } from './historyIdentity';
+import { assertHistoryDatesIndexAdvances } from './historyDatesIndex';
 import { assertRevisionManifest } from './payloadRevision';
 import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from './historicalBankRateCatalogueMerge';
@@ -95,13 +96,6 @@ function currentMatches(core: CorePayload, manifest: Manifest, index: DatesIndex
     assertRevisionManifest(manifest, head, core.run_date, PAYLOAD_REPO);
     return true;
   } catch { return false; }
-}
-
-function assertIndexAdvances(index: DatesIndex, previous: DatesIndex): void {
-  const dates = Object.keys(previous.revision_heads ?? {}).filter(day => day <= index.latest_date);
-  assertHistoricalIdentitiesAdvance(index, dates, Object.fromEntries(
-    dates.map(day => [day, historicalSourceIdentity(previous, day)]),
-  ));
 }
 
 function sameHeads(left: DatesIndex, right: DatesIndex): boolean {
@@ -219,8 +213,8 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
       currentMatches(core, manifest, baselineIndex);
     const index = freshIndex ?? (cachedMatches ? saved!.index : bundledMatches ? baselineIndex : null);
     if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days || !currentMatches(core, manifest, index)) return fallback();
-    if (baselineIndex) assertIndexAdvances(index, baselineIndex);
-    if (saved) assertIndexAdvances(index, saved.index);
+    if (baselineIndex) assertHistoryDatesIndexAdvances(index, baselineIndex);
+    if (saved) assertHistoryDatesIndexAdvances(index, saved.index);
     const savedCompatible = saved && (!saved.producer_core_sha256 || saved.producer_core_sha256 === manifest.files.core.sha256);
     // A fully covered compatible checkpoint already contains every baseline
     // observation that this selected index could restore. Its receipts suffice;

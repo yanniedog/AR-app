@@ -340,6 +340,82 @@ test('a later core adds only today, exposes missing dates, and reopens its compr
   expect(missingHistoricalCatalogueDates(restarted)).toEqual(['2026-09-27']);
 });
 
+test('offline recovery uses the persisted exact index and verified details when the new core predates its history checkpoint', async () => {
+  const previousDay = '2026-09-27', nextDay = '2026-09-28';
+  await prepareHistoricalBankRateHistory(core(previousDay, '0.07'), manifest(previousDay), mockIndex(previousDay), details(previousDay));
+  const oldCheckpoint = decodeSavedHistoricalCatalogue(mockCache)!;
+  expect(oldCheckpoint.index.latest_date).toBe(previousDay);
+  expect(oldCheckpoint.core_bindings[nextDay]).toBeUndefined();
+
+  // Core/manifest/index/details survived the interrupted adoption; no history
+  // job ran for this edition before the simulated offline restart.
+  const restarted = core(nextDay, '0.08'), originalRow = restarted.sections.Mortgage.rates[0];
+  const persistedIndex = JSON.parse(JSON.stringify(mockIndex(nextDay))) as DatesIndex;
+  expect(await prepareHistoricalBankRateHistory(restarted, manifest(nextDay), persistedIndex, details(nextDay))).toBe(true);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([5]);
+  expect(rates(history(restarted), '2026-09-26')).toEqual([6]);
+  expect(rates(history(restarted), previousDay)).toEqual([7.000000000000001]);
+  expect(rates(history(restarted), nextDay)).toEqual([8]);
+  expect(history(restarted).sources[previousDay]).toEqual(oldCheckpoint.catalogue.sources[previousDay]);
+  expect(missingHistoricalCatalogueDates(restarted)).toEqual([]);
+  expect(restarted.sections.Mortgage.rates[0]).toBe(originalRow);
+
+  const recoveredCheckpoint = decodeSavedHistoricalCatalogue(mockCache)!;
+  expect(recoveredCheckpoint.core_bindings[nextDay]).toEqual({ core_sha256: manifest(nextDay).files.core.sha256,
+    manifest_sha256: persistedIndex.revision_heads![nextDay].manifest_sha256 });
+  const secondRestart = core(nextDay, '0.08');
+  expect(await prepareHistoricalBankRateHistory(secondRestart, manifest(nextDay))).toBe(true);
+  expect(history(secondRestart)).toEqual(history(restarted));
+});
+
+test('a persisted historical correction takes effect after a crash even when the current selected head is unchanged', async () => {
+  const day = '2026-09-27', edition = manifest(day), originalIndex = mockIndex(day);
+  await prepareHistoricalBankRateHistory(core(day, '0.07'), edition, originalIndex, details(day));
+  const persistedIndex = JSON.parse(JSON.stringify(mockIndex(day, true))) as DatesIndex;
+  expect(persistedIndex.revision_heads![day]).toEqual(originalIndex.revision_heads![day]);
+  const restarted = core(day, '0.07');
+  expect(await prepareHistoricalBankRateHistory(restarted, edition, persistedIndex, details(day))).toBe(true);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([]);
+  expect(rates(history(restarted), '2026-09-26')).toEqual([6]);
+  expect(rates(history(restarted), day)).toEqual([7.000000000000001]);
+  expect(missingHistoricalCatalogueDates(restarted)).toEqual(['2026-09-25']);
+  expect(decodeSavedHistoricalCatalogue(mockCache)!.index.revision_heads!['2026-09-25']).toEqual(head('2026-09-25', 2));
+  const secondRestart = core(day, '0.07');
+  expect(await prepareHistoricalBankRateHistory(secondRestart, edition)).toBe(true);
+  expect(rates(history(secondRestart), '2026-09-25')).toEqual([]);
+  expect(await prepareHistoricalBankRateHistory(secondRestart, edition, originalIndex)).toBe(false);
+  expect(availableHistoricalBankRateCatalogue(secondRestart)).toBeNull();
+});
+
+test('a persisted index removing a verified historical head cannot reuse the old checkpoint through an unchanged current head', async () => {
+  const day = '2026-09-27', edition = manifest(day), originalIndex = mockIndex(day);
+  await prepareHistoricalBankRateHistory(core(day), edition, originalIndex, details(day));
+  const oldCheckpoint = mockCache, writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
+  const persistedIndex = JSON.parse(JSON.stringify(originalIndex)) as DatesIndex;
+  persistedIndex.dates = persistedIndex.dates.filter(date => date !== '2026-09-25');
+  persistedIndex.min_date = persistedIndex.dates[0]; persistedIndex.count = persistedIndex.dates.length;
+  delete persistedIndex.revision_heads!['2026-09-25'];
+  expect(persistedIndex.revision_heads![day]).toEqual(originalIndex.revision_heads![day]);
+  const restarted = core(day);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition, persistedIndex, details(day))).toBe(false);
+  expect(availableHistoricalBankRateCatalogue(restarted)).toBeNull();
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(writes);
+  expect(mockCache).toBe(oldCheckpoint);
+});
+
+test('offline recovery rejects a persisted index selecting another current edition despite the same core digest', async () => {
+  const previousDay = '2026-09-27', nextDay = '2026-09-28';
+  await prepareHistoricalBankRateHistory(core(previousDay), manifest(previousDay), mockIndex(previousDay), details(previousDay));
+  const oldCheckpoint = mockCache, writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
+  const persistedIndex = mockIndex(nextDay);
+  persistedIndex.revision_heads![nextDay] = head(nextDay, 2);
+  const restarted = core(nextDay);
+  expect(await prepareHistoricalBankRateHistory(restarted, manifest(nextDay), persistedIndex, details(nextDay))).toBe(false);
+  expect(availableHistoricalBankRateCatalogue(restarted)).toBeNull();
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(writes);
+  expect(mockCache).toBe(oldCheckpoint);
+});
+
 test.each(['unbound', 'wrong date', 'wrong digest', 'absent'])('current-day history rejects %s details provenance', async kind => {
   const current = core('2026-09-27', '0.07');
   const candidate = kind === 'absent' ? null : kind === 'wrong date' ? details() : kind === 'wrong digest' ? details(current.run_date, 'c'.repeat(64)) :

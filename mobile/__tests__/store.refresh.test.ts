@@ -1,6 +1,8 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
 import * as bankRateHistorySync from '../src/data/historicalBankRateCatalogueSync';
+import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
+import * as payload from '../src/data/payload';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -158,6 +160,45 @@ describe('store refresh lifecycle', () => {
     await refreshing;
     expect(useStore.getState().bankRateHistoryLoading).toBe(false);
     expect(useStore.getState().postRefreshWarming).toBe(false);
+    prepare.mockRestore();
+  });
+
+  it.each([false, true])('persists the selected history index before deferring history (same core=%s)', async sameCore => {
+    const manifest = revisionManifest(1, { files: { core: remoteManifest.files.core, details: remoteManifest.files.details } });
+    const day = manifest.run_date;
+    const priorDay = new Date(Date.parse(day) - 86_400_000).toISOString().slice(0, 10);
+    const oldHead = { ...revisionHead(manifest), manifest_url: revisionHead(manifest).manifest_url.replace(day, priorDay) };
+    const oldIndex = { schema_version: 1, revision_protocol: 1 as const, dates: [priorDay, day], count: 2,
+      min_date: priorDay, latest_date: day, revision_heads: { [priorDay]: oldHead, [day]: revisionHead(manifest) } };
+    const index = { ...oldIndex, revision_heads: { ...oldIndex.revision_heads, [priorDay]: {
+      ...oldHead, revision: 2, generation_id: 'corrected', manifest_sha256: 'f'.repeat(64),
+      manifest_url: oldHead.manifest_url.replace('r000001', 'r000002'),
+    } } };
+    // Today's core/assets are unchanged; only a prior day's selected head changes.
+    mockReadMeta.mockResolvedValue(sameCore ? { manifest, source: 'remote', savedAt: manifest.generated_at,
+      coreSha: manifest.files.core.sha256, detailsSha: manifest.files.details.sha256, historyDatesIndex: oldIndex } : null);
+    mockFetchManifest.mockResolvedValue(manifest);
+    mockFetchDatesIndexJson.mockResolvedValue(index);
+    mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+    jest.mocked(payload.downloadDetails).mockResolvedValue({ text: '{}', details: { schema_version: 1, run_date: day, products: {} } });
+    useStore.setState({ source: 'remote', manifest: sameCore ? manifest : null,
+      core: sameCore ? remoteCore : null, ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureHistoryBanks: mockEnsureHistoryBanks, ensureBankInsights: mockEnsureBankInsights,
+      ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+    let finish!: () => void;
+    const pending = new Promise<boolean>(resolve => { finish = () => resolve(true); });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+      entered(); return pending;
+    });
+    const refreshing = useStore.getState().refresh({});
+    await started;
+    const writer = sameCore ? mockUpdateMeta : mockWriteBundle;
+    expect(writer.mock.calls[0][0]).toMatchObject({ manifest, historyDatesIndex: index });
+    expect(useStore.getState()).toMatchObject({ status: 'ready', bankRateHistoryLoading: true });
+    finish();
+    await refreshing;
     prepare.mockRestore();
   });
 
