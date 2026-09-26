@@ -89,6 +89,7 @@ export interface RbaEntry {
 }
 
 export interface CorePayload {
+  bank_rate_history_catalogue?: import('./data/historicalBankRateCatalogueWire').HistoricalBankRateCatalogue;
   bank_rate_history?: import('./data/bankRateHistoryWire').PackedBankRateHistory;
   schema_version: number;
   run_date: string;

@@ -1,5 +1,7 @@
 import { cache } from './cache';
-import { prepareBankRateHistory } from './bankRateHistorySync';
+import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
+import { warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { normalizeInterests } from './interests';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
@@ -25,7 +27,7 @@ import {
   suitabilityIndexMatches,
 } from './suitabilityIndex';
 import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
-import type { CorePayload, DetailsPayload, Manifest } from '../types';
+import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
 import { savedRatesWithAlerts } from './subscriptions';
 import {
@@ -380,7 +382,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
             const historyCore = bundle?.core ?? live.core;
-            if (historyCore) await prepareBankRateHistory(historyCore, remote, resolution.datesIndex, { downloadMissing: !background });
+            if (historyCore) {
+              const historyDetails = liveMatches && live.details ? live.details : await cache.readDetails();
+              await prepareHistoricalBankRateHistory(historyCore, remote, resolution.datesIndex, historyDetails);
+              if (!background) await warmHistoricalBankRateCatalogue(historyCore, {
+                profileFilters: live.prefs.profileFilters, includeNonStandard: live.prefs.includeNonStandard,
+                interests: live.prefs.onboarded ? normalizeInterests(live.prefs.interests) : SECTION_KEYS,
+              });
+            }
             const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
             if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
@@ -459,7 +468,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
         );
         if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
-        await prepareBankRateHistory(core, remote, resolution.datesIndex, { downloadMissing: !background });
         // Verify the entire immutable edition before advertising it. Staging
         // details by content hash keeps the installed offline edition usable if
         // any subsequent asset download or cache write fails.
@@ -488,6 +496,11 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           await cache.writeDetails(downloaded.text, remote.files.details.sha256);
           stagedDetails = downloaded.details;
         }
+        await prepareHistoricalBankRateHistory(core, remote, resolution.datesIndex, stagedDetails);
+        if (!background) await warmHistoricalBankRateCatalogue(core, {
+          profileFilters: get().prefs.profileFilters, includeNonStandard: get().prefs.includeNonStandard,
+          interests: get().prefs.onboarded ? normalizeInterests(get().prefs.interests) : SECTION_KEYS,
+        });
         const detailsUnchanged = !!meta && meta.detailsSha === remote.files.details.sha256;
         onProgress({
           phase: 'install',

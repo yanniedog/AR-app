@@ -7,6 +7,7 @@ import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import type { CorePayload } from '../src/types';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
+import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
 type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
@@ -64,5 +65,33 @@ test('an update missing detailed history identifies the limitation and recovers 
   act(() => tree.update(<BankRatesPanel />));
   expect(chart().props.model.dates).toEqual(core.bank_rate_history!.run_dates);
   expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable in this update.');
+  act(() => tree.unmount());
+});
+
+test('prepacked history includes withdrawn products and filters their own dated feature evidence', () => {
+  const row = { provider: 'Withdrawn Bank', product_id: 'old', product_key: 'old-loan', product_name: 'Retired loan', category: 'RESIDENTIAL_MORTGAGES', rate_type: 'VARIABLE' };
+  const dates = ['2026-09-20', '2026-09-21', '2026-09-22'];
+  const source = { kind: 'published_core' as const, core_sha256: 'a'.repeat(64), details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) };
+  const identity = { provider: row.provider, product_id: row.product_id, product_key: row.product_key, category: row.category, dataset: 'Mortgage' as const };
+  const catalogue: HistoricalBankRateCatalogue = {
+    schema_version: 2, run_dates: dates, sources: Object.fromEntries(dates.map(day => [day, source])), unavailable_dates: {},
+    evidence: [{ status: 'unknown' }, ...[true, false].map(value => ({ status: 'known' as const, identity,
+      detail: { description: 'Ordinary home loan.', facts: [{ id: 'offset', kind: 'feature' as const, canonicalKey: 'OFFSET', sourceType: 'OFFSET', unit: 'boolean' as const, value }] },
+    }))],
+    sections: { Mortgage: [{ row, spans: [[0, 1, [5], 1], [1, 1, [6], 2]] }], Savings: [], TD: [] },
+  };
+  mockState.core = { ...core, bank_rate_history_catalogue: catalogue };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
+  expect(chart().props.model.lines.find(line => line.provider === 'Withdrawn Bank')!.points.map(point => point.date)).toEqual(dates.slice(0, 2));
+  expect(JSON.stringify(tree.toJSON())).toContain('including products since withdrawn');
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
+  act(() => tree.update(<BankRatesPanel />));
+  expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Withdrawn Bank']);
+  expect(chart().props.model.lines[0].points.map(point => point.date)).toEqual([dates[0]]);
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
+  act(() => tree.update(<BankRatesPanel />));
+  expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Beta']);
   act(() => tree.unmount());
 });
