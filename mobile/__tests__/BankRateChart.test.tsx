@@ -104,3 +104,17 @@ test('a single-date fallback explicitly reports that earlier matching observatio
     expect(JSON.stringify(tree.toJSON())).not.toMatch(/NaN|Infinity/);
   } finally { act(() => tree.unmount()); }
 });
+
+test.each([1, 3])('an unselected bank with %i isolated observations remains visible in the background', count => {
+  const model = fixture(2, 5);
+  model.lines[1].points = [model.lines[1].points[0], model.lines[1].points[2], model.lines[1].points[4]].slice(0, count);
+  const tree = mount(model);
+  try {
+    // The selected bank has a continuous line. These marker subpaths belong
+    // only to the unselected bank whose move-only segments cannot draw pixels.
+    expect(String(path(tree, 'bank-rate-background').props.d).match(/Z/g)).toHaveLength(count);
+    expect(tree.root.findAllByType(Path)).toHaveLength(3);
+    expect(tree.root.findAllByType(Circle)).toHaveLength(0);
+    expect(JSON.stringify(tree.toJSON())).not.toMatch(/NaN|Infinity/);
+  } finally { act(() => tree.unmount()); }
+});

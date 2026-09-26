@@ -28,23 +28,29 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
       : L + (timestamps.get(date)! - start) / Math.max(1, end - start) * (W - L - R)]));
     return model.lines.map(line => {
       const markers: string[] = [];
+      const isolatedMarkers: string[] = [];
       const path = line.points.map((point, i) => {
         const previous = line.points[i - 1];
         const continuous = previous && positions.get(point.date)! === positions.get(previous.date)! + 1 &&
           timestamps.get(point.date)! - timestamps.get(previous.date)! === 86_400_000;
+        const next = line.points[i + 1];
+        const continues = next && positions.get(next.date)! === positions.get(point.date)! + 1 &&
+          timestamps.get(next.date)! - timestamps.get(point.date)! === 86_400_000;
         const px = xCoordinates.get(point.date)!;
         const py = T + (model.max - point.value) / (model.max - model.min) * (H - T - B);
         // One SVG path retains every selected observation, including isolated
         // days, without allocating a native Circle for each bank and date.
-        markers.push(`M${(px - 2).toFixed(1)},${py.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`);
+        const marker = `M${(px - 2).toFixed(1)},${py.toFixed(1)}a2,2 0 1,0 4,0a2,2 0 1,0 -4,0Z`;
+        markers.push(marker);
+        if (!continuous && !continues) isolatedMarkers.push(marker);
         return `${continuous ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`;
       }).join(' ');
-      return { path, markers: markers.join(' ') };
+      return { path, markers: markers.join(' '), background: `${path} ${isolatedMarkers.join(' ')}` };
     });
   }, [end, model, start]);
   // The context stays mounted unchanged when selecting another bank. The
   // selected bank is drawn over it with just two already prepared paths.
-  const background = useMemo(() => <Path testID="bank-rate-background" d={paths.map(item => item.path).join(' ')}
+  const background = useMemo(() => <Path testID="bank-rate-background" d={paths.map(item => item.background).join(' ')}
     fill="none" stroke={theme.colors.textFaint} strokeOpacity={0.28} strokeWidth={0.8} />,
   [paths, theme.colors.textFaint]);
   if (!selected || !latest) return null;
