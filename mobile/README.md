@@ -54,8 +54,19 @@ optional development client. The ARM download retains both 32-bit and 64-bit pho
 support. Native libraries stay uncompressed so Android can load them from the APK
 without storing extracted copies; the Hermes bundle also stays uncompressed.
 
-`performance-budgets.json` caps the ARM APK at 48,405,000 bytes and the universal
-fallback at 92,400,000 bytes, based on the measured v1.0.191/build 260 releases.
+`performance-budgets.json` caps the ARM APK at 51,579,008 bytes, retaining the 5%
+growth guard above the measured 49,122,865-byte v1.0.212/build 275 ARM build
+([run 36247596476](https://github.com/yanniedog/AR-app/actions/runs/36247596476),
+source `50b429c1fe4654df875dd2dd50cdc17e995b3ecb`). That build exceeded the previous
+48,405,000-byte cap before publication. The complete historical catalogue and
+dated product filtering added exactly 3,067,136 bytes to both channels compared
+with verified v1.0.211/build 274: ARM grew from 46,055,729 to 49,122,865 bytes,
+and universal from 87,780,773 to 90,847,909 bytes
+([run 36246172783](https://github.com/yanniedog/AR-app/actions/runs/36246172783)).
+The two source revisions have no changes to app/native configuration, dependencies,
+plugins or app assets, supporting a shared JS/data increase.
+The universal fallback cap remains 92,400,000 bytes; font and asset limits are
+unchanged. This ARM baseline update accounts for the intentional history feature.
 Both GitHub and EAS publication enforce these budgets. An explicitly supplied
 missing/empty APK fails the size check. On Android startup, the updater removes
 its versioned installer files for builds already installed, even offline, while
