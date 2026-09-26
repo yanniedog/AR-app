@@ -82,6 +82,13 @@ describe('redactSecrets', () => {
     },
   );
 
+  it.each(['Bearer', 'Basic'])('redacts quoted Authorization %s values and preserves JSON', (scheme) => {
+    const out = redactSecrets(JSON.stringify({ headers: { Authorization: `${scheme} sk-live-xyz` }, request: 'completed' }));
+    expect(out).not.toContain('sk-live-xyz');
+    expect(JSON.parse(out)).toEqual({ headers: { Authorization: '[REDACTED]' }, request: 'completed' });
+    expect(redactSecrets(`'authorization': '${scheme} sk-live-xyz'`)).toBe("'authorization': '[REDACTED]'");
+  });
+
   it('redacts account identifiers and email addresses', () => {
     const out = redactSecrets(
       'auth signed in uid=firebase-123 email=person@example.com subscriptionId=sub-secret',

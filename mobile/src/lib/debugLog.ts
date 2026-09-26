@@ -42,8 +42,8 @@ const SECRET_SOURCES: string[] = [
   String.raw`Bearer\s+${SECRET_VALUE}`,
   String.raw`Authorization:\s*(?:(?:Bearer|Basic)\s+)?${SECRET_VALUE}`,
   String.raw`(?:api[_-]?key|secret|password|token)[=:\s]${SECRET_VALUE}`,
-  String.raw`"(?:EXPO_TOKEN|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`,
-  String.raw`'(?:EXPO_TOKEN|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`,
+  String.raw`"(?:EXPO_TOKEN|Authorization|api[_-]?key|secret|password|token)"\s*:\s*"[^"]+"`,
+  String.raw`'(?:EXPO_TOKEN|Authorization|api[_-]?key|secret|password|token)'\s*:\s*'[^']+'`,
 ];
 /**
  * One alternation rather than six sequential passes. Redaction runs over the
@@ -65,6 +65,9 @@ export function redactSecrets(text: string): string {
   let result = text;
   if (/EXPO_TOKEN|Bearer|Authorization|api[_-]?key|secret|password|token/i.test(result)) {
     result = result.replace(SECRET_PATTERN, (match) => {
+      // Preserve the quoted header/field shape in the complete audit JSON.
+      const quotedPrefix = match.match(/^((["'])[^"']+\2\s*:\s*)(["'])/);
+      if (quotedPrefix) return `${quotedPrefix[1]}${quotedPrefix[3]}[REDACTED]${quotedPrefix[3]}`;
       const key = match.split(/[=:\s]/)[0] ?? 'secret';
       return `${key}=[REDACTED]`;
     });
