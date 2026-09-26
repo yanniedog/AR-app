@@ -177,7 +177,8 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(debugScreen).toContain('Upload full log?');
     expect(screen).toContain('Anyone with the link can read the log.');
     const completion = runner.indexOf('completePerformanceAudit(report)');
-    const upload = runner.indexOf('await startDebugLogUpload(');
+    const upload = runner.indexOf('void startDebugLogUpload(');
+    expect(runner).not.toContain('await startDebugLogUpload(');
     expect(upload).toBeGreaterThan(completion);
     expect(runner.lastIndexOf('restoreTransportGuard();', completion)).toBeGreaterThan(0);
     expect(upload).toBeGreaterThan(runner.indexOf("'Final audit log flush'"));

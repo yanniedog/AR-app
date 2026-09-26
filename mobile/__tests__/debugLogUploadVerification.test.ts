@@ -43,6 +43,7 @@ describe('verified full paste read-back', () => {
     const fetcher = jest.fn().mockImplementation(() => new Promise(() => {}));
     await expect(verifyDebugLogUpload(receipt, 'log', fetcher, { ...options, attemptTimeoutMs: 1 }))
       .rejects.toThrow('timed out');
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls.every((call) => call[1].signal.aborted)).toBe(true);
   });
 });

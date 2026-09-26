@@ -3322,7 +3322,9 @@ export function PerformanceAuditRunner() {
         // All checks, rollback, report storage and final log writes precede
         // sharing. The transport guard is already restored and results remain
         // complete even if upload or clipboard access fails.
-        await startDebugLogUpload({
+        // Reserve sharing's busy state before finally releases the run gate,
+        // but let finally release audit resources without awaiting the network.
+        void startDebugLogUpload({
           sessionId,
           appVersion: app.appVersion,
           buildVersion: app.buildVersion,
@@ -3529,7 +3531,7 @@ export function PerformanceAuditRunner() {
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'));
-          await startDebugLogUpload({
+          void startDebugLogUpload({
             sessionId,
             appVersion: app.appVersion,
             buildVersion: app.buildVersion,

@@ -1137,6 +1137,7 @@ export async function verifyDebugLogUpload(
   let lastError: unknown;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController();
+    let timedOut = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -1155,6 +1156,7 @@ export async function verifyDebugLogUpload(
         })(),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => {
+            timedOut = true;
             controller.abort();
             reject(new Error('The paste link verification timed out.'));
           }, Math.max(1, options.attemptTimeoutMs ?? PASTE_RS_ATTEMPT_TIMEOUT_MS));
@@ -1166,6 +1168,9 @@ export async function verifyDebugLogUpload(
     } finally {
       if (timer) clearTimeout(timer);
     }
+    // An abort-ignoring transport may still hold the previous GET. Leave the
+    // next attempt to the user's explicit retry instead of stacking requests.
+    if (timedOut) break;
     if (attempt < 2) await sleep(1_000 * (attempt + 1));
   }
   throw new Error(`${lastError instanceof Error ? lastError.message : 'The paste link could not be verified.'} The link was not copied; retry verification or share the local log.`);
