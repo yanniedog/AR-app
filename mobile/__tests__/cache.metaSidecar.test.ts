@@ -4,7 +4,10 @@ import { verifiedDetailsSha } from '../src/data/detailsIdentity';
 
 import { cache, v3GenerationCache, type CacheMeta } from '../src/data/cache';
 import { sampleCore, sampleManifest } from '../src/data/sample';
-import { revisionManifest } from '../testUtils/payloadRevision';
+import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
+import { compressCatalogue } from '../src/data/historicalBankRateCatalogueCompression';
+import { decodeSavedHistoricalCatalogueAsync } from '../src/data/historicalBankRateCatalogueSync';
+import * as uiYield from '../src/lib/yieldToUi';
 import type { RbaMarketOutlook } from '../src/data/rbaMarketOutlookTypes';
 
 const files = new Map<string, string>();
@@ -109,6 +112,41 @@ describe('cache core-meta sidecar', () => {
       expect(await cache.readBankRateHistory(decode)).toBeNull();
     },
   );
+
+  it.each(['accepted', 'rejected', 'throws'])('awaits an asynchronous bank-history checkpoint validator: %s', async result => {
+    const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+    files.set(path, '{"historical_revision":1}');
+    files.set(`${path}.tmp`, '{"historical_revision":2}');
+    const decode = async (text: string) => {
+      await Promise.resolve();
+      const value = JSON.parse(text) as { historical_revision: number };
+      if (value.historical_revision === 2) {
+        if (result === 'throws') throw new Error('Invalid temporary checkpoint');
+        if (result === 'rejected') return null;
+      }
+      return value;
+    };
+    expect(await cache.readBankRateHistory(decode)).toEqual({ historical_revision: result === 'accepted' ? 2 : 1 });
+  });
+
+  it.each(['digest', 'schema'])('recovers the verified primary when cooperative catalogue recovery rejects the temporary %s', async corruption => {
+    const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+    const manifest = revisionManifest(1), day = manifest.run_date, head = revisionHead(manifest);
+    const value = { schema_version: 2, core_bindings: { [day]: { core_sha256: manifest.files.core.sha256, manifest_sha256: head.manifest_sha256 } },
+      index: { schema_version: 1, revision_protocol: 1, dates: [day], min_date: day, latest_date: day, count: 1, revision_heads: { [day]: head } },
+      catalogue: { schema_version: 2, run_dates: [day], sources: {}, unavailable_dates: {}, evidence: [{ status: 'unknown' }],
+        sections: { Mortgage: [], Savings: [], TD: [] } } };
+    files.set(path, JSON.stringify(compressCatalogue(value)));
+    const temporary = corruption === 'schema' ? compressCatalogue({ ...value, schema_version: 99 }) :
+      { ...compressCatalogue(value), sha256: 'f'.repeat(64) };
+    files.set(`${path}.tmp`, JSON.stringify(temporary));
+    const yieldWork = jest.spyOn(uiYield, 'yieldToUi').mockResolvedValue(undefined);
+    try {
+      expect(await cache.readBankRateHistory(decodeSavedHistoricalCatalogueAsync)).toEqual(value);
+      expect(FileSystem.readAsStringAsync).toHaveBeenNthCalledWith(1, `${path}.tmp`);
+      expect(FileSystem.readAsStringAsync).toHaveBeenNthCalledWith(2, path);
+    } finally { yieldWork.mockRestore(); }
+  });
 
   it.each(['{broken', '{"schema_version":99}'])(
     'recovers a valid temporary RBA cache when the primary is malformed: %s',

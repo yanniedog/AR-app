@@ -639,13 +639,13 @@ export const cache = {
     await deletePath(DIR);
   },
 
-  async readBankRateHistory<T>(decode: (text: string) => T | null): Promise<T | null> {
+  async readBankRateHistory<T>(decode: (text: string) => T | null | Promise<T | null>): Promise<T | null> {
     // A complete temporary write is newer than the primary. Decode before
     // choosing it so an interrupted write cannot hide the last valid cache.
     for (const path of [`${BANK_RATE_HISTORY}.tmp`, BANK_RATE_HISTORY]) {
       try {
         if (!await pathExists(path)) continue;
-        const value = decode(await readText(path));
+        const value = await decode(await readText(path));
         if (value !== null) return value;
       } catch { /* Try the other checkpoint if this read or decode failed. */ }
     }
