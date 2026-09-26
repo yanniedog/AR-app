@@ -135,3 +135,83 @@ export function upsertHistoricalCatalogueDay(catalogue: HistoricalBankRateCatalo
   if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue update');
   return result;
 }
+
+/** Next selected index and contiguous selected-run end, allowing each span to
+ * skip unrequested dates without scanning the complete date list again. */
+function selectedRuns(axis: readonly string[], selected: ReadonlySet<string>) {
+  const next = Array<number>(axis.length + 1).fill(axis.length);
+  const end = Array<number>(axis.length + 1).fill(axis.length);
+  for (let index = axis.length - 1; index >= 0; index--) {
+    if (selected.has(axis[index])) {
+      next[index] = index;
+      end[index] = next[index + 1] === index + 1 ? end[index + 1] : index + 1;
+    } else next[index] = next[index + 1];
+  }
+  return { next, end };
+}
+
+function selectedSpans(tier: HistoricalCatalogueTier, runs: ReturnType<typeof selectedRuns>, shift: number,
+  evidenceId: (id: number) => number): HistoricalCatalogueSpan[] {
+  const result: HistoricalCatalogueSpan[] = [];
+  for (const [start, count, rates, id] of tier.spans) {
+    const stop = start + count;
+    for (let cursor = runs.next[start]; cursor < stop;) {
+      const end = Math.min(stop, runs.end[cursor]);
+      result.push([cursor + shift, end - cursor, rates, evidenceId(id)]);
+      cursor = runs.next[end];
+    }
+  }
+  return result;
+}
+
+/** Fill only caller-authorized blank dates from verified public editions.
+ * The caller verifies revision-head authority before listing a date here.
+ * Any base source wins, including a source with an unavailable marker. */
+export function overlayHistoricalCatalogueDays(base: HistoricalBankRateCatalogue, fallback: HistoricalBankRateCatalogue,
+  dates: readonly string[]): HistoricalBankRateCatalogue {
+  if (!prepareHistoricalBankRateCatalogue(base) || !prepareHistoricalBankRateCatalogue(fallback)) {
+    throw new Error('Invalid historical catalogue overlay');
+  }
+  const selected = [...new Set(dates)].filter(day => !Object.hasOwn(base.sources, day) &&
+    fallback.sources[day]?.kind === 'published_core' && !Object.hasOwn(fallback.unavailable_dates, day)).sort();
+  if (!selected.length) return base;
+  const first = selected[0] < base.run_dates[0] ? selected[0] : base.run_dates[0];
+  const last = selected.at(-1)! > base.run_dates.at(-1)! ? selected.at(-1)! : base.run_dates.at(-1)!;
+  const count = (Date.parse(last) - Date.parse(first)) / 86_400_000 + 1;
+  if (count > HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('Historical catalogue overlay date budget exceeded');
+  const run_dates = Array.from({ length: count }, (_, index) => new Date(Date.parse(first) + index * 86_400_000).toISOString().slice(0, 10));
+  const baseShift = (Date.parse(base.run_dates[0]) - Date.parse(first)) / 86_400_000;
+  const fallbackShift = (Date.parse(fallback.run_dates[0]) - Date.parse(first)) / 86_400_000;
+  const runs = selectedRuns(fallback.run_dates, new Set(selected));
+  const evidence = [...base.evidence];
+  const identities = new Map(evidence.map((item, id) => [canonical(item), id]));
+  const remapped = new Map<number, number>();
+  const evidenceId = (id: number): number => {
+    if (remapped.has(id)) return remapped.get(id)!;
+    const item = fallback.evidence[id], identity = canonical(item);
+    let mapped = identities.get(identity);
+    if (mapped === undefined) { mapped = evidence.length; evidence.push(item); identities.set(identity, mapped); }
+    remapped.set(id, mapped);
+    return mapped;
+  };
+  const sections = Object.fromEntries(SECTION_KEYS.map(section => {
+    const tiers: HistoricalCatalogueTier[] = base.sections[section].map(tier => ({ row: tier.row,
+      spans: tier.spans.map(([start, length, rates, id]) => [start + baseShift, length, rates, id]) }));
+    const tierIds = new Map(tiers.map((tier, id) => [rateTierSignature(tier.row as RateRow), id]));
+    for (const tier of fallback.sections[section]) {
+      const spans = selectedSpans(tier, runs, fallbackShift, evidenceId);
+      if (!spans.length) continue;
+      const signature = rateTierSignature(tier.row as RateRow);
+      const id = tierIds.get(signature);
+      if (id === undefined) { tierIds.set(signature, tiers.length); tiers.push({ row: tier.row, spans }); }
+      else tiers[id].spans.push(...spans);
+    }
+    for (const tier of tiers) tier.spans = coalesce(tier.spans);
+    return [section, tiers];
+  })) as HistoricalBankRateCatalogue['sections'];
+  const sources = { ...base.sources }, unavailable_dates = { ...base.unavailable_dates };
+  for (const day of selected) { sources[day] = fallback.sources[day]; delete unavailable_dates[day]; }
+  const result: HistoricalBankRateCatalogue = { schema_version: 2, run_dates, sources, unavailable_dates, evidence, sections };
+  if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue overlay result');
+  return result;
+}

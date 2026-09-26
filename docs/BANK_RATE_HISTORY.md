@@ -24,7 +24,12 @@ prepares the user's historical filter result before making the core available.
 
 A valid schema-2 pack in the verified current core is authoritative. Its original
 selected-contract or retained-export receipts remain attached; it is persisted
-with the normal core cache. Schema-1 `bank_rate_history` remains supported for
+with the normal core cache. If a raw-export selection is unresolved, the app may
+fill that blank from an independently verified published observation whose
+manifest still matches the selected index. It never replaces a producer
+observation with this fallback. The merged cache binds to the exact producer core,
+and a changed or missing public manifest removes its fallback observation.
+Schema-1 `bank_rate_history` remains supported for
 older producer payloads, with its narrower current-tier behaviour identified in
 the chart text.
 

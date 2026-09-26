@@ -6,7 +6,7 @@ import { yieldToUi } from '../lib/yieldToUi';
 const supplemental = new WeakMap<CorePayload, { prepared: PreparedHistoricalBankRateCatalogue; missing: readonly string[] }>();
 
 export function availableHistoricalBankRateCatalogue(core: CorePayload): PreparedHistoricalBankRateCatalogue | null {
-  return prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue) ?? supplemental.get(core)?.prepared ?? null;
+  return supplemental.get(core)?.prepared ?? prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
 }
 
 export function installHistoricalBankRateCatalogue(core: CorePayload, value: unknown, missing: readonly string[] = []): boolean {
@@ -21,8 +21,10 @@ export function clearHistoricalBankRateCatalogue(core: CorePayload): void {
 }
 
 export function missingHistoricalCatalogueDates(core: CorePayload): readonly string[] {
+  const installed = supplemental.get(core);
+  if (installed) return installed.missing;
   const embedded = prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
-  return embedded ? Object.keys(embedded.catalogue.unavailable_dates).filter(day => day < core.run_date) : supplemental.get(core)?.missing ?? [];
+  return embedded ? Object.keys(embedded.catalogue.unavailable_dates).filter(day => day < core.run_date) : [];
 }
 
 /** Prepare the user's full historical filter result before exposing a new core.

@@ -1,4 +1,4 @@
-import { upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
+import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
 import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
 import { validateHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
 import { bankRateScope } from '../src/data/bankRateOverview';
@@ -114,4 +114,89 @@ test('a verified replacement clears that date missing marker and rejects invalid
   expect(result.unavailable_dates).toEqual({});
   expect(() => upsertHistoricalCatalogueDay(history, core(day2), details(day2), { ...source, manifest_sha256: 'invalid' })).toThrow('identity');
   expect(() => upsertHistoricalCatalogueDay(history, core('2000-01-01'), null, source)).toThrow('budget');
+});
+
+test('overlay fills an authorized gap, preserves multiplicity, and reuses identical evidence and descriptors', () => {
+  const first = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const base = upsertHistoricalCatalogueDay(first, core(day3), details(day3), source);
+  base.unavailable_dates[day2] = 'historical_selection_unresolved';
+  const fallback = upsertHistoricalCatalogueDay(null, core(day2, [row(), row(), row({ rate: '0.04' })]), details(day2), source);
+  const beforeBase = JSON.stringify(base), beforeFallback = JSON.stringify(fallback);
+  const result = overlayHistoricalCatalogueDays(base, fallback, [day2, day2]);
+  expect(result.sections.Mortgage).toHaveLength(1);
+  expect(result.evidence).toHaveLength(base.evidence.length);
+  expect(result.sections.Mortgage[0].spans).toEqual([[0, 1, [5], 1], [1, 1, [4, 5, 5], 1], [2, 1, [5], 1]]);
+  expect(result.sources).toEqual({ [day1]: source, [day2]: source, [day3]: source });
+  expect(result.unavailable_dates).toEqual({});
+  expect(JSON.stringify(base)).toBe(beforeBase); expect(JSON.stringify(fallback)).toBe(beforeFallback);
+});
+
+test('overlay never replaces a producer source, including a producer source carrying an unavailable marker', () => {
+  const first = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const base = upsertHistoricalCatalogueDay(first, core(day2), details(day2), source);
+  base.sources[day1] = { kind: 'retained_legacy_export', banks_sha256: 'd'.repeat(64), bytes: 8 };
+  const unavailable = { ...base, sections: { ...base.sections, Mortgage: [{ ...base.sections.Mortgage[0], spans: [[0, 1, [5], 1] as [number, number, number[], number]] }] },
+    unavailable_dates: { [day2]: 'historical_selection_unresolved' } };
+  let fallback = upsertHistoricalCatalogueDay(null, core(day1, [row({ rate: '0.99' })]), details(day1), source);
+  fallback = upsertHistoricalCatalogueDay(fallback, core(day2, [row({ rate: '0.99' })]), details(day2), source);
+  expect(overlayHistoricalCatalogueDays(unavailable, fallback, [day1, day2])).toBe(unavailable);
+  expect(unavailable.sections.Mortgage[0].spans).toEqual([[0, 1, [5], 1]]);
+});
+
+test('overlay ignores missing, unavailable, non-public and unrequested fallback dates', () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  let fallback = upsertHistoricalCatalogueDay(null, core(day2), details(day2), source);
+  fallback = upsertHistoricalCatalogueDay(fallback, core(day3), details(day3), source);
+  fallback.sources[day2] = { kind: 'selected_contract', generation_id: 'obs', contract_digest: 'd'.repeat(64), banks_sha256: 'e'.repeat(64), bytes: 1 };
+  expect(overlayHistoricalCatalogueDays(base, fallback, [day2, '2026-09-23'])).toBe(base);
+  const unavailable = { ...fallback, sections: { ...fallback.sections, Mortgage: [] }, unavailable_dates: { [day3]: 'unresolved' } };
+  expect(overlayHistoricalCatalogueDays(base, unavailable, [day3])).toBe(base);
+  const missing = { ...unavailable, sources: { [day2]: fallback.sources[day2] }, unavailable_dates: {} };
+  expect(overlayHistoricalCatalogueDays(base, missing, [day3])).toBe(base);
+});
+
+test('overlay expands only to authorized days and clips fallback spans to disjoint selected runs', () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day2, [row({ rate: '0.08' })]), details(day2), source);
+  let fallback = upsertHistoricalCatalogueDay(null, core('2026-09-18'), details('2026-09-18'), source);
+  for (const date of ['2026-09-19', day1, day2, day3, '2026-09-23', '2026-09-24']) {
+    fallback = upsertHistoricalCatalogueDay(fallback, core(date), details(date), source);
+  }
+  const result = overlayHistoricalCatalogueDays(base, fallback, [day1, day3, '2026-09-24']);
+  expect(result.run_dates).toEqual([day1, day2, day3, '2026-09-23', '2026-09-24']);
+  expect(result.sections.Mortgage[0].spans).toEqual([[0, 1, [5], 1], [1, 1, [8], 1], [2, 1, [5], 1], [4, 1, [5], 1]]);
+  expect(result.sources['2026-09-23']).toBeUndefined();
+  expect(result.sources['2026-09-19']).toBeUndefined();
+});
+
+test('overlay remaps different evidence and tier ordering, preserving withdrawn products and dated feature exclusions', () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const withdrawn = row({ product_id: 'old', product_key: 'old', product_name: 'Withdrawn loan' });
+  const denied = { ...detail, facts: detail.facts!.map(f => ({ ...f, value: false })) };
+  const fallback = upsertHistoricalCatalogueDay(null, core(day2, [withdrawn, row()]), details(day2, denied), source);
+  const result = overlayHistoricalCatalogueDays(base, fallback, [day2]);
+  expect(result.sections.Mortgage.map(t => t.row.product_key)).toEqual(['Alpha|p', 'old']);
+  expect(result.sections.Mortgage[0].spans).toEqual([[0, 1, [5], 1], [1, 1, [5], 2]]);
+  expect(result.sections.Mortgage[1].spans).toEqual([[1, 1, [5], 0]]);
+  const settings = { includeNonStandard: true, interests: ['Mortgage' as const], profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
+  const output = historicalBankRateSnapshots(prepareHistoricalBankRateCatalogue(result)!, core(day3, []), bankRateScope({ Mortgage: [], Savings: [], TD: [] }), settings);
+  expect(output[day1].Mortgage!.Alpha.count).toBe(1);
+  expect(output[day2].Mortgage!.Alpha).toBeUndefined();
+});
+
+test('overlay can adopt a verified empty observation without importing any other fallback rows', () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const fallback = upsertHistoricalCatalogueDay(null, core(day2, []), details(day2), source);
+  const result = overlayHistoricalCatalogueDays(base, fallback, [day2]);
+  expect(result.sources[day2]).toEqual(source);
+  expect(result.sections.Mortgage[0].spans).toEqual([[0, 1, [5], 1]]);
+  expect(result.evidence).toHaveLength(2);
+});
+
+test('overlay validates both inputs and the combined calendar budget', () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const fallback = upsertHistoricalCatalogueDay(null, core(day2), details(day2), source);
+  expect(() => overlayHistoricalCatalogueDays(base, { ...fallback, evidence: [] }, [])).toThrow('Invalid');
+  expect(() => overlayHistoricalCatalogueDays({ ...base, evidence: [] }, fallback, [day2])).toThrow('Invalid');
+  const distant = upsertHistoricalCatalogueDay(null, core('2000-01-01'), null, source);
+  expect(() => overlayHistoricalCatalogueDays(base, distant, ['2000-01-01'])).toThrow('budget');
 });

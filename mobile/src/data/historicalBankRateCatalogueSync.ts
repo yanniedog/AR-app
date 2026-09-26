@@ -8,7 +8,7 @@ import { verifiedDetailsSha } from './detailsIdentity';
 import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity } from './historyIdentity';
 import { assertRevisionManifest } from './payloadRevision';
 import { prepareHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
-import { upsertHistoricalCatalogueDay } from './historicalBankRateCatalogueMerge';
+import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from './historicalBankRateCatalogueMerge';
 import { clearHistoricalBankRateCatalogue, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { compressCatalogue, decompressCatalogue } from './historicalBankRateCatalogueCompression';
 import { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogue } from './bundledHistoricalBankRateCatalogue';
@@ -20,6 +20,8 @@ interface SavedCatalogue {
   core_bindings: Record<string, { core_sha256: string; manifest_sha256: string }>;
   index: DatesIndex;
   catalogue: HistoricalBankRateCatalogue;
+  /** Only this exact producer core may reuse the merged catalogue wholesale. */
+  producer_core_sha256?: string;
 }
 const MAX_CACHE_CHARS = 24 * 1024 * 1024;
 const SHA = /^[a-f0-9]{64}$/;
@@ -32,6 +34,7 @@ export function decodeSavedHistoricalCatalogue(text: string | null): SavedCatalo
     if (text === decodedCheckpoint?.text) return decodedCheckpoint.value;
     const value = decompressCatalogue(JSON.parse(text)) as SavedCatalogue | null;
     if (!value || value.schema_version !== 2 || !prepareHistoricalBankRateCatalogue(value.catalogue)) return null;
+    if (value.producer_core_sha256 !== undefined && !SHA.test(value.producer_core_sha256)) return null;
     const index = parseDatesIndex(value.index);
     if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days ||
         !value.core_bindings || typeof value.core_bindings !== 'object' || Array.isArray(value.core_bindings)) return null;
@@ -97,8 +100,14 @@ function discardSupersededPublicDates(catalogue: HistoricalBankRateCatalogue, in
 /** One rich cache prepares every bank and filter. It never fetches dated cores. */
 export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Manifest,
   index: DatesIndex | null = null, details: DetailsPayload | null = null): Promise<boolean> {
-  if (prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue)) return Promise.resolve(true);
-  if (!manifest.payload_revision) { clearHistoricalBankRateCatalogue(core); return Promise.resolve(false); }
+  const embedded = prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue)?.catalogue;
+  const selected = index ?? bundledHistoricalCatalogueBinding.index;
+  if (embedded && !embedded.run_dates.some(day => day < core.run_date && (!embedded.sources[day] || embedded.unavailable_dates[day])) &&
+      !selected?.dates.some(day => day < core.run_date && !embedded.sources[day])) {
+    clearHistoricalBankRateCatalogue(core);
+    return Promise.resolve(true);
+  }
+  if (!manifest.payload_revision) { clearHistoricalBankRateCatalogue(core); return Promise.resolve(!!embedded); }
   const work = preparation.then(() => prepare(core, manifest, index, details));
   preparation = work.catch(() => false);
   return preparation;
@@ -106,6 +115,7 @@ export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Ma
 
 async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null, details: DetailsPayload | null): Promise<boolean> {
   clearHistoricalBankRateCatalogue(core);
+  const embedded = prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue)?.catalogue;
   try {
     const saved = await cache.readBankRateHistory?.(decodeSavedHistoricalCatalogue).catch(() => null) ?? null;
     const baselineIndex = bundledHistoricalCatalogueBinding.index;
@@ -116,17 +126,29 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
     const bundledMatches = !!baselineIndex && bundledHistoricalCatalogueBinding.core_sha256 === manifest.files.core.sha256 &&
       currentMatches(core, manifest, baselineIndex);
     const index = freshIndex ?? (cachedMatches ? saved!.index : bundledMatches ? baselineIndex : null);
-    if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days || !currentMatches(core, manifest, index)) return false;
+    if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days || !currentMatches(core, manifest, index)) return !!embedded;
     if (baselineIndex) assertIndexAdvances(index, baselineIndex);
     if (saved) assertIndexAdvances(index, saved.index);
     const baseline = getBundledHistoricalBankRateCatalogue();
     const usableDates = (catalogue: HistoricalBankRateCatalogue) => Object.entries(catalogue.sources).filter(([day, source]) =>
       day <= core.run_date && !catalogue.unavailable_dates[day] &&
       (source.kind !== 'published_core' || source.manifest_sha256 === index.revision_heads![day]?.manifest_sha256)).length;
-    let catalogue = saved && (!baseline || usableDates(saved.catalogue) >= usableDates(baseline)) ? saved.catalogue : baseline;
+    let catalogue = embedded
+      ? saved?.producer_core_sha256 === manifest.files.core.sha256 && cachedMatches ? saved.catalogue : embedded
+      : saved && (!baseline || usableDates(saved.catalogue) >= usableDates(baseline)) ? saved.catalogue : baseline;
     if (!catalogue) return false;
     catalogue = discardSupersededPublicDates(catalogue, index);
-    if ((!catalogue.sources[core.run_date] || catalogue.unavailable_dates[core.run_date]) && details?.run_date === core.run_date &&
+    if (embedded) {
+      // An unresolved raw-export selection is not a revocation of a separately
+      // verified public observation. Fill only blanks, retaining its exact head.
+      for (const fallback of [saved?.catalogue, baseline]) if (fallback) {
+        const dates = index.dates.filter(day => day < core.run_date && !catalogue!.sources[day] &&
+          fallback.sources[day]?.kind === 'published_core' && !fallback.unavailable_dates[day] &&
+          fallback.sources[day].manifest_sha256 === index.revision_heads![day]?.manifest_sha256);
+        catalogue = overlayHistoricalCatalogueDays(catalogue, fallback, dates);
+      }
+    }
+    if (!embedded && (!catalogue.sources[core.run_date] || catalogue.unavailable_dates[core.run_date]) && details?.run_date === core.run_date &&
         verifiedDetailsSha(details) === manifest.files.details.sha256) {
       catalogue = upsertHistoricalCatalogueDay(catalogue, core, details, {
         kind: 'published_core', core_sha256: manifest.files.core.sha256,
@@ -151,7 +173,9 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
         core_bindings[core.run_date] = { core_sha256: manifest.files.core.sha256,
           manifest_sha256: index.revision_heads[core.run_date].manifest_sha256 };
         if (Object.keys(core_bindings).length > HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('History binding budget exceeded');
-        const value: SavedCatalogue = { schema_version: 2, core_bindings, index, catalogue };
+        const value: SavedCatalogue = { schema_version: 2, core_bindings, index, catalogue,
+          ...(embedded ? { producer_core_sha256: manifest.files.core.sha256 } : {}),
+        };
         const text = JSON.stringify(compressCatalogue(value));
         await cache.writeBankRateHistory(text);
         decodedCheckpoint = { text, value };
@@ -161,6 +185,6 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
   } catch (error) {
     clearHistoricalBankRateCatalogue(core);
     debugLog.warn('bank-history-catalogue', `Historical catalogue unavailable: ${String((error as Error)?.message ?? error)}`);
-    return false;
+    return !!embedded;
   }
 }

@@ -83,6 +83,88 @@ test('embedded verified producer catalogue wins without cache reads or supplemen
   expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
 });
 
+function producerWithGap(rate = '0.09'): HistoricalBankRateCatalogue {
+  const value = upsertHistoricalCatalogueDay(null, core('2026-09-26', rate), details(), source('2026-09-26'));
+  return { ...value, run_dates: ['2026-09-25', '2026-09-26'],
+    sources: { '2026-09-26': { kind: 'selected_contract', generation_id: 'producer', contract_digest: 'c'.repeat(64), banks_sha256: 'd'.repeat(64), bytes: 100 } },
+    unavailable_dates: { '2026-09-25': 'historical_selection_unresolved' },
+    sections: { ...value.sections, Mortgage: value.sections.Mortgage.map(tier => ({ ...tier, spans: [[1, 1, tier.spans[0][2], tier.spans[0][3]]] })) },
+  };
+}
+
+test('a producer gap retains independently selected public history and its exact offline edition', async () => {
+  const current = core(), packed = producerWithGap(), before = JSON.stringify(packed);
+  current.bank_rate_history_catalogue = packed;
+  const edition = manifest(current.run_date, 'e'.repeat(64));
+  expect(await prepareHistoricalBankRateHistory(current, edition, mockIndex())).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(rates(history(current), '2026-09-26')).toEqual([9]);
+  expect(history(current).sources['2026-09-25']).toEqual(source('2026-09-25'));
+  expect(history(current).sources['2026-09-26'].kind).toBe('selected_contract');
+  expect(JSON.stringify(packed)).toBe(before);
+  expect(missingHistoricalCatalogueDates(current)).toEqual([]);
+  const restarted = { ...core(), bank_rate_history_catalogue: JSON.parse(before) };
+  expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
+  expect(history(restarted)).toEqual(history(current));
+});
+
+test('an older overlay cannot replace observations in a new producer edition', async () => {
+  const current = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex());
+  const next = { ...core(), bank_rate_history_catalogue: producerWithGap('0.10') };
+  const selected = mockIndex(); selected.revision_heads!['2026-09-26'] = head('2026-09-26', 2);
+  expect(await prepareHistoricalBankRateHistory(next, manifest(next.run_date, 'e'.repeat(64), 2), selected)).toBe(true);
+  expect(rates(history(next), '2026-09-25')).toEqual([5]);
+  expect(rates(history(next), '2026-09-26')).toEqual([10]);
+});
+
+test('a changed public identity invalidates a producer overlay without resurrecting it offline', async () => {
+  const current = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  const edition = manifest(current.run_date, 'e'.repeat(64));
+  await prepareHistoricalBankRateHistory(current, edition, mockIndex());
+  expect(await prepareHistoricalBankRateHistory(current, edition, mockIndex(current.run_date, true))).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-25']);
+  const restarted = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  await prepareHistoricalBankRateHistory(restarted, edition);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([]);
+  await prepareHistoricalBankRateHistory(restarted, edition, mockIndex());
+  expect(rates(history(restarted), '2026-09-25')).toEqual([]);
+});
+
+test('without a selected edition or exact cached binding, producer blanks remain unknown', async () => {
+  const current = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  expect(await prepareHistoricalBankRateHistory(current, manifest(current.run_date, 'e'.repeat(64)))).toBe(true);
+  expect(history(current)).toBe(current.bank_rate_history_catalogue);
+  expect(rates(history(current), '2026-09-25')).toEqual([]);
+});
+
+test('removing a selected date cannot leave a previous public overlay visible on the same core', async () => {
+  const current = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex());
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  const selected = mockIndex(); selected.dates = ['2026-09-26'];
+  delete selected.revision_heads!['2026-09-25'];
+  await prepareHistoricalBankRateHistory(current, manifest(), selected);
+  expect(history(current)).toBe(current.bank_rate_history_catalogue);
+  expect(rates(history(current), '2026-09-25')).toEqual([]);
+});
+
+test('offline restart retains an overlaid public date newer than the bundled index', async () => {
+  const legacy = core('2026-09-27', '0.07');
+  await prepareHistoricalBankRateHistory(legacy, manifest(legacy.run_date), mockIndex(legacy.run_date), details(legacy.run_date));
+  const next = core('2026-09-28', '0.08');
+  const packed = upsertHistoricalCatalogueDay(mockBaseline, next, details(next.run_date), source(next.run_date));
+  packed.unavailable_dates['2026-09-27'] = 'historical_selection_unresolved';
+  const current = { ...next, bank_rate_history_catalogue: packed };
+  const edition = manifest(current.run_date, 'e'.repeat(64));
+  await prepareHistoricalBankRateHistory(current, edition, mockIndex(current.run_date));
+  expect(rates(history(current), '2026-09-27')).toEqual([7.000000000000001]);
+  const restarted = { ...core(current.run_date), bank_rate_history_catalogue: JSON.parse(JSON.stringify(packed)) };
+  await prepareHistoricalBankRateHistory(restarted, edition);
+  expect(rates(history(restarted), '2026-09-27')).toEqual([7.000000000000001]);
+});
+
 test('a later core adds only today, exposes missing dates, and reopens its compressed catalogue offline', async () => {
   const current = core('2026-09-28', '0.08');
   expect(await prepareHistoricalBankRateHistory(current, manifest(current.run_date), mockIndex(current.run_date), details(current.run_date))).toBe(true);
