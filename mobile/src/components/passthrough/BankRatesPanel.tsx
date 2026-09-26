@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { SECTION_KEYS, type RateRow, type SectionKey } from '../../types';
+import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../../types';
 import { bankRateScope, buildBankRateChart, type BankRateChartModel, type RateStatistic } from '../../data/bankRateOverview';
 import { availableBankRateHistory, missingBankRateHistoryDates, packedBankRateSnapshots } from '../../data/bankRateHistory';
 import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshotsAsync } from '../../data/historicalBankRateCatalogue';
@@ -61,8 +61,10 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
     includeNonStandard: prefs.includeNonStandard,
   } }), [core, scope, historyRevision, revision, prefs.profileFilters, prefs.onboarded, prefs.interests, prefs.includeNonStandard]);
   const [settled, setSettled] = useState<{ request: typeof request; failed: boolean } | null>(null);
+  const [invalidRich, setInvalidRich] = useState<{ core: CorePayload; value: unknown } | null>(null);
   const catalogue = core ? cachedHistoricalBankRateCatalogue(core) : null;
-  const richHistory = !!catalogue || !!core?.bank_rate_history_catalogue;
+  const rejectedRich = invalidRich?.core === core && invalidRich?.value === core?.bank_rate_history_catalogue;
+  const richHistory = !!catalogue || (!!core?.bank_rate_history_catalogue && !rejectedRich);
   const snapshots = useMemo(() => {
     void settled;
     return core ? richHistory ? catalogue ? cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters) : null
@@ -74,7 +76,12 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
     let active = true;
     void (async () => {
       const ready = catalogue ?? await prepareAvailableHistoricalBankRateCatalogue(core);
-      if (!ready) throw new Error('Historical catalogue is unavailable');
+      if (!ready) {
+        // A rejected optional rich extension must not hide valid legacy history.
+        // Only the active request may reject it; fallback uses the latest scope.
+        if (active) setInvalidRich({ core, value: core.bank_rate_history_catalogue });
+        return;
+      }
       await historicalBankRateSnapshotsAsync(ready, core, scope, request.filters, () => yieldToUi(0));
       if (active) setSettled({ request, failed: false });
     })().catch(() => { if (active) setSettled({ request, failed: true }); });

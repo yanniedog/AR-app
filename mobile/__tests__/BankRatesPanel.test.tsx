@@ -10,6 +10,7 @@ import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import { prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
+import { installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
@@ -19,7 +20,7 @@ const core = { run_date: '2026-09-22', sections: {
 } } as unknown as CorePayload;
 core.bank_rate_history = { schema_version: 1, row_tiers: { Mortgage: [0, 1], Savings: [0], TD: [0] }, run_dates: ['2026-08-01', '2026-09-22'], sections: { Mortgage: [[[0, 2, [6]]], [[0, 2, [9]]]], Savings: [[[0, 2, [4]]]], TD: [[[0, 2, [5]]]] } };
 for (const section of ['Mortgage', 'Savings', 'TD'] as const) core.sections[section].rates.forEach((row, i) => { row.bank_rate_tier = i; });
-const mockState = { core, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
+const mockState = { core, bankRateHistoryRevision: 0, prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, source: 'remote', rbaCalendar: null,
   ensureDetails: jest.fn(), ensureRbaCalendar: jest.fn(), details: null };
 jest.mock('../src/data/store', () => ({ useStore: (selector: (s: typeof mockState) => unknown) => selector(mockState) }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
@@ -28,7 +29,7 @@ jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedCon
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => undefined) }));
-beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
+beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.bankRateHistoryRevision = 0; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 test('opens Rates/Mean; all statistics, product sections and secondary Gap are selectable', () => {
   let tree!: Renderer;
@@ -68,6 +69,60 @@ test('an update missing detailed history identifies the limitation and recovers 
   act(() => tree.update(<BankRatesPanel />));
   expect(chart().props.model.dates).toEqual(core.bank_rate_history!.run_dates);
   expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable in this update.');
+  act(() => tree.unmount());
+});
+
+test('invalid optional rich history falls back to valid legacy history after validation using the latest filters', async () => {
+  mockState.core = { ...core, bank_rate_history_catalogue: { schema_version: 2 } as HistoricalBankRateCatalogue };
+  let release!: () => void;
+  jest.mocked(yieldToUi).mockImplementation(() => new Promise<void>(resolve => { release = resolve; }));
+  const onModelChange = jest.fn();
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel onModelChange={onModelChange} />) as Renderer; });
+  const charts = () => tree.root.findAll(n => n.type === ('BankRateChart' as unknown));
+  expect(charts()).toHaveLength(0);
+  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['VARIABLE'] } };
+  act(() => tree.update(<BankRatesPanel onModelChange={onModelChange} />));
+  expect(charts()).toHaveLength(0);
+  expect(onModelChange).toHaveBeenLastCalledWith(null);
+  await act(async () => release());
+  expect(charts()[0].props.model.dates).toEqual(core.bank_rate_history!.run_dates);
+  expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Alpha']);
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates could not be prepared');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Updating historical rates for your filters');
+  const calls = jest.mocked(yieldToUi).mock.calls.length;
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
+  act(() => tree.update(<BankRatesPanel onModelChange={onModelChange} />));
+  expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Beta']);
+  expect(jest.mocked(yieldToUi)).toHaveBeenCalledTimes(calls);
+  const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
+  expect(installHistoricalBankRateCatalogue(mockState.core, {
+    schema_version: 2, run_dates: ['2026-09-21', core.run_date], sources: { '2026-09-21': source, [core.run_date]: source },
+    unavailable_dates: {}, evidence: [{ status: 'unknown' }], sections: {
+      Mortgage: [{ row: { provider: 'Retired Fixed', product_key: 'old', product_name: 'Old loan', rate_type: 'FIXED' }, spans: [[0, 1, [5], 0]] }], Savings: [], TD: [],
+    },
+  })).toBe(true);
+  jest.mocked(yieldToUi).mockResolvedValue(undefined);
+  mockState.bankRateHistoryRevision++;
+  await act(async () => tree.update(<BankRatesPanel onModelChange={onModelChange} />));
+  expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Beta', 'Retired Fixed']);
+  expect(charts()[0].props.model.dates).toEqual(['2026-09-21', core.run_date]);
+  act(() => tree.unmount());
+});
+
+test('an unexpected rich preparation error does not treat valid history as a schema rejection', async () => {
+  const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
+  mockState.core = { ...core, bank_rate_history_catalogue: {
+    schema_version: 2, run_dates: [core.run_date], sources: { [core.run_date]: source }, unavailable_dates: {},
+    evidence: [{ status: 'unknown' }], sections: { Mortgage: [], Savings: [], TD: [] },
+  } };
+  prepareHistoricalBankRateCatalogue(mockState.core.bank_rate_history_catalogue);
+  jest.mocked(yieldToUi).mockRejectedValue(new Error('Temporary scheduler failure'));
+  let tree!: Renderer;
+  await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
+  expect(JSON.stringify(tree.toJSON())).toContain('Historical rates could not be prepared');
   act(() => tree.unmount());
 });
 
