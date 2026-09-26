@@ -1,7 +1,5 @@
 import { cache } from './cache';
-import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
-import { warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
-import { normalizeInterests } from './interests';
+import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
@@ -27,7 +25,7 @@ import {
   suitabilityIndexMatches,
 } from './suitabilityIndex';
 import { mergeOptionalManifestFiles, OPTIONAL_MANIFEST_KEYS, resolveFinalizedManifest } from './ingestFinalized';
-import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
+import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { rbaCalendarCoverage } from './rbaCalendar';
 import { savedRatesWithAlerts } from './subscriptions';
 import {
@@ -218,6 +216,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       set({ refreshing: true });
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
       let deferWarm = false;
+      let historyWork: Promise<void> | null = null;
       let notifyCtx: NotifyContext | null = null;
       let optionalWork: OptionalRefreshWork = {
         historyBanks: false,
@@ -381,15 +380,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
-            const historyCore = bundle?.core ?? live.core;
-            if (historyCore) {
-              const historyDetails = liveMatches && live.details ? live.details : await cache.readDetails();
-              await prepareHistoricalBankRateHistory(historyCore, remote, resolution.datesIndex, historyDetails);
-              if (!background) await warmHistoricalBankRateCatalogue(historyCore, {
-                profileFilters: live.prefs.profileFilters, includeNonStandard: live.prefs.includeNonStandard,
-                interests: live.prefs.onboarded ? normalizeInterests(live.prefs.interests) : SECTION_KEYS,
-              });
-            }
             const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
             if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
@@ -404,7 +394,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             }
             set({
               manifest: remote,
-              bankRateHistoryRevision: (get().bankRateHistoryRevision ?? 0) + 1,
+              status: 'ready',
+              bankRateHistoryLoading: true,
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
@@ -435,6 +426,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                 ),
               } : {}),
             });
+            if (get().core) historyWork = prepareBankRateHistoryAfterPaint(
+              set, get, get().core!, remote, resolution.datesIndex, liveMatches ? live.details : null,
+              { warm: !background, readCachedDetails: true },
+            );
             deferWarm = true;
             set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
             return false;
@@ -496,11 +491,6 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           await cache.writeDetails(downloaded.text, remote.files.details.sha256);
           stagedDetails = downloaded.details;
         }
-        await prepareHistoricalBankRateHistory(core, remote, resolution.datesIndex, stagedDetails);
-        if (!background) await warmHistoricalBankRateCatalogue(core, {
-          profileFilters: get().prefs.profileFilters, includeNonStandard: get().prefs.includeNonStandard,
-          interests: get().prefs.onboarded ? normalizeInterests(get().prefs.interests) : SECTION_KEYS,
-        });
         const detailsUnchanged = !!meta && meta.detailsSha === remote.files.details.sha256;
         onProgress({
           phase: 'install',
@@ -552,6 +542,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           manifest: remote,
           source: 'remote',
           status: 'ready',
+          bankRateHistoryLoading: true,
           error: null,
           pendingIngestRunDate,
           details: stagedDetails ?? (detailsUnchanged ? get().details : null),
@@ -569,6 +560,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             bankSpreadHistoryError: null,
           } : {}),
         });
+        historyWork = prepareBankRateHistoryAfterPaint(set, get, core, remote, resolution.datesIndex, stagedDetails, { warm: !background });
         notifyCtx = {
           previousCore,
           previousSource,
@@ -610,6 +602,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         try {
           if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
         } finally {
+          await historyWork;
           if (deferWarm) set({ postRefreshWarming: false });
         }
       }

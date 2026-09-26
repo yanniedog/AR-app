@@ -1,4 +1,5 @@
 import type { CorePayload } from '../types';
+import { inheritHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
 import { rbaCalendarCoverage, sydneyYmd } from './rbaCalendar';
 
@@ -198,9 +199,11 @@ export function integrateRbaCalendarIntoCore(
     }
   }
   if (!changed) return core;
-  return {
+  const replacement = {
     ...core,
     rba: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     rba_holds: [...holds].sort(),
   };
+  inheritHistoricalBankRateCatalogue(core, replacement);
+  return replacement;
 }

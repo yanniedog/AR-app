@@ -61,6 +61,30 @@ precedence over its older primary after an interrupted write. Staging a later da
 preserves the preceding installed day's binding; rollback or conflicting revision
 identities are rejected. Cache failures do not fabricate history.
 
+## Startup and refresh
+
+Validated current rates and the matching suitability gate become ready before
+optional historical work begins. Two paint opportunities precede catalogue
+decoding, filter warming and offline checkpoint writes. The bank chart displays
+its historical loading state during this work; navigation and current-rate
+screens remain usable. The performance audit waits for history to settle.
+
+Each preparation owns its completion state. Superseded jobs cannot clear a newer
+request, and RBA-only core wrappers retain their original history owner. Quiet
+resume refreshes still prepare history. Identical successful preparations reuse
+their exact core, manifest, selected-date and verified-details receipts; changed
+heads, details, failed saves or intervening preparations invalidate the shortcut.
+The bundled catalogue module is initialized only when history work starts.
+
+A desktop Node proxy using the verified 26 September core, a rebuilt persisted
+suitability index and the full bundled catalogue measured cached store readiness
+at 19.77 seconds before this change and 0.20 seconds afterward. Total historical
+preparation remained about 20 seconds, retaining all 134 published observations
+on the 137-day axis. This single-run proxy uses actual cache verification,
+decoding, validation, aggregation and timer yields with native filesystem reads
+adapted to verified in-memory bytes. It excludes React rendering, storage latency
+and Android/Hermes, so it is not a phone launch-time guarantee.
+
 ## Reproduce the bundled catalogue
 
 First use AR-local's canonical local prepacker with verified public inputs:

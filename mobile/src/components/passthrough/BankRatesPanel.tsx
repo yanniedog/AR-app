@@ -28,6 +28,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
 }) {
   const core = useStore(s => s.core);
   const historyRevision = useStore(s => s.bankRateHistoryRevision ?? 0);
+  const historyLoading = useStore(s => s.bankRateHistoryLoading ?? false);
   const details = useStore(s => s.details?.products);
   const prefs = useStore(s => s.prefs);
   const calendar = useStore(s => s.rbaCalendar);
@@ -67,11 +68,11 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const richHistory = !!catalogue || (!!core?.bank_rate_history_catalogue && !rejectedRich);
   const snapshots = useMemo(() => {
     void settled;
-    return core ? richHistory ? catalogue ? cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters) : null
+    return historyLoading ? null : core ? richHistory ? catalogue ? cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters) : null
       : packedBankRateSnapshots(core, scope) : {};
-  }, [catalogue, core, scope, request, richHistory, settled]);
+  }, [catalogue, core, scope, request, richHistory, settled, historyLoading]);
   useEffect(() => {
-    if (!core || !richHistory) return;
+    if (!core || !richHistory || historyLoading) return;
     if (catalogue && cachedHistoricalBankRateSnapshots(catalogue, core, scope, request.filters)) return;
     let active = true;
     void (async () => {
@@ -86,8 +87,8 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       if (active) setSettled({ request, failed: false });
     })().catch(() => { if (active) setSettled({ request, failed: true }); });
     return () => { active = false; };
-  }, [catalogue, core, scope, request, richHistory]);
-  const updating = richHistory && snapshots === null;
+  }, [catalogue, core, scope, request, richHistory, historyLoading]);
+  const updating = historyLoading || (richHistory && snapshots === null);
   const failed = settled?.request === request && settled.failed;
   const historyAvailable = richHistory || (core ? availableBankRateHistory(core) !== null : false);
   const missingDates = core ? catalogue ? missingHistoricalCatalogueDates(core) : richHistory ? [] : missingBankRateHistoryDates(core) : [];
@@ -101,8 +102,8 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
       <AppText variant="tiny" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
-      {core && !historyAvailable ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
-      {missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical observations are unavailable in this update and stay blank.</AppText> : null}
+      {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
+      {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical observations are unavailable in this update and stay blank.</AppText> : null}
       {updating ? <Card><AppText variant="small" accessibilityRole="alert">{failed ? 'Historical rates could not be prepared. Please try again.' : 'Updating historical rates for your filters…'}</AppText></Card> : model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <Card><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></Card>}
       <AppText variant="tiny" color="textMuted">Each matching rate tier has equal weight. {catalogue ? 'History includes products matching your filters on each observed date, including products since withdrawn.' : 'History follows currently matching tiers.'} Missing observations stay blank.{gap ? ' The gap does not measure bank margins.' : ''}</AppText>
     </>}

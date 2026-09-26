@@ -135,6 +135,8 @@ export interface AppState {
   core: CorePayload | null;
   /** Invalidates graph memoization when the same catalogue gains verified history. */
   bankRateHistoryRevision?: number;
+  /** Optional catalogue preparation continues after the current rates are ready. */
+  bankRateHistoryLoading?: boolean;
   /** Explicit trust/provenance carried with the exact normalized core object. */
   coreIntegrity: CoreIntegrityContext | null;
   coreAssetState: AssetState<CoreIntegrityContext>;
