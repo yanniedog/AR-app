@@ -152,7 +152,7 @@ describe('deidentified diagnostics privacy boundary', () => {
     );
   });
 
-  it('keeps running and post-result sharing separate from network, clipboard and raw-log export', () => {
+  it('keeps paste sharing after measurements and retains explicit deidentified sharing', () => {
     const runner = read('src/components/PerformanceAuditRunner.tsx');
     const screen = read('app/performance-audit.tsx');
     const debugScreen = read('app/debug-log.tsx');
@@ -174,8 +174,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).not.toContain('Clipboard');
     expect(screen).not.toContain('uploadDebugLog');
     expect(screen).not.toContain('fetch(');
-    expect(debugScreen).toContain('Open expert public-upload flow?');
-    expect(debugScreen).toContain('Upload private log now?');
+    expect(debugScreen).toContain('Upload full log?');
+    expect(screen).toContain('Anyone with the link can read the log.');
+    const completion = runner.indexOf('completePerformanceAudit(report)');
+    const upload = runner.indexOf('void startDebugLogUpload(');
+    expect(runner).not.toContain('await startDebugLogUpload(');
+    expect(upload).toBeGreaterThan(completion);
+    expect(runner.lastIndexOf('restoreTransportGuard();', completion)).toBeGreaterThan(0);
+    expect(upload).toBeGreaterThan(runner.indexOf("'Final audit log flush'"));
     expect(debugScreen).toContain('!receiptLoaded');
     expect(debugScreen).not.toContain('setStringAsync(result.url)');
     expect(layout).toContain('routeClass=');

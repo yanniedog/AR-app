@@ -12,24 +12,28 @@ function renderGatedRunner(): {
   started: string[];
   queue: (sessionId: string | null) => void;
   finishRun: () => void;
+  setUploadBusy: (busy: boolean) => void;
 } {
   const started: string[] = [];
   let finishCurrentRun: (() => void) | null = null;
   let setSession: ((sessionId: string | null) => void) | null = null;
+  let setSharingBusy: ((busy: boolean) => void) | null = null;
 
   function Harness() {
     const [sessionId, setSessionId] = React.useState<string | null>(null);
+    const [uploadBusy, setUploadBusy] = React.useState(false);
     const { claim, release, releaseCount } = usePerformanceAuditRunGate();
     setSession = setSessionId;
+    setSharingBusy = setUploadBusy;
 
     useEffect(() => {
-      if (!sessionId) return;
+      if (!sessionId || uploadBusy) return;
       if (!claim(sessionId)) return;
       started.push(sessionId);
       // Teardown outlives the run's terminal state while rollback restoration
       // completes in the runner.
       finishCurrentRun = release;
-    }, [claim, release, releaseCount, sessionId]);
+    }, [claim, release, releaseCount, sessionId, uploadBusy]);
 
     return null;
   }
@@ -42,6 +46,7 @@ function renderGatedRunner(): {
     started,
     queue: (sessionId) => act(() => setSession?.(sessionId)),
     finishRun: () => act(() => finishCurrentRun?.()),
+    setUploadBusy: (busy) => act(() => setSharingBusy?.(busy)),
   };
 }
 
@@ -86,5 +91,17 @@ describe('performance audit run gate', () => {
     runner.finishRun();
 
     expect(runner.started).toEqual(['session-a']);
+  });
+
+  it('holds a run queued during finalization until the prior upload reaches a terminal state', () => {
+    const runner = renderGatedRunner();
+    runner.queue('session-a');
+    runner.queue('session-b');
+    runner.setUploadBusy(true);
+    runner.finishRun();
+    expect(runner.started).toEqual(['session-a']);
+
+    runner.setUploadBusy(false);
+    expect(runner.started).toEqual(['session-a', 'session-b']);
   });
 });

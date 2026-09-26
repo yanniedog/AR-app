@@ -6,6 +6,12 @@ import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react
 import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
+import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
+import {
+  getDebugLogUploadSnapshot,
+  isDebugLogUploadBusy,
+  subscribeDebugLogUpload,
+} from '../src/lib/debugLogSharing';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -152,6 +158,8 @@ function checkDetail(check: AuditCheck): string {
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
+  useSyncExternalStore(subscribeDebugLogUpload, getDebugLogUploadSnapshot, getDebugLogUploadSnapshot);
+  const uploadBusy = isDebugLogUploadBusy();
   const apkDownload = useApkDownloadState();
   const updateBlocksAudit = blocksPerformanceAudit(apkDownload);
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
@@ -235,7 +243,7 @@ function PerformanceAuditScreenInner() {
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode) return;
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode || isDebugLogUploadBusy()) return;
     setAuditPreflightMode(mode);
     try {
       let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
@@ -393,10 +401,10 @@ function PerformanceAuditScreenInner() {
           </AppText>
         </View>
         <Button
-          title={report ? 'Run local audit again' : 'Run local audit'}
+          title={report ? 'Run audit and upload log again' : 'Run audit and upload log'}
           icon="pulse-outline"
           loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
-          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('local')}
         />
         <Button
@@ -404,13 +412,13 @@ function PerformanceAuditScreenInner() {
           icon="cloud-download-outline"
           variant="secondary"
           loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
-          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
-          Local mode blocks fetch and XMLHttpRequest. Live-source mode may read only the public
-          Australian Rates manifest, dates index and manifest-authenticated release files. Neither
-          mode uploads diagnostics or writes to the clipboard.
+          Checks use local data unless you choose the live-source check. After the audit finishes,
+          the full log and complete report are uploaded to paste and the verified link is copied
+          to your clipboard. Anyone with the link can read the log.
         </AppText>
         {updateBlocksAudit ? (
           <AppText variant="tiny" color="danger" accessibilityLiveRegion="polite">
@@ -419,6 +427,8 @@ function PerformanceAuditScreenInner() {
           </AppText>
         ) : null}
       </Card>
+
+      <DebugLogUploadStatus sessionId={state.sessionId} />
 
       {state.status === 'cancelled' ? (
         <Card style={{ gap: 6 }}>
@@ -512,7 +522,7 @@ function PerformanceAuditScreenInner() {
               App v{report.environment.appVersion} (build {report.environment.buildVersion})
             </AppText>
             <AppText variant="small" color="textMuted">
-              Results are stored locally. No report or log was uploaded automatically.
+              Results are saved locally. The log upload and clipboard status are shown above.
             </AppText>
             <Button
               title="Share deidentified report"
