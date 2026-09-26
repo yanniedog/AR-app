@@ -4,6 +4,10 @@ import { toFraction } from './format';
 import type { RbaCalendar } from './rbaCalendar';
 
 export type RateStatistic = 'min' | 'mean' | 'median' | 'max';
+/** Numeric safety bound for up to ten million encoded observations. This is
+ * deliberately far above product rates, but keeps weighted totals and chart
+ * coordinates within a representable, finite range. */
+export const MAX_BANK_RATE_PERCENT = Number.MAX_SAFE_INTEGER / 10_000_000;
 export interface RateSummary { min: number; mean: number; median: number; max: number; count: number }
 export type BankRateSnapshot = Partial<Record<SectionKey, Record<string, RateSummary>>>;
 export interface BankRateScope { rows: Record<SectionKey, RateRow[]>; signatures: Record<SectionKey, Set<string>> }
@@ -38,7 +42,7 @@ export function summarizeBankRates(rows: RateRow[]): Record<string, RateSummary>
   const banks = new Map<string, number[]>();
   for (const row of rows) {
     const value = toFraction(row.rate);
-    if (value == null || !Number.isFinite(value) || value < 0) continue;
+    if (value == null || !Number.isFinite(value) || value < 0 || value * 100 > MAX_BANK_RATE_PERCENT) continue;
     const values = banks.get(row.provider) ?? [];
     values.push(value * 100); banks.set(row.provider, values);
   }

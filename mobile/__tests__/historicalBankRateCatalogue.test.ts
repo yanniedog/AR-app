@@ -1,5 +1,5 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
-import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
+import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshots, historicalBankRateSnapshotsAsync, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue,
   type HistoricalCatalogueEvidence, type HistoricalCatalogueTier, type HistoricalRateDescriptor } from '../src/data/historicalBankRateCatalogueWire';
 import { bankRateScope, buildBankRateChart, RATE_OBSERVATION_FIELDS, summarizeBankRates } from '../src/data/bankRateOverview';
@@ -168,6 +168,62 @@ test('cache reuses all-bank snapshots for equivalent filters and never reuses co
   expect(first[day[0]].Mortgage!.Alpha.mean).toBe(5);
 });
 
+test('async snapshots coalesce historical work, match synchronous statistics and populate render-only cache', async () => {
+  const catalogue = pack(), preparation = prepareHistoricalBankRateCatalogue(catalogue)!;
+  const current = core([row()]), selected = scope(current.sections.Mortgage.rates);
+  let release!: () => void;
+  const pause = jest.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBeNull();
+  const first = historicalBankRateSnapshotsAsync(preparation, current, selected, filters, pause);
+  const second = historicalBankRateSnapshotsAsync(preparation, current, selected, { ...filters, interests: ['TD', 'Mortgage', 'Savings'] }, pause);
+  expect(pause).toHaveBeenCalledTimes(1);
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBeNull();
+  release();
+  const [left, right] = await Promise.all([first, second]);
+  expect(right).toBe(left);
+  expect(left).toEqual(snapshot(pack(), filters, current, selected));
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBe(left);
+  expect(await historicalBankRateSnapshotsAsync(preparation, current, selected, filters, pause)).toBe(left);
+  expect(pause).toHaveBeenCalledTimes(1);
+  const restricted = { ...filters, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, restricted)).toBeNull();
+});
+
+test('async completion rechecks original current rows against a gate closed while yielding', async () => {
+  const preparation = prepareHistoricalBankRateCatalogue(pack())!;
+  const original = row(), current = core([original]), selected = scope([original, { ...original }]);
+  let release!: () => void;
+  const pending = historicalBankRateSnapshotsAsync(preparation, current, selected, filters,
+    () => new Promise<void>(resolve => { release = resolve; }));
+  installMandatoryEligibility(selectMandatoryEligibility(current, { ...EMPTY_PROFILE, rateTypes: ['FIXED'] }, null));
+  release();
+  const result = await pending;
+  expect(result[day[0]].Mortgage!.Alpha.mean).toBe(5);
+  expect(result[day[2]].Mortgage).toEqual({});
+  expect(current.sections.Mortgage.rates[0]).toBe(original);
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBe(result);
+  installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null));
+  expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBeNull();
+});
+
+test('cooperative tier and event aggregation retains the exact synchronous result across work slices', async () => {
+  const catalogue = pack([]);
+  catalogue.sections.Mortgage = Array.from({ length: 1000 }, (_, i) => ({
+    row: descriptor({ product_id: String(i), product_key: `p${i}`, provider: `Bank ${i % 8}` }),
+    spans: [[0, 1, [i % 10, i % 10 + 1], 0], [1, 2, [i % 12], 0]],
+  }));
+  const expected = snapshot(catalogue, { ...filters, includeNonStandard: true });
+  const preparation = prepareHistoricalBankRateCatalogue(JSON.parse(JSON.stringify(catalogue)))!;
+  const pause = jest.fn(async () => undefined);
+  let time = 0;
+  const now = jest.spyOn(Date, 'now').mockImplementation(() => time += 4);
+  try {
+    const actual = await historicalBankRateSnapshotsAsync(preparation, core(), scope(), { ...filters, includeNonStandard: true }, pause);
+    expect(actual).toEqual(expected);
+    expect(pause.mock.calls.length).toBeGreaterThan(10);
+  } finally { now.mockRestore(); }
+});
+
 test('date-source gaps stay blank and cannot be bridged by an encoded span', () => {
   const catalogue = pack([{ row: descriptor(), spans: [[0, 1, [5], 1], [2, 1, [5], 1]] }]);
   delete catalogue.sources[day[1]];
@@ -193,6 +249,7 @@ test.each([
   ['overlapping spans', (p: any) => { p.sections.Mortgage[0].spans.push([2, 1, [5], 1]); }],
   ['negative rate', (p: any) => { p.sections.Mortgage[0].spans[0][2] = [-1]; }],
   ['nonfinite rate', (p: any) => { p.sections.Mortgage[0].spans[0][2] = [Infinity]; }],
+  ['overflowing finite rate', (p: any) => { p.sections.Mortgage[0].spans[0][2] = [Number.MAX_VALUE]; }],
   ['unsorted rates', (p: any) => { p.sections.Mortgage[0].spans[0][2] = [5, 4]; }],
   ['missing evidence ID', (p: any) => { p.sections.Mortgage[0].spans[0][3] = 99; }],
   ['invalid feature variant', (p: any) => { p.evidence[1].detail.facts = [fact(), { ...fact(), id: '' }]; }],

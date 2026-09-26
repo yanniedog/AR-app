@@ -1,5 +1,5 @@
 import type { CorePayload } from '../types';
-import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue, type HistoricalCatalogueFilters, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { cachedPreparedHistoricalBankRateCatalogue, historicalBankRateSnapshotsAsync, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, type HistoricalCatalogueFilters, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
 import { bankRateScope } from './bankRateOverview';
 import { yieldToUi } from '../lib/yieldToUi';
 
@@ -7,6 +7,14 @@ const supplemental = new WeakMap<CorePayload, { prepared: PreparedHistoricalBank
 
 export function availableHistoricalBankRateCatalogue(core: CorePayload): PreparedHistoricalBankRateCatalogue | null {
   return supplemental.get(core)?.prepared ?? prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
+}
+
+export function cachedHistoricalBankRateCatalogue(core: CorePayload): PreparedHistoricalBankRateCatalogue | null {
+  return supplemental.get(core)?.prepared ?? cachedPreparedHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
+}
+
+export async function prepareAvailableHistoricalBankRateCatalogue(core: CorePayload): Promise<PreparedHistoricalBankRateCatalogue | null> {
+  return supplemental.get(core)?.prepared ?? await prepareHistoricalBankRateCatalogueAsync(core.bank_rate_history_catalogue, () => yieldToUi(0));
 }
 
 export function installHistoricalBankRateCatalogue(core: CorePayload, value: unknown, missing: readonly string[] = []): boolean {
@@ -31,8 +39,7 @@ export function missingHistoricalCatalogueDates(core: CorePayload): readonly str
 /** Prepare the user's full historical filter result before exposing a new core.
  * Current rows remain gated normally when the panel builds today's snapshot. */
 export async function warmHistoricalBankRateCatalogue(core: CorePayload, filters: HistoricalCatalogueFilters): Promise<void> {
-  const prepared = availableHistoricalBankRateCatalogue(core);
+  const prepared = await prepareAvailableHistoricalBankRateCatalogue(core);
   if (!prepared) return;
-  await yieldToUi();
-  historicalBankRateSnapshots(prepared, core, bankRateScope({ Mortgage: [], Savings: [], TD: [] }), filters);
+  await historicalBankRateSnapshotsAsync(prepared, core, bankRateScope({ Mortgage: [], Savings: [], TD: [] }), filters, () => yieldToUi(0));
 }

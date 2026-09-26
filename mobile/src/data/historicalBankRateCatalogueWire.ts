@@ -1,7 +1,7 @@
 import { SECTION_KEYS, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { normalizedProductFacts } from './productFacts';
-import { RATE_OBSERVATION_FIELDS, rateTierSignature } from './bankRateOverview';
+import { MAX_BANK_RATE_PERCENT, RATE_OBSERVATION_FIELDS, rateTierSignature } from './bankRateOverview';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
@@ -143,7 +143,7 @@ function* validateCatalogueSteps(value: unknown): Generator<void, boolean, void>
         if (!Number.isSafeInteger(start) || !Number.isSafeInteger(count) || start < end || count < 1 || start + count > dates.length ||
             !Number.isSafeInteger(evidenceId) || evidenceId < 0 || evidenceId >= pack.evidence.length ||
             !Array.isArray(rates) || !rates.length || rates.length > HISTORICAL_CATALOGUE_LIMITS.ratesPerSpan ||
-            !rates.every((rate, i) => typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 && (!i || rate >= rates[i - 1])) ||
+            !rates.every((rate, i) => typeof rate === 'number' && Number.isFinite(rate) && rate >= 0 && rate <= MAX_BANK_RATE_PERCENT && (!i || rate >= rates[i - 1])) ||
             absent[start + count] !== absent[start] || !evidenceMatches(tier.row, pack.evidence[evidenceId], section)) return false;
         end = start + count;
         cells += count * rates.length;

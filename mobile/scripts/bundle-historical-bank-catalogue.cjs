@@ -20,6 +20,53 @@ require.extensions['.ts'] = (module, filename) => {
 const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest } = require('../src/data/payloadRevision.ts');
+const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
+const { rateTierSignature } = require('../src/data/bankRateOverview.ts');
+
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function evidenceSignature(evidence) {
+  if (evidence.status !== 'known') return canonical(evidence);
+  // Both encoders represent absent feature evidence. Historical producer
+  // editions can retain an empty array after dropping non-feature facts.
+  const detail = Object.fromEntries(Object.entries(evidence.detail).filter(([, value]) => !Array.isArray(value) || value.length));
+  return canonical({ ...evidence, detail });
+}
+const observationSignature = (rates, evidence) => `[${JSON.stringify(rates)},${evidence}]`;
+function indexedObservations(catalogue) {
+  const evidence = catalogue.evidence.map(evidenceSignature);
+  return Object.fromEntries(['Mortgage', 'Savings', 'TD'].map(section => [section, catalogue.sections[section].map(tier => ({
+    signature: rateTierSignature(tier.row),
+    spans: tier.spans.map(([start, count, rates, id]) => ({ start, end: start + count, value: observationSignature(rates, evidence[id]) })),
+  }))]));
+}
+
+/** Source receipts alone cannot certify the supplied catalogue's contents.
+ * Rebuild one day independently with the app's verified-edition projection and
+ * compare every descriptor, rate multiplicity and dated evidence record. */
+function verifyObservations(catalogue, observations, day, core, details, source) {
+  const expected = upsertHistoricalCatalogueDay(null, core, details, source);
+  const evidence = expected.evidence.map(evidenceSignature);
+  const position = catalogue.run_dates.indexOf(day);
+  for (const section of ['Mortgage', 'Savings', 'TD']) {
+    const selected = new Map();
+    for (const tier of observations[section]) {
+      const span = tier.spans.find(span => position >= span.start && position < span.end);
+      if (span) selected.set(tier.signature, span.value);
+    }
+    if (selected.size !== expected.sections[section].length) throw new Error(`${day}: ${section} historical observation count mismatch`);
+    for (const tier of expected.sections[section]) {
+      const span = tier.spans[0];
+      if (selected.get(rateTierSignature(tier.row)) !== observationSignature(span[2], evidence[span[3]])) {
+        throw new Error(`${day}: ${section} historical observations or evidence mismatch for ${String(tier.row.product_key).slice(0, 160)}`);
+      }
+    }
+  }
+}
 
 function readBounded(filename, limit) {
   const stat = fs.statSync(filename);
@@ -35,7 +82,9 @@ function build(directory, cataloguePath) {
   const catalogueBytes = readBounded(cataloguePath, 128 * 1024 * 1024);
   const catalogue = JSON.parse(catalogueBytes);
   if (!validateHistoricalBankRateCatalogue(catalogue)) throw new Error('Canonical catalogue failed app schema validation');
-  if (catalogue.run_dates.at(-1) !== index.latest_date || Object.keys(catalogue.sources).length !== index.dates.length) throw new Error('Catalogue and index date coverage differ');
+  if (catalogue.run_dates[0] !== index.dates[0] || catalogue.run_dates.at(-1) !== index.latest_date ||
+      Object.keys(catalogue.sources).length !== index.dates.length) throw new Error('Catalogue and index date coverage differ');
+  const observations = indexedObservations(catalogue);
   let lastManifest;
   for (const day of index.dates) {
     const head = index.revision_heads[day];
@@ -46,13 +95,16 @@ function build(directory, cataloguePath) {
     const source = catalogue.sources[day];
     if (source?.kind !== 'published_core' || source.manifest_sha256 !== head.manifest_sha256 ||
         source.core_sha256 !== manifest.files.core.sha256 || source.details_sha256 !== manifest.files.details.sha256) throw new Error(`${day}: catalogue source mismatch`);
+    const assets = {};
     for (const [key, folder] of [['core', 'cores'], ['details', 'details']]) {
       const file = manifest.files[key];
       const compressed = readBounded(path.join(directory, folder, `${file.sha256}.gz`), 64 * 1024 * 1024);
       if (compressed.length !== file.bytes || hash(compressed) !== file.sha256) throw new Error(`${day}: ${key} byte/digest mismatch`);
       const decoded = JSON.parse(zlib.gunzipSync(compressed, { maxOutputLength: 192 * 1024 * 1024 }));
       if (decoded.run_date !== day) throw new Error(`${day}: ${key} date mismatch`);
+      assets[key] = decoded;
     }
+    verifyObservations(catalogue, observations, day, assets.core, assets.details, source);
     lastManifest = manifest;
   }
   const compressed = zlib.gzipSync(catalogueBytes, { level: 9, mtime: 0 });

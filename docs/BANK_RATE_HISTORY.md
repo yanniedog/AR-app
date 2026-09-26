@@ -77,7 +77,9 @@ npm run ci
 ```
 
 The wrapper rechecks all source bindings and raw assets, validates the catalogue
-using the shipping app's schema, and writes
+using the shipping app's schema, and independently rebuilds each observed day
+from its verified core/details pair. Every descriptor, rate multiplicity and dated
+evidence record must match before it writes
 `src/data/historicalBankRateCatalogue.snapshot.json`. The decoded catalogue is
 42,691,597 bytes; gzip is 2,228,451 bytes. Decoded SHA-256:
 `7d6c81f3d69944350b7e45697b789ee130626cba2004899775e9764a11ef8014`.

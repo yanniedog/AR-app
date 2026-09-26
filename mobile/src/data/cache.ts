@@ -5,7 +5,7 @@ import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
-import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
+import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
@@ -14,7 +14,7 @@ import type { EconomicOutlookPayload } from './economicOutlook';
 import type { RbaMarketOutlook } from './rbaMarketOutlookTypes';
 import { normalizeRbaMarketOutlook } from './rbaMarketOutlookParse';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
-import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
@@ -369,6 +369,7 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
+    await sealCoreHistoryAsync(b.core, () => yieldToUi(0));
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
     });

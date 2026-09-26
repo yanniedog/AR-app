@@ -1,6 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type RateRow, type SectionKey } from '../types';
 import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './format';
-import { mandatoryEligibleRows } from './eligibilityGate';
+import { getMandatoryEligibilityRevision, mandatoryEligibleRows } from './eligibilityGate';
+import { getSuitabilityRevision } from './suitabilityGate';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from './profile';
 import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
@@ -23,6 +24,8 @@ interface PreparedState {
   snapshots: Map<string, Record<string, BankRateSnapshot>>;
   current: WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>;
   broad: Map<string, boolean>;
+  pendingSnapshots: Map<string, Promise<Record<string, BankRateSnapshot>>>;
+  scopes: WeakMap<CorePayload, WeakMap<BankRateScope, Map<string, { revision: number; snapshots: Record<string, BankRateSnapshot> }>>>;
 }
 const prepared = new WeakMap<object, PreparedHistoricalBankRateCatalogue | null>();
 const states = new WeakMap<PreparedHistoricalBankRateCatalogue, PreparedState>();
@@ -32,9 +35,14 @@ function installPrepared(value: HistoricalBankRateCatalogue, sections: PreparedS
   const existing = prepared.get(value);
   if (existing) return existing;
   const result = Object.freeze({ catalogue: value, quarantinedTierCount });
-  states.set(result, { sections, snapshots: new Map(), current: new WeakMap(), broad: new Map() });
+  states.set(result, { sections, snapshots: new Map(), current: new WeakMap(), broad: new Map(), pendingSnapshots: new Map(), scopes: new WeakMap() });
   prepared.set(value, result);
   return result;
+}
+
+/** Render-safe lookup; validation and preparation belong outside rendering. */
+export function cachedPreparedHistoricalBankRateCatalogue(value: unknown): PreparedHistoricalBankRateCatalogue | null {
+  return value && typeof value === 'object' ? prepared.get(value) ?? null : null;
 }
 
 /** Call once for an immutable, transport-verified payload, before core adoption. */
@@ -128,11 +136,12 @@ function summarize(counts: Map<number, number>): RateSummary {
   return { min: values[0][0], max: values.at(-1)![0], mean: sum / count, median: (low! + high) / 2, count };
 }
 
-function eventSnapshots(events: Changes[]): Record<string, RateSummary>[] {
+function* eventSnapshots(events: Changes[]): Generator<void, Record<string, RateSummary>[]> {
   const banks = new Map<string, Map<number, number>>();
   let current: Record<string, RateSummary> = {};
-  return events.map(changesByBank => {
-    if (!changesByBank.size) return current;
+  const snapshots: Record<string, RateSummary>[] = [];
+  for (const changesByBank of events) {
+    if (!changesByBank.size) { snapshots.push(current); yield; continue; }
     current = { ...current };
     for (const [provider, changes] of changesByBank) {
       const counts = banks.get(provider) ?? new Map<number, number>();
@@ -147,13 +156,15 @@ function eventSnapshots(events: Changes[]): Record<string, RateSummary>[] {
         if (counts.size) Object.defineProperty(current, provider, { value: summarize(counts), enumerable: true, configurable: true, writable: true });
         else delete current[provider];
       }
+      yield;
     }
-    return current;
-  });
+    snapshots.push(current);
+  }
+  return snapshots;
 }
 
-function historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, state: PreparedState,
-  filters: HistoricalCatalogueFilters, normalized: ReturnType<typeof normalizedFilters>): Record<string, BankRateSnapshot> {
+function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, state: PreparedState,
+  filters: HistoricalCatalogueFilters, normalized: ReturnType<typeof normalizedFilters>): Generator<void, Record<string, BankRateSnapshot>> {
   if (state.snapshots.has(normalized.key)) return state.snapshots.get(normalized.key)!;
   const catalogue = preparation.catalogue;
   const snapshots: Record<string, BankRateSnapshot> = Object.fromEntries(catalogue.run_dates.map(day => [day, {}]));
@@ -162,18 +173,72 @@ function historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, s
     const events: Changes[] = catalogue.run_dates.map(() => new Map());
     const features = profileFeaturesForSection(normalized.profile, section);
     for (const tierState of state.sections[section]) {
+      yield;
       if (!profileFilterRows([tierState.tier.row as RateRow], structural, section).length) continue;
       for (const [start, count, rates, evidenceId] of tierState.tier.spans) {
+        yield;
         if (!evidenceAllows(tierState, evidenceId, section, catalogue, features, filters.includeNonStandard, state.broad)) continue;
         addEvent(events, start, tierState.tier.row.provider, rates, 1);
         addEvent(events, start + count, tierState.tier.row.provider, rates, -1);
       }
     }
-    eventSnapshots(events).forEach((banks, index) => { snapshots[catalogue.run_dates[index]][section] = banks; });
+    (yield* eventSnapshots(events)).forEach((banks, index) => { snapshots[catalogue.run_dates[index]][section] = banks; });
   }
   if (state.snapshots.size >= 8) state.snapshots.delete(state.snapshots.keys().next().value!);
   state.snapshots.set(normalized.key, snapshots);
   return snapshots;
+}
+
+function runSnapshots(generator: Generator<void, Record<string, BankRateSnapshot>>): Record<string, BankRateSnapshot> {
+  let next = generator.next();
+  while (!next.done) next = generator.next();
+  return next.value;
+}
+
+const gateRevision = () => getMandatoryEligibilityRevision() + getSuitabilityRevision();
+function rememberScope(state: PreparedState, core: CorePayload, scope: BankRateScope, key: string, snapshots: Record<string, BankRateSnapshot>) {
+  const scopes = state.scopes.get(core) ?? new WeakMap();
+  const cache = scopes.get(scope) ?? new Map();
+  if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+  cache.set(key, { revision: gateRevision(), snapshots }); scopes.set(scope, cache); state.scopes.set(core, scopes);
+  return snapshots;
+}
+
+/** No tier scan, current-row scan or aggregation. A changed gate fails closed. */
+export function cachedHistoricalBankRateSnapshots(preparation: PreparedHistoricalBankRateCatalogue, core: CorePayload,
+  currentScope: BankRateScope, filters: HistoricalCatalogueFilters): Record<string, BankRateSnapshot> | null {
+  const cached = states.get(preparation)?.scopes.get(core)?.get(currentScope)?.get(normalizedFilters(filters).key);
+  return cached?.revision === gateRevision() ? cached.snapshots : null;
+}
+
+/** Cooperative all-bank preparation. Equivalent historical requests share work;
+ * current observations are gated again after the last asynchronous boundary. */
+export async function historicalBankRateSnapshotsAsync(preparation: PreparedHistoricalBankRateCatalogue, core: CorePayload,
+  currentScope: BankRateScope, filters: HistoricalCatalogueFilters,
+  yieldWork: () => Promise<void> = async () => (await import('../lib/yieldToUi')).yieldToUi(0)): Promise<Record<string, BankRateSnapshot>> {
+  const cached = cachedHistoricalBankRateSnapshots(preparation, core, currentScope, filters);
+  if (cached) return cached;
+  const state = states.get(preparation);
+  if (!state) throw new Error('Historical catalogue was not prepared');
+  const normalized = normalizedFilters(filters);
+  let task = state.pendingSnapshots.get(normalized.key);
+  if (!task) {
+    task = (async () => {
+      await yieldWork();
+      const generator = historicalSnapshots(preparation, state, filters, normalized);
+      let count = 0, started = Date.now(), next = generator.next();
+      while (!next.done) {
+        if (++count % 32 === 0 && Date.now() - started >= 8) { await yieldWork(); started = Date.now(); }
+        next = generator.next();
+      }
+      return next.value;
+    })();
+    state.pendingSnapshots.set(normalized.key, task);
+  }
+  let history: Record<string, BankRateSnapshot>;
+  try { history = await task; }
+  finally { if (state.pendingSnapshots.get(normalized.key) === task) state.pendingSnapshots.delete(normalized.key); }
+  return currentSnapshots(preparation, state, core, currentScope, normalized, history);
 }
 
 /** All banks are calculated together; provider selection never enters this key.
@@ -184,6 +249,11 @@ export function historicalBankRateSnapshots(preparation: PreparedHistoricalBankR
   const state = states.get(preparation);
   if (!state) throw new Error('Historical catalogue was not prepared');
   const normalized = normalizedFilters(filters);
+  return currentSnapshots(preparation, state, core, currentScope, normalized, runSnapshots(historicalSnapshots(preparation, state, filters, normalized)));
+}
+
+function currentSnapshots(preparation: PreparedHistoricalBankRateCatalogue, state: PreparedState, core: CorePayload,
+  currentScope: BankRateScope, normalized: ReturnType<typeof normalizedFilters>, history: Record<string, BankRateSnapshot>): Record<string, BankRateSnapshot> {
   const rowKeys: string[] = [];
   const currentRows = Object.fromEntries(SECTION_KEYS.map(section => {
     const admitted = new Map(core.sections[section].rates.map((row, index) => [row, index]));
@@ -194,8 +264,7 @@ export function historicalBankRateSnapshots(preparation: PreparedHistoricalBankR
   })) as BankRateScope['rows'];
   const key = `${normalized.key}|${rowKeys.join('|')}`;
   const cache = state.current.get(core) ?? new Map<string, Record<string, BankRateSnapshot>>();
-  if (cache.has(key)) return cache.get(key)!;
-  const history = historicalSnapshots(preparation, state, filters, normalized);
+  if (cache.has(key)) return rememberScope(state, core, currentScope, normalized.key, cache.get(key)!);
   const snapshots = Object.fromEntries(Object.entries(history).filter(([day]) => day < core.run_date));
   // A legacy current core can be newer than the last packed day. Retain real calendar gaps.
   const last = preparation.catalogue.run_dates.at(-1)!;
@@ -207,5 +276,5 @@ export function historicalBankRateSnapshots(preparation: PreparedHistoricalBankR
   snapshots[core.run_date] = Object.fromEntries(SECTION_KEYS.map(section => [section, summarizeBankRates(currentRows[section])]));
   if (cache.size >= 8) cache.delete(cache.keys().next().value!);
   cache.set(key, snapshots); state.current.set(core, cache);
-  return snapshots;
+  return rememberScope(state, core, currentScope, normalized.key, snapshots);
 }

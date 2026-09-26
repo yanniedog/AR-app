@@ -8,6 +8,8 @@ import type { CorePayload } from '../src/types';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
+import { yieldToUi } from '../src/lib/yieldToUi';
+import { prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
 type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
@@ -25,7 +27,8 @@ jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
-beforeEach(() => { mockState.core = core; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
+jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => undefined) }));
+beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 test('opens Rates/Mean; all statistics, product sections and secondary Gap are selectable', () => {
   let tree!: Renderer;
@@ -68,7 +71,7 @@ test('an update missing detailed history identifies the limitation and recovers 
   act(() => tree.unmount());
 });
 
-test('prepacked history includes withdrawn products and filters their own dated feature evidence', () => {
+test('prepacked history includes withdrawn products and filters their own dated feature evidence', async () => {
   const row = { provider: 'Withdrawn Bank', product_id: 'old', product_key: 'old-loan', product_name: 'Retired loan', category: 'RESIDENTIAL_MORTGAGES', rate_type: 'VARIABLE' };
   const dates = ['2026-09-20', '2026-09-21', '2026-09-22'];
   const source = { kind: 'published_core' as const, core_sha256: 'a'.repeat(64), details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) };
@@ -82,21 +85,21 @@ test('prepacked history includes withdrawn products and filters their own dated 
   };
   mockState.core = { ...core, bank_rate_history_catalogue: catalogue };
   let tree!: Renderer;
-  act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart().props.model.lines.find(line => line.provider === 'Withdrawn Bank')!.points.map(point => point.date)).toEqual(dates.slice(0, 2));
   expect(JSON.stringify(tree.toJSON())).toContain('including products since withdrawn');
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
-  act(() => tree.update(<BankRatesPanel />));
+  await act(async () => tree.update(<BankRatesPanel />));
   expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Withdrawn Bank']);
   expect(chart().props.model.lines[0].points.map(point => point.date)).toEqual([dates[0]]);
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
-  act(() => tree.update(<BankRatesPanel />));
+  await act(async () => tree.update(<BankRatesPanel />));
   expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Beta']);
   act(() => tree.unmount());
 });
 
-test('embedded calendar gaps show the missing-history message without inventing observations', () => {
+test('embedded calendar gaps show the missing-history message without inventing observations', async () => {
   const dates = ['2026-09-20', '2026-09-21', '2026-09-22'];
   const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
   mockState.core = { ...core, bank_rate_history_catalogue: {
@@ -107,9 +110,51 @@ test('embedded calendar gaps show the missing-history message without inventing 
     },
   } };
   let tree!: Renderer;
-  act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
   expect(JSON.stringify(tree.toJSON())).toContain('Some historical observations are unavailable in this update and stay blank.');
   const chart = tree.root.find(n => n.type === ('BankRateChart' as unknown));
   expect(chart.props.model.lines.find(line => line.provider === 'Alpha')!.points.map(point => point.date)).toEqual([dates[0], dates[2]]);
+  act(() => tree.unmount());
+});
+
+test('uncached filters hide stale history immediately, ignore superseded completion and reuse the bank model', async () => {
+  const date = '2026-09-21';
+  const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
+  const catalogue: HistoricalBankRateCatalogue = { schema_version: 2, run_dates: [date, core.run_date],
+    sources: { [date]: source, [core.run_date]: source }, unavailable_dates: {}, evidence: [{ status: 'unknown' }],
+    sections: { Mortgage: ['VARIABLE', 'FIXED'].map(rate_type => ({
+      row: { provider: rate_type === 'VARIABLE' ? 'Retired Variable' : 'Retired Fixed', product_key: rate_type, product_name: 'Old loan', rate_type },
+      spans: [[0, 1, [rate_type === 'VARIABLE' ? 5 : 9], 0]],
+    })), Savings: [], TD: [] },
+  };
+  prepareHistoricalBankRateCatalogue(catalogue);
+  mockState.core = { ...core, bank_rate_history_catalogue: catalogue };
+  const onModelChange = jest.fn(), onChartReady = jest.fn();
+  const panel = (selectedProvider = 'Alpha') => <BankRatesPanel selectedProvider={selectedProvider} onModelChange={onModelChange} onChartReady={onChartReady} />;
+  let tree!: Renderer;
+  await act(async () => { tree = TestRenderer.create(panel()) as Renderer; });
+  const charts = () => tree.root.findAll(n => n.type === ('BankRateChart' as unknown));
+  const initialModel = charts()[0].props.model, initialYields = jest.mocked(yieldToUi).mock.calls.length;
+  act(() => tree.update(panel('Retired Fixed')));
+  expect(charts()[0].props.model).toBe(initialModel);
+  expect(jest.mocked(yieldToUi)).toHaveBeenCalledTimes(initialYields);
+
+  const releases: (() => void)[] = [];
+  jest.mocked(yieldToUi).mockImplementation(() => new Promise<void>(resolve => { releases.push(resolve); }));
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['VARIABLE'] } };
+  act(() => tree.update(panel()));
+  expect(charts()).toHaveLength(0);
+  expect(JSON.stringify(tree.toJSON())).toContain('Updating historical rates for your filters');
+  expect(onModelChange).toHaveBeenLastCalledWith(null);
+  expect(onChartReady).toHaveBeenLastCalledWith(false);
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
+  act(() => tree.update(panel()));
+  expect(releases).toHaveLength(2);
+  await act(async () => releases[0]());
+  expect(charts()).toHaveLength(0);
+  expect(onModelChange).toHaveBeenLastCalledWith(null);
+  await act(async () => releases[1]());
+  expect(charts()[0].props.model.lines.map(line => line.provider)).toEqual(['Beta', 'Retired Fixed']);
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Updating historical rates for your filters');
   act(() => tree.unmount());
 });
