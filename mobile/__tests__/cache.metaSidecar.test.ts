@@ -68,6 +68,20 @@ describe('cache core-meta sidecar', () => {
     expect(await cache.readRbaMarketOutlook()).toEqual(context);
   });
 
+  it('recovers complete bank-rate history after its final move is interrupted', async () => {
+    const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+    await cache.writeBankRateHistory('{"edition":"previous"}');
+    const corrected = '{"edition":"corrected","historical_revision":2}';
+    (FileSystem.moveAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted history move'));
+    await expect(cache.writeBankRateHistory(corrected)).rejects.toThrow('interrupted history move');
+    expect(files.has(path)).toBe(false);
+    expect(files.get(`${path}.tmp`)).toBe(corrected);
+    expect(await cache.readBankRateHistory()).toBe(corrected);
+    await cache.writeBankRateHistory(corrected);
+    expect(await cache.readBankRateHistory()).toBe(corrected);
+    expect(files.has(`${path}.tmp`)).toBe(false);
+  });
+
   it.each(['{broken', '{"schema_version":99}'])(
     'recovers a valid temporary RBA cache when the primary is malformed: %s',
     async (broken) => {

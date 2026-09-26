@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { prepareBankRateHistory } from './bankRateHistorySync';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
@@ -378,6 +379,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           }
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
+            const historyCore = bundle?.core ?? live.core;
+            if (historyCore) await prepareBankRateHistory(historyCore, remote, resolution.datesIndex);
             const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
             if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
@@ -392,6 +395,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             }
             set({
               manifest: remote,
+              bankRateHistoryRevision: (get().bankRateHistoryRevision ?? 0) + 1,
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
@@ -455,6 +459,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
         );
         if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
+        await prepareBankRateHistory(core, remote, resolution.datesIndex);
         // Verify the entire immutable edition before advertising it. Staging
         // details by content hash keeps the installed offline edition usable if
         // any subsequent asset download or cache write fails.

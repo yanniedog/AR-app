@@ -1,10 +1,37 @@
 import { SECTION_KEYS, type CorePayload, type SectionKey, type RateRow } from '../types';
 import type { PackedBankRateHistory } from './bankRateHistoryWire';
+import { attachBankRateHistoryTiers } from './bankRateHistoryWire';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { RATE_OBSERVATION_FIELDS, snapshotBankRates, summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 
 const verified = new WeakMap<CorePayload, PackedBankRateHistory | null>();
 const calculated = new WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>();
+const supplementary = new WeakMap<CorePayload, { pack: PackedBankRateHistory; ids: WeakMap<RateRow, number>; missing: readonly string[] }>();
+
+/** A verified projection binds to these exact normalized rows, independently of
+ * producer IDs assigned before quarantine. Shared eligibility identities stay intact. */
+export function installSupplementaryBankRateHistory(core: CorePayload, pack: PackedBankRateHistory, missing: readonly string[] = []): boolean {
+  const candidate = attachBankRateHistoryTiers({ ...core, bank_rate_history: pack });
+  if (!packedBankRateHistory(candidate)) return false;
+  const ids = new WeakMap<RateRow, number>();
+  for (const section of SECTION_KEYS) core.sections[section].rates.forEach((row, index) => ids.set(row, pack.row_tiers[section][index]));
+  supplementary.set(core, { pack, ids, missing });
+  calculated.delete(core);
+  return true;
+}
+
+export function clearSupplementaryBankRateHistory(core: CorePayload): void {
+  supplementary.delete(core);
+  calculated.delete(core);
+}
+
+export function availableBankRateHistory(core: CorePayload): PackedBankRateHistory | null {
+  return packedBankRateHistory(core) ?? supplementary.get(core)?.pack ?? null;
+}
+
+export function missingBankRateHistoryDates(core: CorePayload): readonly string[] {
+  return packedBankRateHistory(core) ? [] : supplementary.get(core)?.missing ?? [];
+}
 function sameTier(left: RateRow, right: RateRow): boolean {
   const a = Object.entries(left).filter(([key]) => !RATE_OBSERVATION_FIELDS.has(key));
   const b = Object.keys(right).filter(key => !RATE_OBSERVATION_FIELDS.has(key));
@@ -98,7 +125,7 @@ function sectionSnapshots(pack: PackedBankRateHistory, section: SectionKey, memb
 
 /** One complete local calculation, with no per-date requests or partial renders. */
 export function packedBankRateSnapshots(core: CorePayload, scope: BankRateScope): Record<string, BankRateSnapshot> {
-  const pack = packedBankRateHistory(core);
+  const pack = availableBankRateHistory(core);
   const result: Record<string, BankRateSnapshot> = {};
   if (pack) {
     const rowKeys: string[] = [];
@@ -108,7 +135,8 @@ export function packedBankRateSnapshots(core: CorePayload, scope: BankRateScope)
       const rows = scope.rows[section].filter(row => admitted.has(row));
       currentRows[section] = rows;
       rowKeys.push(rows.map(row => admitted.get(row)).join(','));
-      return new Map(rows.map(row => [row.bank_rate_tier!, row.provider]));
+      const bound = packedBankRateHistory(core) ? null : supplementary.get(core);
+      return new Map(rows.map(row => [bound ? bound.ids.get(row)! : row.bank_rate_tier!, row.provider]));
     });
     const key = rowKeys.join('|');
     const cache = calculated.get(core) ?? new Map<string, Record<string, BankRateSnapshot>>();

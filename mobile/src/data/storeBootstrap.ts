@@ -1,5 +1,6 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
+import { prepareBankRateHistory } from './bankRateHistorySync';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -92,6 +93,7 @@ export function createBootstrapActions(
           debugLog.warn('store', 'ignoring search index that does not match the cached core revision');
         }
         if (bundle) {
+          await prepareBankRateHistory(bundle.core, bundle.meta.manifest);
           debugLog.info('store', `cache hit run_date=${bundle.core.run_date} source=${bundle.meta.source}`);
           clearSuitabilityIndex();
           const suitabilityIndex = await hydrateSuitabilityIndex(

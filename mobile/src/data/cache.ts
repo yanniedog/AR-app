@@ -27,6 +27,7 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
+const BANK_RATE_HISTORY = `${DIR}bank-rate-history.json`;
 const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
@@ -636,6 +637,23 @@ export const cache = {
 
   async clear(): Promise<void> {
     await deletePath(DIR);
+  },
+
+  async readBankRateHistory(): Promise<string | null> {
+    for (const path of [BANK_RATE_HISTORY, `${BANK_RATE_HISTORY}.tmp`]) {
+      if (await pathExists(path)) return readText(path);
+    }
+    return null;
+  },
+
+  async writeBankRateHistory(text: string): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      const temporary = `${BANK_RATE_HISTORY}.tmp`;
+      await writeText(temporary, text);
+      await deletePath(BANK_RATE_HISTORY);
+      await movePath(temporary, BANK_RATE_HISTORY);
+    });
   },
 };
 
