@@ -167,23 +167,63 @@ describe('cache core-meta sidecar', () => {
     },
   );
 
-  it('recovers an index-only sidecar update from its completed temporary file', async () => {
-    const old = historyRecoveryMeta(revisionManifest(1), 2);
+  it.each(['delete', 'move'])('recovers an index-only sidecar update after its final %s is interrupted', async interruption => {
+    const old = { ...historyRecoveryMeta(revisionManifest(1), 2), detailsSha: null };
     const next = historyRecoveryMeta(old.manifest, 3);
     await cache.writeBundle(old, JSON.stringify(sampleCore));
     const bundlePath = `${FileSystem.documentDirectory}payload/core-bundle.json`;
     const metaPath = `${FileSystem.documentDirectory}payload/core-meta.json`;
     const bundleBefore = files.get(bundlePath);
-    (FileSystem.moveAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted sidecar move'));
+    const interruptedOperation = interruption === 'delete' ? FileSystem.deleteAsync : FileSystem.moveAsync;
+    (interruptedOperation as jest.Mock).mockRejectedValueOnce(new Error(`interrupted sidecar ${interruption}`));
 
     await expect(cache.updateMeta({ manifest: next.manifest, coreSha: next.coreSha,
-      historyDatesIndex: next.historyDatesIndex })).rejects.toThrow('interrupted sidecar move');
+      detailsSha: next.detailsSha, historyDatesIndex: next.historyDatesIndex })).rejects.toThrow(`interrupted sidecar ${interruption}`);
 
-    expect(files.has(metaPath)).toBe(false);
+    expect(files.has(metaPath)).toBe(interruption === 'delete');
+    if (interruption === 'delete') expect(JSON.parse(files.get(metaPath)!)).toEqual(old);
     expect(JSON.parse(files.get(`${metaPath}.tmp`)!).historyDatesIndex).toEqual(next.historyDatesIndex);
     expect(files.get(bundlePath)).toBe(bundleBefore);
-    expect((await cache.readMeta())?.historyDatesIndex).toEqual(next.historyDatesIndex);
-    expect((await cache.readBundle())?.meta.historyDatesIndex).toEqual(next.historyDatesIndex);
+    expect(await cache.readMeta()).toEqual(next);
+    expect((await cache.readBundle())?.meta).toEqual(next);
+    await expect(cache.updateMeta({ manifest: old.manifest, coreSha: old.coreSha,
+      historyDatesIndex: old.historyDatesIndex })).rejects.toThrow('Historical publication index is stale');
+  });
+
+  it.each(['older revision', 'equivocated revision', 'equal heads', 'different core SHA', 'different payload revision',
+    'different manifest details SHA', 'malformed receipt', 'malformed manifest'])(
+    'retains the primary metadata when a completed temporary sidecar has %s', async kind => {
+      const primary = historyRecoveryMeta();
+      await cache.writeBundle(primary, JSON.stringify(sampleCore));
+      const temp = { ...historyRecoveryMeta(kind === 'different payload revision' ? revisionManifest(2) : primary.manifest,
+        kind === 'older revision' ? 2 : kind === 'equal heads' || kind === 'equivocated revision' ? 3 : 4),
+      savedAt: '2030-01-01T00:00:00Z', historyBanksSha: 'e'.repeat(64) };
+      if (kind === 'equivocated revision') temp.historyDatesIndex!.revision_heads![temp.historyDatesIndex!.min_date].manifest_sha256 = 'f'.repeat(64);
+      if (kind === 'different core SHA') temp.coreSha = 'f'.repeat(64);
+      if (kind === 'different manifest details SHA') temp.manifest = { ...temp.manifest,
+        files: { ...temp.manifest.files, details: { ...temp.manifest.files.details, sha256: 'f'.repeat(64) } } };
+      if (kind === 'malformed receipt') temp.historyDatesIndex = { dates: [null] } as unknown as DatesIndex;
+      if (kind === 'malformed manifest') temp.manifest = { generated_at: primary.manifest.generated_at } as Manifest;
+      const path = `${FileSystem.documentDirectory}payload/core-meta.json`;
+      files.set(`${path}.tmp`, JSON.stringify(temp));
+      const before = new Map(files);
+
+      expect(await cache.readMeta()).toEqual(primary);
+      expect((await cache.readBundle())?.meta).toEqual(primary);
+      expect(files).toEqual(before);
+    },
+  );
+
+  it.each(['missing', 'malformed'])('recovers a valid temporary receipt when the primary receipt is %s', async kind => {
+    const primary = historyRecoveryMeta();
+    await cache.writeBundle(primary, JSON.stringify(sampleCore));
+    const temp = { ...historyRecoveryMeta(primary.manifest, 4), historyBanksSha: 'e'.repeat(64) };
+    const path = `${FileSystem.documentDirectory}payload/core-meta.json`;
+    files.set(path, JSON.stringify({ ...primary, historyDatesIndex: kind === 'missing' ? undefined : { dates: [null] } }));
+    files.set(`${path}.tmp`, JSON.stringify(temp));
+
+    expect(await cache.readMeta()).toEqual(temp);
+    expect((await cache.readBundle())?.meta).toEqual(temp);
   });
 
   it('preserves the selected history receipt through a details-only metadata patch', async () => {

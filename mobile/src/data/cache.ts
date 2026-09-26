@@ -20,6 +20,7 @@ import { createBankSpreadContentCache } from './bankSpreadContentCache';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 import type { DatesIndex } from './datesIndex';
 import { assertHistoryDatesIndexAdvances, parseHistoryDatesIndex } from './historyDatesIndex';
+import { historicalSourceIdentity } from './historyIdentity';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -310,10 +311,25 @@ async function writeCoreMeta(meta: CacheMeta, path = CORE_META): Promise<void> {
 
 async function readCoreMetaSidecar(path = CORE_META): Promise<CacheMeta | null> {
   const primary = await readJson<CacheMeta>(path);
-  if (isCacheMeta(primary)) return primary;
-  // Crash window after writeCoreMeta wrote the tmp but before moveAsync finished.
   const tmp = await readJson<CacheMeta>(`${path}.tmp`);
-  return isCacheMeta(tmp) ? tmp : null;
+  if (!isCacheMeta(primary)) return isCacheMeta(tmp) ? tmp : null;
+  // The completed temporary write can contain an index-only correction even
+  // before the old primary is deleted. Recover only strictly advancing heads
+  // bound to this same edition; stale leftovers cannot replace current metadata.
+  try {
+    if (isCacheMeta(tmp) && tmp.coreSha === primary.coreSha &&
+      samePayloadIdentity(tmp.manifest, primary.manifest) &&
+      tmp.manifest.files.details.sha256 === primary.manifest.files.details.sha256) {
+      const next = parseHistoryDatesIndex(tmp.historyDatesIndex, tmp.manifest);
+      const prior = parseHistoryDatesIndex(primary.historyDatesIndex, primary.manifest);
+      if (next) {
+        if (prior) assertHistoryDatesIndexAdvances(next, prior);
+        if (!prior || next.dates.length !== prior.dates.length || next.dates.some(day =>
+          !prior.dates.includes(day) || historicalSourceIdentity(next, day) !== historicalSourceIdentity(prior, day))) return tmp;
+      }
+    }
+  } catch { /* Preserve the committed receipt on malformed data, rollback or equivocation. */ }
+  return primary;
 }
 
 function isCacheMeta(value: unknown): value is CacheMeta {
