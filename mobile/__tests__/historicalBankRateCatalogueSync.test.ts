@@ -9,6 +9,8 @@ import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRate
 import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
 import type { DatesIndex } from '../src/data/datesIndex';
 import type { PayloadRevisionHead } from '../src/data/payloadRevision';
+import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
+import type { RbaCalendar } from '../src/data/rbaCalendar';
 
 let mockBaseline: HistoricalBankRateCatalogue;
 let mockCache: string | null = null;
@@ -455,6 +457,30 @@ test('later verified details and same-core terms revisions invalidate the prepar
   await prepareHistoricalBankRateHistory(current, manifest(current.run_date, 'a'.repeat(64), 2), revised, details(current.run_date));
   expect(history(current).sources[current.run_date]).toEqual({ ...source(current.run_date), manifest_sha256: head(current.run_date, 2).manifest_sha256 });
   expect(cache.readBankRateHistory).toHaveBeenCalledTimes(3);
+});
+
+test('an explicit RBA-only wrapper reuses its historical owner without clearing or reading the cache', async () => {
+  const current = core('2026-09-27'), edition = manifest(current.run_date), index = mockIndex(current.run_date);
+  current.rba = [];
+  await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
+  const prepared = availableHistoricalBankRateCatalogue(current);
+  const reads = jest.mocked(cache.readBankRateHistory).mock.calls.length;
+  const writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
+  const replacement = integrateRbaCalendarIntoCore(current, {
+    decisions: [{ date: '2026-09-01', outcome: 'hold', rate: 4.1 }],
+  } as RbaCalendar);
+  expect(replacement).not.toBe(current);
+  expect(availableHistoricalBankRateCatalogue(replacement)).toBe(prepared);
+  const inflate = jest.spyOn(compression, 'decompressCatalogueAsync');
+  const encode = jest.spyOn(compression, 'compressCatalogueAsync');
+  jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockClear();
+  expect(await prepareHistoricalBankRateHistory(replacement, { ...edition }, JSON.parse(JSON.stringify(index)), details(current.run_date))).toBe(true);
+  expect(availableHistoricalBankRateCatalogue(replacement)).toBe(prepared);
+  expect(availableHistoricalBankRateCatalogue(current)).toBe(prepared);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads);
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(writes);
+  expect(inflate).not.toHaveBeenCalled(); expect(encode).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
 });
 
 test('an intervening different core advances historical revision checks before an earlier core can reuse history', async () => {

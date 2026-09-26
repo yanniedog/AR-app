@@ -9,7 +9,7 @@ import { assertHistoricalIdentitiesAdvance, historicalSourceIdentity } from './h
 import { assertRevisionManifest } from './payloadRevision';
 import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from './historicalBankRateCatalogueMerge';
-import { cachedHistoricalBankRateCatalogue, clearHistoricalBankRateCatalogue, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { cachedHistoricalBankRateCatalogue, clearHistoricalBankRateCatalogue, historicalCatalogueOwner, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { compressCatalogueAsync, decompressCatalogue, decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
 import { HISTORICAL_CATALOGUE_LIMITS,
   type HistoricalBankRateCatalogue, type HistoricalCatalogueSpan } from './historicalBankRateCatalogueWire';
@@ -171,7 +171,8 @@ export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Ma
     // intervening core/index may advance the revision high-water mark, even if
     // its adoption fails, so never retain a per-core collection of shortcuts.
     const receipt = JSON.stringify([manifest, index, details ? [details.run_date, verifiedDetailsSha(details)] : null]);
-    if (lastPrepared?.core === core && lastPrepared.embedded === core.bank_rate_history_catalogue &&
+    if (lastPrepared && historicalCatalogueOwner(lastPrepared.core) === historicalCatalogueOwner(core) &&
+        lastPrepared.embedded === core.bank_rate_history_catalogue &&
         lastPrepared.receipt === receipt && lastPrepared.checkpoint === decodedCheckpoint &&
         lastPrepared.catalogue === cachedHistoricalBankRateCatalogue(core)) return true;
     lastPrepared = null;
