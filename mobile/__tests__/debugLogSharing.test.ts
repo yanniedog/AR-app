@@ -67,6 +67,22 @@ describe('automatic audit log sharing', () => {
     expect(log.deleteDebugLogUpload).not.toHaveBeenCalled();
   });
 
+  it('queues the completed audit behind an in-flight manual upload', async () => {
+    let finishManual: ((value: typeof result) => void) | undefined;
+    (log.uploadDebugLog as jest.Mock).mockImplementationOnce(() => new Promise((resolve) => { finishManual = resolve; }));
+    const manual = sharing.startDebugLogUpload({ ...request, sessionId: null, audit: undefined });
+    // Let preparation reach the pending POST before completing the audit.
+    await Promise.resolve();
+    await Promise.resolve();
+    const audit = sharing.startDebugLogUpload(request);
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
+    finishManual?.(result);
+    await manual;
+    expect(await audit).toMatchObject({ phase: 'copied', sessionId: request.sessionId });
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(2);
+    expect(log.debugLog.readCompleteText).toHaveBeenLastCalledWith(request.audit);
+  });
+
   it('never copies a broken link and retries only its read-back, without reposting or deleting it', async () => {
     (log.verifyDebugLogUpload as jest.Mock).mockRejectedValueOnce(new Error('404 missing'));
     expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', error: '404 missing' });
@@ -104,10 +120,22 @@ describe('automatic audit log sharing', () => {
       Object.assign(new Error('response lost'), { mayHaveUploaded: true }),
     );
     expect(await sharing.startDebugLogUpload(request)).toMatchObject({ phase: 'failed', mayHaveUploaded: true });
+    await sharing.startDebugLogUpload(request);
     await sharing.retryDebugLogUpload();
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(1);
     expect(await sharing.retryDebugLogUpload({ acceptDuplicateRisk: true })).toMatchObject({ phase: 'copied' });
     expect(log.uploadDebugLog).toHaveBeenCalledTimes(2);
+  });
+
+  it('automatically uploads a distinct newly requested audit after an ambiguous earlier upload', async () => {
+    (log.uploadDebugLog as jest.Mock).mockRejectedValueOnce(
+      Object.assign(new Error('response lost'), { mayHaveUploaded: true }),
+    );
+    await sharing.startDebugLogUpload(request);
+    const latest = { ...request, sessionId: 'audit-2', audit: { summaryMarker: 'SUMMARY audit-2', report: { sessionId: 'audit-2', checks: ['latest'] } } };
+    expect(await sharing.startDebugLogUpload(latest)).toMatchObject({ phase: 'copied', mayHaveUploaded: false, sessionId: 'audit-2' });
+    expect(log.uploadDebugLog).toHaveBeenCalledTimes(2);
+    expect(log.debugLog.readCompleteText).toHaveBeenLastCalledWith(latest.audit);
   });
 
   it('does not upload when existing deletion receipts cannot be read', async () => {

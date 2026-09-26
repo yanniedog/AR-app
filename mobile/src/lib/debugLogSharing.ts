@@ -42,6 +42,7 @@ let preparedBody: string | null = null;
 let pendingReceipt: DebugLogUploadReceipt | null = null;
 let lastAuditSession: string | null = null;
 let blockedRequest: UploadRequest | null = null;
+let queuedAuditRequest: UploadRequest | null = null;
 
 export const getDebugLogUploadSnapshot = () => snapshot;
 export function subscribeDebugLogUpload(listener: () => void): () => void {
@@ -129,13 +130,33 @@ function run(): Promise<DebugLogUploadSnapshot> {
 }
 
 /** Single flight shared by the audit runner and manual upload screen. */
-export function startDebugLogUpload(request: UploadRequest): Promise<DebugLogUploadSnapshot> {
-  if (inFlight) return inFlight;
+export function startDebugLogUpload(
+  request: UploadRequest,
+  options: { acceptDuplicateRisk?: boolean } = {},
+): Promise<DebugLogUploadSnapshot> {
+  if (inFlight) {
+    if (request.sessionId && request.sessionId !== snapshot.sessionId) {
+      // A manual upload can start during the completed audit's final flush.
+      // Retain the latest finished audit and share it once that flight settles.
+      queuedAuditRequest = request;
+      return inFlight.then(() => {
+        if (queuedAuditRequest !== request) return snapshot;
+        queuedAuditRequest = null;
+        return startDebugLogUpload(request);
+      });
+    }
+    return inFlight;
+  }
   if (request.sessionId && request.sessionId === lastAuditSession) return Promise.resolve(snapshot);
   if (snapshot.recoveryReceipt) {
     // A later audit must still show why its automatic upload is blocked.
     // Keep the existing deletion capability until the user removes that copy.
     blockedRequest = request;
+    update({ sessionId: request.sessionId, phase: 'failed' });
+    return Promise.resolve(snapshot);
+  }
+  if (!request.sessionId && snapshot.mayHaveUploaded && !options.acceptDuplicateRisk) {
+    lastRequest = request;
     update({ sessionId: request.sessionId, phase: 'failed' });
     return Promise.resolve(snapshot);
   }

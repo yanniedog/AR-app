@@ -232,7 +232,7 @@ function DebugLogScreenInner() {
     }
   }, [readVersionedExport]);
 
-  const runUpload = useCallback(async () => {
+  const runUpload = useCallback(async (acceptDuplicateRisk = false) => {
     if (busyRef.current || isDebugLogUploadBusy() || !receiptLoaded || receiptError) return;
     busyRef.current = 'upload';
     setBusy('upload');
@@ -241,7 +241,7 @@ function DebugLogScreenInner() {
         sessionId: null,
         appVersion: Application.nativeApplicationVersion ?? 'unknown',
         buildVersion: Application.nativeBuildVersion ?? 'unknown',
-      });
+      }, { acceptDuplicateRisk });
     } finally {
       busyRef.current = null;
       setBusy(null);
@@ -255,7 +255,7 @@ function DebugLogScreenInner() {
         (uploadState.mayHaveUploaded ? ' An earlier upload was not confirmed and may already exist without a deletion receipt. This creates another public copy.' : ''),
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Upload and copy link', onPress: () => void runUpload() },
+        { text: 'Upload and copy link', onPress: () => void runUpload(uploadState.mayHaveUploaded) },
       ],
     );
   }, [runUpload, uploadState.mayHaveUploaded]);
