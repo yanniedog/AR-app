@@ -1,5 +1,6 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
+import * as bankRateHistorySync from '../src/data/bankRateHistorySync';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -134,6 +135,7 @@ describe('store refresh lifecycle', () => {
   });
 
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareBankRateHistory');
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'remote',
@@ -154,6 +156,7 @@ describe('store refresh lifecycle', () => {
 
     const changed = await useStore.getState().refresh({});
 
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), { downloadMissing: true });
     expect(changed).toBe(false);
     expect(mockDownloadCore).not.toHaveBeenCalled();
     expect(mockReadBundle).not.toHaveBeenCalled();
@@ -372,8 +375,10 @@ describe('store refresh lifecycle', () => {
       detailsSha: revisedManifest.files.details.sha256,
     });
 
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
 
+    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), { downloadMissing: false });
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
@@ -522,8 +527,10 @@ describe('store refresh lifecycle', () => {
       integrity: sampleCoreIntegrity,
     });
 
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
 
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), { downloadMissing: false });
     expect(useStore.getState().manifest?.files.core.sha256).toBe('b'.repeat(64));
     expect(useStore.getState().bankSpreadHistory).toBeNull();
     expect(useStore.getState().bankSpreadHistoryError).toBeNull();

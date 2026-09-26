@@ -114,6 +114,27 @@ test('preparing a later edition preserves offline history for the installed core
   expect(downloadDatedCore).not.toHaveBeenCalled();
 });
 
+test('background preparation retains verified history and today while foreground fills new and corrected dates', async () => {
+  const value = core('2026-09-28', '0.08');
+  const selected = index(value.run_date, true);
+  expect(await prepareBankRateHistory(value, manifest(value.run_date), selected, { downloadMissing: false })).toBe(true);
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(values(value)['2026-09-25'].Mortgage).toEqual({});
+  expect(values(value)['2026-09-26'].Mortgage!.Bank.mean).toBe(6);
+  expect(values(value)['2026-09-28'].Mortgage!.Bank.mean).toBe(8);
+  expect(missingBankRateHistoryDates(value)).toEqual(['2026-09-25', '2026-09-27']);
+  const restarted = core(value.run_date, '0.08');
+  expect(await prepareBankRateHistory(restarted, manifest(value.run_date))).toBe(true);
+  expect(missingBankRateHistoryDates(restarted)).toEqual(['2026-09-25', '2026-09-27']);
+  expect(values(restarted)['2026-09-28'].Mortgage!.Bank.mean).toBe(8);
+  jest.mocked(downloadDatedCore).mockImplementation(async day => core(day, day === '2026-09-25' ? '0.09' : '0.07'));
+  expect(await prepareBankRateHistory(restarted, manifest(value.run_date), selected)).toBe(true);
+  expect(jest.mocked(downloadDatedCore).mock.calls.map(call => call[0])).toEqual(['2026-09-25', '2026-09-27']);
+  expect(values(restarted)['2026-09-25'].Mortgage!.Bank.mean).toBe(9);
+  expect(values(restarted)['2026-09-27'].Mortgage!.Bank.mean).toBeCloseTo(7);
+  expect(missingBankRateHistoryDates(restarted)).toEqual([]);
+});
+
 test.each(['terms-only', 'changed-core'])('a %s revision replaces its same-date binding and cannot admit the old edition', async revisionKind => {
   const day = '2026-09-27', oldManifest = manifest(day, 'b'.repeat(64));
   expect(await prepareBankRateHistory(core(day, '0.07'), oldManifest, index(day))).toBe(true);

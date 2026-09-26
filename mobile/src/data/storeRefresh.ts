@@ -380,7 +380,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const bundle = liveMatches ? null : await cache.readBundle();
           if (liveMatches || bundle) {
             const historyCore = bundle?.core ?? live.core;
-            if (historyCore) await prepareBankRateHistory(historyCore, remote, resolution.datesIndex);
+            if (historyCore) await prepareBankRateHistory(historyCore, remote, resolution.datesIndex, { downloadMissing: !background });
             const adoptingRevision = !!remote.payload_revision && !samePayloadIdentity(live.manifest, remote);
             if (adoptingRevision) closeSuitabilityGateUntilRebuild();
             if (bundle) {
@@ -459,7 +459,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
         );
         if (core.run_date !== remote.run_date) throw new Error('Core publication date mismatch');
-        await prepareBankRateHistory(core, remote, resolution.datesIndex);
+        await prepareBankRateHistory(core, remote, resolution.datesIndex, { downloadMissing: !background });
         // Verify the entire immutable edition before advertising it. Staging
         // details by content hash keeps the installed offline edition usable if
         // any subsequent asset download or cache write fails.

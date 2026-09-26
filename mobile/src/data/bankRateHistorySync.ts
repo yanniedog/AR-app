@@ -78,15 +78,16 @@ function sameHistoryHeads(left: DatesIndex, right: DatesIndex, target: string): 
 /** Fully prepare every bank before adopting the catalogue. A fresh publication
  * supplies the index; offline bootstrap may reuse only its exact saved edition.
  * Bank/section/profile selection never performs any history network requests. */
-export function prepareBankRateHistory(core: CorePayload, manifest: Manifest, index: DatesIndex | null = null): Promise<boolean> {
+export function prepareBankRateHistory(core: CorePayload, manifest: Manifest, index: DatesIndex | null = null,
+  options: { downloadMissing?: boolean } = {}): Promise<boolean> {
   if (packedBankRateHistory(core)) return Promise.resolve(true);
   if (!manifest.payload_revision) return Promise.resolve(false);
-  const work = preparation.then(() => prepare(core, manifest, index));
+  const work = preparation.then(() => prepare(core, manifest, index, options.downloadMissing !== false));
   preparation = work.catch(() => false);
   return preparation;
 }
 
-async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null): Promise<boolean> {
+async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null, downloadMissing: boolean): Promise<boolean> {
   try {
     const saved = await cache.readBankRateHistory?.(decodeSavedBankRateHistory).catch(() => null) ?? null;
     const baselineIndex = parseDatesIndex(bundled.source_index);
@@ -113,6 +114,9 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
       let failures = 0;
       for (const day of dates) {
         if (!heads[day]) continue;
+        // OS background tasks adopt today's rates without an unbounded series
+        // of historical requests. The next foreground refresh fills the gaps.
+        if (!downloadMissing && day !== core.run_date) continue;
         await yieldToUi();
         try {
           const observed = day === core.run_date ? core : await downloadDatedCore(day, index);
