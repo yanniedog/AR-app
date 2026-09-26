@@ -11,7 +11,7 @@ import type { PayloadRevisionHead } from '../src/data/payloadRevision';
 let mockBaseline: PortableBankRateHistory;
 let mockCache: string | null = null;
 jest.mock('../src/data/cache', () => ({ cache: {
-  readBankRateHistory: jest.fn(async () => mockCache),
+  readBankRateHistory: jest.fn(async (decode: (text: string) => unknown) => mockCache === null ? null : decode(mockCache)),
   writeBankRateHistory: jest.fn(async (text: string) => { mockCache = text; }),
 } }));
 jest.mock('../src/data/historyDaily', () => ({ downloadDatedCore: jest.fn() }));

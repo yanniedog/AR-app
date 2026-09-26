@@ -88,7 +88,7 @@ export function prepareBankRateHistory(core: CorePayload, manifest: Manifest, in
 
 async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null): Promise<boolean> {
   try {
-    const saved = decodeSavedBankRateHistory(await cache.readBankRateHistory?.().catch(() => null) ?? null);
+    const saved = await cache.readBankRateHistory?.(decodeSavedBankRateHistory).catch(() => null) ?? null;
     const baselineIndex = parseDatesIndex(bundled.source_index);
     if (!baselineIndex?.revision_heads) return false;
     const cachedBinding = saved?.core_bindings[core.run_date];
