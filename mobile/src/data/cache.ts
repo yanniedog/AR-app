@@ -27,6 +27,7 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
+const BANK_RATE_HISTORY = `${DIR}bank-rate-history.json`;
 const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
@@ -636,6 +637,29 @@ export const cache = {
 
   async clear(): Promise<void> {
     await deletePath(DIR);
+  },
+
+  async readBankRateHistory<T>(decode: (text: string) => T | null): Promise<T | null> {
+    // A complete temporary write is newer than the primary. Decode before
+    // choosing it so an interrupted write cannot hide the last valid cache.
+    for (const path of [`${BANK_RATE_HISTORY}.tmp`, BANK_RATE_HISTORY]) {
+      try {
+        if (!await pathExists(path)) continue;
+        const value = decode(await readText(path));
+        if (value !== null) return value;
+      } catch { /* Try the other checkpoint if this read or decode failed. */ }
+    }
+    return null;
+  },
+
+  async writeBankRateHistory(text: string): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      const temporary = `${BANK_RATE_HISTORY}.tmp`;
+      await writeText(temporary, text);
+      await deletePath(BANK_RATE_HISTORY);
+      await movePath(temporary, BANK_RATE_HISTORY);
+    });
   },
 };
 

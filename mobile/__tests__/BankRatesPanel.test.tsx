@@ -8,7 +8,7 @@ import type { CorePayload } from '../src/types';
 import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
-type Renderer = ReactTestRenderer & { root: TestNode };
+type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
   Mortgage: { rates: [{ provider: 'Alpha', product_key: 'a', product_name: 'Loan', rate: '0.06', rate_type: 'VARIABLE' }, { provider: 'Beta', product_key: 'b', product_name: 'Fixed', rate: '0.09', rate_type: 'FIXED' }] },
   Savings: { rates: [{ provider: 'Alpha', product_key: 's', product_name: 'Savings', rate: '0.04' }] },
@@ -24,7 +24,7 @@ jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
-beforeEach(() => { mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
+beforeEach(() => { mockState.core = core; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });
 afterEach(() => installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null)));
 test('opens Rates/Mean; all statistics, product sections and secondary Gap are selectable', () => {
   let tree!: Renderer;
@@ -50,5 +50,19 @@ test('profile changes remove excluded banks immediately; missing mandatory featu
   mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
   act(() => tree.update(<BankRatesPanel />));
   expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
+  act(() => tree.unmount());
+});
+
+test('an update missing detailed history identifies the limitation and recovers with the next complete payload', () => {
+  mockState.core = { ...core, bank_rate_history: undefined };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  const chart = () => tree.root.find(n => n.type === ('BankRateChart' as unknown));
+  expect(chart().props.model.dates).toEqual([core.run_date]);
+  expect(JSON.stringify(tree.toJSON())).toContain('Historical rates are unavailable in this update. Showing current rates only.');
+  mockState.core = core;
+  act(() => tree.update(<BankRatesPanel />));
+  expect(chart().props.model.dates).toEqual(core.bank_rate_history!.run_dates);
+  expect(JSON.stringify(tree.toJSON())).not.toContain('Historical rates are unavailable in this update.');
   act(() => tree.unmount());
 });

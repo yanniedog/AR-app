@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { SECTION_KEYS, type RateRow, type SectionKey } from '../../types';
 import { bankRateScope, buildBankRateChart, type BankRateChartModel, type RateStatistic } from '../../data/bankRateOverview';
-import { packedBankRateSnapshots } from '../../data/bankRateHistory';
+import { availableBankRateHistory, missingBankRateHistoryDates, packedBankRateSnapshots } from '../../data/bankRateHistory';
 import { visibleAccountRows } from '../../data/format';
 import { profileFeaturesForSection, profileFilterRows, profileSelectionCount } from '../../data/profile';
 import { normalizeInterests, sectionSegmentOptions } from '../../data/interests';
@@ -24,6 +24,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   onModelChange?: (model: BankRateChartModel | null) => void; onChartReady?: (ready: boolean) => void;
 }) {
   const core = useStore(s => s.core);
+  const historyRevision = useStore(s => s.bankRateHistoryRevision ?? 0);
   const details = useStore(s => s.details?.products);
   const prefs = useStore(s => s.prefs);
   const calendar = useStore(s => s.rbaCalendar);
@@ -51,7 +52,8 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   useEffect(() => {
     if (core && !details && (!prefs.includeNonStandard || SECTION_KEYS.some(key => profileFeaturesForSection(prefs.profileFilters, key).length))) void ensureDetails();
   }, [core, details, ensureDetails, prefs.includeNonStandard, prefs.profileFilters]);
-  const snapshots = useMemo(() => core ? packedBankRateSnapshots(core, scope) : {}, [core, scope]);
+  const snapshots = useMemo(() => core ? packedBankRateSnapshots(core, scope) : {}, [core, scope, historyRevision]);
+  const historyAvailable = core ? availableBankRateHistory(core) !== null : false;
   const model = useMemo(() => buildBankRateChart(snapshots, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
   useEffect(() => { onModelChange?.(tab === 'gap' && !gapAllowed ? null : model); }, [gapAllowed, model, onModelChange, tab]);
   return <View style={{ gap: 12 }} testID="bank-rates-panel">
@@ -61,6 +63,8 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
       <AppText variant="tiny" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
+      {core && !historyAvailable ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
+      {core && missingBankRateHistoryDates(core).length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical updates could not be loaded. Refresh to retry; missing observations stay blank.</AppText> : null}
       {model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <Card><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></Card>}
       <AppText variant="tiny" color="textMuted">Each matching rate tier has equal weight. History follows currently matching tiers; missing observations stay blank.{gap ? ' The gap does not measure bank margins.' : ''}</AppText>
     </>}

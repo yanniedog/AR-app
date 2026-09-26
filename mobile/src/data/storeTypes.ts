@@ -133,6 +133,8 @@ export interface AppState {
   source: PayloadSource;
   manifest: Manifest | null;
   core: CorePayload | null;
+  /** Invalidates graph memoization when the same catalogue gains verified history. */
+  bankRateHistoryRevision?: number;
   /** Explicit trust/provenance carried with the exact normalized core object. */
   coreIntegrity: CoreIntegrityContext | null;
   coreAssetState: AssetState<CoreIntegrityContext>;

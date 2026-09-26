@@ -68,6 +68,48 @@ describe('cache core-meta sidecar', () => {
     expect(await cache.readRbaMarketOutlook()).toEqual(context);
   });
 
+  it('recovers complete bank-rate history after its final move is interrupted', async () => {
+    const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+    await cache.writeBankRateHistory('{"edition":"previous"}');
+    const corrected = '{"edition":"corrected","historical_revision":2}';
+    (FileSystem.moveAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted history move'));
+    await expect(cache.writeBankRateHistory(corrected)).rejects.toThrow('interrupted history move');
+    expect(files.has(path)).toBe(false);
+    expect(files.get(`${path}.tmp`)).toBe(corrected);
+    expect(await cache.readBankRateHistory(JSON.parse)).toEqual(JSON.parse(corrected));
+    await cache.writeBankRateHistory(corrected);
+    expect(await cache.readBankRateHistory(JSON.parse)).toEqual(JSON.parse(corrected));
+    expect(files.has(`${path}.tmp`)).toBe(false);
+  });
+
+  it('recovers a completed bank-history temporary write before the older primary is deleted', async () => {
+    const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+    const previous = '{"historical_revision":1}';
+    const corrected = '{"historical_revision":2}';
+    await cache.writeBankRateHistory(previous);
+    (FileSystem.deleteAsync as jest.Mock).mockRejectedValueOnce(new Error('interrupted history delete'));
+    await expect(cache.writeBankRateHistory(corrected)).rejects.toThrow('interrupted history delete');
+    expect(files.get(path)).toBe(previous);
+    expect(files.get(`${path}.tmp`)).toBe(corrected);
+    expect(await cache.readBankRateHistory(JSON.parse)).toEqual({ historical_revision: 2 });
+  });
+
+  it.each(['{broken', '{"historical_revision":99}'])(
+    'falls back to the valid bank-history primary when a temporary checkpoint fails decoding: %s',
+    async broken => {
+      const path = `${FileSystem.documentDirectory}payload/bank-rate-history.json`;
+      files.set(path, '{"historical_revision":1}');
+      files.set(`${path}.tmp`, broken);
+      const decode = (text: string) => {
+        const value = JSON.parse(text);
+        return value.historical_revision === 1 ? value : null;
+      };
+      expect(await cache.readBankRateHistory(decode)).toEqual({ historical_revision: 1 });
+      files.delete(path);
+      expect(await cache.readBankRateHistory(decode)).toBeNull();
+    },
+  );
+
   it.each(['{broken', '{"schema_version":99}'])(
     'recovers a valid temporary RBA cache when the primary is malformed: %s',
     async (broken) => {

@@ -1,4 +1,4 @@
-import { packedBankRateHistory, packedBankRateSnapshots } from '../src/data/bankRateHistory';
+import { availableBankRateHistory, clearSupplementaryBankRateHistory, installSupplementaryBankRateHistory, packedBankRateHistory, packedBankRateSnapshots } from '../src/data/bankRateHistory';
 import { bankRateScope } from '../src/data/bankRateOverview';
 import type { CorePayload, RateRow } from '../src/types';
 const row = (id: number, rate = '0.06', extra: Partial<RateRow> = {}): RateRow => ({ provider: 'Alpha', product_key: String(id), product_name: 'Loan', rate, bank_rate_tier: id, ...extra });
@@ -62,4 +62,26 @@ test('legacy data has no network fallback; a quarantined row cannot re-enter his
   expect(packedBankRateSnapshots(core, scope(core, [excluded]))['2026-09-19'].Mortgage).toEqual({});
   const legacy = { ...core, bank_rate_history: undefined };
   expect(Object.keys(packedBankRateSnapshots(legacy, scope(legacy)))).toEqual([core.run_date]);
+});
+
+test('supplementary history preserves shared eligibility identities and respects current filtered row membership', () => {
+  const original = fixture();
+  const core = { ...original, bank_rate_history: undefined };
+  const rows = core.sections.Mortgage.rates;
+  const before = JSON.stringify(core);
+  const currentOnly = packedBankRateSnapshots(core, scope(core, [rows[2]]));
+  expect(Object.keys(currentOnly)).toEqual([core.run_date]);
+  expect(installSupplementaryBankRateHistory(core, original.bank_rate_history!)).toBe(true);
+  expect(packedBankRateHistory(core)).toBeNull();
+  expect(availableBankRateHistory(core)?.run_dates).toHaveLength(4);
+  const complete = packedBankRateSnapshots(core, scope(core, [rows[2]]));
+  expect(Object.keys(complete)).toHaveLength(4);
+  expect(Object.values(complete).every(day => day.Mortgage!.Alpha.mean === 9)).toBe(true);
+  const foreign = { ...rows[2] };
+  expect(Object.values(packedBankRateSnapshots(core, scope(core, [foreign])))
+    .every(day => !Object.keys(day.Mortgage!).length)).toBe(true);
+  expect(core.sections.Mortgage.rates).toBe(rows);
+  expect(JSON.stringify(core)).toBe(before);
+  clearSupplementaryBankRateHistory(core);
+  expect(Object.keys(packedBankRateSnapshots(core, scope(core)))).toEqual([core.run_date]);
 });
