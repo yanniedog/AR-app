@@ -19,6 +19,10 @@ Bank selection reuses the prepared chart model and SVG paths without network
 requests. New profile filters evaluate local spans rather than downloading daily
 payloads or expanding every historical row observation. Foreground adoption
 prepares the user's historical filter result before making the core available.
+Cold hydration splits decompression, hashing, validation and cache compression
+into cooperative work slices so queued input can run between them. JSON parsing
+still runs atomically. The catalogue is decoded once per process; switching banks
+does not repeat hydration.
 
 ## Producer and offline recovery
 
@@ -29,6 +33,9 @@ fill that blank from an independently verified published observation whose
 manifest still matches the selected index. It never replaces a producer
 observation with this fallback. The merged cache binds to the exact producer core,
 and a changed or missing public manifest removes its fallback observation.
+An independent, bounded public-observation archive retains editions that cannot
+be recovered from the bundled catalogue. A staged producer cannot destroy those
+editions while an older installed core still needs them after a failed update.
 Schema-1 `bank_rate_history` remains supported for
 older producer payloads, with its narrower current-tier behaviour identified in
 the chart text.

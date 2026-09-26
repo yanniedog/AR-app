@@ -1,6 +1,6 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
-import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
-import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, type HistoricalBankRateCatalogue,
+import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
+import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue,
   type HistoricalCatalogueEvidence, type HistoricalCatalogueTier, type HistoricalRateDescriptor } from '../src/data/historicalBankRateCatalogueWire';
 import { bankRateScope, buildBankRateChart, RATE_OBSERVATION_FIELDS, summarizeBankRates } from '../src/data/bankRateOverview';
 import { EMPTY_PROFILE } from '../src/data/profile';
@@ -198,10 +198,27 @@ test.each([
   ['invalid feature variant', (p: any) => { p.evidence[1].detail.facts = [fact(), { ...fact(), id: '' }]; }],
   ['oversized metadata field', (p: any) => { p.evidence[1].detail.description = 'x'.repeat(65_537); }],
   ['too many tiers', (p: any) => { p.sections.Mortgage = Array(HISTORICAL_CATALOGUE_LIMITS.tiers + 1).fill(p.sections.Mortgage[0]); }],
-])('rejects malformed catalogue: %s', (_label, mutate) => {
+])('rejects malformed catalogue: %s', async (_label, mutate) => {
   const catalogue = pack(); mutate(catalogue);
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(false);
+  expect(await validateHistoricalBankRateCatalogueAsync(catalogue, async () => {})).toBe(false);
+  expect(await prepareHistoricalBankRateCatalogueAsync(catalogue, async () => {})).toBeNull();
   expect(prepareHistoricalBankRateCatalogue(catalogue)).toBeNull();
+});
+
+test('cooperative preparation yields before work, coalesces callers and shares the synchronous cache', async () => {
+  const catalogue = pack();
+  let release!: () => void;
+  const pause = jest.fn(() => new Promise<void>(resolve => { release = resolve; }));
+  const first = prepareHistoricalBankRateCatalogueAsync(catalogue, pause);
+  const second = prepareHistoricalBankRateCatalogueAsync(catalogue, pause);
+  expect(pause).toHaveBeenCalledTimes(1);
+  release();
+  const [left, right] = await Promise.all([first, second]);
+  expect(left).not.toBeNull();
+  expect(right).toBe(left);
+  expect(prepareHistoricalBankRateCatalogue(catalogue)).toBe(left);
+  expect(historicalBankRateSnapshots(left!, core(), scope(), filters)[day[0]].Mortgage!.Alpha.mean).toBe(5);
 });
 
 test('rejects expanded observations exceeding budget without expanding them', () => {

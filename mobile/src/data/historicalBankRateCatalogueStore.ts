@@ -24,7 +24,8 @@ export function missingHistoricalCatalogueDates(core: CorePayload): readonly str
   const installed = supplemental.get(core);
   if (installed) return installed.missing;
   const embedded = prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
-  return embedded ? Object.keys(embedded.catalogue.unavailable_dates).filter(day => day < core.run_date) : [];
+  return embedded ? embedded.catalogue.run_dates.filter(day => day < core.run_date &&
+    (!embedded.catalogue.sources[day] || embedded.catalogue.unavailable_dates[day])) : [];
 }
 
 /** Prepare the user's full historical filter result before exposing a new core.

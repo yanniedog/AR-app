@@ -105,7 +105,7 @@ function evidenceMatches(row: HistoricalRateDescriptor, evidence: HistoricalCata
 }
 
 /** Transport SHA/revision verification remains the caller's responsibility. */
-export function validateHistoricalBankRateCatalogue(value: unknown): value is HistoricalBankRateCatalogue {
+function* validateCatalogueSteps(value: unknown): Generator<void, boolean, void> {
   if (!record(value) || value.schema_version !== 2 || !Array.isArray(value.run_dates) || !value.run_dates.length ||
       value.run_dates.length > HISTORICAL_CATALOGUE_LIMITS.days || !record(value.sources) || !record(value.unavailable_dates) ||
       !record(value.sections) || !Array.isArray(value.evidence) || !value.evidence.length ||
@@ -116,17 +116,20 @@ export function validateHistoricalBankRateCatalogue(value: unknown): value is Hi
   if (!Object.entries(value.sources).every(([day, source]) => axis.has(day) && validateHistoricalCatalogueSource(source)) ||
       !Object.entries(value.unavailable_dates).every(([day, reason]) => axis.has(day) && text(reason))) return false;
   let metadata = 0;
-  if (!value.evidence.every(evidence => validateHistoricalCatalogueEvidence(evidence) &&
-      (metadata += metadataSize(evidence, HISTORICAL_CATALOGUE_LIMITS.metadataCharacters - metadata)) <= HISTORICAL_CATALOGUE_LIMITS.metadataCharacters)) return false;
+  for (const evidence of value.evidence) {
+    if (!validateHistoricalCatalogueEvidence(evidence) ||
+        (metadata += metadataSize(evidence, HISTORICAL_CATALOGUE_LIMITS.metadataCharacters - metadata)) > HISTORICAL_CATALOGUE_LIMITS.metadataCharacters) return false;
+    yield;
+  }
   const pack = value as unknown as HistoricalBankRateCatalogue;
   const absent = [0];
   dates.forEach(day => absent.push(absent.at(-1)! + (!Object.hasOwn(pack.sources, day) || Object.hasOwn(pack.unavailable_dates, day) ? 1 : 0)));
   let tiers = 0, spans = 0, cells = 0;
-  return SECTION_KEYS.every(section => {
+  for (const section of SECTION_KEYS) {
     const items = pack.sections[section];
     if (!Array.isArray(items) || (tiers += items.length) > HISTORICAL_CATALOGUE_LIMITS.tiers) return false;
     const identities = new Set<string>();
-    return items.every(tier => {
+    for (const tier of items) {
       if (!record(tier) || !validDescriptor(tier.row) || !Array.isArray(tier.spans) ||
           (metadata += metadataSize(tier.row, HISTORICAL_CATALOGUE_LIMITS.metadataCharacters - metadata)) > HISTORICAL_CATALOGUE_LIMITS.metadataCharacters ||
           (spans += tier.spans.length) > HISTORICAL_CATALOGUE_LIMITS.spans) return false;
@@ -134,7 +137,7 @@ export function validateHistoricalBankRateCatalogue(value: unknown): value is Hi
       if (identities.has(identity)) return false;
       identities.add(identity);
       let end = 0;
-      return tier.spans.every(span => {
+      for (const span of tier.spans) {
         if (!Array.isArray(span) || span.length !== 4) return false;
         const [start, count, rates, evidenceId] = span;
         if (!Number.isSafeInteger(start) || !Number.isSafeInteger(count) || start < end || count < 1 || start + count > dates.length ||
@@ -144,8 +147,34 @@ export function validateHistoricalBankRateCatalogue(value: unknown): value is Hi
             absent[start + count] !== absent[start] || !evidenceMatches(tier.row, pack.evidence[evidenceId], section)) return false;
         end = start + count;
         cells += count * rates.length;
-        return cells <= HISTORICAL_CATALOGUE_LIMITS.cells;
-      });
-    });
-  });
+        if (cells > HISTORICAL_CATALOGUE_LIMITS.cells) return false;
+        yield;
+      }
+      yield;
+    }
+  }
+  return true;
+}
+
+export function validateHistoricalBankRateCatalogue(value: unknown): value is HistoricalBankRateCatalogue {
+  const steps = validateCatalogueSteps(value);
+  let result = steps.next();
+  while (!result.done) result = steps.next();
+  return result.value;
+}
+
+/** The same validation rules, split into bounded work slices for app hydration. */
+export async function validateHistoricalBankRateCatalogueAsync(value: unknown,
+  yieldWork: () => Promise<void> = async () => (await import('../lib/yieldToUi')).yieldToUi()): Promise<boolean> {
+  await yieldWork();
+  const steps = validateCatalogueSteps(value);
+  let started = Date.now(), count = 0, result = steps.next();
+  while (!result.done) {
+    if (++count % 32 === 0 && Date.now() - started >= 8) {
+      await yieldWork();
+      started = Date.now();
+    }
+    result = steps.next();
+  }
+  return result.value;
 }

@@ -5,7 +5,7 @@ import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from './profile';
 import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
 import { summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
-import { validateHistoricalBankRateCatalogue, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
+import { validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
 
 export type { HistoricalBankRateCatalogue, HistoricalCatalogueEvidence, HistoricalCatalogueSource } from './historicalBankRateCatalogueWire';
 export interface HistoricalCatalogueFilters {
@@ -26,6 +26,16 @@ interface PreparedState {
 }
 const prepared = new WeakMap<object, PreparedHistoricalBankRateCatalogue | null>();
 const states = new WeakMap<PreparedHistoricalBankRateCatalogue, PreparedState>();
+const preparing = new WeakMap<object, Promise<PreparedHistoricalBankRateCatalogue | null>>();
+
+function installPrepared(value: HistoricalBankRateCatalogue, sections: PreparedState['sections'], quarantinedTierCount: number): PreparedHistoricalBankRateCatalogue {
+  const existing = prepared.get(value);
+  if (existing) return existing;
+  const result = Object.freeze({ catalogue: value, quarantinedTierCount });
+  states.set(result, { sections, snapshots: new Map(), current: new WeakMap(), broad: new Map() });
+  prepared.set(value, result);
+  return result;
+}
 
 /** Call once for an immutable, transport-verified payload, before core adoption. */
 export function prepareHistoricalBankRateCatalogue(value: unknown): PreparedHistoricalBankRateCatalogue | null {
@@ -37,10 +47,30 @@ export function prepareHistoricalBankRateCatalogue(value: unknown): PreparedHist
     if (section === 'Savings' && isExplicitTermDepositProduct(tier.row)) { quarantinedTierCount++; return []; }
     return [{ tier, broad: new Map<number, boolean>(), features: new Map<string, boolean>() }];
   })])) as PreparedState['sections'];
-  const result = Object.freeze({ catalogue: value, quarantinedTierCount });
-  states.set(result, { sections, snapshots: new Map(), current: new WeakMap(), broad: new Map() });
-  prepared.set(value, result);
-  return result;
+  return installPrepared(value, sections, quarantinedTierCount);
+}
+
+/** Validate and construct the same cached representation without one long
+ * synchronous scan on the React Native UI thread. Input must remain immutable. */
+export async function prepareHistoricalBankRateCatalogueAsync(value: unknown,
+  yieldWork: () => Promise<void> = async () => (await import('../lib/yieldToUi')).yieldToUi()): Promise<PreparedHistoricalBankRateCatalogue | null> {
+  if (!value || typeof value !== 'object') return null;
+  if (prepared.has(value)) return prepared.get(value)!;
+  if (preparing.has(value)) return preparing.get(value)!;
+  const task = (async () => {
+    if (!await validateHistoricalBankRateCatalogueAsync(value, yieldWork)) { prepared.set(value, null); return null; }
+    const catalogue = value as HistoricalBankRateCatalogue;
+    let quarantinedTierCount = 0, count = 0, started = Date.now();
+    const sections: PreparedState['sections'] = { Mortgage: [], Savings: [], TD: [] };
+    for (const section of SECTION_KEYS) for (const tier of catalogue.sections[section]) {
+      if (section === 'Savings' && isExplicitTermDepositProduct(tier.row)) quarantinedTierCount++;
+      else sections[section].push({ tier, broad: new Map(), features: new Map() });
+      if (++count % 32 === 0 && Date.now() - started >= 8) { await yieldWork(); started = Date.now(); }
+    }
+    return installPrepared(catalogue, sections, quarantinedTierCount);
+  })();
+  preparing.set(value, task);
+  try { return await task; } finally { preparing.delete(value); }
 }
 
 function normalizedFilters(filters: HistoricalCatalogueFilters) {

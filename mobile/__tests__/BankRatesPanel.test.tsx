@@ -95,3 +95,21 @@ test('prepacked history includes withdrawn products and filters their own dated 
   expect(chart().props.model.lines.map(line => line.provider)).toEqual(['Beta']);
   act(() => tree.unmount());
 });
+
+test('embedded calendar gaps show the missing-history message without inventing observations', () => {
+  const dates = ['2026-09-20', '2026-09-21', '2026-09-22'];
+  const source = { kind: 'retained_legacy_export' as const, banks_sha256: 'a'.repeat(64), bytes: 100 };
+  mockState.core = { ...core, bank_rate_history_catalogue: {
+    schema_version: 2, run_dates: dates, sources: { [dates[0]]: source, [dates[2]]: source }, unavailable_dates: {},
+    evidence: [{ status: 'unknown' }], sections: {
+      Mortgage: [{ row: { provider: 'Alpha', product_key: 'a', product_name: 'Loan', rate_type: 'VARIABLE' }, spans: [[0, 1, [5], 0]] }],
+      Savings: [], TD: [],
+    },
+  } };
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  expect(JSON.stringify(tree.toJSON())).toContain('Some historical observations are unavailable in this update and stay blank.');
+  const chart = tree.root.find(n => n.type === ('BankRateChart' as unknown));
+  expect(chart.props.model.lines.find(line => line.provider === 'Alpha')!.points.map(point => point.date)).toEqual([dates[0], dates[2]]);
+  act(() => tree.unmount());
+});
