@@ -45,6 +45,7 @@ function DebugLogScreenInner() {
   const visibleReceipts = uploadState.recoveryReceipt
     ? [uploadState.recoveryReceipt, ...uploadReceipts.filter((item) => item.url !== uploadState.recoveryReceipt?.url)]
     : uploadReceipts;
+  const hasPublicUploads = visibleReceipts.length > 0;
   const [receiptError, setReceiptError] = useState<string | null>(null);
   const [receiptLoaded, setReceiptLoaded] = useState(false);
   const [clearFailed, setClearFailed] = useState(false);
@@ -143,8 +144,8 @@ function DebugLogScreenInner() {
             void debugLog.clear().then(() => {
               Alert.alert(
                 'Debug log cleared',
-                uploadReceipts.length
-                  ? 'Local diagnostics were removed. The public-upload deletion receipt was retained.'
+                hasPublicUploads
+                  ? 'Local diagnostics were removed. Public uploads and their deletion access were retained.'
                   : 'Local diagnostics were removed and absence was verified.',
               );
             }).catch((error) => {
@@ -158,7 +159,7 @@ function DebugLogScreenInner() {
         },
       ],
     );
-  }, [uploadReceipts]);
+  }, [hasPublicUploads]);
 
   const onCopyPath = useCallback(async () => {
     if (busyRef.current) return;
