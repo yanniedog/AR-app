@@ -1247,6 +1247,22 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
   };
 }
 
+/** A terminal diagnostic is not a completed planned check, nor is an unflushed result. */
+export function summarizePartialPerformanceAudit(
+  checks: AuditCheck[], plannedChecks: number, storedChecks: number,
+): PerformanceAuditSummary {
+  const summary = summarizePerformanceAudit(checks);
+  const durableCount = Number.isFinite(storedChecks) ? Math.max(0, Math.floor(storedChecks)) : 0;
+  const executed = summarizePerformanceAudit(checks.slice(0, durableCount)).executed;
+  return {
+    ...summary,
+    executed,
+    coveragePercent: plannedChecks > 0 && Number.isFinite(plannedChecks)
+      ? roundMetric((executed / plannedChecks) * 100)
+      : null,
+  };
+}
+
 /** Pair cold/warm route checks into a compact comparison for the result UI and export. */
 export function aggregateRepeatedJourneys(checks: AuditCheck[]): AuditRouteAggregate[] {
   const byJourney = new Map<string, Partial<Record<'cold' | 'warm', AuditCheck>>>();

@@ -9,7 +9,14 @@ import { normalizeInterests } from './interests';
 import { samePayloadIdentity } from './payloadRevision';
 import type { StoreGet, StoreSet } from './storeTypes';
 
-const requests = new WeakMap<StoreGet, object>();
+const requests = new WeakMap<StoreGet, { completion: Promise<void> }>();
+
+/** Product history shares the prepared catalogue instead of racing it with a
+ * second download of every historical core. Follow a superseding request too. */
+export async function waitForBankRateHistoryPreparation(get: StoreGet): Promise<void> {
+  let request;
+  while ((request = requests.get(get))) await request.completion;
+}
 
 /** Optional history must never hold the cached core, splash or download UI.
  * Claim ownership synchronously, then allow the usable screen to paint first.
@@ -19,7 +26,8 @@ export async function prepareBankRateHistoryAfterPaint(
   index: DatesIndex | null = null, details: DetailsPayload | null = null,
   options: { warm?: boolean; readCachedDetails?: boolean } = {},
 ): Promise<void> {
-  const request = {};
+  let finish!: () => void;
+  const request = { completion: new Promise<void>(resolve => { finish = resolve; }) };
   requests.set(get, request);
   const isCurrent = () => requests.get(get) === request && !!get().core &&
     historicalCatalogueOwner(get().core!) === historicalCatalogueOwner(core) &&
@@ -45,7 +53,13 @@ export async function prepareBankRateHistoryAfterPaint(
     debugLog.warn('store', `optional bank history preparation failed: ${String((error as Error)?.message ?? error)}`);
   } finally {
     // An old completion must not clear a newer core/revision's loading state.
-    if (isCurrent()) set({ bankRateHistoryLoading: false,
-      bankRateHistoryRevision: (get().bankRateHistoryRevision ?? 0) + 1 });
+    // A cancelled request without a successor must still release its own flag.
+    if (requests.get(get) === request) {
+      const current = isCurrent();
+      requests.delete(get);
+      set({ bankRateHistoryLoading: false,
+        ...(current ? { bankRateHistoryRevision: (get().bankRateHistoryRevision ?? 0) + 1 } : {}) });
+    }
+    finish();
   }
 }

@@ -48,6 +48,8 @@ import {
 import { replaceAssetData } from './assetState';
 import { rebindCoreIntegrity } from './sectionIntegrity';
 import { samePayloadIdentity } from './payloadRevision';
+import { waitForBankRateHistoryPreparation } from './storeBankRateHistory';
+import { cachedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -912,11 +914,14 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             );
             return true;
           };
+          await waitForBankRateHistoryPreparation(get);
+          if (!revisionIsCurrent()) return;
           const synced = await syncProductHistoryFromDailyPayloads({
             targetRunDate: core.run_date,
             currentCore: core,
             coreSha,
             existing: cached,
+            catalogue: cachedHistoricalBankRateCatalogue(get().core!),
             isCurrent: revisionIsCurrent,
             onCheckpoint: async (checkpoint, progress) => {
               const published = await persistCheckpoint(

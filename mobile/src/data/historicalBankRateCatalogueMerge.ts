@@ -2,7 +2,7 @@ import { SECTION_KEYS, type CorePayload, type DetailsPayload, type ProductDetail
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { toFraction } from './format';
 import { RATE_OBSERVATION_FIELDS, rateTierSignature } from './bankRateOverview';
-import { prepareHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalCatalogueEvidence, validateHistoricalCatalogueSource,
   type HistoricalBankRateCatalogue, type HistoricalCatalogueEvidence, type HistoricalCatalogueSource,
   type HistoricalCatalogueSpan, type HistoricalCatalogueTier, type HistoricalRateDescriptor } from './historicalBankRateCatalogueWire';
@@ -11,6 +11,23 @@ type PublishedSource = Extract<HistoricalCatalogueSource, { kind: 'published_cor
 const unknownEvidence: HistoricalCatalogueEvidence = { status: 'unknown' };
 const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const normalized = (value: string) => value.trim().replace(/\s+/g, ' ').toLocaleLowerCase('en-US');
+const yieldCatalogueWork = async () => (await import('../lib/yieldToUi')).yieldToUi(0);
+
+function run<T>(steps: Generator<void, T>): T {
+  let next = steps.next();
+  while (!next.done) next = steps.next();
+  return next.value;
+}
+
+async function runAsync<T>(steps: Generator<void, T>, yieldWork: () => Promise<void>): Promise<T> {
+  await yieldWork();
+  let started = Date.now(), count = 0, next = steps.next();
+  while (!next.done) {
+    if (++count % 8 === 0 && Date.now() - started >= 8) { await yieldWork(); started = Date.now(); }
+    next = steps.next();
+  }
+  return next.value;
+}
 
 /** Only validated shallow evidence reaches this stable dictionary identity. */
 function canonical(value: unknown): string {
@@ -79,6 +96,23 @@ function coalesce(spans: HistoricalCatalogueSpan[]): HistoricalCatalogueSpan[] {
  * mutation of either edition, shared current rows or current eligibility gates. */
 export function upsertHistoricalCatalogueDay(catalogue: HistoricalBankRateCatalogue | null, core: CorePayload,
   details: DetailsPayload | null, source: PublishedSource): HistoricalBankRateCatalogue {
+  const result = run(upsertDaySteps(catalogue, core, details, source));
+  if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue update');
+  return result;
+}
+
+/** Same date replacement, yielding throughout preparation, copying and validation. */
+export async function upsertHistoricalCatalogueDayAsync(catalogue: HistoricalBankRateCatalogue | null, core: CorePayload,
+  details: DetailsPayload | null, source: PublishedSource,
+  yieldWork: () => Promise<void> = yieldCatalogueWork): Promise<HistoricalBankRateCatalogue> {
+  if (catalogue && !await prepareHistoricalBankRateCatalogueAsync(catalogue, yieldWork)) throw new Error('Invalid historical catalogue update identity');
+  const result = await runAsync(upsertDaySteps(catalogue, core, details, source), yieldWork);
+  if (!await prepareHistoricalBankRateCatalogueAsync(result, yieldWork)) throw new Error('Invalid historical catalogue update');
+  return result;
+}
+
+function* upsertDaySteps(catalogue: HistoricalBankRateCatalogue | null, core: CorePayload,
+  details: DetailsPayload | null, source: PublishedSource): Generator<void, HistoricalBankRateCatalogue> {
   if (!isValidCalendarDate(core.run_date) || source.kind !== 'published_core' || !validateHistoricalCatalogueSource(source) ||
       (catalogue && !prepareHistoricalBankRateCatalogue(catalogue))) throw new Error('Invalid historical catalogue update identity');
   const first = catalogue && catalogue.run_dates[0] < core.run_date ? catalogue.run_dates[0] : core.run_date;
@@ -88,7 +122,8 @@ export function upsertHistoricalCatalogueDay(catalogue: HistoricalBankRateCatalo
   const dates = Array.from({ length: dayCount }, (_, index) => new Date(Date.parse(first) + index * 86_400_000).toISOString().slice(0, 10));
   const index = dates.indexOf(core.run_date), shift = catalogue ? dates.indexOf(catalogue.run_dates[0]) : 0;
   const evidence = catalogue ? [...catalogue.evidence] : [unknownEvidence];
-  const evidenceIds = new Map(evidence.map((item, id) => [canonical(item), id]));
+  const evidenceIds = new Map<string, number>();
+  for (let id = 0; id < evidence.length; id++) { evidenceIds.set(canonical(evidence[id]), id); yield; }
   // Multiple rate tiers share one verified product identity and detail edition.
   // Resolve and canonicalize that evidence once, not once per balance/LVR tier.
   const productEvidenceIds = new Map<string, number>();
@@ -96,12 +131,19 @@ export function upsertHistoricalCatalogueDay(catalogue: HistoricalBankRateCatalo
   for (const section of SECTION_KEYS) for (const row of core.sections[section].rates) {
     const grouped = identities.get(row.product_key) ?? new Set<string>();
     grouped.add(rowIdentity(row, section)); identities.set(row.product_key, grouped);
+    yield;
   }
-  const sections = Object.fromEntries(SECTION_KEYS.map(section => {
-    const tiers: HistoricalCatalogueTier[] = (catalogue?.sections[section] ?? []).map(tier => ({ row: tier.row, spans: replaceDay(tier.spans, index, shift) }));
-    const tierIds = new Map(tiers.map((tier, id) => [rateTierSignature(tier.row as RateRow), id]));
+  const sections: HistoricalBankRateCatalogue['sections'] = { Mortgage: [], Savings: [], TD: [] };
+  for (const section of SECTION_KEYS) {
+    const tiers = sections[section], tierIds = new Map<string, number>();
+    for (const tier of catalogue?.sections[section] ?? []) {
+      tierIds.set(rateTierSignature(tier.row as RateRow), tiers.length);
+      tiers.push({ row: tier.row, spans: replaceDay(tier.spans, index, shift) });
+      yield;
+    }
     const observed = new Map<number, { rates: number[]; evidenceId: number }>();
     for (const row of core.sections[section].rates) {
+      yield;
       const value = toFraction(row.rate);
       if (value === null) continue;
       const signature = rateTierSignature(row);
@@ -125,14 +167,14 @@ export function upsertHistoricalCatalogueDay(catalogue: HistoricalBankRateCatalo
       }
       observation.rates.push(value * 100);
     }
-    for (const [id, observation] of observed) tiers[id].spans.push([index, 1, observation.rates.sort((a, b) => a - b), observation.evidenceId]);
-    for (const tier of tiers) tier.spans = coalesce(tier.spans);
-    return [section, tiers];
-  })) as HistoricalBankRateCatalogue['sections'];
+    for (const [id, observation] of observed) {
+      tiers[id].spans.push([index, 1, observation.rates.sort((a, b) => a - b), observation.evidenceId]); yield;
+    }
+    for (const tier of tiers) { tier.spans = coalesce(tier.spans); yield; }
+  }
   const unavailable_dates = { ...catalogue?.unavailable_dates }; delete unavailable_dates[core.run_date];
   const result: HistoricalBankRateCatalogue = { schema_version: 2, run_dates: dates, sections, evidence,
     sources: { ...catalogue?.sources, [core.run_date]: source }, unavailable_dates };
-  if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue update');
   return result;
 }
 
@@ -150,8 +192,8 @@ function selectedRuns(axis: readonly string[], selected: ReadonlySet<string>) {
   return { next, end };
 }
 
-function selectedSpans(tier: HistoricalCatalogueTier, runs: ReturnType<typeof selectedRuns>, shift: number,
-  evidenceId: (id: number) => number): HistoricalCatalogueSpan[] {
+function* selectedSpans(tier: HistoricalCatalogueTier, runs: ReturnType<typeof selectedRuns>, shift: number,
+  evidenceId: (id: number) => number): Generator<void, HistoricalCatalogueSpan[]> {
   const result: HistoricalCatalogueSpan[] = [];
   for (const [start, count, rates, id] of tier.spans) {
     const stop = start + count;
@@ -160,6 +202,7 @@ function selectedSpans(tier: HistoricalCatalogueTier, runs: ReturnType<typeof se
       result.push([cursor + shift, end - cursor, rates, evidenceId(id)]);
       cursor = runs.next[end];
     }
+    yield;
   }
   return result;
 }
@@ -169,6 +212,24 @@ function selectedSpans(tier: HistoricalCatalogueTier, runs: ReturnType<typeof se
  * Any base source wins, including a source with an unavailable marker. */
 export function overlayHistoricalCatalogueDays(base: HistoricalBankRateCatalogue, fallback: HistoricalBankRateCatalogue,
   dates: readonly string[]): HistoricalBankRateCatalogue {
+  const result = run(overlayDaySteps(base, fallback, dates));
+  if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue overlay result');
+  return result;
+}
+
+/** Cooperatively overlays the same explicitly authorized public observations. */
+export async function overlayHistoricalCatalogueDaysAsync(base: HistoricalBankRateCatalogue, fallback: HistoricalBankRateCatalogue,
+  dates: readonly string[], yieldWork: () => Promise<void> = yieldCatalogueWork): Promise<HistoricalBankRateCatalogue> {
+  if (!await prepareHistoricalBankRateCatalogueAsync(base, yieldWork) || !await prepareHistoricalBankRateCatalogueAsync(fallback, yieldWork)) {
+    throw new Error('Invalid historical catalogue overlay');
+  }
+  const result = await runAsync(overlayDaySteps(base, fallback, dates), yieldWork);
+  if (!await prepareHistoricalBankRateCatalogueAsync(result, yieldWork)) throw new Error('Invalid historical catalogue overlay result');
+  return result;
+}
+
+function* overlayDaySteps(base: HistoricalBankRateCatalogue, fallback: HistoricalBankRateCatalogue,
+  dates: readonly string[]): Generator<void, HistoricalBankRateCatalogue> {
   if (!prepareHistoricalBankRateCatalogue(base) || !prepareHistoricalBankRateCatalogue(fallback)) {
     throw new Error('Invalid historical catalogue overlay');
   }
@@ -184,7 +245,8 @@ export function overlayHistoricalCatalogueDays(base: HistoricalBankRateCatalogue
   const fallbackShift = (Date.parse(fallback.run_dates[0]) - Date.parse(first)) / 86_400_000;
   const runs = selectedRuns(fallback.run_dates, new Set(selected));
   const evidence = [...base.evidence];
-  const identities = new Map(evidence.map((item, id) => [canonical(item), id]));
+  const identities = new Map<string, number>();
+  for (let id = 0; id < evidence.length; id++) { identities.set(canonical(evidence[id]), id); yield; }
   const remapped = new Map<number, number>();
   const evidenceId = (id: number): number => {
     if (remapped.has(id)) return remapped.get(id)!;
@@ -194,24 +256,26 @@ export function overlayHistoricalCatalogueDays(base: HistoricalBankRateCatalogue
     remapped.set(id, mapped);
     return mapped;
   };
-  const sections = Object.fromEntries(SECTION_KEYS.map(section => {
-    const tiers: HistoricalCatalogueTier[] = base.sections[section].map(tier => ({ row: tier.row,
-      spans: tier.spans.map(([start, length, rates, id]) => [start + baseShift, length, rates, id]) }));
-    const tierIds = new Map(tiers.map((tier, id) => [rateTierSignature(tier.row as RateRow), id]));
+  const sections: HistoricalBankRateCatalogue['sections'] = { Mortgage: [], Savings: [], TD: [] };
+  for (const section of SECTION_KEYS) {
+    const tiers = sections[section], tierIds = new Map<string, number>();
+    for (const tier of base.sections[section]) {
+      tierIds.set(rateTierSignature(tier.row as RateRow), tiers.length);
+      tiers.push({ row: tier.row, spans: tier.spans.map(([start, length, rates, id]) => [start + baseShift, length, rates, id]) });
+      yield;
+    }
     for (const tier of fallback.sections[section]) {
-      const spans = selectedSpans(tier, runs, fallbackShift, evidenceId);
+      const spans = yield* selectedSpans(tier, runs, fallbackShift, evidenceId);
       if (!spans.length) continue;
       const signature = rateTierSignature(tier.row as RateRow);
       const id = tierIds.get(signature);
       if (id === undefined) { tierIds.set(signature, tiers.length); tiers.push({ row: tier.row, spans }); }
       else tiers[id].spans.push(...spans);
     }
-    for (const tier of tiers) tier.spans = coalesce(tier.spans);
-    return [section, tiers];
-  })) as HistoricalBankRateCatalogue['sections'];
+    for (const tier of tiers) { tier.spans = coalesce(tier.spans); yield; }
+  }
   const sources = { ...base.sources }, unavailable_dates = { ...base.unavailable_dates };
   for (const day of selected) { sources[day] = fallback.sources[day]; delete unavailable_dates[day]; }
   const result: HistoricalBankRateCatalogue = { schema_version: 2, run_dates, sources, unavailable_dates, evidence, sections };
-  if (!prepareHistoricalBankRateCatalogue(result)) throw new Error('Invalid historical catalogue overlay result');
   return result;
 }

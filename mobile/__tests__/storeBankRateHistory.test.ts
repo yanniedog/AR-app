@@ -1,4 +1,4 @@
-import { prepareBankRateHistoryAfterPaint } from '../src/data/storeBankRateHistory';
+import { prepareBankRateHistoryAfterPaint, waitForBankRateHistoryPreparation } from '../src/data/storeBankRateHistory';
 import { createBootstrapActions } from '../src/data/storeBootstrap';
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from '../src/data/storeTypes';
 import { sampleCore, sampleManifest } from '../src/data/sample';
@@ -143,6 +143,45 @@ test('a later request cancels queued startup work and uses the latest filters', 
   expect(prepareHistoricalBankRateHistory).toHaveBeenCalledTimes(1);
   expect(warmHistoricalBankRateCatalogue).toHaveBeenCalledWith(sampleCore, expect.objectContaining({ includeNonStandard: true, interests: ['Savings'] }));
   expect(get().bankRateHistoryRevision).toBe(1);
+});
+
+test('product history waits for the replacement preparation before choosing a source', async () => {
+  const old = deferred(), next = deferred();
+  jest.mocked(prepareHistoricalBankRateHistory)
+    .mockImplementationOnce(async () => { await old.promise; return true; })
+    .mockImplementationOnce(async () => { await next.promise; return true; });
+  const { get, set } = store();
+  const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  await Promise.resolve();
+  let settled = false;
+  const waiting = waitForBankRateHistoryPreparation(get).then(() => { settled = true; });
+  const replacement = { ...sampleCore };
+  set({ core: replacement });
+  const second = prepareBankRateHistoryAfterPaint(set, get, replacement, sampleManifest);
+  await Promise.resolve();
+  old.resolve();
+  await first;
+  expect(settled).toBe(false);
+  next.resolve();
+  await second;
+  await waiting;
+  expect(settled).toBe(true);
+  expect(get().bankRateHistoryLoading).toBe(false);
+});
+
+test('a cancelled preparation without a successor releases its flag and product waiter', async () => {
+  const paint = deferred();
+  jest.mocked(yieldToPaintFrames).mockReturnValueOnce(paint.promise);
+  const { get, set } = store();
+  const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  const waiting = waitForBankRateHistoryPreparation(get);
+  set({ core: { ...sampleCore } });
+  paint.resolve();
+  await pending;
+  await waiting;
+  expect(prepareHistoricalBankRateHistory).not.toHaveBeenCalled();
+  expect(get().bankRateHistoryLoading).toBe(false);
+  expect(get().bankRateHistoryRevision).toBe(0);
 });
 
 test('RBA-only core replacements inherit in-flight and completed bank history', async () => {

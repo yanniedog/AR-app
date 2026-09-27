@@ -7,6 +7,8 @@ import type { DatesIndex } from './datesIndex';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
 import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRates, type ProductHistoryPayload } from './productHistoryModel';
+import type { PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { productRatesFromHistoricalCatalogue } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -20,6 +22,8 @@ export interface SyncProductHistoryOpts {
   currentCore: CorePayload;
   coreSha?: string;
   existing?: ProductHistoryPayload | null;
+  /** Already validated, transport-bound history for the current core owner. */
+  catalogue?: PreparedHistoricalBankRateCatalogue | null;
   /** Override circuit trip threshold (tests). */
   circuitLimit?: number;
   /** Successful dated cores between durable checkpoints. Defaults to five. */
@@ -89,7 +93,7 @@ export async function syncProductHistoryFromDailyPayloads(
   const sourceIdentities = Object.fromEntries([...reusableDates].map(date => [date, opts.existing!.source_identities![date]]));
   // Recent dates are useful to product charts immediately; older dates continue
   // warming in the same background task after progressive checkpoints land.
-  const toFetch = wantedDates
+  let toFetch = wantedDates
     .filter((d) => d !== targetRunDate && !reusableDates.has(d) && indexedDates.includes(d) && !!selectedIdentity(d))
     .sort((a, b) => b.localeCompare(a));
 
@@ -112,16 +116,22 @@ export async function syncProductHistoryFromDailyPayloads(
   ) {
     return opts.existing;
   }
-  const bestByDate = new Map<string, Map<string, number>>([
-    [targetRunDate, bestRatesForCore(opts.currentCore, keys)],
-  ]);
+  const bestByDate = opts.catalogue && selectedIndex && toFetch.length
+    ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex, toFetch, opts.isCurrent)
+    : new Map<string, Map<string, number>>();
+  const packedDates = bestByDate.size;
+  for (const day of bestByDate.keys()) sourceIdentities[day] = selectedIdentity(day)!;
+  toFetch = toFetch.filter(day => !bestByDate.has(day));
+  // Today's exact installed rows always win, independently of a catalogue's
+  // embedded current point or a subsequently published index correction.
+  bestByDate.set(targetRunDate, bestRatesForCore(opts.currentCore, keys));
   // The installed core may precede a newly selected revision for today. Its hash
   // remains authoritative; do not label it with an unacquired index head.
   if (opts.coreSha) sourceIdentities[targetRunDate] = `core:${opts.coreSha}`;
 
   debugLog.info(
     'productHistory',
-    `sync start target=${targetRunDate} want=${wantedDates.length} fetch=${toFetch.length}`,
+    `sync start target=${targetRunDate} want=${wantedDates.length} packed=${packedDates} fetch=${toFetch.length}`,
   );
   // #region agent log
   const _syncT0 = Date.now();

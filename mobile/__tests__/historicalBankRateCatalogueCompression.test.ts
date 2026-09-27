@@ -44,6 +44,18 @@ test('valid compression and digest do not admit malformed JSON', () => {
 
 const cooperative = () => ({ yieldControl: jest.fn(async () => undefined), sliceMs: 0 });
 
+test.each([16_383, 16_384, 16_385])('bounded native string escaping preserves JSON bytes at %s code units', async length => {
+  const escaped = '\u0000\b\t\n\f\r"\\\ud800x\udfff😀日本語';
+  const text = ('x'.repeat(8191) + '😀' + escaped.repeat(1000)).slice(0, length);
+  const value = { [text]: text, allControls: Array.from({ length: 32 }, (_, i) => String.fromCharCode(i)).join(''),
+    loneHigh: '\ud800', loneLow: '\udfff', pair: '😀', empty: '' };
+  const expected = Buffer.from(JSON.stringify(value));
+  const result = await compressCatalogueAsync(value, cooperative());
+  expect(result.bytes).toBe(expected.length);
+  expect(result.sha256).toBe(bytesToHex(sha256(expected)));
+  expect(decompressCatalogue(result)).toEqual(value);
+});
+
 test('async compression yields while preserving native JSON bytes, Unicode boundaries and shared references', async () => {
   const shared = { data: 'repeat', optional: undefined };
   const value = { '2': 'second', '1': 'first', omitted: undefined, functions: () => 1,

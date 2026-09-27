@@ -90,6 +90,13 @@ type Checkpoint = ReturnType<typeof scheduler>;
 
 /** Escape bounded strings while preserving pairs across chunk boundaries. */
 function* quoted(value: string): Generator<string> {
+  // Almost every catalogue key/value is small. Let the engine escape those in
+  // one bounded call instead of three generator transfers plus slicing. Keep
+  // long strings chunked so neither quoting nor UTF-8 conversion monopolizes JS.
+  if (value.length <= 16_384) {
+    yield JSON.stringify(value);
+    return;
+  }
   yield '"';
   for (let start = 0; start < value.length;) {
     let end = Math.min(value.length, start + 8192);
