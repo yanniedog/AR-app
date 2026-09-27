@@ -128,7 +128,32 @@ test('a producer gap retains independently selected public history and its exact
   jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockClear();
   expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
   expect(history(restarted)).toEqual(history(current));
-  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).toHaveBeenCalledTimes(1);
+});
+
+test('a producer with baseline-restorable gaps persists only revision receipts and never serializes either durable catalogue', async () => {
+  const current = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  const encode = jest.spyOn(compression, 'compressCatalogueAsync');
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex());
+  const checkpoint = encode.mock.calls[0][0] as Record<string, unknown>;
+  expect(Object.keys(checkpoint).sort()).toEqual(['core_bindings', 'index', 'schema_version']);
+  expect(checkpoint.schema_version).toBe(3);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(rates(history(current), '2026-09-26')).toEqual([9]);
+  const restarted = { ...core(), bank_rate_history_catalogue: producerWithGap() };
+  await prepareHistoricalBankRateHistory(restarted, manifest(), mockIndex());
+  expect(history(restarted)).toEqual(history(current));
+  expect(encode).toHaveBeenCalledTimes(1);
+});
+
+test.each(['catalogue', 'producer_core_sha256'])('a delta checkpoint rejects the legacy-only %s field', async field => {
+  const day = '2026-09-27';
+  await prepareHistoricalBankRateHistory(core(day), manifest(day), mockIndex(day), details(day));
+  const checkpoint = compression.decompressCatalogue(JSON.parse(mockCache!)) as Record<string, unknown>;
+  checkpoint[field] = field === 'catalogue' ? mockBaseline : 'a'.repeat(64);
+  const text = JSON.stringify(compression.compressCatalogue(checkpoint));
+  expect(decodeSavedHistoricalCatalogue(text)).toBeNull();
+  expect(await decodeSavedHistoricalCatalogueAsync(text)).toBeNull();
 });
 
 test('an older overlay cannot replace observations in a new producer edition', async () => {
@@ -257,6 +282,8 @@ test('the public archive clips baseline-only rows and dates and migrates legacy 
   const current = core('2026-09-27');
   await prepareHistoricalBankRateHistory(current, manifest(current.run_date), mockIndex(current.run_date), details(current.run_date));
   const saved = compression.decompressCatalogue(JSON.parse(mockCache!)) as ReturnType<typeof decodeSavedHistoricalCatalogue>;
+  saved!.schema_version = 2;
+  saved!.catalogue = history(current);
   delete saved!.public_fallback;
   mockCache = JSON.stringify(compression.compressCatalogue(saved));
   await prepareHistoricalBankRateHistory(current, manifest(current.run_date), mockIndex(current.run_date));
@@ -266,6 +293,10 @@ test('the public archive clips baseline-only rows and dates and migrates legacy 
   expect(archive.sections.Mortgage).toHaveLength(1);
   expect(archive.sections.Mortgage[0].spans).toHaveLength(1);
   expect(archive.evidence).toHaveLength(2);
+  const migrated = compression.decompressCatalogue(JSON.parse(mockCache!)) as Record<string, unknown>;
+  expect(migrated.schema_version).toBe(3);
+  expect(migrated.catalogue).toBeUndefined();
+  expect(migrated.producer_core_sha256).toBeUndefined();
   expect(JSON.parse(mockCache!).bytes).toBeLessThan(12_000);
   const writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
   const compress = jest.spyOn(compression, 'compressCatalogue');
@@ -292,7 +323,7 @@ test.each(['raw source', 'stale head', 'invalid span', 'oversized calendar'])('a
   expect(await decodeSavedHistoricalCatalogueAsync(text)).toBeNull();
 });
 
-test('runtime checkpoint recovery uses the cooperative codec and shares the validated object with synchronous readers', async () => {
+test('runtime delta recovery uses the cooperative codec and restores the baseline without serializing it again', async () => {
   const day = '2026-09-27';
   await prepareHistoricalBankRateHistory(core(day), manifest(day), mockIndex(day), details(day));
   mockCache += ' ';
@@ -304,7 +335,7 @@ test('runtime checkpoint recovery uses the cooperative codec and shares the vali
   expect(rates(history(restarted), day)).toEqual([6]);
   expect(asyncInflate).toHaveBeenCalledTimes(1);
   expect(syncInflate).not.toHaveBeenCalled();
-  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).toHaveBeenCalledTimes(1);
   const saved = await decodeSavedHistoricalCatalogueAsync(mockCache);
   expect(decodeSavedHistoricalCatalogue(mockCache)).toBe(saved);
   expect(asyncInflate).toHaveBeenCalledTimes(1);
@@ -315,6 +346,7 @@ test('a compatible checkpoint with a baseline gap still loads the bundle to rest
   const day = '2026-09-27';
   await prepareHistoricalBankRateHistory(core(day), manifest(day), mockIndex(day), details(day));
   const saved = compression.decompressCatalogue(JSON.parse(mockCache!)) as NonNullable<ReturnType<typeof decodeSavedHistoricalCatalogue>>;
+  saved.schema_version = 2;
   saved.catalogue = upsertHistoricalCatalogueDay(null, core(day), details(day), source(day));
   mockCache = JSON.stringify(compression.compressCatalogue(saved));
   jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockClear();
@@ -356,7 +388,7 @@ test('offline recovery uses the persisted exact index and verified details when 
   expect(rates(history(restarted), '2026-09-26')).toEqual([6]);
   expect(rates(history(restarted), previousDay)).toEqual([7.000000000000001]);
   expect(rates(history(restarted), nextDay)).toEqual([8]);
-  expect(history(restarted).sources[previousDay]).toEqual(oldCheckpoint.catalogue.sources[previousDay]);
+  expect(history(restarted).sources[previousDay]).toEqual(oldCheckpoint.public_fallback!.sources[previousDay]);
   expect(missingHistoricalCatalogueDates(restarted)).toEqual([]);
   expect(restarted.sections.Mortgage.rates[0]).toBe(originalRow);
 
@@ -520,7 +552,7 @@ test('consecutive identical verified preparations reuse the installed catalogue 
   clearHistoricalBankRateCatalogue(current);
   await prepareHistoricalBankRateHistory(current, edition, index, details(current.run_date));
   expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads + 1);
-  expect(history(current)).toBe(first);
+  expect(history(current)).toEqual(first);
 });
 
 test('later verified details and same-core terms revisions invalidate the preparation shortcut', async () => {
@@ -533,6 +565,25 @@ test('later verified details and same-core terms revisions invalidate the prepar
   await prepareHistoricalBankRateHistory(current, manifest(current.run_date, 'a'.repeat(64), 2), revised, details(current.run_date));
   expect(history(current).sources[current.run_date]).toEqual({ ...source(current.run_date), manifest_sha256: head(current.run_date, 2).manifest_sha256 });
   expect(cache.readBankRateHistory).toHaveBeenCalledTimes(3);
+});
+
+test('verified details arriving after an absent-details preparation persist the new evidence under the unchanged head', async () => {
+  const day = '2026-09-27', current = core(day), edition = manifest(day), index = mockIndex(day);
+  await prepareHistoricalBankRateHistory(current, edition, index);
+  expect(decodeSavedHistoricalCatalogue(mockCache)!.public_fallback).toBeUndefined();
+  const writes = jest.mocked(cache.writeBankRateHistory).mock.calls.length;
+  await prepareHistoricalBankRateHistory(current, edition, index, details(day));
+  expect(cache.writeBankRateHistory).toHaveBeenCalledTimes(writes + 1);
+  const archived = decodeSavedHistoricalCatalogue(mockCache)!.public_fallback!;
+  const evidenceId = archived.sections.Mortgage[0].spans[0][3];
+  expect(archived.evidence[evidenceId].status).toBe('known');
+  const next = core('2026-09-28');
+  await prepareHistoricalBankRateHistory(next, manifest(next.run_date), mockIndex(next.run_date));
+  const restarted = core(next.run_date);
+  await prepareHistoricalBankRateHistory(restarted, manifest(next.run_date));
+  expect(rates(history(restarted), day)).toEqual([6]);
+  expect(history(restarted).sources[day]).toEqual(source(day));
+  expect(decodeSavedHistoricalCatalogue(mockCache)!.public_fallback!.evidence).toEqual(archived.evidence);
 });
 
 test('an explicit RBA-only wrapper reuses its historical owner without clearing or reading the cache', async () => {

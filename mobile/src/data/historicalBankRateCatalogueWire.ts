@@ -39,6 +39,9 @@ const rowFields = new Set(['provider', 'product_id', 'product_key', 'product_nam
   'repayment_type', 'loan_purpose', 'term', 'term_months', 'lvr_tier', 'ribbon_normalized', 'security_purpose',
   'ribbon_repayment_type', 'ribbon_rate_structure', 'ribbon_fixed_term', 'account_type', 'ribbon_deposit_kind',
   'balance_min', 'balance_max', 'interest_payment', 'feature_set', 'account_class', 'taxonomy_path']);
+// Duplicate detection is not transport authentication. Keep ordinary exact
+// signatures without hashing every tier, but bound JSON escaping amplification.
+const MAX_RETAINED_SIGNATURE = 4096, MAX_SECTION_SIGNATURE_CHARACTERS = 16 * 1024 * 1024;
 
 export function validateHistoricalCatalogueSource(value: unknown): value is HistoricalCatalogueSource {
   if (!record(value)) return false;
@@ -129,13 +132,25 @@ function* validateCatalogueSteps(value: unknown): Generator<void, boolean, void>
     const items = pack.sections[section];
     if (!Array.isArray(items) || (tiers += items.length) > HISTORICAL_CATALOGUE_LIMITS.tiers) return false;
     const identities = new Set<string>();
+    const overflowIdentities = new Map<string, HistoricalRateDescriptor[]>();
+    let signatureCharacters = 0;
     for (const tier of items) {
       if (!record(tier) || !validDescriptor(tier.row) || !Array.isArray(tier.spans) ||
           (metadata += metadataSize(tier.row, HISTORICAL_CATALOGUE_LIMITS.metadataCharacters - metadata)) > HISTORICAL_CATALOGUE_LIMITS.metadataCharacters ||
           (spans += tier.spans.length) > HISTORICAL_CATALOGUE_LIMITS.spans) return false;
-      const identity = bytesToHex(sha256(utf8ToBytes(rateTierSignature(tier.row as RateRow))));
+      const identity = rateTierSignature(tier.row as RateRow);
       if (identities.has(identity)) return false;
-      identities.add(identity);
+      if (identity.length <= MAX_RETAINED_SIGNATURE &&
+          signatureCharacters + identity.length <= MAX_SECTION_SIGNATURE_CHARACTERS) {
+        identities.add(identity); signatureCharacters += identity.length;
+      } else {
+        // Retain existing row references, not potentially sixfold-expanded
+        // strings. Exact comparison also distinguishes a digest collision.
+        const digest = bytesToHex(sha256(utf8ToBytes(identity)));
+        const collisions = overflowIdentities.get(digest) ?? [];
+        if (collisions.some(row => rateTierSignature(row as RateRow) === identity)) return false;
+        collisions.push(tier.row); overflowIdentities.set(digest, collisions);
+      }
       let end = 0;
       for (const span of tier.spans) {
         if (!Array.isArray(span) || span.length !== 4) return false;

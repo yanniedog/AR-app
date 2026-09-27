@@ -50,6 +50,24 @@ beforeEach(() => {
   mockedFetchIndex.mockResolvedValue({} as never);
 });
 
+test('offline receipt retains verified legacy slices without resolving mutable manifests or inventing new slices', async () => {
+  const old = '2026-06-09', missing = '2026-06-10', today = '2026-06-11';
+  mockedHistoryDates.mockReturnValue([old, missing, today]);
+  const identity = `legacy-content:${old}:verified-manifest:verified-core`;
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: today,
+    currentCore: core(today, { Mortgage: [rateRow('P|1', '0.055')] }), allowNetwork: false,
+    fallbackIndex: { revision_heads: {} } as never,
+    existing: { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION, run_date: today,
+      run_dates: [old, today], products: { 'P|1': [0.06, 0.055] }, source_identities: { [old]: identity } },
+  });
+  expect(result.products['P|1']).toEqual([0.06, null, 0.055]);
+  expect(result.source_identities?.[old]).toBe(identity);
+  expect(result.source_identities?.[missing]).toBeUndefined();
+  expect(resolveLegacyPublications).not.toHaveBeenCalled();
+  expect(mockedFetchIndex).not.toHaveBeenCalled();
+  expect(mockedDownload).not.toHaveBeenCalled();
+});
+
 test('always includes the current core date and records its revision', async () => {
   mockedHistoryDates.mockReturnValue(['2026-06-10']);
 

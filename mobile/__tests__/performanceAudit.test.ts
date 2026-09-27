@@ -34,6 +34,7 @@ import {
   scoreLatency,
   selectReportedAuditChecks,
   summarizePerformanceAudit,
+  summarizePartialPerformanceAudit,
   summarizeResponsiveness,
   worstStatus,
   type AuditCheck,
@@ -182,7 +183,7 @@ const environment: AuditEnvironment = {
 function check(
   id: string,
   status: AuditCheck['status'],
-  durationMs: number,
+  durationMs: number | null,
   metrics: AuditCheck['metrics'] = {},
 ): AuditCheck {
   return {
@@ -480,6 +481,22 @@ describe('performance audit scoring', () => {
       slowestCheckId: 'proven-zero',
       slowestCheckMs: 0,
     });
+  });
+
+  it('reports zero planned execution coverage when preflight fails before a durable check', () => {
+    const fatal = check('fatal-1', 'fail', null, { executionAttempted: false });
+    expect(summarizePartialPerformanceAudit([fatal], 324, 0)).toMatchObject({
+      overall: 'bottleneck', fail: 1, executed: 0, coveragePercent: 0, slowestCheckId: null,
+    });
+  });
+
+  it('uses durable executed checks over the full plan for partial coverage', () => {
+    const partial = [check('completed', 'pass', 10), check('skipped', 'skipped', null),
+      check('not-flushed', 'pass', 10), check('fatal-3', 'fail', null, { executionAttempted: false })];
+    expect(summarizePartialPerformanceAudit(partial, 4, 2)).toMatchObject({
+      executed: 1, coveragePercent: 25, fail: 1,
+    });
+    expect(summarizePartialPerformanceAudit(partial, 0, 0).coveragePercent).toBeNull();
   });
 
   it('promotes the worst latency and check status', () => {

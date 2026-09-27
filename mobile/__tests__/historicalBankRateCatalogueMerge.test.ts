@@ -1,4 +1,4 @@
-import { overlayHistoricalCatalogueDays, upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
+import { overlayHistoricalCatalogueDays, overlayHistoricalCatalogueDaysAsync, upsertHistoricalCatalogueDay, upsertHistoricalCatalogueDayAsync } from '../src/data/historicalBankRateCatalogueMerge';
 import { historicalBankRateSnapshots, prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
 import { validateHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
 import { bankRateScope } from '../src/data/bankRateOverview';
@@ -14,6 +14,50 @@ const detail: ProductDetail = { description: 'Ordinary retail home loan.', displ
   facts: [{ id: 'offset', canonicalKey: 'OFFSET', sourceType: 'OFFSET', kind: 'feature', value: true, unit: 'boolean' }] };
 const details = (date: string, value: ProductDetail = detail): DetailsPayload => ({ schema_version: 1, run_date: date, products: { 'Alpha|p': value } });
 const day1 = '2026-09-20', day2 = '2026-09-21', day3 = '2026-09-22';
+
+test('cooperative upsert preserves correction semantics and original references across multiple work slices', async () => {
+  const rows = Array.from({ length: 192 }, (_, i) => row({ product_id: String(i), product_key: `Alpha|${i}`, balance_min: i }));
+  const original = upsertHistoricalCatalogueDay(null, core(day1, rows), details(day1), source);
+  const before = JSON.stringify(original), current = core(day3, rows.slice(0, 160));
+  const expected = upsertHistoricalCatalogueDay(original, current, details(day3), source);
+  const yieldWork = jest.fn(async () => undefined);
+  let clock = 0;
+  const now = jest.spyOn(Date, 'now').mockImplementation(() => clock += 8);
+  try {
+    expect(await upsertHistoricalCatalogueDayAsync(original, current, details(day3), source, yieldWork)).toEqual(expected);
+  } finally { now.mockRestore(); }
+  expect(yieldWork.mock.calls.length).toBeGreaterThan(3);
+  expect(JSON.stringify(original)).toBe(before);
+  expect(current.sections.Mortgage.rates.every((item, index) => item === rows[index])).toBe(true);
+});
+
+test('cooperative overlay matches synchronous gaps, evidence remapping and input immutability', async () => {
+  const rows = Array.from({ length: 96 }, (_, i) => row({ lvr_tier: String(i) }));
+  const base = upsertHistoricalCatalogueDay(null, core(day1, rows), details(day1), source);
+  const denied = { ...detail, facts: detail.facts!.map(fact => ({ ...fact, value: false })) };
+  const fallback = upsertHistoricalCatalogueDay(null, core(day3, [...rows].reverse()), details(day3, denied), source);
+  const expected = overlayHistoricalCatalogueDays(base, fallback, [day3]);
+  const beforeBase = JSON.stringify(base), beforeFallback = JSON.stringify(fallback);
+  const yieldWork = jest.fn(async () => undefined);
+  let clock = 0;
+  const now = jest.spyOn(Date, 'now').mockImplementation(() => clock += 8);
+  try {
+    expect(await overlayHistoricalCatalogueDaysAsync(base, fallback, [day3], yieldWork)).toEqual(expected);
+  } finally { now.mockRestore(); }
+  expect(yieldWork.mock.calls.length).toBeGreaterThan(3);
+  expect(JSON.stringify(base)).toBe(beforeBase); expect(JSON.stringify(fallback)).toBe(beforeFallback);
+  expect(await overlayHistoricalCatalogueDaysAsync(base, fallback, [], yieldWork)).toBe(base);
+});
+
+test('cooperative transforms retain source validation, calendar budgets and interruption errors', async () => {
+  const base = upsertHistoricalCatalogueDay(null, core(day1), details(day1), source);
+  const yieldWork = async () => undefined;
+  await expect(upsertHistoricalCatalogueDayAsync(base, core(day2), details(day2), { ...source, core_sha256: 'invalid' }, yieldWork)).rejects.toThrow('identity');
+  await expect(overlayHistoricalCatalogueDaysAsync(base, { ...base, evidence: [] }, [], yieldWork)).rejects.toThrow('Invalid');
+  await expect(upsertHistoricalCatalogueDayAsync(base, core('2000-01-01'), null, source, yieldWork)).rejects.toThrow('budget');
+  await expect(upsertHistoricalCatalogueDayAsync(base, core(day2), details(day2), source,
+    async () => { throw new Error('cancelled caller'); })).rejects.toThrow('cancelled caller');
+});
 
 test('upsert extends and prepends a complete calendar while retaining original core identities', () => {
   const original = row(); const current = core(day3, [original]);

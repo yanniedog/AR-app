@@ -44,6 +44,7 @@ import {
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
+import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
   buildDeepPerformanceAuditPlan,
@@ -100,6 +101,7 @@ import {
   scoreLatency,
   subscribePerformanceAudit,
   summarizePerformanceAudit,
+  summarizePartialPerformanceAudit,
   updatePerformanceAuditProgress,
   worstStatus,
   type AuditCheck,
@@ -2602,6 +2604,21 @@ export function PerformanceAuditRunner() {
       };
 
       try {
+        logAuditEvent(app, {
+          kind: 'start',
+          phase: 'preflight',
+          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+          sessionId,
+          startedAt,
+          plannedChecks: total,
+          hangTimeoutMs: watchdog.hangTimeoutMs,
+          watchdogMode: 'stored-check-inactivity',
+          storedCheckCount: watchdog.storedCheckCount,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
+        });
+        // Persist the begin marker even when setup never reaches its first check.
+        // Logging is not completed-check progress and does not reset the watchdog.
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit start log flush');
         if (Platform.OS === 'android') {
           auditApkDownloadSnapshot = await awaitAuditWork(
             getHydratedApkDownloadSnapshot(),
@@ -2635,6 +2652,10 @@ export function PerformanceAuditRunner() {
           total,
           'Waiting for active payload work to finish',
         );
+        logAuditEvent(app, {
+          kind: 'setup', phase: 'waiting-for-payload-work', sessionId,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
+        });
         await waitForRefreshWork(watchdog);
         // Setup snapshots the store, plan and environment the whole run is
         // pinned to. Capturing that from a backgrounded process would pin the
@@ -2659,7 +2680,8 @@ export function PerformanceAuditRunner() {
           'Capturing device and app state',
         );
         logAuditEvent(app, {
-          kind: 'start',
+          kind: 'setup',
+          phase: 'payload-work-settled',
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
@@ -2669,9 +2691,10 @@ export function PerformanceAuditRunner() {
           storedCheckCount: watchdog.storedCheckCount,
           lastStoredCheckAt,
           datasetRevision,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
         });
-        // Keep start logging outside the first measured phase.
-        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit start log flush');
+        // Keep setup logging outside the first measured phase.
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit setup log flush');
 
         let environment = await awaitAuditWork(collectEnvironment(
           app,
@@ -3339,6 +3362,9 @@ export function PerformanceAuditRunner() {
         });
 
       } catch (caught) {
+        // Route recovery/rollback can change loading flags. Preserve failure-time
+        // evidence before either starts, including preflight failures with no pin.
+        const failedPayloadWork = captureAuditPayloadWork(useStore.getState());
         let recoveryError: string | null = null;
         try {
           await recoverAuditRoute(() => pathnameRef.current);
@@ -3383,6 +3409,7 @@ export function PerformanceAuditRunner() {
             lastStoredCheckAt,
             trace: formatAuditErrorForLog(caught),
             recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
+            payloadWork: failedPayloadWork,
           }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
           restoreTransportGuard();
@@ -3402,7 +3429,17 @@ export function PerformanceAuditRunner() {
             metrics: {
               completedBeforeFailure: completed,
               plannedChecks: total,
+              executionAttempted: false,
               currentPath: pathnameRef.current,
+              payloadWorkCapturedAt: failedPayloadWork.capturedAt,
+              payloadWorkActive: failedPayloadWork.activeWork.join(' | ') || null,
+              refreshing: failedPayloadWork.refreshing,
+              postRefreshWarming: failedPayloadWork.postRefreshWarming,
+              bankRateHistoryLoading: failedPayloadWork.bankRateHistoryLoading,
+              detailsLoading: failedPayloadWork.detailsLoading,
+              currentDatasetRevision: datasetRevisionLabel(failedPayloadWork.revision),
+              currentPayloadRevision: failedPayloadWork.revision.payloadRevision,
+              currentBundleSha: failedPayloadWork.revision.bundleSha,
               datasetRevision: activeDatasetRevision
                 ? datasetRevisionLabel(activeDatasetRevision)
                 : null,
@@ -3435,6 +3472,7 @@ export function PerformanceAuditRunner() {
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
             error: flattenAuditLogText(error),
+            payloadWork: failedPayloadWork,
             failedCheck: compactAuditCheckForLog({
               ...failedCheck,
               error: failedCheck.error ? flattenAuditLogText(failedCheck.error) : null,
@@ -3473,7 +3511,7 @@ export function PerformanceAuditRunner() {
                 maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
               })),
           }, 'error');
-          const partialSummary = summarizePerformanceAudit(checks);
+          const partialSummary = summarizePartialPerformanceAudit(checks, total, completed);
           const partialReport: PerformanceAuditReport = {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
@@ -3515,6 +3553,10 @@ export function PerformanceAuditRunner() {
             `pass=${partialSummary.pass}`,
             `warn=${partialSummary.warn}`,
             `fail=${partialSummary.fail}`,
+            `executed=${partialSummary.executed}`,
+            `stored=${completed}`,
+            `planned=${total}`,
+            `coverage_percent=${partialSummary.coveragePercent}`,
             `slowest=${partialSummary.slowestCheckId ?? 'none'}`,
             `slowest_ms=${partialSummary.slowestCheckMs}`,
           ].join(' ');
