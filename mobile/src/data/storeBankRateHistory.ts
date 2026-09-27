@@ -1,6 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { cache } from './cache';
 import type { DatesIndex } from './datesIndex';
 import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
@@ -47,7 +48,17 @@ export async function prepareBankRateHistoryAfterPaint(
     if (!isCurrent()) return;
     const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
     if (!isCurrent()) return;
-    await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
+    // Keep transport, cache and archive decoding outside the first-paint path.
+    // The loader authenticates the detached asset without changing sealed core.
+    let detached = null;
+    if (manifest.bank_rate_history_catalogue) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
+      detached = await loadDetachedHistoricalBankRateCatalogue(manifest, { allowNetwork: !isLocalAppHealthAudit(), isCurrent });
+    }
+    if (!isCurrent()) return;
+    if (detached) await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached);
+    else await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) await warmHistoricalBankRateCatalogue(get().core!, {

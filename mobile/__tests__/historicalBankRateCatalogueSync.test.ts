@@ -87,6 +87,26 @@ test('embedded verified raw producer catalogue wins without cache reads or suppl
   expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
 });
 
+test('detached producer history installs without changing the verified core or loading the bundled archive', async () => {
+  const current = core(), packed = rawProducer(current.run_date, []), before = JSON.stringify(current);
+  expect(await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, packed)).toBe(true);
+  expect(history(current)).toBe(packed);
+  expect(JSON.stringify(current)).toBe(before);
+  expect(cache.readBankRateHistory).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  expect(missingHistoricalCatalogueDates(current)).toEqual([]);
+});
+
+test('a corrected detached archive replaces history even when core bytes are unchanged', async () => {
+  const current = core(), first = producerWithGap(), next = producerWithGap('0.10');
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, first);
+  expect(rates(history(current), current.run_date)).toEqual([9]);
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, next);
+  expect(rates(history(current), current.run_date)).toEqual([10]);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(current.bank_rate_history_catalogue).toBeUndefined();
+});
+
 function producerWithGap(rate = '0.09'): HistoricalBankRateCatalogue {
   const value = upsertHistoricalCatalogueDay(null, core('2026-09-26', rate), details(), source('2026-09-26'));
   return { ...value, run_dates: ['2026-09-25', '2026-09-26'],

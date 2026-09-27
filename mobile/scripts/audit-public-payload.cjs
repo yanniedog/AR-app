@@ -23,7 +23,10 @@ const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.t
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
+const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
+const { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
+const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
@@ -98,6 +101,8 @@ async function audit(opts) {
     assertRevisionManifest(manifest, binding, date, opts.repo);
   }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
+  if (manifest.bank_rate_history_catalogue && manifest.payload_revision &&
+      manifest.payload_revision.bundle_sha256 !== payloadBundleIdentity(manifest)) throw new Error('Detached history bundle identity mismatch');
   const decoded = {};
   const evidence = {};
   const observations = {};
@@ -120,6 +125,34 @@ async function audit(opts) {
       evidence[key] = { status: 'FAIL', error: error.message };
       observations[key] = { state: 'failed' };
     }
+  }
+  if (manifest.bank_rate_history_catalogue !== undefined) {
+    const key = 'bank_rate_history_catalogue';
+    try {
+      const file = validateDetachedHistoricalCatalogueDescriptor(manifest, opts.repo);
+      if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
+      if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
+          decoded.core?.bank_rate_history_catalogue !== undefined) throw new Error('Detached history must preserve the compact startup core');
+      const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await fetchBytes(file.url, file.bytes + 1);
+      if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) throw new Error('Detached history asset size/hash mismatch');
+      const envelope = zlib.gunzipSync(bytes, { maxOutputLength: 24 * 1024 * 1024 });
+      const archive = validateDetachedHistoricalCatalogueEnvelope(JSON.parse(envelope.toString('utf8')), manifest);
+      if (!archive) throw new Error('Detached history envelope binding mismatch');
+      const compressed = Buffer.from(archive.gzip_base64, 'base64');
+      if (!compressed.length || compressed.length > 16 * 1024 * 1024 || compressed.toString('base64') !== archive.gzip_base64) {
+        throw new Error('Detached history archive base64 is invalid');
+      }
+      const body = zlib.gunzipSync(compressed, { maxOutputLength: archive.bytes });
+      if (body.length !== archive.bytes || hash(body) !== archive.sha256) throw new Error('Detached history catalogue size/hash mismatch');
+      const catalogue = JSON.parse(body.toString('utf8'));
+      if (!validateHistoricalBankRateCatalogue(catalogue) || catalogue.run_dates.some(day => day > manifest.run_date)) throw new Error('Detached history catalogue is invalid');
+      evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: file.sha256, bytes: bytes.length,
+        decoded_bytes: envelope.length, catalogue_sha256: archive.sha256, catalogue_bytes: body.length,
+        observed_dates: Object.keys(catalogue.sources).length, calendar_dates: catalogue.run_dates.length,
+        unavailable_dates: Object.keys(catalogue.unavailable_dates).length,
+        tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
+        acquisition: directory ? 'local_file' : 'public_http' };
+    } catch (error) { evidence[key] = { status: 'FAIL', error: error.message }; }
   }
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));

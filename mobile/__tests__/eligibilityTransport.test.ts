@@ -1,4 +1,5 @@
 import bundleFixture from './fixtures/executable-eligibility-bundle-v2.json';
+import historyManifestFixture from './fixtures/detached-history-manifest-20260926.json';
 import type { Manifest } from '../src/types';
 import { eligibilityTransportHarness } from '../test-support/eligibilityHarness';
 import { eligibilityBundleIdentity, loadEligibilitySelections } from '../src/data/eligibilityContracts/transport';
@@ -79,4 +80,16 @@ test('matches independent Python bundle vector while binding namespace and ignor
   expect(eligibilityBundleIdentity({ ...m, tag: 'not-authority-for-hash', generated_at: 'changed' })).toBe(bundleFixture.expectedBundleSha256);
   const changed = structuredClone(m); changed.executable_v2!.index.bytes += 1;
   expect(eligibilityBundleIdentity(changed)).not.toBe(bundleFixture.expectedBundleSha256);
+});
+
+test('detached history retagging preserves bundle identity while its immutable descriptor stays bound', () => {
+  // AR-local _package over 134 authenticated public source editions; Python's
+  // canonical bundle preimage independently supplies this expected digest.
+  const m = structuredClone(historyManifestFixture) as Manifest;
+  const digest = eligibilityBundleIdentity(m);
+  expect(digest).toBe('23c2ef338a3a2058a866138cd9fc8bd3baa06d0eae6a115c9b26a40cc043ef30');
+  m.bank_rate_history_catalogue!.file.url = m.bank_rate_history_catalogue!.file.url.replace('app-payload-latest', 'app-payload-2026-09-26-r000001');
+  expect(eligibilityBundleIdentity(m)).toBe(digest);
+  m.bank_rate_history_catalogue!.file.bytes++;
+  expect(eligibilityBundleIdentity(m)).not.toBe(digest);
 });

@@ -6,9 +6,11 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { gzipSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
 const { audit, options } = require('./audit-public-payload.cjs');
+const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 
@@ -66,4 +68,48 @@ test('private audit rejects unsafe descriptor paths before reading them', async 
   const report = await audit(opts);
   assert.equal(report.status, 'FAIL');
   assert.equal(report.assets.core.status, 'FAIL');
+});
+
+function detachedCandidate(t, editEnvelope = () => {}) {
+  const result = candidate(t), { directory, manifest } = result;
+  const core = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.core.name)));
+  const details = JSON.parse(fs.readFileSync(path.join(directory, manifest.files.details.name)));
+  const catalogue = upsertHistoricalCatalogueDay(null, core, details, { kind: 'published_core',
+    core_sha256: manifest.files.core.sha256, details_sha256: manifest.files.details.sha256,
+    manifest_sha256: hash(fs.readFileSync(path.join(directory, 'manifest.json'))) });
+  const inner = Buffer.from(JSON.stringify(catalogue));
+  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  editEnvelope(envelope);
+  const outer = gzipSync(Buffer.from(JSON.stringify(envelope)));
+  const sha256 = hash(outer), name = `bank-rate-history-catalogue-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
+  manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256, bytes: outer.length,
+    url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
+  fs.writeFileSync(path.join(directory, name), outer);
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  return { ...result, catalogue };
+}
+
+test('private candidate audits detached history bytes and retained real catalogue outside legacy files', async (t) => {
+  const { opts, manifest, catalogue } = detachedCandidate(t);
+  assert.equal(manifest.files.bank_rate_history_catalogue, undefined);
+  const report = await audit(opts), proof = report.assets.bank_rate_history_catalogue;
+  assert.equal(proof.status, 'PASS');
+  assert.equal(proof.sha256, manifest.bank_rate_history_catalogue.file.sha256);
+  assert.equal(proof.catalogue_sha256, hash(Buffer.from(JSON.stringify(catalogue))));
+  assert.equal(proof.observed_dates, 1);
+  assert.equal(proof.acquisition, 'local_file');
+  assert.equal(report.publication_verified, false);
+});
+
+for (const [label, change] of [
+  ['different core', value => { value.core_sha256 = 'f'.repeat(64); }],
+  ['different day', value => { value.run_date = '2026-08-06'; }],
+  ['inner digest mismatch', value => { value.catalogue.sha256 = 'f'.repeat(64); }],
+  ['invalid base64', value => { value.catalogue.gzip_base64 += '\n'; }],
+]) test(`private candidate rejects detached history ${label}`, async t => {
+  const { opts } = detachedCandidate(t, change);
+  const report = await audit(opts);
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.assets.bank_rate_history_catalogue.status, 'FAIL');
 });

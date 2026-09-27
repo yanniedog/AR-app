@@ -13,8 +13,11 @@ older date, or an unversioned fallback. Unavailable or inconsistent metadata
 keeps the last verified cache and marks the refresh as failed/pending.
 
 The complete manifest identity triggers refresh, including details-only and
-optional-asset corrections. All listed assets are verified before the new
-core/details edition is committed. Revision details and optional caches use
+optional-asset corrections. Legacy listed assets are verified before the new
+core/details edition is committed. The separate `bank_rate_history_catalogue`
+namespace is optional: its exact asset and core binding are verified after first
+paint, and its failure cannot prevent adoption of usable current rates.
+Revision details and optional caches use
 content hashes; assets from rolling, dated, or older editions are never merged
 into a selected revision. Legacy releases remain readable before adoption.
 The dormant v3 reader is not activated.
@@ -33,9 +36,13 @@ npm run audit:payload -- --output dist-audit/public-payload.json
 npm run audit:payload -- --date 2026-09-11 --output dist-audit/2026-09-11.json
 ```
 
-The CLI downloads the selected manifest and every listed asset, checks raw
+The CLI downloads the selected manifest and every listed asset (including the
+separate optional history archive), checks raw
 hashes and lengths, and calls the same normalization and data-quality
 validators used by the app. It writes JSON plus a companion Markdown report.
+Detached history additionally records the inner catalogue hash, byte count,
+observed/missing dates and tiers, and checks that raw history is absent from the
+512 KiB critical core. Private candidate audits exercise the same archive checks.
 Exit codes are 0 for PASS/WARN, 2 for FAIL, and 3 for acquisition BLOCKED.
 WARN is actionable evidence; it must not be reported as complete coverage.
 Generated reports are ignored by Git.
