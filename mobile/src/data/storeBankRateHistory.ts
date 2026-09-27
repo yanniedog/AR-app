@@ -1,6 +1,7 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { cache } from './cache';
 import type { DatesIndex } from './datesIndex';
 import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
@@ -29,11 +30,13 @@ export async function prepareBankRateHistoryAfterPaint(
   let finish!: () => void;
   const request = { completion: new Promise<void>(resolve => { finish = resolve; }) };
   requests.set(get, request);
-  const isCurrent = () => requests.get(get) === request && !!get().core &&
+  const isAssetCurrent = () => !!get().core &&
     historicalCatalogueOwner(get().core!) === historicalCatalogueOwner(core) &&
     samePayloadIdentity(get().manifest, manifest) &&
     get().manifest?.files.core.sha256 === manifest.files.core.sha256 &&
-    get().manifest?.files.details.sha256 === manifest.files.details.sha256;
+    get().manifest?.files.details.sha256 === manifest.files.details.sha256 &&
+    JSON.stringify(get().manifest?.bank_rate_history_catalogue) === JSON.stringify(manifest.bank_rate_history_catalogue);
+  const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
   try {
@@ -47,7 +50,19 @@ export async function prepareBankRateHistoryAfterPaint(
     if (!isCurrent()) return;
     const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
     if (!isCurrent()) return;
-    await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
+    // Keep transport, cache and archive decoding outside the first-paint path.
+    // The loader authenticates the detached asset without changing sealed core.
+    let detached = null;
+    if (manifest.bank_rate_history_catalogue) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
+      detached = await loadDetachedHistoricalBankRateCatalogue(manifest, {
+        allowNetwork: !isLocalAppHealthAudit(), isCurrent, isAssetCurrent,
+      });
+    }
+    if (!isCurrent()) return;
+    if (detached) await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached);
+    else await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) await warmHistoricalBankRateCatalogue(get().core!, {

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "run_date": "2026-09-26",
+  "generated_at": "2026-09-27T01:43:23Z",
+  "app_min_version": "1.0.0",
+  "repo": "yanniedog/AR-local",
+  "tag": "app-payload-latest",
+  "counts": {
+    "constraints": 5022,
+    "eligibility": 8421,
+    "failures": 18,
+    "features": 18393,
+    "fees": 29484,
+    "holder_attempts": 116,
+    "product_changes": 2234,
+    "product_facts": 656559,
+    "products": 2976,
+    "rates": 16989
+  },
+  "schedule": {
+    "label": "01:00 Australia/Hobart daily",
+    "next_due_utc": "2026-09-27T15:00:00Z"
+  },
+  "files": {
+    "core": {
+      "name": "core-2026-09-26-a0cce6325fb7.json.gz",
+      "bytes": 360742,
+      "sha256": "a0cce6325fb7dccf4db978d10c08ad89295ddac3023cf06860c34c429bacb87d",
+      "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/core-2026-09-26-a0cce6325fb7.json.gz"
+    },
+    "details": {
+      "name": "details-2026-09-26-933f65044953.json.gz",
+      "bytes": 2821488,
+      "sha256": "933f6504495397e8cc999061e9d04623d1f4a61e6404eb53303b5d9410fa31f1",
+      "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/details-2026-09-26-933f65044953.json.gz"
+    }
+  },
+  "bank_rate_history_catalogue": {
+    "schema_version": 1,
+    "file": {
+      "name": "bank-rate-history-catalogue-2026-09-26-32586b120cff.json.gz",
+      "bytes": 2229400,
+      "sha256": "32586b120cff064268e7571c826d94be583a98e2788036488bc39733956b6205",
+      "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/bank-rate-history-catalogue-2026-09-26-32586b120cff.json.gz"
+    }
+  },
+  "source_observation": {
+    "contract_digest": "22173659c0632c9400d50091d2f13ccbdc50dedd835048b1bc304511e7f75bb9",
+    "generation_id": "obs-2026-09-26-48fa068d73246fd7",
+    "observation_date": "2026-09-26",
+    "observation_state": "partial",
+    "source_path": "runs/2026-09-26/_revisions/20260926T051403_815560/_exports"
+  }
+}

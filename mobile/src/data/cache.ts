@@ -21,6 +21,7 @@ import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision
 import type { DatesIndex } from './datesIndex';
 import { assertHistoryDatesIndexAdvances, parseHistoryDatesIndex } from './historyDatesIndex';
 import { historicalSourceIdentity } from './historyIdentity';
+import { DETACHED_HISTORY_MAX_ENCODED } from './detachedHistoricalBankRateCatalogueWire';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -31,6 +32,7 @@ const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
 const BANK_RATE_HISTORY = `${DIR}bank-rate-history.json`;
+const DETACHED_BANK_RATE_HISTORY_ASSET = `${DIR}bank-rate-history-asset.base64`;
 const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
@@ -719,6 +721,37 @@ export const cache = {
       await writeText(temporary, text);
       await deletePath(BANK_RATE_HISTORY);
       await movePath(temporary, BANK_RATE_HISTORY);
+    });
+  },
+
+  /** Exact detached asset bytes encoded as base64, distinct from derived checkpoints.
+   * The caller authenticates bytes and current manifest binding before accepting a slot. */
+  async readDetachedBankRateHistoryAsset<T>(decode: (base64: string) => Promise<T | null>): Promise<T | null> {
+    for (const path of [`${DETACHED_BANK_RATE_HISTORY_ASSET}.tmp`, DETACHED_BANK_RATE_HISTORY_ASSET]) {
+      try {
+        if (!IS_WEB) {
+          const info = await FileSystem.getInfoAsync(path);
+          if (!info.exists || info.isDirectory || (typeof info.size === 'number' && info.size > DETACHED_HISTORY_MAX_ENCODED)) continue;
+        }
+        const text = await readText(path);
+        if (!text.length || text.length > DETACHED_HISTORY_MAX_ENCODED) continue;
+        const value = await decode(text);
+        if (value !== null) return value;
+      } catch { /* A torn or mismatched temporary asset cannot hide a valid primary. */ }
+    }
+    return null;
+  },
+
+  async writeDetachedBankRateHistoryAsset(base64: string, isCurrent: () => boolean = () => true): Promise<void> {
+    if (!base64.length || base64.length > DETACHED_HISTORY_MAX_ENCODED) throw new Error('Detached history cache exceeds byte budget');
+    return serialize(async () => {
+      if (!isCurrent()) return;
+      await ensureDir();
+      const temporary = `${DETACHED_BANK_RATE_HISTORY_ASSET}.tmp`;
+      await writeText(temporary, base64);
+      if (!isCurrent()) return;
+      await deletePath(DETACHED_BANK_RATE_HISTORY_ASSET);
+      await movePath(temporary, DETACHED_BANK_RATE_HISTORY_ASSET);
     });
   },
 };

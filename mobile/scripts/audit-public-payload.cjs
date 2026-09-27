@@ -23,7 +23,10 @@ const { publishedV1SourceContract } = require('../src/lib/appHealth/v1Contract.t
 const { normalizeCoreWithIntegrity } = require('../src/data/sectionIntegrity.ts');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
+const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
+const { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
+const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
@@ -69,6 +72,23 @@ function privateFile(directory, name, maxBytes) {
   return bytes;
 }
 
+function historySourceSelection(catalogue, manifest, index) {
+  const checked = !!index?.revision_heads;
+  const published = Object.entries(catalogue.sources).filter(([, source]) => source.kind === 'published_core');
+  const superseded = checked ? published.filter(([day, source]) =>
+    source.manifest_sha256 !== index.revision_heads[day]?.manifest_sha256).map(([day]) => day) : [];
+  const rejected = new Set(superseded);
+  // The live core supplies today's rates separately. This check describes the
+  // archive, not whether a bundled fallback could subsequently fill its gaps.
+  const dates = [...new Set([...catalogue.run_dates, ...(index?.dates ?? [])])].filter(day => day < manifest.run_date);
+  const missing = dates.filter(day => !catalogue.sources[day] || catalogue.unavailable_dates[day] || rejected.has(day));
+  return { status: !checked ? 'NOT_CHECKED' : superseded.length || missing.length ? 'WARN' : 'PASS',
+    selected_heads_checked: checked, published_source_dates: published.length,
+    matched_selected_dates: checked ? published.length - superseded.length : null,
+    superseded_dates: superseded.sort(), missing_historical_dates: missing.sort(),
+    independent_source_dates: Object.keys(catalogue.sources).length - published.length };
+}
+
 async function audit(opts) {
   const base = `https://github.com/${opts.repo}/releases/download/`;
   const contract = publishedV1SourceContract({
@@ -98,6 +118,11 @@ async function audit(opts) {
     assertRevisionManifest(manifest, binding, date, opts.repo);
   }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
+  if (manifest.bank_rate_history_catalogue && manifest.payload_revision) {
+    const bundle = payloadBundleIdentity(manifest);
+    if (manifest.payload_revision.bundle_sha256 !== bundle ||
+        manifest.payload_revision.generation_id !== `sha256-${bundle}`) throw new Error('Detached history bundle identity mismatch');
+  }
   const decoded = {};
   const evidence = {};
   const observations = {};
@@ -121,6 +146,35 @@ async function audit(opts) {
       observations[key] = { state: 'failed' };
     }
   }
+  if (manifest.bank_rate_history_catalogue !== undefined) {
+    const key = 'bank_rate_history_catalogue';
+    try {
+      const file = validateDetachedHistoricalCatalogueDescriptor(manifest, opts.repo);
+      if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
+      if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
+          decoded.core?.bank_rate_history_catalogue !== undefined) throw new Error('Detached history must preserve the compact startup core');
+      const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await fetchBytes(file.url, file.bytes + 1);
+      if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) throw new Error('Detached history asset size/hash mismatch');
+      const envelope = zlib.gunzipSync(bytes, { maxOutputLength: 24 * 1024 * 1024 });
+      const archive = validateDetachedHistoricalCatalogueEnvelope(JSON.parse(envelope.toString('utf8')), manifest);
+      if (!archive) throw new Error('Detached history envelope binding mismatch');
+      const compressed = Buffer.from(archive.gzip_base64, 'base64');
+      if (!compressed.length || compressed.length > 16 * 1024 * 1024 || compressed.toString('base64') !== archive.gzip_base64) {
+        throw new Error('Detached history archive base64 is invalid');
+      }
+      const body = zlib.gunzipSync(compressed, { maxOutputLength: archive.bytes });
+      if (body.length !== archive.bytes || hash(body) !== archive.sha256) throw new Error('Detached history catalogue size/hash mismatch');
+      const catalogue = JSON.parse(body.toString('utf8'));
+      if (!validateHistoricalBankRateCatalogue(catalogue) || catalogue.run_dates.some(day => day > manifest.run_date)) throw new Error('Detached history catalogue is invalid');
+      evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: file.sha256, bytes: bytes.length,
+        decoded_bytes: envelope.length, catalogue_sha256: archive.sha256, catalogue_bytes: body.length,
+        observed_dates: Object.keys(catalogue.sources).length, calendar_dates: catalogue.run_dates.length,
+        unavailable_dates: Object.keys(catalogue.unavailable_dates).length,
+        source_selection: historySourceSelection(catalogue, manifest, index),
+        tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
+        acquisition: directory ? 'local_file' : 'public_http' };
+    } catch (error) { evidence[key] = { status: 'FAIL', error: error.message }; }
+  }
   const normalized = decoded.core ? normalizeCoreWithIntegrity(decoded.core, { coreSha256: manifest.files.core.sha256 }) : null;
   const coreKeys = new Set(Object.values(normalized?.core.sections ?? {}).flatMap((section) => section.rates).map((row) => row.product_key));
   const detailKeys = Object.keys(decoded.details?.products ?? {});
@@ -136,6 +190,22 @@ async function audit(opts) {
       countImpacts: normalized.integrity.quarantines.countImpacts } : null,
   };
   const checks = evaluateAppHealthDataQuality(snapshot, contract);
+  const historySelection = evidence.bank_rate_history_catalogue?.source_selection;
+  if (historySelection) checks.push({ id: 'bank-history-selected-sources', code: 'bank-history-selected-sources',
+    label: 'Historical source selection', domain: 'data-integrity',
+    status: historySelection.status === 'PASS' ? 'pass' : 'warn',
+    metrics: { selectedHeadsChecked: historySelection.selected_heads_checked,
+      publishedSourceDates: historySelection.published_source_dates,
+      matchedSelectedDates: historySelection.matched_selected_dates,
+      supersededDates: historySelection.superseded_dates.length,
+      missingHistoricalDates: historySelection.missing_historical_dates.length,
+      independentSourceDates: historySelection.independent_source_dates },
+    summary: !historySelection.selected_heads_checked
+      ? 'Archive bytes are verified; selected public history heads were not checked.'
+      : historySelection.status === 'WARN'
+        ? 'Archive bytes are verified, but its superseded public observations are discarded at runtime and missing history stays blank unless another verified source restores it.'
+        : 'Published archive observations match the selected heads; producer contract observations retain their independent provenance.',
+  });
   if (directory) {
     const sourceCheck = checks.find((check) => check.code === 'data-source-state');
     if (sourceCheck) {
@@ -146,6 +216,7 @@ async function audit(opts) {
   const failed = checks.some((check) => check.status === 'fail') || Object.values(evidence).some((asset) => asset.status === 'FAIL');
   return { schema_version: 1, audited_at: new Date().toISOString(), status: failed ? 'FAIL' : checks.some((check) => check.status !== 'pass') ? 'WARN' : 'PASS',
     acquisition: directory ? 'private_candidate' : 'public_http', publication_verified: !directory && !failed,
+    historical_coverage_verified: historySelection?.selected_heads_checked ? !failed && historySelection.status === 'PASS' : null,
     app_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim(),
     app_worktree_clean: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: sourceRoot, encoding: 'utf8' }).trim() === '',
     run_date: date, manifest_url: manifestUrl, manifest_sha256: hash(manifestBytes), dates_index_sha256: indexBytes ? hash(indexBytes) : null,

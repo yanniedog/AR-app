@@ -14,6 +14,12 @@ it('routes frozen encrypted domain assets without local setup keys', () => {
     .toBe(`${APP_DATA_ORIGIN}/v1/release/app-payload-latest/core-2026-09-18-123456789abc.json.gz.enc`);
 });
 
+it('routes the detached history asset through automatic delivery without changing its immutable identity', () => {
+  const name = 'bank-rate-history-catalogue-2026-09-27-123456789abc.json.gz';
+  const url = source.replace('app-payload-latest', 'app-payload-2026-09-27-r000001').replace('manifest.json', name);
+  expect(automaticDataUrl(url)).toBe(`${APP_DATA_ORIGIN}/v1/release/app-payload-2026-09-27-r000001/${name}`);
+});
+
 it.each(['app-payload-latest', 'app-payload-2026-09-18', 'app-payload-2026-09-18-r000002'])(
   'maps %s while preserving immutable domain references', tag => {
     expect(automaticDataUrl(source.replace('app-payload-latest', tag) + '?_=123'))

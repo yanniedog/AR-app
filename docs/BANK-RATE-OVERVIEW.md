@@ -13,7 +13,13 @@ sections to selected interests. Required features without verified details
 produce no matching rows. A gap requires both selected product lines and
 matching rates on both sides for the bank and date.
 
-The complete history is embedded in the normal verified core catalogue as
+Full observation-time filtering, withdrawn products, the detached producer archive
+and bundled offline recovery are described in [Bank rate history](BANK_RATE_HISTORY.md).
+The app prepares all banks after first paint; selecting a bank uses local results.
+
+## Legacy schema-1 history
+
+Older payload history is embedded in the normal verified core catalogue as
 `bank_rate_history`. A separate row map becomes non-enumerable internal
 `bank_rate_tier` IDs before row quarantine. Original catalogue rows remain
 unchanged on the wire and when hashed for contracts or saved receipts.
@@ -40,7 +46,7 @@ The generator verifies the source gzip hash and exact equality of all original
 catalogue facts before retaining only the history extension. The recorded source
 manifest and history digest are included with the bundle.
 
-Historical scope means the history of **currently matching tiers**, not a claim
+For these legacy schema-1 payloads, historical scope means the history of **currently matching tiers**, not a claim
 that the user's present profile was applicable on every historical date. Exact
 non-rate tier attributes must match a currently eligible row. A sibling tier's
 best rate is never substituted. Changed descriptive attributes conservatively

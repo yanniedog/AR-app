@@ -1,7 +1,8 @@
 # Bank rate history
 
-AR-local prepackages the complete historical product catalogue in each core's
-`bank_rate_history_catalogue` field. The Rates and Gap charts apply the user's
+AR-local prepackages the complete historical product catalogue in the optional
+`manifest.bank_rate_history_catalogue` archive. It stays outside the legacy
+`files` inventory and the critical core (512 KiB compressed maximum). The Rates and Gap charts apply the user's
 filters independently to each observed date, including products subsequently
 withdrawn. Each matching advertised rate tier has equal weight. Missing dates
 remain gaps; the app does not carry rates or eligibility across missing evidence.
@@ -17,8 +18,8 @@ Savings history also excludes products explicitly identified as term deposits.
 The app computes all banks together and caches results by profile and catalogue.
 Bank selection reuses the prepared chart model and SVG paths without network
 requests. New profile filters evaluate local spans rather than downloading daily
-payloads or expanding every historical row observation. Foreground adoption
-prepares the user's historical filter result before making the core available.
+payloads or expanding every historical row observation. After the current rates
+paint, deferred preparation warms the user's historical filter result.
 Cold hydration splits decompression, hashing, validation and cache compression
 into cooperative work slices so queued input can run between them. JSON parsing
 still runs atomically. The catalogue is decoded once per process; switching banks
@@ -26,9 +27,11 @@ does not repeat hydration.
 
 ## Producer and offline recovery
 
-A valid schema-2 pack in the verified current core is authoritative. Its original
-selected-contract or retained-export receipts remain attached; it is persisted
-with the normal core cache. If a raw-export selection is unresolved, the app may
+A valid schema-2 pack authenticated by the selected manifest and core is authoritative.
+Its original selected-contract or retained-export receipts remain attached. The
+app saves the exact verified asset bytes in a separate bounded cache, authenticates
+them again on restart, and never inserts the decoded archive into sealed core data.
+Legacy embedded schema-2 packs remain readable. If a raw-export selection is unresolved, the app may
 fill that blank from an independently verified published observation whose
 manifest still matches the selected index. It never replaces a producer
 observation with this fallback. The merged cache binds to the exact producer core,
@@ -62,6 +65,34 @@ preserves the preceding installed day's binding; rollback or conflicting revisio
 identities are rejected. Cache failures do not fabricate history.
 
 ## Startup and refresh
+
+The optional namespace is `{schema_version: 1, file: {name, bytes, sha256, url, enc?}}`.
+Its content-addressed asset is a gzip JSON envelope containing `schema_version: 1`,
+`run_date`, `core_sha256` (exactly the selected `files.core.sha256`) and
+`catalogue: {sha256, bytes, gzip_base64}`. The inner gzip decodes to schema 2.
+The outer asset is limited to 8 MiB compressed / 24 MiB decoded; the inner
+catalogue to 16 MiB compressed / 128 MiB decoded. Sizes, hashes, canonical base64,
+release routing, core binding, schema and historical dates are verified before use.
+Only `file.url` is excluded from the optional namespace's canonical bundle identity;
+its schema, byte identity and encryption metadata remain bound when releases are retagged.
+Before revision-protocol adoption, a dated manifest may retain a valid optional
+archive from the same day's rolling alias only when its core SHA matches. The
+original descriptor URL is retained and its envelope must still match the exact
+core. Selected immutable revisions never inherit assets from another alias.
+
+The native Android codec performs inner gzip and digest work off the JavaScript
+thread after first paint. A matching prepared archive is reused for subsequent
+refreshes. Local audits read verified caches without initiating history downloads.
+Missing or corrupt optional archives retain bundled/current history fallback.
+
+The payload auditor reports archive byte verification separately from historical
+coverage. Public `published_core` receipts are compared with selected index heads;
+superseded observations and missing historical dates produce a coverage warning.
+`historical_coverage_verified` is false for those gaps and null when selected
+heads were not checked, including private candidate audits. A repackaged current
+core is bound by the envelope; its earlier public source receipt cannot equal the
+new manifest's own digest without a circular dependency. Producer contract and
+retained-export sources keep their independent provenance.
 
 Validated current rates and the matching suitability gate become ready before
 optional historical work begins. Two paint opportunities precede catalogue

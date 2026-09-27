@@ -54,6 +54,15 @@ function manifest(day = '2026-09-26', coreSha = 'a'.repeat(64), revision = 1): M
 function details(day = '2026-09-26', sha = 'b'.repeat(64)): DetailsPayload {
   return bindVerifiedDetails({ schema_version: 1, run_date: day, products: { 'Bank|loan': { description: 'Ordinary retail mortgage.' } } }, sha);
 }
+function compactLegacyManifest(day = '2026-09-27'): Manifest {
+  const result = manifest(day);
+  delete result.payload_revision;
+  result.tag = 'app-payload-latest';
+  const sha256 = 'd'.repeat(64), name = `bank-rate-history-catalogue-${day}-${sha256.slice(0, 12)}.json.gz`;
+  result.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256, bytes: 123,
+    url: `https://github.com/yanniedog/AR-local/releases/download/${result.tag}/${name}` } };
+  return result;
+}
 const source = (day: string) => ({ kind: 'published_core' as const, core_sha256: 'a'.repeat(64),
   details_sha256: 'b'.repeat(64), manifest_sha256: head(day).manifest_sha256 });
 const history = (value: CorePayload) => availableHistoricalBankRateCatalogue(value)!.catalogue;
@@ -67,6 +76,239 @@ beforeEach(() => {
   jest.restoreAllMocks(); jest.clearAllMocks(); mockCache = null;
   mockBaseline = upsertHistoricalCatalogueDay(null, core('2026-09-25', '0.05'), details('2026-09-25'), source('2026-09-25'));
   mockBaseline = upsertHistoricalCatalogueDay(mockBaseline, core(), details(), source('2026-09-26'));
+});
+
+test('a compact legacy core restores prior bundled public history offline without inventing a current edition', async () => {
+  const current = core('2026-09-28'), edition = compactLegacyManifest(current.run_date), before = JSON.stringify(current);
+  expect(await prepareHistoricalBankRateHistory(current, edition, null, details(current.run_date))).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(rates(history(current), '2026-09-26')).toEqual([6]);
+  expect(rates(history(current), '2026-09-27')).toEqual([]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-27']);
+  expect(history(current).sources[current.run_date]).toBeUndefined();
+  expect(history(current).run_dates).not.toContain(current.run_date);
+  expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+  expect(JSON.stringify(current)).toBe(before);
+  const prepared = history(current);
+  const reads = jest.mocked(cache.readBankRateHistory).mock.calls.length;
+  await prepareHistoricalBankRateHistory(current, edition, null, details(current.run_date));
+  expect(history(current)).toBe(prepared);
+  expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads);
+});
+
+test('legacy fallback retains dated feature evidence and excludes non-public baseline provenance', async () => {
+  const known = mockBaseline.evidence.find(evidence => evidence.status === 'known');
+  mockBaseline.sources['2026-09-26'] = { kind: 'retained_legacy_export', banks_sha256: 'a'.repeat(64), bytes: 100 };
+  const current = core('2026-09-27');
+  expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest())).toBe(true);
+  expect(history(current).evidence).toContainEqual(known);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(rates(history(current), '2026-09-26')).toEqual([]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-26']);
+});
+
+test('a legacy fallback persists an index-only correction and does not resurrect its old observations offline', async () => {
+  const current = core('2026-09-27'), edition = compactLegacyManifest(), corrected = mockIndex(current.run_date, true);
+  expect(await prepareHistoricalBankRateHistory(current, edition, corrected)).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([]);
+  expect(rates(history(current), '2026-09-26')).toEqual([6]);
+  const saved = decodeSavedHistoricalCatalogue(mockCache)!;
+  expect(saved).toEqual({ schema_version: 3, core_bindings: {}, index: corrected });
+  const restarted = core(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([]);
+  expect(missingHistoricalCatalogueDates(restarted)).toEqual(['2026-09-25']);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition, mockIndex(current.run_date))).toBe(false);
+  expect(availableHistoricalBankRateCatalogue(restarted)).toBeNull();
+  const equivocated = mockIndex(current.run_date, true);
+  equivocated.revision_heads!['2026-09-25'].bundle_sha256 = 'e'.repeat(64);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition, equivocated)).toBe(false);
+  // The historical receipt cannot authorize this current immutable edition.
+  expect(await prepareHistoricalBankRateHistory(core(current.run_date), manifest(current.run_date))).toBe(false);
+});
+
+test('a normal dates-only legacy index retains independent verified history and calendar gaps', async () => {
+  const current = core('2026-09-28'), edition = compactLegacyManifest(current.run_date);
+  const index: DatesIndex = { schema_version: 1, dates: ['2026-09-24', '2026-09-25', '2026-09-28'],
+    count: 3, min_date: '2026-09-24', latest_date: current.run_date };
+  expect(await prepareHistoricalBankRateHistory(current, edition, index)).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(rates(history(current), '2026-09-26')).toEqual([6]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-24', '2026-09-27']);
+  expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+  const corrected = mockIndex(current.run_date, true);
+  await prepareHistoricalBankRateHistory(current, edition, corrected);
+  const saved = mockCache;
+  const restarted = core(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition, index)).toBe(true);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([]);
+  expect(rates(history(restarted), '2026-09-26')).toEqual([6]);
+  expect(mockCache).toBe(saved);
+});
+
+test('superseding every bundled date durably retains gaps with no fabricated core binding', async () => {
+  const current = core('2026-09-27'), edition = compactLegacyManifest(), corrected = mockIndex(current.run_date, true);
+  corrected.revision_heads!['2026-09-26'] = head('2026-09-26', 2);
+  expect(await prepareHistoricalBankRateHistory(current, edition, corrected)).toBe(true);
+  expect(history(current).sources).toEqual({});
+  const saved = decodeSavedHistoricalCatalogue(mockCache)!;
+  expect(saved.core_bindings).toEqual({});
+  expect(saved.public_fallback).toBeUndefined();
+  const restarted = core(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
+  expect(history(restarted).sources).toEqual({});
+  expect(missingHistoricalCatalogueDates(restarted)).toEqual(['2026-09-25', '2026-09-26']);
+  const schema2 = { ...saved, schema_version: 2, catalogue: mockBaseline };
+  expect(decodeSavedHistoricalCatalogue(JSON.stringify(compression.compressCatalogue(schema2)))).toBeNull();
+  expect(decodeSavedHistoricalCatalogue(JSON.stringify(compression.compressCatalogue({ ...saved,
+    producer_core_sha256: 'a'.repeat(64) })))).toBeNull();
+});
+
+test.each(['no capability', 'wrong repo', 'wrong date', 'unknown tag'])(
+  'bundled fallback remains scoped away from unsupported legacy %s input', async kind => {
+    const current = core('2026-09-27'), edition = compactLegacyManifest();
+    if (kind === 'no capability') delete edition.bank_rate_history_catalogue;
+    if (kind === 'wrong repo') edition.repo = 'untrusted/payload';
+    if (kind === 'wrong date') edition.run_date = '2026-09-28';
+    if (kind === 'unknown tag') edition.tag = 'other-release';
+    expect(await prepareHistoricalBankRateHistory(current, edition)).toBe(false);
+    expect(availableHistoricalBankRateCatalogue(current)).toBeNull();
+    expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  },
+);
+
+test('legacy fallback restores a saved selected public correction without reusing another producer archive', async () => {
+  const corrected = mockIndex('2026-09-27', true);
+  const correctedDay = upsertHistoricalCatalogueDay(null, core('2026-09-25', '0.08'), details('2026-09-25'),
+    { ...source('2026-09-25'), manifest_sha256: corrected.revision_heads!['2026-09-25'].manifest_sha256 });
+  mockCache = JSON.stringify(compression.compressCatalogue({ schema_version: 3, core_bindings: {},
+    index: corrected, public_fallback: correctedDay }));
+  const current = core('2026-09-27');
+  expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest())).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([8]);
+  expect(rates(history(current), '2026-09-26')).toEqual([6]);
+  expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+});
+
+test.each(['embedded', 'detached'] as const)(
+  'a successful partial legacy %s archive fills earlier verified dates and preserves independent producer rates', async location => {
+    const current = core('2026-09-27'), edition = compactLegacyManifest(), packed = producerWithGap();
+    // A dates-only list can itself omit older known public dates; it is not a
+    // complete revision selection and must not trigger the old raw fast path.
+    const datesOnly: DatesIndex = { schema_version: 1, dates: ['2026-09-26', current.run_date], count: 2,
+      min_date: '2026-09-26', latest_date: current.run_date };
+    const before = JSON.stringify(packed);
+    if (location === 'embedded') current.bank_rate_history_catalogue = packed;
+    expect(await prepareHistoricalBankRateHistory(current, edition, datesOnly, null,
+      location === 'detached' ? packed : null)).toBe(true);
+    expect(rates(history(current), '2026-09-25')).toEqual([5]);
+    expect(rates(history(current), '2026-09-26')).toEqual([9]);
+    expect(history(current).sources['2026-09-26']).toEqual(packed.sources['2026-09-26']);
+    expect(history(current).sources[current.run_date]).toBeUndefined();
+    expect(missingHistoricalCatalogueDates(current)).toEqual([]);
+    expect(JSON.stringify(packed)).toBe(before);
+  },
+);
+
+test.each(['bundled', 'saved', 'fresh'] as const)(
+  'legacy public observations are reconciled against known %s heads, including complete archives', async authority => {
+    const current = core('2026-09-27'), edition = compactLegacyManifest(), packed = structuredClone(mockBaseline);
+    const corrected = mockIndex(current.run_date, true);
+    if (authority === 'bundled') packed.sources['2026-09-25'] = { ...source('2026-09-25'), manifest_sha256: 'e'.repeat(64) };
+    if (authority === 'saved') mockCache = JSON.stringify(compression.compressCatalogue({
+      schema_version: 3, core_bindings: {}, index: corrected }));
+    expect(await prepareHistoricalBankRateHistory(current, edition, authority === 'fresh' ? corrected : null, null, packed)).toBe(true);
+    expect(rates(history(current), '2026-09-25')).toEqual(authority === 'bundled' ? [5] : []);
+    expect(rates(history(current), '2026-09-26')).toEqual([6]);
+    expect(missingHistoricalCatalogueDates(current)).toEqual(authority === 'bundled' ? [] : ['2026-09-25']);
+    const restarted = core(current.run_date);
+    expect(await prepareHistoricalBankRateHistory(restarted, edition, null, null, packed)).toBe(true);
+    expect(rates(history(restarted), '2026-09-25')).toEqual(authority === 'bundled' ? [5] : []);
+  },
+);
+
+test.each(['selected_contract', 'retained_legacy_export', 'published_core'] as const)(
+  'legacy reconciliation preserves authentic %s dates beyond known selected public history', async kind => {
+    const current = core('2026-09-29'), edition = compactLegacyManifest(current.run_date);
+    const packed = upsertHistoricalCatalogueDay(null, core('2026-09-27', '0.07'), details('2026-09-27'), source('2026-09-27'));
+    if (kind === 'selected_contract') packed.sources['2026-09-27'] = { kind, generation_id: 'new-independent',
+      contract_digest: 'd'.repeat(64), banks_sha256: 'e'.repeat(64), bytes: 123 };
+    if (kind === 'retained_legacy_export') packed.sources['2026-09-27'] = { kind, banks_sha256: 'e'.repeat(64), bytes: 123 };
+    expect(await prepareHistoricalBankRateHistory(current, edition, null, null, packed)).toBe(true);
+    expect(rates(history(current), '2026-09-25')).toEqual([5]);
+    expect(rates(history(current), '2026-09-27')).toEqual([7.000000000000001]);
+    expect(history(current).sources['2026-09-27']).toEqual(packed.sources['2026-09-27']);
+    expect(missingHistoricalCatalogueDates(current)).toContain('2026-09-28');
+    expect(history(current).sources[current.run_date]).toBeUndefined();
+  },
+);
+
+test('a newer selected public observation in a legacy archive survives a later detached cache miss', async () => {
+  const current = core('2026-09-28'), edition = compactLegacyManifest(current.run_date);
+  const packed = upsertHistoricalCatalogueDay(null, core('2026-09-27', '0.07'), details('2026-09-27'), source('2026-09-27'));
+  expect(await prepareHistoricalBankRateHistory(current, edition, mockIndex(current.run_date), null, packed)).toBe(true);
+  expect(decodeSavedHistoricalCatalogue(mockCache)?.public_fallback?.sources['2026-09-27']).toEqual(source('2026-09-27'));
+  const restarted = core(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
+  expect(rates(history(restarted), '2026-09-27')).toEqual([7.000000000000001]);
+});
+
+test.each(['selected_contract', 'published_core'] as const)(
+  'complete legacy %s history avoids decoding a duplicate baseline and reuses its prepared result', async kind => {
+    const current = core('2026-09-27'), edition = compactLegacyManifest();
+    const packed = kind === 'selected_contract' ? rawProducer('2026-09-26', []) : mockBaseline;
+    expect(await prepareHistoricalBankRateHistory(current, edition, null, null, packed)).toBe(true);
+    expect(history(current)).toBe(packed);
+    expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+    expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+    const reads = jest.mocked(cache.readBankRateHistory).mock.calls.length;
+    expect(await prepareHistoricalBankRateHistory(current, edition, null, null, packed)).toBe(true);
+    expect(cache.readBankRateHistory).toHaveBeenCalledTimes(reads);
+  },
+);
+
+test('a selected public correction in a legacy archive wins over the older bundled edition and is durable', async () => {
+  const current = core('2026-09-27'), edition = compactLegacyManifest(), corrected = mockIndex(current.run_date, true);
+  const replacement = { ...source('2026-09-25'), manifest_sha256: corrected.revision_heads!['2026-09-25'].manifest_sha256 };
+  const packed = upsertHistoricalCatalogueDay(mockBaseline, core('2026-09-25', '0.08'), details('2026-09-25'), replacement);
+  expect(await prepareHistoricalBankRateHistory(current, edition, corrected, null, packed)).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([8]);
+  expect(history(current).sources['2026-09-25']).toEqual(replacement);
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  expect(decodeSavedHistoricalCatalogue(mockCache)?.core_bindings).toEqual({});
+  const restarted = core(current.run_date);
+  expect(await prepareHistoricalBankRateHistory(restarted, edition)).toBe(true);
+  expect(rates(history(restarted), '2026-09-25')).toEqual([8]);
+});
+
+test.each(['malformed', 'older latest date', 'rollback', 'equivocation'])(
+  'rejected %s legacy selection cannot expose known superseded embedded public rates', async kind => {
+    const current = core('2026-09-27'), edition = compactLegacyManifest(), corrected = mockIndex(current.run_date, true);
+    const packed = structuredClone(mockBaseline);
+    packed.sources['2026-09-26'] = { kind: 'retained_legacy_export', banks_sha256: 'e'.repeat(64), bytes: 123 };
+    current.bank_rate_history_catalogue = packed;
+    mockCache = JSON.stringify(compression.compressCatalogue({ schema_version: 3, core_bindings: {}, index: corrected }));
+    const before = mockCache;
+    const rejected = mockIndex(kind === 'older latest date' ? '2026-09-26' : current.run_date, kind !== 'rollback');
+    if (kind === 'malformed') rejected.revision_protocol = 99 as 1;
+    if (kind === 'equivocation') rejected.revision_heads!['2026-09-25'].bundle_sha256 = 'e'.repeat(64);
+    expect(await prepareHistoricalBankRateHistory(current, edition, rejected)).toBe(true);
+    expect(rates(history(current), '2026-09-25')).toEqual([]);
+    expect(rates(history(current), '2026-09-26')).toEqual([6]);
+    expect(history(current).sources['2026-09-26']).toEqual(packed.sources['2026-09-26']);
+    expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-25']);
+    expect(mockCache).toBe(before);
+    expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+  },
+);
+
+test('a valid legacy archive remains usable if optional bundled decoding fails', async () => {
+  const current = core('2026-09-27'), packed = producerWithGap();
+  jest.mocked(getBundledHistoricalBankRateCatalogueAsync).mockRejectedValueOnce(new Error('unavailable bundle'));
+  expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest(), null, null, packed)).toBe(true);
+  expect(rates(history(current), '2026-09-26')).toEqual([9]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-25']);
+  expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
 });
 
 test('exact bundled edition is reusable offline without a duplicate cache write or current-row mutation', async () => {
@@ -85,6 +327,41 @@ test('embedded verified raw producer catalogue wins without cache reads or suppl
   expect(history(current)).toBe(current.bank_rate_history_catalogue);
   expect(cache.readBankRateHistory).not.toHaveBeenCalled();
   expect(cache.writeBankRateHistory).not.toHaveBeenCalled();
+});
+
+test('detached producer history installs without changing the verified core or loading the bundled archive', async () => {
+  const current = core(), packed = rawProducer(current.run_date, []), before = JSON.stringify(current);
+  expect(await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, packed)).toBe(true);
+  expect(history(current)).toBe(packed);
+  expect(JSON.stringify(current)).toBe(before);
+  expect(cache.readBankRateHistory).not.toHaveBeenCalled();
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  expect(missingHistoricalCatalogueDates(current)).toEqual([]);
+});
+
+test('a corrected detached archive replaces history even when core bytes are unchanged', async () => {
+  const current = core(), first = producerWithGap(), next = producerWithGap('0.10');
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, first);
+  expect(rates(history(current), current.run_date)).toEqual([9]);
+  await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, next);
+  expect(rates(history(current), current.run_date)).toEqual([10]);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(current.bank_rate_history_catalogue).toBeUndefined();
+});
+
+test('a complete detached public archive skips the duplicate bundled decode on first use and restart', async () => {
+  const packed = structuredClone(mockBaseline);
+  const current = core();
+  expect(await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, packed)).toBe(true);
+  expect(history(current)).toBe(packed);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  const checkpoint = compression.decompressCatalogue(JSON.parse(mockCache!)) as Record<string, unknown>;
+  expect(checkpoint.public_fallback).toBeUndefined();
+  const restarted = core();
+  expect(await prepareHistoricalBankRateHistory(restarted, manifest(), mockIndex(), null, structuredClone(packed))).toBe(true);
+  expect(history(restarted)).toEqual(packed);
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
 });
 
 function producerWithGap(rate = '0.09'): HistoricalBankRateCatalogue {

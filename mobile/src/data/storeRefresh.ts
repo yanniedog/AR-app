@@ -344,14 +344,16 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const searchIndexChanged =
             live.manifest?.files.search_index?.sha256 !==
             remote.files.search_index?.sha256;
-          // Persist enriched optional file entries so the next cold start does
-          // not re-load a core/details-only dated manifest from cache meta.
+          // Persist enriched optional entries so the next cold start retains
+          // both legacy files and corrected detached transport/schema metadata.
+          // Its asset SHA can stay unchanged when bytes/enc/schema are repaired.
           const cachedOptionalChanged =
             !!meta?.manifest &&
-            OPTIONAL_MANIFEST_KEYS.some(
+            (OPTIONAL_MANIFEST_KEYS.some(
               (key) =>
                 meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
-            );
+            ) || JSON.stringify(meta.manifest.bank_rate_history_catalogue) !==
+              JSON.stringify(remote.bank_rate_history_catalogue));
           const historyIndexChanged = historyDatesIndex &&
             JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
           if (cachedOptionalChanged || historyIndexChanged) {

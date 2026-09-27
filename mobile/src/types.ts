@@ -300,6 +300,8 @@ export interface ManifestFile {
 }
 
 export interface Manifest {
+  /** Verified full history loaded after first paint, outside legacy eager files. */
+  bank_rate_history_catalogue?: { schema_version: 1; file: ManifestFile };
   executable_v3?: import('./data/monetaryContracts/types').MonetaryNamespace;
   executable_v4?: import('./data/activityContracts/types').ActivityNamespace;
   /** Optional lazy capability descriptors; deliberately outside legacy eager files. */
