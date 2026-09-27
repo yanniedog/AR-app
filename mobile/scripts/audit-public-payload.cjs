@@ -72,6 +72,23 @@ function privateFile(directory, name, maxBytes) {
   return bytes;
 }
 
+function historySourceSelection(catalogue, manifest, index) {
+  const checked = !!index?.revision_heads;
+  const published = Object.entries(catalogue.sources).filter(([, source]) => source.kind === 'published_core');
+  const superseded = checked ? published.filter(([day, source]) =>
+    source.manifest_sha256 !== index.revision_heads[day]?.manifest_sha256).map(([day]) => day) : [];
+  const rejected = new Set(superseded);
+  // The live core supplies today's rates separately. This check describes the
+  // archive, not whether a bundled fallback could subsequently fill its gaps.
+  const dates = [...new Set([...catalogue.run_dates, ...(index?.dates ?? [])])].filter(day => day < manifest.run_date);
+  const missing = dates.filter(day => !catalogue.sources[day] || catalogue.unavailable_dates[day] || rejected.has(day));
+  return { status: !checked ? 'NOT_CHECKED' : superseded.length || missing.length ? 'WARN' : 'PASS',
+    selected_heads_checked: checked, published_source_dates: published.length,
+    matched_selected_dates: checked ? published.length - superseded.length : null,
+    superseded_dates: superseded.sort(), missing_historical_dates: missing.sort(),
+    independent_source_dates: Object.keys(catalogue.sources).length - published.length };
+}
+
 async function audit(opts) {
   const base = `https://github.com/${opts.repo}/releases/download/`;
   const contract = publishedV1SourceContract({
@@ -150,6 +167,7 @@ async function audit(opts) {
         decoded_bytes: envelope.length, catalogue_sha256: archive.sha256, catalogue_bytes: body.length,
         observed_dates: Object.keys(catalogue.sources).length, calendar_dates: catalogue.run_dates.length,
         unavailable_dates: Object.keys(catalogue.unavailable_dates).length,
+        source_selection: historySourceSelection(catalogue, manifest, index),
         tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
         acquisition: directory ? 'local_file' : 'public_http' };
     } catch (error) { evidence[key] = { status: 'FAIL', error: error.message }; }
@@ -169,6 +187,22 @@ async function audit(opts) {
       countImpacts: normalized.integrity.quarantines.countImpacts } : null,
   };
   const checks = evaluateAppHealthDataQuality(snapshot, contract);
+  const historySelection = evidence.bank_rate_history_catalogue?.source_selection;
+  if (historySelection) checks.push({ id: 'bank-history-selected-sources', code: 'bank-history-selected-sources',
+    label: 'Historical source selection', domain: 'data-integrity',
+    status: historySelection.status === 'PASS' ? 'pass' : 'warn',
+    metrics: { selectedHeadsChecked: historySelection.selected_heads_checked,
+      publishedSourceDates: historySelection.published_source_dates,
+      matchedSelectedDates: historySelection.matched_selected_dates,
+      supersededDates: historySelection.superseded_dates.length,
+      missingHistoricalDates: historySelection.missing_historical_dates.length,
+      independentSourceDates: historySelection.independent_source_dates },
+    summary: !historySelection.selected_heads_checked
+      ? 'Archive bytes are verified; selected public history heads were not checked.'
+      : historySelection.status === 'WARN'
+        ? 'Archive bytes are verified, but its superseded public observations are discarded at runtime and missing history stays blank unless another verified source restores it.'
+        : 'Published archive observations match the selected heads; producer contract observations retain their independent provenance.',
+  });
   if (directory) {
     const sourceCheck = checks.find((check) => check.code === 'data-source-state');
     if (sourceCheck) {
@@ -179,6 +213,7 @@ async function audit(opts) {
   const failed = checks.some((check) => check.status === 'fail') || Object.values(evidence).some((asset) => asset.status === 'FAIL');
   return { schema_version: 1, audited_at: new Date().toISOString(), status: failed ? 'FAIL' : checks.some((check) => check.status !== 'pass') ? 'WARN' : 'PASS',
     acquisition: directory ? 'private_candidate' : 'public_http', publication_verified: !directory && !failed,
+    historical_coverage_verified: historySelection?.selected_heads_checked ? !failed && historySelection.status === 'PASS' : null,
     app_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim(),
     app_worktree_clean: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: sourceRoot, encoding: 'utf8' }).trim() === '',
     run_date: date, manifest_url: manifestUrl, manifest_sha256: hash(manifestBytes), dates_index_sha256: indexBytes ? hash(indexBytes) : null,

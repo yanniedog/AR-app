@@ -9,6 +9,7 @@ import { encodeDetachedHistoryBytes, decodeDetachedHistoryBytes } from '../src/d
 import { cache } from '../src/data/cache';
 import { downloadInflate } from '../src/data/payload';
 import { compressCatalogue } from '../src/data/historicalBankRateCatalogueCompression';
+import * as catalogueCompression from '../src/data/historicalBankRateCatalogueCompression';
 import { upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
 import { sampleCore } from '../src/data/sample';
 import { revisionManifest } from '../testUtils/payloadRevision';
@@ -65,14 +66,156 @@ const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
 function stored(raw: Uint8Array) {
   jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementation(async decode => decode(base64(raw)));
 }
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
 
 beforeEach(() => {
+  jest.restoreAllMocks();
   jest.clearAllMocks();
   jest.mocked(cache.readDetachedBankRateHistoryAsset).mockResolvedValue(null);
   jest.mocked(cache.writeDetachedBankRateHistoryAsset).mockResolvedValue(undefined);
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
   jest.mocked(resolvePayloadKeyHex).mockRejectedValue(new Error('No local key'));
   jest.mocked(yieldToUi).mockResolvedValue(undefined);
+});
+
+test('a matching refresh takes over a bootstrap download and prepares it only once', async () => {
+  const value = fixture(), started = deferred<void>(), release = deferred<void>();
+  const refreshManifest = JSON.parse(JSON.stringify(value.manifest)) as Manifest;
+  let bootstrapCurrent = true;
+  const decode = jest.spyOn(catalogueCompression, 'decompressCatalogueAsync');
+  jest.mocked(downloadInflate).mockImplementation(async (_url, _sha, options) => {
+    started.resolve(); await release.promise;
+    options!.onVerifiedBytes!(value.raw); return value.text;
+  });
+  const bootstrap = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true, isCurrent: () => bootstrapCurrent });
+  await started.promise;
+  bootstrapCurrent = false;
+  const refresh = loadDetachedHistoricalBankRateCatalogue(refreshManifest, { allowNetwork: true });
+  // The stale caller's object may be replaced/mutated while its identical
+  // immutable asset is still needed by the independently validated refresh.
+  value.manifest.files.core.sha256 = 'f'.repeat(64);
+  release.resolve();
+  expect(await bootstrap).toBeNull();
+  const result = await refresh;
+  expect(result).toEqual(catalogue);
+  expect(downloadInflate).toHaveBeenCalledTimes(1);
+  expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+  expect(decode).toHaveBeenCalledTimes(1);
+  expect(cache.writeDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+  expect(await loadDetachedHistoricalBankRateCatalogue(refreshManifest, { allowNetwork: false })).toBe(result);
+});
+
+test('matching callers share preparation while retaining individual cancellation', async () => {
+  const value = fixture(), started = deferred<void>(), release = deferred<void>();
+  let secondCurrent = true;
+  stored(value.raw);
+  jest.mocked(yieldToUi).mockImplementationOnce(async () => { started.resolve(); await release.promise; });
+  const first = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false });
+  await started.promise;
+  const second = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false, isCurrent: () => secondCurrent });
+  secondCurrent = false; release.resolve();
+  expect(await first).toEqual(catalogue);
+  expect(await second).toBeNull();
+  expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('changed asset ownership cancels the handoff before a successor reaches the loader', async () => {
+  const value = fixture(), started = deferred<void>(), release = deferred<void>();
+  let requestCurrent = true, assetCurrent = true;
+  jest.mocked(downloadInflate).mockImplementation(async (_url, _sha, options) => {
+    started.resolve(); await release.promise;
+    options!.onVerifiedBytes!(value.raw); return value.text;
+  });
+  const first = loadDetachedHistoricalBankRateCatalogue(value.manifest, {
+    allowNetwork: true, isCurrent: () => requestCurrent, isAssetCurrent: () => assetCurrent,
+  });
+  await started.promise;
+  requestCurrent = false; assetCurrent = false;
+  release.resolve();
+  expect(await first).toBeNull();
+  expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+});
+
+test.each(['cancelled network owner', 'audit started'] as const)('joining cannot start transport after %s', async reason => {
+  const value = fixture(), started = deferred<void>(), release = deferred<void>();
+  let onlineCurrent = true;
+  jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementation(async () => {
+    started.resolve(); await release.promise; return null;
+  });
+  const online = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true, isCurrent: () => onlineCurrent });
+  await started.promise;
+  const offline = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false });
+  if (reason === 'cancelled network owner') onlineCurrent = false;
+  else jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+  release.resolve();
+  expect(await online).toBeNull(); expect(await offline).toBeNull();
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('a local audit can reuse an already-started matching download without new transport', async () => {
+  const value = fixture(), started = deferred<void>(), release = deferred<void>();
+  let bootstrapCurrent = true;
+  jest.mocked(downloadInflate).mockImplementation(async (_url, _sha, options) => {
+    started.resolve(); await release.promise;
+    options!.onVerifiedBytes!(value.raw); return value.text;
+  });
+  const bootstrap = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true, isCurrent: () => bootstrapCurrent });
+  await started.promise;
+  bootstrapCurrent = false;
+  jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+  const audit = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false });
+  release.resolve();
+  expect(await bootstrap).toBeNull();
+  expect(await audit).toEqual(catalogue);
+  expect(downloadInflate).toHaveBeenCalledTimes(1);
+  expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+});
+
+test('a corrected descriptor supersedes an older in-flight asset without replacing its cache', async () => {
+  const old = fixture(), started = deferred<void>(), release = deferred<void>();
+  const changed = fixture({ ...catalogue, sources: { [day]: { ...source, manifest_sha256: 'd'.repeat(64) } } }, old.manifest.files.core.sha256);
+  jest.mocked(downloadInflate).mockImplementation(async (url, _sha, options) => {
+    const value = url === old.manifest.bank_rate_history_catalogue!.file.url ? old : changed;
+    if (value === old) { started.resolve(); await release.promise; }
+    options!.onVerifiedBytes!(value.raw); return value.text;
+  });
+  const first = loadDetachedHistoricalBankRateCatalogue(old.manifest, { allowNetwork: true });
+  await started.promise;
+  const result = await loadDetachedHistoricalBankRateCatalogue(changed.manifest, { allowNetwork: true });
+  release.resolve();
+  expect(await first).toBeNull();
+  expect(result?.sources[day]).toMatchObject({ manifest_sha256: 'd'.repeat(64) });
+  expect(cache.writeDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+  expect(cache.writeDetachedBankRateHistoryAsset).toHaveBeenCalledWith(base64(changed.raw), expect.any(Function));
+  expect(await loadDetachedHistoricalBankRateCatalogue(changed.manifest, { allowNetwork: false })).toBe(result);
+  expect(downloadInflate).toHaveBeenCalledTimes(2);
+});
+
+test('a failed shared asset load is released so a later attempt can recover', async () => {
+  const value = fixture();
+  jest.mocked(downloadInflate).mockRejectedValue(new Error('offline'));
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
+  serve(value);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toEqual(catalogue);
+  expect(downloadInflate).toHaveBeenCalledTimes(2);
+});
+
+test('cached multi-megabyte envelopes use the standard 64KiB inflate slices', async () => {
+  const value = fixture();
+  // Valid envelope plus legal JSON whitespace, stored without compression to
+  // isolate the real outer inflater's scheduling from the rate catalogue.
+  const raw = gzipSync(strToU8(value.text + ' '.repeat(2_229_400)), { level: 0 });
+  attach(value.manifest, raw); stored(raw);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  const inflateWaits = jest.mocked(yieldToUi).mock.calls.filter(args => args.length === 0).length;
+  expect(inflateWaits).toBe(Math.ceil(raw.length / (64 * 1024)) - 1);
+  expect(inflateWaits).toBeLessThan(36);
+  expect(downloadInflate).not.toHaveBeenCalled();
 });
 
 test('downloads once, verifies captured rates, caches exact bytes and memoizes the complete immutable receipt', async () => {

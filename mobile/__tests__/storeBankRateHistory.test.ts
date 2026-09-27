@@ -14,9 +14,21 @@ import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
 import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
 import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { configureNativeHistoricalCatalogueCodec } from '../src/data/historicalBankRateCatalogueNative';
+import { gzipSync, strToU8 } from 'fflate';
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesToHex } from '@noble/hashes/utils';
+import { downloadInflate } from '../src/data/payload';
+import { compressCatalogue } from '../src/data/historicalBankRateCatalogueCompression';
+import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
+
+jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
+}));
+jest.mock('../src/data/payload', () => ({ ...jest.requireActual('../src/data/payload'), downloadInflate: jest.fn() }));
 
 jest.mock('../src/data/cache', () => ({ cache: {
   readBundle: jest.fn(), readDetails: jest.fn(async () => null),
+  readDetachedBankRateHistoryAsset: jest.fn(async () => null), writeDetachedBankRateHistoryAsset: jest.fn(async () => {}),
 } }));
 jest.mock('../src/data/historicalBankRateCatalogueSync', () => ({ prepareHistoricalBankRateHistory: jest.fn(async () => true) }));
 jest.mock('../src/data/historicalBankRateCatalogueNative', () => ({ configureNativeHistoricalCatalogueCodec: jest.fn(async () => false) }));
@@ -25,8 +37,10 @@ jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: 
 jest.mock('../src/data/historicalBankRateCatalogueStore', () => ({
   ...jest.requireActual('../src/data/historicalBankRateCatalogueStore'), warmHistoricalBankRateCatalogue: jest.fn(async () => {}),
 }));
-jest.mock('../src/lib/yieldToUi', () => ({ yieldToPaintFrames: jest.fn(async () => {}) }));
-jest.mock('../src/lib/debugLog', () => ({ debugLog: { info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
+jest.mock('../src/lib/yieldToUi', () => ({ yieldToPaintFrames: jest.fn(async () => {}),
+  yieldToUi: jest.fn(async () => {}), parseJsonHeavy: async (text: string) => JSON.parse(text),
+}));
+jest.mock('../src/lib/debugLog', () => ({ debugLog: { debug: jest.fn(), info: jest.fn(), warn: jest.fn(), error: jest.fn() } }));
 jest.mock('../src/data/suitabilityIndex', () => ({
   clearSuitabilityIndex: jest.fn(), hydrateSuitabilityIndex: jest.fn(async () => null), closeSuitabilityGateUntilRebuild: jest.fn(),
 }));
@@ -53,6 +67,7 @@ beforeEach(() => {
   jest.mocked(cache.readDetails).mockResolvedValue(null);
   jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockResolvedValue(null);
   jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
+  jest.mocked(configureNativeHistoricalCatalogueCodec).mockResolvedValue(false);
 });
 
 function detachedManifest() {
@@ -60,6 +75,62 @@ function detachedManifest() {
     file: { name: 'history.json.gz', bytes: 123, sha256: 'a'.repeat(64), url: 'https://example.invalid/history.json.gz' },
   } };
 }
+
+test.each(['paint', 'native setup', 'cached details'] as const)(
+  'same-edition refresh reuses a download completed while the successor awaits %s', async pausedStage => {
+    const { get, set } = store(), manifest = revisionManifest(1);
+    // Unique captured binding prevents the module's prepared memo from hiding
+    // transport in any of the three scheduling paths.
+    manifest.files.core = { ...manifest.files.core, sha256: bytesToHex(sha256(strToU8(pausedStage))) };
+    delete manifest.files.core.enc;
+    const catalogue = { schema_version: 2 as const, run_dates: [sampleCore.run_date], sources: {}, unavailable_dates: {},
+      evidence: [{ status: 'unknown' as const }], sections: { Mortgage: [], Savings: [], TD: [] } };
+    const text = JSON.stringify({ schema_version: 1, run_date: manifest.run_date,
+      core_sha256: manifest.files.core.sha256, catalogue: compressCatalogue(catalogue) });
+    const raw = gzipSync(strToU8(text)), hash = bytesToHex(sha256(raw));
+    const name = `bank-rate-history-catalogue-${manifest.run_date}-${hash.slice(0, 12)}.json.gz`;
+    manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, bytes: raw.length, sha256: hash,
+      url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
+    const bundle = payloadBundleIdentity(manifest);
+    manifest.payload_revision = { ...manifest.payload_revision!, bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
+    set({ manifest });
+    const enteredDownload = deferred(), download = deferred(), enteredPause = deferred(), pause = deferred();
+    jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementation(
+      jest.requireActual('../src/data/detachedHistoricalBankRateCatalogue').loadDetachedHistoricalBankRateCatalogue);
+    jest.mocked(downloadInflate).mockImplementation(async (_url, _sha, options) => {
+      enteredDownload.resolve(); await download.promise;
+      options!.onVerifiedBytes!(raw); return text;
+    });
+    const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
+    await Promise.race([enteredDownload.promise, first.then(() => { throw new Error('Download was not reached: ' +
+      JSON.stringify(jest.requireMock('../src/lib/debugLog').debugLog.warn.mock.calls)); })]);
+    const freshIndex = { schema_version: 1, revision_protocol: 1 as const, dates: [manifest.run_date], count: 1,
+      min_date: manifest.run_date, latest_date: manifest.run_date, revision_heads: { [manifest.run_date]: revisionHead(manifest) } };
+    const freshDetails = { schema_version: 1, run_date: manifest.run_date, products: {} };
+    const wait = async () => { enteredPause.resolve(); await pause.promise; };
+    if (pausedStage === 'paint') jest.mocked(yieldToPaintFrames).mockImplementationOnce(wait);
+    if (pausedStage === 'native setup') jest.mocked(configureNativeHistoricalCatalogueCodec).mockImplementationOnce(async () => { await wait(); return false; });
+    jest.mocked(cache.readDetails).mockImplementationOnce(async () => {
+      if (pausedStage === 'cached details') await wait();
+      return freshDetails;
+    });
+    const second = prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest, freshIndex, null, { readCachedDetails: true });
+    await enteredPause.promise;
+    const firstOptions = jest.mocked(loadDetachedHistoricalBankRateCatalogue).mock.calls[0][1];
+    expect(firstOptions.isCurrent?.()).toBe(false);
+    expect(firstOptions.isAssetCurrent?.()).toBe(true);
+    download.resolve(); await first;
+    expect(prepareHistoricalBankRateHistory).not.toHaveBeenCalled();
+    expect(cache.writeDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+    expect(get().bankRateHistoryLoading).toBe(true);
+    pause.resolve(); await second;
+    expect(downloadInflate).toHaveBeenCalledTimes(1);
+    expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
+    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledTimes(1);
+    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, freshIndex, freshDetails, catalogue);
+    expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+  },
+);
 
 test('detached history starts after paint and native setup, respecting the local audit network guard', async () => {
   const paint = deferred(), { get, set } = store(), manifest = detachedManifest();
@@ -94,7 +165,11 @@ test('missing detached archive keeps the bundled preparation path available', as
 test('a replaced selection cannot install a detached archive that finishes later', async () => {
   const work = deferred(), { get, set } = store(), manifest = detachedManifest();
   set({ manifest });
-  jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementationOnce(async () => { await work.promise; return null; });
+  jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementationOnce(async (_manifest, options) => {
+    await work.promise;
+    expect(options.isAssetCurrent?.()).toBe(false);
+    return null;
+  });
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
   await new Promise(resolve => setTimeout(resolve, 0));
   set({ manifest: { ...manifest, bank_rate_history_catalogue: { schema_version: 1,

@@ -30,11 +30,13 @@ export async function prepareBankRateHistoryAfterPaint(
   let finish!: () => void;
   const request = { completion: new Promise<void>(resolve => { finish = resolve; }) };
   requests.set(get, request);
-  const isCurrent = () => requests.get(get) === request && !!get().core &&
+  const isAssetCurrent = () => !!get().core &&
     historicalCatalogueOwner(get().core!) === historicalCatalogueOwner(core) &&
     samePayloadIdentity(get().manifest, manifest) &&
     get().manifest?.files.core.sha256 === manifest.files.core.sha256 &&
-    get().manifest?.files.details.sha256 === manifest.files.details.sha256;
+    get().manifest?.files.details.sha256 === manifest.files.details.sha256 &&
+    JSON.stringify(get().manifest?.bank_rate_history_catalogue) === JSON.stringify(manifest.bank_rate_history_catalogue);
+  const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
   try {
@@ -54,7 +56,9 @@ export async function prepareBankRateHistoryAfterPaint(
     if (manifest.bank_rate_history_catalogue) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
-      detached = await loadDetachedHistoricalBankRateCatalogue(manifest, { allowNetwork: !isLocalAppHealthAudit(), isCurrent });
+      detached = await loadDetachedHistoricalBankRateCatalogue(manifest, {
+        allowNetwork: !isLocalAppHealthAudit(), isCurrent, isAssetCurrent,
+      });
     }
     if (!isCurrent()) return;
     if (detached) await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached);

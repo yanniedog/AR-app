@@ -85,6 +85,15 @@ thread after first paint. A matching prepared archive is reused for subsequent
 refreshes. Local audits read verified caches without initiating history downloads.
 Missing or corrupt optional archives retain bundled/current history fallback.
 
+The payload auditor reports archive byte verification separately from historical
+coverage. Public `published_core` receipts are compared with selected index heads;
+superseded observations and missing historical dates produce a coverage warning.
+`historical_coverage_verified` is false for those gaps and null when selected
+heads were not checked, including private candidate audits. A repackaged current
+core is bound by the envelope; its earlier public source receipt cannot equal the
+new manifest's own digest without a circular dependency. Producer contract and
+retained-export sources keep their independent provenance.
+
 Validated current rates and the matching suitability gate become ready before
 optional historical work begins. Two paint opportunities precede catalogue
 decoding, filter warming and offline checkpoint writes. The bank chart displays
