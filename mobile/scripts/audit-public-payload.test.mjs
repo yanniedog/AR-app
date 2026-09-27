@@ -2,18 +2,141 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import { createCipheriv, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { gzipSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
-const { audit, options } = require('./audit-public-payload.cjs');
+const { audit, options, fetchBytes } = require('./audit-public-payload.cjs');
+const { automaticDataUrl, APP_DATA_ORIGIN } = require('../src/lib/automaticDataAccess.ts');
 const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
+
+// Model the URL actually requested, rather than rewriting a Response.url to
+// disguise delivery as GitHub. The response body uses Node's real byte stream.
+function httpResponse(url, bytes = null, status = 200, headers = {}) {
+  const response = new Response(bytes, { status, headers });
+  return { url, status, ok: response.ok, headers: response.headers, body: response.body };
+}
+
+function mockFetch(t, implementation) {
+  const previous = globalThis.fetch;
+  globalThis.fetch = implementation;
+  t.after(() => { globalThis.fetch = previous; });
+}
+
+function encryptedTransport(plain) {
+  // Public deterministic fixture key, never an app or producer credential.
+  const key = Buffer.alloc(32, 7), nonce = Buffer.alloc(12, 9);
+  const id = createHash('sha256').update(Buffer.concat([Buffer.from('ar-local-payload-key:'), key])).digest('hex').slice(0, 32);
+  const header = Buffer.alloc(44); header.write('ARE2' + id); header.writeUInt32BE(plain.length, 40);
+  const cipher = createCipheriv('aes-256-gcm', key, nonce); cipher.setAAD(header);
+  return Buffer.concat([header, nonce, cipher.update(plain), cipher.final(), cipher.getAuthTag()]);
+}
+
+const publication = 'https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json';
+
+test('public transport requests the shipping allowlisted service and retains the original identity', async t => {
+  const bytes = gzipSync(Buffer.from('{"verified":"domain bytes"}')), transports = [];
+  mockFetch(t, async (url, init) => {
+    assert.equal(url, automaticDataUrl(publication));
+    assert.equal(init.redirect, 'manual');
+    assert.equal(init.cache, 'no-store');
+    assert.ok(init.signal instanceof AbortSignal);
+    return httpResponse(url, bytes);
+  });
+  assert.deepEqual(await fetchBytes(publication, bytes.length, 'yanniedog/AR-local', transports), bytes);
+  assert.deepEqual(transports, [{ source_url: publication, requested_url: automaticDataUrl(publication),
+    final_url: automaticDataUrl(publication), route: 'automatic_data_service' }]);
+});
+
+test('an actual unopened ARE2 wire envelope is rejected before index JSON parsing', async t => {
+  const wire = encryptedTransport(Buffer.from('{"schema_version":1}'));
+  assert.equal(wire.subarray(0, 4).toString(), 'ARE2');
+  let requests = 0;
+  mockFetch(t, async url => { requests++; return httpResponse(url, wire); });
+  await assert.rejects(audit(options([])), /unopened ARE2 transport/);
+  assert.equal(requests, 1);
+});
+
+for (const target of [
+  'https://evil.invalid/manifest.json', publication.replace('AR-local', 'AR-app'),
+  publication.replace('app-payload-latest', 'other-release'), publication + '?url=http://localhost',
+  publication.replace('manifest.json', '..manifest.json'), automaticDataUrl(publication),
+]) test(`public transport rejects an unapproved source ${target}`, async t => {
+  mockFetch(t, () => { throw new Error('Invalid source reached transport'); });
+  await assert.rejects(fetchBytes(target, 100), /Invalid publication source URL/);
+});
+
+for (const target of [APP_DATA_ORIGIN + '/other-path', publication, 'https://evil.invalid/manifest.json']) {
+  test(`delivery redirect is rejected before following ${target}`, async t => {
+    let requests = 0;
+    mockFetch(t, async url => { requests++; return httpResponse(url, null, 302, { location: target }); });
+    await assert.rejects(fetchBytes(publication, 100), /Unexpected publication redirect/);
+    assert.equal(requests, 1);
+  });
+}
+
+test('non-proxied GitHub releases retain bounded approved CDN redirects and actual provenance', async t => {
+  const source = publication.replace('yanniedog/AR-local', 'example/payload'), bytes = Buffer.from('{}');
+  const cdn = 'https://release-assets.githubusercontent.com/github-production-release-asset/123/asset?token=example';
+  const calls = [], transports = [];
+  mockFetch(t, async (url, init) => {
+    calls.push({ url, signal: init.signal });
+    return url === source ? httpResponse(url, null, 302, { location: cdn }) : httpResponse(url, bytes);
+  });
+  assert.deepEqual(await fetchBytes(source, 100, 'example/payload', transports), bytes);
+  assert.deepEqual(calls.map(call => call.url), [source, cdn]);
+  assert.equal(calls[0].signal, calls[1].signal); // One deadline covers the entire acquisition.
+  assert.deepEqual(transports, [{ source_url: source, requested_url: source, final_url: cdn, route: 'github_release' }]);
+});
+
+for (const target of ['https://evil.invalid/a', 'http://release-assets.githubusercontent.com/a',
+  'https://user:secret@release-assets.githubusercontent.com/a', 'https://release-assets.githubusercontent.com:8443/a',
+  publication, APP_DATA_ORIGIN + '/v1/release/app-payload-latest/manifest.json']) {
+  test(`direct GitHub redirect cannot escape its trusted publication route to ${target}`, async t => {
+    let requests = 0;
+    mockFetch(t, async url => { requests++; return httpResponse(url, null, 302, { location: target }); });
+    await assert.rejects(fetchBytes(publication.replace('yanniedog/AR-local', 'example/payload'), 100, 'example/payload'),
+      /Invalid publication source URL|Unexpected publication redirect/);
+    assert.equal(requests, 1);
+  });
+}
+
+test('direct GitHub redirect loops stop at the bounded hop limit', async t => {
+  const source = publication.replace('yanniedog/AR-local', 'example/payload');
+  let requests = 0;
+  mockFetch(t, async url => { requests++; return httpResponse(url, null, 302, { location: source }); });
+  await assert.rejects(fetchBytes(source, 100, 'example/payload'), /Unexpected publication redirect/);
+  assert.equal(requests, 6);
+});
+
+test('an unexpectedly followed or missing response identity cannot be disguised as approved delivery', async t => {
+  let responseUrl;
+  mockFetch(t, async () => httpResponse(responseUrl, Buffer.from('{}')));
+  for (responseUrl of [publication, 'https://evil.invalid/a', '']) {
+    await assert.rejects(fetchBytes(publication, 100), /Unexpected publication response URL/);
+  }
+});
+
+test('byte limits, HTTP failures, and aborts propagate without an alternate transport', async t => {
+  let requests = 0;
+  const timeout = new DOMException('deadline expired', 'TimeoutError');
+  mockFetch(t, async url => {
+    requests++;
+    if (requests === 1) return httpResponse(url, Buffer.from('12345'));
+    if (requests === 2) return httpResponse(url, null, 503);
+    throw timeout;
+  });
+  await assert.rejects(fetchBytes(publication, 4), /byte limit/);
+  await assert.rejects(fetchBytes(publication, 100), /HTTP 503/);
+  await assert.rejects(fetchBytes(publication, 100), error => error === timeout);
+  assert.equal(requests, 3);
+});
 
 function candidate(t) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-app-private-audit-'));
@@ -107,7 +230,7 @@ test('private candidate audits detached history bytes and retained real catalogu
   assert.equal(report.checks.find(check => check.code === 'bank-history-selected-sources').status, 'warn');
 });
 
-function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}) {
+function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}, deliver = (_url, bytes) => bytes) {
   const { manifest, directory, catalogue } = value;
   const base = `https://github.com/${manifest.repo}/releases/download/`;
   manifest.tag = `app-payload-${manifest.run_date}-r000001`;
@@ -129,15 +252,36 @@ function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}
     [`${base}app-payload-latest/dates-index.json`, Buffer.from(JSON.stringify(index))],
     ...[...Object.values(manifest.files), manifest.bank_rate_history_catalogue.file].map(file =>
       [file.url, fs.readFileSync(path.join(directory, file.name))])]);
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = async url => {
-    const clean = String(url).split('?')[0], bytes = assets.get(clean);
+  const deliveredAssets = new Map([...assets].map(([url, bytes]) => [automaticDataUrl(url), bytes]));
+  mockFetch(t, async url => {
+    const clean = String(url).split('?')[0], bytes = deliveredAssets.get(clean);
     assert.ok(bytes, `Unexpected audit URL ${clean}`);
-    const response = new Response(bytes); Object.defineProperty(response, 'url', { value: clean }); return response;
-  };
-  t.after(() => { globalThis.fetch = originalFetch; });
+    return httpResponse(url, deliver(clean, bytes));
+  });
   return options(['--repo', manifest.repo]);
 }
+
+test('opened public delivery bytes still must match the immutable domain size and digest', async t => {
+  const value = detachedCandidate(t);
+  const opts = publicCandidate(t, value, () => {}, () => {}, (url, bytes) => {
+    if (!url.endsWith('/' + value.manifest.files.core.name)) return bytes;
+    const changed = Buffer.from(bytes); changed[0] ^= 1; return changed;
+  });
+  const report = await audit(opts);
+  assert.equal(report.assets.core.status, 'FAIL');
+  assert.match(report.assets.core.error, /Asset size\/hash mismatch/);
+  assert.equal(report.publication_verified, false);
+});
+
+test('automatic public delivery does not waive unsupported legacy domain encryption', async t => {
+  const value = detachedCandidate(t);
+  value.manifest.files.core.enc = { alg: 'aes-256-gcm', key_id: '12345678' };
+  const report = await audit(publicCandidate(t, value));
+  assert.equal(report.assets.core.status, 'FAIL');
+  assert.match(report.assets.core.error, /Invalid public asset descriptor/);
+  assert.equal(report.publication_verified, false);
+  assert.ok(!report.public_transport.some(item => item.source_url === value.manifest.files.core.url));
+});
 
 for (const acquisition of ['public', 'private']) test(`${acquisition} audit rejects a stale generation even when the selected head agrees`, async t => {
   const value = detachedCandidate(t);
@@ -152,6 +296,9 @@ test('public audit exposes a superseded current source without comparing its pri
   const report = await audit(opts), proof = report.assets.bank_rate_history_catalogue;
   assert.equal(proof.status, 'PASS'); // The declared archive bytes are authentic.
   assert.equal(report.publication_verified, true);
+  assert.ok(report.public_transport.length >= 5);
+  assert.ok(report.public_transport.every(value => value.route === 'automatic_data_service' &&
+    value.source_url.startsWith('https://github.com/') && value.final_url === automaticDataUrl(value.source_url)));
   assert.equal(report.historical_coverage_verified, false);
   assert.equal(proof.source_selection.status, 'WARN');
   assert.deepEqual(proof.source_selection.superseded_dates, [value.manifest.run_date]);
