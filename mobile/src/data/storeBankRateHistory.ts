@@ -39,6 +39,9 @@ export async function prepareBankRateHistoryAfterPaint(
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
+    const { configureNativeHistoricalCatalogueCodec } = await import('./historicalBankRateCatalogueNative');
+    await configureNativeHistoricalCatalogueCodec();
+    if (!isCurrent()) return;
     const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
     if (!isCurrent()) return;
     await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);

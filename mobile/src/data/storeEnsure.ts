@@ -50,6 +50,7 @@ import { rebindCoreIntegrity } from './sectionIntegrity';
 import { samePayloadIdentity } from './payloadRevision';
 import { waitForBankRateHistoryPreparation } from './storeBankRateHistory';
 import { cachedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { parseHistoryDatesIndex } from './historyDatesIndex';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -916,12 +917,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           };
           await waitForBankRateHistoryPreparation(get);
           if (!revisionIsCurrent()) return;
+          const meta = await cache.readMeta?.().catch(() => null) ?? null;
+          if (!revisionIsCurrent()) return;
+          const fallbackIndex = manifest && meta?.source === 'remote' && meta.coreSha === coreSha &&
+            meta.manifest.files?.core?.sha256 === coreSha &&
+            meta.manifest.files?.details?.sha256 === manifest.files.details.sha256 && samePayloadIdentity(meta.manifest, manifest)
+            ? parseHistoryDatesIndex(meta.historyDatesIndex, manifest) : null;
           const synced = await syncProductHistoryFromDailyPayloads({
             targetRunDate: core.run_date,
             currentCore: core,
             coreSha,
             existing: cached,
             catalogue: cachedHistoricalBankRateCatalogue(get().core!),
+            fallbackIndex,
+            allowNetwork: !isLocalAppHealthAudit(),
             isCurrent: revisionIsCurrent,
             onCheckpoint: async (checkpoint, progress) => {
               const published = await persistCheckpoint(

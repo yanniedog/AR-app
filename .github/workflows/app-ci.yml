@@ -56,12 +56,12 @@ jobs:
         run: npm run pr:automation:verify
       - name: Install
         run: npm ci --no-audit --no-fund
-      - name: Compile native APK identity verifier
+      - name: Compile native APK identity verifier and history codec
         run: |
           node scripts/ensure-firebase-config.mjs
           npx expo prebuild --platform android --no-install
           chmod +x android/gradlew
           cd android
-          ./gradlew :ar-apk-identity-verifier:compileReleaseKotlin --no-daemon
+          ./gradlew :ar-apk-identity-verifier:compileReleaseKotlin :ar-history-codec:compileReleaseKotlin :ar-history-codec:compileReleaseJavaWithJavac --no-daemon
       - name: Mobile CI (doctor - typecheck - lint - test - export)
         run: npm run ci

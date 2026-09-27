@@ -1,7 +1,9 @@
 import { gzipSync, strToU8 } from 'fflate';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
-import { compressCatalogue, compressCatalogueAsync, decompressCatalogue, decompressCatalogueAsync } from '../src/data/historicalBankRateCatalogueCompression';
+import { compressCatalogue, compressCatalogueAsync, configureHistoricalCatalogueCodec, decompressCatalogue, decompressCatalogueAsync } from '../src/data/historicalBankRateCatalogueCompression';
+
+afterEach(() => configureHistoricalCatalogueCodec(null));
 
 const encode = (text: string) => {
   const bytes = strToU8(text);
@@ -43,6 +45,53 @@ test('valid compression and digest do not admit malformed JSON', () => {
 });
 
 const cooperative = () => ({ yieldControl: jest.fn(async () => undefined), sliceMs: 0 });
+
+test('native compression receives the cooperatively validated exact JSON wire bytes', async () => {
+  const compressAsync = jest.fn(async (json: string) => compressCatalogue(JSON.parse(json)));
+  configureHistoricalCatalogueCodec({ compressAsync, decompressAsync: jest.fn() });
+  const value = { '2': true, '1': false, absent: undefined, rows: Array.from({ length: 1500 }, (_, id) => ({
+    id, text: '😀\ud800\n日本語', rate: Infinity, missing: undefined,
+  })), huge: ('x'.repeat(8191) + '😀').repeat(20), sparse: [undefined, , Symbol('skip')] };
+  const expected = JSON.stringify(value), options = cooperative();
+  const encoded = await compressCatalogueAsync(value, options);
+  expect(compressAsync).toHaveBeenCalledTimes(1);
+  expect(compressAsync).toHaveBeenCalledWith(expected);
+  expect(encoded.sha256).toBe(bytesToHex(sha256(strToU8(expected))));
+  expect(options.yieldControl.mock.calls.length).toBeGreaterThan(10);
+});
+
+test('native compression cannot bypass type, circular or nesting validation', async () => {
+  const compressAsync = jest.fn();
+  configureHistoricalCatalogueCodec({ compressAsync, decompressAsync: jest.fn() });
+  const cyclic: { child?: unknown } = {}; cyclic.child = cyclic;
+  let nested: unknown = 0; for (let i = 0; i < 514; i++) nested = [nested];
+  for (const value of [undefined, { value: BigInt(1) }, { date: new Date(0) }, { toJSON: () => 1 }, cyclic, nested]) {
+    await expect(compressCatalogueAsync(value, cooperative())).rejects.toThrow();
+  }
+  expect(compressAsync).not.toHaveBeenCalled();
+});
+
+test('native decode parses only verified returned text and rejects native integrity failures', async () => {
+  const encoded = compressCatalogue({ unicode: '日本語😀' });
+  const decompressAsync = jest.fn(async () => JSON.stringify({ unicode: '日本語😀' }));
+  configureHistoricalCatalogueCodec({ compressAsync: jest.fn(), decompressAsync });
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toEqual({ unicode: '日本語😀' });
+  expect(decompressAsync).toHaveBeenCalledWith(encoded.gzip_base64, encoded.bytes, encoded.sha256);
+  decompressAsync.mockRejectedValueOnce(new Error('Catalogue digest mismatch'));
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+  decompressAsync.mockResolvedValueOnce('{broken JSON');
+  expect(await decompressCatalogueAsync(encoded, cooperative())).toBeNull();
+  decompressAsync.mockClear();
+  expect(await decompressCatalogueAsync({ ...encoded, bytes: 128 * 1024 * 1024 + 1 }, cooperative())).toBeNull();
+  expect(decompressAsync).not.toHaveBeenCalled();
+});
+
+test('invalid native compression receipts fail without retrying a different codec', async () => {
+  const compressAsync = jest.fn(async () => ({ bytes: -1, sha256: '', gzip_base64: '' }));
+  configureHistoricalCatalogueCodec({ compressAsync, decompressAsync: jest.fn() });
+  await expect(compressCatalogueAsync({ x: 1 }, cooperative())).rejects.toThrow('receipt');
+  expect(compressAsync).toHaveBeenCalledTimes(1);
+});
 
 test.each([16_383, 16_384, 16_385])('bounded native string escaping preserves JSON bytes at %s code units', async length => {
   const escaped = '\u0000\b\t\n\f\r"\\\ud800x\udfff😀日本語';

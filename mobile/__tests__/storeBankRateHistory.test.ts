@@ -16,6 +16,7 @@ jest.mock('../src/data/cache', () => ({ cache: {
   readBundle: jest.fn(), readDetails: jest.fn(async () => null),
 } }));
 jest.mock('../src/data/historicalBankRateCatalogueSync', () => ({ prepareHistoricalBankRateHistory: jest.fn(async () => true) }));
+jest.mock('../src/data/historicalBankRateCatalogueNative', () => ({ configureNativeHistoricalCatalogueCodec: jest.fn(async () => false) }));
 jest.mock('../src/data/historicalBankRateCatalogueStore', () => ({
   ...jest.requireActual('../src/data/historicalBankRateCatalogueStore'), warmHistoricalBankRateCatalogue: jest.fn(async () => {}),
 }));
@@ -101,7 +102,7 @@ test('slow or failed history does not change readiness and settles its loading s
   jest.mocked(prepareHistoricalBankRateHistory).mockImplementationOnce(async () => { await work.promise; throw new Error('unavailable'); });
   const { get, set } = store();
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: true });
   work.resolve();
   await pending;
@@ -115,11 +116,11 @@ test('a superseded core cannot publish completion over the new history request',
     .mockImplementationOnce(async () => { await next.promise; return true; });
   const { get, set } = store();
   const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   const replacement = { ...sampleCore };
   set({ core: replacement });
   const second = prepareBankRateHistoryAfterPaint(set, get, replacement, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   old.resolve();
   await first;
   expect(get().bankRateHistoryLoading).toBe(true);
@@ -152,13 +153,13 @@ test('product history waits for the replacement preparation before choosing a so
     .mockImplementationOnce(async () => { await next.promise; return true; });
   const { get, set } = store();
   const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   let settled = false;
   const waiting = waitForBankRateHistoryPreparation(get).then(() => { settled = true; });
   const replacement = { ...sampleCore };
   set({ core: replacement });
   const second = prepareBankRateHistoryAfterPaint(set, get, replacement, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   old.resolve();
   await first;
   expect(settled).toBe(false);
@@ -195,7 +196,7 @@ test('RBA-only core replacements inherit in-flight and completed bank history', 
   });
   const { get, set } = store();
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
   const calendar = { decisions: [{ date: '2026-09-01', outcome: 'hold', rate: 4.1 }] } as RbaCalendar;
   const nextCore = integrateRbaCalendarIntoCore(sampleCore, calendar);
   expect(nextCore).not.toBe(sampleCore);

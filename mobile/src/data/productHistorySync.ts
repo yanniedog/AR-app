@@ -24,6 +24,10 @@ export interface SyncProductHistoryOpts {
   existing?: ProductHistoryPayload | null;
   /** Already validated, transport-bound history for the current core owner. */
   catalogue?: PreparedHistoricalBankRateCatalogue | null;
+  /** Exact current-manifest receipt already validated by the cache reader. */
+  fallbackIndex?: DatesIndex | null;
+  /** Local audits must project verified cache data without starting transport. */
+  allowNetwork?: boolean;
   /** Override circuit trip threshold (tests). */
   circuitLimit?: number;
   /** Successful dated cores between durable checkpoints. Defaults to five. */
@@ -65,16 +69,28 @@ export async function syncProductHistoryFromDailyPayloads(
   const revisionHighWater = historicalRevisionHighWater(
     opts.existing?.revision_high_water, opts.existing?.source_identities,
   );
+  let networkAvailable = opts.allowNetwork !== false;
+  let candidateIndex: DatesIndex | null | undefined;
+  if (networkAvailable) {
+    try { candidateIndex = await fetchDatesIndexJson(); }
+    catch (err) {
+      networkAvailable = false;
+      debugLog.warn('productHistory', `dates index unavailable; using verified cache receipt: ${String((err as Error)?.message ?? err)}`);
+    }
+  }
+  if (!networkAvailable) candidateIndex = opts.fallbackIndex;
   try {
-    const candidateIndex = await fetchDatesIndexJson();
+    if (!candidateIndex) throw new Error('No selected historical publication receipt');
     const candidateDates = historyDatesUpTo(candidateIndex, targetRunDate);
-    assertHistoricalIdentitiesAdvance(candidateIndex, candidateDates, revisionHighWater);
+    assertHistoricalIdentitiesAdvance(candidateIndex, networkAvailable ? candidateDates : [...new Set([
+      ...candidateDates, ...Object.keys(revisionHighWater).filter(day => day <= targetRunDate),
+    ])], revisionHighWater);
     selectedIndex = candidateIndex;
     indexedDates = candidateDates;
   } catch (err) {
     debugLog.warn(
       'productHistory',
-      `dates index failed; using cached/current dates: ${String((err as Error)?.message ?? err)}`,
+      `dates index rejected; retaining cached/current dates: ${String((err as Error)?.message ?? err)}`,
     );
   }
   const wantedDates = normalizeTimelineDates([
@@ -85,11 +101,14 @@ export async function syncProductHistoryFromDailyPayloads(
 
   const keys = productKeysForCore(opts.currentCore);
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
-  const publications = selectedIndex ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
+  const publications = selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
   const selectedIdentity = (date: string): string | undefined => selectedIndex?.revision_heads?.[date]
     ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity;
+  // A local receipt cannot re-resolve mutable legacy manifests. Preserve their
+  // already verified cached slices, without inventing identities for new ones.
   const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => sameDerivation && !!opts.existing?.source_identities?.[date] &&
-    (!selectedIndex || !indexedDates.includes(date) || (opts.existing?.schema_version === 3 && opts.existing.source_identities[date] === selectedIdentity(date)))));
+    (!selectedIndex || !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
+      ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || opts.existing.source_identities[date] === selectedIdentity(date))))));
   const sourceIdentities = Object.fromEntries([...reusableDates].map(date => [date, opts.existing!.source_identities![date]]));
   // Recent dates are useful to product charts immediately; older dates continue
   // warming in the same background task after progressive checkpoints land.
@@ -191,7 +210,7 @@ export async function syncProductHistoryFromDailyPayloads(
     return built;
   };
 
-  if (toFetch.length) {
+  if (networkAvailable && toFetch.length) {
     const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
     for (let fetchIndex = 0; fetchIndex < toFetch.length; fetchIndex += 1) {
       const runDate = toFetch[fetchIndex];

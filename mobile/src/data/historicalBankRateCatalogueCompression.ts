@@ -5,6 +5,21 @@ import { bytesToHex } from '@noble/hashes/utils';
 const MAX_COMPRESSED = 16 * 1024 * 1024, MAX_DECODED = 128 * 1024 * 1024;
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 export interface CompressedCatalogue { sha256: string; bytes: number; gzip_base64: string }
+export interface HistoricalCatalogueCodec {
+  compressAsync(json: string): Promise<CompressedCatalogue>;
+  decompressAsync(gzipBase64: string, bytes: number, sha256: string): Promise<string>;
+}
+let nativeCodec: HistoricalCatalogueCodec | null = null;
+
+/** Native integration registers after first paint; Node/web imports stay pure. */
+export function configureHistoricalCatalogueCodec(codec: HistoricalCatalogueCodec | null): void { nativeCodec = codec; }
+
+function validEnvelope(value: CompressedCatalogue): boolean {
+  return !!value && /^[a-f0-9]{64}$/.test(value.sha256) && Number.isSafeInteger(value.bytes) &&
+    value.bytes > 0 && value.bytes <= MAX_DECODED && typeof value.gzip_base64 === 'string' &&
+    value.gzip_base64.length > 0 && value.gzip_base64.length % 4 === 0 &&
+    value.gzip_base64.length <= Math.ceil(MAX_COMPRESSED / 3) * 4;
+}
 
 function base64Value(code: number): number {
   if (code >= 65 && code <= 90) return code - 65;
@@ -190,7 +205,26 @@ async function decodeBase64Async(value: unknown, checkpoint: Checkpoint): Promis
 /** Compress immutable JSON-wire values without a whole-object stringify or
  * whole-buffer hash/deflate burst. Gzip bytes may differ; decoded SHA is identical. */
 export async function compressCatalogueAsync(value: unknown, options: CatalogueCodecOptions = {}): Promise<CompressedCatalogue> {
-  const checkpoint = scheduler(options), hash = sha256.create(), chunks: Uint8Array[] = [];
+  const checkpoint = scheduler(options), codec = nativeCodec;
+  if (codec) {
+    const parts: string[] = []; let characters = 0;
+    await checkpoint(true);
+    // Reuse the exact bounded JSON-wire traversal, including type/depth/cycle
+    // checks and huge-string yields. Native enforces the stricter UTF-8 byte cap
+    // while streaming conversion; UTF-16 length is an allocation bound here.
+    for (const json of jsonChunks(value)) {
+      characters += json.length;
+      if (characters > MAX_DECODED) throw new Error('Historical catalogue exceeds decoded budget');
+      if (json) parts.push(json);
+      await checkpoint();
+    }
+    const json = parts.join('');
+    await checkpoint(true);
+    const result = await codec.compressAsync(json);
+    if (!validEnvelope(result)) throw new Error('Invalid native catalogue compression receipt');
+    return result;
+  }
+  const hash = sha256.create(), chunks: Uint8Array[] = [];
   let bytes = 0, compressed = 0;
   const gzip = new Gzip({ level: 6 }, chunk => {
     compressed += chunk.length;
@@ -218,9 +252,16 @@ export async function compressCatalogueAsync(value: unknown, options: CatalogueC
  * atomic; callers should schedule catalogue preparation separately afterwards. */
 export async function decompressCatalogueAsync(value: CompressedCatalogue, options: CatalogueCodecOptions = {}): Promise<unknown | null> {
   try {
-    if (!value || !/^[a-f0-9]{64}$/.test(value.sha256) || !Number.isSafeInteger(value.bytes) || value.bytes < 1 || value.bytes > MAX_DECODED) return null;
+    if (!validEnvelope(value)) return null;
     const checkpoint = scheduler(options);
     await checkpoint(true);
+    const codec = nativeCodec;
+    if (codec) {
+      const json = await codec.decompressAsync(value.gzip_base64, value.bytes, value.sha256);
+      if (typeof json !== 'string' || json.length > value.bytes) return null;
+      await checkpoint(true);
+      return JSON.parse(json);
+    }
     const gzip = await decodeBase64Async(value.gzip_base64, checkpoint);
     if (!gzip || gzip.length < 18 || new DataView(gzip.buffer, gzip.byteOffset + gzip.length - 4, 4).getUint32(0, true) !== value.bytes) return null;
     const bytes = new Uint8Array(value.bytes); let written = 0;
