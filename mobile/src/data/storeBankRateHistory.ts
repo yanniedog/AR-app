@@ -39,7 +39,10 @@ export async function prepareBankRateHistoryAfterPaint(
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
-    const { configureNativeHistoricalCatalogueCodec } = await import('./historicalBankRateCatalogueNative');
+    // Resolve only after first paint; a literal require also works in the
+    // repository's Jest runtime without enabling experimental VM modules.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { configureNativeHistoricalCatalogueCodec } = require('./historicalBankRateCatalogueNative') as typeof import('./historicalBankRateCatalogueNative');
     await configureNativeHistoricalCatalogueCodec();
     if (!isCurrent()) return;
     const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
