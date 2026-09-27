@@ -7,9 +7,13 @@ export function payloadBundleIdentity(manifest: Manifest): string {
     !['generated_at', 'tag', 'payload_revision', 'files'].includes(key)));
   value.files = Object.fromEntries(Object.entries(manifest.files).map(([key, file]) =>
     [key, Object.fromEntries(Object.entries(file).filter(([field]) => field !== 'url'))]));
-  if (manifest.bank_rate_history_catalogue) value.bank_rate_history_catalogue = {
-    ...manifest.bank_rate_history_catalogue,
-    file: Object.fromEntries(Object.entries(manifest.bank_rate_history_catalogue.file).filter(([field]) => field !== 'url')),
+  const history = manifest.bank_rate_history_catalogue;
+  // Unrelated capabilities still bind malformed optional metadata verbatim. Its
+  // own loader validates the schema; only object descriptors have a routing URL.
+  if (history && typeof history === 'object' && !Array.isArray(history)
+      && history.file && typeof history.file === 'object' && !Array.isArray(history.file)) value.bank_rate_history_catalogue = {
+    ...history,
+    file: Object.fromEntries(Object.entries(history.file).filter(([field]) => field !== 'url')),
   };
   return hashText(canonical(value));
 }

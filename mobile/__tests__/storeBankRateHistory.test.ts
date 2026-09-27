@@ -20,6 +20,16 @@ import { bytesToHex } from '@noble/hashes/utils';
 import { downloadInflate } from '../src/data/payload';
 import { compressCatalogue } from '../src/data/historicalBankRateCatalogueCompression';
 import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
+import { upsertHistoricalCatalogueDay } from '../src/data/historicalBankRateCatalogueMerge';
+import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueWire';
+import type { DatesIndex } from '../src/data/datesIndex';
+
+let mockLegacyCatalogue: HistoricalBankRateCatalogue;
+let mockLegacyIndex: DatesIndex;
+jest.mock('../src/data/bundledHistoricalBankRateCatalogue', () => ({
+  getBundledHistoricalBankRateCatalogueAsync: jest.fn(async () => mockLegacyCatalogue),
+  bundledHistoricalCatalogueBinding: { core_sha256: 'a'.repeat(64), get index() { return mockLegacyIndex; } },
+}));
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -161,6 +171,53 @@ test('missing detached archive keeps the bundled preparation path available', as
   expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null);
   expect(get().bankRateHistoryLoading).toBe(false);
 });
+
+test.each(['missing', 'corrupt'])(
+  'a legacy compact core with a %s detached asset actually restores verified prior history during a local audit', async kind => {
+    const { get, set } = store(), current = { ...sampleCore };
+    const previousDay = new Date(Date.parse(current.run_date) - 86_400_000).toISOString().slice(0, 10);
+    const source = { kind: 'published_core' as const, core_sha256: 'a'.repeat(64),
+      details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) };
+    const captured = { ...current, run_date: previousDay, sections: { ...current.sections,
+      Mortgage: { ...current.sections.Mortgage, rates: current.sections.Mortgage.rates.slice(0, 1) },
+      Savings: { ...current.sections.Savings, rates: [] }, TD: { ...current.sections.TD, rates: [] } } };
+    mockLegacyCatalogue = upsertHistoricalCatalogueDay(null, captured, null, source);
+    mockLegacyIndex = { schema_version: 1, revision_protocol: 1, dates: [previousDay], count: 1,
+      min_date: previousDay, latest_date: previousDay, revision_heads: { [previousDay]: {
+        revision: 1, generation_id: 'verified-bundled-day', bundle_sha256: 'd'.repeat(64),
+        manifest_sha256: source.manifest_sha256,
+        manifest_url: `https://github.com/yanniedog/AR-local/releases/download/app-payload-${previousDay}-r000001/manifest.json`,
+      } } };
+    const manifest = { ...sampleManifest, tag: 'app-payload-latest', files: {
+      ...sampleManifest.files, core: { ...sampleManifest.files.core } } };
+    delete manifest.payload_revision;
+    delete manifest.files.core.enc;
+    const hash = bytesToHex(sha256(strToU8(`unavailable-${kind}`)));
+    const name = `bank-rate-history-catalogue-${current.run_date}-${hash.slice(0, 12)}.json.gz`;
+    manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256: hash, bytes: 100,
+      url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
+    set({ core: current, manifest });
+    jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+    jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementation(async decode =>
+      kind === 'corrupt' ? decode('not-a-valid-base64-asset') : null);
+    jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementationOnce(
+      jest.requireActual('../src/data/detachedHistoricalBankRateCatalogue').loadDetachedHistoricalBankRateCatalogue);
+    jest.mocked(prepareHistoricalBankRateHistory).mockImplementationOnce(
+      jest.requireActual('../src/data/historicalBankRateCatalogueSync').prepareHistoricalBankRateHistory);
+    const datesOnly: DatesIndex = { schema_version: 1, dates: [previousDay, current.run_date], count: 2,
+      min_date: previousDay, latest_date: current.run_date };
+
+    await prepareBankRateHistoryAfterPaint(set, get, current, manifest, datesOnly);
+
+    const prepared = cachedHistoricalBankRateCatalogue(current)!;
+    expect(prepared?.catalogue.sources).toEqual({ [previousDay]: source });
+    expect(prepared.catalogue.sections.Mortgage[0].spans[0][2]).toEqual(mockLegacyCatalogue.sections.Mortgage[0].spans[0][2]);
+    expect(prepared.catalogue.sources[current.run_date]).toBeUndefined();
+    expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalled();
+    expect(downloadInflate).not.toHaveBeenCalled();
+    expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+  },
+);
 
 test('a replaced selection cannot install a detached archive that finishes later', async () => {
   const work = deferred(), { get, set } = store(), manifest = detachedManifest();
