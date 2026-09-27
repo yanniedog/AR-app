@@ -107,7 +107,7 @@ test('private candidate audits detached history bytes and retained real catalogu
   assert.equal(report.checks.find(check => check.code === 'bank-history-selected-sources').status, 'warn');
 });
 
-function publicCandidate(t, value, editIndex = () => {}) {
+function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}) {
   const { manifest, directory, catalogue } = value;
   const base = `https://github.com/${manifest.repo}/releases/download/`;
   manifest.tag = `app-payload-${manifest.run_date}-r000001`;
@@ -115,11 +115,12 @@ function publicCandidate(t, value, editIndex = () => {}) {
   const bundle = payloadBundleIdentity(manifest);
   manifest.payload_revision = { schema_version: 1, revision: 1, parent_revision: null,
     bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
+  editRevision(manifest.payload_revision);
   const manifestBytes = Buffer.from(JSON.stringify(manifest));
   const index = { schema_version: 1, revision_protocol: 1, dates: [...catalogue.run_dates],
     latest_date: manifest.run_date, min_date: catalogue.run_dates[0], count: catalogue.run_dates.length,
     revision_heads: Object.fromEntries(catalogue.run_dates.map(day => [day, {
-      revision: 1, generation_id: `sha256-${bundle}`, bundle_sha256: bundle,
+      revision: 1, generation_id: manifest.payload_revision.generation_id, bundle_sha256: bundle,
       manifest_url: `${base}app-payload-${day}-r000001/manifest.json`,
       manifest_sha256: day === manifest.run_date ? hash(manifestBytes) : catalogue.sources[day]?.manifest_sha256 ?? 'd'.repeat(64),
     }])) };
@@ -137,6 +138,14 @@ function publicCandidate(t, value, editIndex = () => {}) {
   t.after(() => { globalThis.fetch = originalFetch; });
   return options(['--repo', manifest.repo]);
 }
+
+for (const acquisition of ['public', 'private']) test(`${acquisition} audit rejects a stale generation even when the selected head agrees`, async t => {
+  const value = detachedCandidate(t);
+  const publicOpts = publicCandidate(t, value, () => {}, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
+  assert.equal(value.manifest.payload_revision.bundle_sha256, payloadBundleIdentity(value.manifest));
+  fs.writeFileSync(path.join(value.directory, 'manifest.json'), JSON.stringify(value.manifest));
+  await assert.rejects(audit(acquisition === 'public' ? publicOpts : value.opts), /Detached history bundle identity mismatch/);
+});
 
 test('public audit exposes a superseded current source without comparing its prior edition to the repackaged core', async t => {
   const value = detachedCandidate(t), opts = publicCandidate(t, value);

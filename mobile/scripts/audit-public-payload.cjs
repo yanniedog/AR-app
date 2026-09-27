@@ -118,8 +118,11 @@ async function audit(opts) {
     assertRevisionManifest(manifest, binding, date, opts.repo);
   }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
-  if (manifest.bank_rate_history_catalogue && manifest.payload_revision &&
-      manifest.payload_revision.bundle_sha256 !== payloadBundleIdentity(manifest)) throw new Error('Detached history bundle identity mismatch');
+  if (manifest.bank_rate_history_catalogue && manifest.payload_revision) {
+    const bundle = payloadBundleIdentity(manifest);
+    if (manifest.payload_revision.bundle_sha256 !== bundle ||
+        manifest.payload_revision.generation_id !== `sha256-${bundle}`) throw new Error('Detached history bundle identity mismatch');
+  }
   const decoded = {};
   const evidence = {};
   const observations = {};
