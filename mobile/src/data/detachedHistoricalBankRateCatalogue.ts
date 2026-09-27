@@ -15,6 +15,7 @@ import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { PAYLOAD_REPO } from '../config';
 import { debugLog } from '../lib/debugLog';
+import { payloadBundleIdentity } from './payloadBundleIdentity';
 
 let preparedAsset: { receipt: string; catalogue: HistoricalBankRateCatalogue } | null = null;
 
@@ -36,9 +37,22 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     if (manifest.bank_rate_history_catalogue !== undefined) debugLog.warn('bank-history-detached', 'Invalid optional history descriptor; using fallback.');
     return null;
   }
+  try {
+    if (manifest.payload_revision) {
+      const bundle = payloadBundleIdentity(manifest);
+      if (manifest.payload_revision.bundle_sha256 !== bundle || manifest.payload_revision.generation_id !== `sha256-${bundle}`) {
+        throw new Error('Optional history revision identity mismatch');
+      }
+    }
+  } catch {
+    debugLog.warn('bank-history-detached', 'Invalid optional history revision identity; using fallback.');
+    return null;
+  }
   const runDate = manifest.run_date, coreSha = manifest.files.core.sha256;
+  const revision = JSON.stringify(manifest.payload_revision);
   const receipt = JSON.stringify([runDate, coreSha, file]);
   const isCurrent = () => (options.isCurrent?.() ?? true) && manifest.run_date === runDate && manifest.files.core.sha256 === coreSha &&
+    JSON.stringify(manifest.payload_revision) === revision &&
     JSON.stringify(validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO)) === JSON.stringify(file);
   if (!isCurrent()) return null;
   if (preparedAsset?.receipt === receipt) { stage('prepared cache hit'); return preparedAsset.catalogue; }

@@ -36,8 +36,13 @@ export function validateDetachedHistoricalCatalogueDescriptor(manifest: Manifest
     if (manifest.tag !== 'app-payload-latest' && manifest.tag !== `app-payload-${manifest.run_date}` &&
         !new RegExp(`^app-payload-${manifest.run_date}-r[0-9]{6}$`).test(manifest.tag)) return null;
     const name = `bank-rate-history-catalogue-${manifest.run_date}-${file.sha256.slice(0, 12)}.json.gz${enc ? '.enc' : ''}`;
+    const legacyTags = ['app-payload-latest', `app-payload-${manifest.run_date}`];
+    // Legacy finalized manifests can gain a same-core optional asset from the
+    // same day's rolling alias. Keep its authenticated URL; do not invent an
+    // asset on another release. Immutable revisions never borrow alias assets.
+    const tags = !manifest.payload_revision && legacyTags.includes(manifest.tag) ? legacyTags : [manifest.tag];
     if (file.name !== name || typeof file.url !== 'string' || manifest.repo !== expectedRepo ||
-        file.url !== `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` || !automaticDataUrl(file.url) ||
+        !tags.some(tag => file.url === `https://github.com/${manifest.repo}/releases/download/${tag}/${name}`) || !automaticDataUrl(file.url) ||
         Object.values(manifest.files).some(entry => entry?.name === name)) return null;
     return { name, bytes: file.bytes as number, sha256: file.sha256, url: file.url,
       ...(encryption ? { enc: { ...encryption } } : {}) };

@@ -107,6 +107,21 @@ test('a corrected detached archive replaces history even when core bytes are unc
   expect(current.bank_rate_history_catalogue).toBeUndefined();
 });
 
+test('a complete detached public archive skips the duplicate bundled decode on first use and restart', async () => {
+  const packed = structuredClone(mockBaseline);
+  const current = core();
+  expect(await prepareHistoricalBankRateHistory(current, manifest(), mockIndex(), null, packed)).toBe(true);
+  expect(history(current)).toBe(packed);
+  expect(rates(history(current), '2026-09-25')).toEqual([5]);
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+  const checkpoint = compression.decompressCatalogue(JSON.parse(mockCache!)) as Record<string, unknown>;
+  expect(checkpoint.public_fallback).toBeUndefined();
+  const restarted = core();
+  expect(await prepareHistoricalBankRateHistory(restarted, manifest(), mockIndex(), null, structuredClone(packed))).toBe(true);
+  expect(history(restarted)).toEqual(packed);
+  expect(getBundledHistoricalBankRateCatalogueAsync).not.toHaveBeenCalled();
+});
+
 function producerWithGap(rate = '0.09'): HistoricalBankRateCatalogue {
   const value = upsertHistoricalCatalogueDay(null, core('2026-09-26', rate), details(), source('2026-09-26'));
   return { ...value, run_dates: ['2026-09-25', '2026-09-26'],

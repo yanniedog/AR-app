@@ -75,6 +75,10 @@ catalogue to 16 MiB compressed / 128 MiB decoded. Sizes, hashes, canonical base6
 release routing, core binding, schema and historical dates are verified before use.
 Only `file.url` is excluded from the optional namespace's canonical bundle identity;
 its schema, byte identity and encryption metadata remain bound when releases are retagged.
+Before revision-protocol adoption, a dated manifest may retain a valid optional
+archive from the same day's rolling alias only when its core SHA matches. The
+original descriptor URL is retained and its envelope must still match the exact
+core. Selected immutable revisions never inherit assets from another alias.
 
 The native Android codec performs inner gzip and digest work off the JavaScript
 thread after first paint. A matching prepared archive is reused for subsequent

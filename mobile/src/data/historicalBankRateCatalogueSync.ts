@@ -243,17 +243,21 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
     // A fully covered compatible checkpoint already contains every baseline
     // observation that this selected index could restore. Its receipts suffice;
     // avoid inflating and retaining another complete catalogue on each restart.
-    const savedCoversBaseline = !detached && saved && savedCatalogue && cachedMatches && baselineIndex &&
-      (embedded ? saved.producer_core_sha256 === manifest.files.core.sha256 : savedCompatible) &&
+    const coversBaseline = (candidate: HistoricalBankRateCatalogue) => !!baselineIndex &&
       baselineIndex.dates.every(day => day > core.run_date ||
         baselineIndex.revision_heads?.[day]?.manifest_sha256 !== index.revision_heads![day]?.manifest_sha256 ||
-        (savedCatalogue.sources[day] && !savedCatalogue.unavailable_dates[day] &&
-          (savedCatalogue.sources[day].kind !== 'published_core' ||
-            savedCatalogue.sources[day].manifest_sha256 === index.revision_heads![day]?.manifest_sha256)));
+        (candidate.sources[day] && !candidate.unavailable_dates[day] &&
+          (candidate.sources[day].kind !== 'published_core' ||
+            candidate.sources[day].manifest_sha256 === index.revision_heads![day]?.manifest_sha256)));
+    const savedCoversBaseline = !detached && saved && savedCatalogue && cachedMatches &&
+      (embedded ? saved.producer_core_sha256 === manifest.files.core.sha256 : savedCompatible) && coversBaseline(savedCatalogue);
+    // A complete producer archive is equally durable. Its authenticated public
+    // receipts avoid decoding the APK's duplicate archive on first use too.
+    const embeddedCoversBaseline = embedded && coversBaseline(embedded);
     stage('baseline begin');
-    const baseline = savedCoversBaseline ? null : await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
+    const baseline = savedCoversBaseline || embeddedCoversBaseline ? null : await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
     stage('baseline ready; merge begin');
-    const restorableIndex = baseline || savedCoversBaseline ? baselineIndex : null;
+    const restorableIndex = baseline || savedCoversBaseline || embeddedCoversBaseline ? baselineIndex : null;
     let public_fallback = await retainPublicFallback(saved?.public_fallback, index, restorableIndex, savedCatalogue);
     const usableDates = (catalogue: HistoricalBankRateCatalogue) => Object.entries(catalogue.sources).filter(([day, source]) =>
       day <= core.run_date && !catalogue.unavailable_dates[day] &&

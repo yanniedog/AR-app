@@ -16,6 +16,7 @@ import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
 import { resolvePayloadKeyHex } from '../src/lib/keyVault';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import type { Manifest } from '../src/types';
+import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -49,6 +50,10 @@ function attach(manifest: Manifest, raw: Uint8Array, encrypted = false) {
   if (encrypted) manifest.files.core.enc = enc;
   manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, bytes: raw.length, sha256: hash,
     url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`, ...(encrypted ? { enc } : {}) } };
+  if (manifest.payload_revision) {
+    const bundle = payloadBundleIdentity(manifest);
+    manifest.payload_revision = { ...manifest.payload_revision, bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
+  }
 }
 function serve(value: ReturnType<typeof fixture>) {
   jest.mocked(downloadInflate).mockImplementation(async (_url, _sha, options) => {
@@ -89,6 +94,35 @@ test('authenticates cached exact bytes and uses them offline without any transpo
   expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
   expect(downloadInflate).not.toHaveBeenCalled();
   expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+});
+
+test.each(['bundle', 'generation', 'descriptor'] as const)('rejects stale %s revision identity before cache or network access', async invalid => {
+  const value = fixture();
+  if (invalid === 'bundle') value.manifest.payload_revision!.bundle_sha256 = 'f'.repeat(64);
+  if (invalid === 'generation') value.manifest.payload_revision!.generation_id = `sha256-${'f'.repeat(64)}`;
+  if (invalid === 'descriptor') value.manifest.bank_rate_history_catalogue!.file.bytes++;
+  expect(validateDetachedHistoricalCatalogueDescriptor(value.manifest)).not.toBeNull();
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
+  expect(cache.readDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('a previously prepared asset cannot bypass a changed revision identity', async () => {
+  const value = fixture(); serve(value);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toEqual(catalogue);
+  jest.clearAllMocks();
+  value.manifest.payload_revision!.bundle_sha256 = 'f'.repeat(64);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
+  expect(cache.readDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('legacy payloads still authenticate the asset without revision metadata', async () => {
+  const value = fixture(); delete value.manifest.payload_revision;
+  value.manifest.tag = `app-payload-${day}`;
+  attach(value.manifest, value.raw); stored(value.raw);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  expect(downloadInflate).not.toHaveBeenCalled();
 });
 
 test('a changed detached descriptor invalidates the prepared memo even when the core is unchanged', async () => {
