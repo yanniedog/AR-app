@@ -25,6 +25,8 @@ const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest, validateRevisionHead } = require('../src/data/payloadRevision.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
+const { automaticDataUrl } = require('../src/lib/automaticDataAccess.ts');
+const { isReleaseTransport } = require('../src/lib/releaseTransport.ts');
 const { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
 const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
 
@@ -32,21 +34,60 @@ const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
 const MAX_DECODED = 192 * 1024 * 1024;
 
-async function fetchBytes(url, maxBytes) {
-  const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(60_000) });
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`);
-  const final = new URL(response.url);
-  if (final.protocol !== 'https:' || !['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'].includes(final.hostname)) {
-    throw new Error('Unexpected publication redirect');
+function publicationSource(source, repo) {
+  const url = new URL(source);
+  const prefix = `/${repo}/releases/download/`;
+  const parts = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length).split('/') : [];
+  if (url.origin !== 'https://github.com' || url.username || url.password || url.hash || parts.length !== 2 ||
+      !/^app-payload-(?:latest|\d{4}-\d{2}-\d{2}(?:-r\d{6})?)$/.test(parts[0]) ||
+      !/^[A-Za-z0-9][A-Za-z0-9_.-]*\.json(?:\.gz(?:\.enc)?)?$/.test(parts[1]) || parts[1].includes('..') ||
+      [...url.searchParams.keys()].some(key => key !== '_')) throw new Error('Invalid publication source URL');
+  return url.href;
+}
+
+async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = []) {
+  const url = publicationSource(source, repo);
+  if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_COMPRESSED) throw new Error('Invalid publication byte limit');
+  // Reuse the shipping app's fixed, allowlisted service. It opens ARE2 only;
+  // immutable manifest byte counts/hashes still describe the returned domain bytes.
+  const delivery = automaticDataUrl(url);
+  const requested = delivery ?? url;
+  const signal = AbortSignal.timeout(60_000);
+  let target = requested;
+  for (let redirects = 0; ; redirects++) {
+    const response = await fetch(target, { cache: 'no-store', redirect: 'manual', signal });
+    const cancel = async () => { await response.body?.cancel?.().catch(() => {}); };
+    if (response.url !== target) { await cancel(); throw new Error('Unexpected publication response URL'); }
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      await cancel();
+      // The fixed delivery endpoint returns bytes directly. Never let it turn
+      // this audit into a request to another path or origin.
+      const location = response.headers.get('location');
+      if (delivery || redirects >= 5 || !location) throw new Error('Unexpected publication redirect');
+      const next = new URL(location, target);
+      if (next.protocol !== 'https:' || next.port || next.username || next.password || next.hash ||
+          !['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'].includes(next.hostname)) {
+        throw new Error('Unexpected publication redirect');
+      }
+      if (next.hostname === 'github.com') publicationSource(next.href, repo);
+      target = next.href;
+      continue;
+    }
+    if (!response.ok) { await cancel(); throw new Error(`HTTP ${response.status}: ${target}`); }
+    if (!response.body) throw new Error('Publication response has no body');
+    const chunks = [];
+    let size = 0;
+    for await (const chunk of response.body) {
+      size += chunk.length;
+      if (size > maxBytes) throw new Error('Publication response exceeds byte limit');
+      chunks.push(chunk);
+    }
+    const bytes = Buffer.concat(chunks);
+    if (isReleaseTransport(bytes)) throw new Error('Publication delivery returned unopened ARE2 transport');
+    transports.push({ source_url: url, requested_url: requested, final_url: response.url,
+      route: delivery ? 'automatic_data_service' : 'github_release' });
+    return bytes;
   }
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of response.body) {
-    size += chunk.length;
-    if (size > maxBytes) throw new Error('Publication response exceeds byte limit');
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
 }
 
 function options(args) {
@@ -90,6 +131,8 @@ function historySourceSelection(catalogue, manifest, index) {
 }
 
 async function audit(opts) {
+  const transports = [];
+  const publicBytes = (url, limit) => fetchBytes(url, limit, opts.repo, transports);
   const base = `https://github.com/${opts.repo}/releases/download/`;
   const contract = publishedV1SourceContract({
     repo: opts.repo, rollingTag: 'app-payload-latest',
@@ -98,14 +141,14 @@ async function audit(opts) {
     datedTagPrefix: 'app-payload-', schema: 1,
   });
   const directory = opts.directory ? fs.realpathSync(path.resolve(opts.directory)) : null;
-  const indexBytes = directory ? null : await fetchBytes(`${contract.datesIndexUrl}?_=${Date.now()}`, 4 * 1024 * 1024);
+  const indexBytes = directory ? null : await publicBytes(`${contract.datesIndexUrl}?_=${Date.now()}`, 4 * 1024 * 1024);
   const index = indexBytes ? parseDatesIndex(JSON.parse(indexBytes.toString('utf8')), opts.repo) : null;
   if (!directory && !index) throw new Error('Invalid dates index');
   const selectedDate = opts.date ?? index?.latest_date;
   if (index && !index.dates.includes(selectedDate)) throw new Error('Requested date is not published');
   const head = index?.revision_heads?.[selectedDate];
   const manifestUrl = directory ? null : head?.manifest_url ?? (opts.date ? `${base}app-payload-${selectedDate}/manifest.json` : contract.manifestUrl);
-  const manifestBytes = directory ? privateFile(directory, 'manifest.json', 4 * 1024 * 1024) : await fetchBytes(manifestUrl, 4 * 1024 * 1024);
+  const manifestBytes = directory ? privateFile(directory, 'manifest.json', 4 * 1024 * 1024) : await publicBytes(manifestUrl, 4 * 1024 * 1024);
   if (head && hash(manifestBytes) !== head.manifest_sha256) throw new Error('Selected manifest sha256 mismatch');
   const manifest = JSON.parse(manifestBytes.toString('utf8'));
   const date = selectedDate ?? manifest.run_date;
@@ -133,7 +176,7 @@ async function audit(opts) {
           !/^[A-Za-z0-9_.-]+$/.test(file.name) || !file.url.startsWith(base) ||
           new URL(file.url).pathname.split('/').pop() !== file.name || file.enc) throw new Error('Invalid public asset descriptor');
       const bytes = directory ? privateFile(directory, file.name, Math.min(MAX_COMPRESSED, file.bytes + 1))
-        : await fetchBytes(file.url, Math.min(MAX_COMPRESSED, file.bytes + 1));
+        : await publicBytes(file.url, Math.min(MAX_COMPRESSED, file.bytes + 1));
       const digest = hash(bytes);
       if (bytes.length !== file.bytes || digest !== file.sha256) throw new Error('Asset size/hash mismatch');
       const body = bytes[0] === 0x1f && bytes[1] === 0x8b ? zlib.gunzipSync(bytes, { maxOutputLength: MAX_DECODED }) : bytes;
@@ -153,7 +196,7 @@ async function audit(opts) {
       if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
       if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
           decoded.core?.bank_rate_history_catalogue !== undefined) throw new Error('Detached history must preserve the compact startup core');
-      const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await fetchBytes(file.url, file.bytes + 1);
+      const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await publicBytes(file.url, file.bytes + 1);
       if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) throw new Error('Detached history asset size/hash mismatch');
       const envelope = zlib.gunzipSync(bytes, { maxOutputLength: 24 * 1024 * 1024 });
       const archive = validateDetachedHistoricalCatalogueEnvelope(JSON.parse(envelope.toString('utf8')), manifest);
@@ -216,6 +259,7 @@ async function audit(opts) {
   const failed = checks.some((check) => check.status === 'fail') || Object.values(evidence).some((asset) => asset.status === 'FAIL');
   return { schema_version: 1, audited_at: new Date().toISOString(), status: failed ? 'FAIL' : checks.some((check) => check.status !== 'pass') ? 'WARN' : 'PASS',
     acquisition: directory ? 'private_candidate' : 'public_http', publication_verified: !directory && !failed,
+    ...(!directory ? { public_transport: transports } : {}),
     historical_coverage_verified: historySelection?.selected_heads_checked ? !failed && historySelection.status === 'PASS' : null,
     app_commit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: sourceRoot, encoding: 'utf8' }).trim(),
     app_worktree_clean: execFileSync('git', ['status', '--porcelain=v1', '--untracked-files=no'], { cwd: sourceRoot, encoding: 'utf8' }).trim() === '',
@@ -242,4 +286,4 @@ async function main() {
   process.exitCode = report.status === 'BLOCKED' ? 3 : report.status === 'FAIL' ? 2 : 0;
 }
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 3; });
-module.exports = { audit, options };
+module.exports = { audit, options, fetchBytes };
