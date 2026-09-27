@@ -171,35 +171,74 @@ async function discardSupersededPublicDates(catalogue: HistoricalBankRateCatalog
 /** A compact legacy core has no immutable current edition to bind. Independently
  * verified earlier public editions still have their own provenance and features. */
 async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null,
-  completion: { reusable: boolean }): Promise<boolean> {
+  completion: { reusable: boolean }, embedded?: HistoricalBankRateCatalogue): Promise<boolean> {
   if (manifest.bank_rate_history_catalogue === undefined || manifest.repo !== PAYLOAD_REPO ||
       !isValidCalendarDate(core.run_date) || manifest.run_date !== core.run_date ||
       !['app-payload-latest', `app-payload-${core.run_date}`].includes(manifest.tag) ||
       !SHA.test(manifest.files.core.sha256) || !SHA.test(manifest.files.details.sha256)) return false;
+  const { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogueAsync } = bundledHistory();
+  const baselineIndex = bundledHistoricalCatalogueBinding.index;
+  let knownIndex = baselineIndex;
+  const install = async (catalogue: HistoricalBankRateCatalogue) => {
+    if (!await prepareHistoricalBankRateCatalogueAsync(catalogue, yieldHistoryWork)) return false;
+    return installHistoricalBankRateCatalogue(core, catalogue, catalogue.run_dates.filter(day =>
+      day < core.run_date && (!catalogue.sources[day] || catalogue.unavailable_dates[day])));
+  };
+  const fallback = async () => embedded ? install(knownIndex
+    ? await discardSupersededPublicDates(embedded, knownIndex, true) : embedded) : false;
   try {
-    const { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogueAsync } = bundledHistory();
-    const baselineIndex = bundledHistoricalCatalogueBinding.index;
-    if (!baselineIndex?.revision_heads) return false;
+    if (!baselineIndex?.revision_heads) return fallback();
     const saved = await cache.readBankRateHistory?.(decodeSavedHistoricalCatalogueAsync).catch(() => null) ?? null;
+    if (saved) {
+      assertHistoryDatesIndexAdvances(saved.index, baselineIndex);
+      knownIndex = saved.index;
+    }
     const parsedFresh = freshIndex && freshIndex.dates.length <= HISTORICAL_CATALOGUE_LIMITS.days
       ? parseDatesIndex(freshIndex, PAYLOAD_REPO) : null;
-    if (freshIndex && !parsedFresh) return false;
+    if (freshIndex && !parsedFresh) return fallback();
     // A legacy membership list supplies calendar coverage, not an immutable
     // revision identity. It cannot erase or downgrade independently known heads.
     const index = parsedFresh?.revision_heads ? parsedFresh : saved?.index ?? baselineIndex;
-    if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days) return false;
+    if (!index?.revision_heads || index.dates.length > HISTORICAL_CATALOGUE_LIMITS.days) return fallback();
+    if (index.latest_date < knownIndex!.latest_date) throw new Error('Historical publication index is stale; retaining verified history');
     assertHistoryDatesIndexAdvances(index, baselineIndex);
     if (saved) assertHistoryDatesIndexAdvances(index, saved.index);
-    const baseline = await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
-    if (!baseline) return false;
-    const first = [baseline.run_dates[0], saved?.public_fallback?.run_dates[0], saved?.catalogue?.run_dates[0], parsedFresh?.dates[0]]
-      .filter((day): day is string => !!day && day < core.run_date).sort()[0];
-    if (!first) return false;
-    const days = (Date.parse(core.run_date) - Date.parse(first)) / 86_400_000;
-    if (days > HISTORICAL_CATALOGUE_LIMITS.days) return false;
-    let catalogue: HistoricalBankRateCatalogue = { schema_version: 2,
-      run_dates: Array.from({ length: days }, (_, day) => new Date(Date.parse(first) + day * 86_400_000).toISOString().slice(0, 10)),
-      sources: {}, unavailable_dates: {}, evidence: [{ status: 'unknown' }], sections: { Mortgage: [], Savings: [], TD: [] } };
+    knownIndex = index;
+    // Complete producer archives need no duplicate baseline decode, but even a
+    // complete archive must reconcile public sources against selected heads.
+    const coversBaseline = embedded && baselineIndex.dates.every(day => day >= core.run_date ||
+      baselineIndex.revision_heads?.[day]?.manifest_sha256 !== index.revision_heads![day]?.manifest_sha256 ||
+      (embedded.sources[day] && !embedded.unavailable_dates[day] &&
+        (embedded.sources[day].kind !== 'published_core' ||
+          embedded.sources[day].manifest_sha256 === index.revision_heads![day]?.manifest_sha256)));
+    const baseline = coversBaseline ? null : await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
+    if (!baseline && !embedded && !saved?.public_fallback && !saved?.catalogue) return false;
+    const earlier = [baselineIndex.dates[0], saved?.public_fallback?.run_dates[0], saved?.catalogue?.run_dates[0], parsedFresh?.dates[0]]
+      .filter((day): day is string => !!day && day < core.run_date);
+    const first = [...earlier, ...(embedded ? [embedded.run_dates[0]] : [])].sort()[0];
+    if (!first) return fallback();
+    const last = [new Date(Date.parse(core.run_date) - 86_400_000).toISOString().slice(0, 10), embedded?.run_dates.at(-1) ?? first].sort().at(-1)!;
+    const days = (Date.parse(last) - Date.parse(first)) / 86_400_000 + 1;
+    if (days > HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('Historical catalogue date budget exceeded');
+    const run_dates = Array.from({ length: days }, (_, day) => new Date(Date.parse(first) + day * 86_400_000).toISOString().slice(0, 10));
+    let catalogue: HistoricalBankRateCatalogue = embedded ? await discardSupersededPublicDates(embedded, index, true) : {
+      schema_version: 2, run_dates, sources: {}, unavailable_dates: {}, evidence: [{ status: 'unknown' }],
+      sections: { Mortgage: [], Savings: [], TD: [] } };
+    // Extend only the axis; never synthesize observations for absent days or
+    // rewrite independent producer source/evidence identities.
+    if (catalogue.run_dates[0] !== first || catalogue.run_dates.at(-1) !== last) {
+      const shift = run_dates.indexOf(catalogue.run_dates[0]);
+      let sections = catalogue.sections;
+      if (shift) {
+        sections = { Mortgage: [], Savings: [], TD: [] };
+        let count = 0, started = Date.now();
+        for (const section of SECTION_KEYS) for (const tier of catalogue.sections[section]) {
+          sections[section].push({ ...tier, spans: tier.spans.map(([start, count, rates, id]) => [start + shift, count, rates, id]) });
+          if (++count % 8 === 0 && Date.now() - started >= 8) { await yieldHistoryWork(); started = Date.now(); }
+        }
+      }
+      catalogue = { ...catalogue, run_dates, sections };
+    }
     for (const candidate of [saved?.public_fallback, saved?.catalogue, baseline]) if (candidate) {
       const candidateIndex = candidate === baseline ? baselineIndex : saved!.index;
       const dates = Object.entries(candidate.sources).flatMap(([day, source]) =>
@@ -208,15 +247,14 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
         source.manifest_sha256 === index.revision_heads![day]?.manifest_sha256 ? [day] : []);
       catalogue = await overlayHistoricalCatalogueDaysAsync(catalogue, candidate, dates, yieldHistoryWork);
     }
-    const missing = catalogue.run_dates.filter(day => !catalogue.sources[day]);
-    if (!installHistoricalBankRateCatalogue(core, catalogue, missing)) return false;
+    if (!await install(catalogue)) return false;
     completion.reusable = true;
-    if (parsedFresh?.revision_heads && !sameHeads(index, saved?.index ?? baselineIndex)) {
+    const public_fallback = await retainPublicFallback(saved?.public_fallback, index, baselineIndex, saved?.catalogue, catalogue);
+    if ((parsedFresh?.revision_heads && !sameHeads(index, saved?.index ?? baselineIndex)) || public_fallback !== saved?.public_fallback) {
       // Persist selection changes even if every observation was superseded.
       // There is deliberately no binding or synthesized source for today's core.
       const core_bindings = Object.fromEntries(Object.entries(saved?.core_bindings ?? {}).filter(([day, binding]) =>
         binding.manifest_sha256 === index.revision_heads![day]?.manifest_sha256));
-      const public_fallback = await retainPublicFallback(saved?.public_fallback, index, baselineIndex, saved?.catalogue);
       const value: SavedCatalogue = { schema_version: 3, core_bindings, index,
         ...(public_fallback ? { public_fallback } : {}) };
       try {
@@ -228,12 +266,11 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
         debugLog.warn('bank-history-catalogue', 'Legacy history is ready; its selected history receipt could not be saved.');
       }
     }
-    debugLog.info('bank-history-catalogue', `Legacy compact fallback ready observed_dates=${Object.keys(catalogue.sources).length} missing_dates=${missing.length}`);
+    debugLog.info('bank-history-catalogue', `Legacy compact history ready observed_dates=${Object.keys(catalogue.sources).length} missing_dates=${catalogue.run_dates.filter(day => day < core.run_date && (!catalogue.sources[day] || catalogue.unavailable_dates[day])).length}`);
     return true;
   } catch (error) {
-    clearHistoricalBankRateCatalogue(core);
     debugLog.warn('bank-history-catalogue', `Legacy compact history unavailable: ${String((error as Error)?.message ?? error)}`);
-    return false;
+    return fallback();
   }
 }
 
@@ -273,6 +310,11 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
   stage('prepare start');
   clearHistoricalBankRateCatalogue(core);
   const embedded = (await prepareHistoricalBankRateCatalogueAsync(detached ?? core.bank_rate_history_catalogue, yieldHistoryWork))?.catalogue;
+  // Legacy compact payloads also need reconciliation when their detached asset
+  // succeeds: it can be partial or contain superseded public observations.
+  if (!manifest.payload_revision && manifest.bank_rate_history_catalogue !== undefined) {
+    return prepareLegacyCompactFallback(core, manifest, freshIndex, completion, embedded);
+  }
   if (detached && embedded) installHistoricalBankRateCatalogue(core, embedded, embedded.run_dates.filter(day =>
     day < core.run_date && (!embedded.sources[day] || embedded.unavailable_dates[day])));
   const { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogueAsync } = bundledHistory();
@@ -282,7 +324,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
       !selected?.dates.some(day => day < core.run_date && !embedded.sources[day])) {
     completion.reusable = true; stage('embedded ready'); return true;
   }
-  if (!manifest.payload_revision) return embedded ? true : prepareLegacyCompactFallback(core, manifest, freshIndex, completion);
+  if (!manifest.payload_revision) return !!embedded;
   let knownIndex = bundledHistoricalCatalogueBinding.index;
   const fallback = async () => {
     if (!embedded) return false;

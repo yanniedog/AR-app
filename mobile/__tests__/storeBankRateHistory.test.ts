@@ -172,10 +172,10 @@ test('missing detached archive keeps the bundled preparation path available', as
   expect(get().bankRateHistoryLoading).toBe(false);
 });
 
-test.each(['missing', 'corrupt'])(
+test.each(['missing', 'corrupt', 'partial'])(
   'a legacy compact core with a %s detached asset actually restores verified prior history during a local audit', async kind => {
     const { get, set } = store(), current = { ...sampleCore };
-    const previousDay = new Date(Date.parse(current.run_date) - 86_400_000).toISOString().slice(0, 10);
+    const previousDay = new Date(Date.parse(current.run_date) - (kind === 'partial' ? 2 : 1) * 86_400_000).toISOString().slice(0, 10);
     const source = { kind: 'published_core' as const, core_sha256: 'a'.repeat(64),
       details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) };
     const captured = { ...current, run_date: previousDay, sections: { ...current.sections,
@@ -192,14 +192,20 @@ test.each(['missing', 'corrupt'])(
       ...sampleManifest.files, core: { ...sampleManifest.files.core } } };
     delete manifest.payload_revision;
     delete manifest.files.core.enc;
-    const hash = bytesToHex(sha256(strToU8(`unavailable-${kind}`)));
+    const partialDay = new Date(Date.parse(current.run_date) - 86_400_000).toISOString().slice(0, 10);
+    const partial = upsertHistoricalCatalogueDay(null, { ...captured, run_date: partialDay }, null, source);
+    partial.sources[partialDay] = { kind: 'selected_contract', generation_id: 'verified-producer-day',
+      contract_digest: 'e'.repeat(64), banks_sha256: 'f'.repeat(64), bytes: 123 };
+    const raw = gzipSync(strToU8(JSON.stringify({ schema_version: 1, run_date: manifest.run_date,
+      core_sha256: manifest.files.core.sha256, catalogue: compressCatalogue(partial) })));
+    const hash = bytesToHex(sha256(kind === 'partial' ? raw : strToU8(`unavailable-${kind}`)));
     const name = `bank-rate-history-catalogue-${current.run_date}-${hash.slice(0, 12)}.json.gz`;
-    manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256: hash, bytes: 100,
+    manifest.bank_rate_history_catalogue = { schema_version: 1, file: { name, sha256: hash, bytes: kind === 'partial' ? raw.length : 100,
       url: `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}` } };
     set({ core: current, manifest });
     jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
     jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementation(async decode =>
-      kind === 'corrupt' ? decode('not-a-valid-base64-asset') : null);
+      kind === 'partial' ? decode(Buffer.from(raw).toString('base64')) : kind === 'corrupt' ? decode('not-a-valid-base64-asset') : null);
     jest.mocked(loadDetachedHistoricalBankRateCatalogue).mockImplementationOnce(
       jest.requireActual('../src/data/detachedHistoricalBankRateCatalogue').loadDetachedHistoricalBankRateCatalogue);
     jest.mocked(prepareHistoricalBankRateHistory).mockImplementationOnce(
@@ -210,10 +216,15 @@ test.each(['missing', 'corrupt'])(
     await prepareBankRateHistoryAfterPaint(set, get, current, manifest, datesOnly);
 
     const prepared = cachedHistoricalBankRateCatalogue(current)!;
-    expect(prepared?.catalogue.sources).toEqual({ [previousDay]: source });
+    expect(prepared?.catalogue.sources).toEqual({ [previousDay]: source,
+      ...(kind === 'partial' ? { [partialDay]: partial.sources[partialDay] } : {}) });
     expect(prepared.catalogue.sections.Mortgage[0].spans[0][2]).toEqual(mockLegacyCatalogue.sections.Mortgage[0].spans[0][2]);
     expect(prepared.catalogue.sources[current.run_date]).toBeUndefined();
     expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalled();
+    if (kind === 'partial') {
+      expect(await jest.mocked(loadDetachedHistoricalBankRateCatalogue).mock.results.at(-1)!.value).not.toBeNull();
+      expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(current, manifest, datesOnly, null, partial);
+    }
     expect(downloadInflate).not.toHaveBeenCalled();
     expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
   },
