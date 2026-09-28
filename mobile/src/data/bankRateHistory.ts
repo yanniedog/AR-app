@@ -2,7 +2,7 @@ import { SECTION_KEYS, type CorePayload, type SectionKey, type RateRow } from '.
 import type { PackedBankRateHistory } from './bankRateHistoryWire';
 import { attachBankRateHistoryTiers } from './bankRateHistoryWire';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { RATE_OBSERVATION_FIELDS, snapshotBankRates, summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
+import { bankRateScope, RATE_OBSERVATION_FIELDS, snapshotBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 
 const verified = new WeakMap<CorePayload, PackedBankRateHistory | null>();
 const calculated = new WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>();
@@ -102,10 +102,13 @@ function sectionSnapshots(pack: PackedBankRateHistory, section: SectionKey, memb
     add(start, provider, rates, 1); add(start + count, provider, rates, -1);
   }
   const banks = new Map<string, Map<number, number>>();
+  const totalCounts = new Map<number, number>();
   let current: Record<string, RateSummary> = {};
+  let total: RateSummary | undefined;
   return events.map(changesByBank => {
-    if (!changesByBank.size) return current;
+    if (!changesByBank.size) return { banks: current, total };
     current = { ...current };
+    let totalChanged = false;
     for (const [provider, changes] of changesByBank) {
       const counts = banks.get(provider) ?? new Map<number, number>();
       let changed = false;
@@ -113,13 +116,17 @@ function sectionSnapshots(pack: PackedBankRateHistory, section: SectionKey, memb
         changed = true;
         const count = (counts.get(rate) ?? 0) + delta;
         if (count) counts.set(rate, count); else counts.delete(rate);
+        const totalCount = (totalCounts.get(rate) ?? 0) + delta;
+        if (totalCount) totalCounts.set(rate, totalCount); else totalCounts.delete(rate);
+        totalChanged = true;
       }
       banks.set(provider, counts);
       if (changed) {
         if (counts.size) current[provider] = summarizeCounts(counts); else delete current[provider];
       }
     }
-    return current;
+    if (totalChanged) total = totalCounts.size ? summarizeCounts(totalCounts) : undefined;
+    return { banks: current, total };
   });
 }
 
@@ -144,11 +151,13 @@ export function packedBankRateSnapshots(core: CorePayload, scope: BankRateScope)
     for (const day of pack.run_dates) result[day] = {};
     SECTION_KEYS.forEach((section, sectionIndex) => {
       const days = sectionSnapshots(pack, section, members[sectionIndex]);
-      days.forEach((banks, index) => {
-        result[pack.run_dates[index]][section] = banks;
+      days.forEach(({ banks, total }, index) => {
+        const snapshot = result[pack.run_dates[index]];
+        snapshot[section] = banks;
+        if (total) (snapshot.sectionTotals ??= {})[section] = total;
       });
     });
-    result[core.run_date] = Object.fromEntries(SECTION_KEYS.map(section => [section, summarizeBankRates(currentRows[section])]));
+    result[core.run_date] = snapshotBankRates(bankRateScope(currentRows));
     if (cache.size >= 8) cache.delete(cache.keys().next().value!);
     cache.set(key, result); calculated.set(core, cache);
     return result;

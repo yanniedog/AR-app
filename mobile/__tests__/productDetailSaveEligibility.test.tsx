@@ -101,6 +101,10 @@ jest.mock('../src/components/ui', () => ({
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));
 jest.mock('../src/data/bankInsights', () => ({ filterBankInsightsForSuitability: () => null }));
 jest.mock('../src/data/historySelectors', () => ({ selectBankHistoryChartModel: () => null }));
+jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => ({
+  snapshots: null, updating: false, failed: false, historyAvailable: false,
+  richHistory: false, missingDates: [], revision: 'history-disabled',
+}) }));
 jest.mock('../src/data/notifications', () => ({ ensurePermissions: jest.fn(async () => true) }));
 jest.mock('../src/data/rateReceipt', () => ({ buildRateReceipt: () => null, buildNegotiationBrief: () => null }));
 jest.mock('../src/data/staySwitchProjection', () => ({ buildStaySwitchProjection: () => null }));

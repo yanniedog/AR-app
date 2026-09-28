@@ -5,7 +5,7 @@ import { getSuitabilityRevision } from './suitabilityGate';
 import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from './profile';
 import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
-import { summarizeBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
+import { bankRateScope, snapshotBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
 import { validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
 
 export type { HistoricalBankRateCatalogue, HistoricalCatalogueEvidence, HistoricalCatalogueSource } from './historicalBankRateCatalogueWire';
@@ -136,13 +136,17 @@ function summarize(counts: Map<number, number>): RateSummary {
   return { min: values[0][0], max: values.at(-1)![0], mean: sum / count, median: (low! + high) / 2, count };
 }
 
-function* eventSnapshots(events: Changes[]): Generator<void, Record<string, RateSummary>[]> {
+interface SectionSnapshot { banks: Record<string, RateSummary>; total?: RateSummary }
+function* eventSnapshots(events: Changes[]): Generator<void, SectionSnapshot[]> {
   const banks = new Map<string, Map<number, number>>();
+  const totalCounts = new Map<number, number>();
   let current: Record<string, RateSummary> = {};
-  const snapshots: Record<string, RateSummary>[] = [];
+  let total: RateSummary | undefined;
+  const snapshots: SectionSnapshot[] = [];
   for (const changesByBank of events) {
-    if (!changesByBank.size) { snapshots.push(current); yield; continue; }
+    if (!changesByBank.size) { snapshots.push({ banks: current, total }); yield; continue; }
     current = { ...current };
+    let totalChanged = false;
     for (const [provider, changes] of changesByBank) {
       const counts = banks.get(provider) ?? new Map<number, number>();
       let changed = false;
@@ -150,6 +154,9 @@ function* eventSnapshots(events: Changes[]): Generator<void, Record<string, Rate
         changed = true;
         const count = (counts.get(rate) ?? 0) + delta;
         if (count) counts.set(rate, count); else counts.delete(rate);
+        const totalCount = (totalCounts.get(rate) ?? 0) + delta;
+        if (totalCount) totalCounts.set(rate, totalCount); else totalCounts.delete(rate);
+        totalChanged = true;
       }
       banks.set(provider, counts);
       if (changed) {
@@ -158,7 +165,8 @@ function* eventSnapshots(events: Changes[]): Generator<void, Record<string, Rate
       }
       yield;
     }
-    snapshots.push(current);
+    if (totalChanged) total = totalCounts.size ? summarize(totalCounts) : undefined;
+    snapshots.push({ banks: current, total });
   }
   return snapshots;
 }
@@ -182,7 +190,11 @@ function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, 
         addEvent(events, start + count, tierState.tier.row.provider, rates, -1);
       }
     }
-    (yield* eventSnapshots(events)).forEach((banks, index) => { snapshots[catalogue.run_dates[index]][section] = banks; });
+    (yield* eventSnapshots(events)).forEach(({ banks, total }, index) => {
+      const snapshot = snapshots[catalogue.run_dates[index]];
+      snapshot[section] = banks;
+      if (total) (snapshot.sectionTotals ??= {})[section] = total;
+    });
   }
   if (state.snapshots.size >= 8) state.snapshots.delete(state.snapshots.keys().next().value!);
   state.snapshots.set(normalized.key, snapshots);
@@ -273,7 +285,7 @@ function currentSnapshots(preparation: PreparedHistoricalBankRateCatalogue, stat
     if (++days >= 5000) break;
     snapshots[new Date(day).toISOString().slice(0, 10)] = {};
   }
-  snapshots[core.run_date] = Object.fromEntries(SECTION_KEYS.map(section => [section, summarizeBankRates(currentRows[section])]));
+  snapshots[core.run_date] = snapshotBankRates(bankRateScope(currentRows));
   if (cache.size >= 8) cache.delete(cache.keys().next().value!);
   cache.set(key, snapshots); state.current.set(core, cache);
   return rememberScope(state, core, currentScope, normalized.key, snapshots);
