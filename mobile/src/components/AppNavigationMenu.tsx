@@ -1,4 +1,4 @@
-import { router, useGlobalSearchParams, usePathname } from 'expo-router';
+import { useGlobalSearchParams, usePathname } from 'expo-router';
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import {
   type AppDestination,
 } from '../lib/appDestinations';
 import { useTheme } from '../theme/ThemeProvider';
+import { navigateToAppDestination } from '../lib/primaryNavigation';
 import { TouchTarget } from './TouchTarget';
 import { AppText, Divider, Row } from './ui';
 import { LedgerIcon } from './icons/LedgerIcon';
@@ -49,14 +50,14 @@ export function NavigationMenuButton() {
   if (!onboarded) return null;
   return (
     <TouchTarget
-      square
       onPress={menu.show}
       accessibilityRole="button"
       accessibilityLabel="Open app menu"
       accessibilityState={{ expanded: menu.open }}
-      style={({ pressed }) => ({ opacity: pressed ? 0.6 : 1 })}
+      style={({ pressed }) => ({ flexDirection: 'row', gap: 5, paddingHorizontal: 10, opacity: pressed ? 0.6 : 1 })}
     >
-      <LedgerIcon name="menu" size={25} color={theme.ledger.ink} />
+      <LedgerIcon name="menu" size={21} color={theme.ledger.ink} />
+      <AppText variant="small" weight="600">Menu</AppText>
     </TouchTarget>
   );
 }
@@ -80,8 +81,8 @@ export function AppNavigationMenu() {
   const openDestination = useCallback((destination: AppDestination) => {
     const href = destinationHref(destination, section);
     menu.hide();
-    requestAnimationFrame(() => router.navigate(href));
-  }, [menu, section]);
+    requestAnimationFrame(() => navigateToAppDestination(href, pathname));
+  }, [menu, section, pathname]);
 
   return (
     <Modal
@@ -119,6 +120,7 @@ export function AppNavigationMenu() {
             {APP_DESTINATION_GROUPS.map((group, groupIndex) => (
               <View key={group.id}>
                 {groupIndex > 0 ? <Divider style={{ marginVertical: 10 }} /> : null}
+                <AppText variant="small" weight="700" accessibilityRole="header" style={{ paddingHorizontal: 12, paddingVertical: 8, color: theme.colors.textMuted }}>{group.label}</AppText>
                 {group.destinations.map((destination) => {
                   const selected = destinationIsActive(destination.id, pathname);
                   return (
@@ -138,6 +140,7 @@ export function AppNavigationMenu() {
                         backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
                         borderLeftWidth: 3,
                         borderLeftColor: selected ? theme.ledger.wattle : 'transparent',
+                        paddingVertical: 8,
                         opacity: pressed ? 0.65 : 1,
                       })}
                     >

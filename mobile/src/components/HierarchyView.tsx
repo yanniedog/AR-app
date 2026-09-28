@@ -231,7 +231,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
   const logoReadiness = useLogoReadiness(listRevision);
   usePerformanceAuditSurface({
     id: 'browse.hierarchy',
-    routeKey: '/browse',
+    routeKey: '/categories',
     datasetRevision,
     renderRevision: listRevision,
     actions: auditActions,

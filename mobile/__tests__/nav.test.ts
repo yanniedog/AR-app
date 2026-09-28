@@ -25,6 +25,9 @@ describe('parseBrowsePath', () => {
 });
 
 describe('buildBrowseRouteParams', () => {
+  test('explicitly clears a previous category drill when returning to its root', () => {
+    expect(buildBrowseRouteParams('Savings', []).path).toBe('');
+  });
   test('gives repeated parameterized entries unique consumable identities', () => {
     const first = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);
     const second = buildBrowseRouteParams('Mortgage', ['FIXED', 'OWNER']);

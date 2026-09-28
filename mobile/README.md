@@ -22,7 +22,7 @@ then upgrades to the live payload at `expo.extra.manifestUrl` (set in `app.json`
 
 ```
 app/                expo-router routes
-  (tabs)/           Today · Explore · Changes · My rates (Settings hidden)
+  (tabs)/           Home · Rates · Saved · Market · Tools
   product/[key]     product detail        bank/[provider]  lender detail
   banks · compare · onboarding
 src/
@@ -35,6 +35,8 @@ src/
 assets/             icon/splash (scripts/make-icons.mjs) + sample/ payload
 __tests__/          selectors · format · notifications (jest-expo)
 ```
+
+Navigation ownership and compatibility: [../docs/NAVIGATION.md](../docs/NAVIGATION.md).
 
 ## Typography
 

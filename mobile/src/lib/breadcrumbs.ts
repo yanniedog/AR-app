@@ -3,6 +3,7 @@ import type { Href } from 'expo-router';
 import { SECTIONS } from '../constants';
 import { ROOT, segLabel } from '../data/taxonomy';
 import type { RateRow, SectionKey } from '../types';
+import { isPrimaryTabRootPath, normalizeAppPath, TAB_BAR_ORDER, tabHref } from './tabRouting';
 
 export type BreadcrumbTarget =
   | { href: Href }
@@ -13,38 +14,43 @@ export interface Breadcrumb {
   target?: BreadcrumbTarget;
 }
 
-const explore: Breadcrumb = { label: 'Explore', target: { href: '/(tabs)/browse' } };
-const changes: Breadcrumb = { label: 'Changes', target: { href: '/(tabs)/passthrough' } };
-const about: Breadcrumb = { label: 'About', target: { href: '/about' } };
-const scenario: Breadcrumb = { label: 'My scenario', target: { href: '/calculator' } };
+const rates: Breadcrumb = { label: 'Rates', target: { href: tabHref('browse') } };
+const market: Breadcrumb = { label: 'Market', target: { href: '/(tabs)/market' } };
+const tools: Breadcrumb = { label: 'Tools', target: { href: '/(tabs)/tools' } };
+const about: Breadcrumb = { label: 'About and help', target: { href: '/about' } };
+const scenario: Breadcrumb = { label: 'Check my rate', target: { href: '/calculator' } };
 
 const ROUTES: Record<string, Breadcrumb[]> = {
-  '/': [{ label: 'Today' }],
-  '/watchlist': [{ label: 'My rates' }],
-  '/passthrough': [changes],
-  '/banks': [explore, { label: 'Banks' }],
-  '/catalogue': [explore, { label: 'Products without listed rates' }],
-  '/compare': [explore, { label: 'Compare' }],
-  '/calculator': [explore, scenario],
-  '/calculation-receipt': [explore, scenario, { label: 'Open calculation receipt' }],
-  '/projections': [explore, scenario, { label: 'What if rates change?' }],
-  '/research': [changes, { label: 'Rate research' }],
-  '/trends': [changes, { label: 'Rate research' }],
-  '/rba': [changes, { label: 'RBA rates' }],
-  '/rba-response': [changes, { label: 'Bank response' }],
-  '/profile': [{ label: 'Your profile' }],
-  '/settings': [{ label: 'Settings' }],
-  '/about': [about],
-  '/terms': [about, { label: 'Terms' }],
-  '/third-party-notices': [about, { label: 'Open-source notices' }],
-  '/debug-log': [about, { label: 'Debug log' }],
-  '/performance-audit': [about, { label: 'App health audit' }],
+  '/': [{ label: 'Home' }],
+  '/browse': [rates],
+  '/watchlist': [{ label: 'Saved' }],
+  '/market': [market],
+  '/tools': [tools],
+  '/matches': [rates, { label: 'Matched rates' }],
+  '/banks': [rates, { label: 'Banks' }],
+  '/catalogue': [rates, { label: 'Products without listed rates' }],
+  '/compare': [rates, { label: 'Compare' }],
+  '/calculator': [tools, scenario],
+  '/calculation-receipt': [tools, scenario, { label: 'Calculation receipt' }],
+  '/projections': [tools, scenario, { label: 'Project my balance' }],
+  '/bank-rates': [market, { label: 'Bank rates over time' }],
+  '/passthrough': [market, { label: 'Recent rate changes' }],
+  '/research': [market, { label: 'Market research' }],
+  '/trends': [market, { label: 'Market research' }],
+  '/rba': [market, { label: 'RBA rates and outlook' }],
+  '/rba-response': [market, { label: 'Bank response' }],
+  '/profile': [tools, { label: 'Your profile' }],
+  '/settings': [tools, { label: 'Settings' }],
+  '/about': [tools, about],
+  '/terms': [tools, about, { label: 'Terms' }],
+  '/third-party-notices': [tools, about, { label: 'Open-source notices' }],
+  '/debug-log': [tools, about, { label: 'Debug log' }],
+  '/performance-audit': [tools, about, { label: 'App health audit' }],
 };
 
 function categoryTrail(section: SectionKey, path: string[]): Breadcrumb[] {
   return [
-    // Explicit category targets also clear any previous drill on the mounted tab.
-    { label: 'Explore', target: { section, path: [] } },
+    rates,
     { label: SECTIONS[section].title, target: { section, path: [] } },
     ...path.map((segment, index) => ({
       label: segLabel(segment),
@@ -73,17 +79,17 @@ export function buildBreadcrumbs({
   catalogueProductName?: string | null;
   rateIndex?: string;
 }): Breadcrumb[] {
-  const route = pathname.split(/[?#]/, 1)[0].replace(/^\/\(tabs\)(?=\/|$)/, '').replace(/\/$/, '') || '/';
+  const route = normalizeAppPath(pathname);
   let trail: Breadcrumb[];
-  if (route === '/browse' || route === '/node' || route === '/search') {
+  if (route === '/categories' || route === '/node' || route === '/search') {
     trail = categoryTrail(section, path);
     if (route === '/search') trail.push({ label: 'Search' });
   } else if (route.startsWith('/bank/')) {
-    trail = [explore, { label: 'Banks', target: { href: '/banks' } }, { label: provider || 'Bank' }];
+    trail = [rates, { label: 'Banks', target: { href: '/banks' } }, { label: provider || 'Bank' }];
   } else if (route.startsWith('/product/') || route === '/rate-receipt') {
     if (!product && catalogueProductName && route.startsWith('/product/')) {
       return [
-        { label: 'Explore', target: { section, path: [] } },
+        rates,
         { label: 'Products without listed rates', target: { href: '/catalogue' } },
         { label: catalogueProductName },
       ];
@@ -91,7 +97,7 @@ export function buildBreadcrumbs({
     const segments = product?.row.taxonomy_path?.split('.').filter(Boolean) ?? [];
     trail = product
       ? categoryTrail(product.section, segments[0] === ROOT[product.section] ? segments.slice(1) : [])
-      : [explore];
+      : [rates];
     trail.push({
       label: product?.row.product_name || 'Product',
       ...(product ? { target: { href: {
@@ -106,12 +112,15 @@ export function buildBreadcrumbs({
   // The final item describes the current page; only ancestors are interactive.
   return trail.map((crumb, index) => {
     if (index === trail.length - 1) return { label: crumb.label };
-    if (crumb === explore) return { label: crumb.label, target: { section, path: [] } };
     if (crumb === scenario) return { label: crumb.label, target: { href: { pathname: '/calculator', params: { section } } as Href } };
     return crumb;
   });
 }
 
 export function shouldShowBreadcrumbs(pathname: string, onboarded: boolean): boolean {
-  return onboarded && pathname !== '/onboarding';
+  const path = normalizeAppPath(pathname);
+  return onboarded
+    && path !== '/onboarding'
+    && !path.startsWith('/onboarding/')
+    && !TAB_BAR_ORDER.some((route) => isPrimaryTabRootPath(path, route));
 }

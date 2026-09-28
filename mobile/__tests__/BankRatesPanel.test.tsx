@@ -11,7 +11,7 @@ import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRate
 import { yieldToUi } from '../src/lib/yieldToUi';
 import { prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
 import { installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
-type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
+type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; testID?: string; onLayout?: () => void; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
   Mortgage: { rates: [{ provider: 'Alpha', product_key: 'a', product_name: 'Loan', rate: '0.06', rate_type: 'VARIABLE' }, { provider: 'Beta', product_key: 'b', product_name: 'Fixed', rate: '0.09', rate_type: 'FIXED' }] },
@@ -61,6 +61,48 @@ test('opens Rates/Mean; all statistics, product sections and secondary Gap are s
   expect(chart().props.model.lines[0].provider).toBe('Term Bank');
   act(() => controls()[0].props.onChange('gap'));
   expect(chart().props.gap).toBe(true); expect(chart().props.model.lines[0].points[0].value).toBe(2);
+  act(() => tree.unmount());
+});
+
+test('audit evidence waits for the current chart layout and invalidates it when its product section changes', () => {
+  const onAuditStateChange = jest.fn();
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel onAuditStateChange={onAuditStateChange} />) as Renderer; });
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'pending', modelPointCount: 4, renderedPointCount: 0, accessibleSummary: false,
+  }));
+  const chartLayout = () => tree.root.findAll(node => node.props.testID === 'bank-rates-chart-layout')[0];
+  act(() => chartLayout().props.onLayout!());
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'ready', modelPointCount: 4, renderedPointCount: 4, accessibleSummary: true,
+  }));
+  const firstRevision = onAuditStateChange.mock.calls.at(-1)![0].revision;
+  const sections = tree.root.findAll(node => node.type === ('SegmentedControl' as unknown))[1];
+  act(() => sections.props.onChange('TD'));
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'pending', modelPointCount: 2, renderedPointCount: 0, accessibleSummary: false,
+  }));
+  expect(onAuditStateChange.mock.calls.at(-1)![0].revision).not.toBe(firstRevision);
+  act(() => chartLayout().props.onLayout!());
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'ready', modelPointCount: 2, renderedPointCount: 2, accessibleSummary: true,
+  }));
+  act(() => tree.unmount());
+});
+
+test('an empty bank model is audited only after its actual empty message is laid out', () => {
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
+  const onAuditStateChange = jest.fn();
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRatesPanel onAuditStateChange={onAuditStateChange} />) as Renderer; });
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'pending', modelPointCount: 0, emptyStateRendered: false,
+  }));
+  act(() => tree.root.findAll(node => node.props.testID === 'bank-rates-empty-layout')[0].props.onLayout!());
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'ready', modelPointCount: 0, renderedPointCount: 0,
+    emptyStateRendered: true, accessibleSummary: false,
+  }));
   act(() => tree.unmount());
 });
 test('profile changes remove excluded banks immediately; missing mandatory feature details fail closed', () => {
@@ -136,10 +178,14 @@ test('an unexpected rich preparation error does not treat valid history as a sch
   } };
   prepareHistoricalBankRateCatalogue(mockState.core.bank_rate_history_catalogue);
   jest.mocked(yieldToUi).mockRejectedValue(new Error('Temporary scheduler failure'));
+  const onAuditStateChange = jest.fn();
   let tree!: Renderer;
-  await act(async () => { tree = TestRenderer.create(<BankRatesPanel />) as Renderer; });
+  await act(async () => { tree = TestRenderer.create(<BankRatesPanel onAuditStateChange={onAuditStateChange} />) as Renderer; });
   expect(tree.root.findAll(n => n.type === ('BankRateChart' as unknown))).toHaveLength(0);
   expect(JSON.stringify(tree.toJSON())).toContain('Historical rates could not be prepared');
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+    status: 'error', error: 'Historical rates could not be prepared', renderedPointCount: 0,
+  }));
   act(() => tree.unmount());
 });
 

@@ -647,17 +647,17 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
   const enabled = interests.includes(section);
   return {
     id: `browse-${section.toLowerCase()}`,
-    label: `Browse: ${SECTIONS[section].title}`,
+    label: `Categories: ${SECTIONS[section].title}`,
     href: enabled
       ? ({
-          pathname: '/browse',
+          pathname: '/categories',
           params: buildBrowseRouteParams(section),
         } as unknown as Href)
       : undefined,
-    expectedPath: '/browse',
+    expectedPath: '/categories',
     expectedSurface: 'browse.hierarchy',
     expectedSection: section,
-    navigationKind: 'tab',
+    navigationKind: 'stack',
     skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
   };
 }
@@ -682,8 +682,56 @@ export function buildPerformanceAuditJourneys(
       label: 'Home',
       href: '/(tabs)' as Href,
       expectedPath: '/',
-      expectedSurface: 'today.hero',
+      expectedSurface: 'home.hub',
       navigationKind: 'tab',
+    },
+    {
+      id: 'rates',
+      label: 'Rates',
+      href: '/browse' as Href,
+      expectedPath: '/browse',
+      expectedSurface: 'rates.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'market',
+      label: 'Market',
+      href: '/market' as Href,
+      expectedPath: '/market',
+      expectedSurface: 'market.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'tools',
+      label: 'Tools',
+      href: '/tools' as Href,
+      expectedPath: '/tools',
+      expectedSurface: 'tools.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'matches',
+      label: 'My matches',
+      href: '/matches' as Href,
+      expectedPath: '/matches',
+      expectedSurface: 'today.hero',
+      navigationKind: 'stack',
+    },
+    {
+      id: 'bank-rates',
+      label: 'Bank rates',
+      href: '/bank-rates' as Href,
+      expectedPath: '/bank-rates',
+      expectedSurface: 'bank-rates.dashboard',
+      navigationKind: 'stack',
+    },
+    {
+      id: 'changes',
+      label: 'Rate moves',
+      href: '/passthrough' as Href,
+      expectedPath: '/passthrough',
+      expectedSurface: 'changes.feed',
+      navigationKind: 'stack',
     },
     ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
     {
@@ -700,7 +748,7 @@ export function buildPerformanceAuditJourneys(
       href: '/research' as Href,
       expectedPath: '/research',
       expectedSurface: 'outlook.dashboard',
-      navigationKind: 'tab',
+      navigationKind: 'stack',
     },
     {
       id: 'rba',
@@ -724,7 +772,7 @@ export function buildPerformanceAuditJourneys(
       href: '/settings' as Href,
       expectedPath: '/settings',
       expectedSurface: 'settings.sections',
-      navigationKind: 'tab',
+      navigationKind: 'stack',
     },
     {
       id: 'search',

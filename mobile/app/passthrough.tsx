@@ -2,26 +2,26 @@ import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
-import { BankMovesFeed, MoversLeaderboard } from '../../src/components/BankInsights';
-import { ScreenScrollView } from '../../src/components/Screen';
-import { SegmentedControl } from '../../src/components/controls';
-import { ScreenSkeleton } from '../../src/components/feedback';
-import { AppText, Button, Card, Disclosure, SectionHeading } from '../../src/components/ui';
-import { SECTIONS } from '../../src/constants';
+import { BankMovesFeed, MoversLeaderboard } from '../src/components/BankInsights';
+import { ScreenScrollView } from '../src/components/Screen';
+import { SegmentedControl } from '../src/components/controls';
+import { ScreenSkeleton } from '../src/components/feedback';
+import { AppText, Button, Card, Disclosure, SectionHeading } from '../src/components/ui';
+import { SECTIONS } from '../src/constants';
 import {
   filterBankInsightsForSuitability,
   marketPulse,
   recentBankEvents,
   rbaPassThroughMultiSection,
-} from '../../src/data/bankInsights';
-import { summarizeSectionResponse } from '../../src/data/passThroughModels';
-import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
-import { useStore } from '../../src/data/store';
-import { isSuitabilityFilterReady } from '../../src/data/suitabilityGate';
-import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
-import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
-import { formatRunDate } from '../../src/data/format';
-import { scalarRouteParam } from '../../src/lib/nav';
+} from '../src/data/bankInsights';
+import { summarizeSectionResponse } from '../src/data/passThroughModels';
+import { resolveInterestSection, sectionSegmentOptions } from '../src/data/interests';
+import { useStore } from '../src/data/store';
+import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
+import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
+import { formatRunDate } from '../src/data/format';
+import { scalarRouteParam } from '../src/lib/nav';
 import {
   isFeedRenderEvidenceReady,
   reconcileFeedRenderEvidence,
@@ -29,7 +29,7 @@ import {
   resetFeedRenderEvidence,
   type FeedLayoutEvidence,
   type FeedRenderEvidence,
-} from '../../src/lib/feedRenderEvidence';
+} from '../src/lib/feedRenderEvidence';
 
 function weeklySummary(
   section: keyof typeof SECTIONS,

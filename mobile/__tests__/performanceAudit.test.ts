@@ -200,10 +200,16 @@ function check(
 describe('performance audit journeys', () => {
   it('covers every steady-state destination and all three browse sections', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys).toHaveLength(20);
+    expect(journeys).toHaveLength(26);
     expect(journeys.map((journey) => journey.id)).toEqual(
       expect.arrayContaining([
         'home',
+        'rates',
+        'market',
+        'tools',
+        'matches',
+        'bank-rates',
+        'changes',
         'browse-mortgage',
         'browse-savings',
         'browse-td',
@@ -245,6 +251,25 @@ describe('performance audit journeys', () => {
       expectedSurface: 'rba.dashboard',
       navigationKind: 'stack',
     });
+  });
+
+  it('audits the five hubs and moved screens against their actual stack destinations', () => {
+    const journeys = buildPerformanceAuditJourneys(core);
+    expect(journeys.filter(journey => journey.navigationKind === 'tab').map(journey => journey.id))
+      .toEqual(['home', 'rates', 'market', 'tools', 'watchlist']);
+    expect(journeys.find(journey => journey.id === 'home')).toMatchObject({
+      expectedPath: '/', expectedSurface: 'home.hub',
+    });
+    expect(journeys.find(journey => journey.id === 'matches')).toMatchObject({
+      expectedPath: '/matches', expectedSurface: 'today.hero', navigationKind: 'stack',
+    });
+    expect(journeys.find(journey => journey.id === 'browse-mortgage')).toMatchObject({
+      href: { pathname: '/categories' }, expectedPath: '/categories',
+      expectedSurface: 'browse.hierarchy', navigationKind: 'stack',
+    });
+    for (const id of ['outlook', 'settings', 'bank-rates', 'changes']) {
+      expect(journeys.find(journey => journey.id === id)?.navigationKind).toBe('stack');
+    }
   });
 
   it('builds comparison journeys only from two products in the same section', () => {

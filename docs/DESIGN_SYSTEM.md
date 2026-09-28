@@ -34,12 +34,16 @@ The system intentionally avoids gradients, glass effects, glowing accents, decor
   so its raised background remains opaque.
 - Use 24 dp between sections and restrained sentence-case labels. Separate list
   entries with one thin rule instead of outlining every row or qualifier.
-- Today leads with the matched product. Bank history and scenario charts expand
-  on demand; freshness remains visible and opens the full evidence sheet.
-- Explore leads with search and categories. Match settings and secondary tools
-  live in Explore options; search alerts and report export live in Search tools.
-- Changes keeps the Rates chart visible by default, with Gap secondary. Detailed
-  methodology and supporting RBA context expand on demand.
+- Home is a short task launcher. Rates, Saved, Market and Tools are the other
+  four persistent destinations. See [NAVIGATION.md](NAVIGATION.md) for ownership.
+- Rates starts with product types leading directly to searchable products. Banks,
+  matched rates, taxonomy categories and the details-only catalogue are named links.
+- Market separates bank history, changes, bank response, RBA outlook and research.
+  Bank history shows Rates by default, with Gap secondary.
+- Tools groups the rate calculator, projections and profile. Settings and About
+  are visible here and in the full app menu; diagnostics remain under About.
+- Every ordinary detail screen retains the primary bar and a parent breadcrumb.
+  Root screens omit redundant breadcrumbs. Modal comparisons retain a close action.
 - Product rows stack their rate below the description on phones under 480 dp.
   Advertised, comparison, ongoing and conditional labels remain explicit.
 - Category aggregates use neutral “Rates from”/“Rates up to” labels because the

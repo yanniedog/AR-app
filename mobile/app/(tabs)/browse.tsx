@@ -1,115 +1,64 @@
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { View } from 'react-native';
 
-import { HierarchyView } from '../../src/components/HierarchyView';
-import { Screen, screenEdgeStyle } from '../../src/components/Screen';
-import { SegmentedControl } from '../../src/components/controls';
-import { Button, Row } from '../../src/components/ui';
-import { LedgerSheet } from '../../src/components/ledger';
-import { sectionFromSlug } from '../../src/constants';
-import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
-import { profileSectionCount } from '../../src/data/profile';
+import { DestinationRow, NavigationHub } from '../../src/components/NavigationHub';
+import { LedgerAction, LedgerSection, LedgerText } from '../../src/components/ledger';
+import { SECTIONS } from '../../src/constants';
+import { sectionSegmentOptions, resolveInterestSection } from '../../src/data/interests';
+import { profileSelectionCount } from '../../src/data/profile';
 import { useStore } from '../../src/data/store';
-import { checkDrillOutcome, logNavParamDrop } from '../../src/lib/degradationLog';
-import { openBrowse, openSearch, parseBrowsePath, scalarRouteParam } from '../../src/lib/nav';
-import { useTheme } from '../../src/theme/ThemeProvider';
-import { ScreenSkeleton } from '../../src/components/feedback';
+import { openBrowse, openSearch } from '../../src/lib/nav';
 
-export default function Browse() {
-  const theme = useTheme();
-  const core = useStore((s) => s.core);
-  const params = useLocalSearchParams<{
-    section?: string | string[];
-    path?: string | string[];
-    request?: string | string[];
-  }>();
-  const drillPath = useMemo(() => parseBrowsePath(params.path), [params.path]);
-  const interests = useStore((s) => s.prefs.interests);
-  const defaultSection = useStore((s) => s.prefs.defaultSection);
-  const setActiveSection = useStore((s) => s.setActiveSection);
-  const routeSectionSlug = scalarRouteParam(params.section);
-  const routeRequest = scalarRouteParam(params.request) ??
-    (routeSectionSlug ? `section:${routeSectionSlug}` : null);
-  const consumedRouteRequest = useRef<string | null>(null);
-  const requestedSection = useMemo(() => {
-    const slug = routeSectionSlug;
-    const parsed = slug ? sectionFromSlug(slug) : undefined;
-    return parsed ? resolveInterestSection(interests, parsed) : null;
-  }, [interests, routeSectionSlug]);
-  const pendingRouteRequest = routeRequest != null && consumedRouteRequest.current !== routeRequest;
-  // Explore owns its category. Changing a market or Today category must not
-  // silently move this screen to another product type.
-  const [section, setSection] = useState(() => resolveInterestSection(interests, defaultSection));
-  const renderedSection = pendingRouteRequest && requestedSection ? requestedSection : section;
-  const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
-  const profileFilters = useStore((s) => s.prefs.profileFilters);
-  const profileCount = profileSectionCount(profileFilters, renderedSection);
-  const [toolsOpen, setToolsOpen] = useState(false);
+export default function Rates() {
+  const params = useLocalSearchParams<{ section?: string | string[]; path?: string | string[]; request?: string | string[] }>();
+  const interests = useStore(s => s.prefs.interests);
+  const activeSection = useStore(s => s.activeSection);
+  const filters = useStore(s => s.prefs.profileFilters);
+  const section = resolveInterestSection(interests, activeSection);
+  const categories = sectionSegmentOptions(interests);
+  const filterCount = profileSelectionCount(filters);
+  const actions = useMemo(() => ({ 'rates.open': () => undefined, 'rates.categories.open': () => openBrowse(section) }), [section]);
 
+  // Clear the mounted tab before opening a legacy drill, so Back and Rates
+  // always return to the hub instead of re-opening the bookmarked category.
+  const legacySection = params.section;
+  const legacyPath = params.path;
+  const legacyRequest = params.request;
+  const handledLegacy = useRef<string | null>(null);
   useEffect(() => {
-    if (!pendingRouteRequest) return;
-    const slug = routeSectionSlug;
-    if (slug && !sectionFromSlug(slug)) {
-      logNavParamDrop({ screen: 'browse', param: 'section', actual: slug });
+    if (legacySection == null && legacyPath == null && legacyRequest == null) {
+      handledLegacy.current = null;
+      return;
     }
-    consumedRouteRequest.current = routeRequest;
-    if (requestedSection) setSection(requestedSection);
-  }, [pendingRouteRequest, requestedSection, routeRequest, routeSectionSlug]);
-
-  useEffect(() => {
-    setSection((current) => resolveInterestSection(interests, current));
-  }, [interests]);
-
-  useFocusEffect(useCallback(() => {
-    setActiveSection(renderedSection);
-  }, [renderedSection, setActiveSection]));
-
-  const changeSection = useCallback((next: typeof section) => {
-    setSection(next);
-    openBrowse(next);
-  }, []);
-
-  useEffect(() => {
-    checkDrillOutcome(renderedSection, drillPath);
-  }, [renderedSection, drillPath]);
-
-  if (!core) return <ScreenSkeleton />;
-
+    const signature = JSON.stringify([legacySection, legacyPath, legacyRequest]);
+    if (handledLegacy.current === signature) return;
+    handledLegacy.current = signature;
+    router.setParams({ section: undefined, path: undefined, request: undefined });
+    router.push({ pathname: '/categories', params: {
+      ...(legacySection != null ? { section: legacySection } : {}),
+      ...(legacyPath != null ? { path: legacyPath } : {}),
+      ...(legacyRequest != null ? { request: legacyRequest } : {}),
+    } });
+  }, [legacyPath, legacyRequest, legacySection]);
   return (
-    <Screen>
-      <View style={screenEdgeStyle(theme)}>
-        <View style={{ gap: theme.spacing(3) }}>
-          <View>
-            {sectionOptions.length > 1 ? (
-              <SegmentedControl options={sectionOptions} value={renderedSection} onChange={changeSection} />
-            ) : null}
-          </View>
-          <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
-            <Button
-              title="Search rates"
-              icon="search"
-              style={{ flexGrow: 1, flexBasis: 140 }}
-              onPress={() => openSearch(renderedSection)}
-            />
-            <Button title={profileCount ? `Options · ${profileCount}` : 'Options'} variant="ghost" onPress={() => setToolsOpen(true)} />
-          </Row>
-        </View>
+    <NavigationHub title="Find a rate" description="Choose a product type to search and compare." surface="rates.hub" route="/browse" actions={actions}>
+      <View>
+        {categories.map(({ value }) => (
+          <DestinationRow key={value} title={SECTIONS[value].title} description={SECTIONS[value].blurb}
+            icon={value === 'Mortgage' ? 'home' : value === 'Savings' ? 'wallet' : 'time'} onPress={() => openSearch(value)} />
+        ))}
       </View>
-      <View style={{ flex: 1 }}>
-        {/* Key on the drill path only — switching SECTION updates HierarchyView in
-            place (FlashList recycles, no teardown/blank), so section changes are
-            instant. Drilling still remounts to reset list/scroll cleanly. */}
-        <HierarchyView key={drillPath.join('.') || 'root'} section={renderedSection} path={drillPath} />
-      </View>
-      <LedgerSheet visible={toolsOpen} title="Explore options" onClose={() => setToolsOpen(false)}>
-        <ScrollView contentContainerStyle={{ gap: theme.spacing(2), paddingBottom: theme.spacing(4) }}>
-          <Button title={profileCount ? `Match settings · ${profileCount} active` : 'Match settings'} icon="person-circle-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/profile'); }} />
-          <Button title="Products without listed rates" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/catalogue'); }} />
-          <Button title="Banks" icon="business-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/banks'); }} />
-          <Button title="My scenario" icon="calculator-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push({ pathname: '/calculator', params: { section: renderedSection } }); }} />
-        </ScrollView>
-      </LedgerSheet>
-    </Screen>
+      <LedgerSection title="Your matches">
+        <LedgerText tone="mutedInk">{filterCount ? 'Your profile is applied when finding products.' : 'Set your needs to narrow the products you see.'}</LedgerText>
+        <DestinationRow title="Matched rates" description="A starting point based on your needs." icon="filter" onPress={() => router.push('/matches')} />
+        <LedgerAction label="Edit profile and product types" variant="quiet" onPress={() => router.push('/profile')} />
+      </LedgerSection>
+      <LedgerSection title="Other ways to browse">
+        <DestinationRow title="Banks" description="Find a bank and view its products." icon="bank" onPress={() => router.push('/banks')} />
+        <DestinationRow title="Product categories" description="Browse by loan type, term or account features." icon="layers" onPress={() => openBrowse(section)} />
+        <DestinationRow title="Products without listed rates" description="View product details when no rate is published." icon="document" onPress={() => router.push('/catalogue')} />
+      </LedgerSection>
+    </NavigationHub>
   );
 }

@@ -1,6 +1,9 @@
 import { sanitizeNativeIntentPath } from '../app/+native-intent';
 
 describe('native intent boundary', () => {
+  it.each(['market', 'tools', 'matches', 'bank-rates', 'categories'])('opens the new %s destination', (route) => {
+    expect(sanitizeNativeIntentPath(`arrates://${route}`)).toBe(`/${route}`);
+  });
   it('normalizes supported app links to internal routes', () => {
     expect(sanitizeNativeIntentPath('arrates://product/A%7C1?ri=2')).toBe('/product/A%7C1?ri=2');
     expect(sanitizeNativeIntentPath('arrates://product/rate%25special')).toBe('/product/rate%25special');

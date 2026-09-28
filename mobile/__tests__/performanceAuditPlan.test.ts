@@ -160,6 +160,11 @@ describe('deep performance audit plan', () => {
     const scenarios = new Set(steps.map((step) => step.scenarioId));
     expect(scenarios).toEqual(new Set([
       'route.onboarding',
+      'route.home',
+      'route.rates',
+      'route.market',
+      'route.tools',
+      'route.bank-rates',
       'route.today',
       'route.browse',
       'route.changes',
@@ -241,7 +246,7 @@ describe('deep performance audit plan', () => {
     const registered = new Set<string>();
     for (const file of files) {
       const source = fs.readFileSync(file, 'utf8');
-      if (!source.includes('usePerformanceAuditSurface(')) continue;
+      if (!source.includes('usePerformanceAuditSurface(') && !source.includes('<NavigationHub ')) continue;
       for (const match of source.matchAll(actionPattern)) registered.add(match[1]);
     }
     const planned = new Set(
@@ -253,6 +258,36 @@ describe('deep performance audit plan', () => {
     expected.add('redirect.node.verify');
     expect([...expected].filter((action) => !planned.has(action))).toEqual([]);
     expect([...planned].filter((action) => !expected.has(action))).toEqual([]);
+  });
+
+  test('requires current hubs and their real destination actions instead of passing on former home or browse surfaces', () => {
+    const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
+    const step = (id: string) => steps.find(item => item.semanticActionId === id);
+    for (const [id, expectedPath, expectedSurface] of [
+      ['home.open', '/', 'home.hub'],
+      ['rates.open', '/browse', 'rates.hub'],
+      ['market.open', '/market', 'market.hub'],
+      ['tools.open', '/tools', 'tools.hub'],
+      ['bank-rates.open', '/bank-rates', 'bank-rates.dashboard'],
+      ['today.open', '/matches', 'today.hero'],
+      ['browse.open', '/categories', 'browse.hierarchy'],
+      ['redirect.node.verify', '/categories', 'browse.hierarchy'],
+      ['not-found.home', '/', 'home.hub'],
+      ['redirect.root.verify', '/', 'home.hub'],
+    ]) {
+      expect(step(id)).toMatchObject({ expectedPath, expectedSurface });
+    }
+    for (const [id, expectedPath, expectedSurface] of [
+      ['home.rates.open', '/browse', 'rates.hub'],
+      ['rates.categories.open', '/categories', 'browse.hierarchy'],
+      ['market.outlook.open', '/research', 'outlook.dashboard'],
+      ['tools.calculator.open', '/calculator', 'calculator.results'],
+    ]) {
+      expect(step(id)).toMatchObject({ depth: 1, expectedPath, expectedSurface });
+    }
+    expect(step('bank-rates.section.next')?.readiness).toContain('graphics');
+    expect(steps.filter(item => item.expectedPath === '/').every(item => item.expectedSurface === 'home.hub')).toBe(true);
+    expect(steps.filter(item => item.expectedPath === '/browse').every(item => item.expectedSurface === 'rates.hub')).toBe(true);
   });
 
   test('opens the RBA page before exercising its optional market chart controls', () => {

@@ -1,24 +1,26 @@
 import type { LedgerIconName } from '../components/icons/LedgerIcon';
 
 /** expo-router tab route names under `app/(tabs)/` (display order). */
-export const TAB_ROUTES = ['index', 'browse', 'passthrough', 'watchlist'] as const;
+export const TAB_ROUTES = ['index', 'browse', 'watchlist', 'market', 'tools'] as const;
 
 export type TabRouteName = (typeof TAB_ROUTES)[number];
 
 /** Human-readable labels for the bottom navigation bar. */
 export const TAB_LABELS: Record<TabRouteName, string> = {
-  index: 'Today',
-  browse: 'Explore',
-  passthrough: 'Changes',
-  watchlist: 'My rates',
+  index: 'Home',
+  browse: 'Rates',
+  watchlist: 'Saved',
+  market: 'Market',
+  tools: 'Tools',
 };
 
 /** Semantic Rate Ledger glyphs for every primary destination. */
 export const TAB_LEDGER_ICONS: Record<TabRouteName, LedgerIconName> = {
-  index: 'today',
-  browse: 'explore',
-  watchlist: 'my-rates',
-  passthrough: 'changes',
+  index: 'home',
+  browse: 'search',
+  watchlist: 'star',
+  market: 'changes',
+  tools: 'calculator',
 };
 
 export function isTabRouteName(name: string): name is TabRouteName {

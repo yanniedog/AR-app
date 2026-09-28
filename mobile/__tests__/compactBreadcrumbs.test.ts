@@ -1,12 +1,12 @@
 import { buildBreadcrumbs } from '../src/lib/breadcrumbs';
 import { compactBreadcrumbs, shortBreadcrumbLabel } from '../src/lib/compactBreadcrumbs';
 
-const trail = buildBreadcrumbs({ pathname: '/browse', section: 'Mortgage', path: ['OO', 'PI', 'VARIABLE'] });
+const trail = buildBreadcrumbs({ pathname: '/categories', section: 'Mortgage', path: ['OO', 'PI', 'VARIABLE'] });
 
 it.each([320, 390, 768, 1440])('caps even a wide %spx trail at two short labels without losing ancestors', (width) => {
   const { visible, hidden } = compactBreadcrumbs(trail, width, 1);
   expect(visible.map((crumb) => shortBreadcrumbLabel(crumb.label))).toEqual(['P&I', 'Variable']);
-  expect(hidden.map((crumb) => crumb.label)).toEqual(['Explore', 'Home loans', 'Owner-occupied']);
+  expect(hidden.map((crumb) => crumb.label)).toEqual(['Rates', 'Home loans', 'Owner-occupied']);
   expect([...hidden, ...visible]).toEqual(trail);
 });
 

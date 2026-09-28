@@ -5,6 +5,10 @@ import { ProfileEditor } from '../src/components/ProfileEditor';
 import { CustomerProfilePanel } from '../src/components/CustomerProfilePanel';
 import { ScreenScrollView } from '../src/components/Screen';
 import { AppText, Button, Card } from '../src/components/ui';
+import { LedgerRow, LedgerSection } from '../src/components/ledger';
+import { LedgerIcon } from '../src/components/icons/LedgerIcon';
+import { SECTION_ORDER, SECTIONS } from '../src/constants';
+import { toggleInterest } from '../src/data/interests';
 import {
   EMPTY_PROFILE,
   PROFILE_FEATURE_OPTIONS,
@@ -86,12 +90,18 @@ export default function Profile() {
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       onLayout={() => setLayoutReady(true)}
     >
-      <CustomerProfilePanel />
+      <LedgerSection title="Product types" deck="Choose at least one. These are the products you see across the app." ruled={false}>
+        {SECTION_ORDER.map(section => {
+          const selected = interests.includes(section);
+          const disabled = selected && interests.length === 1;
+          return <LedgerRow key={section} title={SECTIONS[section].title}
+            accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled }}
+            disabled={disabled} onPress={() => setPref('interests', toggleInterest(interests, section))}
+            trailing={<LedgerIcon name={selected ? 'checkbox' : 'checkbox-empty'} size={24} color={theme.colors.primary} />} />;
+        })}
+      </LedgerSection>
       <AppText variant="body" color="textMuted" style={{ marginBottom: 16, lineHeight: 22 }}>
-        Pick the product attributes that match your situation — owner-occupied, P&I, your LVR —
-        and must-have features like an offset account or early repayment. They apply as default
-        search filters across the app, so you never have to re-select them. Leave a group empty
-        to see everything.
+        Choose the features you need. Your choices apply across products, matches and charts.
       </AppText>
       <Card>
         <ProfileEditor
@@ -109,6 +119,7 @@ export default function Profile() {
           />
         </View>
       ) : null}
+      <CustomerProfilePanel />
     </ScreenScrollView>
   );
 }

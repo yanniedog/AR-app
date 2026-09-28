@@ -8,5 +8,5 @@ const browseRequestSession = Date.now().toString(36);
 export const buildBrowseRouteParams = (section: SectionKey, path: string[] = []) => ({
   section: SECTIONS[section].slug,
   request: `${browseRequestSession}-${++browseRequestSequence}`,
-  ...(path.length ? { path: path.join('.') } : {}),
+  path: path.join('.'),
 });
