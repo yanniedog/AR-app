@@ -238,8 +238,8 @@ export function BankHistoryChart({
   }, [activeIndex, auditActionsRef, handleSlicePress, plotDates, window]);
 
   const hasPlottableValues = plotPoints.some(
-    (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean),
-  );
+    (p) => isFiniteNumber(p.min) || isFiniteNumber(p.max) || isFiniteNumber(p.mean) || isFiniteNumber(p.median),
+  ) || !!highlightValues?.some(isFiniteNumber);
   useEffect(() => {
     if (plotDates.length && plotPoints.length && !hasPlottableValues) {
       debugLog.warn('BankHistoryChart', 'no finite plot values');

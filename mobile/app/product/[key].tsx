@@ -38,9 +38,10 @@ import { normalizedProductFacts } from '../../src/data/productFacts';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
 import { sortRows, findEligibleByKey } from '../../src/data/selectors';
 import { selectBankHistoryChartModel } from '../../src/data/historySelectors';
+import { mergeProductHistoryTimeline, rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import {
   countFiniteSeriesPoints,
-  forwardFillSeriesRecord,
+  productSeriesRecordForChart,
   productSeriesRecordWithCurrent,
 } from '../../src/data/productHistory';
 import { ensurePermissions } from '../../src/data/notifications';
@@ -49,6 +50,7 @@ import { isSavedRate } from '../../src/data/savedRates';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
 import { useUserRateScenario } from '../../src/hooks/useUserRateScenario';
 import { StaySwitchChart } from '../../src/components/scenario/StaySwitchChart';
 import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
@@ -114,11 +116,16 @@ export default function ProductDetail() {
   const depositRankMetric = useStore((s) => s.prefs.depositRankMetric);
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const historyEnabled = useStore((s) => effectiveHistoryRibbon(s.prefs));
+  const rateHistory = useBankRateHistory(historyEnabled && !!found);
   const showBankInsights = effectiveBankInsights();
   const historyBanks = useStore((s) => s.historyBanks);
   const bankInsights = useStore((s) => s.bankInsights);
   const bankInsightsError = useStore((s) => s.bankInsightsError);
   const productHistory = useStore((s) => s.productHistory);
+  const ledgerRevision = useRef({ payload: productHistory, version: 0 });
+  if (ledgerRevision.current.payload !== productHistory) {
+    ledgerRevision.current = { payload: productHistory, version: ledgerRevision.current.version + 1 };
+  }
   const productHistoryError = useStore((s) => s.productHistoryError);
   const ensureHistoryBanks = useStore((s) => s.ensureHistoryBanks);
   const ensureBankInsights = useStore((s) => s.ensureBankInsights);
@@ -211,9 +218,12 @@ export default function ProductDetail() {
     );
   }, [bankInsights, core, coreIntegrity, detailsProducts, includeNonStandard, suitabilityRevision]);
 
-  const historyModel = useMemo(() => {
+  const marketHistoryModel = useMemo(() => {
     void suitabilityRevision;
     if (!historyEnabled || !core || !found) return null;
+    if (rateHistory.updating || rateHistory.failed) return null;
+    const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
+    if (detailed || rateHistory.richHistory) return detailed;
     return selectBankHistoryChartModel(
       {
         core,
@@ -236,19 +246,32 @@ export default function ProductDetail() {
     historyEnabled,
     includeNonStandard,
     suitabilityRevision,
+    rateHistory.snapshots,
+    rateHistory.historyAvailable,
+    rateHistory.richHistory,
+    rateHistory.updating,
+    rateHistory.failed,
   ]);
+  const historyModel = useMemo(() => !historyEnabled || !found ? null : mergeProductHistoryTimeline(
+    marketHistoryModel, found.section, productHistory?.run_dates, core?.run_date,
+  ), [marketHistoryModel, found, historyEnabled, productHistory, core?.run_date]);
 
   // Single-day fallback is a misleading solid RBA block; wait for multi-day context
   // when Standard-only mode is relying on bank insights that have not arrived yet.
   // Stop waiting once insights fail so the empty/collecting copy can show.
   const historyWaitingForInsights =
     historyEnabled &&
+    !rateHistory.historyAvailable &&
+    !rateHistory.updating &&
+    !rateHistory.failed &&
     !includeNonStandard &&
     showBankInsights &&
     !explorerInsights &&
     !bankInsightsError &&
     (!historyModel || historyModel.dates.length < 2);
   const historyContentRevision = [
+    rateHistory.revision,
+    ledgerRevision.current.version,
     coreSha ?? core?.run_date ?? 'no-core',
     historyBanksSha ?? 'no-history-banks',
     bankInsightsSha ?? 'no-bank-history',
@@ -352,7 +375,7 @@ export default function ProductDetail() {
         id: 'product.history-graphic',
         kind: 'graphic',
         required: false,
-        status: historyWaitingForInsights
+        status: rateHistory.failed ? 'error' : historyWaitingForInsights || rateHistory.updating
           ? 'pending'
           : !historyModel
             ? 'ready'
@@ -361,7 +384,8 @@ export default function ProductDetail() {
               : currentHistoryGraphicEvidence.availability === 'rendered'
                 ? 'ready'
                 : 'error',
-        error: !historyWaitingForInsights && currentHistoryGraphicEvidence?.availability === 'unavailable'
+        error: rateHistory.failed ? 'Market history could not be prepared'
+          : !historyWaitingForInsights && currentHistoryGraphicEvidence?.availability === 'unavailable'
           ? 'Product history has no finite values to plot'
           : null,
         expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
@@ -439,9 +463,7 @@ export default function ProductDetail() {
     currentBest,
   );
   const productSeries = {
-    values: chartDates.length
-      ? forwardFillSeriesRecord(seededProductValues, chartDates)
-      : seededProductValues,
+    values: productSeriesRecordForChart(productHistory, productKey, chartDates, core?.run_date, currentBest),
     label: `${row.product_name} · ${PRODUCT_HISTORY_SERIES_LABEL}`,
     valueScope: 'best · all tiers',
     color: productInk,
@@ -648,14 +670,14 @@ export default function ProductDetail() {
             </AppText>
           ) : null}
           {historyEnabled ? (
-            historyWaitingForInsights ? (
+            !rateHistory.failed && (historyWaitingForInsights || rateHistory.updating) && (!historyModel || historyModel.dates.length < 2) ? (
               <AppText variant="small" color="textMuted">
                 Loading market history…
               </AppText>
             ) : historyModel && historyModel.dates.length >= 2 ? (
               <>
                 <AppText variant="tiny" color="textFaint" style={{ marginBottom: 8 }}>
-                  {row.product_name} vs all {meta.title.toLowerCase()} rates
+                  {row.product_name} vs {meta.title.toLowerCase()} rates matching your settings
                 </AppText>
                 <ChartErrorBoundary name="ProductHistoryChart">
                   <BankHistoryChart
@@ -673,6 +695,13 @@ export default function ProductDetail() {
                   />
                 </ChartErrorBoundary>
                 <HistoryLegend productColor={productInk} sectionColor={sectionInk} />
+                {rateHistory.updating || rateHistory.failed || rateHistory.missingDates.length ? (
+                  <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
+                    {rateHistory.failed ? 'Market history could not be prepared. Try refreshing the data.'
+                      : rateHistory.updating ? 'Updating market history for your settings…'
+                        : 'Missing historical observations remain blank.'}
+                  </AppText>
+                ) : null}
                 {productHistoryError && observedProductPoints < 2 ? (
                   <Row style={{ justifyContent: 'space-between', marginTop: 8 }}>
                     <AppText variant="tiny" color="danger" style={{ flex: 1 }}>
@@ -693,7 +722,8 @@ export default function ProductDetail() {
               </>
             ) : (
               <AppText variant="small" color="textMuted">
-                Product-wide history appears once more daily observations are available.
+                {rateHistory.failed ? 'Historical rates could not be prepared. Try refreshing the data.'
+                  : 'Product-wide history appears once more daily observations are available.'}
               </AppText>
             )
           ) : (

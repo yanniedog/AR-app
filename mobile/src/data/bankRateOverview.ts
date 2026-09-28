@@ -9,7 +9,10 @@ export type RateStatistic = 'min' | 'mean' | 'median' | 'max';
  * coordinates within a representable, finite range. */
 export const MAX_BANK_RATE_PERCENT = Number.MAX_SAFE_INTEGER / 10_000_000;
 export interface RateSummary { min: number; mean: number; median: number; max: number; count: number }
-export type BankRateSnapshot = Partial<Record<SectionKey, Record<string, RateSummary>>>;
+export type BankRateSnapshot = Partial<Record<SectionKey, Record<string, RateSummary>>> & {
+  /** Exact pooled tier statistics; bank medians cannot reconstruct a section median. */
+  sectionTotals?: Partial<Record<SectionKey, RateSummary>>;
+};
 export interface BankRateScope { rows: Record<SectionKey, RateRow[]>; signatures: Record<SectionKey, Set<string>> }
 export const RATE_OBSERVATION_FIELDS = new Set(['rate', 'comparison_rate', 'ongoing_rate', 'last_updated', 'rate_index', 'exact_alert_eligible', 'bank_rate_tier']);
 export interface BankRatePoint { date: string; value: number; count: number }
@@ -49,6 +52,17 @@ export function summarizeBankRates(rows: RateRow[]): Record<string, RateSummary>
   return Object.fromEntries([...banks].map(([provider, values]) => [provider, summarizeRateValues(values)]));
 }
 
+/** Use the admitted tiers themselves, preserving each observation's weight. */
+export function summarizeSectionRates(rows: RateRow[]): RateSummary | undefined {
+  const values: number[] = [];
+  for (const row of rows) {
+    const value = toFraction(row.rate);
+    if (value == null || !Number.isFinite(value) || value < 0 || value * 100 > MAX_BANK_RATE_PERCENT) continue;
+    values.push(value * 100);
+  }
+  return values.length ? summarizeRateValues(values) : undefined;
+}
+
 /** Values are percentage points; the caller owns this array. */
 export function summarizeRateValues(values: number[]): RateSummary {
   values.sort((a, b) => a - b);
@@ -60,9 +74,16 @@ export function summarizeRateValues(values: number[]): RateSummary {
 }
 
 export function snapshotBankRates(scope: BankRateScope, historicalCore?: CorePayload): BankRateSnapshot {
-  return Object.fromEntries(SECTION_KEYS.map(section => [section, summarizeBankRates(historicalCore
-    ? historicalCore.sections[section].rates.filter(row => scope.signatures[section].has(rateTierSignature(row)))
-    : scope.rows[section])]));
+  const snapshot: BankRateSnapshot = { sectionTotals: {} };
+  for (const section of SECTION_KEYS) {
+    const rows = historicalCore
+      ? historicalCore.sections[section].rates.filter(row => scope.signatures[section].has(rateTierSignature(row)))
+      : scope.rows[section];
+    snapshot[section] = summarizeBankRates(rows);
+    const total = summarizeSectionRates(rows);
+    if (total) snapshot.sectionTotals![section] = total;
+  }
+  return snapshot;
 }
 
 export function buildBankRateChart(

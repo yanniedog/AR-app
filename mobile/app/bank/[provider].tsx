@@ -31,6 +31,7 @@ import {
   type ProductRateMove,
 } from '../../src/data/productHistory';
 import { excludeTokenDepositRates, sortRows } from '../../src/data/selectors';
+import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
@@ -40,6 +41,7 @@ import {
   auditActionString,
 } from '../../src/lib/performanceAuditActionParams';
 import { useSuitabilityRevision } from '../../src/hooks/useSuitabilityRevision';
+import { useBankRateHistory } from '../../src/hooks/useBankRateHistory';
 import { moveTone, moveVerb } from '../../src/lib/moveSemantics';
 import { effectiveBankInsights } from '../../src/lib/proAccess';
 import { yieldToUi } from '../../src/lib/yieldToUi';
@@ -143,6 +145,7 @@ export default function BankDetail() {
   const mortgageRateMetric = useStore((s) => s.prefs.mortgageRateMetric);
   const includeNonStandard = useStore((s) => s.prefs.includeNonStandard);
   const showBankInsights = effectiveBankInsights();
+  const rateHistory = useBankRateHistory(showBankInsights);
   const detailsProducts = useStore((s) => s.details?.products ?? null);
   const suitabilityRevision = useSuitabilityRevision();
   const bankInsights = useStore((s) => s.bankInsights);
@@ -277,11 +280,12 @@ export default function BankDetail() {
     [provider, visibleBankInsights],
   );
 
-  const chartSections = useMemo(
-    () =>
-      SECTION_ORDER.filter((section) => !!visibleBankInsights?.banks?.[provider]?.[section]),
-    [provider, visibleBankInsights],
-  );
+  const chartModels = useMemo(() => Object.fromEntries(SECTION_ORDER.map(section => [section,
+    rateHistory.updating || rateHistory.failed ? null
+      : rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, section, provider)
+        : bankTrendChartModel(visibleBankInsights, provider, section),
+  ])), [provider, rateHistory.snapshots, rateHistory.updating, rateHistory.failed, rateHistory.historyAvailable, visibleBankInsights]);
+  const chartSections = SECTION_ORDER.filter(section => !!chartModels[section]);
   const [chartSection, setChartSection] = useState<SectionKey | null>(null);
   const activeChartSection =
     chartSection && chartSections.includes(chartSection)
@@ -290,14 +294,9 @@ export default function BankDetail() {
         ? focusSection
         : chartSections[0] ?? null;
 
-  const chartModel = useMemo(
-    () =>
-      activeChartSection
-        ? bankTrendChartModel(visibleBankInsights, provider, activeChartSection)
-        : null,
-    [activeChartSection, provider, visibleBankInsights],
-  );
+  const chartModel = activeChartSection ? chartModels[activeChartSection] : null;
   const historyContentRevision = [
+    rateHistory.revision,
     bankInsightsSha ?? 'no-bank-history-sha',
     provider,
     activeChartSection ?? 'none',
@@ -508,21 +507,23 @@ export default function BankDetail() {
         id: 'lender.history-data',
         kind: 'data',
         required: false,
-        status: showBankInsights && !bankInsights ? 'pending' : 'ready',
+        status: rateHistory.failed ? 'error' : rateHistory.updating || (showBankInsights && !rateHistory.historyAvailable && !bankInsights) ? 'pending' : 'ready',
+        error: rateHistory.failed ? 'Historical rates could not be prepared' : null,
         actualCount: chartModel?.dates.length ?? 0,
       },
       {
         id: 'lender.history-graphic',
         kind: 'graphic',
         required: false,
-        status: !chartModel
+        status: rateHistory.failed ? 'error' : rateHistory.updating ? 'pending' : !chartModel
           ? 'ready'
           : !currentHistoryGraphicEvidence
             ? 'pending'
             : currentHistoryGraphicEvidence.availability === 'rendered'
               ? 'ready'
               : 'error',
-        error: currentHistoryGraphicEvidence?.availability === 'unavailable'
+        error: rateHistory.failed ? 'Historical rates could not be prepared'
+          : currentHistoryGraphicEvidence?.availability === 'unavailable'
           ? 'Lender history has no finite values to plot'
           : null,
         expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
@@ -722,6 +723,15 @@ export default function BankDetail() {
           </Card>
         ) : null}
 
+        {showBankInsights && (rateHistory.updating || rateHistory.failed) ? (
+          <Card style={{ marginBottom: 16 }}>
+            <AppText variant="h3">Rate history</AppText>
+            <AppText variant="small" color="textMuted" accessibilityRole="alert">
+              {rateHistory.failed ? 'Historical rates could not be prepared. Try refreshing the data.'
+                : 'Updating historical rates for your settings…'}
+            </AppText>
+          </Card>
+        ) : null}
         {showBankInsights ? (
           chartModel && activeChartSection ? (
             <Card style={{ marginBottom: 16 }}>
@@ -736,7 +746,9 @@ export default function BankDetail() {
                 />
               ) : null}
               <AppText variant="tiny" color="textFaint" style={{ marginTop: 6, marginBottom: 4 }}>
-                Band spans this lender&apos;s sharpest offer to its typical rate
+                {rateHistory.historyAvailable
+                  ? 'Range, mean and median of this lender’s advertised rates matching your settings'
+                  : 'Band spans this lender’s sharpest offer to its typical rate'}
               </AppText>
               <ChartErrorBoundary name="BankTrendChart">
                 <BankHistoryChart
@@ -752,6 +764,7 @@ export default function BankDetail() {
                   onGraphicReady={onHistoryGraphicReady}
                 />
               </ChartErrorBoundary>
+              {rateHistory.missingDates.length ? <AppText variant="tiny" color="textMuted">Missing historical observations remain blank.</AppText> : null}
               {rawBankEvents.length ? (
                 <>
                   <Divider style={{ marginVertical: 10 }} />
