@@ -272,7 +272,8 @@ describe('store error recovery', () => {
   });
 
   it.each([
-    { label: 'current', schemaVersion: 3, rebuild: false },
+    { label: 'current', schemaVersion: 4, rebuild: false },
+    { label: 'legacy unspecified LVR', schemaVersion: 3, rebuild: true },
     { label: 'legacy conditionality', schemaVersion: 2, rebuild: true },
   ])('handles the $label cached suitability index without resetting the payload', async ({ schemaVersion, rebuild }) => {
     const ensureDetails = jest.fn(async () => {});

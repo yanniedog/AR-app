@@ -1,6 +1,6 @@
 import type { CorePayload, DetailsPayload, RateRow } from '../types';
 import { SECTION_ORDER } from '../constants';
-import { isBroadlyAvailable, isConditionalDepositRate } from './format';
+import { isBroadlyAvailable, isConditionalDepositRate, isNonStandard } from './format';
 import { setSuitabilityAllowed } from './suitabilityGate';
 import { yieldToUi } from '../lib/yieldToUi';
 import { debugLog } from '../lib/debugLog';
@@ -20,9 +20,9 @@ export type SuitabilityIndex = {
   allowed: Set<string>;
 };
 
-// Schema 2 could omit ordinary siblings when a conditional row appeared first.
-// Rebuild those persisted product-key gates from the matching cached details.
-export const SUITABILITY_INDEX_SCHEMA_VERSION = 3 as const;
+// Schema 3 admitted mortgages with unspecified LVR. Rebuild from matching
+// cached details so upgraded installations use the same policy as fresh ones.
+export const SUITABILITY_INDEX_SCHEMA_VERSION = 4 as const;
 
 export type PersistedSuitabilityIndex = {
   schemaVersion: typeof SUITABILITY_INDEX_SCHEMA_VERSION;
@@ -122,6 +122,7 @@ function suitabilityIdentity(row: RateRow): string {
     row.provider ?? '',
     row.product_name ?? '',
     row.account_class ?? '',
+    isNonStandard(row),
     isConditionalDepositRate(row),
   ]);
 }
