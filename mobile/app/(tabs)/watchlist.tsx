@@ -430,11 +430,11 @@ export default function MyRates() {
       <ScreenScrollView
         ref={scrollRef}
         showDataHealthBanner={false}
-        contentContainerStyle={{ padding: 16, paddingBottom: snack ? 96 : 32, gap: 16 }}
+        contentContainerStyle={{ paddingBottom: snack ? 96 : 48, gap: 24 }}
       >
         <SectionHeading
           title="My rates"
-          subtitle="Your private position and exact watched tiers"
+          subtitle="Your rates and saved products"
         />
 
         {positions.length ? positions.map((position) => {
@@ -443,20 +443,20 @@ export default function MyRates() {
             <Card
               key={position.section}
               variant="outlined"
-              style={{ gap: theme.spacing(2), borderColor: `${meta.accentColor}55` }}
+              style={{ gap: theme.spacing(3) }}
             >
-              <Row style={{ justifyContent: 'space-between' }}>
+              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
                 <AppText variant="small" weight="700">Your {meta.title.toLowerCase()}</AppText>
                 <Pressable
                   onPress={() => openRateEditor(position.section)}
                   accessibilityRole="button"
                   accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
-                  hitSlop={10}
+                  style={{ minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' }}
                 >
                   <AppText variant="small" color="primary" weight="700">Edit</AppText>
                 </Pressable>
               </Row>
-              <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
+              <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
                 <View>
                   <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
                   <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
@@ -513,10 +513,10 @@ export default function MyRates() {
         ) : null}
 
         <SectionHeading
-          title="Watched tiers"
+          title="Saved rates"
           subtitle={items.length
-            ? `${items.length} watched ${items.length === 1 ? 'entry' : 'entries'} · exact tiers are never substituted`
-            : 'Save a rate tier to keep its changes here'}
+            ? `${items.length} saved ${items.length === 1 ? 'rate' : 'rates'}`
+            : 'Save a rate to follow its changes'}
           action={items.length >= 2 ? (
             <Button
               title={selectMode ? 'Done' : 'Compare'}

@@ -5,7 +5,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FilterSheet } from '../src/components/FilterSheet';
@@ -15,6 +15,7 @@ import { Screen, screenEdgeStyle, screenScrollContentStyle } from '../src/compon
 import { ToolbarIconButton } from '../src/components/ToolbarIconButton';
 import { SearchBar } from '../src/components/controls';
 import { AppText, Button, Card, Chip, Row } from '../src/components/ui';
+import { LedgerSheet } from '../src/components/ledger';
 import { SECTIONS, SECTION_ORDER } from '../src/constants';
 import {
   activeFilterCount,
@@ -84,6 +85,7 @@ export default function Search() {
   const theme = useTheme();
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{
     section: string | string[];
     path?: string | string[];
@@ -162,6 +164,7 @@ export default function Search() {
       : profileToFilters(useStore.getState().prefs.profileFilters, section, EMPTY_FILTERS),
   );
   const [filterOpen, setFilterOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [selectMode, setSelectMode] = useState(compareRaw === '1');
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -421,14 +424,8 @@ export default function Search() {
           {sortOptions.map((o) => (
             <Chip key={o.key} label={o.label} selected={sortKey === o.key} onPress={() => setSortKey(o.key)} />
           ))}
-          <Chip
-            icon={searchSub ? 'notifications' : 'notifications-outline'}
-            label={searchSub ? 'Search alert on' : 'Alert this search'}
-            selected={!!searchSub}
-            onPress={() => void onToggleSearchAlert()}
-          />
+          <Button title="More" variant="ghost" onPress={() => setToolsOpen(true)} />
         </Row>
-        <SearchReportExport disabled={searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
         <AppText variant="tiny" color="textFaint">
           {rows.length} {rows.length === 1 ? 'product' : 'products'}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
@@ -469,7 +466,7 @@ export default function Search() {
           extraData={listRevision}
           keyExtractor={(item, i) => `${item.product_key}-${item.rate_index ?? i}`}
           contentContainerStyle={{
-            ...screenScrollContentStyle(theme, insets.bottom),
+            ...screenScrollContentStyle(theme, insets.bottom, width),
             paddingBottom: theme.spacing(6) + insets.bottom + theme.spacing(8),
           }}
           renderItem={({ item }) => (
@@ -550,6 +547,17 @@ export default function Search() {
         detailsProducts={details?.products}
         onApply={setFilters}
       />
+      <LedgerSheet visible={toolsOpen} title="Search tools" onClose={() => setToolsOpen(false)}>
+        <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>
+          <Button
+            icon={searchSub ? 'notifications' : 'notifications-outline'}
+            title={searchSub ? 'Turn off search alert' : 'Alert this search'}
+            variant="ghost"
+            onPress={() => void onToggleSearchAlert()}
+          />
+          <SearchReportExport disabled={searchPending || query !== debouncedQuery} request={{ section, path, hierarchyScoped, query: debouncedQuery, filters: effectiveFilters, sort: sortKey, depositMetric: depositRankMetric, mortgageMetric: mortgageRateMetric, deepSearch: deepSearchActive }} />
+        </ScrollView>
+      </LedgerSheet>
     </Screen>
   );
 }

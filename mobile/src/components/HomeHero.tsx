@@ -1,5 +1,5 @@
-import React, { useEffect, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import React, { useEffect, useState, type ReactNode } from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -7,9 +7,8 @@ import type { PayloadCoverage, PayloadSource } from '../types';
 import type { AssetState } from '../data/assetState';
 import { mapDisplayEvidence } from '../data/displayEvidence';
 import { useTheme } from '../theme/ThemeProvider';
-import { AppText, Row } from './ui';
 import { LedgerIcon } from './icons/LedgerIcon';
-import { DataEvidenceLine } from './ledger';
+import { LedgerRow, LedgerSheet, LedgerText } from './ledger';
 
 const DATA_CHANGE_TIMING = { duration: 160, easing: Easing.bezier(0.2, 0, 0, 1) };
 
@@ -46,7 +45,6 @@ export function HomeHero({
   runAgeLabel,
   source,
   offline,
-  dataKey,
   onShare,
   pendingIngest = false,
   coverageLabel,
@@ -61,7 +59,7 @@ export function HomeHero({
   runAgeLabel: string;
   source: PayloadSource;
   offline: boolean;
-  /** Changes when a new payload is installed — drives spring motion. */
+  /** Identifies the installed payload. */
   dataKey: string;
   /** Shares today's headline rates (system share sheet). */
   onShare?: () => void;
@@ -76,6 +74,7 @@ export function HomeHero({
   scheduleLabel?: string | null;
 }) {
   const theme = useTheme();
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const evidence = mapDisplayEvidence({
     source,
     offline,
@@ -87,60 +86,65 @@ export function HomeHero({
     overdueAfterUtc,
     scheduleLabel,
   });
-  const datePulse = useSharedValue(1);
-  const reducedMotion = useReducedMotion();
-
-  useEffect(() => {
-    if (reducedMotion !== false) {
-      datePulse.value = 1;
-      return;
-    }
-    datePulse.value = 0.98;
-    datePulse.value = withTiming(1, DATA_CHANGE_TIMING);
-  }, [dataKey, datePulse, reducedMotion]);
-
-  const dateStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: datePulse.value }],
-  }));
+  const evidenceTone = evidence.tone === 'danger'
+    ? 'danger'
+    : evidence.tone === 'caution'
+      ? 'clay'
+      : 'mutedInk';
 
   return (
-    <View
-      style={{
-        paddingVertical: 2,
-      }}
-    >
-      <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <View style={{ flex: 1, paddingRight: 8 }}>
-          <Animated.View style={dateStyle}>
-            <AppText variant="tiny" color="textMuted" style={{ marginTop: 3 }}>
-              {runDateLabel} · {runAgeLabel}
-            </AppText>
-            <AppText variant="tiny" color="textFaint" style={{ marginTop: 2 }}>
-              {source === 'sample' ? 'Sample data · not today’s market' : coverageLabel}
-            </AppText>
-          </Animated.View>
-          <DataEvidenceLine evidence={evidence} detailsTitle="Today’s data" />
-        </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          {onShare ? (
-            <Pressable
-              onPress={onShare}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Share today's rates"
-              style={({ pressed }) => ({
-                minWidth: 48,
-                minHeight: 48,
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <LedgerIcon name="share" size={19} color={theme.colors.primary} />
-            </Pressable>
-          ) : null}
-        </View>
-      </Row>
-    </View>
+    <>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Pressable
+          onPress={() => setEvidenceOpen(true)}
+          accessibilityRole="button"
+          accessibilityLabel={`${runDateLabel}. ${evidence.label}. ${evidence.detail} Open data details.`}
+          style={({ pressed }) => ({
+            flex: 1,
+            minHeight: 48,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            opacity: pressed ? 0.62 : 1,
+          })}
+        >
+          <LedgerText variant="caption" tone={evidenceTone} style={{ flex: 1 }}>
+            {runDateLabel} · {evidence.label}
+          </LedgerText>
+          <LedgerIcon name="info" size={16} color={theme.ledger[evidenceTone]} />
+        </Pressable>
+        {onShare ? (
+          <Pressable
+            onPress={onShare}
+            accessibilityRole="button"
+            accessibilityLabel="Share observed rates"
+            style={({ pressed }) => ({
+              minWidth: 48,
+              minHeight: 48,
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.62 : 1,
+            })}
+          >
+            <LedgerIcon name="share" size={19} color={theme.ledger.mutedInk} />
+          </Pressable>
+        ) : null}
+      </View>
+      <LedgerSheet visible={evidenceOpen} title="Today’s data" onClose={() => setEvidenceOpen(false)}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 24, gap: 12 }}>
+          <LedgerText tone={evidenceTone}>{evidence.label}</LedgerText>
+          <LedgerText tone="mutedInk">{evidence.detail}</LedgerText>
+          <LedgerText variant="caption" tone="mutedInk">{runDateLabel} · {runAgeLabel}</LedgerText>
+          <LedgerText variant="caption" tone="mutedInk">
+            {source === 'sample' ? 'Sample data · not today’s market' : coverageLabel}
+          </LedgerText>
+          <View>
+            {evidence.facts.map((fact, index) => (
+              <LedgerRow key={`${fact}-${index}`} title={fact} separator={index < evidence.facts.length - 1} />
+            ))}
+          </View>
+        </ScrollView>
+      </LedgerSheet>
+    </>
   );
 }

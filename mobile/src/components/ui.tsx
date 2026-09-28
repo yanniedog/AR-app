@@ -20,6 +20,7 @@ import { commissionerFamily } from '../theme/fonts';
 import type { FontVariant } from '../theme/theme';
 import { TYPOGRAPHY } from '../theme/typography';
 import { useTheme } from '../theme/ThemeProvider';
+import { LedgerText } from './ledger/LedgerText';
 import { TouchTarget } from './TouchTarget';
 
 export function androidRipple(color: string, borderless = false) {
@@ -73,20 +74,24 @@ export function Card({
   style,
   children,
   variant = 'plain',
+  accessibilityViewIsModal,
   ...rest
 }: ViewProps & { variant?: 'plain' | 'outlined' | 'elevated' }) {
   const theme = useTheme();
+  // Working sheets need their own surface; ordinary content belongs to the page.
+  const contained = accessibilityViewIsModal || variant === 'elevated';
   return (
     <View
+      accessibilityViewIsModal={accessibilityViewIsModal}
       style={[
         {
-          backgroundColor: theme.colors.card,
-          borderRadius: theme.radius.sm,
-          padding: theme.spacing(4),
-          borderTopWidth: 1,
-          borderBottomWidth: 1,
-          borderColor: variant === 'elevated' ? theme.ledger.controlRule : theme.ledger.rule,
-          ...(variant === 'outlined' ? { borderLeftWidth: 1, borderRightWidth: 1 } : null),
+          backgroundColor: contained ? theme.ledger.raised : 'transparent',
+          borderRadius: contained ? theme.radius.md : 0,
+          paddingHorizontal: contained ? theme.spacing(4) : 0,
+          paddingVertical: theme.spacing(4),
+          ...(variant === 'outlined' ? { borderTopWidth: StyleSheet.hairlineWidth } : null),
+          borderColor: theme.ledger.rule,
+          ...(contained ? { padding: theme.spacing(4), borderWidth: StyleSheet.hairlineWidth } : null),
         },
         style,
       ]}
@@ -126,17 +131,17 @@ export function Chip({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: !!selected }}
+      hitSlop={0}
       android_ripple={androidRipple(theme.colors.primaryMuted)}
       style={({ pressed }) => ({
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 8,
+        minWidth: 48,
         paddingHorizontal: 12,
         paddingVertical: 7,
         borderRadius: theme.radius.pill,
-        borderWidth: 1,
-        borderColor: selected ? theme.colors.primary : theme.colors.border,
-        backgroundColor: selected ? theme.colors.primaryMuted : theme.colors.chip,
+        backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
         overflow: 'hidden',
         ...pressedOpacity(pressed, 0.7),
       })}
@@ -153,6 +158,7 @@ export function Chip({
           color: selected ? theme.colors.primary : theme.colors.chipText,
           fontFamily: commissionerFamily(selected ? '700' : '500'),
           fontSize: theme.font.small,
+          flexShrink: 1,
         }}
       >
         {label}
@@ -184,12 +190,7 @@ export function Button({
   accessibilityState?: PressableProps['accessibilityState'];
 }) {
   const theme = useTheme();
-  const bg =
-    variant === 'primary'
-      ? theme.ledger.wattle
-      : variant === 'secondary'
-        ? theme.ledger.raised
-        : 'transparent';
+  const bg = variant === 'primary' ? theme.ledger.wattle : 'transparent';
   const fg = variant === 'primary' ? theme.ledger.onWattle : theme.ledger.ink;
   const rippleColor =
     variant === 'primary' ? theme.colors.onPrimary : theme.colors.primaryMuted;
@@ -214,6 +215,8 @@ export function Button({
           alignItems: 'center',
           justifyContent: 'center',
           gap: 8,
+          minWidth: 48,
+          minHeight: 48,
           paddingHorizontal: 18,
           paddingVertical: 13,
           borderRadius: theme.radius.sm,
@@ -231,7 +234,7 @@ export function Button({
       ) : (
         <>
           {icon ? <Ionicons name={icon} size={18} color={fg} /> : null}
-          <Text style={{ color: fg, fontFamily: commissionerFamily('700'), fontSize: theme.font.body }}>{title}</Text>
+          <Text style={{ color: fg, fontFamily: commissionerFamily('600'), fontSize: theme.font.body, flexShrink: 1, textAlign: 'center' }}>{title}</Text>
         </>
       )}
     </Pressable>
@@ -250,9 +253,9 @@ export function SectionHeading({
   return (
     <Row style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
       <View style={{ flex: 1, paddingRight: action ? 12 : 0 }}>
-        <AppText variant="h3">{title}</AppText>
+        <LedgerText variant="heading">{title}</LedgerText>
         {subtitle ? (
-          <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
+          <AppText variant="small" color="textMuted" style={{ marginTop: 8 }}>
             {subtitle}
           </AppText>
         ) : null}
@@ -290,14 +293,14 @@ export function Disclosure({
           minHeight: 64,
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: theme.spacing(4),
+          paddingHorizontal: 0,
           paddingVertical: theme.spacing(3),
           gap: theme.spacing(3),
         }}
       >
         <View style={{ flex: 1 }}>
-          <AppText variant="body" weight="700">{title}</AppText>
-          {summary ? <AppText variant="small" color="textMuted">{summary}</AppText> : null}
+          <AppText variant="body" weight="600">{title}</AppText>
+          {summary ? <AppText variant="small" color="textMuted" style={{ marginTop: 4 }}>{summary}</AppText> : null}
         </View>
         <Ionicons
           name={open ? 'chevron-up' : icon}
@@ -305,7 +308,7 @@ export function Disclosure({
           color={theme.colors.textMuted}
         />
       </Pressable>
-      {open ? <View style={{ padding: theme.spacing(4), paddingTop: 0 }}>{children}</View> : null}
+      {open ? <View style={{ paddingTop: theme.spacing(2), paddingBottom: theme.spacing(4) }}>{children}</View> : null}
     </Card>
   );
 }
@@ -371,10 +374,7 @@ export function Badge({ label, tone = 'muted' }: { label: string; tone?: 'muted'
   return (
     <View
       style={{
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 2,
-        backgroundColor: theme.colors.chip,
+        paddingVertical: 4,
       }}
     >
       <Text style={{ color: map[tone], fontSize: theme.font.tiny, fontFamily: commissionerFamily('700') }}>{label}</Text>

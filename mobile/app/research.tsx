@@ -10,7 +10,7 @@ import { RbaCountdownCard } from '../src/components/RbaCountdownCard';
 import { RbaOutlook, type RbaOutlookAuditHandle, type RbaOutlookAuditState } from '../src/components/RbaOutlook';
 import { Ribbon } from '../src/components/Ribbon';
 import { ScreenScrollView } from '../src/components/Screen';
-import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from '../src/components/ui';
+import { AppText, Button, Disclosure, Divider, Row } from '../src/components/ui';
 import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/HistoryExplorer';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
@@ -381,23 +381,26 @@ export default function Market() {
   return (
     <ScreenScrollView
       ref={scrollRef}
+      contentContainerStyle={{ gap: 28 }}
       onLayout={(event) => {
         if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
           setDashboardLayoutRevision(core.run_date);
         }
       }}
     >
+      <View style={{ gap: 8 }}>
+        <AppText variant="h1" accessibilityRole="header">Market research</AppText>
+        <AppText variant="body" color="textMuted">A wider view of rates over time.</AppText>
+      </View>
+
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
 
-      <RbaCountdownCard expandable={false} />
-
-      <Card variant="outlined" style={{ gap: 14 }}>
-        <SectionHeading
-          title="Market research"
-          subtitle={`Observed ${formatRunDate(core.run_date)} · ${SECTIONS[activeSection].title}`}
-        />
+      <View style={{ gap: 16 }}>
+        <AppText variant="small" color="textMuted">
+          {SECTIONS[activeSection].title} · observed {formatRunDate(core.run_date)}
+        </AppText>
         {activeSnapshot ? (
           <>
             <Ribbon stats={activeSnapshot.stats} section={activeSection} />
@@ -406,7 +409,7 @@ export default function Market() {
         ) : (
           <AppText variant="small" color="textMuted">Preparing the current standard-product market…</AppText>
         )}
-      </Card>
+      </View>
 
       <Disclosure
         title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
@@ -417,7 +420,7 @@ export default function Market() {
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
         ) : historyReady ? (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 16 }}>
             <HistoryExplorer
               section={activeSection}
               historyModel={historyModel}
@@ -477,8 +480,8 @@ export default function Market() {
             setRbaOpen((open) => !open);
           }}
         >
-          <View style={{ gap: 12 }}>
-          <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ gap: 20 }}>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <AppText variant="small" color="textMuted">Current cash rate</AppText>
             <AppText variant="rateHero" style={{ color: theme.colors.rba }}>{currentRba ? formatRate(currentRba.rate) : '—'}</AppText>
           </Row>
@@ -490,9 +493,10 @@ export default function Market() {
             onDateSelect={setRbaSelectedDate}
             onGraphicReady={setRbaGraphicState}
           />
+          <RbaCountdownCard expandable={false} />
           {decisions.length ? <Divider /> : null}
           {decisions.map((decision) => (
-            <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 3 }}>
+            <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 8, flexWrap: 'wrap' }}>
               <AppText variant="small" color="textMuted">{formatRbaDate(decision.date)}</AppText>
               <AppText variant="small" weight="700">{decisionLine(decision)}</AppText>
             </Row>

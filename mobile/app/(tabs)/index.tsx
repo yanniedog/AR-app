@@ -1,16 +1,16 @@
 import { BankRatesPanel } from '../../src/components/passthrough/BankRatesPanel';
-import Ionicons from '../../src/components/icons/AppIcon';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { router } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { InteractionManager, RefreshControl, ScrollView, View } from 'react-native';
 
 import { HomeHero } from '../../src/components/HomeHero';
 import { ProductCard } from '../../src/components/ProductCard';
 import { IndeterminateProgressBar, LoadingRows, ScreenSkeleton } from '../../src/components/feedback';
 import { ScreenScrollView } from '../../src/components/Screen';
 import { SectionCrossfade, SegmentedControl } from '../../src/components/controls';
-import { AppText, Button, Card, Row } from '../../src/components/ui';
+import { LedgerAction, LedgerRow, LedgerSection, LedgerText } from '../../src/components/ledger';
+import { LedgerIcon } from '../../src/components/icons/LedgerIcon';
 import { SECTIONS } from '../../src/constants';
 import { formatRate, formatRunDate, relativeDate, toFraction } from '../../src/data/format';
 import { computeLvr } from '../../src/data/calc';
@@ -37,52 +37,6 @@ import { buildStaySwitchProjection } from '../../src/data/staySwitchProjection';
 import { NOT_LISTED_PROVIDER } from '../../src/data/userRateScenario';
 import { freshnessDeadlineUtc } from '../../src/data/displayEvidence';
 import { CURRENT_V1_APP_HEALTH_SOURCE_CONTRACT } from '../../src/lib/appHealth';
-
-/**
- * Slim one-line entry point to a secondary tool. Keeps Today's supporting
- * actions from competing with the rate itself for vertical space.
- */
-function TodayPrompt({
-  icon,
-  label,
-  hint,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  hint: string;
-  onPress: () => void;
-}) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityHint={hint}
-      style={({ pressed }) => ({
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: theme.spacing(3),
-        minHeight: 56,
-        paddingHorizontal: theme.spacing(4),
-        paddingVertical: theme.spacing(3),
-        borderRadius: theme.radius.md,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        backgroundColor: theme.colors.surface,
-        opacity: pressed ? 0.7 : 1,
-      })}
-    >
-      <Ionicons name={icon} size={20} color={theme.colors.primary} />
-      <View style={{ flex: 1 }}>
-        <AppText variant="body" weight="700">{label}</AppText>
-        <AppText variant="tiny" color="textMuted">{hint}</AppText>
-      </View>
-      <Ionicons name="chevron-forward" size={18} color={theme.colors.textFaint} />
-    </Pressable>
-  );
-}
 
 export default function Home() {
   const theme = useTheme();
@@ -112,6 +66,8 @@ export default function Home() {
   const suitabilityRevision = useSuitabilityRevision();
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const [shareOpen, setShareOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [projectionOpen, setProjectionOpen] = useState(false);
   const [filterPrepFailed, setFilterPrepFailed] = useState(false);
   const [heroLayoutRevision, setHeroLayoutRevision] = useState<string | null>(null);
   const { scenario: userScenario, storageStatus: scenarioStatus } = useUserRateScenario();
@@ -483,12 +439,19 @@ export default function Home() {
   const coverageLabel = productCount
     ? `${productCount.toLocaleString()} products from ${lenderCount} lenders`
     : `${lenderCount} lenders`;
-  const sectionAccent = meta.accentColor;
   const bestNote = conditionalNote(activeBest, section);
+  const rateGapLabel = !ratesReady
+    ? 'Matching observed rates…'
+    : observedGapRate == null
+      ? 'No matched comparison is available'
+      : observedGapRate <= 0
+        ? 'No better matched rate observed'
+        : `${(observedGapRate * 100).toFixed(2)} percentage point gap`;
 
   return (
     <ScreenScrollView
       ref={scrollRef}
+      contentContainerStyle={{ gap: theme.spacing(6) }}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
       }
@@ -528,192 +491,154 @@ export default function Home() {
         <SegmentedControl options={sectionOptions} value={section} onChange={changeSection} />
       ) : null}
 
-      <BankRatesPanel section={section} onSectionChange={changeSection} showSections={false} />
-
-      {scenarioStatus === 'ready' && scenarioSummary.currentRate != null ? (
-        <Card style={{ borderColor: `${meta.accentColor}55`, gap: theme.spacing(2) }}>
-          <Row style={{ justifyContent: 'space-between', alignItems: 'center' }}>
-            <AppText variant="h3">Your rate today</AppText>
-            <Pressable
-              onPress={() => router.push('/calculator')}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
-              hitSlop={10}
-            >
-              <AppText variant="small" color="primary" weight="700">Edit</AppText>
-            </Pressable>
-          </Row>
-          <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end' }}>
-            <View>
-              <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
-              <AppText variant="h3">{formatRate(scenarioSummary.currentRate)}</AppText>
-            </View>
-            {ratesReady && loyaltyComparisonRate != null ? (
-              <View style={{ alignItems: 'flex-end' }}>
-                <AppText variant="tiny" color="textMuted">Matched observed rate</AppText>
-                <AppText
-                  variant="h3"
-                  style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}
-                >
-                  {formatRate(loyaltyComparisonRate)}
-                </AppText>
-              </View>
-            ) : null}
-          </Row>
-          <AppText variant="body" weight="700">
-            {!ratesReady
-              ? 'Matching today’s observed rates…'
-              : observedGapRate == null
-              ? 'No matched comparison is available today'
-              : observedGapRate <= 0
-                ? 'No better matched rate observed today'
-                : `${(observedGapRate * 100).toFixed(2)} percentage point gap`}
-          </AppText>
-          <AppText variant="tiny" color="textMuted">
-            Matched to your filters · observed {formatRunDate(core.run_date)}.
-          </AppText>
-          {section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
-            <AppText variant="tiny" color="textMuted">
-              Product matched by comparison rate; the gap uses its advertised rate.
-            </AppText>
-          ) : null}
-          {activeBest ? (
-            <Button title="View matched rate" variant="secondary" onPress={openBestProduct} />
-          ) : null}
-        </Card>
-      ) : scenarioStatus === 'ready' ? (
-        <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
-          <View>
-            <AppText variant="h3">Check my rate</AppText>
-            <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
-              See your observed gap without linking a bank account.
-            </AppText>
-          </View>
-          <Button
-            title="Add my rate"
-            onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section } })}
-          />
-          <AppText variant="tiny" color="textMuted">Entered amounts stay on this device.</AppText>
-        </Card>
-      ) : null}
-
-      {staySwitchProjection?.ready ? (
-        <StaySwitchChart
-          projection={staySwitchProjection}
-          currentBank={currentBankLabel}
-          compact
-          onOpenFull={() => router.push({
-            pathname: '/projections',
-            params: {
-              section: 'Mortgage',
-              target: activeBest?.product_key,
-              ri: activeBest?.rate_index != null ? String(activeBest.rate_index) : undefined,
-            },
-          } as never)}
-        />
-      ) : null}
-
       <SectionCrossfade section={section}>
-      <Card variant="outlined" style={{ borderColor: `${sectionAccent}44` }}>
-        {!ratesReady ? (
-          <View style={{ gap: theme.spacing(3) }}>
-            <View>
-              <AppText variant="tiny" color="textFaint" weight="700">
-                MARKET REFERENCE
-              </AppText>
-              <AppText variant="small" color="textMuted" style={{ marginTop: theme.spacing(1) / 2 }}>
+        <View style={{ gap: theme.spacing(4), paddingVertical: theme.spacing(2) }}>
+          <View style={{ gap: theme.spacing(1) }}>
+            <LedgerText variant="heading" accessibilityRole="header">
+              {meta.lowerIsBetter ? 'Lowest matched rate' : 'Highest matched rate'}
+            </LedgerText>
+            <LedgerText variant="caption" tone="mutedInk">
+              {meta.title}{profileCount > 0 ? ' · your profile' : ' · broadly available'}
+            </LedgerText>
+          </View>
+          {!ratesReady ? (
+            <View style={{ gap: theme.spacing(3) }}>
+              <LedgerText tone="mutedInk">
                 {filterPrepFailed
-                  ? 'Could not prepare filtered rates for today.'
+                  ? 'Could not prepare filtered rates.'
                   : profileFeaturesPending
                     ? 'Matching your profile…'
-                    : 'Finding today’s observed rate…'}
-              </AppText>
+                    : 'Finding a matching rate…'}
+              </LedgerText>
+              {filterPrepFailed ? (
+                <LedgerAction label="Retry filtered rates" variant="secondary" onPress={retryFilterPrep} />
+              ) : (
+                <>
+                  <IndeterminateProgressBar
+                    caption="Applying your filter settings."
+                    accessibilityLabel="Finding today’s observed rate"
+                  />
+                  <LoadingRows count={1} />
+                </>
+              )}
             </View>
-            {filterPrepFailed ? (
-              <Button title="Retry" variant="secondary" onPress={retryFilterPrep} />
-            ) : (
-              <>
-                <IndeterminateProgressBar
-                  caption="Applying your filter settings to today’s rates."
-                  accessibilityLabel="Finding today’s observed rate"
+          ) : (
+            <>
+              {activeBest ? (
+                <ProductCard
+                  row={activeBest}
+                  section={section}
+                  embedded
+                  heroRate
+                  displayedRate={heroRate}
+                  displayedRateLabel={heroRateLabel}
+                  onPress={openBestProduct}
+                  onLongPress={() => openBank(activeBest.provider)}
+                  logoRenderStateId={todayLogoIds[0]}
+                  onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
                 />
-                <LoadingRows count={1} />
-              </>
-            )}
-          </View>
-        ) : (
-          <>
-            <View style={{ marginBottom: activeBest ? theme.spacing(4) : 0 }}>
-              <AppText variant="h3">
-                {meta.lowerIsBetter ? 'Lowest matched rate' : 'Highest matched rate'}
-              </AppText>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
-                {meta.title}{profileCount > 0 ? ' · matched to your profile' : ' · broadly available'}
-              </AppText>
-              {!activeBest ? (
-                <AppText
-                  variant="rateHero"
-                  style={{
-                    color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit,
-                    marginTop: theme.spacing(2),
-                  }}
-                >
-                  {formatRate(heroRate)}
-                </AppText>
+              ) : (
+                <View style={{ gap: theme.spacing(2) }}>
+                  <LedgerText variant="caption" tone="mutedInk">{heroRateLabel}</LedgerText>
+                  <LedgerText variant="rateLarge">{formatRate(heroRate)}</LedgerText>
+                  <LedgerText tone="mutedInk">No matching product is available for these filters.</LedgerText>
+                </View>
+              )}
+              {bestNote ? (
+                <LedgerText variant="caption" tone="clay">{bestNote}</LedgerText>
               ) : null}
-            </View>
-            {activeBest ? (
-              <ProductCard
-                row={activeBest}
-                section={section}
-                embedded
-                heroRate
-                displayedRate={heroRate}
-                displayedRateLabel={heroRateLabel}
-                onPress={openBestProduct}
-                onLongPress={() => openBank(activeBest.provider)}
-                logoRenderStateId={todayLogoIds[0]}
-                onLogoRenderStateChange={todayLogos.onLogoRenderStateChange}
-              />
-            ) : null}
-            {bestNote ? (
-              <AppText
-                variant="small"
-                weight="700"
-                style={{ color: theme.colors.warning, marginTop: theme.spacing(2) }}
-              >
-                {bestNote}
-              </AppText>
-            ) : null}
-            {profileCount === 0 ? (
-              // Personalisation is offered here, against a real result, rather
-              // than as a wall of chips during onboarding.
-              <Pressable
+              <LedgerAction
+                label={profileCount > 0 ? 'Adjust my matches' : 'Refine what matches me'}
+                variant="quiet"
                 onPress={() => router.push('/profile')}
-                accessibilityRole="button"
-                accessibilityLabel="Refine what matches me"
                 accessibilityHint="Set the loan or account attributes that apply to you"
-                style={({ pressed }) => ({
-                  marginTop: theme.spacing(3),
-                  opacity: pressed ? 0.6 : 1,
-                })}
-              >
-                <AppText variant="small" color="primary" weight="700">
-                  Refine what matches me
-                </AppText>
-              </Pressable>
-            ) : null}
-          </>
-        )}
-      </Card>
+                style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }}
+              />
+            </>
+          )}
+        </View>
       </SectionCrossfade>
 
-      <TodayPrompt
-        icon="analytics-outline"
-        label="Project my balance over time"
-        hint="Repayments, offset plans and rate scenarios"
-        onPress={() => router.push({ pathname: '/projections', params: { section } } as never)}
-      />
+      {scenarioStatus === 'ready' ? (
+        <LedgerSection>
+          {scenarioSummary.currentRate != null ? (
+            <>
+              <LedgerRow
+                title={`Your entered rate · ${formatRate(scenarioSummary.currentRate)}`}
+                detail={rateGapLabel}
+                onPress={() => router.push('/calculator')}
+                accessibilityLabel={`Your entered rate ${formatRate(scenarioSummary.currentRate)}. ${rateGapLabel}. Edit my ${meta.title.toLowerCase()} rate.`}
+                separator={false}
+              />
+              <LedgerText variant="caption" tone="mutedInk">
+                Matched to your filters · observed {formatRunDate(core.run_date)}.
+                {section === 'Mortgage' && mortgageRateMetric === 'comparison'
+                  ? ' Product ranked by comparison rate; the gap uses its advertised rate.'
+                  : ''}
+              </LedgerText>
+            </>
+          ) : (
+            <LedgerRow
+              title="Check my rate"
+              detail="Compare your rate. Entered amounts stay on this device."
+              accessibilityHint="Compare your rate. Entered amounts stay on this device."
+              onPress={() => router.push({ pathname: '/calculator', params: { intent: 'check', section } })}
+              separator={false}
+            />
+          )}
+        </LedgerSection>
+      ) : null}
+
+      <LedgerSection style={{ gap: 0 }}>
+        <LedgerRow
+          title="Bank rate history"
+          detail={historyOpen ? undefined : 'Rates over time, by lender'}
+          onPress={() => setHistoryOpen((open) => !open)}
+          accessibilityState={{ expanded: historyOpen }}
+          trailing={<LedgerIcon name={historyOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.ledger.mutedInk} />}
+          separator={false}
+        />
+        {historyOpen ? (
+          <View style={{ paddingVertical: theme.spacing(4) }}>
+            <BankRatesPanel section={section} onSectionChange={changeSection} showSections={false} />
+          </View>
+        ) : null}
+        {staySwitchProjection?.ready ? (
+          <>
+            <LedgerRow
+              title="Stay or switch"
+              detail={projectionOpen ? undefined : 'Compare your projected loan balance'}
+              onPress={() => setProjectionOpen((open) => !open)}
+              accessibilityState={{ expanded: projectionOpen }}
+              trailing={<LedgerIcon name={projectionOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.ledger.mutedInk} />}
+              separator={false}
+            />
+            {projectionOpen ? (
+              <View style={{ paddingVertical: theme.spacing(4) }}>
+                <StaySwitchChart
+                  projection={staySwitchProjection}
+                  currentBank={currentBankLabel}
+                  compact
+                  onOpenFull={() => router.push({
+                    pathname: '/projections',
+                    params: {
+                      section: 'Mortgage',
+                      target: activeBest?.product_key,
+                      ri: activeBest?.rate_index != null ? String(activeBest.rate_index) : undefined,
+                    },
+                  } as never)}
+                />
+              </View>
+            ) : null}
+          </>
+        ) : null}
+        <LedgerRow
+          title="Project my balance"
+          detail="Repayments, offsets and rate scenarios"
+          onPress={() => router.push({ pathname: '/projections', params: { section } } as never)}
+          separator={false}
+        />
+      </LedgerSection>
 
       <ShareQrModal visible={shareOpen} onClose={() => setShareOpen(false)} shareMessage={shareMessage} />
     </ScreenScrollView>

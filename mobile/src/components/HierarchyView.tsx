@@ -2,7 +2,7 @@ import Ionicons from './icons/AppIcon';
 import { useScrollToTop } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { SECTIONS } from '../constants';
@@ -106,6 +106,7 @@ const EMPTY_VIEW = {
 export function HierarchyView({ section, path }: { section: SectionKey; path: string[] }) {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const listRef = useRef<FlashListRef<Item>>(null);
   useScrollToTop(listRef);
   const sectionData = useStore((s) => s.core?.sections[section]);
@@ -281,7 +282,9 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
         <Pressable
           onPress={() => openBrowseDrill(section, path.slice(0, -1))}
           hitSlop={theme.spacing(2)}
-          style={{ paddingHorizontal: theme.spacing(1) / 2, paddingBottom: theme.spacing(1) }}
+          accessibilityRole="button"
+          accessibilityLabel="Back to parent category"
+          style={{ minHeight: 48, justifyContent: 'center' }}
         >
           <Row gap={4} style={{ alignItems: 'center' }}>
             <Ionicons name="chevron-back" size={16} color={theme.colors.primary} />
@@ -298,12 +301,12 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
               <Ribbon stats={stats} section={section} rbaRate={section === 'Mortgage' ? rba : null} />
             </Card>
           ) : null}
-          <Row style={{ justifyContent: 'space-between', paddingHorizontal: theme.spacing(1) / 2 }}>
-            <AppText variant="small" weight="700" color="textMuted">
-              {isLeaf ? `${stats.products} ${stats.products === 1 ? 'PRODUCT' : 'PRODUCTS'}` : 'CATEGORIES'}
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap', paddingVertical: theme.spacing(2) }}>
+            <AppText variant="small" weight="500" color="textMuted">
+              {isLeaf ? `${stats.products} ${stats.products === 1 ? 'product' : 'products'}` : 'Browse by category'}
             </AppText>
             {!isLeaf ? (
-              <Pressable onPress={() => openProductsList(section, path)} hitSlop={theme.spacing(2)}>
+              <Pressable onPress={() => openProductsList(section, path)} accessibilityRole="button" style={{ minHeight: 48, justifyContent: 'center' }}>
                 <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
                   All {stats.products} products →
                 </AppText>
@@ -332,8 +335,7 @@ export function HierarchyView({ section, path }: { section: SectionKey; path: st
           ? `${section}-n-${it.node.seg}`
           : `${section}-p-${it.row.product_key}-${it.row.rate_index ?? i}`
       }
-      contentContainerStyle={screenScrollContentStyle(theme, insets.bottom)}
-      ItemSeparatorComponent={() => <View style={{ height: theme.spacing(3) }} />}
+      contentContainerStyle={screenScrollContentStyle(theme, insets.bottom, width)}
       ListHeaderComponent={header}
       ListEmptyComponent={<EmptyState title="No products here" />}
       renderItem={({ item }) =>

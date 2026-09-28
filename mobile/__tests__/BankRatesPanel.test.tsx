@@ -26,7 +26,7 @@ jest.mock('../src/data/store', () => ({ useStore: (selector: (s: typeof mockStat
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
 jest.mock('@react-navigation/native', () => ({ useIsFocused: () => true }));
 jest.mock('../src/components/controls', () => ({ SegmentedControl: 'SegmentedControl' }));
-jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
+jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button', Disclosure: 'Disclosure' }));
 jest.mock('../src/components/passthrough/BankRateChart', () => ({ BankRateChart: 'BankRateChart' }));
 jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => undefined) }));
 beforeEach(() => { jest.mocked(yieldToUi).mockReset().mockResolvedValue(undefined); mockState.core = core; mockState.bankRateHistoryRevision = 0; mockState.bankRateHistoryLoading = false; mockState.prefs = { ...DEFAULT_PREFS, includeNonStandard: true }; installMandatoryEligibility(selectMandatoryEligibility(core, EMPTY_PROFILE, null)); });

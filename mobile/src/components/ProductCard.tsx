@@ -1,8 +1,7 @@
 import Ionicons from './icons/AppIcon';
 import React from 'react';
-import { Pressable, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 
-import { SECTIONS } from '../constants';
 import {
   formatBalanceRange,
   formatRate,
@@ -42,9 +41,8 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     const bal = formatBalanceRange(row.balance_min, row.balance_max);
     if (bal) out.push(bal);
   } else {
-    // Bonus / introductory deposit kinds are surfaced as a distinct warning
-    // badge below, so don't also repeat them as a neutral chip. Reuse the
-    // central classifier so the chip and the badge can never disagree.
+    // Conditional rates have their own caution label below. Reuse the central
+    // classifier so the caption and caution label can never disagree.
     if (row.ribbon_deposit_kind && !qualifier.conditional) {
       out.push(humanizeEnum(row.ribbon_deposit_kind));
     }
@@ -90,8 +88,8 @@ export function ProductCard({
 }) {
   const theme = useTheme();
   const { width, fontScale } = useWindowDimensions();
-  const compact = width < 380 || fontScale >= 1.3;
-  const textLines = fontScale >= 1.3 ? undefined : compact ? 2 : 1;
+  const compact = width < 480 || fontScale >= 1.3;
+  const textLines = fontScale >= 1.3 ? undefined : 2;
   const favorite = useStore((s) => s.isRateSaved(row.product_key, row.rate_index ?? null));
   const toggleSavedRate = useStore((s) => s.toggleSavedRate);
   const detail = useStore((s) => s.details?.products[row.product_key] ?? null);
@@ -103,7 +101,6 @@ export function ProductCard({
     [row.product_name, row.provider, detail],
   );
   const tags = chips(row, section, qualifier);
-  const lowerIsBetter = SECTIONS[section].lowerIsBetter;
   const presentation = ratePresentation(row, section, mortgageRateMetric);
   const hasDisplayedRateOverride = displayedRate !== undefined;
   const rateLabel = hasDisplayedRateOverride
@@ -141,15 +138,13 @@ export function ProductCard({
     <View
       style={{
         flexDirection: 'row',
-        alignItems: compact ? 'flex-start' : 'center',
+        alignItems: 'flex-start',
         gap: 8,
-        paddingVertical: embedded ? 0 : 12,
-        paddingHorizontal: embedded ? 0 : 14,
-        backgroundColor: selected ? theme.colors.primaryMuted : embedded ? 'transparent' : theme.colors.card,
-        borderRadius: theme.radius.lg,
-        borderWidth: embedded ? 0 : 1,
-        borderColor: selected ? theme.colors.primary : theme.colors.border,
-        marginBottom: embedded ? 0 : 10,
+        paddingVertical: embedded ? 0 : 20,
+        paddingHorizontal: selected ? 12 : 0,
+        backgroundColor: selected ? theme.colors.primaryMuted : 'transparent',
+        borderBottomWidth: embedded ? 0 : StyleSheet.hairlineWidth,
+        borderBottomColor: theme.ledger.rule,
       }}
     >
       <Pressable
@@ -158,14 +153,16 @@ export function ProductCard({
         delayLongPress={onLongPress ? 450 : undefined}
         accessibilityRole="button"
         accessibilityLabel={cardA11yLabel}
+        accessibilityState={selectMode ? { selected: !!selected } : undefined}
         accessibilityHint={onLongPress ? 'Long press also opens this bank' : undefined}
         android_ripple={androidRipple(theme.colors.primaryMuted)}
         style={({ pressed }) => ({
           flex: 1,
+          minHeight: 48,
           flexDirection: compact ? 'column' : 'row',
           alignItems: compact ? 'stretch' : 'center',
           gap: 12,
-          borderRadius: theme.radius.md,
+          borderRadius: theme.radius.sm,
           overflow: 'hidden',
           opacity: pressed ? 0.85 : 1,
         })}
@@ -186,87 +183,45 @@ export function ProductCard({
           )}
 
           <View style={{ flex: 1, minWidth: 0 }}>
-        <AppText variant="body" weight="700" numberOfLines={textLines}>
-          {row.product_name}
-        </AppText>
-        <AppText variant="small" color="textMuted" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
-          {row.provider}
-        </AppText>
-        <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
-        {tags.length || qualifier.conditional || nonStandard || access.badge ? (
-          <Row gap={6} style={{ flexWrap: 'wrap', marginTop: 6 }}>
-            {access.badge ? (
-              <View
-                style={{
-                  paddingHorizontal: 7,
-                  paddingVertical: 2,
-                  borderRadius: theme.radius.sm,
-                  borderWidth: 1,
-                  borderColor: theme.colors.warning,
-                }}
-              >
-                <AppText variant="tiny" style={{ color: theme.colors.warning }} weight="700">
-                  {access.verify ? `${access.badge}?` : access.badge}
-                </AppText>
-              </View>
+            <AppText variant="body" weight="600" numberOfLines={textLines}>
+              {row.product_name}
+            </AppText>
+            <AppText variant="small" color="textMuted" numberOfLines={fontScale >= 1.3 ? undefined : 1}>
+              {row.provider}
+            </AppText>
+            <ProductRateChangeSummaryLine summary={rateChange} section={section} compact />
+            {tags.length || qualifier.conditional || nonStandard || access.badge ? (
+              <Row gap={8} style={{ flexWrap: 'wrap', marginTop: 8 }}>
+                {access.badge ? (
+                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
+                    {access.verify ? `${access.badge}?` : access.badge}
+                  </AppText>
+                ) : null}
+                {tags.length ? (
+                  <AppText variant="tiny" color="textMuted" style={{ flexShrink: 1 }}>{tags.join(' · ')}</AppText>
+                ) : null}
+                {qualifier.conditional ? (
+                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
+                    {qualifier.shortLabel}
+                  </AppText>
+                ) : null}
+                {nonStandard ? (
+                  <AppText variant="tiny" style={{ color: theme.colors.warning, flexShrink: 1 }} weight="600">
+                    Special eligibility
+                  </AppText>
+                ) : null}
+              </Row>
             ) : null}
-            {tags.map((t, i) => (
-              <View
-                key={`${t}-${i}`}
-                style={{
-                  paddingHorizontal: 7,
-                  paddingVertical: 2,
-                  borderRadius: theme.radius.sm,
-                  backgroundColor: theme.colors.chip,
-                }}
-              >
-                <AppText variant="tiny" color="chipText">
-                  {t}
-                </AppText>
-              </View>
-            ))}
-            {qualifier.conditional ? (
-              <View
-                style={{
-                  paddingHorizontal: 7,
-                  paddingVertical: 2,
-                  borderRadius: theme.radius.sm,
-                  borderWidth: 1,
-                  borderColor: theme.colors.warning,
-                }}
-              >
-                <AppText variant="tiny" style={{ color: theme.colors.warning }} weight="700">
-                  {qualifier.shortLabel}
-                </AppText>
-              </View>
-            ) : null}
-            {nonStandard ? (
-              <View
-                style={{
-                  paddingHorizontal: 7,
-                  paddingVertical: 2,
-                  borderRadius: theme.radius.sm,
-                  backgroundColor: theme.colors.chip,
-                }}
-              >
-                <AppText variant="tiny" style={{ color: theme.colors.warning }} weight="700">
-                  Special eligibility
-                </AppText>
-              </View>
-            ) : null}
-          </Row>
-        ) : null}
           </View>
         </View>
 
         <View
           style={{
-            alignItems: compact ? 'baseline' : 'flex-end',
-            flexDirection: compact ? 'row' : 'column',
-            justifyContent: compact ? 'flex-end' : 'center',
-            gap: compact ? 6 : 0,
+            alignItems: compact ? 'flex-start' : 'flex-end',
+            justifyContent: 'center',
+            gap: 4,
             minWidth: compact ? 0 : 76,
-            marginTop: compact ? 8 : 0,
+            marginTop: compact ? 4 : 0,
             paddingLeft: 0,
           }}
         >
@@ -275,7 +230,7 @@ export function ProductCard({
           </AppText>
           <AppText
             variant={heroRate ? 'rateHero' : 'rate'}
-            style={{ color: lowerIsBetter ? theme.colors.success : theme.colors.primary }}
+            color="text"
           >
             {rateText}
           </AppText>

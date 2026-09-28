@@ -3692,7 +3692,7 @@ export function PerformanceAuditRunner() {
         paddingBottom: Math.max(16, insets.bottom + 12),
       }}
     >
-      <Card style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
+      <Card variant="elevated" style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
           <AppText variant="body" weight="700">
             App health audit

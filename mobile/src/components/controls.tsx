@@ -1,7 +1,6 @@
 import Ionicons from './icons/AppIcon';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  type LayoutChangeEvent,
   Pressable,
   Switch,
   TextInput,
@@ -13,7 +12,6 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 
@@ -24,14 +22,10 @@ import { useTheme } from '../theme/ThemeProvider';
 import { TouchTarget } from './TouchTarget';
 import { androidRipple, AppText } from './ui';
 
-const PILL_SPRING = { damping: 20, stiffness: 280, mass: 0.8 };
-
 export interface SegOption<T extends string> {
   value: T;
   label: string;
 }
-
-type SegmentLayout = { x: number; width: number };
 
 /** Brief opacity dip when `section` changes — keeps content mounted (no hard remount). */
 export function SectionCrossfade({
@@ -78,66 +72,16 @@ export function SegmentedControl<T extends string>({
   onChange: (v: T) => void;
 }) {
   const theme = useTheme();
-  const reducedMotion = useReducedMotion();
-  const [layouts, setLayouts] = useState<Partial<Record<T, SegmentLayout>>>({});
-  const pillX = useSharedValue(0);
-  const pillW = useSharedValue(0);
-  const pillReady = useRef(false);
-
-  const movePill = useCallback(
-    (layout: SegmentLayout, animate: boolean) => {
-      if (animate && reducedMotion === false) {
-        pillX.value = withSpring(layout.x, PILL_SPRING);
-        pillW.value = withSpring(layout.width, PILL_SPRING);
-      } else {
-        pillX.value = layout.x;
-        pillW.value = layout.width;
-      }
-    },
-    [pillW, pillX, reducedMotion],
-  );
-
-  useEffect(() => {
-    const layout = layouts[value];
-    if (!layout) return;
-    movePill(layout, pillReady.current);
-    pillReady.current = true;
-  }, [value, layouts, movePill]);
-
-  const onSegmentLayout = useCallback((optValue: T, e: LayoutChangeEvent) => {
-    const { x, width } = e.nativeEvent.layout;
-    setLayouts((prev) => {
-      const existing = prev[optValue];
-      if (existing?.x === x && existing?.width === width) return prev;
-      return { ...prev, [optValue]: { x, width } };
-    });
-  }, []);
-
-  const pillStyle = useAnimatedStyle(() => ({
-    position: 'absolute',
-    top: 3,
-    bottom: 3,
-    left: pillX.value,
-    width: pillW.value,
-    borderRadius: theme.radius.sm,
-    backgroundColor: theme.colors.card,
-    shadowColor: theme.colors.shadow,
-    shadowOpacity: 1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
-  }));
-
   return (
     <View
       accessibilityRole="tablist"
       style={{
         flexDirection: 'row',
-        backgroundColor: theme.colors.surfaceAlt,
-        borderRadius: theme.radius.md,
-        padding: 3,
+        flexWrap: 'wrap',
+        columnGap: 12,
+        rowGap: 4,
       }}
     >
-      <Animated.View pointerEvents="none" style={pillStyle} />
       {options.map((opt) => {
         const active = opt.value === value;
         return (
@@ -147,24 +91,28 @@ export function SegmentedControl<T extends string>({
               if (opt.value !== value) hapticSelection();
               onChange(opt.value);
             }}
-            onLayout={(e) => onSegmentLayout(opt.value, e)}
+            hitSlop={0}
             accessibilityRole="tab"
             accessibilityLabel={opt.label}
             accessibilityState={{ selected: active }}
             android_ripple={androidRipple(theme.colors.primaryMuted)}
             style={{
-              flex: 1,
-              borderRadius: theme.radius.sm,
+              flexGrow: 1,
+              flexShrink: 1,
+              flexBasis: 48,
+              minWidth: 48,
               alignItems: 'center',
               justifyContent: 'center',
-              paddingVertical: 4,
+              paddingVertical: 12,
+              borderBottomWidth: 2,
+              borderBottomColor: active ? theme.ledger.eucalyptus : 'transparent',
             }}
           >
             <AppText
               variant="small"
               weight={active ? '700' : '500'}
               color={active ? 'text' : 'textMuted'}
-              style={{ textAlign: 'center' }}
+              style={{ textAlign: 'center', maxWidth: '100%' }}
             >
               {opt.label}
             </AppText>
@@ -185,14 +133,17 @@ export function SearchBar({
   placeholder?: string;
 }) {
   const theme = useTheme();
+  const [focused, setFocused] = useState(false);
   return (
     <View
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
-        backgroundColor: theme.colors.surfaceAlt,
+        backgroundColor: theme.ledger.raised,
         borderRadius: theme.radius.md,
+        borderWidth: 1,
+        borderColor: focused ? theme.ledger.eucalyptus : theme.ledger.controlRule,
         paddingHorizontal: 12,
         minHeight: 48,
         paddingVertical: 4,
@@ -203,6 +154,8 @@ export function SearchBar({
         accessibilityLabel={placeholder}
         value={value}
         onChangeText={onChangeText}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
         placeholder={placeholder}
         placeholderTextColor={theme.colors.textFaint}
         style={{
@@ -256,13 +209,11 @@ export function CompactToggle({
         alignItems: 'center',
         justifyContent: 'space-between',
         gap: 10,
-        minHeight: 40,
-        paddingHorizontal: 12,
-        backgroundColor: theme.colors.surfaceAlt,
-        borderRadius: theme.radius.md,
+        minHeight: 48,
+        paddingVertical: 8,
       }}
     >
-      <AppText variant="small" weight="600" color="textMuted">
+      <AppText variant="small" weight="600" color="textMuted" style={{ flex: 1 }}>
         {label}
       </AppText>
       <Switch

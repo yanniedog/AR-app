@@ -204,20 +204,25 @@ export default function RateMovesTab() {
   if (!core) return <ScreenSkeleton />;
 
   return (
-    <ScreenScrollView onLayout={() => setLayoutReady(true)}>
+    <ScreenScrollView onLayout={() => setLayoutReady(true)} contentContainerStyle={{ gap: 28 }}>
+      <View style={{ gap: 8 }}>
+        <AppText variant="h1" accessibilityRole="header">Rate moves</AppText>
+        <AppText variant="body" color="textMuted">What changed, and which banks moved.</AppText>
+      </View>
+
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
 
-      <Card variant="outlined" style={{ gap: 10 }}>
+      <View style={{ gap: 8 }}>
         <AppText variant="small" color="textMuted">
           Last 7 days · {SECTIONS[activeSection].short}
         </AppText>
-        <AppText variant="h2">{weeklySummary(activeSection, pulse)}</AppText>
+        <AppText variant="h2" accessibilityRole="header">{weeklySummary(activeSection, pulse)}</AppText>
         <AppText variant="small" color="textMuted">
           Observed changes in advertised rates. Tap a lender to see the products involved.
         </AppText>
-      </Card>
+      </View>
 
       <View style={{ gap: 10 }}>
         <SectionHeading
@@ -231,16 +236,14 @@ export default function RateMovesTab() {
           }
         />
         {payload ? (
-          <Card>
-            <BankMovesFeed
+          <BankMovesFeed
               payload={payload}
               error={error}
               sections={[activeSection]}
               limit={14}
               contentRevision={feedRenderRevision}
               onRenderEvidence={recordFeedEvidence}
-            />
-          </Card>
+          />
         ) : suitabilityWarming ? (
           <Card variant="outlined" style={{ gap: 10 }}>
             <AppText variant="body" weight="700">Preparing compatible rate moves</AppText>
@@ -306,7 +309,7 @@ export default function RateMovesTab() {
         </Disclosure>
       ) : null}
 
-      <Card variant="outlined" style={{ gap: 10 }}>
+      <View style={{ gap: 8 }}>
         <SectionHeading
           title="Since the latest RBA decision"
           subtitle={currentRbaSummary && currentRbaSummary.eligible > 0
@@ -315,14 +318,14 @@ export default function RateMovesTab() {
         />
         <Button
           title="Compare bank responses"
-          variant="secondary"
+          variant="ghost"
           icon="analytics-outline"
           onPress={() => router.push({ pathname: '/rba-response', params: { section: activeSection } })}
           disabled={!payload}
         />
-      </Card>
+      </View>
 
-      <Card variant="outlined" style={{ gap: 10 }}>
+      <View style={{ gap: 8 }}>
         <SectionHeading
           title="Market and RBA research"
           subtitle="Rate history, RBA decisions and the economic signals shaping rates"
@@ -330,10 +333,10 @@ export default function RateMovesTab() {
         <Button
           title="Explore the data"
           icon="analytics-outline"
-          variant="secondary"
+          variant="ghost"
           onPress={() => router.navigate('/research')}
         />
-      </Card>
+      </View>
     </ScreenScrollView>
   );
 }
