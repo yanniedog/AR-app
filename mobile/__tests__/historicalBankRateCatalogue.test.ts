@@ -164,6 +164,16 @@ test('current day uses only original current rows and respects a newly closed ma
   expect(Object.hasOwn(original, 'bank_rate_tier')).toBe(false);
 });
 
+test('historical LVR n/a siblings stay opt-in even when they share access evidence', () => {
+  const catalogue = pack([
+    { row: descriptor({ lvr_tier: 'lvr_unspecified' }), spans: [[0, 2, [0], 1]] },
+    { row: descriptor(), spans: [[0, 2, [6], 1]] },
+  ]);
+  expect(snapshot(catalogue)[day[0]].Mortgage!.Alpha).toEqual({ min: 6, max: 6, mean: 6, median: 6, count: 1 });
+  expect(snapshot(catalogue, { ...filters, includeNonStandard: true })[day[0]].Mortgage!.Alpha)
+    .toEqual({ min: 0, max: 6, mean: 3, median: 3, count: 2 });
+});
+
 test('cutoff excludes later catalogue observations; legacy newer core adds actual rates with calendar gaps', () => {
   const catalogue = pack(); const early = core([row('0.07')], day[1]);
   const result = snapshot(catalogue, filters, early, scope(early.sections.Mortgage.rates));

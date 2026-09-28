@@ -39,9 +39,9 @@ function observedCase(caseIndex: number, reverse = false) {
   const visible = (includeNonStandard = false) => filterRows(
     rates, { ...EMPTY_FILTERS, includeNonStandard }, details.products, null, section,
   );
-  // Both retained products publish ordinary VARIABLE siblings above the deposit
-  // token-rate floor. Their introductory/bonus sibling must remain opt-in.
-  const ordinary = rates.filter((row) => row.rate_type === 'VARIABLE');
+  // Dnister's exact source rows have unspecified LVR, so both siblings are now
+  // opt-in. BCU's two ordinary VARIABLE savings tiers remain visible by default.
+  const ordinary = caseIndex === 0 ? [] : rates.filter((row) => row.rate_type === 'VARIABLE');
   return { core, details, rates, visible, ordinary, key: observed.product_key };
 }
 
@@ -57,9 +57,9 @@ describe('observed conditional and ordinary siblings in the suitability index', 
     ['Dnister reversed order', 0, true],
     ['BCU source order', 1, false],
     ['BCU reversed order', 1, true],
-  ] as const)('preserves ordinary rows through default filters: %s', async (_label, caseIndex, reverse) => {
+  ] as const)('applies current LVR and conditionality policy through default filters: %s', async (_label, caseIndex, reverse) => {
     const { core, details, visible, ordinary, rates } = observedCase(caseIndex, reverse);
-    expect(ordinary.length).toBeGreaterThan(0);
+    expect(ordinary).toHaveLength(caseIndex === 0 ? 0 : 2);
     expect(visible()).toEqual(ordinary);
     const index = await buildSuitabilityIndex(core, details, DETAILS_SHA, CORE_SHA);
     installSuitabilityIndex(index);
@@ -87,7 +87,7 @@ describe('observed conditional and ordinary siblings in the suitability index', 
     await rebuildAndInstallSuitabilityIndex(core, details, DETAILS_SHA, () => true, CORE_SHA);
     expect(visible()).toEqual(ordinary);
     const persisted = jest.mocked(cache.writeSuitabilityIndex).mock.calls[0][0];
-    expect(persisted).toMatchObject({ schemaVersion: 3, allowed: [key] });
+    expect(persisted).toMatchObject({ schemaVersion: 4, allowed: caseIndex === 0 ? [] : [key] });
 
     clearSuitabilityIndex();
     jest.mocked(cache.readSuitabilityIndex).mockResolvedValue(persisted);

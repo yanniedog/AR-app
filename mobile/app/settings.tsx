@@ -344,7 +344,7 @@ export default function Settings() {
         <ToggleRow
           icon="people-outline"
           label="Widely available products"
-          sub="Show only rates without bonus, intro, age, region, staff, or other eligibility conditions"
+          sub="Hide loans with unspecified LVR, plus bonus, intro, age, region, staff, and other restricted rates"
           value={!prefs.includeNonStandard}
           onChange={(v) => setPref('includeNonStandard', !v)}
         />

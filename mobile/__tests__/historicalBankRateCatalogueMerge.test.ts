@@ -7,7 +7,7 @@ import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src
 
 const source = { kind: 'published_core' as const, core_sha256: 'a'.repeat(64), details_sha256: 'b'.repeat(64), manifest_sha256: 'c'.repeat(64) };
 const row = (extra: Partial<RateRow> = {}): RateRow => ({ provider: 'Alpha', product_id: 'p', product_key: 'Alpha|p',
-  product_name: 'Ordinary loan', category: 'RESIDENTIAL_MORTGAGES', rate: '0.05', rate_type: 'VARIABLE', ...extra });
+  product_name: 'Ordinary loan', category: 'RESIDENTIAL_MORTGAGES', lvr_tier: 'lvr_70-80%', rate: '0.05', rate_type: 'VARIABLE', ...extra });
 const core = (date: string, rows: RateRow[] = [row()]) => ({ run_date: date,
   sections: { Mortgage: { rates: rows }, Savings: { rates: [] }, TD: { rates: [] } } } as unknown as CorePayload);
 const detail: ProductDetail = { description: 'Ordinary retail home loan.', displayIdentity: { name: 'Ordinary loan', provider: 'Alpha', productCategory: 'RESIDENTIAL_MORTGAGES' },
