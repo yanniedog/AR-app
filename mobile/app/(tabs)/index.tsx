@@ -461,7 +461,6 @@ export default function Home() {
         onLayout={() => setHeroLayoutRevision(todayRenderRevision)}
       >
       <HomeHero
-        dataKey={core.run_date}
         runDate={core.run_date}
         runDateLabel={formatRunDate(core.run_date)}
         runAgeLabel={relativeDate(`${core.run_date}T00:00:00Z`)}

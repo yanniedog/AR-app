@@ -59,8 +59,6 @@ export function HomeHero({
   runAgeLabel: string;
   source: PayloadSource;
   offline: boolean;
-  /** Identifies the installed payload. */
-  dataKey: string;
   /** Shares today's headline rates (system share sheet). */
   onShare?: () => void;
   /** Rolling ingest for today is still uploading on GitHub. */
