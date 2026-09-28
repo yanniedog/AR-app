@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import React from 'react';
 import { Platform, Pressable, useWindowDimensions, View } from 'react-native';
 
@@ -10,6 +10,7 @@ import { resolveInterestSection } from '../../src/data/interests';
 import { useStore } from '../../src/data/store';
 import { openSearch } from '../../src/lib/nav';
 import { primaryTabLabel } from '../../src/lib/tabRouting';
+import { shouldShowBreadcrumbs } from '../../src/lib/breadcrumbs';
 import { logTabNoOp } from '../../src/lib/degradationLog';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
@@ -53,6 +54,8 @@ export default function TabsLayout() {
   const isAndroid = Platform.OS === 'android';
   const tabPressListener = ({ navigation, route }: { navigation: { getState: () => { index: number; routes: { name: string }[] } }; route: { name: string } }) => ({ tabPress: () => { const state = navigation.getState(); if (state.routes[state.index]?.name === route.name) logTabNoOp(route.name); } });
   const showUpdateBanner = useAppUpdateBannerVisible();
+  const onboarded = useStore((state) => state.prefs.onboarded);
+  const breadcrumbVisible = shouldShowBreadcrumbs(usePathname(), onboarded);
 
   return (
     <>
@@ -64,8 +67,8 @@ export default function TabsLayout() {
         // Mounted tabs contain expensive data models. Keep blurred tabs from
         // reacting to shared section/data updates during another transition.
         freezeOnBlur: true,
-        // The banner owns the status-bar inset while visible.
-        ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+        // The fixed breadcrumb (or update banner) owns the top inset.
+        ...(showUpdateBanner || breadcrumbVisible ? { headerStatusBarHeight: 0 } : {}),
         headerStyle: {
           backgroundColor: theme.ledger.raised,
           borderBottomColor: theme.ledger.rule,

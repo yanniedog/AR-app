@@ -30,6 +30,7 @@ import {
   NavigationMenuProvider,
 } from '../src/components/AppNavigationMenu';
 import { AppTabBar } from '../src/components/AppTabBar';
+import { AppBreadcrumbBar } from '../src/components/AppBreadcrumbBar';
 import {
   AppUpdateBanner,
   AppUpdateBannerLayoutProvider,
@@ -54,6 +55,7 @@ import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { shouldShowAppTabBar } from '../src/lib/tabRouting';
+import { shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
@@ -266,6 +268,7 @@ function RootNavigator() {
   // Reserve the tab-bar strip only on the four destination roots. Focused
   // stack routes and auxiliary settings use the full viewport.
   const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);
+  const breadcrumbVisible = shouldShowBreadcrumbs(pathname, onboarded);
 
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -445,6 +448,7 @@ function RootNavigator() {
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
+            <AppBreadcrumbBar />
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
@@ -458,7 +462,7 @@ function RootNavigator() {
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: theme.colors.bg },
                   ...androidHeader,
-                  ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+                  ...(showUpdateBanner || breadcrumbVisible ? { headerStatusBarHeight: 0 } : {}),
                   headerRight: () => <NavigationMenuButton />,
                 }}
               >
@@ -470,7 +474,7 @@ function RootNavigator() {
               <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
               <Stack.Screen name="bank/[provider]" options={{ title: 'Bank' }} />
               <Stack.Screen name="banks" options={{ title: 'Banks' }} />
-              <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
+              <Stack.Screen name="compare" options={{ title: 'Compare' }} />
               <Stack.Screen name="calculator" options={{ title: 'My scenario' }} />
               <Stack.Screen name="projections" options={{ title: 'What if rates change?' }} />
               <Stack.Screen name="rba-response" options={{ title: 'Bank response', headerBackTitle: 'Changes' }} />

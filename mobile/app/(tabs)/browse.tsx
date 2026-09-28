@@ -1,4 +1,4 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 
@@ -59,9 +59,9 @@ export default function Browse() {
     setSection((current) => resolveInterestSection(interests, current));
   }, [interests]);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     setActiveSection(renderedSection);
-  }, [renderedSection, setActiveSection]);
+  }, [renderedSection, setActiveSection]));
 
   const changeSection = useCallback((next: typeof section) => {
     setSection(next);
