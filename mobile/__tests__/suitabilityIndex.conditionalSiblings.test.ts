@@ -40,7 +40,7 @@ function observedCase(caseIndex: number, reverse = false) {
     rates, { ...EMPTY_FILTERS, includeNonStandard }, details.products, null, section,
   );
   // Dnister's exact source rows have unspecified LVR, so both siblings are now
-  // opt-in. BCU's ordinary VARIABLE savings row remains visible by default.
+  // opt-in. BCU's two ordinary VARIABLE savings tiers remain visible by default.
   const ordinary = caseIndex === 0 ? [] : rates.filter((row) => row.rate_type === 'VARIABLE');
   return { core, details, rates, visible, ordinary, key: observed.product_key };
 }
@@ -59,7 +59,7 @@ describe('observed conditional and ordinary siblings in the suitability index', 
     ['BCU reversed order', 1, true],
   ] as const)('applies current LVR and conditionality policy through default filters: %s', async (_label, caseIndex, reverse) => {
     const { core, details, visible, ordinary, rates } = observedCase(caseIndex, reverse);
-    expect(ordinary).toHaveLength(caseIndex === 0 ? 0 : 1);
+    expect(ordinary).toHaveLength(caseIndex === 0 ? 0 : 2);
     expect(visible()).toEqual(ordinary);
     const index = await buildSuitabilityIndex(core, details, DETAILS_SHA, CORE_SHA);
     installSuitabilityIndex(index);
