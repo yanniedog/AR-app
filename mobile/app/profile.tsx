@@ -96,6 +96,7 @@ export default function Profile() {
           const disabled = selected && interests.length === 1;
           return <LedgerRow key={section} title={SECTIONS[section].title}
             accessibilityRole="checkbox" accessibilityState={{ checked: selected, disabled }}
+            aria-checked={selected} aria-disabled={disabled}
             disabled={disabled} onPress={() => setPref('interests', toggleInterest(interests, section))}
             trailing={<LedgerIcon name={selected ? 'checkbox' : 'checkbox-empty'} size={24} color={theme.colors.primary} />} />;
         })}

@@ -65,6 +65,7 @@ export function AppTabBar() {
             key={route}
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
+            aria-selected={focused}
             accessibilityLabel={label}
             onPress={() => onPressTab(route)}
             style={({ pressed }) => ({
