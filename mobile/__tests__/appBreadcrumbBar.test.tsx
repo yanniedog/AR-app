@@ -118,6 +118,30 @@ it('removes a protected product name from an open ancestor menu when eligibility
   expect(button('Close parent sections')).toBeUndefined();
 });
 
+it('does not reopen a dismissed overflow menu after rotating back to a narrow screen', () => {
+  mockPathname = '/catalogue';
+  mockDimensions = { ...mockDimensions, width: 200 };
+  mount();
+  act(() => button('Show parent sections').props.onPress!());
+  expect(button('Close parent sections')).toBeDefined();
+  mockDimensions = { ...mockDimensions, width: 800 };
+  act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Close parent sections')).toBeUndefined();
+  mockDimensions = { ...mockDimensions, width: 200 };
+  act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Close parent sections')).toBeUndefined();
+});
+
+it('does not offer a dead product jump when exact-rate evidence is unavailable', () => {
+  mockPathname = '/rate-receipt';
+  mockParams = { key: 'private-key', ri: 'not-a-rate' };
+  mockDimensions = { ...mockDimensions, width: 320, fontScale: 2.5 };
+  mount();
+  act(() => button('Show parent sections').props.onPress!());
+  expect(button('Go to Product')).toBeUndefined();
+  expect(button('Product').props.disabled).toBe(true);
+});
+
 it('consumes the top safe-area inset exactly once when the update banner toggles', () => {
   mount();
   const bar = () => tree.root.findByProps({ testID: 'app-breadcrumb-bar' });

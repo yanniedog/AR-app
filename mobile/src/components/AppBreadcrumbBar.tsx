@@ -72,7 +72,7 @@ export function AppBreadcrumbBar() {
   const trailKey = JSON.stringify(crumbs);
   const { hidden, visible } = compactBreadcrumbs(crumbs, width - insets.left - insets.right, fontScale);
   // A changed route or eligibility result dismisses the menu before stale labels can render.
-  if (openTrail !== null && openTrail !== trailKey) setOpenTrail(null);
+  if (openTrail !== null && (openTrail !== trailKey || hidden.length === 0)) setOpenTrail(null);
   const menuOpen = openTrail === trailKey && hidden.length > 0;
   const closeMenu = () => setOpenTrail(null);
 
@@ -140,7 +140,7 @@ export function AppBreadcrumbBar() {
         </View>
       </View>
       <Modal visible={menuOpen} transparent animationType="none" onRequestClose={closeMenu} statusBarTranslucent>
-        <View style={{ flex: 1, paddingTop: insets.top + height, paddingHorizontal: Math.max(insets.left, insets.right, 8), paddingBottom: Math.max(insets.bottom, 8) }}>
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: Math.max(insets.top, 8), paddingHorizontal: Math.max(insets.left, insets.right, 8), paddingBottom: Math.max(insets.bottom, 8) }}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Dismiss parent sections"
@@ -161,8 +161,9 @@ export function AppBreadcrumbBar() {
               {hidden.map((crumb, index) => (
                 <Pressable
                   key={index}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Go to ${crumb.label}`}
+                  accessibilityRole={crumb.target ? 'button' : 'text'}
+                  accessibilityLabel={crumb.target ? `Go to ${crumb.label}` : crumb.label}
+                  disabled={!crumb.target}
                   onPress={() => { if (crumb.target) navigate(crumb.target); }}
                   style={({ pressed }) => ({ minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
                 >
