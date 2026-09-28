@@ -73,7 +73,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
     </Row>
     <View style={{ gap: 4 }}>
       <AppText variant="rateHero">{latest.value.toFixed(2)}{unit}</AppText>
-      <AppText variant="small" color="textMuted">{label} {gap ? 'gap' : 'advertised rate (% p.a.)'} · {formatRunDate(latest.date)}</AppText>
+      <AppText variant="small" color="textMuted">{gap ? 'Mortgage − savings gap (pp)' : `${label} advertised rate (% p.a.)`} · {formatRunDate(latest.date)}</AppText>
     </View>
     <View accessible accessibilityRole="image" accessibilityLabel={summary}>
       <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
