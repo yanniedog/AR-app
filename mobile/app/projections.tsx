@@ -677,7 +677,7 @@ export default function Projections() {
       <View>
         <AppText variant="h3">Start with today</AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-          These values are shared with Today and My scenario. Editing them updates only your private local scenario.
+          These values are shared with your rate calculator. Editing them updates only your private local scenario.
         </AppText>
       </View>
       {section === 'Mortgage' ? (
@@ -888,7 +888,7 @@ export default function Projections() {
             Fix or add {result.missing.join(', ')} above to build this projection.
           </AppText>
           <Button
-            title="Edit My scenario"
+            title="Edit Check my rate"
             variant="secondary"
             onPress={() => { void flush().then((saved) => { if (saved) router.push('/calculator'); }); }}
           />

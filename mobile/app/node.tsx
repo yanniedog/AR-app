@@ -5,7 +5,7 @@ import { SECTION_ORDER } from '../src/constants';
 import { buildBrowseRouteParams } from '../src/lib/browseRoute';
 import type { SectionKey } from '../src/types';
 
-/** Legacy /node deep links redirect into the Browse tab drill-down. */
+/** Preserve legacy category links at the dedicated category screen. */
 export default function NodeScreen() {
   const { section: secRaw, path: pathRaw } = useLocalSearchParams<{ section: string; path?: string }>();
   const section = (SECTION_ORDER.includes(secRaw as SectionKey) ? secRaw : 'Mortgage') as SectionKey;
@@ -18,7 +18,7 @@ export default function NodeScreen() {
   return (
     <Redirect
       href={{
-        pathname: '/browse',
+        pathname: '/categories',
         params: browseParams,
       }}
     />

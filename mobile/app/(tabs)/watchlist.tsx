@@ -11,7 +11,7 @@ import { ProductCard } from '../../src/components/ProductCard';
 import { Screen, ScreenScrollView } from '../../src/components/Screen';
 import { UndoSnackbar } from '../../src/components/Snackbar';
 import { SwipeableRow } from '../../src/components/SwipeableRow';
-import { AppText, Button, Card, Row, SectionHeading } from '../../src/components/ui';
+import { AppText, Button, Card, Disclosure, Row, SectionHeading } from '../../src/components/ui';
 import { SECTION_ORDER, SECTIONS } from '../../src/constants';
 import { computeLvr } from '../../src/data/calc';
 import { toggleCompareSelection } from '../../src/data/compareSelection';
@@ -92,6 +92,7 @@ let auditSavedFixtureSnapshot: {
 
 export default function MyRates() {
   const theme = useTheme();
+  const [positionsOpen, setPositionsOpen] = useState(false);
   const reducedMotion = useReducedMotion();
   const core = useStore((s) => s.core);
   const coreSha = useStore((s) => s.manifest?.files.core.sha256 ?? '');
@@ -231,7 +232,7 @@ export default function MyRates() {
       return;
     }
     if (update.rejection === 'unavailable') {
-      Alert.alert('Rate unavailable', 'Refresh My rates and choose a current rate.');
+      Alert.alert('Rate unavailable', 'Refresh Saved and choose a current rate.');
       return;
     }
     setSelected(update.tokens);
@@ -433,70 +434,9 @@ export default function MyRates() {
         contentContainerStyle={{ paddingBottom: snack ? 96 : 48, gap: 24 }}
       >
         <SectionHeading
-          title="My rates"
-          subtitle="Your rates and saved products"
+          title="Saved products"
+          subtitle="Follow rates, manage alerts and compare your shortlist."
         />
-
-        {positions.length ? positions.map((position) => {
-          const meta = SECTIONS[position.section];
-          return (
-            <Card
-              key={position.section}
-              variant="outlined"
-              style={{ gap: theme.spacing(3) }}
-            >
-              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
-                <AppText variant="small" weight="700">Your {meta.title.toLowerCase()}</AppText>
-                <Pressable
-                  onPress={() => openRateEditor(position.section)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
-                  style={{ minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' }}
-                >
-                  <AppText variant="small" color="primary" weight="700">Edit</AppText>
-                </Pressable>
-              </Row>
-              <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
-                <View>
-                  <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
-                  <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
-                </View>
-                {position.matchedRate != null ? (
-                  <View style={{ alignItems: 'flex-end' }}>
-                    <AppText variant="tiny" color="textMuted">Matched observed rate</AppText>
-                    <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
-                      {formatRate(position.matchedRate)}
-                    </AppText>
-                  </View>
-                ) : null}
-              </Row>
-              <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
-              {position.ready ? (
-                <AppText variant="tiny" color="textMuted">
-                  Observed {formatRunDate(core.run_date)} · matched to your filters.
-                </AppText>
-              ) : null}
-              {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
-                <AppText variant="tiny" color="textMuted">
-                  Product matched by comparison rate; the gap uses its advertised rate.
-                </AppText>
-              ) : null}
-            </Card>
-          );
-        }) : (
-          <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
-            <View>
-              <AppText variant="h3">Check my rate</AppText>
-              <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
-                See your observed gap without linking a bank account.
-              </AppText>
-            </View>
-            <Button title="Add my rate" onPress={() => openRateEditor('Mortgage')} />
-          </Card>
-        )}
-        <AppText variant="tiny" color="textMuted">
-          Entered rates stay on this device. Observed gaps are shown in percentage points.
-        </AppText>
 
         {profileDetailsPending && !detailsLoading ? (
           <Card variant="outlined" style={{ gap: theme.spacing(2) }}>
@@ -672,6 +612,69 @@ export default function MyRates() {
             </View>
           );
         })}
+        <Disclosure title="Your entered rates" summary="Review rates you entered in Tools" open={positionsOpen} onToggle={() => setPositionsOpen(open => !open)}>
+        {positions.length ? positions.map((position) => {
+          const meta = SECTIONS[position.section];
+          return (
+            <Card
+              key={position.section}
+              variant="outlined"
+              style={{ gap: theme.spacing(3) }}
+            >
+              <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                <AppText variant="small" weight="700">Your {meta.title.toLowerCase()}</AppText>
+                <Pressable
+                  onPress={() => openRateEditor(position.section)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit my ${meta.title.toLowerCase()} rate`}
+                  style={{ minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'flex-end' }}
+                >
+                  <AppText variant="small" color="primary" weight="700">Edit</AppText>
+                </Pressable>
+              </Row>
+              <Row style={{ justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: theme.spacing(4) }}>
+                <View>
+                  <AppText variant="tiny" color="textMuted">Current entered rate</AppText>
+                  <AppText variant="h3">{formatRate(position.currentRate)}</AppText>
+                </View>
+                {position.matchedRate != null ? (
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <AppText variant="tiny" color="textMuted">Matched observed rate</AppText>
+                    <AppText variant="h3" style={{ color: meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit }}>
+                      {formatRate(position.matchedRate)}
+                    </AppText>
+                  </View>
+                ) : null}
+              </Row>
+              <AppText variant="body" weight="700">{positionHeadline(position)}</AppText>
+              {position.ready ? (
+                <AppText variant="tiny" color="textMuted">
+                  Observed {formatRunDate(core.run_date)} · matched to your filters.
+                </AppText>
+              ) : null}
+              {position.section === 'Mortgage' && mortgageRateMetric === 'comparison' ? (
+                <AppText variant="tiny" color="textMuted">
+                  Product matched by comparison rate; the gap uses its advertised rate.
+                </AppText>
+              ) : null}
+            </Card>
+          );
+        }) : (
+          <Card variant="outlined" style={{ gap: theme.spacing(3) }}>
+            <View>
+              <AppText variant="h3">Check my rate</AppText>
+              <AppText variant="small" color="textMuted" style={{ marginTop: 2 }}>
+                See your observed gap without linking a bank account.
+              </AppText>
+            </View>
+            <Button title="Add my rate" onPress={() => openRateEditor('Mortgage')} />
+          </Card>
+        )}
+        <AppText variant="tiny" color="textMuted">
+          Entered rates stay on this device. Observed gaps are shown in percentage points.
+        </AppText>
+
+        </Disclosure>
       </ScreenScrollView>
       <UndoSnackbar snack={snack} onUndo={undo} />
       <Modal

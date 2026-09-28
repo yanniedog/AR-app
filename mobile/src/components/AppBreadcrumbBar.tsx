@@ -15,6 +15,7 @@ import { buildBreadcrumbs, shouldShowBreadcrumbs, type BreadcrumbTarget } from '
 import { compactBreadcrumbs, shortBreadcrumbLabel } from '../lib/compactBreadcrumbs';
 import { parseBrowsePath, scalarRouteParam } from '../lib/nav';
 import { useTheme } from '../theme/ThemeProvider';
+import { navigateToAppDestination, navigateToPrimaryTab } from '../lib/primaryNavigation';
 import { useAppUpdateBannerVisible } from './AppUpdateBanner';
 import { LedgerIcon } from './icons/LedgerIcon';
 import { AppText } from './ui';
@@ -80,9 +81,9 @@ export function AppBreadcrumbBar() {
 
   const navigate = (target: BreadcrumbTarget) => {
     closeMenu();
-    if ('href' in target) router.navigate(target.href);
+    if ('href' in target) navigateToAppDestination(target.href, pathname);
     else router.navigate({
-      pathname: '/(tabs)/browse',
+      pathname: '/categories',
       params: { ...buildBrowseRouteParams(target.section, target.path), path: target.path.join('.') },
     });
   };
@@ -101,7 +102,7 @@ export function AppBreadcrumbBar() {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Home"
-          onPress={() => router.navigate('/(tabs)')}
+          onPress={() => navigateToPrimaryTab('index', pathname)}
           style={({ pressed }) => ({ width: 44, alignItems: 'center', justifyContent: 'center', opacity: pressed ? 0.6 : 1 })}
         >
           <LedgerIcon name="home" size={18} color={theme.ledger.mutedInk} />

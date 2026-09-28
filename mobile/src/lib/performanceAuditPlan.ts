@@ -395,13 +395,91 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 1, semanticActionId: 'onboarding.job.check', stateImpact: 'local-only' },
   ]);
 
-  scenario(templates, 'route.today', {
+  scenario(templates, 'route.home', {
     expectedPath: '/',
+    expectedSurface: 'home.hub',
+    readiness: ['app', 'local-state'],
+  }, [
+    { depth: 0, semanticActionId: 'home.open' },
+    { depth: 1, semanticActionId: 'home.rates.open', expectedPath: '/browse', expectedSurface: 'rates.hub', stateImpact: 'local-only' },
+  ]);
+
+  scenario(templates, 'route.rates', {
+    expectedPath: '/browse',
+    expectedSurface: 'rates.hub',
+    readiness: ['app', 'local-state'],
+  }, [
+    { depth: 0, semanticActionId: 'rates.open' },
+    {
+      depth: 1,
+      semanticActionId: 'rates.categories.open',
+      expectedPath: '/categories',
+      expectedSurface: 'browse.hierarchy',
+      readiness: ['data', 'suitability', 'list'],
+      skipReason: missingCore,
+      stateImpact: 'local-only',
+    },
+  ]);
+
+  scenario(templates, 'route.market', {
+    expectedPath: '/market',
+    expectedSurface: 'market.hub',
+    readiness: ['app', 'local-state'],
+  }, [
+    { depth: 0, semanticActionId: 'market.open' },
+    {
+      depth: 1,
+      semanticActionId: 'market.outlook.open',
+      expectedPath: '/research',
+      expectedSurface: 'outlook.dashboard',
+      readiness: ['data', 'graphics', 'rba-calendar', 'economic-data'],
+      skipReason: missingCore,
+      stateImpact: 'local-only',
+    },
+  ]);
+
+  scenario(templates, 'route.tools', {
+    expectedPath: '/tools',
+    expectedSurface: 'tools.hub',
+    readiness: ['app', 'local-state'],
+  }, [
+    { depth: 0, semanticActionId: 'tools.open' },
+    {
+      depth: 1,
+      semanticActionId: 'tools.calculator.open',
+      expectedPath: '/calculator',
+      expectedSurface: 'calculator.results',
+      readiness: ['data', 'details', 'scenario-storage', 'suitability', 'list'],
+      skipReason: missingCore,
+      stateImpact: 'local-only',
+    },
+  ]);
+
+  scenario(templates, 'route.bank-rates', {
+    expectedPath: '/bank-rates',
+    expectedSurface: 'bank-rates.dashboard',
+    readiness: ['app', 'data', 'graphics'],
+    skipReason: missingCore,
+    skipWhen: ['Core data is unavailable'],
+    skipExplanation: 'Bank rates require observed chart layout and a prepared rate model.',
+  }, [
+    { depth: 0, semanticActionId: 'bank-rates.open' },
+    {
+      depth: 1,
+      semanticActionId: 'bank-rates.section.next',
+      stateImpact: 'local-only',
+      optional: true,
+      skipWhen: ['Only one product type is enabled in interests'],
+    },
+  ]);
+
+  scenario(templates, 'route.today', {
+    expectedPath: '/matches',
     expectedSurface: 'today.hero',
     readiness: ['app', 'data', 'suitability', 'details', 'graphics', 'logos'],
     skipReason: missingCore,
     skipWhen: ['Core data is unavailable'],
-    skipExplanation: 'Today requires a pinned core revision and an honest suitability result.',
+    skipExplanation: 'My matches requires a pinned core revision and an honest suitability result.',
   }, [
     { depth: 0, semanticActionId: 'today.open' },
     { depth: 1, semanticActionId: 'today.section.next', stateImpact: 'restorable' },
@@ -419,7 +497,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   ]);
 
   scenario(templates, 'route.browse', {
-    expectedPath: '/browse',
+    expectedPath: '/categories',
     expectedSurface: 'browse.hierarchy',
     readiness: ['app', 'data', 'suitability', 'list'],
     skipReason: missingCore,
@@ -456,7 +534,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
   ]);
 
   scenario(templates, 'redirect.node', {
-    expectedPath: '/browse',
+    expectedPath: '/categories',
     expectedSurface: 'browse.hierarchy',
     readiness: ['app', 'redirect', 'data', 'list'],
     optional: true,
@@ -838,7 +916,7 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'outlook.economy.lens.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.economy.window.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.economy.date.previous', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.snapshot.browse.first', expectedPath: '/browse', expectedSurface: 'browse.hierarchy', readiness: ['list'], parameters: { section: section ?? null }, optional: true, skipReason: missingCore },
+    { depth: 2, semanticActionId: 'outlook.snapshot.browse.first', expectedPath: '/categories', expectedSurface: 'browse.hierarchy', readiness: ['list'], parameters: { section: section ?? null }, optional: true, skipReason: missingCore },
   ]);
 
   scenario(templates, 'route.saved', {
@@ -945,13 +1023,13 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     readiness: ['app', 'local-state'],
   }, [
     { depth: 0, semanticActionId: 'not-found.open' },
-    { depth: 1, semanticActionId: 'not-found.home', expectedPath: '/', expectedSurface: 'today.hero', readiness: ['data', 'suitability', 'graphics'], stateImpact: 'local-only' },
+    { depth: 1, semanticActionId: 'not-found.home', expectedPath: '/', expectedSurface: 'home.hub', readiness: ['local-state'], stateImpact: 'local-only' },
   ]);
 
   scenario(templates, 'redirect.root', {
     expectedPath: '/',
-    expectedSurface: 'today.hero',
-    readiness: ['app', 'redirect', 'data', 'suitability', 'graphics'],
+    expectedSurface: 'home.hub',
+    readiness: ['app', 'redirect', 'local-state'],
   }, [
     { depth: 1, semanticActionId: 'redirect.root.verify' },
   ]);

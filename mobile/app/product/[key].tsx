@@ -513,8 +513,8 @@ export default function ProductDetail() {
                 color={favorite ? 'warning' : 'text'}
                 onPress={() => toggleSavedRate(row, saveScope)}
                 accessibilityLabel={favorite
-                  ? exactSaveEligible ? 'Remove this rate from My rates' : 'Remove this product from My rates'
-                  : exactSaveEligible ? 'Save this exact rate to My rates' : 'Save all product variants to My rates'}
+                  ? exactSaveEligible ? 'Remove this rate from Saved' : 'Remove this product from Saved'
+                  : exactSaveEligible ? 'Save this exact rate to Saved' : 'Save all product variants to Saved'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
               <NavigationMenuButton />
@@ -645,8 +645,8 @@ export default function ProductDetail() {
 
         <Button
           title={favorite
-            ? 'Saved to My rates'
-            : exactSaveEligible ? 'Save exact rate to My rates' : 'Save product to My rates'}
+            ? 'Saved to Saved'
+            : exactSaveEligible ? 'Save exact rate to Saved' : 'Save product to Saved'}
           icon={favorite ? 'star' : 'star-outline'}
           style={{ marginBottom: 10 }}
           onPress={() => toggleSavedRate(row, saveScope)}

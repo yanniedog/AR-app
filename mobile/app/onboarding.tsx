@@ -175,7 +175,7 @@ export default function Onboarding() {
       ? { pathname: '/calculator', params: { intent: 'check', section } }
       : job === 'find'
         ? '/(tabs)/browse'
-        : '/(tabs)/passthrough');
+        : '/(tabs)/market');
   };
 
   if (!core) return <ScreenSkeleton />;
@@ -306,7 +306,7 @@ export default function Onboarding() {
 
         <View style={{ flex: 1, minHeight: 28 }} />
         <Button
-          title={job === 'check' ? 'Check my rate' : job === 'find' ? 'Explore rates' : 'See recent changes'}
+          title={job === 'check' ? 'Check my rate' : job === 'find' ? 'Find rates' : 'Open Market'}
           icon="arrow-forward"
           onPress={start}
         />

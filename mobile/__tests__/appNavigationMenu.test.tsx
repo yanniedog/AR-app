@@ -42,7 +42,7 @@ jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
 }));
 
-it('opens the app menu and closes it before navigating to RBA rates', () => {
+it('opens the app menu and closes it before navigating to RBA rates and outlook', () => {
   let nextFrame: Parameters<typeof requestAnimationFrame>[0] | undefined;
   const frame = jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
     nextFrame = callback;
@@ -66,10 +66,13 @@ it('opens the app menu and closes it before navigating to RBA rates', () => {
     act(() => { button('Open app menu').props.onPress(); });
     expect(tree.root.findByType(Modal).props.visible).toBe(true);
     expect(tree.root.findAllByType(AppText).some((node) => node.props.children === 'Menu')).toBe(true);
-    const rba = button('RBA rates');
+    for (const group of ['Start', 'Rates', 'Saved', 'Market', 'Tools', 'App']) {
+      expect(tree.root.findAllByType(AppText).some((node) => node.props.children === group && node.props.accessibilityRole === 'header')).toBe(true);
+    }
+    const rba = button('RBA rates and outlook');
     expect(rba.props.accessibilityState.selected).toBe(true);
     expect(StyleSheet.flatten(rba.props.style({ pressed: false })).minHeight).toBeGreaterThanOrEqual(48);
-    for (const label of ['Your profile', 'Settings', 'About']) {
+    for (const label of ['Your profile', 'Settings', 'About and help', 'Market overview', 'Home', 'Find rates', 'Tools overview']) {
       expect(button(label).props.accessibilityState.selected).toBe(false);
     }
     act(() => { rba.props.onPress(); });

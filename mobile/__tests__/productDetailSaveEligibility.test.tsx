@@ -144,8 +144,8 @@ describe('Product detail save eligibility', () => {
     act(() => {
       header = TestRenderer.create(stack.props.options.headerRight()) as InspectableRenderer;
     });
-    const headerSave = header.root.findByProps({ accessibilityLabel: 'Save all product variants to My rates' });
-    const bodySave = tree.root.findByProps({ title: 'Save product to My rates' });
+    const headerSave = header.root.findByProps({ accessibilityLabel: 'Save all product variants to Saved' });
+    const bodySave = tree.root.findByProps({ title: 'Save product to Saved' });
 
     expect(() => {
       act(() => headerSave.props.onPress());

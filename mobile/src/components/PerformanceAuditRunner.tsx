@@ -472,14 +472,19 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
   const selectionTokens = stringArrayParameter(step, 'selectionTokens');
   switch (step.semanticActionId) {
     case 'onboarding.open': return '/onboarding' as Href;
-    case 'today.open': return '/(tabs)' as Href;
-    case 'browse.open': return '/browse' as Href;
+    case 'home.open': return '/(tabs)' as Href;
+    case 'rates.open': return '/browse' as Href;
+    case 'market.open': return '/market' as Href;
+    case 'tools.open': return '/tools' as Href;
+    case 'bank-rates.open': return '/bank-rates' as Href;
+    case 'today.open': return '/matches' as Href;
+    case 'browse.open': return '/categories' as Href;
     case 'search.open':
       return {
         pathname: '/search',
         params: section ? { section } : {},
       } as unknown as Href;
-    case 'changes.open': return '/(tabs)/passthrough' as Href;
+    case 'changes.open': return '/passthrough' as Href;
     case 'compare.open':
       return {
         pathname: '/compare',
@@ -567,13 +572,18 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
   switch (root) {
     case 'calculator': return '/calculator';
     case 'search': return '/search';
-    case 'browse': return '/browse';
+    case 'home': return '/';
+    case 'rates': return '/browse';
+    case 'market': return '/market';
+    case 'tools': return '/tools';
+    case 'bank-rates': return '/bank-rates';
+    case 'browse': return '/categories';
     case 'projections': return '/projections';
     case 'lenders': return '/banks';
     case 'saved': return '/watchlist';
     case 'settings': return '/settings';
     case 'onboarding': return '/onboarding';
-    case 'today': return '/';
+    case 'today': return '/matches';
     case 'changes': return '/passthrough';
     case 'moves': return '/rba-response';
     case 'rba': return '/rba';

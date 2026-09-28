@@ -428,7 +428,7 @@ export default function RateReceiptScreen() {
           ) : (
             <>
               <AppText variant="small" color="textMuted" style={{ marginBottom: 12, lineHeight: 20 }}>
-                Add your current rate and balance in My scenario to make this brief specific.
+                Add your current rate and balance in Check my rate to make this brief specific.
               </AppText>
               <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />
             </>

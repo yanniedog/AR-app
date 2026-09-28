@@ -1,4 +1,4 @@
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
 import React, { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,30 +6,21 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStore } from '../data/store';
 import { getTabBarLayout, TAB_BAR_LABEL_LINE_HEIGHT } from '../lib/androidChrome';
 import { hapticSelection } from '../lib/haptics';
+import { navigateToPrimaryTab } from '../lib/primaryNavigation';
 import {
   isPrimaryTabRootPath,
   primaryTabLabel,
   resolveActiveTab,
   shouldShowAppTabBar,
   TAB_BAR_ORDER,
-  tabHref,
   type PrimaryTabRouteName,
 } from '../lib/tabRouting';
 import { useTheme } from '../theme/ThemeProvider';
 import { commissionerFamily } from '../theme/fonts';
-import { LedgerIcon, type LedgerIconName } from './icons/LedgerIcon';
+import { TAB_LEDGER_ICONS } from '../lib/tabIcons';
+import { LedgerIcon } from './icons/LedgerIcon';
 
-const TAB_ICONS: Record<PrimaryTabRouteName, LedgerIconName> = {
-  index: 'today',
-  browse: 'explore',
-  passthrough: 'changes',
-  watchlist: 'my-rates',
-};
-
-/**
- * Root-level primary navigation. Focused stack routes deliberately hide this
- * bar so their native back action preserves the journey that launched them.
- */
+/** Persistent section navigation; stack Back still preserves the current journey. */
 export function AppTabBar() {
   const theme = useTheme();
   const insets = useSafeAreaInsets();
@@ -44,7 +35,7 @@ export function AppTabBar() {
       hapticSelection();
       return;
     }
-    router.navigate(tabHref(route));
+    navigateToPrimaryTab(route, pathname);
   }, [pathname]);
 
   if (!shouldShowAppTabBar(pathname, onboarded)) return null;
@@ -58,6 +49,8 @@ export function AppTabBar() {
         height: tabBarLayout.contentHeight + insets.bottom,
         paddingBottom: insets.bottom,
         paddingTop: 0,
+        paddingLeft: insets.left,
+        paddingRight: insets.right,
         borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: theme.ledger.rule,
       }}
@@ -94,7 +87,7 @@ export function AppTabBar() {
             />
             <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               <View style={{ height: 30, alignItems: 'center', justifyContent: 'center' }}>
-                <LedgerIcon name={TAB_ICONS[route]} size={23} color={tint} />
+                <LedgerIcon name={TAB_LEDGER_ICONS[route]} size={23} color={tint} />
               </View>
               <Text
                 numberOfLines={tabBarLayout.labelLines}
