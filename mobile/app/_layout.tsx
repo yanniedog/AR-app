@@ -1,4 +1,5 @@
 import * as Application from 'expo-application';
+import { Header, getHeaderTitle } from '@react-navigation/elements';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
@@ -31,6 +32,7 @@ import {
 } from '../src/components/AppNavigationMenu';
 import { AppTabBar } from '../src/components/AppTabBar';
 import { AppBreadcrumbBar } from '../src/components/AppBreadcrumbBar';
+import { NavigatorSafeArea } from '../src/components/NavigatorSafeArea';
 import {
   AppUpdateBanner,
   AppUpdateBannerLayoutProvider,
@@ -449,6 +451,7 @@ function RootNavigator() {
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
             <AppBreadcrumbBar />
+            <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
@@ -462,7 +465,20 @@ function RootNavigator() {
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: theme.colors.bg },
                   ...androidHeader,
-                  ...(showUpdateBanner || breadcrumbVisible ? { headerStatusBarHeight: 0 } : {}),
+                  // Native Android toolbars force a window-level top inset in
+                  // edge-to-edge mode. A JS header respects the consumed inset.
+                  header: showUpdateBanner || breadcrumbVisible
+                    ? ({ options, route, back }) => (
+                      <Header
+                        {...options}
+                        title={getHeaderTitle(options, route.name)}
+                        back={options.headerBackVisible === false ? undefined : back && {
+                          ...back, title: options.headerBackTitle ?? back.title,
+                        }}
+                        headerStatusBarHeight={0}
+                      />
+                    )
+                    : undefined,
                   headerRight: () => <NavigationMenuButton />,
                 }}
               >
@@ -502,15 +518,8 @@ function RootNavigator() {
               <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'About' }} />
               <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'About' }} />
               </Stack>
-              {appReady ? (
-                <BrandedSplashOverlay
-                  visible={overlayVisible}
-                  morphTarget={morphTarget}
-                  onboarded={onboarded}
-                  onMorphComplete={handleMorphComplete}
-                />
-              ) : null}
             </View>
+            </NavigatorSafeArea>
             <AppTabBar />
             <AppNavigationMenu />
             </NavigationMenuProvider>
@@ -522,6 +531,16 @@ function RootNavigator() {
             onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}
           />
+          {/* Splash targets use measureInWindow; keep the overlay above every
+              layout strip in the root coordinate space as well. */}
+          {appReady ? (
+            <BrandedSplashOverlay
+              visible={overlayVisible}
+              morphTarget={morphTarget}
+              onboarded={onboarded}
+              onMorphComplete={handleMorphComplete}
+            />
+          ) : null}
         </View>
       </AppUpdateBannerLayoutProvider>
     </SplashMorphProvider>

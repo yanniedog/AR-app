@@ -29,6 +29,7 @@ import {
   type ProjectionMetric,
 } from '../src/data/projections';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { useScenarioSection } from '../src/hooks/useScenarioSection';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useStore } from '../src/data/store';
 import type { SectionKey } from '../src/types';
@@ -51,11 +52,6 @@ const FREQUENCY_OPTIONS: { label: string; value: ProjectionFrequency }[] = [
   { label: 'Fortnightly', value: 'fortnightly' },
   { label: 'Monthly', value: 'monthly' },
 ];
-
-function requestedSection(value: string | string[] | undefined): SectionKey {
-  const first = Array.isArray(value) ? value[0] : value;
-  return first === 'Savings' || first === 'TD' ? first : 'Mortgage';
-}
 
 function enteredNumber(value: string): number | null {
   if (!value.trim()) return null;
@@ -210,7 +206,7 @@ export default function Projections() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 860 && fontScale < 1.5;
-  const [section, setSection] = useState<SectionKey>(() => requestedSection(params.section));
+  const [section, changeSection] = useScenarioSection('Mortgage');
   const {
     scenario,
     storageStatus,
@@ -233,12 +229,9 @@ export default function Projections() {
   const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
   auditRenderRevisionTracker.current ??= new OpaquePerformanceAuditRenderRevision();
 
-  const changeSection = useCallback((next: SectionKey) => setSection(next), []);
   const toggleAdvanced = useCallback(() => setAdvanced((value) => !value), []);
   const changeDimension = useCallback((next: ProjectionDimension) => setDimension(next), []);
   const changeMetric = useCallback((next: ProjectionMetric) => setMetric(next), []);
-
-  useEffect(() => changeSection(requestedSection(params.section)), [changeSection, params.section]);
 
   const projectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const projectionInputs = scenario.projections[projectionKey];

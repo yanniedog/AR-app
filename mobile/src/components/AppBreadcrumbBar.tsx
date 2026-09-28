@@ -4,6 +4,7 @@ import { Platform, Pressable, ScrollView, StyleSheet, useWindowDimensions, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../data/eligibilityGate';
+import { detailsDisplayIdentity, verifiedCatalogueDetails } from '../data/detailsCatalogue';
 import { resolveInterestSection } from '../data/interests';
 import { findEligibleByKey } from '../data/selectors';
 import { useStore } from '../data/store';
@@ -30,24 +31,42 @@ export function AppBreadcrumbBar() {
   const interests = useStore((state) => state.prefs.interests);
   const activeSection = useStore((state) => state.activeSection);
   const core = useStore((state) => state.core);
+  const coreIntegrity = useStore((state) => state.coreIntegrity);
+  const manifest = useStore((state) => state.manifest);
+  const details = useStore((state) => state.details);
   const suitabilityRevision = useSuitabilityRevision();
   const updateBannerVisible = useAppUpdateBannerVisible();
   const scroll = useRef<ScrollView>(null);
   const key = scalarRouteParam(params.key);
   const rateIndex = scalarRouteParam(params.ri);
-  const product = useMemo(() => {
+  const { product, catalogueProductName } = useMemo(() => {
     // Eligibility changes must invalidate labels even when core data is unchanged.
     void suitabilityRevision;
-    if (!key || !core || !isMandatoryEligibilityReady() || !mandatoryProductAllowed(key)) return null;
+    const unavailable = { product: null, catalogueProductName: null };
+    if (!key || !core || !isMandatoryEligibilityReady() || !mandatoryProductAllowed(key)) return unavailable;
     const found = findEligibleByKey(core.sections, key);
-    if (!found || rateIndex == null) return found;
-    const row = found.siblings.find((candidate) => String(candidate.rate_index) === rateIndex);
-    return row ? { section: found.section, row } : null;
-  }, [key, core, rateIndex, suitabilityRevision]);
-  const section = resolveInterestSection(interests, destinationSectionFromParam(params.section) ?? activeSection);
+    const exactRateRequested = rateIndex != null && rateIndex !== '';
+    if (!found) {
+      if (exactRateRequested) return unavailable;
+      const catalogue = verifiedCatalogueDetails(core, coreIntegrity, manifest, details);
+      const detail = catalogue && Object.hasOwn(catalogue.products, key) ? catalogue.products[key] : null;
+      return { product: null, catalogueProductName: detail ? detailsDisplayIdentity(detail).name ?? 'Product' : null };
+    }
+    if (!exactRateRequested) return { product: found, catalogueProductName: null };
+    const parsedIndex = Number(rateIndex);
+    const row = Number.isInteger(parsedIndex)
+      ? found.siblings.find((candidate) => candidate.rate_index === parsedIndex)
+      : null;
+    return row ? { product: { section: found.section, row }, catalogueProductName: null } : unavailable;
+  }, [key, core, coreIntegrity, manifest, details, rateIndex, suitabilityRevision]);
+  const requestedSection = destinationSectionFromParam(params.section);
+  const scenarioRoute = pathname === '/calculator' || pathname === '/projections';
+  const section = scenarioRoute
+    ? requestedSection ?? (pathname === '/projections' ? 'Mortgage' : activeSection)
+    : resolveInterestSection(interests, requestedSection ?? activeSection);
   const crumbs = buildBreadcrumbs({
     pathname, section, path: parseBrowsePath(params.path),
-    provider: scalarRouteParam(params.provider), product, rateIndex,
+    provider: scalarRouteParam(params.provider), product, catalogueProductName, rateIndex,
   });
   const trailKey = JSON.stringify(crumbs);
   const revealCurrent = useCallback(() => scroll.current?.scrollToEnd({ animated: false }), []);
