@@ -69,7 +69,7 @@ export function AppBreadcrumbBar() {
     pathname, section, path: parseBrowsePath(params.path),
     provider: scalarRouteParam(params.provider), product, catalogueProductName, rateIndex,
   });
-  const trailKey = JSON.stringify(crumbs);
+  const trailKey = JSON.stringify({ pathname, params, crumbs });
   const { hidden, visible } = compactBreadcrumbs(crumbs, width - insets.left - insets.right, fontScale);
   // A changed route or eligibility result dismisses the menu before stale labels can render.
   if (openTrail !== null && (openTrail !== trailKey || hidden.length === 0)) setOpenTrail(null);

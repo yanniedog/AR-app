@@ -13,7 +13,7 @@ let mockBanner = false;
 let mockAllowed = true;
 let mockFound = true;
 let mockDimensions = { width: 390, height: 844, scale: 1, fontScale: 1 };
-const mockRow = { product_key: 'private-key', product_name: 'Protected name', taxonomy_path: 'HOME_LOAN.OO', rate_index: 1 };
+let mockRow = { product_key: 'private-key', product_name: 'Protected name', taxonomy_path: 'HOME_LOAN.OO', rate_index: 1 };
 let mockState = {
   ...rateConditionFixture(),
   activeSection: 'Mortgage' as SectionKey,
@@ -49,6 +49,7 @@ beforeEach(() => {
   mockBanner = false;
   mockAllowed = true;
   mockFound = true;
+  mockRow = { product_key: 'private-key', product_name: 'Protected name', taxonomy_path: 'HOME_LOAN.OO', rate_index: 1 };
   mockDimensions = { width: 390, height: 844, scale: 1, fontScale: 1 };
   mockState = { ...rateConditionFixture(), activeSection: 'Mortgage', prefs: { onboarded: true, interests: ['Mortgage', 'Savings', 'TD'] } };
   jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 1);
@@ -129,6 +130,25 @@ it('does not reopen a dismissed overflow menu after rotating back to a narrow sc
   expect(button('Close parent sections')).toBeUndefined();
   mockDimensions = { ...mockDimensions, width: 200 };
   act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Close parent sections')).toBeUndefined();
+});
+
+it.each(['product', 'rate'])('dismisses the menu when the %s changes but breadcrumb labels stay the same', (change) => {
+  mockPathname = '/product/private-key';
+  mockParams = { key: 'private-key', ri: '1' };
+  mount();
+  act(() => button('Show parent sections').props.onPress!());
+  expect(button('Close parent sections')).toBeDefined();
+  if (change === 'product') {
+    mockRow = { ...mockRow, product_key: 'another-key' };
+    mockPathname = '/product/another-key';
+    mockParams = { key: 'another-key', ri: '1' };
+  } else {
+    mockRow = { ...mockRow, rate_index: 2 };
+    mockParams = { key: 'private-key', ri: '2' };
+  }
+  act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Protected name, current location')).toBeDefined();
   expect(button('Close parent sections')).toBeUndefined();
 });
 
