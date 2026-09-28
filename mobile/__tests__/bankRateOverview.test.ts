@@ -11,6 +11,15 @@ test('all four statistics use eligible tiers, including zero; odd and even media
   expect(summarizeBankRates(rates.slice(0, 3)).Alpha.median).toBe(2);
 });
 
+test('section totals preserve unequal bank populations instead of averaging bank medians', () => {
+  const rows = [row('0.01'), row('0.01'), row('0.01'), row('0.09', { provider: 'Beta' })];
+  const result = snapshotBankRates(bankRateScope({ Mortgage: rows, Savings: [], TD: [] }));
+  expect(result.sectionTotals?.Mortgage).toEqual({ min: 1, mean: 3, median: 1, max: 9, count: 4 });
+  expect(result.sectionTotals?.Savings).toBeUndefined();
+  expect(buildBankRateChart({ '2026-09-22': result }, 'Mortgage', 'median', false, null).lines.map(line => line.provider))
+    .toEqual(['Alpha', 'Beta']);
+});
+
 test('unrepresentable current rates are excluded while bounded extreme chart coordinates remain finite', () => {
   const stats = summarizeBankRates([row(String(Number.MAX_VALUE)), row('0.06')]);
   expect(stats.Alpha).toEqual({ min: 6, mean: 6, median: 6, max: 6, count: 1 });
@@ -31,6 +40,7 @@ test('profile filtering precedes every statistic, excludes sibling tiers and unk
   const historical = snapshotBankRates(scope, core([row('0.05'), row('0.77', { rate_type: 'FIXED' })]));
   expect(historical.Mortgage!.Alpha.mean).toBe(5);
   expect(historical.Mortgage!.Alpha.count).toBe(1);
+  expect(historical.sectionTotals?.Mortgage).toEqual({ min: 5, mean: 5, median: 5, max: 5, count: 1 });
 });
 
 test('recomputed scope cannot retain a formerly matching bank; section and statistic are independent', () => {

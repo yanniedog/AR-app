@@ -19,9 +19,25 @@ test('full history is synchronous; matching duplicate tiers count once and blank
   const result = packedBankRateSnapshots(core, scope(core, core.sections.Mortgage.rates.slice(0, 2)));
   expect(Object.keys(result)).toEqual(core.bank_rate_history!.run_dates);
   expect(result['2026-09-19'].Mortgage!.Alpha).toEqual({ min: 0, mean: 1, median: 1, max: 2, count: 2 });
+  expect(result['2026-09-19'].sectionTotals?.Mortgage).toEqual({ min: 0, mean: 1, median: 1, max: 2, count: 2 });
   expect(result['2026-09-20'].Mortgage!.Alpha.count).toBe(2);
   expect(result['2026-09-21'].Mortgage).toEqual({});
+  expect(result['2026-09-21'].sectionTotals?.Mortgage).toBeUndefined();
   expect(result['2026-09-22'].Mortgage!.Alpha.mean).toBeCloseTo(6.5);
+});
+
+test('section totals pool unequal bank populations exactly across packed span changes', () => {
+  const core = fixture();
+  core.sections.Mortgage.rates[2].provider = 'Beta';
+  core.bank_rate_history!.sections.Mortgage[0] = [[0, 2, [1, 1, 1]], [3, 1, [6, 7]]];
+  const result = packedBankRateSnapshots(core, scope(core));
+  expect(result['2026-09-19'].sectionTotals?.Mortgage).toEqual({ min: 1, mean: 3, median: 1, max: 9, count: 4 });
+  expect(result['2026-09-21'].sectionTotals?.Mortgage).toEqual({ min: 9, mean: 9, median: 9, max: 9, count: 1 });
+  const today = result['2026-09-22'].sectionTotals!.Mortgage!;
+  expect(today.count).toBe(3);
+  expect(today.mean).toBeCloseTo(22 / 3);
+  expect(today.median).toBeCloseTo(7);
+  expect(Object.keys(result['2026-09-19'].Mortgage!)).toEqual(['Alpha', 'Beta']);
 });
 test('changing profile membership immediately recomputes every date without fetching', () => {
   const core = fixture();
@@ -60,6 +76,7 @@ test('legacy data has no network fallback; a quarantined row cannot re-enter his
   const core = fixture();
   const excluded = core.sections.Mortgage.rates.pop()!;
   expect(packedBankRateSnapshots(core, scope(core, [excluded]))['2026-09-19'].Mortgage).toEqual({});
+  expect(packedBankRateSnapshots(core, scope(core, [excluded]))['2026-09-19'].sectionTotals?.Mortgage).toBeUndefined();
   const legacy = { ...core, bank_rate_history: undefined };
   expect(Object.keys(packedBankRateSnapshots(legacy, scope(legacy)))).toEqual([core.run_date]);
 });

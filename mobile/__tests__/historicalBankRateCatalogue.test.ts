@@ -50,9 +50,25 @@ test('all historical cohorts include withdrawn providers and retain exact multip
   const result = snapshot(catalogue, filters, current, scope(current.sections.Mortgage.rates));
   expect(result[day[0]].Mortgage!.Alpha).toEqual({ min: 0, mean: 5, median: 4, max: 12, count: 4 });
   expect(result[day[0]].Mortgage!['Withdrawn Bank'].mean).toBe(8);
+  expect(result[day[0]].sectionTotals?.Mortgage).toEqual({ min: 0, mean: 5.6, median: 6, max: 12, count: 5 });
   expect(result[day[1]].Mortgage!['Withdrawn Bank']).toBeUndefined();
+  expect(result[day[1]].sectionTotals?.Mortgage).toEqual({ min: 0, mean: 5, median: 4, max: 12, count: 4 });
   expect(result[day[2]].Mortgage).toEqual(summarizeBankRates(current.sections.Mortgage.rates));
+  expect(result[day[2]].sectionTotals?.Mortgage).toEqual({ min: 6, mean: 6, median: 6, max: 6, count: 1 });
   expect(buildBankRateChart(result, 'Mortgage', 'mean', false, null).lines.map(l => l.provider)).toEqual(['Alpha', 'Withdrawn Bank']);
+});
+
+test('pooled historical medians retain tier multiplicity when banks have unequal counts', () => {
+  const beta = descriptor({ provider: 'Beta', product_key: 'beta', product_id: 'beta' });
+  const catalogue = pack([
+    { row: descriptor(), spans: [[0, 1, [1, 1, 1], 1], [1, 1, [5], 1]] },
+    { row: beta, spans: [[0, 1, [9], 2], [1, 1, [2, 2, 2], 2]] },
+  ]);
+  catalogue.evidence.push(evidence(beta));
+  const result = snapshot(catalogue);
+  expect(result[day[0]].sectionTotals?.Mortgage).toEqual({ min: 1, mean: 3, median: 1, max: 9, count: 4 });
+  expect(result[day[1]].sectionTotals?.Mortgage).toEqual({ min: 2, mean: 2.75, median: 2, max: 5, count: 4 });
+  expect(result[day[2]].sectionTotals?.Mortgage).toBeUndefined();
 });
 
 test('historical access and features use each span evidence, never the installed current gates', () => {
@@ -66,7 +82,9 @@ test('historical access and features use each span evidence, never the installed
   expect(mandatoryEligibleRows([descriptor() as RateRow])).toEqual([]);
   const result = snapshot(catalogue, settings, current, scope(current.sections.Mortgage.rates));
   expect(result[day[0]].Mortgage!.Alpha.mean).toBe(5);
+  expect(result[day[0]].sectionTotals?.Mortgage?.mean).toBe(5);
   expect(result[day[1]].Mortgage!.Alpha).toBeUndefined();
+  expect(result[day[1]].sectionTotals?.Mortgage).toBeUndefined();
   expect(result[day[2]].Mortgage!.Alpha.mean).toBe(6);
   // Today's positive facts cannot admit the historical negative or staff-only edition.
   expect(snapshot(catalogue, filters)[day[1]].Mortgage!.Alpha).toBeUndefined();
@@ -137,8 +155,10 @@ test('current day uses only original current rows and respects a newly closed ma
   const original = row(); const current = core([original]); const catalogue = pack();
   const before = JSON.stringify(current); const currentScope = scope([original, { ...original }, row('0.99')]);
   expect(snapshot(catalogue, filters, current, currentScope)[day[2]].Mortgage!.Alpha.count).toBe(1);
+  expect(snapshot(catalogue, filters, current, currentScope)[day[2]].sectionTotals?.Mortgage?.count).toBe(1);
   installMandatoryEligibility(selectMandatoryEligibility(current, { ...EMPTY_PROFILE, rateTypes: ['FIXED'] }, null));
   expect(snapshot(catalogue, filters, current, currentScope)[day[2]].Mortgage).toEqual({});
+  expect(snapshot(catalogue, filters, current, currentScope)[day[2]].sectionTotals?.Mortgage).toBeUndefined();
   expect(current.sections.Mortgage.rates[0]).toBe(original);
   expect(JSON.stringify(current)).toBe(before);
   expect(Object.hasOwn(original, 'bank_rate_tier')).toBe(false);
@@ -200,6 +220,7 @@ test('async completion rechecks original current rows against a gate closed whil
   const result = await pending;
   expect(result[day[0]].Mortgage!.Alpha.mean).toBe(5);
   expect(result[day[2]].Mortgage).toEqual({});
+  expect(result[day[2]].sectionTotals?.Mortgage).toBeUndefined();
   expect(current.sections.Mortgage.rates[0]).toBe(original);
   expect(cachedHistoricalBankRateSnapshots(preparation, current, selected, filters)).toBe(result);
   installMandatoryEligibility(selectMandatoryEligibility(null, EMPTY_PROFILE, null));
@@ -228,6 +249,7 @@ test('date-source gaps stay blank and cannot be bridged by an encoded span', () 
   const catalogue = pack([{ row: descriptor(), spans: [[0, 1, [5], 1], [2, 1, [5], 1]] }]);
   delete catalogue.sources[day[1]];
   expect(snapshot(catalogue)[day[1]].Mortgage).toEqual({});
+  expect(snapshot(catalogue)[day[1]].sectionTotals?.Mortgage).toBeUndefined();
   catalogue.sections.Mortgage[0].spans = [[0, 3, [5], 1]];
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(false);
 });
