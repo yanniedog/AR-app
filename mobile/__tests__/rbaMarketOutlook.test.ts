@@ -178,7 +178,7 @@ test.each(['partial', 'offline'] as const)(
   'retries a recent %s refresh on the next normal visit when sources recover',
   async (status) => {
     jest.mocked(cache.readRbaMarketOutlook).mockResolvedValue(payload());
-    globalThis.fetch = jest.fn(async (url) => {
+    globalThis.fetch = jest.fn(async (url: RequestInfo | URL) => {
       if (status === 'offline' || String(url) === RBA_F17_FORWARD_URL) throw new Error('offline');
       return response(economistsCsv);
     });
@@ -197,7 +197,7 @@ test.each(['partial', 'offline'] as const)(
 test('keeps cached bonds when only the economist source refreshes', async () => {
   const cached = payload();
   jest.mocked(cache.readRbaMarketOutlook).mockResolvedValue(cached);
-  globalThis.fetch = jest.fn(async (url) => {
+  globalThis.fetch = jest.fn(async (url: RequestInfo | URL) => {
     if (String(url) === RBA_F17_FORWARD_URL) throw new Error('offline');
     return response(economistsCsv);
   });
@@ -208,7 +208,7 @@ test('keeps cached bonds when only the economist source refreshes', async () => 
 });
 
 test('allows a usable partial first fetch and does not invent the missing series', async () => {
-  globalThis.fetch = jest.fn(async (url) => response(String(url) === RBA_F17_FORWARD_URL ? bondsCsv : '<html>Error</html>'));
+  globalThis.fetch = jest.fn(async (url: RequestInfo | URL) => response(String(url) === RBA_F17_FORWARD_URL ? bondsCsv : '<html>Error</html>'));
   const result = await loadRbaMarketOutlook();
   expect(result.bondForwards).not.toBeNull();
   expect(result.economists).toBeNull();

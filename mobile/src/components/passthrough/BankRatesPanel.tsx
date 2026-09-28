@@ -8,7 +8,7 @@ import { useStore } from '../../data/store';
 import { useBankRateHistory } from '../../hooks/useBankRateHistory';
 import { BankRateChart } from './BankRateChart';
 import { SegmentedControl } from '../controls';
-import { AppText, Card } from '../ui';
+import { AppText, Disclosure } from '../ui';
 
 const STATISTICS: { value: RateStatistic; label: string }[] = [
   { value: 'min', label: 'Min' }, { value: 'mean', label: 'Mean' },
@@ -30,6 +30,7 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const [statistic, setStatistic] = useState<RateStatistic>('mean');
   const [chosenSection, setChosenSection] = useState(requestedSection);
   const [provider, setProvider] = useState('');
+  const [methodOpen, setMethodOpen] = useState(false);
   const options = sectionSegmentOptions(prefs.onboarded ? prefs.interests : SECTION_KEYS);
   const section = options.some(option => option.value === chosenSection) ? chosenSection : options[0].value;
   const gapAllowed = options.some(o => o.value === 'Mortgage') && options.some(o => o.value === 'Savings');
@@ -40,17 +41,23 @@ export function BankRatesPanel({ section: requestedSection = 'Mortgage', onSecti
   const model = useMemo(() => buildBankRateChart(snapshots ?? {}, section, statistic, gap, calendar), [calendar, gap, section, snapshots, statistic]);
   useEffect(() => { onModelChange?.(updating || (tab === 'gap' && !gapAllowed) ? null : model); }, [gapAllowed, model, onModelChange, tab, updating]);
   useEffect(() => { if (updating) onChartReady?.(false); }, [onChartReady, updating]);
-  return <View style={{ gap: 12 }} testID="bank-rates-panel">
-    <AppText variant="h3">Bank rates</AppText>
+  return <View style={{ gap: 20 }} testID="bank-rates-panel">
+    <View style={{ gap: 4 }}>
+      <AppText variant="h2" accessibilityRole="header">Bank rates</AppText>
+      <AppText variant="small" color="textMuted">Compare the rates banks advertise over time.</AppText>
+    </View>
     <SegmentedControl options={[{ value: 'rates' as const, label: 'Rates' }, { value: 'gap' as const, label: 'Gap' }]} value={tab} onChange={setTab} />
-    {tab === 'gap' && !gapAllowed ? <Card><AppText variant="small">The gap needs both Mortgage and Savings in your profile interests.</AppText></Card> : <>
+    {tab === 'gap' && !gapAllowed ? <AppText variant="small">The gap needs both Mortgage and Savings in your profile interests.</AppText> : <>
       {showSections && !gap ? <SegmentedControl options={options} value={section} onChange={next => { setChosenSection(next); onSectionChange?.(next); }} /> : null}
       {!gap ? <SegmentedControl options={STATISTICS} value={statistic} onChange={setStatistic} /> : null}
-      <AppText variant="tiny" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
+      <AppText variant="small" color="textMuted">{personalized ? 'Matching your profile' : 'Included products'} · {gap ? 'Mortgage mean − savings mean' : 'Advertised rate tiers'}</AppText>
       {core && !historyAvailable && !historyLoading ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Historical rates are unavailable in this update. Showing current rates only.</AppText> : null}
       {!historyLoading && missingDates.length > 0 ? <AppText variant="small" color="textMuted" accessibilityRole="alert">Some historical observations are unavailable in this update and stay blank.</AppText> : null}
-      {updating ? <Card><AppText variant="small" accessibilityRole="alert">{failed ? 'Historical rates could not be prepared. Please try again.' : 'Updating historical rates for your filters…'}</AppText></Card> : model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <Card><AppText variant="small">No matching rates. Required product details may still be loading.</AppText></Card>}
-      <AppText variant="tiny" color="textMuted">Each matching rate tier has equal weight. {cataloguePrepared ? 'History includes products matching your filters on each observed date, including products since withdrawn.' : 'History follows currently matching tiers.'} Missing observations stay blank.{gap ? ' The gap does not measure bank margins.' : ''}</AppText>
+      {updating ? <AppText variant="small" accessibilityRole="alert">{failed ? 'Historical rates could not be prepared. Please try again.' : 'Updating historical rates for your filters…'}</AppText> : model.lines.length ? <View onLayout={() => onChartReady?.(true)}><BankRateChart model={model} provider={selectedProvider ?? provider} onProviderChange={onProviderChange ?? setProvider} label={gap ? 'Gap' : STATISTICS.find(s => s.value === statistic)!.label} gap={gap} /></View> : <AppText variant="small">No matching rates. Required product details may still be loading.</AppText>}
+      {gap ? <AppText variant="small" color="textMuted">The gap does not measure bank margins.</AppText> : null}
+      <Disclosure title="How these rates are compared" summary="Rate tiers, filters and missing observations" open={methodOpen} onToggle={() => setMethodOpen(open => !open)}>
+        <AppText variant="small" color="textMuted">Each matching rate tier has equal weight. {cataloguePrepared ? 'History includes products matching your filters on each observed date, including products since withdrawn.' : 'History follows currently matching tiers.'} Missing observations stay blank.</AppText>
+      </Disclosure>
     </>}
   </View>;
 }

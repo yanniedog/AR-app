@@ -40,14 +40,12 @@ function Insight({
               flexGrow: 1,
               flexBasis: '46%',
               minWidth: 120,
-              padding: 10,
-              borderRadius: theme.radius.md,
-              backgroundColor: theme.colors.surfaceAlt,
+              paddingVertical: theme.spacing(3),
             }
       }
     >
       <AppText variant="tiny" color="textFaint" weight="700" numberOfLines={1}>
-        {label.toUpperCase()}
+        {label}
       </AppText>
       <AppText
         variant={compact ? 'small' : 'rate'}

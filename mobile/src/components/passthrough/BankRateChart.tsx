@@ -7,7 +7,7 @@ import { useTheme } from '../../theme/ThemeProvider';
 import { ChartText } from '../charts/ChartText';
 import { BankAvatar } from '../BankAvatar';
 import Ionicons from '../icons/AppIcon';
-import { AppText, Card, Row } from '../ui';
+import { AppText, Row } from '../ui';
 
 const W = 340, H = 225, L = 44, R = 12, T = 12, B = 40;
 const timestamp = (date: string) => Date.parse(`${date}T00:00:00Z`);
@@ -60,18 +60,21 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
     : `${selected.points.length} observed days · ${formatRunDate(selected.points[0].date)} – ${formatRunDate(latest.date)}`;
   const summary = `${selected.provider}. ${label} ${latest.value.toFixed(2)} ${gap ? 'percentage points' : 'percent'} on ${formatRunDate(latest.date)}. ${latest.count} matching rate tiers. ${model.lines.length} banks shown. ${coverage}`;
   const move = (offset: number) => onProviderChange(model.lines[(index + offset + model.lines.length) % model.lines.length].provider);
-  return <Card style={{ gap: 10 }}>
-    <Row gap={4} style={{ alignItems: 'center' }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Previous bank alphabetically" onPress={() => move(-1)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-back" size={20} color={theme.colors.text} /></Pressable>
+  return <View style={{ gap: 16 }}>
+    <Row gap={8} style={{ alignItems: 'center' }}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Previous bank alphabetically" onPress={() => move(-1)} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-back" size={20} color={theme.colors.text} /></Pressable>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Row gap={8} style={{ alignItems: 'center' }}>
-          <BankAvatar provider={selected.provider} size={22} />
-          <AppText variant="small" weight="700" numberOfLines={1} style={{ flex: 1 }}>{selected.provider}</AppText>
+          <BankAvatar provider={selected.provider} size={28} />
+          <AppText variant="body" weight="600" style={{ flex: 1 }}>{selected.provider}</AppText>
         </Row>
-        <AppText variant="tiny" color="textMuted">{formatRunDate(latest.date)} · {label} {latest.value.toFixed(2)}{unit}</AppText>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Next bank alphabetically" onPress={() => move(1)} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-forward" size={20} color={theme.colors.text} /></Pressable>
+      <Pressable accessibilityRole="button" accessibilityLabel="Next bank alphabetically" onPress={() => move(1)} style={{ width: 48, height: 48, alignItems: 'center', justifyContent: 'center' }}><Ionicons name="chevron-forward" size={20} color={theme.colors.text} /></Pressable>
     </Row>
+    <View style={{ gap: 4 }}>
+      <AppText variant="rateHero">{latest.value.toFixed(2)}{unit}</AppText>
+      <AppText variant="small" color="textMuted">{gap ? 'Mortgage − savings gap (pp)' : `${label} advertised rate (% p.a.)`} · {formatRunDate(latest.date)}</AppText>
+    </View>
     <View accessible accessibilityRole="image" accessibilityLabel={summary}>
       <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
         {[model.min, (model.min + model.max) / 2, model.max].map(value => <React.Fragment key={value}>
@@ -89,7 +92,9 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
         {model.dates.length > 1 ? <ChartText x={W - R} y={H - 5} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{model.dates.at(-1)}</ChartText> : null}
       </Svg>
     </View>
-    <AppText variant="tiny" color="textMuted">{coverage}</AppText>
-    <AppText variant="tiny" color="textMuted">{model.lines.length} matching banks · {gap ? 'Gap (pp)' : 'Rate (% p.a.)'} · ▲ hike · ● hold · ▼ cut</AppText>
-  </Card>;
+    <View style={{ gap: 4 }}>
+      <AppText variant="tiny" color="textMuted">{coverage}</AppText>
+      <AppText variant="tiny" color="textMuted">{model.lines.length} matching banks · {gap ? 'Gap (pp)' : 'Rate (% p.a.)'} · ▲ hike · ● hold · ▼ cut</AppText>
+    </View>
+  </View>;
 }

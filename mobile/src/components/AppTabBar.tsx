@@ -1,6 +1,6 @@
 import { router, usePathname } from 'expo-router';
 import React, { useCallback } from 'react';
-import { Pressable, Text, useWindowDimensions, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useStore } from '../data/store';
@@ -58,7 +58,7 @@ export function AppTabBar() {
         height: tabBarLayout.contentHeight + insets.bottom,
         paddingBottom: insets.bottom,
         paddingTop: 0,
-        borderTopWidth: 1,
+        borderTopWidth: StyleSheet.hairlineWidth,
         borderTopColor: theme.ledger.rule,
       }}
     >
@@ -74,16 +74,24 @@ export function AppTabBar() {
             accessibilityState={{ selected: focused }}
             accessibilityLabel={label}
             onPress={() => onPressTab(route)}
-            style={{
+            style={({ pressed }) => ({
               flex: 1,
               alignItems: 'center',
               justifyContent: 'center',
               minHeight: 48,
-              borderTopWidth: 3,
-              borderTopColor: focused ? theme.ledger.wattle : 'transparent',
-              backgroundColor: focused ? theme.colors.primaryMuted : 'transparent',
-            }}
+              backgroundColor: pressed ? theme.colors.primaryMuted : 'transparent',
+            })}
           >
+            <View
+              pointerEvents="none"
+              style={{
+                position: 'absolute',
+                top: 0,
+                width: 28,
+                height: 3,
+                backgroundColor: focused ? theme.ledger.eucalyptus : 'transparent',
+              }}
+            />
             <View style={{ alignItems: 'center', justifyContent: 'center', width: '100%' }}>
               <View style={{ height: 30, alignItems: 'center', justifyContent: 'center' }}>
                 <LedgerIcon name={TAB_ICONS[route]} size={23} color={tint} />

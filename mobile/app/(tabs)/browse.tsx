@@ -1,11 +1,12 @@
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 
 import { HierarchyView } from '../../src/components/HierarchyView';
 import { Screen, screenEdgeStyle } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
-import { AppText, Button, Chip, Row } from '../../src/components/ui';
+import { Button, Row } from '../../src/components/ui';
+import { LedgerSheet } from '../../src/components/ledger';
 import { sectionFromSlug } from '../../src/constants';
 import { resolveInterestSection, sectionSegmentOptions } from '../../src/data/interests';
 import { profileSectionCount } from '../../src/data/profile';
@@ -44,6 +45,7 @@ export default function Browse() {
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const profileFilters = useStore((s) => s.prefs.profileFilters);
   const profileCount = profileSectionCount(profileFilters, renderedSection);
+  const [toolsOpen, setToolsOpen] = useState(false);
 
   useEffect(() => {
     if (!pendingRouteRequest) return;
@@ -83,30 +85,15 @@ export default function Browse() {
               <SegmentedControl options={sectionOptions} value={renderedSection} onChange={changeSection} />
             ) : null}
           </View>
-          <Row gap={theme.spacing(2)}>
+          <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
             <Button
               title="Search rates"
               icon="search"
-              style={{ flex: 1 }}
+              style={{ flexGrow: 1, flexBasis: 140 }}
               onPress={() => openSearch(renderedSection)}
             />
-            <Button
-              title={profileCount ? `Matched · ${profileCount}` : 'Match settings'}
-              icon="person-circle-outline"
-              variant="secondary"
-              onPress={() => router.push('/profile')}
-            />
+            <Button title={profileCount ? `Options · ${profileCount}` : 'Options'} variant="ghost" onPress={() => setToolsOpen(true)} />
           </Row>
-          <Row gap={theme.spacing(2)} style={{ flexWrap: 'wrap' }}>
-            <Chip label="Products without listed rates" onPress={() => router.push('/catalogue')} />
-            <Chip label="Banks" icon="business-outline" onPress={() => router.push('/banks')} />
-            <Chip
-              label="My scenario"
-              icon="calculator-outline"
-              onPress={() => router.push({ pathname: '/calculator', params: { section: renderedSection } })}
-            />
-          </Row>
-          <AppText variant="body" weight="700">Browse by category</AppText>
         </View>
       </View>
       <View style={{ flex: 1 }}>
@@ -115,6 +102,14 @@ export default function Browse() {
             instant. Drilling still remounts to reset list/scroll cleanly. */}
         <HierarchyView key={drillPath.join('.') || 'root'} section={renderedSection} path={drillPath} />
       </View>
+      <LedgerSheet visible={toolsOpen} title="Explore options" onClose={() => setToolsOpen(false)}>
+        <ScrollView contentContainerStyle={{ gap: theme.spacing(2), paddingBottom: theme.spacing(4) }}>
+          <Button title={profileCount ? `Match settings · ${profileCount} active` : 'Match settings'} icon="person-circle-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/profile'); }} />
+          <Button title="Products without listed rates" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/catalogue'); }} />
+          <Button title="Banks" icon="business-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push('/banks'); }} />
+          <Button title="My scenario" icon="calculator-outline" variant="ghost" onPress={() => { setToolsOpen(false); router.push({ pathname: '/calculator', params: { section: renderedSection } }); }} />
+        </ScrollView>
+      </LedgerSheet>
     </Screen>
   );
 }

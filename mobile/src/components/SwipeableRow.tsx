@@ -68,7 +68,7 @@ export function SwipeableRow({
       friction={2}
       rightThreshold={40}
     >
-      <View style={style}>{children}</View>
+      <View style={[{ backgroundColor: theme.colors.bg }, style]}>{children}</View>
     </Swipeable>
   );
 }
