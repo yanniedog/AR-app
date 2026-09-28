@@ -53,7 +53,8 @@ import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
-import { SECTION_KEYS, type RateRow, type SectionKey } from '../src/types';
+import { type RateRow, type SectionKey } from '../src/types';
+import { useScenarioSection } from '../src/hooks/useScenarioSection';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function monthlyPayment(balance: number, annualRate: number, months: number): number {
@@ -94,10 +95,7 @@ export default function Calculator() {
   const setPref = useStore((s) => s.setPref);
   const activeSection = useStore((s) => s.activeSection);
   const params = useLocalSearchParams<{ intent?: string; section?: string }>();
-  const requestedSection = SECTION_KEYS.includes(params.section as SectionKey)
-    ? params.section as SectionKey
-    : null;
-  const [section, setSection] = useState<SectionKey>(requestedSection ?? activeSection);
+  const [section, changeSection] = useScenarioSection(activeSection);
   const [layoutReady, setLayoutReady] = useState(false);
   const [detailsTerminalError, setDetailsTerminalError] = useState(false);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
@@ -163,10 +161,6 @@ export default function Calculator() {
     if (!currentProduct.productKey || details?.products?.[currentProduct.productKey] || detailsLoading) return;
     void ensureDetails({ forProductView: true });
   }, [currentProduct.productKey, details?.products, detailsLoading, ensureDetails]);
-
-  useEffect(() => {
-    if (requestedSection) setSection(requestedSection);
-  }, [requestedSection]);
 
   useEffect(() => {
     const intentKey = `${params.intent ?? ''}:${section}`;
@@ -338,7 +332,6 @@ export default function Calculator() {
     ? details?.products?.[candidates[0].row.product_key] ?? null
     : null;
 
-  const changeSection = useCallback((next: SectionKey) => setSection(next), []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
     if (typeof requested === 'string' && requested in SECTIONS) {

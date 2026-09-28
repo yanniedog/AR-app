@@ -60,6 +60,7 @@ export function buildBreadcrumbs({
   path = [],
   provider,
   product,
+  catalogueProductName,
   rateIndex,
 }: {
   pathname: string;
@@ -68,6 +69,8 @@ export function buildBreadcrumbs({
   provider?: string;
   // Only pass a product after the same eligibility checks as the detail screen.
   product?: { section: SectionKey; row: RateRow } | null;
+  // Only pass display identity from the verified, eligible details catalogue.
+  catalogueProductName?: string | null;
   rateIndex?: string;
 }): Breadcrumb[] {
   const route = pathname.split(/[?#]/, 1)[0].replace(/^\/\(tabs\)(?=\/|$)/, '').replace(/\/$/, '') || '/';
@@ -78,6 +81,13 @@ export function buildBreadcrumbs({
   } else if (route.startsWith('/bank/')) {
     trail = [explore, { label: 'Banks', target: { href: '/banks' } }, { label: provider || 'Bank' }];
   } else if (route.startsWith('/product/') || route === '/rate-receipt') {
+    if (!product && catalogueProductName && route.startsWith('/product/')) {
+      return [
+        { label: 'Explore', target: { section, path: [] } },
+        { label: 'Products without listed rates', target: { href: '/catalogue' } },
+        { label: catalogueProductName },
+      ];
+    }
     const segments = product?.row.taxonomy_path?.split('.').filter(Boolean) ?? [];
     trail = product
       ? categoryTrail(product.section, segments[0] === ROOT[product.section] ? segments.slice(1) : [])
