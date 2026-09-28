@@ -12,6 +12,7 @@ let mockParams: Record<string, string> = {};
 let mockBanner = false;
 let mockAllowed = true;
 let mockFound = true;
+let mockDimensions = { width: 390, height: 844, scale: 1, fontScale: 1 };
 const mockRow = { product_key: 'private-key', product_name: 'Protected name', taxonomy_path: 'HOME_LOAN.OO', rate_index: 1 };
 let mockState = {
   ...rateConditionFixture(),
@@ -33,9 +34,10 @@ jest.mock('../src/data/eligibilityGate', () => ({ isMandatoryEligibilityReady: (
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => mockAllowed ? 1 : 2 }));
 jest.mock('../src/components/AppUpdateBanner', () => ({ useAppUpdateBannerVisible: () => mockBanner }));
 jest.mock('react-native-safe-area-context', () => ({ useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }) }));
+jest.mock('react-native/Libraries/Utilities/useWindowDimensions', () => ({ default: () => mockDimensions }));
 
 type TestNode = {
-  props: { accessibilityLabel?: string; onPress?: () => void; disabled?: boolean; style?: { paddingTop: number } };
+  props: { accessibilityLabel?: string; onPress?: () => void; onRequestClose?: () => void; disabled?: boolean; horizontal?: boolean; children?: unknown; style?: { paddingTop: number } };
   findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
   findByProps: (props: Record<string, unknown>) => TestNode;
 };
@@ -47,6 +49,7 @@ beforeEach(() => {
   mockBanner = false;
   mockAllowed = true;
   mockFound = true;
+  mockDimensions = { width: 390, height: 844, scale: 1, fontScale: 1 };
   mockState = { ...rateConditionFixture(), activeSection: 'Mortgage', prefs: { onboarded: true, interests: ['Mortgage', 'Savings', 'TD'] } };
   jest.spyOn(globalThis, 'requestAnimationFrame').mockImplementation(() => 1);
 });
@@ -57,16 +60,62 @@ afterEach(() => {
 
 const mount = () => act(() => { tree = TestRenderer.create(<AppBreadcrumbBar />) as typeof tree; });
 const button = (label: string) => tree.root.findAll((node) => node.props.accessibilityLabel === label)[0];
+const jump = (label: string) => {
+  if (!button(label)) act(() => button('Show parent sections').props.onPress!());
+  act(() => button(label).props.onPress!());
+};
 
 it('jumps to a middle category, clears the drill at the root, and goes Home', () => {
   mount();
-  act(() => button('Go to Owner-occupied').props.onPress!());
+  expect(button('Go to Owner-occupied')).toBeUndefined();
+  jump('Go to Owner-occupied');
   expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/(tabs)/browse', params: expect.objectContaining({ section: 'home-loans', path: 'OO', request: expect.any(String) }) });
-  act(() => button('Go to Home loans').props.onPress!());
+  expect(button('Go to Owner-occupied')).toBeUndefined();
+  jump('Go to Home loans');
   expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/(tabs)/browse', params: expect.objectContaining({ section: 'home-loans', path: '' }) });
   expect(button('Variable rate, current location').props.disabled).toBe(true);
   act(() => button('Home').props.onPress!());
   expect(mockNavigate).toHaveBeenLastCalledWith('/(tabs)');
+});
+
+it('keeps large-text paths short with no horizontal scroller and opens full parent names on demand', () => {
+  mockDimensions = { ...mockDimensions, width: 320, fontScale: 2.5 };
+  mount();
+  expect(button('Go to Principal & interest')).toBeUndefined();
+  expect(button('Variable rate, current location')).toBeDefined();
+  expect(tree.root.findAll((node) => node.props.horizontal === true)).toHaveLength(0);
+  act(() => button('Show parent sections').props.onPress!());
+  expect(button('Go to Principal & interest')).toBeDefined();
+  act(() => button('Close parent sections').props.onPress!());
+  expect(button('Go to Principal & interest')).toBeUndefined();
+});
+
+it('dismisses parent sections on backdrop, native back and route changes', () => {
+  mount();
+  act(() => button('Show parent sections').props.onPress!());
+  act(() => button('Dismiss parent sections').props.onPress!());
+  expect(button('Go to Owner-occupied')).toBeUndefined();
+  act(() => button('Show parent sections').props.onPress!());
+  act(() => tree.root.findAll((node) => Boolean(node.props.onRequestClose))[0].props.onRequestClose!());
+  expect(button('Go to Owner-occupied')).toBeUndefined();
+  act(() => button('Show parent sections').props.onPress!());
+  mockParams = { section: 'home-loans', path: 'OO.PI.FIXED' };
+  act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Close parent sections')).toBeUndefined();
+  expect(button('Fixed rate, current location')).toBeDefined();
+});
+
+it('removes a protected product name from an open ancestor menu when eligibility closes', () => {
+  mockPathname = '/rate-receipt';
+  mockParams = { key: 'private-key', ri: '1' };
+  mockDimensions = { ...mockDimensions, width: 320, fontScale: 2.5 };
+  mount();
+  act(() => button('Show parent sections').props.onPress!());
+  expect(button('Go to Protected name')).toBeDefined();
+  mockAllowed = false;
+  act(() => tree.update(<AppBreadcrumbBar />));
+  expect(button('Go to Protected name')).toBeUndefined();
+  expect(button('Close parent sections')).toBeUndefined();
 });
 
 it('consumes the top safe-area inset exactly once when the update banner toggles', () => {
@@ -111,7 +160,7 @@ it('adds the verified details catalogue parent and removes identity on stale or 
   mockState.details.products['details-only'] = { displayIdentity: { name: 'Verified no-rate product' } };
   mount();
   expect(button('Verified no-rate product, current location')).toBeDefined();
-  act(() => button('Go to Products without listed rates').props.onPress!());
+  jump('Go to Products without listed rates');
   expect(mockNavigate).toHaveBeenLastCalledWith('/catalogue');
   const verified = mockState.details;
   mockState.details = { ...verified };
@@ -147,10 +196,10 @@ it.each(['/calculator', '/projections'])('keeps %s category changes and ancestor
   expect(current!).toBe('Mortgage');
   act(() => { select!('Savings'); tree.update(<Scenario />); });
   expect(current!).toBe('Savings');
-  act(() => button('Go to Explore').props.onPress!());
+  jump('Go to Explore');
   expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/(tabs)/browse', params: expect.objectContaining({ section: 'savings' }) });
   if (pathname === '/projections') {
-    act(() => button('Go to My scenario').props.onPress!());
+    jump('Go to My scenario');
     expect(mockNavigate).toHaveBeenLastCalledWith({ pathname: '/calculator', params: { section: 'Savings' } });
   }
   mockParams = { section: 'TD' };
