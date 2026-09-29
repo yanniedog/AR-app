@@ -80,9 +80,6 @@ Source classifications and identities also need producer investigation:
 - CommBank Standard Term Deposit has `account_class=non_standard`, despite
   describing individual and other applicant types. The app retains that source
   classification; the BUSINESS-alternative repair does not override it.
-- Australian Mutual Bank LTD rows contain Your Way/Edvest products with
-  education-sector membership text. Verify holder/brand/product attribution at
-  acquisition before changing consumer labels or eligibility.
 - Some source eligibility arrays list STAFF, STUDENT and PENSION_RECIPIENT
   together with NATURAL_PERSON (for example SWSbank term deposits). The app
   continues to respect these explicit restriction codes pending source review.
