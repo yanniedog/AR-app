@@ -15,21 +15,21 @@ checked against the manifest's byte lengths and SHA-256 hashes:
 - Core: `0b6fd476d916591d9eb8f187d3d7654faa91e784fb48f45d51fc896d177650cd`
 - Details: `e37cf7c3ba401aa132f93848ef4e5040eb55085a170d6682c8ab9c1a4c7a4e80`
 
-Counts below use distinct `product_key` values and the shipping shared
+The app comparison baseline is main commit `4bf46cd`. Counts below use distinct `product_key` values and the shipping shared
 `isBroadlyAvailable` predicate with matching product details. They precede
 user profile selections, screen filters and the deposit token-rate floor.
 
 | Category | Published products with rates | Before | After |
 | --- | ---: | ---: | ---: |
-| Mortgage | 1,449 | 963 | 990 |
-| Savings | 735 | 305 | 313 |
-| Term deposits | 647 | 316 | 372 |
-| Total | 2,831 | 1,584 | 1,675 |
+| Mortgage | 1,449 | 963 | 1,049 |
+| Savings | 735 | 305 | 326 |
+| Term deposits | 647 | 316 | 395 |
+| Total | 2,831 | 1,584 | 1,770 |
 
-Visible rate tiers increase from 9,298 to 10,166, a net gain of 868 tiers and
-91 products. These are catalogue-level measurements, not observations of an
+Visible rate tiers increase from 9,298 to 10,688, a net gain of 1,390 tiers and
+186 products. These are catalogue-level measurements, not observations of an
 installed phone's saved profile or cache. Savings/TD lists also remove rates
-below 0.10%: after that unchanged floor the product counts are 990, 166 and 362.
+below 0.10%: after that unchanged floor the product counts are 1,049, 172 and 385.
 
 ## Corrected app classifications
 
@@ -49,6 +49,10 @@ below 0.10%: after that unchanged floor the product counts are 990, 166 and 362.
   their loan rate structure is introductory. Conditional savings rates remain
   excluded under the existing default policy.
 - Suitability cache schema 5 forces older exclusions to rebuild on upgrade.
+- Verified public membership at Australian Military Bank, Defence Bank and
+  Police Credit Union overrides brand-only occupation inferences and ordinary
+  membership of those banks. Product-level staff, ADF/DHOAS, age and other
+  restrictions remain enforced, including when a description repeats the brand.
 
 Every newly admitted product identity was inspected by provider and product.
 The only newly excluded product is Judo's Home Loan, whose published description
@@ -61,6 +65,10 @@ Independent provider references corroborate examples:
 [Bankwest term deposit](https://www.bankwest.com.au/term-deposit),
 [CommBank fixed home loans](https://www.commbank.com.au/home-loans/fixed-rate.html),
 [Northern Inland deposits](https://www.nicu.com.au/banking/investments-term-deposits).
+Public membership statements:
+[Australian Military Bank](https://support.australianmilitarybank.com.au/about-us/can-anyone-join-australian-military-bank),
+[Defence Bank](https://www.defencebank.com.au/tools-and-advice/faqs/deposit-accounts/),
+[Police Credit Union](https://www.policecu.com.au/become-a-member/).
 
 ## Remaining source coverage and policy limits
 
@@ -75,7 +83,7 @@ There are 18 source failure records across eight providers: Aussie Home Loans,
 Bank of Queensland, Bank of Sydney, CommFCU, DDH Graham, Geelong Bank, ME Go and
 SWSbank. The source marks these providers partial, not complete.
 
-Source classifications and identities also need producer investigation:
+Source classifications also need producer investigation:
 
 - CommBank Standard Term Deposit has `account_class=non_standard`, despite
   describing individual and other applicant types. The app retains that source
@@ -83,10 +91,9 @@ Source classifications and identities also need producer investigation:
 - Some source eligibility arrays list STAFF, STUDENT and PENSION_RECIPIENT
   together with NATURAL_PERSON (for example SWSbank term deposits). The app
   continues to respect these explicit restriction codes pending source review.
-- Provider-brand occupation rules and general membership rules can still
-  suppress whole banks. These need a separately evidenced policy review;
-  [Australian Military Bank's membership FAQ](https://support.australianmilitarybank.com.au/about-us/can-anyone-join-australian-military-bank)
-  is an example to reconcile against the existing brand-based rule.
+- Other provider-brand occupation rules and general membership rules remain
+  in place; further exceptions require equivalent provider evidence rather
+  than assuming every branded or member-owned institution is public.
 
 Unspecified mortgage LVR, source non-standard classifications, conditional
 deposit rates, genuinely restricted eligibility and saved profile requirements

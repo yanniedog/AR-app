@@ -67,9 +67,27 @@ const RESTRICTING_TYPES: Record<string, AccessCategory> = {
 };
 
 const OCCUPATION_RE =
-  /\b(police|nurs(?:e|es|ing)|midwi(?:fe|ves)|teacher|educator(?:s)?|doctor|dentist|dental|veterinar(?:y|ian|ians)|health\s*(?:care|sector|worker|professional)s?|medical|defence|defense|military|navy|army|veteran|firefighter|fire\s*service|ambulance|paramedic|emergency\s*services|first\s*responder|essential\s*workers?)\b/i;
+  /\b(police|nurs(?:e|es|ing)|midwi(?:fe|ves)|teacher|educator(?:s)?|doctor|dentist|dental|veterinar(?:y|ian|ians)|health\s*(?:care|sector|worker|professional)s?|medical|defence|defense|military|adf|dhoas|navy|army|veteran|firefighter|fire\s*service|ambulance|paramedic|emergency\s*services|first\s*responder|essential\s*workers?)\b/i;
 const STAFF_RE = /\b(staff|employees?|employers?|colleagues?)\b/i;
 const MEMBERSHIP_RE = /\bmembers?\s+of\b|\bassociation\b|\bunion\b|\balumni\b|\bdiocese\b|\bparish\b/i;
+
+// Public membership verified against the providers' own statements on 2026-09-29:
+// https://support.australianmilitarybank.com.au/about-us/can-anyone-join-australian-military-bank
+// https://www.defencebank.com.au/tools-and-advice/faqs/deposit-accounts/
+// https://www.policecu.com.au/become-a-member/
+// This removes brand-only inferences, never a product's specific eligibility.
+const PUBLIC_MEMBERSHIP_PROVIDERS = new Set([
+  'australian military bank', 'defence bank', 'police credit union',
+]);
+const normalizedProvider = (provider: string) => provider.trim().toLowerCase().replace(/\s+(?:limited|ltd)\.?$/i, '');
+const publicMembershipProvider = (provider: string) => PUBLIC_MEMBERSHIP_PROVIDERS.has(normalizedProvider(provider));
+const providerBrandPattern = (provider: string) => normalizedProvider(provider).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function withoutPublicProviderBrand(text: string, provider: string): string {
+  return publicMembershipProvider(provider)
+    ? text.replace(new RegExp(`\\b${providerBrandPattern(provider)}\\b`, 'gi'), '')
+    : text;
+}
 const BUSINESS_RE = /\b(business|commercial|corporate|company|smsf|self[-\s]?managed\s+super|trust)\b/i;
 const STUDENT_RE = /\bstudent[s]?\b/i;
 const FIRST_HOME_RE = /\bfirst[-\s]?home\s+(?:buyers?|owners?)\b/i;
@@ -141,7 +159,10 @@ function staffDetailRestricts(text: string): boolean {
 function membershipDetailRestricts(text: string, provider: string): boolean {
   // Keep "member of" and association/referral requirements intact. Only the
   // literal provider brand is incidental, just as it is in the description.
-  const brand = provider.trim().replace(/\s+(?:limited|ltd)\.?$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const brand = providerBrandPattern(provider);
+  if (publicMembershipProvider(provider)) {
+    text = text.replace(new RegExp(`\\bmembers?\\s+of\\s+(?:the\\s+)?${brand}\\b`, 'gi'), '');
+  }
   return MEMBERSHIP_RE.test(brand ? text.replace(new RegExp(brand, 'gi'), '') : text);
 }
 
@@ -191,9 +212,9 @@ export function assessAccess(
   provider?: string | null,
 ): AccessAssessment {
   const codes = eligibilityCodes(detail);
-  const text = textOf(name, detail);
-  const nameText = name || '';
   const providerText = provider || '';
+  const text = withoutPublicProviderBrand(textOf(name, detail), providerText);
+  const nameText = withoutPublicProviderBrand(name || '', providerText);
 
   const cats = new Set<AccessCategory>();
   // CDR can list the eligible applicant types as alternatives. A retail loan
@@ -246,7 +267,7 @@ export function assessAccess(
   // Provider brand: occupation/staff only. Do not run membership `\bunion\b`
   // against provider names or every "* Credit Union" becomes members-only.
   if (STAFF_RE.test(providerText)) cats.add('staff');
-  if (OCCUPATION_RE.test(providerText)) cats.add('occupation');
+  if (providerRestrictsAccess(providerText) && OCCUPATION_RE.test(providerText)) cats.add('occupation');
   // Beyond the applicant codes and explicit exclusive-access wording above,
   // business keywords are classified only in the product NAME. Free-text
   // "company/trust/commercial" mentions in eligibility
@@ -339,6 +360,7 @@ export function nameRestrictsAccess(name: string | null | undefined): boolean {
 export function providerRestrictsAccess(provider: string | null | undefined): boolean {
   const text = provider ?? '';
   if (!text) return false;
+  if (publicMembershipProvider(text)) return false;
   // Occupation/staff only — do NOT apply membership `\bunion\b` here, or every
   // "* Credit Union" lender would be treated as members-only.
   return STAFF_RE.test(text) || OCCUPATION_RE.test(text);
@@ -354,7 +376,7 @@ export function rowRestrictsAccess(
   row: { product_name?: string | null; provider?: string | null } | null | undefined,
 ): boolean {
   if (!row) return false;
-  return nameRestrictsAccess(row.product_name) || providerRestrictsAccess(row.provider);
+  return nameRestrictsAccess(withoutPublicProviderBrand(row.product_name || '', row.provider || '')) || providerRestrictsAccess(row.provider);
 }
 
 /** Which name-signal categories fire for a product name (may be empty). */
