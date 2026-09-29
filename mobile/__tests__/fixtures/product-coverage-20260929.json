@@ -503,53 +503,6 @@
       }
     },
     {
-      "section": "Savings",
-      "row": {
-        "provider": "Australian Military Bank",
-        "product_id": "a7d9a6dc-8261-4252-978b-66bb95bec20c",
-        "product_key": "Australian Military Bank|a7d9a6dc-8261-4252-978b-66bb95bec20c|TRANS_AND_SAVINGS_ACCOUNTS|Capital Guaranteed Super",
-        "product_name": "Capital Guaranteed Super",
-        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
-        "rate": "0.036",
-        "rate_type": "FIXED",
-        "term": "P12M",
-        "ribbon_normalized": true,
-        "account_type": "savings",
-        "ribbon_deposit_kind": "base",
-        "balance_min": "20000",
-        "feature_set": "basic",
-        "account_class": "standard",
-        "rate_index": 5,
-        "last_updated": "2026-08-24T23:16:32.83124Z",
-        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
-      },
-      "detail": {
-        "description": "Capital Guaranteed Super account is a retirement savings account (RSA) that offers a tax advantaged way to save for your retirement. It is a low risk, low cost investment option with nominal monthly fees. The account is a capital guaranteed investment, meaning your retirement savings are protected from negative earnings. Retirement Savings Account (RSA) is a superannuation account with the same tax concessions as any other superannuation fund, however it operates similar to a savings/investment account.",
-        "eligibility": [
-          {
-            "label": "MIN_AGE",
-            "value": "18"
-          },
-          {
-            "label": "RESIDENCY_STATUS",
-            "value": "Australian citizen, NZ citizen or permanent resident of Australia"
-          }
-        ],
-        "constraints": [
-          {
-            "label": "MIN_BALANCE",
-            "value": "20000.00",
-            "info": "Minimum opening balance for fixed product"
-          },
-          {
-            "label": "OPENING_BALANCE",
-            "value": "6000.00",
-            "info": "Minimum initial deposit $6,000"
-          }
-        ]
-      }
-    },
-    {
       "section": "TD",
       "row": {
         "provider": "Australian Military Bank",
@@ -766,30 +719,6 @@
       }
     },
     {
-      "section": "Savings",
-      "row": {
-        "provider": "Police Credit Union Ltd",
-        "product_id": "Super_MyWay_Account",
-        "product_key": "Police Credit Union Ltd|Super_MyWay_Account|TRANS_AND_SAVINGS_ACCOUNTS|Super MyWay Account",
-        "product_name": "Super MyWay Account",
-        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
-        "rate": "0.0475",
-        "rate_type": "VARIABLE",
-        "ribbon_normalized": true,
-        "account_type": "savings",
-        "ribbon_deposit_kind": "base",
-        "balance_min": "250000",
-        "feature_set": "basic",
-        "account_class": "standard",
-        "rate_index": 3,
-        "last_updated": "2026-06-01T10:26:32.000+09:30",
-        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
-      },
-      "detail": {
-        "description": "Self Managed Super Fund Account"
-      }
-    },
-    {
       "section": "TD",
       "row": {
         "provider": "Police Credit Union Ltd",
@@ -830,6 +759,144 @@
             "value": "2500000.00"
           }
         ]
+      }
+    },
+    {
+      "section": "Savings",
+      "row": {
+        "provider": "Australian Military Bank",
+        "product_id": "9d1888b8-097d-4c21-849f-730bfaace6c3",
+        "product_key": "Australian Military Bank|9d1888b8-097d-4c21-849f-730bfaace6c3|TRANS_AND_SAVINGS_ACCOUNTS|Online Saver",
+        "product_name": "Online Saver",
+        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+        "rate": "0.001",
+        "rate_type": "VARIABLE",
+        "ribbon_normalized": true,
+        "account_type": "savings",
+        "ribbon_deposit_kind": "base",
+        "balance_min": "0",
+        "balance_max": "500000",
+        "feature_set": "basic",
+        "account_class": "standard",
+        "rate_index": 1,
+        "last_updated": "2026-08-24T23:19:10.181187Z",
+        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+      },
+      "detail": {
+        "description": "The Online Saver Account gives you access to your money exclusively via Internet Banking, so you can avoid temptation and reach your savings goals faster. Plus, you’ll be rewarded with a competitive bonus interest rate when the conditions on the account are met.",
+        "eligibility": [
+          {
+            "label": "RESIDENCY_STATUS",
+            "value": "Individuals must be citizens or permanent residents of Australia."
+          },
+          {
+            "label": "MIN_AGE",
+            "value": "11"
+          }
+        ],
+        "constraints": [
+          {
+            "label": "MAX_BALANCE",
+            "value": "500000.00"
+          }
+        ]
+      }
+    },
+    {
+      "section": "Savings",
+      "row": {
+        "provider": "Police Credit Union Ltd",
+        "product_id": "iSavings_Account",
+        "product_key": "Police Credit Union Ltd|iSavings_Account|TRANS_AND_SAVINGS_ACCOUNTS|iSavings Account",
+        "product_name": "iSavings Account",
+        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+        "rate": "0.0425",
+        "rate_type": "VARIABLE",
+        "ribbon_normalized": true,
+        "account_type": "savings",
+        "ribbon_deposit_kind": "base",
+        "balance_min": "500000",
+        "feature_set": "basic",
+        "account_class": "standard",
+        "rate_index": 4,
+        "last_updated": "2026-06-01T10:56:01+10:00",
+        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+      },
+      "detail": {
+        "description": "Online savings account"
+      }
+    }
+  ],
+  "restrictedExamples": [
+    {
+      "section": "Savings",
+      "row": {
+        "provider": "Australian Military Bank",
+        "product_id": "a7d9a6dc-8261-4252-978b-66bb95bec20c",
+        "product_key": "Australian Military Bank|a7d9a6dc-8261-4252-978b-66bb95bec20c|TRANS_AND_SAVINGS_ACCOUNTS|Capital Guaranteed Super",
+        "product_name": "Capital Guaranteed Super",
+        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+        "rate": "0.036",
+        "rate_type": "FIXED",
+        "term": "P12M",
+        "ribbon_normalized": true,
+        "account_type": "savings",
+        "ribbon_deposit_kind": "base",
+        "balance_min": "20000",
+        "feature_set": "basic",
+        "account_class": "standard",
+        "rate_index": 5,
+        "last_updated": "2026-08-24T23:16:32.83124Z",
+        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+      },
+      "detail": {
+        "description": "Capital Guaranteed Super account is a retirement savings account (RSA) that offers a tax advantaged way to save for your retirement. It is a low risk, low cost investment option with nominal monthly fees. The account is a capital guaranteed investment, meaning your retirement savings are protected from negative earnings. Retirement Savings Account (RSA) is a superannuation account with the same tax concessions as any other superannuation fund, however it operates similar to a savings/investment account.",
+        "eligibility": [
+          {
+            "label": "MIN_AGE",
+            "value": "18"
+          },
+          {
+            "label": "RESIDENCY_STATUS",
+            "value": "Australian citizen, NZ citizen or permanent resident of Australia"
+          }
+        ],
+        "constraints": [
+          {
+            "label": "MIN_BALANCE",
+            "value": "20000.00",
+            "info": "Minimum opening balance for fixed product"
+          },
+          {
+            "label": "OPENING_BALANCE",
+            "value": "6000.00",
+            "info": "Minimum initial deposit $6,000"
+          }
+        ]
+      }
+    },
+    {
+      "section": "Savings",
+      "row": {
+        "provider": "Police Credit Union Ltd",
+        "product_id": "Super_MyWay_Account",
+        "product_key": "Police Credit Union Ltd|Super_MyWay_Account|TRANS_AND_SAVINGS_ACCOUNTS|Super MyWay Account",
+        "product_name": "Super MyWay Account",
+        "category": "TRANS_AND_SAVINGS_ACCOUNTS",
+        "rate": "0.0475",
+        "rate_type": "VARIABLE",
+        "ribbon_normalized": true,
+        "account_type": "savings",
+        "ribbon_deposit_kind": "base",
+        "balance_min": "250000",
+        "feature_set": "basic",
+        "account_class": "standard",
+        "rate_index": 3,
+        "last_updated": "2026-06-01T10:26:32.000+09:30",
+        "taxonomy_path": "SAVINGS.SAVINGS_ACCT.BASE.TIERED"
+      },
+      "detail": {
+        "description": "Self Managed Super Fund Account"
       }
     }
   ]

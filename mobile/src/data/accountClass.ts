@@ -24,6 +24,10 @@ export function hasUnspecifiedMortgageLvr(row: RateRow): boolean {
  * (e.g. Pi export uses "RACQ Bank", "Westpac").
  */
 const NON_STANDARD_PRODUCTS: Readonly<Record<string, readonly string[]>> = {
+  // Published descriptions identify these as retirement/SMSF accounts despite
+  // standard source labels; keep the row-only gate safe before details load.
+  'australian military bank': ['Capital Guaranteed Super'],
+  'police credit union': ['Super MyWay Account'],
   racq: ['Green Home Loan', 'Green Home Loan Investment'],
   westpac: [
     'Sustainable Upgrades Home Loan',
@@ -34,6 +38,8 @@ const NON_STANDARD_PRODUCTS: Readonly<Record<string, readonly string[]>> = {
 
 function providerKey(provider: string): string | null {
   const p = provider.trim().toLowerCase();
+  if (p.replace(/\s+(?:limited|ltd)\.?$/, '') === 'australian military bank') return 'australian military bank';
+  if (p.replace(/\s+(?:limited|ltd)\.?$/, '') === 'police credit union') return 'police credit union';
   if (p.includes('racq')) return 'racq';
   if (p.includes('westpac')) return 'westpac';
   return null;

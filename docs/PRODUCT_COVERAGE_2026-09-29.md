@@ -22,14 +22,16 @@ user profile selections, screen filters and the deposit token-rate floor.
 | Category | Published products with rates | Before | After |
 | --- | ---: | ---: | ---: |
 | Mortgage | 1,449 | 963 | 1,049 |
-| Savings | 735 | 305 | 326 |
+| Savings | 735 | 305 | 324 |
 | Term deposits | 647 | 316 | 395 |
-| Total | 2,831 | 1,584 | 1,770 |
+| Total | 2,831 | 1,584 | 1,768 |
 
-Visible rate tiers increase from 9,298 to 10,688, a net gain of 1,390 tiers and
-186 products. These are catalogue-level measurements, not observations of an
+Visible rate tiers increase from 9,298 to 10,680, a net gain of 1,382 tiers and
+184 products. These are catalogue-level measurements, not observations of an
 installed phone's saved profile or cache. Savings/TD lists also remove rates
-below 0.10%: after that unchanged floor the product counts are 1,049, 172 and 385.
+below 0.10%: after that unchanged floor the product counts are 1,049, 170 and 385.
+At that default-list boundary, products increase from 1,430 to 1,604 (+174)
+and rate tiers from 8,790 to 10,017 (+1,227), before saved-profile requirements.
 
 ## Corrected app classifications
 
@@ -53,6 +55,10 @@ below 0.10%: after that unchanged floor the product counts are 1,049, 172 and 38
   Police Credit Union overrides brand-only occupation inferences and ordinary
   membership of those banks. Product-level staff, ADF/DHOAS, age and other
   restrictions remain enforced, including when a description repeats the brand.
+- Australian Military Bank Capital Guaranteed Super and Police Credit Union
+  Super MyWay remain non-standard retirement/SMSF accounts, including before
+  details load. Explicit SMSF account descriptions and exclusive applicant
+  requirements remain restricted; alternatives and negated restrictions do not.
 
 Every newly admitted product identity was inspected by provider and product.
 The only newly excluded product is Judo's Home Loan, whose published description

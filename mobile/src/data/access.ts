@@ -119,7 +119,18 @@ const PACKAGE_RE =
   /\b(?:existing|current)\s+customers?\s+only\b|\bmust\s+already\s+(?:be\s+an?\s+existing\s+customer|hold\s+an?\s+(?:everyday|transaction|offset|package)\s+account)\b|\brequires?\s+(?:an?\s+)?(?:existing|package)\s+account\b|\bpackage\s+(?:customers?|members?)\s+only\b|\bonly\s+available\s+(?:as\s+part\s+of|with)\s+a?\s*package\b|\b(?:only|exclusively)\s+bundled\s+with\b|\bhome\s+loan\s+package\s+customers?\s+only\b/i;
 
 const CHANNEL_RE = /\b(?:available|offered)\s+only\s+through\s+(?:approved\s+platforms?|accredited\s+partners?)\b|\b(?:invite|invitation)\s+only\b/i;
-const BUSINESS_ONLY_RE = /\b(?:business(?:es)?|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?)\s+only\b|\b(?:only\s+available|available\s+only|restricted|limited)\s+(?:to|for)\s+(?:business(?:es)?(?!\s+(?:introduced|referred))|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?)\b/i;
+const BUSINESS_ONLY_RE = /\b(?:business(?:es)?|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?|smsfs?|self[-\s]+managed\s+super(?:annuation)?\s+funds?)\s+only\b|\b(?:only\s+available|available\s+only|restricted|limited)\s+(?:to|for)\s+(?:business(?:es)?(?!\s+(?:introduced|referred))|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?|smsfs?|self[-\s]+managed\s+super(?:annuation)?\s+funds?)\b/gi;
+// A description that identifies the account itself as an SMSF product differs
+// from eligibility text merely listing SMSFs alongside individual applicants.
+const SMSF_ACCOUNT_DESCRIPTION_RE = /^(?:an?\s+)?(?:smsf|self[-\s]+managed\s+super(?:annuation)?\s+fund)\s+accounts?\b/i;
+
+function businessOnlyRestricts(text: string): boolean {
+  for (const match of text.matchAll(BUSINESS_ONLY_RE)) {
+    const prefix = text.slice(0, match.index);
+    if (!/\b(?:not|never)\s+(?:(?:just|solely|exclusively)\s+)?$/i.test(prefix)) return true;
+  }
+  return false;
+}
 
 /** True when MAX_AGE encodes a youth/child upper bound (≤25), not a senior lending cap. */
 function maxAgeImpliesYouth(detail: ProductDetail | null | undefined): boolean {
@@ -219,7 +230,7 @@ export function assessAccess(
   const cats = new Set<AccessCategory>();
   // CDR can list the eligible applicant types as alternatives. A retail loan
   // offered to individuals AND companies is not a business-only product.
-  const retailAlternative = codes.has('NATURAL_PERSON') && !BUSINESS_ONLY_RE.test(text);
+  const retailAlternative = codes.has('NATURAL_PERSON') && !businessOnlyRestricts(text);
   // Structured codes are authoritative (MAX_AGE handled via maxAgeImpliesYouth).
   for (const [code, cat] of Object.entries(RESTRICTING_TYPES)) {
     if (codes.has(code) && !(code === 'BUSINESS' && retailAlternative)) cats.add(cat);
@@ -263,7 +274,7 @@ export function assessAccess(
   if (geoRestricts(text)) cats.add('geographic');
   if (PACKAGE_RE.test(text)) cats.add('package');
   if (CHANNEL_RE.test(text)) cats.add('channel');
-  if (BUSINESS_ONLY_RE.test(text)) cats.add('business');
+  if (businessOnlyRestricts(text) || SMSF_ACCOUNT_DESCRIPTION_RE.test((detail?.description ?? '').trim())) cats.add('business');
   // Provider brand: occupation/staff only. Do not run membership `\bunion\b`
   // against provider names or every "* Credit Union" becomes members-only.
   if (STAFF_RE.test(providerText)) cats.add('staff');

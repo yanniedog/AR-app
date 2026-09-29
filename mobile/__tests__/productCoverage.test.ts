@@ -11,11 +11,13 @@ import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 jest.mock('../src/data/cache', () => ({ cache: {} }));
 
 const examples = fixture.examples as { section: SectionKey; row: RateRow; detail: ProductDetail }[];
-const products = Object.fromEntries(examples.map(({ row, detail }) => [row.product_key, detail]));
+const restrictedExamples = fixture.restrictedExamples as typeof examples;
+const allExamples = [...examples, ...restrictedExamples];
+const products = Object.fromEntries(allExamples.map(({ row, detail }) => [row.product_key, detail]));
 const core = {
   run_date: '2026-09-29',
   sections: Object.fromEntries(['Mortgage', 'Savings', 'TD'].map(section => [section, {
-    rates: examples.filter(e => e.section === section).map(e => e.row),
+    rates: allExamples.filter(e => e.section === section).map(e => e.row),
   }])),
 } as CorePayload;
 
@@ -34,8 +36,9 @@ describe('published product coverage regressions', () => {
     const check = () => {
       for (const section of ['Mortgage', 'Savings', 'TD'] as const) {
         const rows = core.sections[section].rates;
-        expect(visibleAccountRows(rows, false, products)).toEqual(rows);
-        expect(filterRows(rows, EMPTY_FILTERS, products, null, section)).toEqual(rows);
+        const expected = examples.filter(e => e.section === section).map(e => e.row);
+        expect(visibleAccountRows(rows, false, products)).toEqual(expected);
+        expect(filterRows(rows, EMPTY_FILTERS, products, null, section)).toEqual(expected);
       }
       const bankRows = groupByProvider(core.sections, 'base', false, products).flatMap(group => group.rows);
       expect(new Set(bankRows.map(r => r.product_key))).toEqual(new Set(examples.map(e => e.row.product_key)));
@@ -55,6 +58,14 @@ describe('published product coverage regressions', () => {
 });
 
 describe('restriction boundaries after coverage repair', () => {
+  it.each(restrictedExamples)('keeps $row.provider / $row.product_name out before and after details load', ({ row, detail }) => {
+    expect(isBroadlyAvailable(row, null)).toBe(false);
+    expect(isBroadlyAvailable(row, detail)).toBe(false);
+    expect(visibleAccountRows([row], false)).toEqual([]);
+    expect(visibleAccountRows([row], false, products)).toEqual([]);
+    expect(visibleAccountRows([row], true, products)).toEqual([row]);
+  });
+
   it.each([
     ['Staff term deposit', { eligibility: [{ label: 'NATURAL_PERSON' }, { label: 'STAFF' }] }],
     ['Saver', { eligibility: [{ label: 'NATURAL_PERSON' }, { label: 'STAFF', info: 'Apply through staff assisted channels.' }] }],
@@ -74,6 +85,44 @@ describe('restriction boundaries after coverage repair', () => {
   it('does not confuse broker-introduced business with business-only applicants', () => {
     expect(assessAccess('Home Loan', { eligibility: [
       { label: 'NATURAL_PERSON' }, { label: 'OTHER', info: 'Only available for business introduced through Broker' },
+    ] }).restricted).toBe(false);
+  });
+
+  it.each([
+    'Not limited to companies',
+    'Not restricted to businesses',
+    'Not only available to companies',
+    'Not just limited to businesses',
+  ])('does not treat negated business wording as a restriction: %s', info => {
+    expect(assessAccess('Saver', { eligibility: [
+      { label: 'NATURAL_PERSON' }, { label: 'BUSINESS', info },
+    ] }).restricted).toBe(false);
+  });
+
+  it.each([
+    'Only available to SMSFs',
+    'Self managed super funds only',
+    'Not restricted to companies. Available only to businesses.',
+  ])('retains an explicit exclusive applicant restriction: %s', info => {
+    expect(assessAccess('Saver', { eligibility: [
+      { label: 'NATURAL_PERSON' }, { label: 'BUSINESS', info },
+    ] }).restricted).toBe(true);
+  });
+
+  it.each(['Self Managed Super Fund Account', 'An SMSF account for retirement savings'])(
+    'recognizes an explicit specialist account description: %s', description => {
+      expect(assessAccess('Saver', { description }).categories).toContain('business');
+    },
+  );
+
+  it.each([
+    'Available to individuals and SMSFs.',
+    'Available to individuals and self managed super funds.',
+    'Not available to SMSFs.',
+    'Not a self managed super fund account.',
+  ])('preserves ordinary retail alternatives and negated SMSF mentions: %s', description => {
+    expect(assessAccess('Term Deposit', { description, eligibility: [
+      { label: 'NATURAL_PERSON' }, { label: 'BUSINESS' },
     ] }).restricted).toBe(false);
   });
 
