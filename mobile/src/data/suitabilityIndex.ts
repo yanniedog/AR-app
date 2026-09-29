@@ -20,9 +20,9 @@ export type SuitabilityIndex = {
   allowed: Set<string>;
 };
 
-// Schema 3 admitted mortgages with unspecified LVR. Rebuild from matching
-// cached details so upgraded installations use the same policy as fresh ones.
-export const SUITABILITY_INDEX_SCHEMA_VERSION = 4 as const;
+// Rebuild stale exclusions after correcting incidental eligibility text and
+// limiting conditional-deposit rules to deposits, including on cached starts.
+export const SUITABILITY_INDEX_SCHEMA_VERSION = 5 as const;
 
 export type PersistedSuitabilityIndex = {
   schemaVersion: typeof SUITABILITY_INDEX_SCHEMA_VERSION;

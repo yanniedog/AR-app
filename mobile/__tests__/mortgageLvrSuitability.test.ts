@@ -85,7 +85,7 @@ test('an upgrade rejects the old allowlist, rebuilds and rehydrates the new LVR 
   expect(await hydrateSuitabilityIndex(identity.runDate, 'core', 'details')).toBeNull();
   await rebuildAndInstallSuitabilityIndex(core(rows), null, 'details', () => true, 'core');
   const persisted = jest.mocked(cache.writeSuitabilityIndex).mock.calls[0][0];
-  expect(persisted).toMatchObject({ schemaVersion: 4, allowed: [ordinary.product_key] });
+  expect(persisted).toMatchObject({ schemaVersion: 5, allowed: [ordinary.product_key] });
   clearSuitabilityIndex();
   jest.mocked(cache.readSuitabilityIndex).mockResolvedValue(persisted);
   expect(await hydrateSuitabilityIndex(identity.runDate, 'core', 'details')).not.toBeNull();

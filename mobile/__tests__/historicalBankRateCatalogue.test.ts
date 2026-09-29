@@ -145,7 +145,7 @@ test('shared access cache cannot admit restricted names or rate siblings through
     { row: descriptor({ lvr_tier: 'lvr_80-90%' }), spans: [[0, 2, [6], 1]] },
     { row: descriptor({ product_name: 'Staff Home Loan' }), spans: [[0, 2, [50], 1]] },
     { row: descriptor({ account_class: 'non_standard' }), spans: [[0, 2, [40], 1]] },
-    { row: descriptor({ taxonomy_path: 'SAVINGS.BONUS' }), spans: [[0, 2, [30], 1]] },
+    { row: descriptor({ lvr_tier: 'lvr_unspecified' }), spans: [[0, 2, [30], 1]] },
   ]);
   expect(snapshot(catalogue)[day[0]].Mortgage!.Alpha).toEqual({ min: 5, max: 6, mean: 5.5, median: 5.5, count: 2 });
   expect(snapshot(catalogue, { ...filters, includeNonStandard: true })[day[0]].Mortgage!.Alpha.count).toBe(5);
