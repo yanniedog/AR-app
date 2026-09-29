@@ -208,7 +208,7 @@ export function isNonStandard(row: RateRow): boolean {
 export function isConditionalDepositRate(row: RateRow): boolean {
   // Mortgage introductory/discounted rates are loan structures, not savings
   // bonus actions. The producer also uses ribbon_rate_structure for home loans.
-  if (row.category === 'RESIDENTIAL_MORTGAGES' || row.taxonomy_path?.startsWith('HOME_LOAN.')) return false;
+  if (row.category === 'RESIDENTIAL_MORTGAGES' || row.taxonomy_path === 'HOME_LOAN' || row.taxonomy_path?.startsWith('HOME_LOAN.')) return false;
   const depositKind = (row.ribbon_deposit_kind ?? '').toLowerCase().trim();
   const rateStructure = (row.ribbon_rate_structure ?? '').toLowerCase().trim();
   if (depositKind === 'bonus' || depositKind === 'introductory' || depositKind === 'intro') {

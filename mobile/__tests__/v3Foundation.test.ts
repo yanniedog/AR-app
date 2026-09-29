@@ -31,6 +31,7 @@ import {
 } from '../src/contracts/v3/validators';
 import { assetStateForV3Coverage } from '../src/data/assetState';
 import { sampleCore } from '../src/data/sample';
+import { isConditionalDepositRate } from '../src/data/format';
 import { createV3GenerationCache, type GenerationCacheStorage } from '../src/data/v3GenerationCache';
 import {
   V3_PAYLOAD_BRIDGE_ENABLED,
@@ -466,6 +467,17 @@ describe('canonical core validation and legacy adaptation', () => {
       conditions: [{ type: 'MONTHLY_DEPOSIT', value: '1000', additional_info: null }],
     });
     expect(() => buildGeneration({ products: [conditional] })).toThrow(/unambiguous applicability/);
+  });
+
+  test.each([
+    ['mortgage', 'Mortgage', false],
+    ['savings_account', 'Savings', true],
+    ['term_deposit', 'TD', true],
+  ] as const)('preserves introductory %s conditionality through the legacy adapter', (kind, section, conditionalDeposit) => {
+    const product = makeProduct({ kind, metric: 'introductory_interest' });
+    const row = adapt(buildGeneration({ products: [product] }).core).sections[section].rates[0];
+    expect(row.category).toBeUndefined();
+    expect(isConditionalDepositRate(row)).toBe(conditionalDeposit);
   });
 
   test('maps Savings semantics, base rows, and an exact trusted ongoing-base sibling', () => {
