@@ -23,7 +23,8 @@ export type AccessCategory =
   | 'youth'
   | 'pension'
   | 'geographic'
-  | 'package';
+  | 'package'
+  | 'channel';
 
 export interface AccessAssessment {
   /** Any access-limiting signal (structured or textual) is present. */
@@ -48,6 +49,7 @@ const CATEGORY_LABEL: Record<AccessCategory, string> = {
   pension: 'Pensioners',
   geographic: 'Region-restricted',
   package: 'Package / existing customers',
+  channel: 'Restricted application channel',
 };
 
 // Structured CDR eligibilityType codes that genuinely limit who can apply.
@@ -98,6 +100,9 @@ const GEO_ACT_CANDIDATE_RE =
 const PACKAGE_RE =
   /\b(?:existing|current)\s+customers?\s+only\b|\bmust\s+already\s+(?:be\s+an?\s+existing\s+customer|hold\s+an?\s+(?:everyday|transaction|offset|package)\s+account)\b|\brequires?\s+(?:an?\s+)?(?:existing|package)\s+account\b|\bpackage\s+(?:customers?|members?)\s+only\b|\bonly\s+available\s+(?:as\s+part\s+of|with)\s+a?\s*package\b|\b(?:only|exclusively)\s+bundled\s+with\b|\bhome\s+loan\s+package\s+customers?\s+only\b/i;
 
+const CHANNEL_RE = /\b(?:available|offered)\s+only\s+through\s+(?:approved\s+platforms?|accredited\s+partners?)\b|\b(?:invite|invitation)\s+only\b/i;
+const BUSINESS_ONLY_RE = /\b(?:business(?:es)?|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?)\s+only\b|\b(?:only\s+available|available\s+only|restricted|limited)\s+(?:to|for)\s+(?:business(?:es)?(?!\s+(?:introduced|referred))|compan(?:y|ies)|corporat(?:e|ions?)|sole\s+traders?)\b/i;
+
 /** True when MAX_AGE encodes a youth/child upper bound (≤25), not a senior lending cap. */
 function maxAgeImpliesYouth(detail: ProductDetail | null | undefined): boolean {
   for (const it of detail?.eligibility ?? []) {
@@ -125,6 +130,29 @@ function firstHomeNameRestricts(text: string): boolean {
   return FIRST_HOME_RE.test(text) &&
     !FIRST_HOME_NEGATED_NAME_RE.test(text) &&
     !FIRST_HOME_MARKETING_NAME_RE.test(text);
+}
+
+/** Application channels do not restrict a product to bank staff. */
+function staffDetailRestricts(text: string): boolean {
+  return STAFF_RE.test(text.replace(/\bstaff[-\s]+assisted\b/gi, ''));
+}
+
+/** A lender name in contact instructions is not a membership requirement. */
+function membershipDetailRestricts(text: string, provider: string): boolean {
+  // Keep "member of" and association/referral requirements intact. Only the
+  // literal provider brand is incidental, just as it is in the description.
+  const brand = provider.trim().replace(/\s+(?:limited|ltd)\.?$/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return MEMBERSHIP_RE.test(brand ? text.replace(new RegExp(brand, 'gi'), '') : text);
+}
+
+/** A lower youth deposit minimum is an alternative within an adult-open TD. */
+function youthDescriptionRestricts(description: string): boolean {
+  if (!/\bterm\s+deposits\s+from\s+\$[\d,]+/i.test(description)) return YOUTH_RE.test(description);
+  const withoutOptionalMinimum = description.replace(
+    /\byouth\s+deposits\s+from\s+\$[\d,]+\s*\(under\s+\d+\s+years\)\.?/gi,
+    '',
+  );
+  return YOUTH_RE.test(withoutOptionalMinimum);
 }
 
 function textOf(name: string, detail: ProductDetail | null | undefined): string {
@@ -168,27 +196,36 @@ export function assessAccess(
   const providerText = provider || '';
 
   const cats = new Set<AccessCategory>();
+  // CDR can list the eligible applicant types as alternatives. A retail loan
+  // offered to individuals AND companies is not a business-only product.
+  const retailAlternative = codes.has('NATURAL_PERSON') && !BUSINESS_ONLY_RE.test(text);
   // Structured codes are authoritative (MAX_AGE handled via maxAgeImpliesYouth).
   for (const [code, cat] of Object.entries(RESTRICTING_TYPES)) {
-    if (codes.has(code)) cats.add(cat);
+    if (codes.has(code) && !(code === 'BUSINESS' && retailAlternative)) cats.add(cat);
   }
   // Textual signals from product name + detail copy.
-  if (STAFF_RE.test(text)) cats.add('staff');
+  if (STAFF_RE.test(nameText) || staffDetailRestricts(textOf('', detail))) cats.add('staff');
   if (OCCUPATION_RE.test(text)) cats.add('occupation');
   // Membership: name + eligibility/constraints only — descriptions often repeat lender brands.
   {
-    const membershipParts: string[] = [nameText];
+    const membershipParts: string[] = [];
     for (const it of detail?.eligibility ?? []) {
-      if (it.name) membershipParts.push(String(it.name));
-      if (it.info) membershipParts.push(String(it.info));
-      if (it.value) membershipParts.push(String(it.value));
+      // Associations in an alternative legal-entity list are applicants,
+      // not a requirement to belong to an association. "Member of" remains.
+      const entityAlternative = retailAlternative && (it.label ?? '').toUpperCase() === 'BUSINESS';
+      for (const value of [it.name, it.info, it.value]) {
+        if (value) membershipParts.push(entityAlternative ? String(value).replace(/\bassociation\b/gi, '') : String(value));
+      }
     }
     for (const it of detail?.constraints ?? []) {
       if (it.name) membershipParts.push(String(it.name));
       if (it.info) membershipParts.push(String(it.info));
       if (it.value) membershipParts.push(String(it.value));
     }
-    if (MEMBERSHIP_RE.test(membershipParts.join(" "))) cats.add("membership");
+    if (MEMBERSHIP_RE.test(nameText) || membershipDetailRestricts(membershipParts.join(' • '), providerText)) cats.add('membership');
+    // When replacing a BUSINESS exclusion with an individual applicant path,
+    // retain a separately stated membership gate on that path.
+    if (codes.has('BUSINESS') && retailAlternative && /\bavailable\s+to\s+[^.!?•]{1,70}\s+members\b/i.test(text)) cats.add('membership');
   }
   if (STUDENT_RE.test(text)) cats.add('student');
   // Product names are allowed to classify an explicitly first-home product.
@@ -200,17 +237,19 @@ export function assessAccess(
   ) cats.add('first-home');
   // Youth: product name/description or a low MAX_AGE cap — not guardian copy in
   // eligibility ("customers under 18 need a parent").
-  const youthSurface = `${nameText} ${detail?.description || ''}`;
-  if (YOUTH_RE.test(youthSurface) || maxAgeImpliesYouth(detail)) cats.add('youth');
+  if (YOUTH_RE.test(nameText) || youthDescriptionRestricts(detail?.description || '') || maxAgeImpliesYouth(detail)) cats.add('youth');
   if (PENSION_NAME_RE.test(nameText) || PENSION_RE.test(text)) cats.add('pension');
   if (geoRestricts(text)) cats.add('geographic');
   if (PACKAGE_RE.test(text)) cats.add('package');
+  if (CHANNEL_RE.test(text)) cats.add('channel');
+  if (BUSINESS_ONLY_RE.test(text)) cats.add('business');
   // Provider brand: occupation/staff only. Do not run membership `\bunion\b`
   // against provider names or every "* Credit Union" becomes members-only.
   if (STAFF_RE.test(providerText)) cats.add('staff');
   if (OCCUPATION_RE.test(providerText)) cats.add('occupation');
-  // Business: ONLY from the structured BUSINESS code (handled above) or the
-  // product NAME. Free-text "company/trust/commercial" mentions in eligibility
+  // Beyond the applicant codes and explicit exclusive-access wording above,
+  // business keywords are classified only in the product NAME. Free-text
+  // "company/trust/commercial" mentions in eligibility
   // are almost always EXCLUSIONS ("not available to companies or trusts") and
   // would wrongly flag popular retail products (Unloan, Virgin Money Lite).
   // Do not match provider names here (many "X Business Bank" style brands).
@@ -230,6 +269,7 @@ export function assessAccess(
     firstHomeNameRestricts(nameText) ||
     geoRestricts(nameText) ||
     PACKAGE_RE.test(nameText) ||
+    CHANNEL_RE.test(nameText) ||
     PENSION_NAME_RE.test(nameText);
   const structurallyConfirmed =
     codes.has('STAFF') ||
@@ -290,6 +330,7 @@ export function nameRestrictsAccess(name: string | null | undefined): boolean {
     PENSION_NAME_RE.test(text) ||
     geoRestricts(text) ||
     PACKAGE_RE.test(text) ||
+    CHANNEL_RE.test(text) ||
     BUSINESS_RE.test(text)
   );
 }
@@ -331,6 +372,7 @@ export function nameRestrictionCategories(name: string | null | undefined): Acce
   if (PENSION_NAME_RE.test(text)) cats.push('pension');
   if (geoRestricts(text)) cats.push('geographic');
   if (PACKAGE_RE.test(text)) cats.push('package');
+  if (CHANNEL_RE.test(text)) cats.push('channel');
   return cats;
 }
 
