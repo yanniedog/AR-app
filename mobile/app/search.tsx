@@ -1,5 +1,5 @@
 import { SearchReportExport } from '../src/components/SearchReportExport';
-import { isMandatoryEligibilityReady } from '../src/data/eligibilityGate';
+import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
@@ -219,6 +219,7 @@ export default function Search() {
   );
 
   const showDeepSearchHint =
+    isSuitabilityFilterReady(effectiveFilters.includeNonStandard) &&
     !!debouncedQuery.trim() && !deepSearchActive && rows.length === 0 && !activeFilterCount(effectiveFilters);
 
   const searchSnapshot = useMemo(
@@ -254,7 +255,7 @@ export default function Search() {
     deepSearchActive &&
     !searchIndex &&
     (searchIndexStatus === 'unavailable' || searchIndexStatus === 'error');
-  const detailFiltersPending = !isMandatoryEligibilityReady() ||
+  const detailFiltersPending = !isSuitabilityFilterReady(effectiveFilters.includeNonStandard) ||
     (effectiveFilters.accountFeatures.length > 0 ||
       effectiveFilters.eligibilityCriteria.length > 0 ||
       effectiveFilters.factCriteria.length > 0) &&
@@ -427,7 +428,7 @@ export default function Search() {
           <Button title="More" variant="ghost" onPress={() => setToolsOpen(true)} />
         </Row>
         <AppText variant="tiny" color="textFaint">
-          {rows.length} {rows.length === 1 ? 'product' : 'products'}
+          {searchPending ? 'Preparing products…' : `${rows.length} ${rows.length === 1 ? 'product' : 'products'}`}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
         </AppText>
         {searchIndexUnavailable ? (
@@ -488,16 +489,16 @@ export default function Search() {
                 {detailsLoading ? (
                   <>
                     <IndeterminateProgressBar
-                      caption="Loading product features so account-feature filters can apply."
-                      accessibilityLabel="Preparing feature filters"
+                      caption="Preparing rates and product details."
+                      accessibilityLabel="Preparing rates"
                     />
                     <LoadingRows count={3} />
                   </>
                 ) : (
                   <View style={{ gap: theme.spacing(3) }}>
                     <EmptyState
-                      title="Could not load product features"
-                      subtitle="Connect and retry, or clear the feature filters."
+                      title="Could not prepare rates"
+                      subtitle="Product details are needed to verify these rates. Connect and try again."
                     />
                     <Button
                       title="Retry"
