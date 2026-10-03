@@ -23,7 +23,7 @@
     "preexport:ios": "node scripts/ensure-firebase-config.mjs",
     "export:ios": "expo export --platform ios --source-maps && node scripts/separate-export-symbols.mjs",
     "preexport": "node scripts/clean-export-dir.mjs && node scripts/ensure-firebase-config.mjs",
-    "export": "expo export --platform all --source-maps && node scripts/separate-export-symbols.mjs",
+    "export": "expo export --platform all --source-maps && node scripts/separate-export-symbols.mjs && node scripts/check-exported-external-links.mjs",
     "size:report": "node scripts/report-artifact-sizes.mjs --guard",
     "ci": "npm run doctor && npm run typecheck && npm run lint && npm run test:scripts && npm run test -- --ci && npm run export && npm run size:report",
     "sample": "node scripts/build-sample.mjs",
