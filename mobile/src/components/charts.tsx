@@ -19,9 +19,11 @@ import { formatRate, formatRateDigits, formatRunDate } from '../data/format';
 import { useFirstMountDrawIn } from '../hooks/useFirstMountDrawIn';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 import { rbaChartA11ySummary } from '../lib/a11ySummaries';
+import { hasFiniteChartDate, hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { ChartSliceControls, useChartScrub } from './charts/ChartSliceControls';
+import { AppText } from './ui';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
@@ -51,10 +53,11 @@ export const RbaChart = React.memo(function RbaChart({
   height?: number;
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
-  onGraphicReady?: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
+  onGraphicReady?: (result: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
+  const [measuredGraphic, setMeasuredGraphic] = useState<{ revision: string; positive: boolean } | null>(null);
   const reducedMotion = useReducedMotion();
   const drawProgress = useFirstMountDrawIn(reducedMotion, DRAW_MS);
   const timeline = useMemo(() => rbaTimelineDates(data, holds), [data, holds]);
@@ -118,14 +121,17 @@ export const RbaChart = React.memo(function RbaChart({
     };
   }, [firstTs, innerH, innerW, minR, plottedData, span, timeSpan, width]);
   const { pathD, pathLength } = pathModel;
-  const graphicRevision = `${data.at(-1)?.date ?? 'none'}:${holds?.length ?? 0}:${width}`;
+  const graphicRevision = `${data.at(-1)?.date ?? 'none'}:${holds?.length ?? 0}:${width}:${data.map((point) => `${point.date}=${point.rate}`).join(',')}`;
   useEffect(() => {
-    if (width <= 0 || reducedMotion == null || !pathD) return;
+    if (measuredGraphic?.revision !== graphicRevision || reducedMotion == null) return;
     const timer = setTimeout(() => {
-      onGraphicReady?.({ revision: graphicRevision, pointCount: plottedData.length, accessibleSummary: true });
+      const pointCount = hasFiniteChartPath(pathD)
+        ? plottedData.filter((point) => hasFiniteChartDate(point.date) && Number.isFinite(point.rate)).length : 0;
+      onGraphicReady?.({ revision: graphicRevision, expectedCount: plottedData.length, pointCount,
+        accessibleSummary: pointCount > 0, layoutMeasured: measuredGraphic.positive, emptyStateRendered: false });
     }, reducedMotion ? 0 : DRAW_MS);
     return () => clearTimeout(timer);
-  }, [graphicRevision, onGraphicReady, pathD, plottedData.length, reducedMotion, width]);
+  }, [graphicRevision, measuredGraphic, onGraphicReady, pathD, plottedData, reducedMotion]);
 
   const pathAnimatedProps = useAnimatedProps(() => ({
     strokeDashoffset: pathLength * (1 - drawProgress.value),
@@ -166,7 +172,10 @@ export const RbaChart = React.memo(function RbaChart({
     },
   });
 
-  if (!data.length) return null;
+  if (!data.length) return <AppText variant="small" color="textMuted" onLayout={(event) => {
+    onGraphicReady?.({ revision: graphicRevision, expectedCount: 0, pointCount: 0,
+      accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+  }}>No cash-rate observations available.</AppText>;
 
   const a11ySummary = rbaChartA11ySummary(data, holdMarks.length);
 
@@ -189,7 +198,8 @@ export const RbaChart = React.memo(function RbaChart({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={graphicRevision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => setMeasuredGraphic({ revision: graphicRevision, positive: hasPositiveChartLayout(event) })}>
           <Line x1={padL} y1={y(maxR)} x2={width - padR} y2={y(maxR)} stroke={theme.colors.border} strokeWidth={1} />
           <Line x1={padL} y1={y(minR)} x2={width - padR} y2={y(minR)} stroke={theme.colors.border} strokeWidth={1} />
           <SvgText x={width - padR + 4} y={y(maxR) + 4} fontSize={10} fill={theme.colors.textFaint}>

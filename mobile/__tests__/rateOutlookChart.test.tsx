@@ -54,6 +54,8 @@ function layout(tree: InspectableRenderer, width: number) {
       nativeEvent: { layout: { width } },
     });
   });
+  const svg = tree.root.findAllByType(Svg)[0];
+  if (svg) act(() => (svg.props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width, height: 220 } } }));
 }
 
 const content = (node: TestNode) => Array.isArray(node.props.children)

@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 
 import type { EconomicPoint } from '../../data/economicOutlook';
+import { hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { commissionerFamily } from '../../theme/fonts';
 import { useTheme } from '../../theme/ThemeProvider';
 import { LedgerText } from '../ledger';
@@ -33,6 +34,7 @@ export function RateOutlookChart({
   selectedIndex,
   onSelect,
   onReady,
+  onGraphicReady,
 }: {
   label: string;
   points: readonly EconomicPoint[];
@@ -41,11 +43,10 @@ export function RateOutlookChart({
   selectedIndex: number;
   onSelect: (index: number) => void;
   onReady?: (revision: string) => void;
+  onGraphicReady?: (evidence: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
-  const onReadyRef = useRef(onReady);
-  onReadyRef.current = onReady;
   const valid = useMemo(() => points.filter((point) => Number.isFinite(point.value) && Number.isFinite(Date.parse(point.date))), [points]);
   const revision = valid.map((point) => `${point.date}:${point.value}`).join('|');
   const [min, max] = outlookRateDomain(valid, cashRate);
@@ -66,11 +67,10 @@ export function RateOutlookChart({
   const path = valid.map((point, i) => `${i ? 'L' : 'M'} ${x(point.date)} ${y(point.value)}`).join(' ');
   const summary = `${label}. ${valid.map((point) => `${outlookMonth(point.date)}: ${point.value.toFixed(2)} percent`).join('; ')}.`;
 
-  useEffect(() => {
-    if (width > 76 && revision) onReadyRef.current?.(revision);
-  }, [revision, width]);
-
-  if (!selected) return <LedgerText tone="mutedInk">No forecast observations published.</LedgerText>;
+  if (!selected) return <LedgerText key={revision} tone="mutedInk" onLayout={(event) => {
+    onGraphicReady?.({ revision, expectedCount: points.length, pointCount: 0,
+      accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+  }}>No forecast observations published.</LedgerText>;
   const delta = cashRate == null || !Number.isFinite(cashRate) ? null : Math.round((selected.value - cashRate) * 100);
 
   return (
@@ -94,7 +94,15 @@ export function RateOutlookChart({
         accessibilityLabel={summary}
       >
         {width > left + right ? (
-          <Svg width={width} height={height} accessible={false}>
+          <Svg key={`${revision}:${index}`} width={width} height={height} accessible={false}
+            onLayout={(event) => {
+              const layoutMeasured = hasPositiveChartLayout(event);
+              const pointCount = hasFiniteChartPath(path) ? valid.length : 0;
+              if (layoutMeasured && pointCount > 0) onReady?.(revision);
+              onGraphicReady?.({ revision, expectedCount: points.length, pointCount,
+                accessibleSummary: summary.trim().length > 0 && pointCount > 0,
+                layoutMeasured, emptyStateRendered: false });
+            }}>
             {[min, (min + max) / 2, max].map((tick) => (
               <React.Fragment key={tick}>
                 <Line x1={left} x2={width - right} y1={y(tick)} y2={y(tick)} stroke={theme.ledger.rule} />

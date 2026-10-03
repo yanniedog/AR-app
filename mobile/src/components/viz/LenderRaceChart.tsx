@@ -11,6 +11,7 @@ import { openBank } from '../../lib/nav';
 import type { Brand, HistoryWindow, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { BankAvatar } from '../BankAvatar';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
@@ -44,7 +45,7 @@ export function LenderRaceChart({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
-  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
+  onGraphicReadiness?: (state: ChartRenderEvidence) => void;
   onLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
   height?: number;
   topN?: number;
@@ -119,7 +120,10 @@ export function LenderRaceChart({
   }, [auditRevision, onLogoReadiness, ranked, terminalLogoProviders]);
   if (!model) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {
+        if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
+          accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+      }}>
         Not enough ranking history in this window yet. Leaders need at least two lenders with observations.
       </AppText>
     );
@@ -155,9 +159,7 @@ export function LenderRaceChart({
         onLayout={(event) => {
           const nextWidth = event.nativeEvent.layout.width;
           setWidth(nextWidth);
-          if (nextWidth > 0 && auditRevision) {
-            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
-          }
+
         }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
@@ -167,8 +169,17 @@ export function LenderRaceChart({
       >
         {width > 0 ? (
           <Svg
+            key={auditRevision}
             width={width}
             height={height}
+            onLayout={(event) => {
+              if (auditRevision) onGraphicReadiness?.({ revision: auditRevision,
+                expectedCount: model.series.reduce((count, item) => count + item.ranks.filter((rank) => rank != null).length, 0),
+                pointCount: model.series.reduce((count, item) => count + item.ranks.filter((rank, index) =>
+                  rank != null && Number.isFinite(rank) && Number.isFinite(item.values[index]) &&
+                  hasFiniteChartDate(model.dates[index])).length, 0),
+                accessibleSummary: true, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false });
+            }}
             {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
           >
             {Array.from({ length: lanes }, (_, lane) => (
@@ -211,6 +222,10 @@ export function LenderRaceChart({
                   {lastRank != null ? (
                     <Circle cx={xAt(s.ranks.length - 1)} cy={yAt(lastRank)} r={4} fill={color} />
                   ) : null}
+                  {s.ranks.map((rank, index) => rank != null && Number.isFinite(rank) &&
+                    index !== s.ranks.length - 1 && s.ranks[index - 1] == null && s.ranks[index + 1] == null ? (
+                      <Circle key={`isolated-${index}`} cx={xAt(index)} cy={yAt(rank)} r={3} fill={color} />
+                    ) : null)}
                 </React.Fragment>
               );
             })}

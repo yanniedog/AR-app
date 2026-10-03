@@ -32,6 +32,7 @@ export default function BankRates() {
       status: chart?.status ?? 'pending' as const, error: chart?.error,
       expectedCount: chart?.modelPointCount ?? 0, actualCount: chart?.renderedPointCount ?? 0,
       emptyStateRendered: chart?.emptyStateRendered ?? false,
+      layoutMeasured: chart?.layoutMeasured ?? false,
       accessibleSummary: chart?.accessibleSummary ?? false, renderRevision: chart?.revision },
   ], [chart, focused, laidOut]);
   usePerformanceAuditSurface({ id: 'bank-rates.dashboard', routeKey: '/bank-rates',

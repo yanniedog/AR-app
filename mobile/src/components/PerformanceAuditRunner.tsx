@@ -44,6 +44,10 @@ import {
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
+import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
+import { collectExternalAuditLinks, beginExternalLinkCapture, endExternalLinkCapture,
+  getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
+import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
@@ -135,7 +139,7 @@ const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
 // network, update readiness, and durable audit-state restoration.
-const FIXED_BENCHMARK_CHECKS = 9;
+const FIXED_BENCHMARK_CHECKS = 10;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -549,6 +553,12 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
     readinessRequiredProbeCount: snapshot.requiredProbes,
     readinessPendingRequiredProbeCount: snapshot.pendingRequiredProbes,
     readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot),
+    graphicEvidence: compactPerformanceAuditReadinessEvidence({
+      ...snapshot,
+      surfaces: snapshot.surfaces.map((surface) => ({
+        ...surface, probes: surface.probes.filter((probe) => probe.kind === 'graphic'),
+      })),
+    }),
     readinessActionEvidence: snapshot.surfaces
       .map((surface) => `${surface.id}:${surface.lastCompletedAction ?? 'none'}:${surface.actionRevision}`)
       .join(' | '),
@@ -2553,6 +2563,9 @@ export function PerformanceAuditRunner() {
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
+      let externalLinks: TrustedExternalUrlRequest[] = [];
+      const linkCapture = beginExternalLinkCapture();
+      const linkAbort = new AbortController();
       let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
@@ -2939,6 +2952,44 @@ export function PerformanceAuditRunner() {
           }
         }
 
+        // Collect the exact links encountered during the journeys, plus all
+        // available lender detail destinations. Do not silently certify a sample.
+        externalLinks = collectExternalAuditLinks({
+          details: useStore.getState().details,
+          observed: getCapturedExternalAuditLinks(),
+        });
+        total += externalLinks.length;
+        await record({
+          id: 'external-link-inventory', label: 'External link coverage', kind: 'data',
+          status: useStore.getState().details ? 'pass' : 'warn', durationMs: null,
+          metrics: {
+            executionAttempted: true, uniqueDestinations: externalLinks.length,
+            lenderDetailsLoaded: useStore.getState().details != null,
+            observedDestinations: getCapturedExternalAuditLinks().length,
+            reason: 'Covers official sources, loaded lender details and links rendered during this run. Unloaded lazy sources remain outside this inventory.',
+          },
+        });
+        const linkDeadline = Date.now() + 90_000;
+        transportGuard.allowExternalUrls(externalLinks);
+        for (let offset = 0; offset < externalLinks.length; offset += 4) {
+          await waitWhilePaused(watchdog);
+          assertSessionActive(watchdog);
+          const chunk = externalLinks.slice(offset, offset + 4);
+          const remaining = Math.max(0, linkDeadline - Date.now());
+          const pending = chunk.map((request, index) => runExternalLinkAuditCheck(request, offset + index, {
+            platform: Platform.OS,
+            reachability: auditMode === 'live-source' && remaining > 0,
+            handler: remaining > 0,
+            timeoutMs: Math.max(1, Math.min(5_000, remaining || 5_000)),
+            signal: linkAbort.signal,
+          }));
+          for (let index = 0; index < pending.length; index += 1) {
+            const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
+            updatePerformanceAuditProgress(completed, total, label);
+            await recordContinuable(label, () => pending[index]);
+          }
+        }
+
         for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
@@ -3106,6 +3157,8 @@ export function PerformanceAuditRunner() {
         ).length;
         const plannedCheckIds = [
           'maximum-coverage-profile',
+          'external-link-inventory',
+          ...externalLinks.map((_, index) => `external-link-${index + 1}`),
           'runtime-responsiveness',
           ...navigationJourneys.flatMap((journey) => [
             `journey-${journey.id}-cold`,
@@ -3246,8 +3299,8 @@ export function PerformanceAuditRunner() {
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             auditMode === 'local'
-              ? 'Local mode blocks fetch and XMLHttpRequest before transport. It records the existing Android download snapshot without contacting a host or launching the installer.'
-              : 'During measurement, live-source mode permits only the configured public manifest, dates index and manifest-authenticated release assets. It never launches the installer.',
+              ? 'Local mode validates link addresses and OS browser handlers without HTTP transport. Website reachability remains unverified. It records the existing Android download snapshot without contacting a host or launching the installer.'
+              : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
               ? 'Local audit measurements perform no network or clipboard action. After completion, the full log and report are uploaded to paste and the verified link is copied.'
@@ -3602,6 +3655,8 @@ export function PerformanceAuditRunner() {
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
+        linkAbort.abort();
+        endExternalLinkCapture(linkCapture);
         try {
           monitor.stop();
         } catch {

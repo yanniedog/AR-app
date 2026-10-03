@@ -1,5 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import { Linking } from 'react-native';
 
 import {
   TrustedExternalUrlProvider,
@@ -41,6 +42,31 @@ function RequestButton({ url }: { url: string }) {
 }
 
 describe('TrustedExternalUrlProvider', () => {
+  it('preserves the native Linking receiver when using the default opener', async () => {
+    const open = jest.spyOn(Linking, 'openURL').mockImplementation(function (this: typeof Linking) {
+      if (this !== Linking) throw new Error('lost Linking receiver');
+      return Promise.resolve();
+    });
+    let tree!: InspectableRenderer;
+    try {
+      await act(async () => {
+        tree = TestRenderer.create(
+          <TrustedExternalUrlProvider>
+            <RequestButton url="https://www.rba.gov.au/statistics/tables/" />
+          </TrustedExternalUrlProvider>,
+        ) as InspectableRenderer;
+      });
+      act(() => { (tree.root.findByType('RequestButton').props.onPress as () => void)(); });
+      expect(open).not.toHaveBeenCalled();
+      await act(async () => { (tree.root.findByProps({ title: 'Continue' }).props.onPress as () => void)(); });
+      expect(open).toHaveBeenCalledWith('https://www.rba.gov.au/statistics/tables/');
+      expect(tree.root.findByProps({ visible: false })).toBeDefined();
+    } finally {
+      if (tree) act(() => tree.unmount());
+      open.mockRestore();
+    }
+  });
+
   it('shows the destination host and opens only after confirmation', async () => {
     const openUrl = jest.fn(async () => undefined);
     let tree!: InspectableRenderer;

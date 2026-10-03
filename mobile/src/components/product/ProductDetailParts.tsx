@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { DetailLoadingLines } from '../feedback';
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Badge, Card, Disclosure, Divider, Row } from '../ui';
@@ -316,6 +317,13 @@ export function OfficialLinks({ links, sourceDocuments }: { links?: ProductDetai
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
   const [open, setOpen] = useState(false);
+  useAuditExternalLinks([
+    ...Object.entries(links ?? {}).flatMap(([label, url]) => url ? [{ url, label, purpose: 'lender_source' as const }] : []),
+    ...(sourceDocuments ?? []).flatMap((document) => {
+      const url = document.sourceUrl ?? document.url;
+      return url ? [{ url, label: document.label || 'Additional document', purpose: 'lender_source' as const }] : [];
+    }),
+  ]);
   if (!links && !sourceDocuments?.length) return null;
   const all: { label: string; url?: string; icon: keyof typeof Ionicons.glyphMap }[] = [
     { label: 'Product overview', url: links?.overview, icon: 'document-text-outline' },

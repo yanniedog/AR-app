@@ -83,6 +83,7 @@ export type PerformanceAuditReadinessBlockerCode =
   | 'dataset-revision-mismatch'
   | 'render-revision-mismatch'
   | 'count-incomplete'
+  | 'graphic-evidence-missing'
   | 'required-kind-missing';
 
 export interface PerformanceAuditReadinessBlocker {
@@ -152,6 +153,7 @@ export function compactPerformanceAuditReadinessEvidence(
       probe.kind,
       probe.status,
       probe.actualCount == null ? '' : `${probe.actualCount}/${probe.expectedCount ?? probe.actualCount}`,
+      ...(probe.kind === 'graphic' ? [`required=${probe.required ? 1 : 0}`] : []),
       ...(probe.fallbackCount == null ? [] : [`fallback=${probe.fallbackCount}`]),
       ...(probe.visibleCount == null ? [] : [`visible=${probe.visibleCount}`]),
       ...(probe.emptyStateRendered == null ? [] : [`empty=${probe.emptyStateRendered ? 1 : 0}`]),
@@ -640,6 +642,8 @@ export class PerformanceAuditReadinessRegistry {
       for (const probe of surface.probes) {
         if (limitedKinds && !limitedKinds.has(probe.kind)) continue;
         if (!limitedKinds && !probe.required && !selectedKinds?.has(probe.kind)) continue;
+        if (probe.kind === 'graphic' && !probe.required && probe.expectedCount === 0 &&
+            probe.actualCount === 0 && probe.emptyStateRendered !== true) continue;
         if (probe.status === 'error') {
           blockers.push({
             code: 'probe-error',
@@ -690,6 +694,19 @@ export class PerformanceAuditReadinessRegistry {
             surfaceId: surface.id,
             probeId: probe.id,
             message: `${surface.id}.${probe.id} has ${probe.actualCount ?? 0} of ${probe.expectedCount} expected items`,
+          });
+        }
+        if (probe.kind === 'graphic' && probe.status === 'ready' &&
+            (probe.expectedCount == null || probe.actualCount == null ||
+             !Number.isInteger(probe.expectedCount) || !Number.isInteger(probe.actualCount) ||
+             probe.actualCount !== probe.expectedCount || probe.layoutMeasured !== true ||
+             ((probe.expectedCount ?? 0) > 0 && probe.accessibleSummary !== true) ||
+             (probe.expectedCount === 0 && probe.emptyStateRendered !== true))) {
+          blockers.push({
+            code: 'graphic-evidence-missing',
+            surfaceId: surface.id,
+            probeId: probe.id,
+            message: `${surface.id}.${probe.id} has no measured graph or explicit empty-state proof`,
           });
         }
       }

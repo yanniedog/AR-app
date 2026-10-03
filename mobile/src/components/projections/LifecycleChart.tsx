@@ -12,6 +12,7 @@ import {
   type ProjectionSeries,
 } from '../../data/projections';
 import type { SectionKey } from '../../types';
+import { hasFiniteChartDate, hasFiniteChartPath, hasPositiveChartLayout } from '../../lib/chartRenderEvidence';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
@@ -48,13 +49,19 @@ function pathFor(
 ): string {
   let path = '';
   let started = false;
-  for (const item of points) {
+  for (const [index, item] of points.entries()) {
     const value = metricValue(item, metric);
     if (value == null || !Number.isFinite(value)) {
       started = false;
       continue;
     }
-    path += `${started ? ' L' : 'M'} ${xAt(item.date)} ${yAt(value)}`;
+    const x = xAt(item.date), y = yAt(value);
+    const previous = points[index - 1] ? metricValue(points[index - 1], metric) : null;
+    const next = points[index + 1] ? metricValue(points[index + 1], metric) : null;
+    if ((previous == null || !Number.isFinite(previous)) && (next == null || !Number.isFinite(next))) {
+      path += ` M ${x - 2} ${y} a 2 2 0 1 0 4 0 a 2 2 0 1 0 -4 0 Z`;
+    }
+    path += `${started ? ' L' : 'M'} ${x} ${y}`;
     started = true;
   }
   return path;
@@ -84,6 +91,10 @@ export interface LifecycleChartRenderEvidence {
   renderRevision: string;
   selectionIndex: number;
   accessibleSummary: boolean;
+  expectedCount: number;
+  pointCount: number;
+  layoutMeasured: boolean;
+  emptyStateRendered: boolean;
 }
 
 export function LifecycleChart({
@@ -199,15 +210,24 @@ export function LifecycleChart({
     ...activeValues
     .map(({ series: item, point: selected }) => `${item.label} ${formatValue(selected ? metricValue(selected, metric) : null, metric)}`)
   ].join(', ');
-  useEffect(() => {
-    if (width > 0 && dates.length > 0) {
-      onRenderReadyRef.current?.({
-        renderRevision,
-        selectionIndex: boundedActiveIndex,
-        accessibleSummary: accessibilitySummary.trim().length > 0,
-      });
-    }
-  }, [accessibilitySummary, boundedActiveIndex, dates.length, renderRevision, width]);
+  const graphicCounts = useMemo(() => {
+    const points = [...history, ...series.flatMap((item) => item.points)];
+    return {
+      expectedCount: points.filter((point) => metricValue(point, metric) != null).length,
+      pointCount: points.filter((point) => {
+        const value = metricValue(point, metric);
+        return hasFiniteChartDate(point.date) && value != null && Number.isFinite(value) &&
+          Number.isFinite(xAt(point.date)) && Number.isFinite(yAt(value));
+      }).length,
+    };
+  }, [history, metric, series, xAt, yAt]);
+  if (!graphicCounts.expectedCount) {
+    return <AppText key={`${renderRevision}:${boundedActiveIndex}`} variant="small" color="textMuted" onLayout={(event) => {
+      onRenderReadyRef.current?.({ renderRevision, selectionIndex: boundedActiveIndex,
+        expectedCount: 0, pointCount: 0, accessibleSummary: false,
+        layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>No observations are available for this metric.</AppText>;
+  }
 
   return (
     <View style={{ gap: 10 }}>
@@ -247,7 +267,15 @@ export function LifecycleChart({
         style={{ height, width: '100%' }}
       >
         {width > 0 && dates.length ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={`${renderRevision}:${boundedActiveIndex}`} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => onRenderReadyRef.current?.({
+              renderRevision, selectionIndex: boundedActiveIndex,
+              expectedCount: graphicCounts.expectedCount,
+              pointCount: [paths.history, ...paths.series.map((item) => item.path)]
+                .filter(Boolean).every(hasFiniteChartPath) ? graphicCounts.pointCount : 0,
+              accessibleSummary: accessibilitySummary.trim().length > 0 && graphicCounts.pointCount > 0,
+              layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false,
+            })}>
             {[0, 0.5, 1].map((fraction) => {
               const value = yMin + (yMax - yMin) * fraction;
               const y = yAt(value);

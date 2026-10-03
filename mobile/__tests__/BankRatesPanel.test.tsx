@@ -1,3 +1,4 @@
+import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { BankRatesPanel } from '../src/components/passthrough/BankRatesPanel';
@@ -11,7 +12,7 @@ import type { HistoricalBankRateCatalogue } from '../src/data/historicalBankRate
 import { yieldToUi } from '../src/lib/yieldToUi';
 import { prepareHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
 import { installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
-type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; testID?: string; onLayout?: () => void; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
+type TestNode = { type: unknown; props: { value: string; label: string; gap: boolean; model: BankRateChartModel; testID?: string; onLayout?: (event: unknown) => void; auditRevision: string; onGraphicReady?: (evidence: ChartRenderEvidence) => void; onChange: (value: string) => void }; find: (predicate: (node: TestNode) => boolean) => TestNode; findAll: (predicate: (node: TestNode) => boolean) => TestNode[] };
 type Renderer = ReactTestRenderer & { root: TestNode; toJSON: () => unknown };
 const core = { run_date: '2026-09-22', sections: {
   Mortgage: { rates: [{ provider: 'Alpha', product_key: 'a', product_name: 'Loan', rate: '0.06', rate_type: 'VARIABLE' }, { provider: 'Beta', product_key: 'b', product_name: 'Fixed', rate: '0.09', rate_type: 'FIXED' }] },
@@ -71,8 +72,15 @@ test('audit evidence waits for the current chart layout and invalidates it when 
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'pending', modelPointCount: 4, renderedPointCount: 0, accessibleSummary: false,
   }));
-  const chartLayout = () => tree.root.findAll(node => node.props.testID === 'bank-rates-chart-layout')[0];
-  act(() => chartLayout().props.onLayout!());
+  const chartLayout = () => tree.root.find(node => node.type === ('BankRateChart' as unknown));
+  const measuredChart = () => {
+    const chart = chartLayout();
+    const count = chart.props.model.lines.reduce((sum, line) => sum + line.points.length, 0);
+    chart.props.onGraphicReady!({ revision: chart.props.auditRevision, expectedCount: count, pointCount: count,
+      accessibleSummary: true, layoutMeasured: true, emptyStateRendered: false });
+  };
+  expect(tree.root.findAll(node => node.props.testID === 'bank-rates-chart-layout')[0].props.onLayout).toBeUndefined();
+  act(() => measuredChart());
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'ready', modelPointCount: 4, renderedPointCount: 4, accessibleSummary: true,
   }));
@@ -83,7 +91,7 @@ test('audit evidence waits for the current chart layout and invalidates it when 
     status: 'pending', modelPointCount: 2, renderedPointCount: 0, accessibleSummary: false,
   }));
   expect(onAuditStateChange.mock.calls.at(-1)![0].revision).not.toBe(firstRevision);
-  act(() => chartLayout().props.onLayout!());
+  act(() => measuredChart());
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'ready', modelPointCount: 2, renderedPointCount: 2, accessibleSummary: true,
   }));
@@ -98,11 +106,28 @@ test('an empty bank model is audited only after its actual empty message is laid
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'pending', modelPointCount: 0, emptyStateRendered: false,
   }));
-  act(() => tree.root.findAll(node => node.props.testID === 'bank-rates-empty-layout')[0].props.onLayout!());
+  act(() => tree.root.findAll(node => node.props.testID === 'bank-rates-empty-layout')[0].props.onLayout!({ nativeEvent: { layout: { width: 320, height: 24 } } }));
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
     status: 'ready', modelPointCount: 0, renderedPointCount: 0,
     emptyStateRendered: true, accessibleSummary: false,
   }));
+  act(() => tree.unmount());
+});
+
+test('a newly selected bank must provide its own measured graph evidence', () => {
+  const onAuditStateChange = jest.fn();
+  const panel = (selectedProvider: string) => <BankRatesPanel selectedProvider={selectedProvider} onAuditStateChange={onAuditStateChange} />;
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(panel('Alpha')) as Renderer; });
+  const chart = () => tree.root.find(node => node.type === ('BankRateChart' as unknown));
+  const firstRevision = chart().props.auditRevision;
+  act(() => chart().props.onGraphicReady!({ revision: firstRevision, expectedCount: 4, pointCount: 4,
+    accessibleSummary: true, layoutMeasured: true, emptyStateRendered: false }));
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ready' }));
+  act(() => tree.update(panel('Beta')));
+  expect(chart().props.auditRevision).not.toBe(firstRevision);
+  expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'pending', renderedPointCount: 0,
+    layoutMeasured: false, accessibleSummary: false }));
   act(() => tree.unmount());
 });
 test('profile changes remove excluded banks immediately; missing mandatory feature details fail closed', () => {

@@ -1,4 +1,6 @@
 import { automaticDataUrl } from './automaticDataAccess';
+import { StandardUrl as URL } from './standardUrl';
+import { trustedExternalUrl, type TrustedExternalUrlRequest } from './trustedExternalUrl';
 import {
   AppHealthNetworkPolicy,
   AppHealthNetworkPolicyError,
@@ -37,14 +39,15 @@ export interface AuditTransportTarget {
 
 export interface AppHealthTransportGuard {
   allowManifestAssets(urls: readonly string[]): number;
+  allowExternalUrls(requests: readonly TrustedExternalUrlRequest[]): number;
   snapshot(): AppHealthNetworkSnapshot;
   restore(): AppHealthNetworkSnapshot;
 }
 
 function requestUrl(input: RequestInfo | URL): string {
   if (typeof input === 'string') return input;
-  if (input instanceof URL) return input.toString();
-  return input.url;
+  if ('url' in input) return input.url;
+  return String(input);
 }
 
 function canonical(value: string): string | null {
@@ -122,14 +125,19 @@ export function installAppHealthTransportGuard(options: {
     declaredAssetUrls,
   });
   const originalFetch = target.fetch;
+  const externalRequests = new Map<string, TrustedExternalUrlRequest>();
   let approvedFetchDepth = 0;
   const guardedFetch: typeof fetch = async (input, init) => {
     const url = requestUrl(input);
+    const external = externalRequests.get(url);
+    const permittedExternal = external && typeof input === 'string' &&
+      init?.method === 'HEAD' && init.credentials === 'omit' &&
+      init.body == null && init.headers == null;
     const response = await executeAppHealthRequest(
       policy,
       handle,
       url,
-      purposeFor(url, contract),
+      permittedExternal ? 'external-link' : purposeFor(url, contract),
       () => {
         // React Native implements fetch on top of XMLHttpRequest. Mark only
         // the synchronous XHR created by this already-authorized fetch call;
@@ -145,7 +153,14 @@ export function installAppHealthTransportGuard(options: {
         }
       },
     );
-    if (!acceptedFinalFetchUrl(url, response, contract)) {
+    const finalExternal = external && typeof response.url === 'string'
+      ? trustedExternalUrl({ ...external, url: response.url }) : null;
+    // A manual/opaque redirect is inconclusive and is classified by the link
+    // checker. A visible final destination must satisfy the original purpose.
+    const acceptedExternal = external &&
+      ((response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) ||
+        (finalExternal?.ok === true));
+    if (!(external ? acceptedExternal : acceptedFinalFetchUrl(url, response, contract))) {
       policy.recordPolicyViolation(handle);
       throw new AppHealthNetworkPolicyError({ allowed: false, reason: 'not-allowlisted' });
     }
@@ -195,6 +210,16 @@ export function installAppHealthTransportGuard(options: {
   return {
     allowManifestAssets(urls) {
       return policy.declareAssetUrls(handle, urls);
+    },
+    allowExternalUrls(requests) {
+      const added = policy.declareExternalUrls(handle, requests);
+      if (mode === 'live-source') {
+        for (const request of requests) {
+          const trusted = trustedExternalUrl(request);
+          if (trusted.ok) externalRequests.set(trusted.url, request);
+        }
+      }
+      return added;
     },
     snapshot,
     restore() {

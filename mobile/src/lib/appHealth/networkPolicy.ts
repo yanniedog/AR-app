@@ -7,6 +7,8 @@ import {
   type AppHealthNetworkSnapshot,
   type AppHealthSourceContract,
 } from './types';
+import { StandardUrl as URL } from '../standardUrl';
+import { trustedExternalUrl, type TrustedExternalUrlRequest } from '../trustedExternalUrl';
 
 export interface AppHealthNetworkSessionHandle {
   readonly token: number;
@@ -27,6 +29,7 @@ interface ActiveSession {
   contract: AppHealthSourceContract;
   declaredAssetUrls: Set<string>;
   declaredManifestUrls: Set<string>;
+  externalUrls: Set<string>;
   authorizationAttempts: number;
   authorizedAttempts: number;
   blockedAttempts: number;
@@ -144,6 +147,7 @@ export class AppHealthNetworkPolicy {
       contract,
       declaredAssetUrls,
       declaredManifestUrls,
+      externalUrls: new Set(),
       authorizationAttempts: 0,
       authorizedAttempts: 0,
       blockedAttempts: 0,
@@ -189,6 +193,11 @@ export class AppHealthNetworkPolicy {
       session.blockedAttempts += 1;
       return { allowed: false, reason: 'local-mode' };
     }
+    if (purpose === 'external-link' && session.externalUrls.has(url)) {
+      session.authorizedAttempts += 1;
+      session.pendingAuthorizations += 1;
+      return { allowed: true, reason: 'allowlisted' };
+    }
     const canonical = canonicalAuditUrl(url);
     if (!canonical) {
       session.blockedAttempts += 1;
@@ -205,6 +214,18 @@ export class AppHealthNetworkPolicy {
     }
     session.blockedAttempts += 1;
     return { allowed: false, reason: 'not-allowlisted' };
+  }
+
+  /** Exact source destinations only; this never grants a host-wide permission. */
+  declareExternalUrls(handle: AppHealthNetworkSessionHandle, requests: readonly TrustedExternalUrlRequest[]): number {
+    const session = this.sessionFor(handle);
+    if (!session || session.mode !== 'live-source') return 0;
+    const before = session.externalUrls.size;
+    for (const request of requests) {
+      const trusted = trustedExternalUrl(request);
+      if (trusted.ok) session.externalUrls.add(trusted.url);
+    }
+    return session.externalUrls.size - before;
   }
 
   /** Record the actual transport boundary after an authorization decision. */

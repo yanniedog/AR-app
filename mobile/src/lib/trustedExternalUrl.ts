@@ -1,3 +1,5 @@
+import { StandardUrl } from './standardUrl';
+
 export type TrustedExternalUrlPurpose =
   | 'app_release'
   | 'official_economic_source'
@@ -70,7 +72,7 @@ function isPublicDnsHostname(host: string): boolean {
     .every((label) => /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label));
 }
 
-function purposeAllowsUrl(parsed: URL, purpose: TrustedExternalUrlPurpose): boolean {
+function purposeAllowsUrl(parsed: InstanceType<typeof StandardUrl>, purpose: TrustedExternalUrlPurpose): boolean {
   const host = parsed.hostname.toLowerCase();
   if (purpose === 'app_release') {
     return (
@@ -97,7 +99,7 @@ function purposeAllowsUrl(parsed: URL, purpose: TrustedExternalUrlPurpose): bool
   );
 }
 
-function hasCredentialLikeQuery(parsed: URL): boolean {
+function hasCredentialLikeQuery(parsed: InstanceType<typeof StandardUrl>): boolean {
   return [...parsed.searchParams.keys()].some((key) =>
     CREDENTIAL_QUERY_KEYS.has(key.toLowerCase().replaceAll('-', '').replaceAll('_', '')),
   );
@@ -114,9 +116,9 @@ export function trustedExternalUrl(
     return { ok: false, message: 'This destination is missing or invalid.' };
   }
 
-  let parsed: URL;
+  let parsed: InstanceType<typeof StandardUrl>;
   try {
-    parsed = new URL(request.url.trim());
+    parsed = new StandardUrl(request.url.trim());
   } catch {
     return { ok: false, message: 'This destination is not a valid web address.' };
   }

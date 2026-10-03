@@ -5,6 +5,7 @@ import { AppState, View } from 'react-native';
 
 import { RbaChart } from '../src/components/charts';
 import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../src/hooks/useAuditExternalLinks';
 import { LedgerAction, LedgerSection, LedgerText } from '../src/components/ledger';
 import { RateOutlookChart } from '../src/components/rba/RateOutlookChart';
 import { ScreenScrollView } from '../src/components/Screen';
@@ -15,6 +16,7 @@ import { loadRbaMarketOutlook, RBA_F17_FORWARD_URL, RBA_J1_FORECAST_URL, subscri
 import { useStore } from '../src/data/store';
 import { usePerformanceAuditProbe, usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { yieldToPaintFrames } from '../src/lib/yieldToUi';
+import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 
 const ASX_TRACKER_URL = 'https://www.asx.com.au/markets/trade-our-derivatives-market/futures-market/rba-rate-tracker';
 const DAY_MS = 86_400_000;
@@ -26,6 +28,11 @@ export default function RbaRates() {
   const calendarAsset = useStore((state) => state.manifest?.files.rba_calendar?.sha256);
   const ensureRbaCalendar = useStore((state) => state.ensureRbaCalendar);
   const { requestExternalUrl } = useTrustedExternalUrl();
+  useAuditExternalLinks([
+    { url: ASX_TRACKER_URL, purpose: 'official_market_source', label: 'ASX RBA Rate Tracker' },
+    { url: RBA_J1_FORECAST_URL, purpose: 'official_economic_source', label: 'RBA economist survey' },
+    { url: RBA_F17_FORWARD_URL, purpose: 'official_economic_source', label: 'RBA bond forward rates' },
+  ]);
   const [now, setNow] = useState(Date.now);
   const [outlook, setOutlook] = useState<RbaMarketOutlook | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +42,7 @@ export default function RbaRates() {
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
-  const [graphReady, setGraphReady] = useState({ forecast: '', bonds: '' });
+  const [graphReady, setGraphReady] = useState<{ forecast: ChartRenderEvidence | null; bonds: ChartRenderEvidence | null }>({ forecast: null, bonds: null });
   const [activeAuditChart, setActiveAuditChart] = useState<'forecast' | 'bonds' | null>(null);
   const epoch = useRef(0);
   const today = sydneyYmd(now);
@@ -69,7 +76,7 @@ export default function RbaRates() {
     setOutlook(null);
     setLoading(false);
     setError(false);
-    setGraphReady({ forecast: '', bonds: '' });
+    setGraphReady({ forecast: null, bonds: null });
     setActiveAuditChart(null);
     setForecastIndex(0);
     setBondIndex(1);
@@ -99,8 +106,8 @@ export default function RbaRates() {
     if (focused && core?.run_date && calendarAsset) void ensureRbaCalendar();
   }, [calendarAsset, core?.run_date, ensureRbaCalendar, focused]);
 
-  const forecastReady = useCallback((revision: string) => setGraphReady((previous) => previous.forecast === revision ? previous : { ...previous, forecast: revision }), []);
-  const bondsReady = useCallback((revision: string) => setGraphReady((previous) => previous.bonds === revision ? previous : { ...previous, bonds: revision }), []);
+  const forecastReady = useCallback((evidence: ChartRenderEvidence) => setGraphReady((previous) => ({ ...previous, forecast: evidence })), []);
+  const bondsReady = useCallback((evidence: ChartRenderEvidence) => setGraphReady((previous) => ({ ...previous, bonds: evidence })), []);
   const datasetRevision = outlook?.checkedAt ?? core?.run_date ?? null;
   const renderRevision = `${datasetRevision}:${forecastIndex}:${bondIndex}:${activeAuditChart ?? 'open'}`;
   const auditSurface = usePerformanceAuditSurface({
@@ -110,11 +117,13 @@ export default function RbaRates() {
       'rba.forecast.next': () => {
         if (forecasts.length < 2) return { unavailableReason: 'At least two cached economist forecasts are required' };
         setActiveAuditChart('forecast');
+        setGraphReady((previous) => ({ ...previous, forecast: null }));
         setForecastIndex((index) => (index + 1) % forecasts.length);
       },
       'rba.bonds.next': () => {
         if (!bonds || bonds.length < 2) return { unavailableReason: 'At least two cached bond forwards are required' };
         setActiveAuditChart('bonds');
+        setGraphReady((previous) => ({ ...previous, bonds: null }));
         setBondIndex((index) => (index + 1) % bonds.length);
       },
     },
@@ -128,12 +137,15 @@ export default function RbaRates() {
     status: layoutReady ? 'ready' : 'pending', layoutMeasured: layoutReady,
   });
   const chartRevision = activeAuditChart === 'forecast' ? forecastRevision : bondRevision;
-  const chartRendered = !!activeAuditChart && !!chartRevision && graphReady[activeAuditChart] === chartRevision;
-  const pointCount = activeAuditChart === 'forecast' ? forecasts.length : bonds?.length ?? 0;
+  const graphicEvidence = activeAuditChart ? graphReady[activeAuditChart] : null;
+  const chartRendered = !!graphicEvidence && graphicEvidence.revision === chartRevision && graphicEvidence.layoutMeasured;
+  const pointCount = activeAuditChart === 'forecast' ? forecasts.length : activeAuditChart === 'bonds' ? bonds?.length ?? 0 : 0;
   usePerformanceAuditProbe(auditSurface, {
     id: 'rba.chart', kind: 'graphic', required: activeAuditChart != null, datasetRevision, renderRevision,
     status: chartRendered ? 'ready' : 'pending', expectedCount: pointCount,
-    actualCount: chartRendered ? pointCount : 0, accessibleSummary: chartRendered,
+    actualCount: chartRendered ? graphicEvidence.pointCount : 0,
+    accessibleSummary: chartRendered && graphicEvidence.accessibleSummary,
+    layoutMeasured: chartRendered, emptyStateRendered: chartRendered && graphicEvidence.emptyStateRendered,
   });
 
   const sourceLink = (url: string, label: string) => requestExternalUrl({ url, label, purpose: 'official_economic_source' });
@@ -168,12 +180,12 @@ export default function RbaRates() {
         </LedgerSection>
 
         <LedgerSection title="Economists’ cash-rate forecast" deck="Quarterly median from the RBA’s survey. This is separate from market pricing.">
-          {forecasts.length ? <RateOutlookChart label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onReady={forecastReady} /> : <LedgerText tone="mutedInk">{loading ? 'Loading economist forecasts…' : 'No upcoming economist forecasts available.'}</LedgerText>}
+          {forecasts.length ? <RateOutlookChart label="Economists’ cash-rate forecast" points={forecasts} cashRate={cashRate} selectedIndex={forecastIndex} onSelect={setForecastIndex} onGraphicReady={forecastReady} /> : <LedgerText tone="mutedInk">{loading ? 'Loading economist forecasts…' : 'No upcoming economist forecasts available.'}</LedgerText>}
           {outlook?.economists ? <LedgerText variant="caption" tone="mutedInk">RBA J1 · Survey {formatRunDate(outlook.economists.surveyDate)} · Published {formatRunDate(outlook.economists.publicationDate)}{surveyStale ? ' · Older survey' : ''}</LedgerText> : null}
         </LedgerSection>
 
         <LedgerSection title="Bond-market forward rates" deck="A market view over the next year. Bond forwards include risk premiums and do not predict individual RBA decisions.">
-          {bonds?.length ? <RateOutlookChart label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onReady={bondsReady} /> : <LedgerText tone="mutedInk">{loading ? 'Loading bond forwards…' : 'Bond-market data is unavailable.'}</LedgerText>}
+          {bonds?.length ? <RateOutlookChart label="Bond-market forward rates" points={bonds} cashRate={cashRate} tone="info" selectedIndex={bondIndex} onSelect={setBondIndex} onGraphicReady={bondsReady} /> : <LedgerText tone="mutedInk">{loading ? 'Loading bond forwards…' : 'Bond-market data is unavailable.'}</LedgerText>}
           {outlook?.bondForwards ? <LedgerText variant="caption" tone="mutedInk">RBA F17 · Observed {formatRunDate(outlook.bondForwards.observationDate)} · Published {formatRunDate(outlook.bondForwards.publicationDate)}{bondStale ? ' · Older observation' : ''}</LedgerText> : null}
         </LedgerSection>
 

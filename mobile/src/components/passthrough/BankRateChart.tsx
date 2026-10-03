@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Line, Path } from 'react-native-svg';
 import type { BankRateChartModel } from '../../data/bankRateOverview';
+import { hasFiniteChartPath, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { formatRunDate } from '../../data/format';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartText } from '../charts/ChartText';
@@ -11,8 +12,10 @@ import { AppText, Row } from '../ui';
 
 const W = 340, H = 225, L = 44, R = 12, T = 12, B = 40;
 const timestamp = (date: string) => Date.parse(`${date}T00:00:00Z`);
-export function BankRateChart({ model, provider, onProviderChange, label, gap }: {
+export function BankRateChart({ model, provider, onProviderChange, label, gap, auditRevision, onGraphicReady }: {
   model: BankRateChartModel; provider: string; onProviderChange: (provider: string) => void; label: string; gap: boolean;
+  auditRevision?: string;
+  onGraphicReady?: (evidence: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const index = Math.max(0, model.lines.findIndex(line => line.provider === provider));
@@ -45,7 +48,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
         if (!continuous && !continues) isolatedMarkers.push(marker);
         return `${continuous ? 'L' : 'M'}${px.toFixed(1)},${py.toFixed(1)}`;
       }).join(' ');
-      return { path, markers: markers.join(' '), background: `${path} ${isolatedMarkers.join(' ')}` };
+      return { path, markers: markers.join(' '), background: `${path} ${isolatedMarkers.join(' ')}`, pointCount: line.points.length };
     });
   }, [end, model, start]);
   // The context stays mounted unchanged when selecting another bank. The
@@ -59,6 +62,7 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
     ? `1 observed day · ${formatRunDate(latest.date)}. Earlier matching observations unavailable.`
     : `${selected.points.length} observed days · ${formatRunDate(selected.points[0].date)} – ${formatRunDate(latest.date)}`;
   const summary = `${selected.provider}. ${label} ${latest.value.toFixed(2)} ${gap ? 'percentage points' : 'percent'} on ${formatRunDate(latest.date)}. ${latest.count} matching rate tiers. ${model.lines.length} banks shown. ${coverage}`;
+  const graphicRevision = `${auditRevision ?? ''}:${selected.provider}`;
   const move = (offset: number) => onProviderChange(model.lines[(index + offset + model.lines.length) % model.lines.length].provider);
   return <View style={{ gap: 16 }}>
     <Row gap={8} style={{ alignItems: 'center' }}>
@@ -76,7 +80,15 @@ export function BankRateChart({ model, provider, onProviderChange, label, gap }:
       <AppText variant="small" color="textMuted">{gap ? 'Mortgage − savings gap (pp)' : `${label} advertised rate (% p.a.)`} · {formatRunDate(latest.date)}</AppText>
     </View>
     <View accessible accessibilityRole="image" accessibilityLabel={summary}>
-      <Svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`}>
+      <Svg key={graphicRevision} width="100%" height={H} viewBox={`0 0 ${W} ${H}`}
+        onLayout={(event) => onGraphicReady?.({
+          revision: auditRevision ?? graphicRevision,
+          expectedCount: paths.reduce((count, item) => count + item.pointCount, 0),
+          pointCount: paths.reduce((count, item) => count + (hasFiniteChartPath(item.background) ? item.pointCount : 0), 0),
+          layoutMeasured: hasPositiveChartLayout(event),
+          accessibleSummary: summary.trim().length > 0 && hasFiniteChartPath(paths[index].markers),
+          emptyStateRendered: false,
+        })}>
         {[model.min, (model.min + model.max) / 2, model.max].map(value => <React.Fragment key={value}>
           <Line x1={L} x2={W - R} y1={y(value)} y2={y(value)} stroke={theme.colors.border} />
           <ChartText x={L - 5} y={y(value) + 3} textAnchor="end" fontSize={10} fill={theme.colors.textMuted}>{value.toFixed(2)}</ChartText>

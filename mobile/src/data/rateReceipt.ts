@@ -1,4 +1,5 @@
 import { descriptiveValue } from './descriptiveValue';
+import { StandardUrl } from '../lib/standardUrl';
 import { SECTIONS } from '../constants';
 import { rateQualifier } from '../lib/rateQualifier';
 import type {
@@ -117,7 +118,7 @@ const SOURCE_LABELS: Record<keyof ProductLinks, string> = {
 function safeHttpsUrl(value: unknown): string | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   try {
-    const parsed = new URL(value.trim());
+    const parsed = new StandardUrl(value.trim());
     if (parsed.protocol !== 'https:' || !parsed.hostname) return null;
     parsed.hash = '';
     return parsed.toString();
@@ -135,7 +136,7 @@ export function officialReceiptSources(links?: ProductLinks): OfficialReceiptSou
     const url = safeHttpsUrl(links[kind]);
     if (!url || seen.has(url)) continue;
     seen.add(url);
-    sources.push({ kind, label: SOURCE_LABELS[kind], url, hostname: new URL(url).hostname });
+    sources.push({ kind, label: SOURCE_LABELS[kind], url, hostname: new StandardUrl(url).hostname });
   }
   return sources;
 }

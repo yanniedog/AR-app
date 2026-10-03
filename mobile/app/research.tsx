@@ -1,3 +1,4 @@
+import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -78,15 +79,8 @@ export default function Market() {
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
-  const [historyGraphicState, setHistoryGraphicState] = useState<{
-    revision: string;
-    accessibleSummary: boolean;
-  } | null>(null);
-  const [rbaGraphicState, setRbaGraphicState] = useState<{
-    revision: string;
-    pointCount: number;
-    accessibleSummary: boolean;
-  } | null>(null);
+  const [historyGraphicState, setHistoryGraphicState] = useState<ChartRenderEvidence | null>(null);
+  const [rbaGraphicState, setRbaGraphicState] = useState<ChartRenderEvidence | null>(null);
   const [leaderLogoState, setLeaderLogoState] = useState<{
     revision: string;
     expectedCount: number;
@@ -204,7 +198,7 @@ export default function Market() {
   const datasetRevision = core?.run_date ?? null;
   const rbaGraphicRevisionPrefix = `${core?.rba.at(-1)?.date ?? 'none'}:${core?.rba_holds?.length ?? 0}:`;
   const rbaGraphicReady = !!rbaGraphicState &&
-    rbaGraphicState.pointCount > 0 &&
+    rbaGraphicState.pointCount > 0 && rbaGraphicState.layoutMeasured &&
     rbaGraphicState.revision.startsWith(rbaGraphicRevisionPrefix);
   const rbaChartPointCount = useMemo(() => {
     if (!core?.rba.length) return 0;
@@ -315,14 +309,22 @@ export default function Market() {
   usePerformanceAuditProbe(surface, {
     id: 'history-graphic', kind: 'graphic', required: historyOpen,
     status: !historyOpen || (
-      historyChartAvailable && historyGraphicState?.revision === renderRevision
+      historyGraphicState?.revision === renderRevision && historyGraphicState.layoutMeasured
     ) ? 'ready' : 'pending', datasetRevision, renderRevision,
+    expectedCount: historyOpen ? historyGraphicState?.expectedCount ?? 0 : 0,
+    actualCount: historyOpen ? historyGraphicState?.pointCount ?? 0 : 0,
+    layoutMeasured: historyOpen && historyGraphicState?.revision === renderRevision && historyGraphicState.layoutMeasured,
+    emptyStateRendered: historyOpen && historyGraphicState?.revision === renderRevision && historyGraphicState.emptyStateRendered,
     accessibleSummary: historyOpen && historyChartAvailable &&
       historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
   });
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    expectedCount: economyOpen ? economicAuditState?.expectedCount ?? 0 : 0,
+    actualCount: economyOpen ? economicAuditState?.pointCount ?? 0 : 0,
+    layoutMeasured: economyOpen ? economicAuditState?.layoutMeasured ?? false : false,
+    emptyStateRendered: economyOpen ? economicAuditState?.emptyStateRendered ?? false : false,
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
     datasetRevision, renderRevision,
   });
@@ -353,6 +355,8 @@ export default function Market() {
     status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
     expectedCount: rbaOpen ? rbaChartPointCount : 0,
     actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
+    layoutMeasured: rbaOpen ? rbaGraphicState?.layoutMeasured ?? false : false,
+    emptyStateRendered: rbaOpen ? rbaGraphicState?.emptyStateRendered ?? false : false,
     accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
   });
   usePerformanceAuditProbe(rbaSurface, {
