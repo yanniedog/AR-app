@@ -6,7 +6,10 @@ export interface HistoryGraphicEvidence {
   window: HistoryWindow;
   availability: 'rendered' | 'unavailable';
   pointCount: number;
+  expectedCount: number;
   accessibleSummary: boolean;
+  layoutMeasured: boolean;
+  emptyStateRendered: boolean;
 }
 
 export function buildHistoryGraphicRevision(
@@ -36,8 +39,8 @@ export function isCurrentHistoryGraphicEvidence(
     return false;
   }
   return evidence.availability === 'rendered'
-    ? evidence.pointCount > 0 && evidence.accessibleSummary
+    ? evidence.pointCount > 0 && evidence.accessibleSummary && evidence.layoutMeasured
     : evidence.availability === 'unavailable' &&
         evidence.pointCount === 0 &&
-        !evidence.accessibleSummary;
+        !evidence.accessibleSummary && evidence.layoutMeasured && evidence.emptyStateRendered;
 }

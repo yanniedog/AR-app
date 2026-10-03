@@ -130,6 +130,18 @@ function checkDetail(check: AuditCheck): string {
   if (check.id === 'manifest-network') {
     return `${measuredMs('Request', checkDuration(check))} · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
+  if (check.id === 'external-link-inventory') {
+    return `${check.metrics.uniqueDestinations ?? 0} destinations · ${check.metrics.lenderDetailsLoaded ? 'Lender details included' : 'Lender details unavailable'}`;
+  }
+  if (check.id.startsWith('external-link-')) {
+    return [
+      `${check.metrics.host ?? 'Invalid destination'}${check.metrics.destinationPath ?? ''}`,
+      `Address: ${check.metrics.urlValidation ?? 'unverified'}`,
+      `Browser: ${check.metrics.browserHandler ?? 'unverified'}`,
+      `Website: ${check.metrics.httpReachability ?? 'unverified'}`,
+      check.metrics.reachabilityDetail,
+    ].filter(Boolean).join(' · ');
+  }
   if (check.id.startsWith('section-model-')) {
     const rows = metricNumber(check, 'rows');
     return [
@@ -344,8 +356,8 @@ function PerformanceAuditScreenInner() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">App health audit</AppText>
         <AppText variant="small" color="textMuted">
-          Checks responsiveness, data integrity, missing assets and whether loaded information
-          actually reaches the display. Your settings and saved rates are restored afterward.
+          Checks responsiveness, data integrity, external links and whether graphs and loaded
+          information actually render. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           When results are ready, you can separately review and share a byte-capped deidentified
@@ -408,7 +420,7 @@ function PerformanceAuditScreenInner() {
           onPress={() => void runAudit('local')}
         />
         <Button
-          title="Run with live-source check"
+          title="Run with live data and link checks"
           icon="cloud-download-outline"
           variant="secondary"
           loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
@@ -416,7 +428,10 @@ function PerformanceAuditScreenInner() {
           onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
-          Checks use local data unless you choose the live-source check. After the audit finishes,
+          Local checks validate link addresses and installed browser handlers. Live checks also
+          contact approved websites; blocked sites, timeouts and unchecked links stay unverified.
+          Graph checks require plotted data and measured layout, or a visible no-data state.
+          After the audit finishes,
           the full log and complete report are uploaded to paste and the verified link is copied
           to your clipboard. Anyone with the link can read the log.
         </AppText>

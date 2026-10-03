@@ -35,6 +35,33 @@ describe('installAppHealthTransportGuard', () => {
     datesIndexUrl: 'https://example.test/dates-index.json',
   });
 
+  it('checks exact approved external destinations with credential-free HEAD only', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    const request = { url: 'https://www.rba.gov.au/statistics/tables/?table=f1',
+      label: 'Statistics', purpose: 'official_economic_source' as const };
+    expect(guard.allowExternalUrls([request, { ...request, url: 'https://untrusted.test/' }])).toBe(1);
+    try {
+      await expect(target.fetch(request.url, { method: 'HEAD', credentials: 'omit' })).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(request.url)).rejects.toThrow('blocked');
+      await expect(target.fetch(request.url, { method: 'HEAD', credentials: 'include' })).rejects.toThrow('blocked');
+      await expect(target.fetch('https://www.rba.gov.au/statistics/other/', { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    } finally { guard.restore(); }
+  });
+
+  it('preserves zero transport for external destinations in local mode', async () => {
+    const { target, fetchSpy } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'local', contract });
+    const request = { url: 'https://www.rba.gov.au/statistics/tables/',
+      label: 'Statistics', purpose: 'official_economic_source' as const };
+    expect(guard.allowExternalUrls([request])).toBe(0);
+    try {
+      await expect(target.fetch(request.url, { method: 'HEAD', credentials: 'omit' })).rejects.toThrow('blocked');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally { guard.restore(); }
+  });
+
   it('blocks fetch before transport in local mode and restores it', async () => {
     const { target, fetchSpy } = targetWithSpies();
     const original = target.fetch;
@@ -54,6 +81,20 @@ describe('installAppHealthTransportGuard', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(guard.snapshot()).toMatchObject({ authorizedAttempts: 1, blockedAttempts: 1, transportCalls: 1 });
     guard.restore();
+  });
+
+  it('uses standards canonicalization when the native global has getter-only properties', async () => {
+    const originalUrl = globalThis.URL;
+    globalThis.URL = jest.requireActual('react-native/Libraries/Blob/URL').URL;
+    const { target } = targetWithSpies();
+    const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract });
+    try {
+      await expect(target.fetch(contract.manifestUrl)).resolves.toMatchObject({ ok: true });
+      await expect(target.fetch(`${contract.manifestUrl}?_=123`)).resolves.toMatchObject({ ok: true });
+    } finally {
+      guard.restore();
+      globalThis.URL = originalUrl;
+    }
   });
 
   it('accepts cache-busted contract URLs without URLSearchParams.size on native', async () => {

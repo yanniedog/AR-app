@@ -45,6 +45,11 @@ const METRIC_ALLOWLIST = new Set([
   'frameMeasurementAvailable',
   'availabilityFailure',
   'routeStateInvalidated',
+  'handlerAttempted',
+  'httpAttempted',
+  'uniqueDestinations',
+  'lenderDetailsLoaded',
+  'observedDestinations',
 ]);
 
 const FIXED_CHECK_IDS = new Set([
@@ -57,6 +62,7 @@ const FIXED_CHECK_IDS = new Set([
   'debug-log-io',
   'update-readiness',
   'audit-state-restoration',
+  'external-link-inventory',
 ]);
 const JOURNEY_IDS = [
   'home', 'response', 'outlook', 'rba', 'rba-redirect', 'watchlist', 'settings', 'search',
@@ -129,6 +135,7 @@ function allowlistedMetrics(check: AuditCheck): Record<string, string | number |
 function safeCheckId(value: string | null): string | null {
   if (value == null) return null;
   if (FIXED_CHECK_IDS.has(value)) return value;
+  if (/^external-link-[1-9][0-9]{0,5}$/.test(value)) return value;
   if (/^section-model-(?:mortgage|savings|td)$/.test(value)) return value;
   if (new RegExp(`^journey-(?:${JOURNEY_IDS})-(?:cold|warm)$`).test(value)) return value;
   if (/^deep-(?:first-pass|repeat)\.[a-z0-9.-]{1,80}$/.test(value)) return value;

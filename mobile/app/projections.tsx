@@ -10,6 +10,7 @@ import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react
 import {
   LifecycleChart,
   type LifecycleChartController,
+  type LifecycleChartRenderEvidence,
 } from '../src/components/projections/LifecycleChart';
 import { ProjectionSummary } from '../src/components/scenario/ProjectionSummary';
 import { StaySwitchChart } from '../src/components/scenario/StaySwitchChart';
@@ -24,6 +25,7 @@ import {
   MAX_MORTGAGE_BALANCE,
   MAX_PERIODIC_AMOUNT,
   MAX_PROJECTION_YEARS,
+  metricValue,
   projectionMetricLabel,
   type ProjectionDimension,
   type ProjectionMetric,
@@ -224,6 +226,10 @@ export default function Projections() {
     revision: string;
     selectionIndex: number;
     accessibleSummary: boolean;
+    expectedCount: number;
+    pointCount: number;
+    layoutMeasured: boolean;
+    emptyStateRendered: boolean;
   } | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
   const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
@@ -409,20 +415,20 @@ export default function Projections() {
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
-  const recordChartEvidence = useCallback(({ renderRevision, selectionIndex, accessibleSummary }: {
-    renderRevision: string;
-    selectionIndex: number;
-    accessibleSummary: boolean;
-  }) => {
+  const recordChartEvidence = useCallback(({ renderRevision, ...evidence }: LifecycleChartRenderEvidence) => {
     setChartEvidence((current) => {
       if (
         current?.revision === renderRevision &&
-        current.selectionIndex === selectionIndex &&
-        current.accessibleSummary === accessibleSummary
+        current.selectionIndex === evidence.selectionIndex &&
+        current.accessibleSummary === evidence.accessibleSummary &&
+        current.pointCount === evidence.pointCount &&
+        current.expectedCount === evidence.expectedCount &&
+        current.layoutMeasured === evidence.layoutMeasured &&
+        current.emptyStateRendered === evidence.emptyStateRendered
       ) {
         return current;
       }
-      return { revision: renderRevision, selectionIndex, accessibleSummary };
+      return { revision: renderRevision, ...evidence };
     });
   }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
@@ -626,8 +632,11 @@ export default function Projections() {
         kind: 'graphic',
         required: result.ready,
         status: !result.ready || chartEvidence?.revision === projectionRenderRevision ? 'ready' : 'pending',
-        expectedCount: result.ready ? 1 : 0,
-        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? 1 : 0,
+        expectedCount: result.ready ? [...result.history, ...activeSeries.flatMap((item) => item.points)]
+          .filter((point) => metricValue(point, metric) != null).length : 0,
+        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? chartEvidence.pointCount : 0,
+        layoutMeasured: chartEvidence?.revision === projectionRenderRevision && chartEvidence.layoutMeasured,
+        emptyStateRendered: chartEvidence?.revision === projectionRenderRevision && chartEvidence.emptyStateRendered,
         accessibleSummary: chartEvidence?.revision === projectionRenderRevision
           ? chartEvidence.accessibleSummary
           : false,

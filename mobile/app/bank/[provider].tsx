@@ -308,7 +308,10 @@ export default function BankDetail() {
       return current?.graphicRevision === evidence.graphicRevision &&
         current.availability === evidence.availability &&
         current.pointCount === evidence.pointCount &&
-        current.accessibleSummary === evidence.accessibleSummary
+        current.accessibleSummary === evidence.accessibleSummary &&
+        current.layoutMeasured === evidence.layoutMeasured &&
+        current.emptyStateRendered === evidence.emptyStateRendered &&
+        current.expectedCount === evidence.expectedCount
         ? current
         : evidence;
     });
@@ -526,9 +529,11 @@ export default function BankDetail() {
           : currentHistoryGraphicEvidence?.availability === 'unavailable'
           ? 'Lender history has no finite values to plot'
           : null,
-        expectedCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
+        expectedCount: currentHistoryGraphicEvidence?.expectedCount ?? 0,
         actualCount: currentHistoryGraphicEvidence?.pointCount ?? 0,
         accessibleSummary: currentHistoryGraphicEvidence?.accessibleSummary ?? false,
+        layoutMeasured: currentHistoryGraphicEvidence?.layoutMeasured ?? false,
+        emptyStateRendered: currentHistoryGraphicEvidence?.emptyStateRendered ?? false,
       },
       {
         id: 'lender.product-history-data',

@@ -23,6 +23,7 @@ import { SECTIONS } from '../constants';
 import { bankHistoryChartA11ySummary } from '../lib/a11ySummaries';
 import { buildBandPath, buildLinePath } from '../lib/chartSvgPaths';
 import { debugLog } from '../lib/debugLog';
+import { hasFiniteChartDate, hasPositiveChartLayout } from '../lib/chartRenderEvidence';
 import {
   buildHistoryGraphicRevision,
   type HistoryGraphicEvidence,
@@ -251,32 +252,22 @@ export function BankHistoryChart({
     window,
     plotDates,
   );
-  useEffect(() => {
-    if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
-      onGraphicReady?.({
-        contentRevision: sourceRevision,
-        graphicRevision,
-        window,
-        availability: 'unavailable',
-        pointCount: 0,
-        accessibleSummary: false,
-      });
-      return;
-    }
-    if (width <= 0) return;
-    onGraphicReady?.({
-      contentRevision: sourceRevision,
-      graphicRevision,
-      window,
-      availability: 'rendered',
-      pointCount: plotDates.length,
-      accessibleSummary: true,
-    });
-  }, [graphicRevision, hasPlottableValues, onGraphicReady, plotDates.length, plotPoints.length, sourceRevision, width, window]);
-
-  if (!plotDates.length || !plotPoints.length) return null;
-
-  if (!hasPlottableValues) return null;
+  const expectedPointCount = plotPoints.reduce((count, point, index) => count + (
+    [point.min, point.max, point.mean, point.median, highlightValues?.[index]]
+      .some((value) => value != null) ? 1 : 0
+  ), 0);
+  const finitePointCount = plotPoints.reduce((count, point, index) => count + (
+    hasFiniteChartDate(point.date) &&
+    [point.min, point.max, point.mean, point.median, highlightValues?.[index]]
+      .some(isFiniteNumber) ? 1 : 0
+  ), 0);
+  if (!plotDates.length || !plotPoints.length || !hasPlottableValues) {
+    return <AppText key={graphicRevision} variant="small" color="textMuted" onLayout={(event) => {
+      onGraphicReady?.({ contentRevision: sourceRevision, graphicRevision, window,
+        availability: 'unavailable', expectedCount: expectedPointCount, pointCount: 0,
+        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>No matching history observations for this window.</AppText>;
+  }
 
   const padL = 44;
   const padR = 8;
@@ -428,7 +419,14 @@ export function BankHistoryChart({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={graphicRevision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => onGraphicReady?.({
+              contentRevision: sourceRevision, graphicRevision, window, availability: 'rendered',
+              expectedCount: expectedPointCount,
+              pointCount: Number.isFinite(yDomain.min) && Number.isFinite(yDomain.max) ? finitePointCount : 0,
+              accessibleSummary: finitePointCount > 0,
+              layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false,
+            })}>
             {[0, 0.5, 1].map((frac) => {
               const v = yDomain.min + span * frac;
               const y = yAt(v);
@@ -479,6 +477,13 @@ export function BankHistoryChart({
               );
             })}
 
+            {[mins, maxs, means, medians, highlightValues ?? []].flatMap((values, seriesIndex) =>
+              values.map((value, index) => isFiniteNumber(value) &&
+                !isFiniteNumber(values[index - 1]) && !isFiniteNumber(values[index + 1]) ? (
+                  <Circle key={`isolated-${seriesIndex}-${index}`} cx={xAt(index)} cy={yAt(value)} r={2.5}
+                    fill={seriesIndex === 4 ? highlightColor : ribbonColor} />
+                ) : null),
+            )}
             {band ? (
               <AnimatedPath animatedProps={bandDrawProps} d={band} fill={bandFill} stroke="none" />
             ) : null}

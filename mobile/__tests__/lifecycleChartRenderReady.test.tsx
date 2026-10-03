@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
+import Svg from 'react-native-svg';
 
 import {
   LifecycleChart,
@@ -10,6 +11,7 @@ import type { ProjectionPoint, ProjectionSeries } from '../src/data/projections'
 type TestNode = {
   props: Record<string, unknown>;
   findByProps: (props: Record<string, unknown>) => TestNode;
+  findByType: (type: React.ElementType | string) => TestNode;
 };
 type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
@@ -40,7 +42,27 @@ const series: ProjectionSeries = {
   totalValue: 500_000,
 };
 
+function measuredSvg(tree: InspectableRenderer) {
+  act(() => (tree.root.findByType(Svg).props.onLayout as (event: unknown) => void)({
+    nativeEvent: { layout: { width: 320, height: 220 } },
+  }));
+}
+
 describe('LifecycleChart render evidence', () => {
+  it('reports an undefined ratio through measured empty copy, without claiming a graph', () => {
+    const onRenderReady = jest.fn();
+    let tree!: InspectableRenderer;
+    act(() => { tree = TestRenderer.create(<LifecycleChart section="Mortgage" history={[]}
+      series={[{ ...series, points: [{ ...point, periodRatio: null }] }]} metric="periodRatio"
+      asAt={point.date} renderRevision="undefined-ratio" onRenderReady={onRenderReady} />) as InspectableRenderer; });
+    try {
+      expect(onRenderReady).not.toHaveBeenCalled();
+      const empty = tree.root.findByProps({ children: 'No observations are available for this metric.' });
+      act(() => (empty.props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320, height: 24 } } }));
+      expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ expectedCount: 0, pointCount: 0,
+        layoutMeasured: true, emptyStateRendered: true, accessibleSummary: false }));
+    } finally { act(() => tree.unmount()); }
+  });
   it('does not loop when a parent recreates its render-ready callback', () => {
     let observedReadyCount = 0;
 
@@ -71,6 +93,8 @@ describe('LifecycleChart render evidence', () => {
       }) => void)({ nativeEvent: { layout: { width: 320 } } });
     });
 
+    expect(observedReadyCount).toBe(0);
+    measuredSvg(tree!);
     expect(observedReadyCount).toBe(1);
     act(() => tree!.unmount());
   });
@@ -98,11 +122,13 @@ describe('LifecycleChart render evidence', () => {
       }) => void)({ nativeEvent: { layout: { width } } });
     };
     act(() => layout(320));
+    expect(onRenderReady).not.toHaveBeenCalled();
+    measuredSvg(tree);
     expect(onRenderReady).toHaveBeenCalledTimes(1);
     expect(onRenderReady).toHaveBeenLastCalledWith({
       renderRevision: 'revision-1',
       selectionIndex: 0,
-      accessibleSummary: true,
+      accessibleSummary: true, expectedCount: 1, pointCount: 1, layoutMeasured: true, emptyStateRendered: false,
     });
 
     act(() => layout(320.2));
@@ -121,11 +147,13 @@ describe('LifecycleChart render evidence', () => {
         />,
       );
     });
+    expect(onRenderReady).toHaveBeenCalledTimes(1);
+    measuredSvg(tree);
     expect(onRenderReady).toHaveBeenCalledTimes(2);
     expect(onRenderReady).toHaveBeenLastCalledWith({
       renderRevision: 'revision-2',
       selectionIndex: 0,
-      accessibleSummary: true,
+      accessibleSummary: true, expectedCount: 1, pointCount: 1, layoutMeasured: true, emptyStateRendered: false,
     });
     act(() => tree.unmount());
   });
@@ -155,10 +183,13 @@ describe('LifecycleChart render evidence', () => {
         nativeEvent: { layout: { width: number } };
       }) => void)({ nativeEvent: { layout: { width: 320 } } });
     });
+    measuredSvg(tree);
     expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ selectionIndex: 0 }));
 
     act(() => controllerRef.current?.next());
 
+    expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ selectionIndex: 0 }));
+    measuredSvg(tree);
     expect(onRenderReady).toHaveBeenLastCalledWith(expect.objectContaining({ selectionIndex: 1 }));
     act(() => tree.unmount());
   });

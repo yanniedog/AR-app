@@ -50,6 +50,7 @@ module.exports = ({ config }) => {
   else permissions.add('REQUEST_INSTALL_PACKAGES');
   return {
     ...config,
+    plugins: [...(config.plugins ?? []), './plugins/with-external-link-queries'],
     ...(releaseVersion ? { version: releaseVersion } : {}),
     android: {
       ...config.android,

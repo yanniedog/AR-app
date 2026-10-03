@@ -1,6 +1,6 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
-import { Path } from 'react-native-svg';
+import Svg, { Path } from 'react-native-svg';
 
 import { BankHistoryChart } from '../src/components/BankHistoryChart';
 import type { BankHistoryPoint } from '../src/types';
@@ -51,9 +51,11 @@ test('product-only observations render after layout and retain gaps without inve
     expect(chart.props.accessibilityLabel).not.toMatch(/range|mean|median/);
     expect(onGraphicReady).not.toHaveBeenCalled();
     act(() => chart.props.onLayout({ nativeEvent: { layout: { width: 320 } } }));
+    expect(onGraphicReady).not.toHaveBeenCalled();
+    act(() => tree.root.findAllByType(Svg)[0].props.onLayout({ nativeEvent: { layout: { width: 320, height: 180 } } }));
     expect(onGraphicReady).toHaveBeenCalledTimes(1);
     expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({
-      contentRevision: 'product-history', availability: 'rendered', pointCount: 4, accessibleSummary: true,
+      contentRevision: 'product-history', availability: 'rendered', expectedCount: 3, pointCount: 3, accessibleSummary: true, layoutMeasured: true,
     }));
 
     const paths = tree.root.findAllByType(Path);
@@ -86,8 +88,10 @@ test('nonfinite product values cannot turn an empty market into an available cha
   });
   try {
     expect(tree.root.findAllByProps({ accessibilityRole: 'image' })).toHaveLength(0);
+    expect(onGraphicReady).not.toHaveBeenCalled();
+    act(() => tree.root.findAllByType('AppText')[0].props.onLayout({ nativeEvent: { layout: { width: 320, height: 24 } } }));
     expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({
-      availability: 'unavailable', pointCount: 0, accessibleSummary: false,
+      expectedCount: 2, layoutMeasured: true, emptyStateRendered: true, availability: 'unavailable', pointCount: 0, accessibleSummary: false,
     }));
   } finally { act(() => tree.unmount()); }
 });

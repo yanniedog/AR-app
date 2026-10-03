@@ -20,7 +20,7 @@ import { BankAvatar } from '../BankAvatar';
 import { SegmentedControl } from '../controls';
 import { responsiveScreenContentStyle } from '../Screen';
 import { AppText, Row } from '../ui';
-import { BankRatesPanel } from './BankRatesPanel';
+import { BankRatesPanel, type BankRatesAuditState } from './BankRatesPanel';
 
 function DecisionArrow({ newer, disabled, onPress }: { newer: boolean; disabled: boolean; onPress: () => void }) {
   const theme = useTheme();
@@ -76,8 +76,7 @@ export function BankResponseDashboard({
   const [listMounted, setListMounted] = useState(false);
   const [listReadyRevision, setListReadyRevision] = useState<string | null>(null);
   const [layoutReadyRevision, setLayoutReadyRevision] = useState<string | null>(null);
-  const [chartMounted, setChartMounted] = useState(false);
-  const [chartReadyRevision, setChartReadyRevision] = useState<string | null>(null);
+  const [chartAuditState, setChartAuditState] = useState<BankRatesAuditState | null>(null);
   useEffect(() => setSection(initialSection), [initialSection]);
   useEffect(() => {
     if (!chartModel?.lines.length) return;
@@ -98,16 +97,6 @@ export function BankResponseDashboard({
     });
     return () => cancelAnimationFrame(frame);
   }, [active, listMounted, renderRevision]);
-  useEffect(() => {
-    if (!chartModel || !selectedProvider) {
-      setChartMounted(false);
-      setChartReadyRevision(null);
-      return;
-    }
-    if (!chartMounted) return;
-    const frame = requestAnimationFrame(() => setChartReadyRevision(renderRevision));
-    return () => cancelAnimationFrame(frame);
-  }, [chartMounted, renderRevision, selectedProvider, chartModel]);
 
   const actions = useMemo(() => ({
     'moves.open': () => undefined,
@@ -136,6 +125,7 @@ export function BankResponseDashboard({
         return { unavailableReason: 'Only one eligible bank is available in the chart' };
       }
       const index = Math.max(0, chartModel.lines.findIndex((line) => line.provider === selectedProvider));
+      setChartAuditState(null);
       setSelectedProvider(chartModel.lines[(index + 1) % chartModel.lines.length].provider);
       return undefined;
     },
@@ -175,19 +165,20 @@ export function BankResponseDashboard({
     renderRevision,
     layoutMeasured: layoutReadyRevision === renderRevision,
   });
-  const selectedLine = chartModel?.lines.find((line) => line.provider === selectedProvider) ?? null;
   usePerformanceAuditProbe(auditSurface, {
     id: 'bank-rates-chart',
     kind: 'graphic',
     required: false,
-    status: !selectedLine || chartReadyRevision === renderRevision ? 'ready' : 'pending',
+    status: chartAuditState?.status ?? 'pending', error: chartAuditState?.error,
     datasetRevision: payload.run_date,
     renderRevision,
-    expectedCount: selectedLine?.points.length ?? 0,
-    actualCount: selectedLine && chartReadyRevision === renderRevision ? selectedLine.points.length : 0,
-    accessibleSummary: Boolean(selectedLine && chartReadyRevision === renderRevision),
+    expectedCount: chartAuditState?.modelPointCount ?? 0,
+    actualCount: chartAuditState?.renderedPointCount ?? 0,
+    accessibleSummary: chartAuditState?.accessibleSummary ?? false,
+    layoutMeasured: chartAuditState?.layoutMeasured ?? false,
+    emptyStateRendered: chartAuditState?.emptyStateRendered ?? false,
   });
-  const overview = <BankRatesPanel section={section} onSectionChange={setSection} selectedProvider={selectedProvider} onProviderChange={setSelectedProvider} onModelChange={setChartModel} onChartReady={setChartMounted} />;
+  const overview = <BankRatesPanel section={section} onSectionChange={setSection} selectedProvider={selectedProvider} onProviderChange={setSelectedProvider} onModelChange={setChartModel} onAuditStateChange={setChartAuditState} />;
   if (!active) return <ScrollView contentContainerStyle={{ ...responsiveScreenContentStyle(width), paddingVertical: 24, gap: 28 }}>{overview}<AppText>No recorded RBA decisions overlap the available history.</AppText></ScrollView>;
 
   const header = <View style={{ gap: 28, paddingBottom: 16 }}>

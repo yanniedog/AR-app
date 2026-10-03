@@ -54,7 +54,7 @@ describe('integrated app-health display evidence', () => {
         'browse.screen:probe:data:ready:12/12',
         'browse.screen:probe:list:ready:10/12:revision:render:visible=4:empty=0',
         'browse.screen:probe:logo:ready:8/10:revision:render:fallback=3',
-        'browse.screen:probe:graphic:ready:6/6:summary=1',
+        'browse.screen:probe:graphic:ready:6/6:summary=1:measured=1',
         'browse.screen:probe:layout:ready:1/1:measured=1',
       ].join(' | ')),
     ]);
@@ -67,8 +67,9 @@ describe('integrated app-health display evidence', () => {
         { role: 'visible', expectedMinimum: 1, visibleCount: 4 },
         { role: 'empty-state', expected: false, rendered: false },
         { role: 'logo', expectedCount: 10, decodedCount: 5, fallbackCount: 3, missingCount: 2 },
-        { role: 'chart', modelPointCount: 6, renderedPointCount: 6, accessibleSummary: true },
         { role: 'critical-layout', measured: true, width: null, height: null },
+        { role: 'chart', modelPointCount: 6, renderedPointCount: 6, accessibleSummary: true,
+          layoutMeasured: true, emptyStateRendered: true, unverifiedCount: 0, unavailableCount: 0 },
       ],
     }]);
   });
@@ -87,20 +88,47 @@ describe('integrated app-health display evidence', () => {
     ]);
   });
 
-  it('prefers accessible chart proof when an optional closed chart has the same count', () => {
+  it('keeps each expected chart so a healthy sibling cannot mask a missing graph', () => {
     const observations = appHealthDisplayObservations([
       check([
-        'outlook.dashboard:history:graphic:ready:1/1:summary=1',
-        'outlook.dashboard:economy:graphic:ready:1/1:summary=0',
+        'outlook.dashboard:history:graphic:ready:1/1:summary=1:measured=1',
+        'outlook.dashboard:economy:graphic:ready:0/1:summary=0:measured=0',
       ].join(' | ')),
     ]);
 
     expect(observations[0]?.evidence).toContainEqual({
       role: 'chart',
-      modelPointCount: 1,
+      modelPointCount: 2,
       renderedPointCount: 1,
-      accessibleSummary: true,
+      accessibleSummary: false,
+      layoutMeasured: false, emptyStateRendered: true, unverifiedCount: 1, unavailableCount: 0,
     });
+  });
+
+  it('does not invent graph counts and retains a failure across repeat visits', () => {
+    const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
+    const observations = appHealthDisplayObservations([
+      check('screen:plot:graphic:ready::measured=1:summary=1'),
+      check('screen:plot:graphic:ready:2/2:measured=1:summary=1'),
+    ]);
+    expect(evaluateAppHealthDisplayQuality(contracts, observations)
+      .find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('fail');
+  });
+
+  it('distinguishes a measured no-data state from a rendered graph', () => {
+    const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
+    expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
+      check('screen:plot:graphic:ready:0/0:required=0:measured=1:empty=1:summary=1'),
+    ])).find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('unavailable');
+  });
+
+  it('retains a no-data lens even when another visit to the same graph has data', () => {
+    const contracts = [{ id: 'screen', requiredRoles: ['chart' as const], chartRequired: true }];
+    expect(evaluateAppHealthDisplayQuality(contracts, appHealthDisplayObservations([
+      check('screen:plot:graphic:ready:2/2:measured=1:summary=1'),
+      check('screen:plot:graphic:ready:0/0:required=1:measured=1:empty=1'),
+      check('screen:plot:graphic:ready:3/3:measured=1:summary=1'),
+    ])).find((entry) => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_CHART)?.status).toBe('unavailable');
   });
 
   it('records an explicitly rendered empty state for an empty settled list', () => {

@@ -9,6 +9,7 @@ import type { BankHistoryPoint, HistoryWindow, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Badge, Row } from '../ui';
@@ -35,7 +36,7 @@ export function SwitcherEdgeChart({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
-  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
+  onGraphicReadiness?: (state: ChartRenderEvidence) => void;
   height?: number;
 }) {
   const theme = useTheme();
@@ -80,7 +81,10 @@ export function SwitcherEdgeChart({
   });
   if (!model) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {
+        if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
+          accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+      }}>
         No spread history available for this window yet.
       </AppText>
     );
@@ -149,9 +153,7 @@ export function SwitcherEdgeChart({
         onLayout={(event) => {
           const nextWidth = event.nativeEvent.layout.width;
           setWidth(nextWidth);
-          if (nextWidth > 0 && auditRevision) {
-            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
-          }
+
         }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
@@ -161,8 +163,16 @@ export function SwitcherEdgeChart({
       >
         {width > 0 && started ? (
           <Svg
+            key={auditRevision}
             width={width}
             height={height}
+            onLayout={(event) => {
+              if (auditRevision) onGraphicReadiness?.({ revision: auditRevision,
+                expectedCount: model.points.filter((point) => point.gapBps != null).length,
+                pointCount: Number.isFinite(yMax) ? model.points.filter((point) =>
+                  hasFiniteChartDate(point.date) && point.gapBps != null && Number.isFinite(point.gapBps)).length : 0,
+                accessibleSummary: true, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false });
+            }}
             {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
           >
             {[0, 0.5, 1].map((frac) => {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'r
 import { Alert, Platform, Pressable, ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { AppText, Button, Row } from '../ui';
 import { SELF_UPDATE_ENABLED } from '../../config';
 import { useStore } from '../../data/store';
@@ -304,6 +305,7 @@ export function UpdateChangelogList({
   bare?: boolean;
 }) {
   const { requestExternalUrl } = useTrustedExternalUrl();
+  useAuditExternalLinks(entries.map((entry) => ({ url: entry.releaseUrl, purpose: 'app_release', label: `Australian Rates ${entry.version} changelog` })));
   const list = (
     <ScrollView nestedScrollEnabled style={{ maxHeight: 180 }}>
       {entries.map((entry) => (

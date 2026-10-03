@@ -7,6 +7,7 @@ import { loadProductTerms } from '../../data/productTermsTransport';
 import { humanizeEnum } from '../../data/format';
 import { AppText, Button, Disclosure } from '../ui';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { CustomerProfilePanel } from '../CustomerProfilePanel';
 
 const STAGE_LABELS: Record<TermsStage, string> = {
@@ -19,6 +20,7 @@ function EvidenceRows({ terms }: { terms: ProductTerms }) {
   const [termsOpen, setTermsOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(false);
   const { requestExternalUrl } = useTrustedExternalUrl();
+  useAuditExternalLinks(terms.documents.map((document) => ({ url: document.source_url, purpose: 'lender_source', label: 'Product document' })));
   return (
     <View style={{ gap: 12 }}>
       {TERMS_STAGES.map((stage) => {

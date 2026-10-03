@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
-import { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path } from 'react-native-svg';
 import { BankRateChart } from '../src/components/passthrough/BankRateChart';
 import type { BankRateChartModel } from '../src/data/bankRateOverview';
 
@@ -116,5 +116,33 @@ test.each([1, 3])('an unselected bank with %i isolated observations remains visi
     expect(tree.root.findAllByType(Path)).toHaveLength(3);
     expect(tree.root.findAllByType(Circle)).toHaveLength(0);
     expect(JSON.stringify(tree.toJSON())).not.toMatch(/NaN|Infinity/);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('audit counts come from the actual SVG and invalid coordinates cannot certify the model', () => {
+  const model = fixture(2, 4), onGraphicReady = jest.fn();
+  let tree!: Renderer;
+  act(() => { tree = TestRenderer.create(<BankRateChart model={model} provider="Bank 0" onProviderChange={jest.fn()}
+    label="Mean" gap={false} auditRevision="source-1" onGraphicReady={onGraphicReady} />) as Renderer; });
+  const measured = (height: number) => act(() => {
+    (tree.root.findByType(Svg).props.onLayout as (event: unknown) => void)({ nativeEvent: { layout: { width: 320, height } } });
+  });
+  try {
+    expect(onGraphicReady).not.toHaveBeenCalled();
+    measured(0);
+    expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({ layoutMeasured: false }));
+    measured(NaN);
+    expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({ layoutMeasured: false }));
+    measured(225);
+    expect(onGraphicReady).toHaveBeenLastCalledWith({ revision: 'source-1', expectedCount: 8, pointCount: 8,
+      accessibleSummary: true, layoutMeasured: true, emptyStateRendered: false });
+    const malformed = { ...model, lines: model.lines.map((line, index) => index ? line : {
+      ...line, points: line.points.map((point, pointIndex) => pointIndex === 1 ? { ...point, value: NaN } : point),
+    }) };
+    act(() => tree.update(<BankRateChart model={malformed} provider="Bank 0" onProviderChange={jest.fn()}
+      label="Mean" gap={false} auditRevision="source-2" onGraphicReady={onGraphicReady} />));
+    measured(225);
+    expect(onGraphicReady).toHaveBeenLastCalledWith(expect.objectContaining({ expectedCount: 8, pointCount: 4,
+      accessibleSummary: false, emptyStateRendered: false }));
   } finally { act(() => tree.unmount()); }
 });
