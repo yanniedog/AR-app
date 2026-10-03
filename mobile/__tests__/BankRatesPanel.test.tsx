@@ -120,11 +120,13 @@ test('a newly selected bank must provide its own measured graph evidence', () =>
   let tree!: Renderer;
   act(() => { tree = TestRenderer.create(panel('Alpha')) as Renderer; });
   const chart = () => tree.root.find(node => node.type === ('BankRateChart' as unknown));
+  const initialChart = chart();
   const firstRevision = chart().props.auditRevision;
   act(() => chart().props.onGraphicReady!({ revision: firstRevision, expectedCount: 4, pointCount: 4,
     accessibleSummary: true, layoutMeasured: true, emptyStateRendered: false }));
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'ready' }));
   act(() => tree.update(panel('Beta')));
+  expect(chart()).toBe(initialChart);
   expect(chart().props.auditRevision).not.toBe(firstRevision);
   expect(onAuditStateChange).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'pending', renderedPointCount: 0,
     layoutMeasured: false, accessibleSummary: false }));
