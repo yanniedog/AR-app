@@ -364,7 +364,7 @@ function PerformanceAuditScreenInner() {
           report. Raw debug logs are never included in that report.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          The screen stays awake during visual checks. Leaving the app pauses the run and it
+          The screen stays awake throughout the audit. Locking the phone or leaving the app pauses the run and it
           continues where it left off when you return — route and animation timings cannot be
           measured while the app is off screen.
         </AppText>
