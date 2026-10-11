@@ -57,8 +57,8 @@ public final class HistoryCodecTest {
     byte[] invalidUtf8 = new byte[] { 34, (byte) 0xc0, (byte) 0xaf, 34 };
     rejects(() -> HistoryCodec.decompress(Base64.getEncoder().encodeToString(gzip(invalidUtf8)), invalidUtf8.length, sha(invalidUtf8)));
     rejects(() -> HistoryCodec.compress("\"\ud800\""));
-    equal(json, HistoryCodec.inflatePayload(compressed, expected.length, expected.length));
-    equal(json, HistoryCodec.inflatePayload(compressed, expected.length + 10, -1));
+    equal(json, String.join("", HistoryCodec.inflatePayload(compressed, expected.length, expected.length)));
+    equal(json, String.join("", HistoryCodec.inflatePayload(compressed, expected.length + 10, -1)));
     rejects(() -> HistoryCodec.inflatePayload(compressed, expected.length - 1, -1));
     rejects(() -> HistoryCodec.inflatePayload(compressed, expected.length + 1, expected.length + 1));
     rejects(() -> HistoryCodec.inflatePayload(badCrc, expected.length, -1));

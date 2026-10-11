@@ -70,7 +70,11 @@ preserves the previous file and records the recovery limitation.
 ## Startup and refresh
 
 Preparation starts after the current screen paints. Native Android gzip and
-SHA-256 run off the JavaScript thread. The remaining bounded work yields through
+history SHA-256 run off the JavaScript thread. Current-core content hashing uses
+the native crypto implementation, preserving the exact JSON and UTF-8 digest.
+Large JSON assets decode into bounded text chunks to avoid simultaneous complete
+Java byte and character buffers. Verified optional assets are normalized once
+and reused after installation. The remaining bounded work yields through
 React Native's runtime scheduler; runtimes without it retain an asynchronous
 timer fallback. Explicit paint, navigation and interaction waits are unchanged.
 Capable browsers use DecompressionStream and WebCrypto; the bounded portable
@@ -83,10 +87,12 @@ starting history downloads. Unavailable dates stay visibly unknown.
 
 ## Performance and verification
 
-The acceptance budget is **five seconds of history processing after asset bytes
-are available**, including verification, decoding, preparation, profile results,
-product history construction and cache byte conversion. Network latency and disk
-latency are recorded separately. A Node result is a regression proxy and must not
+The acceptance budget is **five seconds of payload processing after asset bytes
+are available**, including current-core verification, JSON decoding, optional
+asset normalization, suitability classification, history preparation, profile
+results, product history construction and cache byte conversion. Network latency
+and persistent disk latency are recorded separately. A history-only measurement
+does not satisfy the combined budget. A Node result is a regression proxy and must not
 be presented as Android acceptance. Android acceptance uses a release Hermes
 build with real observations and records input/progress responsiveness.
 

@@ -10,7 +10,7 @@ const getCodec = jest.mocked(getNativeHistoryCodec);
 afterEach(() => { jest.resetAllMocks(); Object.assign(Platform, { OS: 'android' }); });
 
 it('passes verified bytes and exact limits to the background native codec', async () => {
-  const inflatePayloadAsync = jest.fn().mockResolvedValue('{"ready":true}');
+  const inflatePayloadAsync = jest.fn().mockResolvedValue(['{"ready":', 'true}']);
   getCodec.mockReturnValue({ inflatePayloadAsync } as unknown as ReturnType<typeof getNativeHistoryCodec>);
   const bytes = gzipSync(strToU8('{"ready":true}'));
   await expect(inflatePayloadOffThread(bytes, 100, 14)).resolves.toBe('{"ready":true}');

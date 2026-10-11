@@ -48,5 +48,7 @@ export async function inflatePayloadOffThread(bytes: Uint8Array, limit: number, 
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { getNativeHistoryCodec } = require('../../modules/history-codec') as typeof import('../../modules/history-codec');
   const codec = getNativeHistoryCodec();
-  return codec?.inflatePayloadAsync ? codec.inflatePayloadAsync(bytes, limit, expected ?? -1) : null;
+  // Bounded text chunks avoid retaining a full decoded byte buffer plus a giant
+  // Java UTF-16 allocation at once. Joining happens once in the JS heap.
+  return codec?.inflatePayloadAsync ? (await codec.inflatePayloadAsync(bytes, limit, expected ?? -1)).join('') : null;
 }
