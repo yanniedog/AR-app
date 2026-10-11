@@ -75,7 +75,7 @@ describe('suitabilityIndex', () => {
     const staff = row({ product_key: 'mixed|staff', product_name: 'Staff Home Loan' });
     const rates = [staff, open, ...Array.from({ length: 120 }, (_, i) => ({
       ...open, product_name: i % 2 ? 'Staff Home Loan' : `Standard Variable ${i}`,
-      account_class: i % 3 ? 'standard' : 'non_standard', rate: i / 10000,
+      account_class: i % 3 ? 'standard' : 'non_standard', rate: String(i / 10000),
     })), { ...staff, product_name: 'Everyday Home Loan' }, staff];
     const core = { run_date: '2026-07-15', sections: { Mortgage: { rates } } } as unknown as CorePayload;
     const expected = new Set(rates.filter(item => isBroadlyAvailable(item, null)).map(item => item.product_key));
