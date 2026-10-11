@@ -308,6 +308,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               );
               if (stillThisCore()) installSuitabilityIndex(built);
             }
+            if (stillThisCore() && isSuitabilityFilterReady(false)) workOutcome = 'completed';
           }
         }
       })();

@@ -189,6 +189,18 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().detailsLoading).toBe(false);
   });
 
+  it('reports completed when trusted live details recover after a metadata read failure', async () => {
+    closeSuitabilityGateUntilRebuild();
+    store.setState({ details: remoteDetails });
+    mockReadMeta.mockRejectedValueOnce(new Error('temporary metadata failure')).mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: remoteManifest.files.details.sha256,
+    });
+    await store.getState().ensureDetails({ force: true });
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Product details and suitability index')?.outcome).toBe('completed');
+  });
+
   it('leaves the suitability gate closed when details download fails', async () => {
     closeSuitabilityGateUntilRebuild();
     mockReadMeta.mockResolvedValue({
