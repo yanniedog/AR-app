@@ -16,6 +16,7 @@ type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 const [row, prize] = fixture.rates as RateRow[];
 const mockParams = { key: row.product_key, ri: '4' };
 const mockHistoryModel = { section: 'Savings', dates: ['2026-09-12', '2026-09-13'], allDates: ['2026-09-12', '2026-09-13'], points: [] };
+const mockSelectLegacyHistory = jest.fn(() => mockHistoryModel);
 const mockRateHistory: Record<string, any> = {
   snapshots: null, updating: false, failed: false, historyAvailable: false,
   richHistory: false, missingDates: [], revision: 'history-1',
@@ -96,7 +97,7 @@ jest.mock('../src/components/ui', () => ({
 }));
 jest.mock('../src/components/scenario/StaySwitchChart', () => ({ StaySwitchChart: 'StaySwitchChart' }));
 jest.mock('../src/data/bankInsights', () => ({ filterBankInsightsForSuitability: () => null }));
-jest.mock('../src/data/historySelectors', () => ({ selectBankHistoryChartModel: () => mockHistoryModel }));
+jest.mock('../src/data/historySelectors', () => ({ selectBankHistoryChartModel: (...args: unknown[]) => mockSelectLegacyHistory(...args) }));
 jest.mock('../src/data/notifications', () => ({ ensurePermissions: jest.fn(async () => true) }));
 jest.mock('../src/data/rateReceipt', () => ({ buildRateReceipt: () => null, buildNegotiationBrief: () => null }));
 jest.mock('../src/data/staySwitchProjection', () => ({ buildStaySwitchProjection: () => null }));
@@ -152,6 +153,7 @@ describe('product-wide history context on an exact-tier page', () => {
     mockRateHistory.historyAvailable = false;
     mockRateHistory.updating = false;
     mockRateHistory.failed = false;
+    mockSelectLegacyHistory.mockClear();
   });
 
   it.each([false, true])('does not call an older cached capture current with history enabled=%s', async (enabled) => {
@@ -236,6 +238,8 @@ describe('product-wide history context on an exact-tier page', () => {
     } } } };
     const tree = await renderProduct();
     const charts = tree.root.findAllByType('BankHistoryChart');
+    expect(mockSelectLegacyHistory).not.toHaveBeenCalled();
+    expect(charts).toHaveLength(0);
     expect(charts.every(chart => chart.props.points.every((point: { mean: number | null }) => point.mean === null))).toBe(true);
     act(() => tree.unmount());
   });
