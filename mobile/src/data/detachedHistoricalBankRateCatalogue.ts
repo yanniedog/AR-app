@@ -14,18 +14,28 @@ import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { PAYLOAD_REPO } from '../config';
+import { backgroundPayloadWork, type BackgroundWorkHandle } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { payloadBundleIdentity } from './payloadBundleIdentity';
 
 let preparedAsset: { receipt: string; catalogue: HistoricalBankRateCatalogue } | null = null;
 type Consumer = { isCurrent: () => boolean; isAssetCurrent: () => boolean; allowNetwork: boolean };
 type PendingAsset = {
+  work: BackgroundWorkHandle;
   receipt: string;
   consumers: Set<Consumer>;
   superseded: boolean;
   promise: Promise<HistoricalBankRateCatalogue | null>;
 };
 let pendingAsset: PendingAsset | null = null;
+
+function retireUnusedPendingAsset(): void {
+  if (pendingAsset && ![...pendingAsset.consumers].some(caller => caller.isAssetCurrent())) {
+    pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
+    pendingAsset = null;
+  }
+}
 
 async function consume(load: PendingAsset, consumer: Consumer): Promise<HistoricalBankRateCatalogue | null> {
   try {
@@ -51,6 +61,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
   const stage = (name: string) => { phase = name; debugLog.debug('bank-history-detached', `${name} run_date=${manifest.run_date} elapsed_ms=${Date.now() - started}`); };
   const file = validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO);
   if (!file) {
+    retireUnusedPendingAsset();
     if (manifest.bank_rate_history_catalogue !== undefined) debugLog.warn('bank-history-detached', 'Invalid optional history descriptor; using fallback.');
     return null;
   }
@@ -62,6 +73,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       }
     }
   } catch {
+    retireUnusedPendingAsset();
     debugLog.warn('bank-history-detached', 'Invalid optional history revision identity; using fallback.');
     return null;
   }
@@ -73,9 +85,10 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     JSON.stringify(validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO)) === JSON.stringify(file);
   const callerIsCurrent = () => (options.isCurrent?.() ?? true) && sameManifest();
   const assetIsCurrent = () => (options.isAssetCurrent?.() ?? options.isCurrent?.() ?? true) && sameManifest();
-  if (!callerIsCurrent() || !assetIsCurrent()) return null;
+  if (!callerIsCurrent() || !assetIsCurrent()) { retireUnusedPendingAsset(); return null; }
   if (pendingAsset && pendingAsset.receipt !== receipt) {
     pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
     pendingAsset = null;
   }
   if (preparedAsset?.receipt === receipt) { stage('prepared cache hit'); return preparedAsset.catalogue; }
@@ -85,7 +98,13 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     stage('matching preparation joined');
     return consume(pendingAsset, consumer);
   }
-  const load: PendingAsset = { receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
+  const work = backgroundPayloadWork.begin('Detached historical catalogue', runDate, 'Reading asset cache', () => {
+    if (!load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent())) return true;
+    load.superseded = true;
+    if (pendingAsset === load) pendingAsset = null;
+    return false;
+  });
+  const load: PendingAsset = { work, receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
   pendingAsset = load;
   const isCurrent = () => !load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent());
   // A superseded caller's mutable manifest must not invalidate a live joiner's
@@ -96,29 +115,39 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       if (!isCurrent()) throw new Error('Detached history preparation superseded');
       await yieldToUi(0);
       if (!isCurrent()) throw new Error('Detached history preparation superseded');
+      work.checkpoint();
     };
     const prepare = async (text: string): Promise<HistoricalBankRateCatalogue | null> => {
       if (text.length > DETACHED_HISTORY_MAX_DECODED) {
         debugLog.warn('bank-history-detached', 'Optional history envelope exceeds its byte budget; using fallback.'); return null;
       }
       await checkpoint();
+      work.stage('Parsing and validating history envelope');
       const inner = validateDetachedHistoricalCatalogueEnvelope(await parseJsonHeavy<unknown>(text), boundManifest);
       if (!inner) { debugLog.warn('bank-history-detached', 'Optional history envelope binding is invalid; using fallback.'); return null; }
       if (!isCurrent()) return null;
+      work.stage('Decoding compressed historical catalogue');
       stage('inner decode begin');
       const decoded = await decompressCatalogueAsync(inner, { yieldControl: checkpoint });
       if (!isCurrent()) return null;
+      work.stage('Validating historical catalogue');
       stage('inner decode complete; validation begin');
       const prepared = await prepareHistoricalBankRateCatalogueAsync(decoded, checkpoint);
       const result = isCurrent() && prepared && prepared.catalogue.run_dates.every(day => day <= runDate) ? prepared.catalogue : null;
       if (result) stage('verified catalogue ready');
-      else debugLog.warn('bank-history-detached', 'Optional historical catalogue rejected; using fallback.');
+      else {
+        work.stage(!isCurrent() ? 'History request superseded' : prepared
+          ? 'Catalogue contains dates after payload date; using fallback'
+          : 'Catalogue validation rejected; using fallback');
+        debugLog.warn('bank-history-detached', 'Optional historical catalogue rejected; using fallback.');
+      }
       return result;
     };
     try {
       stage('asset cache read');
       const cached = await cache.readDetachedBankRateHistoryAsset(async encoded => {
         await checkpoint();
+        work.stage('Decoding and verifying cached asset bytes');
         const raw = await decodeDetachedHistoryBytes(encoded, checkpoint);
         if (!raw || !await authentic(raw, file) || !isCurrent() || isEncryptedAsset(raw) !== !!file.enc) return null;
         const bytes = file.enc ? decryptAsset(raw, await resolvePayloadKeyHex(file.enc.key_id)) : raw;
@@ -126,6 +155,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
         const length = new DataView(bytes.buffer, bytes.byteOffset + bytes.length - 4, 4).getUint32(0, true);
         if (!length || length > DETACHED_HISTORY_MAX_DECODED) return null;
         await checkpoint();
+        work.stage('Inflating cached history asset');
         const inflated = await gunzipCooperatively(bytes, undefined, DETACHED_HISTORY_MAX_DECODED);
         if (inflated.length !== length || !isCurrent()) return null;
         return prepare(strFromU8(inflated));
@@ -137,6 +167,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
         stage('offline asset cache miss'); return null;
       }
       let verified: Uint8Array | null = null;
+      work.stage('Downloading, verifying and inflating history asset');
       stage('asset download begin');
       const text = await downloadInflate(file.url, file.sha256, {
         fileName: file.name, expectedBytes: file.bytes, requireExactBytes: true,
@@ -151,8 +182,10 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       stage('asset bytes verified');
       const catalogue = await prepare(text);
       if (!catalogue || !isCurrent()) return null;
+      work.stage('Encoding verified asset for cache');
       const encoded = await encodeDetachedHistoryBytes(verified, checkpoint);
       if (!isCurrent()) return null;
+      work.stage('Saving verified asset cache');
       try { await cache.writeDetachedBankRateHistoryAsset(encoded, isCurrent); }
       catch { debugLog.warn('bank-history-detached', 'History is verified; its original asset bytes could not be cached.'); }
       if (!isCurrent()) return null;
@@ -162,6 +195,10 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       debugLog.warn('bank-history-detached', `Optional history unavailable during ${phase}; using fallback. elapsed_ms=${Date.now() - started}`);
       return null;
     }
-  }).finally(() => { if (pendingAsset === load) pendingAsset = null; });
+  }).then(result => {
+    work.finish(!isCurrent() ? 'superseded' : result ? 'completed' : 'fallback');
+    return result;
+  }, error => { work.finish('failed'); throw error; })
+    .finally(() => { if (pendingAsset === load) pendingAsset = null; });
   return consume(load, consumer);
 }

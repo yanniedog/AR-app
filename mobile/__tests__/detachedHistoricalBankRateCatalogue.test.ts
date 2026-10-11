@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { gcm } from '@noble/ciphers/aes';
 import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope,
   DETACHED_HISTORY_MAX_COMPRESSED, DETACHED_HISTORY_MAX_DECODED } from '../src/data/detachedHistoricalBankRateCatalogueWire';
 import { encodeDetachedHistoryBytes, decodeDetachedHistoryBytes } from '../src/data/detachedHistoricalCatalogueBytes';
@@ -186,7 +187,10 @@ test('a corrected descriptor supersedes an older in-flight asset without replaci
   });
   const first = loadDetachedHistoricalBankRateCatalogue(old.manifest, { allowNetwork: true });
   await started.promise;
+  const oldWork = backgroundPayloadWork.snapshot().find(job => job.label === 'Detached historical catalogue' && job.outcome === null)!;
   const result = await loadDetachedHistoricalBankRateCatalogue(changed.manifest, { allowNetwork: true });
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === oldWork.id)?.outcome).toBe('superseded');
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
   release.resolve();
   expect(await first).toBeNull();
   expect(result?.sources[day]).toMatchObject({ manifest_sha256: 'd'.repeat(64) });
@@ -384,4 +388,48 @@ test('raw-byte codec preserves chunk boundaries and rejects noncanonical/oversiz
   for (const value of ['AB==', 'AAF=', 'AA==AAAA', '!!!!', 'AAAA\n']) expect(await decodeDetachedHistoryBytes(value, work)).toBeNull();
   await expect(encodeDetachedHistoryBytes(new Uint8Array(DETACHED_HISTORY_MAX_COMPRESSED + 1), work)).rejects.toThrow('budget');
   expect(strFromU8(gunzipSync(fixture().raw))).toContain('core_sha256');
+});
+
+
+test.each(['missing', 'invalid', 'reset'] as const)('retires hung detached work after its final consumer loses ownership: %s', async replacement => {
+  const value = fixture(), started = deferred<void>(), release = deferred<null>();
+  let current = true;
+  jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementationOnce(async () => {
+    started.resolve(); return release.promise;
+  });
+  const old = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false, isAssetCurrent: () => current });
+  await started.promise;
+  const worker = backgroundPayloadWork.snapshot().find(job => job.outcome === null && job.label === 'Detached historical catalogue')!;
+  current = false;
+  if (replacement !== 'reset') {
+    const next = JSON.parse(JSON.stringify(value.manifest)) as Manifest;
+    if (replacement === 'missing') delete next.bank_rate_history_catalogue;
+    else next.bank_rate_history_catalogue!.file.sha256 = 'invalid';
+    expect(await loadDetachedHistoricalBankRateCatalogue(next, { allowNetwork: false })).toBeNull();
+  }
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBe('superseded');
+  release.resolve(null);
+  expect(await old).toBeNull();
+});
+
+test('keeps a shared hung asset visible while one consumer still owns it', async () => {
+  const value = fixture(), started = deferred<void>(), release = deferred<null>();
+  let firstCurrent = true, secondCurrent = true;
+  jest.mocked(cache.readDetachedBankRateHistoryAsset).mockImplementationOnce(async () => {
+    started.resolve(); return release.promise;
+  });
+  const first = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false, isAssetCurrent: () => firstCurrent });
+  await started.promise;
+  const second = loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false, isAssetCurrent: () => secondCurrent });
+  const worker = backgroundPayloadWork.snapshot().find(job => job.outcome === null && job.label === 'Detached historical catalogue')!;
+  firstCurrent = false;
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(true);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBeNull();
+  secondCurrent = false;
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBe('superseded');
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
+  release.resolve(null);
+  expect(await first).toBeNull();
+  expect(await second).toBeNull();
 });
