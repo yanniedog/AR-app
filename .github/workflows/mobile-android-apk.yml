@@ -65,7 +65,7 @@ permissions:
 concurrency:
   # Shared with mobile-eas-build so two APK publishers cannot select the same
   # next version from the rolling manifest.
-  group: mobile-apk-release
+  group: ${{ github.event_name == 'push' && 'mobile-apk-workflow-check' || 'mobile-apk-release' }}
   cancel-in-progress: false
 
 jobs:
@@ -330,7 +330,8 @@ jobs:
             # pinned checkout, which can differ from the dispatch ref SHA.
             gh workflow run mobile-auto-release-on-queue-drain.yml \
               --ref main \
-              --repo "${{ github.repository }}"
+              --repo "${{ github.repository }}" \
+                -f failed_apk_run_id="$GITHUB_RUN_ID"
           else
             echo "Failed APK source is still main; leaving the failure for investigation."
           fi
