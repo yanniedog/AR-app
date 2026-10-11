@@ -204,10 +204,34 @@ jobs:
           ls -lh "$apk"
 
       - name: Enforce APK size budget
+        id: size
         env:
           AR_APP_APK_PATH: ${{ steps.apk.outputs.path }}
           AR_APP_APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
         run: npm run size:report
+
+      - name: Verify built APK identity and payload privacy
+        id: validated_apk
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { inspectApkIdentity } from './scripts/apk-identity.mjs';
+          import { verifyNativeApkPrivacy } from './scripts/apk-payload-privacy.mjs';
+          import { expectedAbisForApkChannel } from './scripts/app-release-utils.mjs';
+          const app = JSON.parse(readFileSync('app.json', 'utf8')).expo;
+          const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
+          const tag = process.env.APK_CHANNEL === 'arm' ? 'app-apk-arm-latest' : 'app-apk-latest';
+          inspectApkIdentity(process.env.APK_PATH, {
+            packageName: identity.android_package,
+            versionName: app.version,
+            versionCode: app.android.versionCode,
+            certificateSha256: identity.signing_certificate_sha256,
+            supportedAbis: expectedAbisForApkChannel(tag, identity.android_release_abis),
+          });
+          verifyNativeApkPrivacy(readFileSync(process.env.APK_PATH), process.cwd());
+          NODE
 
       - name: Publish preview APK manifest (GitHub release)
         id: publish
@@ -271,7 +295,7 @@ jobs:
       # Keep the signed Gradle output available even when no publish folder
       # exists; never include an unpublished manifest in the fallback artifact.
       - name: Upload built APK when publication fails
-        if: always() && steps.apk.outputs.path != '' && steps.publish.outcome != 'success'
+        if: always() && steps.size.outcome == 'success' && steps.validated_apk.outcome == 'success' && steps.publish.outcome != 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk

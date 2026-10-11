@@ -130,7 +130,13 @@ test('a rejected publication still uploads the signed Gradle APK without an unpu
   assert.match(workflow, /Publish preview APK manifest \(GitHub release\)\n\s+id: publish/);
   const fallback = workflow.split('- name: Upload built APK when publication fails')[1]
     .split('- name: Upload workflow artifact')[0];
-  assert.match(fallback, /if: always\(\) && steps\.apk\.outputs\.path != '' && steps\.publish\.outcome != 'success'/);
+  assert.match(fallback, /if: always\(\) && steps\.size\.outcome == 'success' && steps\.validated_apk\.outcome == 'success' && steps\.publish\.outcome != 'success'/);
+  const validationIndex = workflow.indexOf('id: validated_apk');
+  assert.ok(validationIndex > 0 && validationIndex < workflow.indexOf('id: publish'));
+  const validation = workflow.slice(validationIndex, workflow.indexOf('id: publish'));
+  assert.match(validation, /inspectApkIdentity\(process\.env\.APK_PATH/);
+  assert.match(validation, /certificateSha256: identity\.signing_certificate_sha256/);
+  assert.match(validation, /verifyNativeApkPrivacy\(readFileSync\(process\.env\.APK_PATH\), process\.cwd\(\)\)/);
   assert.match(fallback, /path: mobile\/\$\{\{ steps\.apk\.outputs\.path \}\}/);
   assert.doesNotMatch(fallback, /apk-publish|app-apk-latest\.json/);
   assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
