@@ -17,9 +17,14 @@
 name: mobile-android-apk
 run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches this after the final patch-version PR
-# merges. Building on every preceding main push produced duplicate/stale APKs.
+# Queue-drain automation dispatches ordinary app releases after the final
+# patch-version PR merges. A change to this workflow also builds an APK so
+# release-pipeline repairs can be verified without waiting for the PR queue.
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
     inputs:
       apk_channel:
@@ -205,6 +210,7 @@ jobs:
         run: npm run size:report
 
       - name: Publish preview APK manifest (GitHub release)
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
@@ -261,8 +267,20 @@ jobs:
             --ref main \
             --repo "${{ github.repository }}"
 
+      # The freshness gate can reject publication after a successful build.
+      # Keep the signed Gradle output available even when no publish folder
+      # exists; never include an unpublished manifest in the fallback artifact.
+      - name: Upload built APK when publication fails
+        if: always() && steps.apk.outputs.path != '' && steps.publish.outcome != 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
+          path: mobile/${{ steps.apk.outputs.path }}
+          compression-level: 0
+          if-no-files-found: error
+
       - name: Upload workflow artifact
-        if: always()
+        if: always() && steps.publish.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
@@ -272,3 +290,4 @@ jobs:
             mobile/build/apk-publish/app-preview-qr.png
             mobile/build/apk-publish/install.html
           if-no-files-found: error
+          compression-level: 0

@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import yaml from 'js-yaml';
 
@@ -46,11 +49,43 @@ test('queue reconciliation accepts PR closures, explicit dispatch and APK comple
     workflows: ['mobile-android-apk'], types: ['completed'], branches: ['main'],
   });
   const job = workflow.jobs['maybe-release'];
-  assert.equal(job.if, "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'");
+  assert.equal(job.if, "github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'");
+  const recovery = job.steps.find((step) => step.id === 'recovery');
+  assert.equal(recovery.if, "github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'");
+  assert.equal(recovery.env.FAILED_BUILD_SHA, '${{ github.event.workflow_run.head_sha }}');
+  const release = job.steps.find((step) => step.run?.includes('node mobile/scripts/mobile-auto-release-on-drain.mjs'));
+  assert.equal(release.if, "steps.recovery.outputs.recover != 'false'");
   const checkout = job.steps.find((step) => step.uses?.startsWith('actions/checkout@'));
   assert.equal(checkout.with.ref, 'main');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
+});
+
+test('failed-build recovery skips unchanged main, accepts new main and fails closed on API errors', () => {
+  const workflow = yaml.load(readFileSync(new URL(
+    '../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url,
+  ), 'utf8'));
+  const recovery = workflow.jobs['maybe-release'].steps.find((step) => step.id === 'recovery');
+  const run = recovery.run.replaceAll('${{ github.repository }}', 'owner/repo');
+  const directory = mkdtempSync(join(tmpdir(), 'apk-recovery-'));
+  try {
+    for (const [mainSha, ghStatus, expected] of [
+      ['a'.repeat(40), '0', 'false'],
+      ['b'.repeat(40), '0', 'true'],
+      ['b'.repeat(40), '1', null],
+    ]) {
+      const output = join(directory, `${ghStatus}-${mainSha}`);
+      const result = spawnSync('bash', ['-c', `gh() { printf '%s' "$MOCK_MAIN_SHA"; return "$MOCK_GH_STATUS"; }\n${run}`], {
+        encoding: 'utf8',
+        env: { ...process.env, MOCK_MAIN_SHA: mainSha, MOCK_GH_STATUS: ghStatus,
+          FAILED_BUILD_SHA: 'a'.repeat(40), GITHUB_OUTPUT: output },
+      });
+      assert.equal(result.status, expected === null ? 1 : 0, result.stderr);
+      if (expected !== null) assert.equal(readFileSync(output, 'utf8'), `recover=${expected}\n`);
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('successful ARM publication reconciles after the README without depending on artifact upload', () => {

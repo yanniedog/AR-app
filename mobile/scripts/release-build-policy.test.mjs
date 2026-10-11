@@ -122,6 +122,36 @@ test('APK publication serializes universal before ARM and delays README mutation
   assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
 });
 
+test('a rejected publication still uploads the signed Gradle APK without an unpublished manifest', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /Publish preview APK manifest \(GitHub release\)\n\s+id: publish/);
+  const fallback = workflow.split('- name: Upload built APK when publication fails')[1]
+    .split('- name: Upload workflow artifact')[0];
+  assert.match(fallback, /if: always\(\) && steps\.apk\.outputs\.path != '' && steps\.publish\.outcome != 'success'/);
+  assert.match(fallback, /path: mobile\/\$\{\{ steps\.apk\.outputs\.path \}\}/);
+  assert.doesNotMatch(fallback, /apk-publish|app-apk-latest\.json/);
+  assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
+});
+
+test('workflow repairs build on main and superseded failures recheck the release queue', async () => {
+  const apkWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
+  const recoveryWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(recoveryWorkflow, /github\.event\.workflow_run\.conclusion == 'failure'/);
+  assert.match(recoveryWorkflow, /FAILED_BUILD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
+  assert.match(recoveryWorkflow, /if \[ "\$main_sha" = "\$FAILED_BUILD_SHA" \]; then[\s\S]*echo "recover=false"/);
+  assert.match(recoveryWorkflow, /Release current main \(APK via mobile-android-apk\)\n\s+if: steps\.recovery\.outputs\.recover != 'false'/);
+});
+
 test('EAS submission validates an environment-delivered build UUID', async () => {
   const submitWorkflow = await readFile(
     new URL('../../.github/workflows/mobile-eas-submit.yml', import.meta.url),
