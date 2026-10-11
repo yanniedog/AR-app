@@ -3,6 +3,7 @@ import {
   compactAuditCheckForLog,
   compactAuditLogJson,
   compactPerformanceAuditReportForLog,
+  encodePerformanceAuditEvent,
   MAX_AUDIT_EVIDENCE_CHARS,
   MAX_AUDIT_METRIC_TEXT_CHARS,
   omitNullishDeep,
@@ -10,6 +11,45 @@ import {
   truncateAuditText,
 } from '../src/lib/performanceAuditLog';
 import { APP_HEALTH_CHECK_CODES, finalizeAppHealthReport } from '../src/lib/appHealth';
+
+describe('self-contained audit log identity', () => {
+  const app = { appVersion: '1.0.221', buildVersion: '284' };
+  const device = {
+    platform: 'android', platformVersion: '36', manufacturer: 'Google', brand: 'google',
+    model: 'Pixel 8 Pro', osName: 'Android', osVersion: '16',
+    deviceName: 'Personal phone name', serialNumber: 'private-serial',
+  };
+
+  it.each(['start', 'report', 'report-fallback', 'fatal', 'cancelled'])(
+    'includes installed app and device context in a %s record without a sidecar', (kind) => {
+      const encoded = encodePerformanceAuditEvent(app, device, { kind, sessionId: 'run-1' });
+      expect(JSON.parse(encoded)).toEqual({
+        app, device: {
+          platform: 'android', platformVersion: '36', manufacturer: 'Google', brand: 'google',
+          model: 'Pixel 8 Pro', osName: 'Android', osVersion: '16',
+        }, kind, sessionId: 'run-1',
+      });
+      expect(encoded).not.toContain('Personal phone name');
+      expect(encoded).not.toContain('private-serial');
+    },
+  );
+
+  it('retains explicit unknowns when native device information is unavailable', () => {
+    const encoded = encodePerformanceAuditEvent(app, {
+      platform: 'web', platformVersion: 'unknown', manufacturer: null, brand: null,
+      model: null, osName: null, osVersion: null,
+    }, { kind: 'start' });
+    expect(JSON.parse(encoded).device).toEqual({
+      platform: 'web', platformVersion: 'unknown', manufacturer: 'unknown', brand: 'unknown',
+      model: 'unknown', osName: 'unknown', osVersion: 'unknown',
+    });
+  });
+
+  it('does not repeat device identity on every measured check', () => {
+    expect(JSON.parse(encodePerformanceAuditEvent(app, device, { kind: 'check', id: 'runtime' })))
+      .toEqual({ kind: 'check', id: 'runtime' });
+  });
+});
 
 describe('bounded audit evidence', () => {
   it('leaves a check within budget untouched', () => {
