@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import { gzipSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
 const { verifyPublicDelivery } = require('./verify-public-delivery.cjs');
@@ -14,10 +15,10 @@ const base = 'https://github.com/yanniedog/AR-local/releases/download/';
 
 function fixture(change = () => {}) {
   const date = '2026-10-11', tag = `app-payload-${date}-r000002`;
+  const assets = Object.fromEntries(['core', 'details'].map(key => [key, gzipSync(encode({ [key]: true }))]));
   const manifest = { schema_version: 1, run_date: date, repo: 'yanniedog/AR-local', tag,
-    delivery: { mode: 'github-public-v1' },
     files: Object.fromEntries(['core', 'details'].map(key => [key, {
-      name: `${key}.json.gz`, url: `${base}${tag}/${key}.json.gz`, bytes: 123, sha256: 'a'.repeat(64),
+      name: `${key}.json.gz`, url: `${base}${tag}/${key}.json.gz`, bytes: assets[key].length, sha256: hash(assets[key]),
     }])) };
   change(manifest);
   const bundle = payloadBundleIdentity(manifest);
@@ -28,7 +29,7 @@ function fixture(change = () => {}) {
     manifest_url: `${base}${tag}/manifest.json`, manifest_sha256: hash(manifestBytes) };
   const index = { schema_version: 1, revision_protocol: 1, dates: [date], latest_date: date,
     revision_heads: { [date]: head } };
-  return { manifest, manifestBytes, head, index };
+  return { manifest, manifestBytes, head, index, assets };
 }
 
 function serve(t, data, alter = (_url, bytes) => ({ bytes })) {
@@ -38,15 +39,16 @@ function serve(t, data, alter = (_url, bytes) => ({ bytes })) {
     assert.equal(init.redirect, 'manual');
     assert.equal(init.cache, 'no-store');
     const parsed = new URL(url);
-    assert.equal(parsed.origin, 'https://raw.githubusercontent.com');
-    assert.ok(parsed.searchParams.get('_'));
+    assert.equal(parsed.origin, 'https://ar-app-data.jkokavec.workers.dev');
+    if (parsed.pathname.endsWith('.json')) assert.ok(parsed.searchParams.get('_'));
     parsed.search = '';
     const documents = {
       [automaticDataUrl(`${base}app-payload-latest/dates-index.json`)]: encode(data.index),
       [automaticDataUrl(`${base}app-payload-latest/manifest.json`)]: data.manifestBytes,
       [automaticDataUrl(data.head.manifest_url)]: data.manifestBytes,
+      ...Object.fromEntries(Object.entries(data.manifest.files).map(([key, file]) => [automaticDataUrl(file.url), data.assets[key]])),
     };
-    assert.ok(documents[parsed.href], 'only the three metadata documents may be fetched');
+    assert.ok(documents[parsed.href], 'only metadata and required domain assets may be fetched');
     const changed = alter(parsed.href, documents[parsed.href]);
     const response = new Response(changed.bytes, { status: changed.status ?? 200, headers: changed.headers });
     return { url: changed.finalUrl ?? url, status: response.status, ok: response.ok,
@@ -56,38 +58,35 @@ function serve(t, data, alter = (_url, bytes) => ({ bytes })) {
   return calls;
 }
 
-test('activated direct publication verifies exact rolling/index/immutable bindings without asset downloads', async t => {
+test('existing canonical publication verifies Cloudflare selectors and required bytes without a delivery marker', async t => {
   const data = fixture(), calls = serve(t, data);
   const receipt = await verifyPublicDelivery();
   assert.equal(receipt.status, 'PASS');
   assert.equal(receipt.manifest_sha256, data.head.manifest_sha256);
   assert.equal(receipt.revision, 2);
-  assert.equal(calls.length, 3);
-  assert.equal(receipt.public_transport.length, 3);
-  assert.ok(receipt.public_transport.every(item => item.route === 'github_public_branch'));
+  assert.equal(calls.length, 5);
+  assert.equal(receipt.public_transport.length, 5);
+  assert.equal(receipt.delivery_mode, 'cloudflare-service');
+  assert.ok(receipt.public_transport.every(item => item.route === 'cloudflare_service'));
 });
 
-for (const mode of [undefined, 'worker', 'github-public-v2']) {
-  test(`bootstrap or unsupported delivery mode ${mode} holds publication`, async t => {
-    const data = fixture(manifest => {
-      if (mode) manifest.delivery = { mode };
-      else delete manifest.delivery;
-    });
-    const calls = serve(t, data);
-    await assert.rejects(verifyPublicDelivery(), /has not advertised github-public-v1/);
-    assert.equal(calls.length, 2);
+for (const key of ['core', 'details']) {
+  test(`a corrupt ${key} domain asset holds publication`, async t => {
+    const data = fixture();
+    serve(t, data, (url, bytes) => ({ bytes: url.endsWith(`/${key}.json.gz`) ? Buffer.alloc(bytes.length) : bytes }));
+    await assert.rejects(verifyPublicDelivery(), /asset size\/SHA-256 mismatch/);
   });
 }
 
 test('a stale rolling selector cannot publish even when the selected revision is available', async t => {
   const data = fixture();
-  serve(t, data, (url, bytes) => ({ bytes: url.includes('/latest/manifest.json') ? Buffer.concat([bytes, Buffer.from(' ')]) : bytes }));
+  serve(t, data, (url, bytes) => ({ bytes: url.includes('/app-payload-latest/manifest.json') ? Buffer.concat([bytes, Buffer.from(' ')]) : bytes }));
   await assert.rejects(verifyPublicDelivery(), /Rolling manifest does not match/);
 });
 
 test('a missing or changed immutable mirror cannot authorize publication', async t => {
   const data = fixture();
-  serve(t, data, (url, bytes) => ({ bytes: url.includes('/tags/') ? Buffer.from('{}') : bytes }));
+  serve(t, data, (url, bytes) => ({ bytes: url.includes('/app-payload-2026-') ? Buffer.from('{}') : bytes }));
   await assert.rejects(verifyPublicDelivery(), /Immutable selected manifest differs/);
 });
 
@@ -124,7 +123,7 @@ test('an oversized metadata stream is bounded before JSON parsing', async t => {
 
 test('public APK dispatch is checked before build and immediately before publication, artifact-only push is unaffected', async () => {
   const workflow = await readFile(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8');
-  const early = workflow.indexOf('- name: Verify direct public payload delivery before release build');
+  const early = workflow.indexOf('- name: Verify Cloudflare payload delivery before release build');
   assert.ok(early > workflow.indexOf('- name: Install dependencies'));
   assert.ok(early < workflow.indexOf('- name: Materialize Firebase config'));
   assert.match(workflow.slice(early, workflow.indexOf('- name: Materialize Firebase config')),

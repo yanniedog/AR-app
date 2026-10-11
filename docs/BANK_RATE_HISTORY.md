@@ -137,35 +137,32 @@ APK delivery or acceptance on the user's physical phone. App and producer must
 use the same pinned compiler; compiler changes require coordinated publication
 and app delivery.
 
-## Direct GitHub delivery
+## Cloudflare payload delivery
 
-AR-local publishes the readable app inventory on a dedicated GitHub branch,
-`app-payload-public`. Immutable editions live under `tags/<canonical tag>/`;
-current manifest and index selectors live under `latest/`.
-Canonical manifest URLs and revision identities keep their `app-payload-*`
-namespace. The app maps these validated identities to the corresponding public
-raw GitHub file and verifies the original sizes and hashes. New manifests advertise
-`delivery: {mode: 'github-public-v1'}`. These bytes need no Cloudflare service or
-device decryption keys. Unexpected encrypted responses fail closed.
+Canonical manifests, URLs and revision identities remain the AR-local GitHub
+`app-payload-*` releases. The app maps validated canonical URLs to the fixed
+Cloudflare service at `https://ar-app-data.jkokavec.workers.dev/v1/release/`.
+The service opens ARE2 release transport and returns the original domain bytes;
+the app still verifies their exact sizes, SHA-256, generation and revision binding.
+Device decryption keys are not needed for managed delivery. Legacy ARE1 assets
+are hashed first, then opened by the service using `X-AR-Legacy-SHA256` for that
+verified ciphertext identity. An unopened service response fails closed.
 
-The producer verifies the staged commit's raw files before atomically updating
-the branch reference, publishing files and selectors together. Only explicitly
-declared app assets are included;
-preservation archives, source evidence, logs and keys are excluded. Existing
-encrypted releases remain available to older clients. Every public branch
-edition remains available to apps retaining that edition in their cache.
+The Worker allowlists declared app assets only, including URL-free
+`bank_rate_history_ready.file` and `bank_rate_history_catalogue_packed.file`.
+Their canonical URLs are derived from the selected immutable manifest tag.
+It returns their gzip bytes unchanged, without HTTP Content-Encoding inflation.
+Preservation archives, source evidence, logs and keys are not app assets.
 
 Historical index entries remain provenance receipts for prepared history. The
-app downloads the selected current edition, without fetching every old core.
-The raw endpoint supports browser access as well as native Android downloads.
-The public auditor rejects redirects from this fixed route and records canonical,
-requested and final URLs separately. A successful direct public readback is
-required before reporting delivery complete.
+app downloads the selected current edition without fetching every old core.
+The service supports native and browser clients. Audits reject redirects from
+the exact service route and record canonical, requested and final URLs separately.
+Existing canonical publication continues updating the managed route; no separate
+public GitHub branch or new delivery marker is required.
 
-A transport-only copy of an older edition can initialize the branch, but does
-not establish that future daily publications use it. Release automation checks
-the producer's `github-public-v1` marker and exact index, rolling manifest and
-immutable manifest bindings before allocating a version, building a public APK
-and publishing it. Missing or inconsistent metadata holds the release; ordinary
-artifact-only builds remain available. Producer activation and fresh public
-readback complete this handoff.
+Release automation checks the exact index, rolling and immutable manifest
+bindings plus current core/details byte lengths and SHA-256 before allocating a
+version, building a public APK and publishing it. Failed readback holds release;
+artifact-only builds remain available. These checks do not inflate historical
+catalogues or alter the processing performance acceptance contract above.

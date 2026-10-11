@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-// Reuse the audit's bounded, redirect-refusing direct GitHub transport and its
-// checked-in TypeScript loader. This gate reads metadata only, never catalogues.
+// Reuse the audit's bounded, redirect-refusing Cloudflare transport and its
+// checked-in TypeScript loader. No archive inflation or history reconstruction.
 const { fetchBytes } = require('./audit-public-payload.cjs');
 const { createHash } = require('node:crypto');
 const { parseDatesIndex } = require('../src/data/datesIndex.ts');
@@ -28,9 +28,6 @@ async function verifyPublicDelivery() {
   const head = index.revision_heads[index.latest_date];
   const latestBytes = await read(`${BASE}app-payload-latest/manifest.json`);
   const manifest = parse(latestBytes);
-  if (manifest?.delivery?.mode !== 'github-public-v1') {
-    throw new Error('Public APK publication is held: the producer has not advertised github-public-v1 delivery');
-  }
   if (hash(latestBytes) !== head.manifest_sha256) {
     throw new Error('Rolling manifest does not match the current index-selected manifest SHA-256');
   }
@@ -43,8 +40,19 @@ async function verifyPublicDelivery() {
   if (hash(selectedBytes) !== head.manifest_sha256 || !selectedBytes.equals(latestBytes)) {
     throw new Error('Immutable selected manifest differs from the verified rolling manifest');
   }
+  // Existing canonical publishers need no new marker. Prove that the service
+  // actually serves the two required domain assets, not just readable selectors.
+  const assets = {};
+  for (const name of ['core', 'details']) {
+    const file = manifest.files[name];
+    const bytes = await fetchBytes(file.url, file.bytes, REPO, transports);
+    if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) {
+      throw new Error(`Public delivery ${name} asset size/SHA-256 mismatch`);
+    }
+    assets[name] = { bytes: bytes.length, sha256: file.sha256 };
+  }
   return {
-    status: 'PASS', delivery_mode: manifest.delivery.mode,
+    status: 'PASS', delivery_mode: 'cloudflare-service', assets,
     run_date: index.latest_date, revision: head.revision,
     manifest_url: head.manifest_url, manifest_sha256: head.manifest_sha256,
     bundle_sha256: bundle, dates_index_sha256: hash(indexBytes),
