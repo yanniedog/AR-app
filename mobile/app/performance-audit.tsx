@@ -364,7 +364,8 @@ function PerformanceAuditScreenInner() {
           information actually render. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          When the audit finishes, its full debug log and complete report are uploaded to paste.
+          When the audit finishes, its full debug log and complete report, including product identities
+          and profile-based coverage counts, are uploaded to paste.
           Anyone with the resulting link can read them. A separate deidentified report is also available.
         </AppText>
         <AppText variant="small" weight="700">Background checks: {passive.completed} of {passive.total} data checks and {passive.linksCompleted} of {passive.linksTotal} links preloaded</AppText>
@@ -374,6 +375,7 @@ function PerformanceAuditScreenInner() {
           {passive.nativeStatus === 'restricted' ? ' Background execution is currently restricted by the system.' : ''}
           {passive.nativeStatus === 'unavailable' ? ' This device supports preloading while the app is open only.' : ''}
           {passive.updatedAt ? ` Last background evidence: ${new Date(passive.updatedAt).toLocaleString()}.` : ''}
+          {passive.lastError ? ` ${passive.lastError} Unfinished checks still run during the manual audit.` : ''}
         </AppText>
         <AppText variant="tiny" color="textMuted">
           The screen stays awake throughout the audit. Locking the phone or leaving the app pauses the run and it

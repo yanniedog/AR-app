@@ -45,8 +45,8 @@ export async function preloadPassiveLinks(input: {
 }): Promise<void> {
   const now = Date.now();
   if (!loaded) {
-    loaded = true;
     const raw = await AsyncStorage.getItem(KEY);
+    loaded = true;
     if (raw && utf8ToBytes(raw).length <= MAX_BYTES) {
       try {
         const saved = JSON.parse(raw) as Record;
@@ -113,14 +113,16 @@ export async function preloadPassiveLinks(input: {
 /** Checkpoint at most every 30 seconds/64 links, plus background/completion.
  * Compact tuples avoid thousands of repeated status/label/detail strings. */
 export function flushPassiveLinks(): Promise<void> {
-  writes = writes.then(async () => {
+  // Each caller sees its failure, but a rejected checkpoint must not poison the
+  // serialized queue: the next slice retries the still-dirty record.
+  writes = writes.catch(() => {}).then(async () => {
     if (!record || !dirty) return;
     const current = record;
     const cursor = current.cursor;
     const raw = JSON.stringify(current);
-    if (utf8ToBytes(raw).length > MAX_BYTES) return;
+    if (utf8ToBytes(raw).length > MAX_BYTES) throw new Error('Passive link checkpoint exceeds its storage budget.');
     dirty = false;
-    await AsyncStorage.setItem(KEY, raw).catch(() => { dirty = true; });
+    await AsyncStorage.setItem(KEY, raw).catch(error => { dirty = true; throw error; });
     if (record === current) { lastWriteAt = Date.now(); lastWrittenCursor = cursor; }
   });
   return writes;

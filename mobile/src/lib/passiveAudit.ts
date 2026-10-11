@@ -29,16 +29,18 @@ export interface PassiveAuditStatus {
   busy: boolean;
   linksCompleted: number;
   linksTotal: number;
+  lastError: string | null;
 }
 const listeners = new Set<() => void>();
 let status: PassiveAuditStatus = { completed: 0, total: APP_HEALTH_DATA_CHECKS.length,
-  updatedAt: null, nativeStatus: 'unknown', busy: false, linksCompleted: 0, linksTotal: 0 };
+  updatedAt: null, nativeStatus: 'unknown', busy: false, linksCompleted: 0, linksTotal: 0, lastError: null };
 let record: PassiveAuditRecord | null = null;
+let recordDirty = false;
 let snapshot: AppHealthDataSnapshot | null = null;
 let references: unknown[] = [];
 let paused = false;
 let loaded = false;
-let inFlight: Promise<void> | null = null;
+let inFlight: Promise<boolean> | null = null;
 let getState: (() => AppState) | null = null;
 
 export const passiveAuditAppBuild = (): string =>
@@ -56,6 +58,11 @@ function emit(patch: Partial<PassiveAuditStatus> = {}): void {
     updatedAt: record ? new Date(Math.max(record.inputAt,
       ...Object.values(record.entries).map(entry => entry.checkedAt))).toISOString() : null };
   for (const listener of listeners) listener();
+}
+function reportPassiveFailure(): void {
+  // Storage/native error strings may contain private paths or input. Keep the
+  // user-visible status generic while retaining dirty work for the next slice.
+  emit({ lastError: 'Background checks could not prepare or save progress. Automatic retry is pending.' });
 }
 export function setPassiveAuditPaused(value: boolean): void { paused = value; }
 const blocked = () => paused || hasAppHealthFetchGuard();
@@ -112,14 +119,14 @@ async function load(): Promise<void> {
 
 /** A single serialized, bounded slice. The native task never loads the core or
  * history: it uses an already-loaded snapshot, or persisted compact metadata. */
-export function runPassiveAuditSlice(native = false): Promise<void> {
+export function runPassiveAuditSlice(native = false): Promise<boolean> {
   if (inFlight) return inFlight;
-  if (blocked()) return Promise.resolve();
+  if (blocked()) return Promise.resolve(true);
   const run = async () => {
     await load();
-    if (blocked()) return;
+    if (blocked()) return true;
     const state = getState?.();
-    if (state && stateBusy(state)) return;
+    if (state && stateBusy(state)) return true;
     const previousRecord = record;
     const previousCount = Object.keys(record?.entries ?? {}).length;
     const start = Date.now();
@@ -137,13 +144,22 @@ export function runPassiveAuditSlice(native = false): Promise<void> {
       if (native) await new Promise<void>(resolve => setTimeout(resolve, 5));
     }
     const changed = didWork || record !== previousRecord || Object.keys(record?.entries ?? {}).length !== previousCount;
-    const raw = record && changed ? serializePassiveAuditRecord(record) : null;
-    if (raw) await AsyncStorage.setItem(STORAGE_KEY, raw);
+    recordDirty = recordDirty || changed;
+    const raw = record && recordDirty ? serializePassiveAuditRecord(record) : null;
+    if (record && recordDirty && !raw) throw new Error('Passive data checkpoint exceeds its storage budget.');
+    if (raw) {
+      await AsyncStorage.setItem(STORAGE_KEY, raw);
+      recordDirty = false;
+    }
     if (!blocked()) await preloadPassiveLinks({ appBuild: passiveAuditAppBuild(),
       revision: linkRevision(state), details: state?.details ?? null, platform: Platform.OS, stopped: blocked });
+    emit({ lastError: null });
+    return true;
   };
   inFlight = run().catch(() => {
     // Persistence or native availability must never interrupt normal browsing.
+    reportPassiveFailure();
+    return false;
   }).finally(() => { inFlight = null; emit({ busy: false }); });
   return inFlight;
 }
@@ -185,7 +201,7 @@ export function startPassiveAuditPreloading(): () => void {
     }, IDLE_INTERVAL_MS);
   };
   const subscription = NativeAppState.addEventListener('change', () => {
-    if (NativeAppState.currentState !== 'active') void flushPassiveLinks();
+    if (NativeAppState.currentState !== 'active') void flushPassiveLinks().catch(reportPassiveFailure);
     schedule();
   });
   schedule();
@@ -211,9 +227,14 @@ export async function registerPassiveAuditBackground(): Promise<boolean> {
 try {
   if (typeof TaskManager.isTaskDefined === 'function' && !TaskManager.isTaskDefined(PASSIVE_AUDIT_TASK)) {
     TaskManager.defineTask(PASSIVE_AUDIT_TASK, async () => {
-      await runPassiveAuditSlice(true);
-      await flushPassiveLinks();
-      return BackgroundTask.BackgroundTaskResult.Success;
+      const succeeded = await runPassiveAuditSlice(true);
+      try {
+        await flushPassiveLinks();
+        return succeeded ? BackgroundTask.BackgroundTaskResult.Success : BackgroundTask.BackgroundTaskResult.Failed;
+      } catch {
+        reportPassiveFailure();
+        return BackgroundTask.BackgroundTaskResult.Failed;
+      }
     });
   }
 } catch { /* Web/native-unavailable runtimes retain passive foreground work. */ }
