@@ -15,11 +15,16 @@
 # Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
 
 name: mobile-android-apk
-run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
+run-name: mobile-android-apk (${{ github.event_name == 'push' && 'workflow-check' || inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches this after the final patch-version PR
-# merges. Building on every preceding main push produced duplicate/stale APKs.
+# Queue-drain automation dispatches ordinary app releases after the final
+# patch-version PR merges. A change to this workflow builds an artifact only
+# so pipeline repairs can be verified without publishing ahead of the queue.
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
     inputs:
       apk_channel:
@@ -60,7 +65,7 @@ permissions:
 concurrency:
   # Shared with mobile-eas-build so two APK publishers cannot select the same
   # next version from the rolling manifest.
-  group: mobile-apk-release
+  group: ${{ github.event_name == 'push' && 'mobile-apk-workflow-check' || 'mobile-apk-release' }}
   cancel-in-progress: false
 
 jobs:
@@ -199,12 +204,38 @@ jobs:
           ls -lh "$apk"
 
       - name: Enforce APK size budget
+        id: size
         env:
           AR_APP_APK_PATH: ${{ steps.apk.outputs.path }}
           AR_APP_APK_CHANNEL: ${{ inputs.apk_channel || 'arm' }}
         run: npm run size:report
 
+      - name: Verify built APK identity and payload privacy
+        id: validated_apk
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { inspectApkIdentity } from './scripts/apk-identity.mjs';
+          import { verifyNativeApkPrivacy } from './scripts/apk-payload-privacy.mjs';
+          import { expectedAbisForApkChannel } from './scripts/app-release-utils.mjs';
+          const app = JSON.parse(readFileSync('app.json', 'utf8')).expo;
+          const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
+          const tag = process.env.APK_CHANNEL === 'arm' ? 'app-apk-arm-latest' : 'app-apk-latest';
+          inspectApkIdentity(process.env.APK_PATH, {
+            packageName: identity.android_package,
+            versionName: app.version,
+            versionCode: app.android.versionCode,
+            certificateSha256: identity.signing_certificate_sha256,
+            supportedAbis: expectedAbisForApkChannel(tag, identity.android_release_abis),
+          });
+          verifyNativeApkPrivacy(readFileSync(process.env.APK_PATH), process.cwd());
+          NODE
+
       - name: Publish preview APK manifest (GitHub release)
+        id: publish
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
@@ -261,8 +292,20 @@ jobs:
             --ref main \
             --repo "${{ github.repository }}"
 
+      # The freshness gate can reject publication after a successful build.
+      # Keep the signed Gradle output available even when no publish folder
+      # exists; never include an unpublished manifest in the fallback artifact.
+      - name: Upload built APK when publication fails
+        if: always() && steps.size.outcome == 'success' && steps.validated_apk.outcome == 'success' && steps.publish.outcome != 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
+          path: mobile/${{ steps.apk.outputs.path }}
+          compression-level: 0
+          if-no-files-found: error
+
       - name: Upload workflow artifact
-        if: always()
+        if: always() && steps.publish.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: app-${{ inputs.apk_channel || 'arm' }}-preview-apk
@@ -272,3 +315,23 @@ jobs:
             mobile/build/apk-publish/app-preview-qr.png
             mobile/build/apk-publish/install.html
           if-no-files-found: error
+          compression-level: 0
+
+      - name: Reconcile superseded failed APK build
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ "$main_sha" != "$RELEASE_SOURCE_SHA" ]; then
+            # Token-dispatched runs may not emit workflow_run. Use the actual
+            # pinned checkout, which can differ from the dispatch ref SHA.
+            gh workflow run mobile-auto-release-on-queue-drain.yml \
+              --ref main \
+              --repo "${{ github.repository }}" \
+                -f failed_apk_run_id="$GITHUB_RUN_ID"
+          else
+            echo "Failed APK source is still main; leaving the failure for investigation."
+          fi
