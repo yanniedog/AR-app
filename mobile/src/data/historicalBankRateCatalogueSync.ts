@@ -1,5 +1,6 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
 import { PAYLOAD_REPO } from '../config';
+import { backgroundPayloadWork, type BackgroundWorkHandle } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { yieldToUi } from '../lib/yieldToUi';
 import { isValidCalendarDate } from '../lib/calendarDate';
@@ -40,7 +41,10 @@ let lastPrepared: {
   catalogue: NonNullable<ReturnType<typeof cachedHistoricalBankRateCatalogue>>;
   checkpoint: DecodedCheckpoint | null;
 } | null = null;
-const yieldHistoryWork = () => yieldToUi(0);
+// Catalogue preparation is serialized below. These signals come from real
+// cooperative processing batches, independently of audit observation timers.
+let processingWork: BackgroundWorkHandle | null = null;
+const yieldHistoryWork = () => { processingWork?.checkpoint(); return yieldToUi(0); };
 
 function bundledHistory(): typeof import('./bundledHistoricalBankRateCatalogue') {
   // Metro keeps this module lazy: importing sync must not initialize the large
@@ -171,7 +175,7 @@ async function discardSupersededPublicDates(catalogue: HistoricalBankRateCatalog
 /** A compact legacy core has no immutable current edition to bind. Independently
  * verified earlier public editions still have their own provenance and features. */
 async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null,
-  completion: { reusable: boolean }, embedded?: HistoricalBankRateCatalogue): Promise<boolean> {
+  completion: { reusable: boolean }, embedded: HistoricalBankRateCatalogue | undefined, work: BackgroundWorkHandle): Promise<boolean> {
   if (manifest.bank_rate_history_catalogue === undefined || manifest.repo !== PAYLOAD_REPO ||
       !isValidCalendarDate(core.run_date) || manifest.run_date !== core.run_date ||
       !['app-payload-latest', `app-payload-${core.run_date}`].includes(manifest.tag) ||
@@ -188,6 +192,7 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
     ? await discardSupersededPublicDates(embedded, knownIndex, true) : embedded) : false;
   try {
     if (!baselineIndex?.revision_heads) return fallback();
+    work.stage('Reading and decoding legacy history checkpoint');
     const saved = await cache.readBankRateHistory?.(decodeSavedHistoricalCatalogueAsync).catch(() => null) ?? null;
     if (saved) {
       assertHistoryDatesIndexAdvances(saved.index, baselineIndex);
@@ -211,7 +216,9 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
       (embedded.sources[day] && !embedded.unavailable_dates[day] &&
         (embedded.sources[day].kind !== 'published_core' ||
           embedded.sources[day].manifest_sha256 === index.revision_heads![day]?.manifest_sha256)));
+    work.stage(coversBaseline ? 'Reusing verified baseline receipts' : 'Decoding and validating bundled fallback catalogue');
     const baseline = coversBaseline ? null : await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
+    work.stage('Preparing legacy catalogue edition');
     if (!baseline && !embedded && !saved?.public_fallback && !saved?.catalogue) return false;
     const earlier = [baselineIndex.dates[0], saved?.public_fallback?.run_dates[0], saved?.catalogue?.run_dates[0], parsedFresh?.dates[0]]
       .filter((day): day is string => !!day && day < core.run_date);
@@ -239,6 +246,7 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
       }
       catalogue = { ...catalogue, run_dates, sections };
     }
+    work.stage('Merging legacy history observations');
     for (const candidate of [saved?.public_fallback, saved?.catalogue, baseline]) if (candidate) {
       const candidateIndex = candidate === baseline ? baselineIndex : saved!.index;
       const dates = Object.entries(candidate.sources).flatMap(([day, source]) =>
@@ -258,7 +266,9 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
       const value: SavedCatalogue = { schema_version: 3, core_bindings, index,
         ...(public_fallback ? { public_fallback } : {}) };
       try {
+        work.stage('Encoding legacy history checkpoint');
         const text = JSON.stringify(await compressCatalogueAsync(value, { yieldControl: yieldHistoryWork }));
+        work.stage('Saving legacy history checkpoint');
         await cache.writeBankRateHistory(text);
         decodedCheckpoint = { text, value };
       } catch {
@@ -277,8 +287,12 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
 /** One rich cache prepares every bank and filter. It never fetches dated cores. */
 export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Manifest,
   index: DatesIndex | null = null, details: DetailsPayload | null = null,
-  detached: HistoricalBankRateCatalogue | null = null): Promise<boolean> {
+  detached: HistoricalBankRateCatalogue | null = null, isCurrent?: () => boolean): Promise<boolean> {
+  const evidence = backgroundPayloadWork.begin('Historical catalogue preparation', core.run_date, 'Queued behind previous catalogue preparation', isCurrent);
   const work = preparation.then(async () => {
+    processingWork = evidence;
+    try {
+    evidence.stage('Checking prepared catalogue receipt');
     // Only the last serialized successful preparation can be reused. An
     // intervening core/index may advance the revision high-water mark, even if
     // its adoption fails, so never retain a per-core collection of shortcuts.
@@ -289,31 +303,37 @@ export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Ma
         lastPrepared.catalogue === cachedHistoricalBankRateCatalogue(core)) return true;
     lastPrepared = null;
     const completion = { reusable: false };
-    const ready = await prepare(core, manifest, index, details, completion, detached);
+    const ready = await prepare(core, manifest, index, details, completion, detached, evidence);
     const catalogue = ready ? cachedHistoricalBankRateCatalogue(core) : null;
     if (catalogue && completion.reusable) lastPrepared = { core, embedded: detached ?? core.bank_rate_history_catalogue, receipt, catalogue, checkpoint: decodedCheckpoint };
     return ready;
+    } finally { if (processingWork === evidence) processingWork = null; }
   });
-  preparation = work.catch(() => false);
+  preparation = work.then(ready => {
+    evidence.finish(ready ? 'completed' : 'unavailable');
+    return ready;
+  }, () => { evidence.finish('failed'); return false; });
   return preparation;
 }
 
 async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null, details: DetailsPayload | null,
-  completion: { reusable: boolean }, detached: HistoricalBankRateCatalogue | null): Promise<boolean> {
+  completion: { reusable: boolean }, detached: HistoricalBankRateCatalogue | null, work: BackgroundWorkHandle): Promise<boolean> {
   const started = Date.now();
   let stageStarted = started;
   const stage = (name: string) => {
     const now = Date.now();
     debugLog.debug('bank-history-catalogue', `${name} run_date=${core.run_date} stage_ms=${now - stageStarted} elapsed_ms=${now - started}`);
     stageStarted = now;
+    work.stage(name);
   };
   stage('prepare start');
   clearHistoricalBankRateCatalogue(core);
+  work.stage('Validating embedded historical catalogue');
   const embedded = (await prepareHistoricalBankRateCatalogueAsync(detached ?? core.bank_rate_history_catalogue, yieldHistoryWork))?.catalogue;
   // Legacy compact payloads also need reconciliation when their detached asset
   // succeeds: it can be partial or contain superseded public observations.
   if (!manifest.payload_revision && manifest.bank_rate_history_catalogue !== undefined) {
-    return prepareLegacyCompactFallback(core, manifest, freshIndex, completion, embedded);
+    return prepareLegacyCompactFallback(core, manifest, freshIndex, completion, embedded, work);
   }
   if (detached && embedded) installHistoricalBankRateCatalogue(core, embedded, embedded.run_dates.filter(day =>
     day < core.run_date && (!embedded.sources[day] || embedded.unavailable_dates[day])));
@@ -327,6 +347,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
   if (!manifest.payload_revision) return !!embedded;
   let knownIndex = bundledHistoricalCatalogueBinding.index;
   const fallback = async () => {
+    work.stage('Reconciling fallback catalogue');
     if (!embedded) return false;
     let catalogue = embedded;
     // A rejected refresh cannot resurrect public observations already known to
@@ -338,6 +359,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
     return true;
   };
   try {
+    work.stage('Reading and decoding history checkpoint');
     const saved = await cache.readBankRateHistory?.(decodeSavedHistoricalCatalogueAsync).catch(() => null) ?? null;
     stage('checkpoint read');
     knownIndex = saved?.index ?? knownIndex;
@@ -368,9 +390,10 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
     // A complete producer archive is equally durable. Its authenticated public
     // receipts avoid decoding the APK's duplicate archive on first use too.
     const embeddedCoversBaseline = embedded && coversBaseline(embedded);
-    stage('baseline begin');
+    stage(savedCoversBaseline || embeddedCoversBaseline
+      ? 'Reusing verified baseline receipts' : 'Decoding and validating bundled fallback catalogue');
     const baseline = savedCoversBaseline || embeddedCoversBaseline ? null : await getBundledHistoricalBankRateCatalogueAsync({ yieldControl: yieldHistoryWork });
-    stage('baseline ready; merge begin');
+    stage('Merging verified history observations');
     const restorableIndex = baseline || savedCoversBaseline || embeddedCoversBaseline ? baselineIndex : null;
     let public_fallback = await retainPublicFallback(saved?.public_fallback, index, restorableIndex, savedCatalogue);
     const usableDates = (catalogue: HistoricalBankRateCatalogue) => Object.entries(catalogue.sources).filter(([day, source]) =>
@@ -429,6 +452,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
         stage(`persist begin archive_dates=${Object.keys(public_fallback?.sources ?? {}).length}`);
         const text = JSON.stringify(await compressCatalogueAsync(value, { yieldControl: yieldHistoryWork }));
         stage(`persist encoded characters=${text.length}`);
+        work.stage('Saving history checkpoint');
         await cache.writeBankRateHistory(text);
         decodedCheckpoint = { text, value };
         stage('persist saved');

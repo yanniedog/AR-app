@@ -28,7 +28,8 @@
     "ci": "npm run doctor && npm run typecheck && npm run lint && npm run test:scripts && npm run test -- --ci && npm run export && npm run size:report",
     "sample": "node scripts/build-sample.mjs",
     "icons": "node scripts/make-icons.mjs",
-    "changelog:manifest": "node scripts/build-changelog-manifest.mjs"
+    "changelog:manifest": "node scripts/build-changelog-manifest.mjs",
+    "postinstall": "node scripts/apply-dependency-compat.cjs"
   },
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
@@ -112,11 +113,27 @@
     "@react-navigation/core": "7.17.5",
     "@react-navigation/routers": "7.5.5",
     "xcode": {
-      "uuid": "^11.1.0"
+      "uuid": "^11.1.1"
     },
     "@expo/metro-config": {
       "postcss": "^8.5.10"
-    }
+    },
+    "@grpc/grpc-js@1.9.16": "1.13.6",
+    "metro@0.83.3": "0.83.8",
+    "metro-babel-transformer@0.83.3": "0.83.8",
+    "metro-cache@0.83.3": "0.83.8",
+    "metro-cache-key@0.83.3": "0.83.8",
+    "metro-config@0.83.3": "0.83.8",
+    "metro-core@0.83.3": "0.83.8",
+    "metro-file-map@0.83.3": "0.83.8",
+    "metro-minify-terser@0.83.3": "0.83.8",
+    "metro-resolver@0.83.3": "0.83.8",
+    "metro-runtime@0.83.3": "0.83.8",
+    "metro-source-map@0.83.3": "0.83.8",
+    "metro-symbolicate@0.83.3": "0.83.8",
+    "metro-transform-plugins@0.83.3": "0.83.8",
+    "metro-transform-worker@0.83.3": "0.83.8",
+    "decode-uri-component": "0.5.0"
   },
   "jest": {
     "preset": "jest-expo",
@@ -124,7 +141,7 @@
       "<rootDir>/jest.setup.js"
     ],
     "transformIgnorePatterns": [
-      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|@shopify/flash-list|@pchmn/expo-material3-theme|@kesha-antonov/react-native-background-downloader))"
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg|decode-uri-component|@shopify/flash-list|@pchmn/expo-material3-theme|@kesha-antonov/react-native-background-downloader))"
     ]
   }
 }

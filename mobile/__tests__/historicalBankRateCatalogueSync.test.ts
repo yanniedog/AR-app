@@ -10,6 +10,7 @@ import type { CorePayload, DetailsPayload, Manifest } from '../src/types';
 import type { DatesIndex } from '../src/data/datesIndex';
 import type { PayloadRevisionHead } from '../src/data/payloadRevision';
 import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
 
 let mockBaseline: HistoricalBankRateCatalogue;
@@ -916,4 +917,28 @@ test('old numerical envelopes, invalid compression and mismatched edition bindin
   const saved = compression.decompressCatalogue(JSON.parse(mockCache!)) as { core_bindings: Record<string, { manifest_sha256: string }> };
   saved.core_bindings[current.run_date].manifest_sha256 = 'f'.repeat(64);
   expect(decodeSavedHistoricalCatalogue(JSON.stringify(compression.compressCatalogue(saved)))).toBeNull();
+});
+
+test('superseded running and queued catalogue workers retire before blocked cache work settles', async () => {
+  let release!: () => void, entered!: () => void;
+  const blocked = new Promise<void>(resolve => { release = resolve; });
+  const started = new Promise<void>(resolve => { entered = resolve; });
+  jest.mocked(cache.readBankRateHistory).mockImplementationOnce(async () => {
+    entered(); await blocked; return null;
+  });
+  let current = true;
+  const value = core('2050-09-29');
+  const first = prepareHistoricalBankRateHistory(value, manifest(value.run_date), null, null, null, () => current);
+  await started;
+  const firstWorker = backgroundPayloadWork.snapshot().find(job => job.label === 'Historical catalogue preparation' && job.outcome === null)!;
+  const queued = prepareHistoricalBankRateHistory(value, manifest(value.run_date), null, null, null, () => current);
+  const queuedWorker = backgroundPayloadWork.snapshot().find(job => job.label === 'Historical catalogue preparation' && job.id !== firstWorker.id && job.outcome === null)!;
+  expect(queuedWorker.stage).toBe('Queued behind previous catalogue preparation');
+  current = false;
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
+  for (const worker of [firstWorker, queuedWorker]) {
+    expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBe('superseded');
+  }
+  release();
+  await Promise.all([first, queued]);
 });
