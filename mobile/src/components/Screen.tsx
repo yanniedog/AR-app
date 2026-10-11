@@ -60,8 +60,8 @@ function PaddedDataHealthBannerStrip() {
 export function screenEdgeStyle(theme: Theme): ViewStyle {
   return {
     paddingHorizontal: theme.spacing(4),
-    paddingTop: theme.spacing(3),
-    gap: theme.spacing(3),
+    paddingTop: theme.spacing(4),
+    gap: theme.spacing(4),
   };
 }
 
@@ -76,9 +76,9 @@ export function screenScrollContentStyle(
     ...(width == null
       ? { paddingHorizontal: theme.spacing(4) }
       : responsiveScreenContentStyle(width, measure)),
-    paddingTop: theme.spacing(3),
-    paddingBottom: theme.spacing(6) + bottomInset,
-    gap: theme.spacing(3),
+    paddingTop: theme.spacing(6),
+    paddingBottom: theme.spacing(12) + bottomInset,
+    gap: theme.spacing(6),
   };
 }
 

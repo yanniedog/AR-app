@@ -1,0 +1,19 @@
+J1 MARKET ECONOMISTS' FORECASTS,,,,,,,
+Title,Target quarter,Cash rate forecasts – median,Cash rate forecasts – mean,Cash rate forecasts – low,Cash rate forecasts – high,Cash rate forecasts – number of responses,Cash rate forecasts – standard deviation
+Description,Target quarter of market economists’ forecasts,Survey measure of market economists' cash rate target forecasts; Median forecast for level in target quarter,Survey measure of market economists' cash rate target forecasts; Mean forecast for level in target quarter,Survey measure of market economists' cash rate target forecasts; Lowest forecast for level in target quarter,Survey measure of market economists' cash rate target forecasts; Highest forecast for level in target quarter,Number of responses at the target quarter,Survey measure of market economists' cash rate target forecasts; Standard deviation of level in target quarter
+Frequency,Quarterly,Quarterly,Quarterly,Quarterly,Quarterly,Quarterly,Quarterly
+Type,Original,Original,Original,Original,Original,Original,Original
+Units,Date,Per cent,Per cent,Per cent,Per cent,Number,Percentage points
+Source,RBA,RBA,RBA,RBA,RBA,RBA,RBA
+Publication date,28-Aug-2026,28-Aug-2026,28-Aug-2026,28-Aug-2026,28-Aug-2026,28-Aug-2026,28-Aug-2026
+Series ID,JCRTQF,JCRFMED,JCRFMN,JCRFLO,JCRFHI,JCRFNR,JCRFSD
+01/05/2026,01/06/2026,4.35,4.37,4.10,4.60,33,0.11
+01/05/2026,01/12/2026,4.35,4.47,4.10,4.85,33,0.17
+01/05/2026,01/06/2027,4.35,4.36,3.60,4.85,33,0.26
+01/05/2026,01/12/2027,4.23,4.17,3.10,4.85,32,0.36
+01/05/2026,01/06/2028,3.85,3.99,2.60,4.60,20,0.44
+01/08/2026,01/12/2026,4.35,4.44,4.35,4.85,37,0.14
+01/08/2026,01/06/2027,4.35,4.37,3.85,4.85,37,0.24
+01/08/2026,01/12/2027,4.10,4.10,3.35,4.60,37,0.32
+01/08/2026,01/06/2028,3.85,3.92,2.85,4.35,26,0.32
+01/08/2026,01/12/2028,3.85,3.79,2.85,4.35,25,0.36

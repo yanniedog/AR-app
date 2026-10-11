@@ -5,7 +5,7 @@ const read = (relativePath: string) => fs.readFileSync(path.join(__dirname, '..'
 
 describe('financial claim truth contracts', () => {
   it('keeps compact rate-position cards to observed percentage-point gaps', () => {
-    const today = read('app/(tabs)/index.tsx');
+    const today = read('app/matches.tsx');
     const myRates = read('app/(tabs)/watchlist.tsx');
 
     for (const source of [today, myRates]) {

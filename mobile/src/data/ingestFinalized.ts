@@ -8,6 +8,7 @@ import {
   type DatesIndex,
 } from './historyDaily';
 import { fetchManifest } from './payload';
+import { validateDetachedHistoricalCatalogueDescriptor } from './detachedHistoricalBankRateCatalogueWire';
 
 /** Optional assets that dated tags often omit (core/details only). */
 export const OPTIONAL_MANIFEST_KEYS = [
@@ -38,6 +39,12 @@ export function mergeOptionalManifestFiles(
   if (target.files.core.sha256 !== source.files.core.sha256) return target;
 
   let changed = false;
+  let history = target.bank_rate_history_catalogue;
+  if (source.bank_rate_history_catalogue && (replaceExisting || !history) &&
+      validateDetachedHistoricalCatalogueDescriptor(source, PAYLOAD_REPO)) {
+    history = source.bank_rate_history_catalogue;
+    changed = history !== target.bank_rate_history_catalogue;
+  }
   const files: Manifest['files'] = { ...target.files };
   for (const key of OPTIONAL_MANIFEST_KEYS) {
     const fromSource: ManifestFile | undefined = source.files[key as OptionalManifestKey];
@@ -47,7 +54,7 @@ export function mergeOptionalManifestFiles(
       changed = true;
     }
   }
-  return changed ? { ...target, files } : target;
+  return changed ? { ...target, files, ...(history ? { bank_rate_history_catalogue: history } : {}) } : target;
 }
 
 /**

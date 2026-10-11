@@ -180,16 +180,19 @@ function evaluateRole(
           evidence.modelPointCount < 0 ||
           !Number.isInteger(evidence.renderedPointCount) ||
           evidence.renderedPointCount < 0 ||
-          evidence.renderedPointCount > evidence.modelPointCount;
+          evidence.renderedPointCount !== evidence.modelPointCount;
         if (
           invalid ||
+          (evidence.unverifiedCount ?? 0) > 0 ||
           (evidence.modelPointCount > 0 &&
-            (evidence.renderedPointCount === 0 || !evidence.accessibleSummary)) ||
-          (contract.chartRequired && evidence.modelPointCount === 0)
+            (evidence.renderedPointCount === 0 || !evidence.accessibleSummary ||
+              evidence.layoutMeasured !== true)) ||
+          (evidence.modelPointCount === 0 &&
+            (evidence.emptyStateRendered !== true || evidence.layoutMeasured !== true))
         ) {
           result.failed += 1;
           result.failedSurfaceIds.push(contract.id);
-        } else if (evidence.modelPointCount === 0) {
+        } else if (evidence.modelPointCount === 0 || (evidence.unavailableCount ?? 0) > 0) {
           result.unavailable += 1;
         }
         break;

@@ -8,6 +8,7 @@ import { economicPointAtOrBefore } from '../../data/economicModels';
 import { parseYmd } from '../../data/bankHistoryTransform';
 import { formatRunDate } from '../../data/format';
 import { buildLinePath } from '../../lib/chartSvgPaths';
+import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
@@ -32,6 +33,8 @@ export interface EconomicChartFrameProps {
   holdDates?: string[];
   holdSeriesId?: string;
   selectionStep?: number;
+  auditRevision?: string;
+  onGraphicReady?: (evidence: ChartRenderEvidence) => void;
 }
 
 function validTime(date: string): number {
@@ -94,6 +97,8 @@ export function EconomicChartFrame({
   holdDates,
   holdSeriesId,
   selectionStep,
+  auditRevision,
+  onGraphicReady,
 }: EconomicChartFrameProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
@@ -145,7 +150,10 @@ export function EconomicChartFrame({
   useEffect(() => setSelectedDate(null), [revision]);
 
   if (!allPoints.length) {
-    return <AppText variant="small" color="textMuted">No observations available for this view.</AppText>;
+    return <AppText key={auditRevision ?? revision} variant="small" color="textMuted" onLayout={(event) => {
+      onGraphicReady?.({ revision: auditRevision ?? revision, expectedCount: 0, pointCount: 0,
+        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>No observations available for this view.</AppText>;
   }
   const values = allPoints.map((point) => point.value);
   if (targetBand) values.push(...targetBand);
@@ -204,7 +212,14 @@ export function EconomicChartFrame({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={auditRevision ?? revision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => onGraphicReady?.({
+              revision: auditRevision ?? revision, expectedCount: allPoints.length,
+              pointCount: Number.isFinite(min) && Number.isFinite(max)
+                ? allPoints.filter((point) => hasFiniteChartDate(point.date) && Number.isFinite(point.value)).length : 0,
+              accessibleSummary: accessibilitySummary.trim().length > 0,
+              layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false,
+            })}>
             {targetBand ? (
               <Rect
                 x={padL}

@@ -108,7 +108,12 @@ The current screen set mixes Material dynamic colour, Ionicons/Material Symbols,
 6. **No manufactured urgency.** No countdown pressure, celebratory animation, “best ever” claims or financial-advice tone.
 7. **The visual grammar earns its place.** Avoid gradients, glass, blobs, neon, card soup, generic hero copy and gratuitous illustration.
 
-## 5. Target information architecture
+## 5. Information architecture (superseded)
+
+The September 2026 navigation overhaul replaces this original four-tab plan.
+The current implementation contract is [NAVIGATION.md](NAVIGATION.md); its route
+ownership, five destinations, visible tools and persistent detail navigation take
+precedence over the historical composition and acceptance notes below.
 
 ### Primary destinations
 

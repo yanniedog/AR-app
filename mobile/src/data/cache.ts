@@ -5,17 +5,23 @@ import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
-import { HEAVY_JSON_BYTES, parseJsonHeavy } from '../lib/yieldToUi';
+import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { SearchIndexPayload } from './detailSearch';
 import type { BankInsightsPayload } from './bankInsights';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeProductHistoryPayload, type ProductHistoryPayload } from './productHistory';
 import type { EconomicOutlookPayload } from './economicOutlook';
+import type { RbaMarketOutlook } from './rbaMarketOutlookTypes';
+import { normalizeRbaMarketOutlook } from './rbaMarketOutlookParse';
 import type { PersistedSuitabilityIndex } from './suitabilityIndex';
-import { normalizeCoreWithIntegrity, type CoreIntegrityContext } from './sectionIntegrity';
+import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { createV3GenerationCache } from './v3GenerationCache';
 import { createBankSpreadContentCache } from './bankSpreadContentCache';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
+import type { DatesIndex } from './datesIndex';
+import { assertHistoryDatesIndexAdvances, parseHistoryDatesIndex } from './historyDatesIndex';
+import { historicalSourceIdentity } from './historyIdentity';
+import { DETACHED_HISTORY_MAX_ENCODED } from './detachedHistoricalBankRateCatalogueWire';
 
 const IS_WEB = Platform.OS === 'web';
 const DIR = IS_WEB ? 'ar-rates:payload/' : `${FileSystem.documentDirectory}payload/`;
@@ -25,10 +31,14 @@ const DETAILS = `${DIR}details.json`;
 const SEARCH_INDEX = `${DIR}search-index.json`;
 const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
+const BANK_RATE_HISTORY = `${DIR}bank-rate-history.json`;
+const DETACHED_BANK_RATE_HISTORY_ASSET = `${DIR}bank-rate-history-asset.base64`;
 const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
 const ECONOMIC_OUTLOOK = `${DIR}rba-economic-outlook.json`;
+const RBA_MARKET_OUTLOOK = `${DIR}rba-market-outlook.json`;
+const RBA_MARKET_OUTLOOK_TMP = `${RBA_MARKET_OUTLOOK}.tmp`;
 const SUITABILITY_INDEX = `${DIR}suitability-index.json`;
 const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
 // Tiny sidecars so metadata reads/writes never re-parse or re-stringify the
@@ -36,6 +46,9 @@ const SUITABILITY_INDEX_TMP = `${SUITABILITY_INDEX}.tmp`;
 // seconds after every fresh ingest when detailsSha was patched).
 const CORE_META = `${DIR}core-meta.json`;
 const CORE_META_TMP = `${CORE_META}.tmp`;
+// Preserve index-only corrections while replacing a bundle whose embedded
+// receipt can be older than its metadata sidecar.
+const CORE_HISTORY_RECOVERY = `${DIR}core-history-recovery.json`;
 // Optional-asset content hashes live in a tiny sidecar so updating them never
 // rewrites the multi-MB core bundle. Keyed by coreSha so a new core run
 // automatically invalidates stale optional hashes.
@@ -93,6 +106,8 @@ export interface CacheMeta {
   savedAt: string;
   coreSha: string;
   detailsSha: string | null;
+  /** Selected immutable heads committed before deferred history preparation. */
+  historyDatesIndex?: DatesIndex;
   searchIndexSha?: string | null;
   historyBanksSha?: string | null;
   bankInsightsSha?: string | null;
@@ -289,19 +304,34 @@ async function readJson<T>(path: string): Promise<T | null> {
   }
 }
 
-async function writeCoreMeta(meta: CacheMeta): Promise<void> {
+async function writeCoreMeta(meta: CacheMeta, path = CORE_META): Promise<void> {
   await ensureDir();
-  await writeText(CORE_META_TMP, JSON.stringify(meta));
-  await deletePath(CORE_META);
-  await movePath(CORE_META_TMP, CORE_META);
+  await writeText(`${path}.tmp`, JSON.stringify(meta));
+  await deletePath(path);
+  await movePath(`${path}.tmp`, path);
 }
 
-async function readCoreMetaSidecar(): Promise<CacheMeta | null> {
-  const primary = await readJson<CacheMeta>(CORE_META);
-  if (isCacheMeta(primary)) return primary;
-  // Crash window after writeCoreMeta wrote the tmp but before moveAsync finished.
-  const tmp = await readJson<CacheMeta>(CORE_META_TMP);
-  return isCacheMeta(tmp) ? tmp : null;
+async function readCoreMetaSidecar(path = CORE_META): Promise<CacheMeta | null> {
+  const primary = await readJson<CacheMeta>(path);
+  const tmp = await readJson<CacheMeta>(`${path}.tmp`);
+  if (!isCacheMeta(primary)) return isCacheMeta(tmp) ? tmp : null;
+  // The completed temporary write can contain an index-only correction even
+  // before the old primary is deleted. Recover only strictly advancing heads
+  // bound to this same edition; stale leftovers cannot replace current metadata.
+  try {
+    if (isCacheMeta(tmp) && tmp.coreSha === primary.coreSha &&
+      samePayloadIdentity(tmp.manifest, primary.manifest) &&
+      tmp.manifest.files.details.sha256 === primary.manifest.files.details.sha256) {
+      const next = parseHistoryDatesIndex(tmp.historyDatesIndex, tmp.manifest);
+      const prior = parseHistoryDatesIndex(primary.historyDatesIndex, primary.manifest);
+      if (next) {
+        if (prior) assertHistoryDatesIndexAdvances(next, prior);
+        if (!prior || next.dates.length !== prior.dates.length || next.dates.some(day =>
+          !prior.dates.includes(day) || historicalSourceIdentity(next, day) !== historicalSourceIdentity(prior, day))) return tmp;
+      }
+    }
+  } catch { /* Preserve the committed receipt on malformed data, rollback or equivocation. */ }
+  return primary;
 }
 
 function isCacheMeta(value: unknown): value is CacheMeta {
@@ -315,6 +345,29 @@ function isCacheMeta(value: unknown): value is CacheMeta {
     typeof m.coreSha === 'string' &&
     typeof m.source === 'string'
   );
+}
+
+function assertHistoryReceiptWrite(next: CacheMeta, previous: CacheMeta | null): void {
+  const index = parseHistoryDatesIndex(next.historyDatesIndex, next.manifest);
+  const prior = previous && parseHistoryDatesIndex(previous.historyDatesIndex, previous.manifest);
+  if ((next.historyDatesIndex !== undefined || prior) && !index) {
+    throw new Error('Historical publication recovery index is unavailable or invalid');
+  }
+  if (index && prior) assertHistoryDatesIndexAdvances(index, prior);
+}
+
+async function recoverHistoryReceipt(meta: CacheMeta): Promise<CacheMeta> {
+  const recovery = await readCoreMetaSidecar(CORE_HISTORY_RECOVERY);
+  if (!recovery || recovery.coreSha !== meta.coreSha || !samePayloadIdentity(recovery.manifest, meta.manifest)) return meta;
+  const recovered = parseHistoryDatesIndex(recovery.historyDatesIndex, meta.manifest);
+  if (!recovered) return meta;
+  const embedded = parseHistoryDatesIndex(meta.historyDatesIndex, meta.manifest);
+  try {
+    // A same-core repair may already have committed newer heads. A recovery
+    // receipt must never replace them or alter details/optional-asset metadata.
+    if (embedded) assertHistoryDatesIndexAdvances(recovered, embedded);
+    return { ...meta, historyDatesIndex: recovered };
+  } catch { return meta; }
 }
 
 let writeChain: Promise<void> = Promise.resolve();
@@ -364,6 +417,7 @@ export const cache = {
     // Prefer the sidecar meta when present so detailsSha patches never require
     // rewriting the embedded bundle meta.
     const sidecar = await readCoreMetaSidecar();
+    await sealCoreHistoryAsync(b.core, () => yieldToUi(0));
     const normalized = normalizeCoreWithIntegrity(b.core, {
       coreSha256: b.meta.coreSha,
     });
@@ -372,7 +426,7 @@ export const cache = {
           samePayloadIdentity(sidecar.manifest, b.meta.manifest))) {
       return { meta: sidecar, core: normalized.core, integrity: normalized.integrity };
     }
-    return { ...b, core: normalized.core, integrity: normalized.integrity };
+    return { ...b, meta: await recoverHistoryReceipt(b.meta), core: normalized.core, integrity: normalized.integrity };
   },
 
   async readMeta(): Promise<CacheMeta | null> {
@@ -388,7 +442,7 @@ export const cache = {
       (await readJson<CoreBundle>(BUNDLE))?.meta ??
       (await readJson<CoreBundle>(BUNDLE_TMP))?.meta ??
       null;
-    return isCacheMeta(fromBundle) ? fromBundle : null;
+    return isCacheMeta(fromBundle) ? recoverHistoryReceipt(fromBundle) : null;
   },
 
   async readCore(): Promise<CorePayload | null> {
@@ -408,8 +462,13 @@ export const cache = {
 
   async writeBundle(meta: CacheMeta, coreText: string): Promise<void> {
     return serialize(async () => {
-      const previous = (await cache.readMeta())?.manifest;
+      const previousMeta = await cache.readMeta();
+      const previous = previousMeta?.manifest;
       assertNoRevisionRollback(previous, meta.manifest);
+      assertHistoryReceiptWrite(meta, previousMeta);
+      if (previousMeta && parseHistoryDatesIndex(previousMeta.historyDatesIndex, previousMeta.manifest)) {
+        await writeCoreMeta(previousMeta, CORE_HISTORY_RECOVERY);
+      }
       // Drop any prior sidecar first so a crash after the new bundle lands cannot
       // leave readMeta trusting stale detailsSha/coreSha from the old run.
       await deletePath(CORE_META);
@@ -421,6 +480,8 @@ export const cache = {
       // the multi-MB bundle is already committed (embedded meta remains valid).
       try {
         await writeCoreMeta(meta);
+        await deletePath(CORE_HISTORY_RECOVERY);
+        await deletePath(`${CORE_HISTORY_RECOVERY}.tmp`);
       } catch {
         // leave CORE_META_TMP if present — readCoreMetaSidecar recovers it
       }
@@ -440,6 +501,12 @@ export const cache = {
       if (existing.manifest.payload_revision && !samePayloadIdentity(existing.manifest, meta.manifest)) return;
       if (existing.manifest.generated_at > meta.manifest.generated_at) return;
       const merged: CacheMeta = { ...existing, ...meta };
+      // A corrupt optional receipt must not stop details/suitability recovery.
+      // Only drop invalid inherited data; explicit replacements are validated below.
+      if (meta.historyDatesIndex === undefined && !parseHistoryDatesIndex(existing.historyDatesIndex, existing.manifest)) {
+        delete merged.historyDatesIndex;
+      }
+      assertHistoryReceiptWrite(merged, existing);
       await writeCoreMeta(merged);
     });
   },
@@ -556,6 +623,46 @@ export const cache = {
     await writeText(ECONOMIC_OUTLOOK, JSON.stringify(payload));
   },
 
+  async readRbaMarketOutlook(): Promise<RbaMarketOutlook | null> {
+    const [primary, temporary] = (await Promise.all([
+      readJson<unknown>(RBA_MARKET_OUTLOOK),
+      readJson<unknown>(RBA_MARKET_OUTLOOK_TMP),
+    ])).map((value) => normalizeRbaMarketOutlook(value));
+    if (!primary) return temporary;
+    if (!temporary) return primary;
+    const preferred = temporary.checkedAt > primary.checkedAt ? temporary : primary;
+    const fallback = preferred === primary ? temporary : primary;
+    const newerSource = <T extends { publicationDate: string }>(
+      current: T | null, prior: T | null, observed: (source: T) => string,
+    ): T | null => {
+      if (!current) return prior;
+      if (!prior) return current;
+      const order = observed(prior).localeCompare(observed(current))
+        || prior.publicationDate.localeCompare(current.publicationDate);
+      return order > 0 ? prior : current;
+    };
+    const bondForwards = newerSource(preferred.bondForwards, fallback.bondForwards, (source) => source.observationDate);
+    const economists = newerSource(preferred.economists, fallback.economists, (source) => source.surveyDate);
+    return {
+      ...preferred,
+      fetchedAt: [primary.fetchedAt, temporary.fetchedAt].sort().at(-1)!,
+      refreshStatus: preferred.refreshStatus === 'offline' ? 'offline'
+        : bondForwards !== preferred.bondForwards || economists !== preferred.economists ? 'partial'
+          : preferred.refreshStatus,
+      bondForwards,
+      economists,
+    };
+  },
+
+  async writeRbaMarketOutlook(payload: RbaMarketOutlook): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      await writeText(RBA_MARKET_OUTLOOK_TMP, JSON.stringify(payload));
+      await deletePath(RBA_MARKET_OUTLOOK);
+      await movePath(RBA_MARKET_OUTLOOK_TMP, RBA_MARKET_OUTLOOK);
+    });
+  },
+
   async readSuitabilityIndex(): Promise<PersistedSuitabilityIndex | null> {
     return readJson<PersistedSuitabilityIndex>(SUITABILITY_INDEX);
   },
@@ -592,6 +699,60 @@ export const cache = {
 
   async clear(): Promise<void> {
     await deletePath(DIR);
+  },
+
+  async readBankRateHistory<T>(decode: (text: string) => T | null | Promise<T | null>): Promise<T | null> {
+    // A complete temporary write is newer than the primary. Decode before
+    // choosing it so an interrupted write cannot hide the last valid cache.
+    for (const path of [`${BANK_RATE_HISTORY}.tmp`, BANK_RATE_HISTORY]) {
+      try {
+        if (!await pathExists(path)) continue;
+        const value = await decode(await readText(path));
+        if (value !== null) return value;
+      } catch { /* Try the other checkpoint if this read or decode failed. */ }
+    }
+    return null;
+  },
+
+  async writeBankRateHistory(text: string): Promise<void> {
+    return serialize(async () => {
+      await ensureDir();
+      const temporary = `${BANK_RATE_HISTORY}.tmp`;
+      await writeText(temporary, text);
+      await deletePath(BANK_RATE_HISTORY);
+      await movePath(temporary, BANK_RATE_HISTORY);
+    });
+  },
+
+  /** Exact detached asset bytes encoded as base64, distinct from derived checkpoints.
+   * The caller authenticates bytes and current manifest binding before accepting a slot. */
+  async readDetachedBankRateHistoryAsset<T>(decode: (base64: string) => Promise<T | null>): Promise<T | null> {
+    for (const path of [`${DETACHED_BANK_RATE_HISTORY_ASSET}.tmp`, DETACHED_BANK_RATE_HISTORY_ASSET]) {
+      try {
+        if (!IS_WEB) {
+          const info = await FileSystem.getInfoAsync(path);
+          if (!info.exists || info.isDirectory || (typeof info.size === 'number' && info.size > DETACHED_HISTORY_MAX_ENCODED)) continue;
+        }
+        const text = await readText(path);
+        if (!text.length || text.length > DETACHED_HISTORY_MAX_ENCODED) continue;
+        const value = await decode(text);
+        if (value !== null) return value;
+      } catch { /* A torn or mismatched temporary asset cannot hide a valid primary. */ }
+    }
+    return null;
+  },
+
+  async writeDetachedBankRateHistoryAsset(base64: string, isCurrent: () => boolean = () => true): Promise<void> {
+    if (!base64.length || base64.length > DETACHED_HISTORY_MAX_ENCODED) throw new Error('Detached history cache exceeds byte budget');
+    return serialize(async () => {
+      if (!isCurrent()) return;
+      await ensureDir();
+      const temporary = `${DETACHED_BANK_RATE_HISTORY_ASSET}.tmp`;
+      await writeText(temporary, base64);
+      if (!isCurrent()) return;
+      await deletePath(DETACHED_BANK_RATE_HISTORY_ASSET);
+      await movePath(temporary, DETACHED_BANK_RATE_HISTORY_ASSET);
+    });
   },
 };
 

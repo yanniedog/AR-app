@@ -5,6 +5,7 @@ import { ScrollView, View } from 'react-native';
 import type { BankInsightsPayload } from '../../data/bankInsights';
 import type { BankHistoryChartModel, Brand, HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { SECTIONS } from '../../constants';
+import type { ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartErrorBoundary } from '../ChartErrorBoundary';
 import { AppText, Chip, Row } from '../ui';
 import { LenderRaceChart } from './LenderRaceChart';
@@ -68,7 +69,7 @@ export const HistoryExplorer = React.memo(function HistoryExplorer({
   window?: HistoryWindow;
   onWindowChange?: (window: HistoryWindow) => void;
   auditRevision?: string;
-  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
+  onGraphicReadiness?: (state: ChartRenderEvidence) => void;
   onLeaderLogoReadiness?: (state: { revision: string; expectedCount: number; terminalCount: number }) => void;
   /** Keeps the default Market view calm; advanced lenses can be disclosed on demand. */
   showModePicker?: boolean;

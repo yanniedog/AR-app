@@ -19,18 +19,20 @@ describe('tabIcons', () => {
   });
 
   it('uses plain-language labels a first-time user can guess', () => {
-    expect(getTabLabel('index')).toBe('Today');
-    expect(getTabLabel('browse')).toBe('Explore');
-    expect(getTabLabel('passthrough')).toBe('Changes');
-    expect(getTabLabel('watchlist')).toBe('My rates');
+    expect(getTabLabel('index')).toBe('Home');
+    expect(getTabLabel('browse')).toBe('Rates');
+    expect(getTabLabel('market')).toBe('Market');
+    expect(getTabLabel('tools')).toBe('Tools');
+    expect(getTabLabel('watchlist')).toBe('Saved');
   });
 
-  it('contains only the four primary destinations', () => {
+  it('contains only the five primary destinations', () => {
     expect(TAB_ROUTES).toEqual([
       'index',
       'browse',
-      'passthrough',
       'watchlist',
+      'market',
+      'tools',
     ]);
   });
 });

@@ -15,7 +15,11 @@ type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 
 const [row, prize] = fixture.rates as RateRow[];
 const mockParams = { key: row.product_key, ri: '4' };
-const mockHistoryModel = { dates: ['2026-09-12', '2026-09-13'], allDates: ['2026-09-12', '2026-09-13'], points: [] };
+const mockHistoryModel = { section: 'Savings', dates: ['2026-09-12', '2026-09-13'], allDates: ['2026-09-12', '2026-09-13'], points: [] };
+const mockRateHistory: Record<string, any> = {
+  snapshots: null, updating: false, failed: false, historyAvailable: false,
+  richHistory: false, missingDates: [], revision: 'history-1',
+};
 const emptyRibbon = {
   counts: { rates: 1, products: 1, providers: 1 },
   range: { min: 0.05, max: 0.05, mean: 0.05, median: 0.05 },
@@ -101,6 +105,7 @@ jest.mock('../src/hooks/useLogoReadiness', () => ({
   useLogoReadiness: () => ({ ready: true, expectedCount: 1, terminalCount: 1, onLogoRenderStateChange: jest.fn() }),
 }));
 jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision: () => 1 }));
+jest.mock('../src/hooks/useBankRateHistory', () => ({ useBankRateHistory: () => mockRateHistory }));
 jest.mock('../src/hooks/useUserRateScenario', () => ({
   useUserRateScenario: () => ({
     scenario: { currentProducts: { mortgage: { provider: null, productKey: null } } },
@@ -140,11 +145,20 @@ describe('product-wide history context on an exact-tier page', () => {
     mockParams.ri = '4';
     mockState.prefs.showHistoryRibbon = false;
     mockState.productHistory = null;
+    mockHistoryModel.dates = ['2026-09-12', '2026-09-13'];
+    mockHistoryModel.allDates = mockHistoryModel.dates;
+    mockRateHistory.snapshots = null;
+    mockRateHistory.richHistory = false;
+    mockRateHistory.historyAvailable = false;
+    mockRateHistory.updating = false;
+    mockRateHistory.failed = false;
   });
 
   it.each([false, true])('does not call an older cached capture current with history enabled=%s', async (enabled) => {
     // Controlled date context only: the rate rows remain the retained real fixture.
     mockState.core = { ...core, run_date: '2026-09-12' };
+    mockHistoryModel.dates = ['2026-09-11', '2026-09-12'];
+    mockHistoryModel.allDates = mockHistoryModel.dates;
     mockState.prefs.showHistoryRibbon = enabled;
     const tree = await renderProduct();
     const renderedCopy = copy(tree);
@@ -191,6 +205,80 @@ describe('product-wide history context on an exact-tier page', () => {
     expect(copy(tree)).toContain('Includes conditional and restricted tiers. The best tier can change.');
     expect(copy(tree)).not.toContain('Selected tier 11.50%');
     expect(JSON.stringify(mockState.productHistory)).toBe(before);
+    act(() => tree.unmount());
+  });
+
+  it('uses filtered historical rate tiers instead of the legacy market timeline', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    const stats = { min: 4, max: 6, mean: 5, median: 5.5, count: 4 };
+    mockRateHistory.richHistory = true;
+    mockRateHistory.historyAvailable = true;
+    mockRateHistory.snapshots = {
+      '2026-08-01': { sectionTotals: { Savings: stats } },
+      '2026-09-13': { sectionTotals: { Savings: stats } },
+    };
+    const tree = await renderProduct();
+    const chart = tree.root.findAllByType('BankHistoryChart')[0];
+    expect(chart.props.dates).toEqual(['2026-08-01', '2026-09-13']);
+    expect(chart.props.points[0]).toMatchObject({ mean: 0.05, median: 0.055, count: 4 });
+    expect(copy(tree)).toContain('rates matching your settings');
+    act(() => tree.unmount());
+  });
+
+  it('retains earlier product observations and explicit gaps independently of market history', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    mockState.productHistory = {
+      run_date: core.run_date,
+      run_dates: ['2026-08-01', '2026-08-02', '2026-09-13'],
+      products: { [row.product_key]: [0.11, null, 0.115] },
+    };
+    const tree = await renderProduct();
+    const chart = tree.root.findAllByType('BankHistoryChart')[0];
+    expect(chart.props.dates).toEqual(['2026-08-01', '2026-08-02', '2026-09-12', '2026-09-13']);
+    expect(chart.props.highlightSeries.values['2026-08-01']).toBe(0.11);
+    expect(chart.props.highlightSeries.values['2026-08-02']).toBeNull();
+    expect(chart.props.highlightSeries.values['2026-09-12']).toBeNull();
+    expect(chart.props.points[0]).toMatchObject({ min: null, max: null, mean: null, median: null, count: 0 });
+    act(() => tree.unmount());
+  });
+
+  it('keeps legacy market history when only a current snapshot is available', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    mockRateHistory.snapshots = {
+      '2026-09-13': { sectionTotals: { Savings: { min: 5, max: 5, mean: 5, median: 5, count: 1 } } },
+    };
+    const tree = await renderProduct();
+    expect(tree.root.findAllByType('BankHistoryChart')[0].props.dates).toEqual(['2026-09-12', '2026-09-13']);
+    act(() => tree.unmount());
+  });
+
+  it.each([false, true])('shows a preparation failure instead of endless loading with product ledger=%s', async (hasLedger) => {
+    mockState.prefs.showHistoryRibbon = true;
+    mockRateHistory.updating = true;
+    mockRateHistory.failed = true;
+    if (hasLedger) mockState.productHistory = {
+      run_date: core.run_date, run_dates: ['2026-09-12', '2026-09-13'],
+      products: { [row.product_key]: [0.11, 0.115] },
+    };
+    const tree = await renderProduct();
+    expect(copy(tree)).toContain('could not be prepared');
+    expect(copy(tree)).not.toContain('Updating market history');
+    expect(copy(tree)).not.toContain('Loading market history');
+    act(() => tree.unmount());
+  });
+
+  it('keeps the product line available while revised market filters are preparing', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    mockRateHistory.updating = true;
+    mockState.productHistory = {
+      run_date: core.run_date, run_dates: ['2026-09-12', '2026-09-13'],
+      products: { [row.product_key]: [0.11, 0.115] },
+    };
+    const tree = await renderProduct();
+    const chart = tree.root.findAllByType('BankHistoryChart')[0];
+    expect(chart.props.highlightSeries.values['2026-09-12']).toBe(0.11);
+    expect(chart.props.points.every((point: { mean: number | null }) => point.mean === null)).toBe(true);
+    expect(copy(tree)).toContain('Updating market history for your settings');
     act(() => tree.unmount());
   });
 });

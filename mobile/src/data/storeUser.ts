@@ -1,6 +1,7 @@
 import type { LegacyProductAliasMap } from '../contracts/v3/canonicalCoreAdapter';
 import type { SectionKey } from '../types';
 import { cache } from './cache';
+import { resetRbaMarketOutlookRuntimeCache } from './rbaMarketOutlook';
 import { resetDetailSearchIndexCache } from './detailSearch';
 import {
   addSubscription,
@@ -263,11 +264,12 @@ export function createUserActions(set: StoreSet, get: StoreGet) {
 
     async clearCache() {
       debugLog.info('store', 'clearCache');
-      await cache.clear();
+      await resetRbaMarketOutlookRuntimeCache(() => cache.clear());
       resetDetailSearchIndexCache();
       clearSuitabilityIndex();
       set({
         core: null,
+        bankRateHistoryLoading: false,
         coreIntegrity: null,
         coreAssetState: {
           status: 'unavailable',

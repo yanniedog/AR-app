@@ -207,6 +207,12 @@ export type AppHealthDisplayEvidence =
       modelPointCount: number;
       renderedPointCount: number;
       accessibleSummary: boolean;
+      /** Proof from the graph itself, not its surrounding screen. */
+      layoutMeasured?: boolean;
+      emptyStateRendered?: boolean;
+      /** Every independently registered graph must supply evidence. */
+      unverifiedCount?: number;
+      unavailableCount?: number;
     }
   | {
       role: 'logo';
@@ -232,7 +238,7 @@ export interface AppHealthSurfaceObservation {
   evidence: readonly AppHealthDisplayEvidence[];
 }
 
-export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset';
+export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link';
 
 export interface AppHealthNetworkDecision {
   allowed: boolean;

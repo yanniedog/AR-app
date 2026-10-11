@@ -258,7 +258,7 @@ describe('optional feature prefs', () => {
     )).toBe(true);
   });
 
-  it('builds suitability after core install without warming unrelated optional assets', async () => {
+  it('builds suitability and warms enabled search after core install while keeping history lazy', async () => {
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'sample',
@@ -279,7 +279,7 @@ describe('optional feature prefs', () => {
     await store.getState().refresh({});
 
     expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
-    expect(mockDownloadSearchIndex).not.toHaveBeenCalled();
+    expect(mockDownloadSearchIndex).toHaveBeenCalledTimes(1);
     expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
     expect(mockDownloadBankInsights).not.toHaveBeenCalled();
   });
@@ -296,7 +296,7 @@ describe('optional feature prefs', () => {
     mockGetSuitabilityIndex.mockReturnValue({ persisted: true });
     mockSuitabilityIndexMatches.mockReturnValue(true);
     store.setState({
-      prefs: { ...DEFAULT_PREFS, notificationsEnabled: true },
+      prefs: { ...DEFAULT_PREFS, notificationsEnabled: true, enableDeepSearch: false },
       subscriptions: [
         {
           id: 'search:eligibility',

@@ -1,3 +1,4 @@
+import type { ChartRenderEvidence } from '../src/lib/chartRenderEvidence';
 import { useIsFocused, useScrollToTop } from '@react-navigation/native';
 import { useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import { RbaCountdownCard } from '../src/components/RbaCountdownCard';
 import { RbaOutlook, type RbaOutlookAuditHandle, type RbaOutlookAuditState } from '../src/components/RbaOutlook';
 import { Ribbon } from '../src/components/Ribbon';
 import { ScreenScrollView } from '../src/components/Screen';
-import { AppText, Button, Card, Disclosure, Divider, Row, SectionHeading } from '../src/components/ui';
+import { AppText, Button, Disclosure, Divider, Row } from '../src/components/ui';
 import { HistoryExplorer, type HistoryViewMode } from '../src/components/viz/HistoryExplorer';
 import { SECTION_ORDER, SECTIONS } from '../src/constants';
 import { filterBankInsightsForSuitability } from '../src/data/bankInsights';
@@ -78,15 +79,8 @@ export default function Market() {
   const [rewindDate, setRewindDate] = useState<string | null>(null);
   const [rbaSelectedDate, setRbaSelectedDate] = useState<string | null>(null);
   const [dashboardLayoutRevision, setDashboardLayoutRevision] = useState<string | null>(null);
-  const [historyGraphicState, setHistoryGraphicState] = useState<{
-    revision: string;
-    accessibleSummary: boolean;
-  } | null>(null);
-  const [rbaGraphicState, setRbaGraphicState] = useState<{
-    revision: string;
-    pointCount: number;
-    accessibleSummary: boolean;
-  } | null>(null);
+  const [historyGraphicState, setHistoryGraphicState] = useState<ChartRenderEvidence | null>(null);
+  const [rbaGraphicState, setRbaGraphicState] = useState<ChartRenderEvidence | null>(null);
   const [leaderLogoState, setLeaderLogoState] = useState<{
     revision: string;
     expectedCount: number;
@@ -204,7 +198,7 @@ export default function Market() {
   const datasetRevision = core?.run_date ?? null;
   const rbaGraphicRevisionPrefix = `${core?.rba.at(-1)?.date ?? 'none'}:${core?.rba_holds?.length ?? 0}:`;
   const rbaGraphicReady = !!rbaGraphicState &&
-    rbaGraphicState.pointCount > 0 &&
+    rbaGraphicState.pointCount > 0 && rbaGraphicState.layoutMeasured &&
     rbaGraphicState.revision.startsWith(rbaGraphicRevisionPrefix);
   const rbaChartPointCount = useMemo(() => {
     if (!core?.rba.length) return 0;
@@ -276,7 +270,7 @@ export default function Market() {
           ? planned as typeof activeSection
           : activeSection;
         openBrowse(target);
-        return { expectedPath: '/browse' };
+        return { expectedPath: '/categories' };
       },
     },
   });
@@ -315,14 +309,22 @@ export default function Market() {
   usePerformanceAuditProbe(surface, {
     id: 'history-graphic', kind: 'graphic', required: historyOpen,
     status: !historyOpen || (
-      historyChartAvailable && historyGraphicState?.revision === renderRevision
+      historyGraphicState?.revision === renderRevision && historyGraphicState.layoutMeasured
     ) ? 'ready' : 'pending', datasetRevision, renderRevision,
+    expectedCount: historyOpen ? historyGraphicState?.expectedCount ?? 0 : 0,
+    actualCount: historyOpen ? historyGraphicState?.pointCount ?? 0 : 0,
+    layoutMeasured: historyOpen && historyGraphicState?.revision === renderRevision && historyGraphicState.layoutMeasured,
+    emptyStateRendered: historyOpen && historyGraphicState?.revision === renderRevision && historyGraphicState.emptyStateRendered,
     accessibleSummary: historyOpen && historyChartAvailable &&
       historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
   });
   usePerformanceAuditProbe(surface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen ? 'ready' : economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
+    expectedCount: economyOpen ? economicAuditState?.expectedCount ?? 0 : 0,
+    actualCount: economyOpen ? economicAuditState?.pointCount ?? 0 : 0,
+    layoutMeasured: economyOpen ? economicAuditState?.layoutMeasured ?? false : false,
+    emptyStateRendered: economyOpen ? economicAuditState?.emptyStateRendered ?? false : false,
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
     datasetRevision, renderRevision,
   });
@@ -341,7 +343,6 @@ export default function Market() {
     id: 'outlook.rba-response', routeKey: '/research', datasetRevision,
     renderRevision: `${datasetRevision ?? 'none'}:${rbaSelectedDate ?? 'latest'}`,
     actions: {
-      'redirect.rba.verify': () => undefined,
       'outlook.rba-response.decision.previous': previousRbaDate,
     },
   });
@@ -354,6 +355,8 @@ export default function Market() {
     status: !rbaOpen || rbaGraphicReady ? 'ready' : 'pending', datasetRevision,
     expectedCount: rbaOpen ? rbaChartPointCount : 0,
     actualCount: rbaOpen ? rbaGraphicState?.pointCount ?? 0 : 0,
+    layoutMeasured: rbaOpen ? rbaGraphicState?.layoutMeasured ?? false : false,
+    emptyStateRendered: rbaOpen ? rbaGraphicState?.emptyStateRendered ?? false : false,
     accessibleSummary: rbaOpen ? rbaGraphicState?.accessibleSummary ?? false : false,
   });
   usePerformanceAuditProbe(rbaSurface, {
@@ -382,23 +385,26 @@ export default function Market() {
   return (
     <ScreenScrollView
       ref={scrollRef}
+      contentContainerStyle={{ gap: 28 }}
       onLayout={(event) => {
         if (event.nativeEvent.layout.width > 0 && event.nativeEvent.layout.height > 0) {
           setDashboardLayoutRevision(core.run_date);
         }
       }}
     >
+      <View style={{ gap: 8 }}>
+        <AppText variant="h1" accessibilityRole="header">Market research</AppText>
+        <AppText variant="body" color="textMuted">A wider view of rates over time.</AppText>
+      </View>
+
       {sectionOptions.length > 1 ? (
         <SegmentedControl options={sectionOptions} value={activeSection} onChange={setActiveSection} />
       ) : null}
 
-      <RbaCountdownCard expandable={false} />
-
-      <Card variant="outlined" style={{ gap: 14 }}>
-        <SectionHeading
-          title="Market research"
-          subtitle={`Observed ${formatRunDate(core.run_date)} · ${SECTIONS[activeSection].title}`}
-        />
+      <View style={{ gap: 16 }}>
+        <AppText variant="small" color="textMuted">
+          {SECTIONS[activeSection].title} · observed {formatRunDate(core.run_date)}
+        </AppText>
         {activeSnapshot ? (
           <>
             <Ribbon stats={activeSnapshot.stats} section={activeSection} />
@@ -407,7 +413,7 @@ export default function Market() {
         ) : (
           <AppText variant="small" color="textMuted">Preparing the current standard-product market…</AppText>
         )}
-      </Card>
+      </View>
 
       <Disclosure
         title={`How have ${SECTIONS[activeSection].title.toLowerCase()} rates moved?`}
@@ -418,7 +424,7 @@ export default function Market() {
         {!showHistoryRibbon ? (
           <Button title="Show market history" variant="secondary" onPress={() => setPref('showHistoryRibbon', true)} />
         ) : historyReady ? (
-          <View style={{ gap: 10 }}>
+          <View style={{ gap: 16 }}>
             <HistoryExplorer
               section={activeSection}
               historyModel={historyModel}
@@ -478,8 +484,8 @@ export default function Market() {
             setRbaOpen((open) => !open);
           }}
         >
-          <View style={{ gap: 12 }}>
-          <Row style={{ justifyContent: 'space-between' }}>
+          <View style={{ gap: 20 }}>
+          <Row style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
             <AppText variant="small" color="textMuted">Current cash rate</AppText>
             <AppText variant="rateHero" style={{ color: theme.colors.rba }}>{currentRba ? formatRate(currentRba.rate) : '—'}</AppText>
           </Row>
@@ -491,9 +497,10 @@ export default function Market() {
             onDateSelect={setRbaSelectedDate}
             onGraphicReady={setRbaGraphicState}
           />
+          <RbaCountdownCard expandable={false} />
           {decisions.length ? <Divider /> : null}
           {decisions.map((decision) => (
-            <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 3 }}>
+            <Row key={decision.date} style={{ justifyContent: 'space-between', paddingVertical: 8, flexWrap: 'wrap' }}>
               <AppText variant="small" color="textMuted">{formatRbaDate(decision.date)}</AppText>
               <AppText variant="small" weight="700">{decisionLine(decision)}</AppText>
             </Row>

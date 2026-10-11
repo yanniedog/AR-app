@@ -173,7 +173,7 @@ export function makeCompleteDisplayFixture(): {
           { role: 'visible', expectedMinimum: 1, visibleCount: 3 },
           { role: 'empty-state', expected: false, rendered: false },
           { role: 'critical-layout', measured: true, width: 320, height: 480 },
-          { role: 'chart', modelPointCount: 8, renderedPointCount: 8, accessibleSummary: true },
+          { role: 'chart', modelPointCount: 8, renderedPointCount: 8, accessibleSummary: true, layoutMeasured: true },
           { role: 'logo', expectedCount: 3, decodedCount: 3, fallbackCount: 0, missingCount: 0 },
         ],
       },

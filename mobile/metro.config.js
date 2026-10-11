@@ -4,6 +4,11 @@ const config = getDefaultConfig(__dirname);
 const NOBLE_HASHES_CRYPTO = '@noble/hashes/crypto';
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
+  if (moduleName === 'punycode') {
+    // WHATWG URL's CommonJS consumer needs punycode.ucs2. Metro's web
+    // mainFields otherwise picks the ESM entry, where ucs2 is default-only.
+    return context.resolveRequest(context, 'punycode/punycode.js', platform);
+  }
   if (moduleName !== NOBLE_HASHES_CRYPTO) {
     return context.resolveRequest(context, moduleName, platform);
   }

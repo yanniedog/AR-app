@@ -34,6 +34,7 @@ import {
   scoreLatency,
   selectReportedAuditChecks,
   summarizePerformanceAudit,
+  summarizePartialPerformanceAudit,
   summarizeResponsiveness,
   worstStatus,
   type AuditCheck,
@@ -182,7 +183,7 @@ const environment: AuditEnvironment = {
 function check(
   id: string,
   status: AuditCheck['status'],
-  durationMs: number,
+  durationMs: number | null,
   metrics: AuditCheck['metrics'] = {},
 ): AuditCheck {
   return {
@@ -199,16 +200,22 @@ function check(
 describe('performance audit journeys', () => {
   it('covers every steady-state destination and all three browse sections', () => {
     const journeys = buildPerformanceAuditJourneys(core);
-    expect(journeys).toHaveLength(20);
+    expect(journeys).toHaveLength(26);
     expect(journeys.map((journey) => journey.id)).toEqual(
       expect.arrayContaining([
         'home',
+        'rates',
+        'market',
+        'tools',
+        'matches',
+        'bank-rates',
+        'changes',
         'browse-mortgage',
         'browse-savings',
         'browse-td',
         'response',
         'outlook',
-        'rba-redirect',
+        'rba',
         'watchlist',
         'settings',
         'search',
@@ -237,6 +244,32 @@ describe('performance audit journeys', () => {
       expectedSurface: 'moves.response-chart',
       navigationKind: 'stack',
     });
+    expect(journeys.find((journey) => journey.id === 'rba')).toMatchObject({
+      label: 'RBA rates',
+      href: '/rba',
+      expectedPath: '/rba',
+      expectedSurface: 'rba.dashboard',
+      navigationKind: 'stack',
+    });
+  });
+
+  it('audits the five hubs and moved screens against their actual stack destinations', () => {
+    const journeys = buildPerformanceAuditJourneys(core);
+    expect(journeys.filter(journey => journey.navigationKind === 'tab').map(journey => journey.id))
+      .toEqual(['home', 'rates', 'market', 'tools', 'watchlist']);
+    expect(journeys.find(journey => journey.id === 'home')).toMatchObject({
+      expectedPath: '/', expectedSurface: 'home.hub',
+    });
+    expect(journeys.find(journey => journey.id === 'matches')).toMatchObject({
+      expectedPath: '/matches', expectedSurface: 'today.hero', navigationKind: 'stack',
+    });
+    expect(journeys.find(journey => journey.id === 'browse-mortgage')).toMatchObject({
+      href: { pathname: '/categories' }, expectedPath: '/categories',
+      expectedSurface: 'browse.hierarchy', navigationKind: 'stack',
+    });
+    for (const id of ['outlook', 'settings', 'bank-rates', 'changes']) {
+      expect(journeys.find(journey => journey.id === id)?.navigationKind).toBe('stack');
+    }
   });
 
   it('builds comparison journeys only from two products in the same section', () => {
@@ -327,6 +360,19 @@ describe('performance audit optional data', () => {
         true,
       ).bankHistory,
     ).toBe(true);
+  });
+
+  it('does not wait for bank-specific assets on the RBA market page', () => {
+    expect(resolveAuditJourneyOptionalData(
+      'rba',
+      { ...freeBetaPrefs, includeNonStandard: true },
+      true,
+    )).toEqual({
+      deepSearch: false,
+      bankInsights: false,
+      bankHistory: false,
+      productHistory: false,
+    });
   });
 });
 
@@ -460,6 +506,22 @@ describe('performance audit scoring', () => {
       slowestCheckId: 'proven-zero',
       slowestCheckMs: 0,
     });
+  });
+
+  it('reports zero planned execution coverage when preflight fails before a durable check', () => {
+    const fatal = check('fatal-1', 'fail', null, { executionAttempted: false });
+    expect(summarizePartialPerformanceAudit([fatal], 324, 0)).toMatchObject({
+      overall: 'bottleneck', fail: 1, executed: 0, coveragePercent: 0, slowestCheckId: null,
+    });
+  });
+
+  it('uses durable executed checks over the full plan for partial coverage', () => {
+    const partial = [check('completed', 'pass', 10), check('skipped', 'skipped', null),
+      check('not-flushed', 'pass', 10), check('fatal-3', 'fail', null, { executionAttempted: false })];
+    expect(summarizePartialPerformanceAudit(partial, 4, 2)).toMatchObject({
+      executed: 1, coveragePercent: 25, fail: 1,
+    });
+    expect(summarizePartialPerformanceAudit(partial, 0, 0).coveragePercent).toBeNull();
   });
 
   it('promotes the worst latency and check status', () => {

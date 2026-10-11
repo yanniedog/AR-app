@@ -3,7 +3,7 @@ import { useCallback, useRef, useState } from 'react';
 export interface PerformanceAuditRunGate {
   /**
    * Changes every time a run releases the gate. Effects that start audits must
-   * depend on it: teardown (rollback restore, report upload, keep-awake
+   * depend on it: teardown (rollback restore, keep-awake
    * release) outlives the audit's terminal state, so a run requested during
    * teardown finds the gate claimed and returns early — and no later
    * audit-state change re-triggers that effect, which would leave the new

@@ -3,7 +3,7 @@ import { strFromU8 } from 'fflate';
 
 import { parseDatesIndex } from '../data/historyDaily';
 import { gunzipCooperatively } from '../data/payload';
-import { normalizeCoreWithIntegrity } from '../data/sectionIntegrity';
+import { normalizeCoreWithIntegrity, sealCoreHistoryAsync } from '../data/sectionIntegrity';
 import { parseJsonHeavy, yieldToUi } from './yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest, ManifestFile } from '../types';
 import type { AppHealthDataSnapshot, AppHealthSourceContract } from './appHealth';
@@ -125,6 +125,7 @@ export async function readLiveAppHealthSnapshot(options: {
   }
 
   const coreRaw = await fetchVerifiedAsset<CorePayload>(coreFile, 'Core asset', onProgress, signal);
+  await sealCoreHistoryAsync(coreRaw, () => yieldToUi(0));
   const coreResult = normalizeCoreWithIntegrity(coreRaw, { coreSha256: coreFile.sha256 });
   await onProgress?.('core:normalized');
   const details = await fetchVerifiedAsset<DetailsPayload>(

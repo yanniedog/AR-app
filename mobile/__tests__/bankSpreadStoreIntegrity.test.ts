@@ -144,6 +144,35 @@ describe('Bank spread store integrity', () => {
     mockWriteBankSpreadHistoryFor.mockResolvedValue(undefined);
   });
 
+  it('reuses a verified in-memory edition but revalidates replacement data and force refreshes', async () => {
+    mockReadBankSpreadHistoryFor.mockResolvedValue(spreadA);
+    const { state, actions } = harness();
+    await actions.ensureBankSpreadHistory();
+    await actions.ensureBankSpreadHistory();
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenCalledTimes(1);
+    expect(Reflect.set(state.bankSpreadHistory!.banks['Example Bank'].gap, '0', 9)).toBe(false);
+    expect(state.bankSpreadHistory!.banks['Example Bank'].gap[0]).toBe(0.02);
+
+    state.bankSpreadHistory = { ...spreadA };
+    await actions.ensureBankSpreadHistory();
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenCalledTimes(2);
+
+    mockDownloadBankSpreadHistory.mockResolvedValue({ bankSpreadHistory: spreadA, verifiedBytes: new Uint8Array([1]) });
+    await actions.ensureBankSpreadHistory({ force: true });
+    expect(mockDownloadBankSpreadHistory).toHaveBeenCalledTimes(1);
+  });
+
+  it('revalidates the spread when either authenticated content hash changes', async () => {
+    mockReadBankSpreadHistoryFor.mockResolvedValue(spreadA);
+    const { state, actions } = harness();
+    await actions.ensureBankSpreadHistory();
+    installGeneration(state, CORE_B, SPREAD_A, spreadA);
+    await actions.ensureBankSpreadHistory();
+    installGeneration(state, CORE_B, SPREAD_B, spreadA);
+    await actions.ensureBankSpreadHistory();
+    expect(mockReadBankSpreadHistoryFor).toHaveBeenCalledTimes(3);
+  });
+
   it('fails closed instead of trusting a captured unbound in-memory fallback', async () => {
     mockDownloadBankSpreadHistory.mockRejectedValue(new Error('offline'));
     const { state, actions } = harness(spreadA);

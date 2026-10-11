@@ -1,32 +1,18 @@
 import type { Href } from 'expo-router';
 
-import type { TabRouteName } from './tabIcons';
+import { TAB_LABELS, TAB_ROUTES, type TabRouteName } from './tabIcons';
 
 export type PrimaryTabRouteName = TabRouteName;
 
-/**
- * Four household-level destinations. The legacy Trends screen remains a route
- * within Changes, while Settings remains an auxiliary destination.
- */
-export const TAB_BAR_ORDER: readonly PrimaryTabRouteName[] = [
-  'index',
-  'browse',
-  'passthrough',
-  'watchlist',
-];
-
-const PRIMARY_TAB_LABELS: Record<PrimaryTabRouteName, string> = {
-  index: 'Today',
-  browse: 'Explore',
-  passthrough: 'Changes',
-  watchlist: 'My rates',
-};
+/** Stable destinations remain visible while users explore their detail pages. */
+export const TAB_BAR_ORDER: readonly PrimaryTabRouteName[] = TAB_ROUTES;
 
 const TAB_HREFS: Record<TabRouteName, Href> = {
   index: '/(tabs)',
-  browse: '/(tabs)/browse',
-  passthrough: '/(tabs)/passthrough',
+  browse: { pathname: '/(tabs)/browse', params: { section: undefined, path: undefined, request: undefined } },
   watchlist: '/(tabs)/watchlist',
+  market: '/(tabs)/market',
+  tools: '/(tabs)/tools',
 };
 
 export function tabHref(route: TabRouteName): Href {
@@ -34,79 +20,42 @@ export function tabHref(route: TabRouteName): Href {
 }
 
 export function primaryTabLabel(route: PrimaryTabRouteName): string {
-  return PRIMARY_TAB_LABELS[route];
+  return TAB_LABELS[route];
 }
 
-/**
- * The primary bar belongs only on destination roots. Focused search, product,
- * comparison, planning, evidence and settings flows rely on stack navigation.
- */
+export function normalizeAppPath(pathname: string): string {
+  const trimmed = pathname.trim().split(/[?#]/, 1)[0] ?? '';
+  const path = trimmed.replace(/^\/\(tabs\)(?=\/|$)/, '') || '/';
+  return path.length > 1 ? path.replace(/\/+$/, '') : path;
+}
+
 export function shouldShowAppTabBar(pathname: string, onboarded: boolean): boolean {
   if (!onboarded) return false;
-  const path = normalizePath(pathname);
-  return (
-    path === '/' ||
-    path === '/browse' ||
-    path === '/passthrough' ||
-    path === '/watchlist'
-  );
+  const path = normalizeAppPath(pathname);
+  return path !== '/compare' && path !== '/onboarding' && !path.startsWith('/onboarding/');
 }
 
-/** Which primary tab owns the current route for highlight state. */
+const ROUTE_OWNERS: Record<string, PrimaryTabRouteName> = {
+  browse: 'browse', categories: 'browse', node: 'browse', search: 'browse',
+  matches: 'browse', banks: 'browse', bank: 'browse', product: 'browse',
+  catalogue: 'browse', compare: 'browse', 'rate-receipt': 'browse',
+  watchlist: 'watchlist', saved: 'watchlist',
+  market: 'market', 'bank-rates': 'market', passthrough: 'market',
+  research: 'market', trends: 'market', 'rba-response': 'market', rba: 'market',
+  tools: 'tools', calculator: 'tools', projections: 'tools',
+  'calculation-receipt': 'tools', profile: 'tools', settings: 'tools',
+  about: 'tools', terms: 'tools', 'third-party-notices': 'tools',
+  'debug-log': 'tools', 'performance-audit': 'tools',
+};
+
+/** Ownership is independent of the journey; stack Back still returns to the caller. */
 export function resolveActiveTab(pathname: string): PrimaryTabRouteName | null {
-  const path = normalizePath(pathname);
-
-  if (
-    path === '/passthrough' ||
-    path.startsWith('/passthrough/') ||
-    path === '/research' ||
-    path.startsWith('/research/') ||
-    path === '/trends' ||
-    path === '/rba-response' ||
-    path.startsWith('/rba-response/') ||
-    path === '/rba' ||
-    path.startsWith('/rba/')
-  ) return 'passthrough';
-  if (path === '/watchlist' || path.startsWith('/watchlist/')) return 'watchlist';
-
-  if (
-    path === '/browse' ||
-    path.startsWith('/browse/') ||
-    path.startsWith('/node') ||
-    path.startsWith('/search') ||
-    path.startsWith('/banks') ||
-    path.startsWith('/bank/') ||
-    path.startsWith('/product/') ||
-    path.startsWith('/compare') ||
-    path.startsWith('/calculator') ||
-    path.startsWith('/projections') ||
-    path.startsWith('/rate-receipt')
-  ) {
-    return 'browse';
-  }
-
+  const path = normalizeAppPath(pathname);
   if (path === '/') return 'index';
-  return null;
+  const root = path.split('/')[1];
+  return Object.hasOwn(ROUTE_OWNERS, root) ? ROUTE_OWNERS[root] : null;
 }
 
-/** True only for the canonical landing route of a visible destination. */
-export function isPrimaryTabRootPath(
-  pathname: string,
-  route: PrimaryTabRouteName,
-): boolean {
-  const path = normalizePath(pathname);
-  if (route === 'index') return path === '/';
-  return path === `/${route}`;
-}
-
-function normalizePath(pathname: string): string {
-  if (!pathname) return '';
-  const trimmed = pathname.trim().split(/[?#]/, 1)[0] ?? '';
-  const withoutGroup = trimmed === '/(tabs)'
-    ? '/'
-    : trimmed.startsWith('/(tabs)/')
-      ? trimmed.slice('/(tabs)'.length)
-      : trimmed;
-  if (withoutGroup.length > 1 && withoutGroup.endsWith('/')) return withoutGroup.slice(0, -1);
-  return withoutGroup;
+export function isPrimaryTabRootPath(pathname: string, route: PrimaryTabRouteName): boolean {
+  return normalizeAppPath(pathname) === (route === 'index' ? '/' : `/${route}`);
 }

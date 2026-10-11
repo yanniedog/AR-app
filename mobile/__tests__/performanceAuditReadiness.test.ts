@@ -76,6 +76,22 @@ class FakeClock implements PerformanceAuditReadinessClock {
 }
 
 describe('PerformanceAuditReadinessRegistry', () => {
+  it('requires graph measurement and counted data, or an explicit measured no-data state', () => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('graph-proof');
+    const surface = registry.registerSurface({ id: 'graphs', probes: [
+      { id: 'chart', kind: 'graphic', status: 'ready' },
+    ] })!;
+    expect(registry.snapshot().blockers.map(({ code }) => code)).toContain('graphic-evidence-missing');
+    registry.updateProbe(surface, 'chart', { expectedCount: 2, actualCount: 2,
+      accessibleSummary: true, layoutMeasured: true });
+    expect(registry.snapshot().ready).toBe(true);
+    registry.updateProbe(surface, 'chart', { expectedCount: 0, actualCount: 0,
+      emptyStateRendered: false });
+    expect(registry.snapshot().ready).toBe(false);
+    registry.updateProbe(surface, 'chart', { emptyStateRendered: true });
+    expect(registry.snapshot().ready).toBe(true);
+  });
   it('waits for a delayed rendered action beyond the quiet window', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
@@ -219,6 +235,8 @@ describe('PerformanceAuditReadinessRegistry', () => {
         renderRevision: 'stage:1',
         expectedCount: 20,
         actualCount: 20,
+        layoutMeasured: true,
+        accessibleSummary: true,
       }],
     });
     expect(surface).not.toBeNull();
@@ -480,7 +498,8 @@ describe('PerformanceAuditReadinessRegistry', () => {
 
     expect(logo.active).toBe(true);
     logo.ready();
-    graphic.ready({ renderRevision: 'draw:complete' });
+    graphic.ready({ renderRevision: 'draw:complete', expectedCount: 1, actualCount: 1,
+      layoutMeasured: true, accessibleSummary: true });
     list.ready({ actualCount: 3 });
     expect(registry.snapshot()).toMatchObject({
       ready: false,

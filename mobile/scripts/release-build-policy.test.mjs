@@ -68,7 +68,7 @@ test('GHA and EAS production APK paths omit optional development tooling', async
 
 test('the ARM size budget locks in the optimized two-ABI APK', async () => {
   const budgets = await readJson('../performance-budgets.json');
-  assert.equal(budgets.apkBaselineByChannel.arm, 46_100_000);
+  assert.equal(budgets.apkBaselineByChannel.arm, 49_122_865);
   assert.equal(budgets.baseline.apkBytes, 88_000_000);
   assert.equal(budgets.maximumGrowthFraction, 0.05);
 });

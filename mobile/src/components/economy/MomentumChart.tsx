@@ -4,12 +4,15 @@ import Svg, { Line, Rect } from 'react-native-svg';
 import { ChartText as SvgText } from '../charts/ChartText';
 
 import type { EconomicMomentumModel } from '../../data/economicModels';
+import { hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText } from '../ui';
 
-export function MomentumChart({ model }: { model: EconomicMomentumModel }) {
+export function MomentumChart({ model, auditRevision = '', onGraphicReady }: {
+  model: EconomicMomentumModel; auditRevision?: string; onGraphicReady?: (evidence: ChartRenderEvidence) => void;
+}) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const labelWidth = Math.min(116, width * 0.34);
@@ -37,7 +40,12 @@ export function MomentumChart({ model }: { model: EconomicMomentumModel }) {
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={auditRevision} width={width} height={height} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => onGraphicReady?.({ revision: auditRevision, expectedCount: model.rows.length,
+              pointCount: Number.isFinite(model.maxAbsChange) && model.maxAbsChange > 0
+                ? model.rows.filter((row) => Number.isFinite(row.change)).length : 0,
+              accessibleSummary: model.summary.trim().length > 0,
+              layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false })}>
             <Line
               x1={zeroX}
               y1={4}

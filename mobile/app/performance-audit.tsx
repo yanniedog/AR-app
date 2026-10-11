@@ -6,6 +6,12 @@ import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react
 import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
+import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
+import {
+  getDebugLogUploadSnapshot,
+  isDebugLogUploadBusy,
+  subscribeDebugLogUpload,
+} from '../src/lib/debugLogSharing';
 import { AppText, Button, Card, Row } from '../src/components/ui';
 import {
   DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS,
@@ -124,6 +130,18 @@ function checkDetail(check: AuditCheck): string {
   if (check.id === 'manifest-network') {
     return `${measuredMs('Request', checkDuration(check))} · HTTP ${check.metrics.statusCode ?? '—'}`;
   }
+  if (check.id === 'external-link-inventory') {
+    return `${check.metrics.uniqueDestinations ?? 0} destinations · ${check.metrics.lenderDetailsLoaded ? 'Lender details included' : 'Lender details unavailable'}`;
+  }
+  if (check.id.startsWith('external-link-')) {
+    return [
+      `${check.metrics.host ?? 'Invalid destination'}${check.metrics.destinationPath ?? ''}`,
+      `Address: ${check.metrics.urlValidation ?? 'unverified'}`,
+      `Browser: ${check.metrics.browserHandler ?? 'unverified'}`,
+      `Website: ${check.metrics.httpReachability ?? 'unverified'}`,
+      check.metrics.reachabilityDetail,
+    ].filter(Boolean).join(' · ');
+  }
   if (check.id.startsWith('section-model-')) {
     const rows = metricNumber(check, 'rows');
     return [
@@ -152,6 +170,8 @@ function checkDetail(check: AuditCheck): string {
 function PerformanceAuditScreenInner() {
   const theme = useTheme();
   const state = usePerformanceAuditState();
+  useSyncExternalStore(subscribeDebugLogUpload, getDebugLogUploadSnapshot, getDebugLogUploadSnapshot);
+  const uploadBusy = isDebugLogUploadBusy();
   const apkDownload = useApkDownloadState();
   const updateBlocksAudit = blocksPerformanceAudit(apkDownload);
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
@@ -235,7 +255,7 @@ function PerformanceAuditScreenInner() {
   }, [hangTimeoutLoaded, hangTimeoutSeconds]);
 
   const runAudit = async (mode: 'local' | 'live-source') => {
-    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode) return;
+    if (!hangTimeoutLoaded || hangTimeoutSeconds == null || auditPreflightMode || isDebugLogUploadBusy()) return;
     setAuditPreflightMode(mode);
     try {
       let currentDownload: Awaited<ReturnType<typeof getHydratedApkDownloadSnapshot>>;
@@ -336,15 +356,15 @@ function PerformanceAuditScreenInner() {
       <Card style={{ gap: 12 }}>
         <AppText variant="h2">App health audit</AppText>
         <AppText variant="small" color="textMuted">
-          Checks responsiveness, data integrity, missing assets and whether loaded information
-          actually reaches the display. Your settings and saved rates are restored afterward.
+          Checks responsiveness, data integrity, external links and whether graphs and loaded
+          information actually render. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
           When results are ready, you can separately review and share a byte-capped deidentified
           report. Raw debug logs are never included in that report.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          The screen stays awake during visual checks. Leaving the app pauses the run and it
+          The screen stays awake throughout the audit. Locking the phone or leaving the app pauses the run and it
           continues where it left off when you return — route and animation timings cannot be
           measured while the app is off screen.
         </AppText>
@@ -393,24 +413,27 @@ function PerformanceAuditScreenInner() {
           </AppText>
         </View>
         <Button
-          title={report ? 'Run local audit again' : 'Run local audit'}
+          title={report ? 'Run audit and upload log again' : 'Run audit and upload log'}
           icon="pulse-outline"
           loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
-          disabled={!hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('local')}
         />
         <Button
-          title="Run with live-source check"
+          title="Run with live data and link checks"
           icon="cloud-download-outline"
           variant="secondary"
           loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
-          disabled={running || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
-          Local mode blocks fetch and XMLHttpRequest. Live-source mode may read only the public
-          Australian Rates manifest, dates index and manifest-authenticated release files. Neither
-          mode uploads diagnostics or writes to the clipboard.
+          Local checks validate link addresses and installed browser handlers. Live checks also
+          contact approved websites; blocked sites, timeouts and unchecked links stay unverified.
+          Graph checks require plotted data and measured layout, or a visible no-data state.
+          After the audit finishes,
+          the full log and complete report are uploaded to paste and the verified link is copied
+          to your clipboard. Anyone with the link can read the log.
         </AppText>
         {updateBlocksAudit ? (
           <AppText variant="tiny" color="danger" accessibilityLiveRegion="polite">
@@ -419,6 +442,8 @@ function PerformanceAuditScreenInner() {
           </AppText>
         ) : null}
       </Card>
+
+      <DebugLogUploadStatus sessionId={state.sessionId} />
 
       {state.status === 'cancelled' ? (
         <Card style={{ gap: 6 }}>
@@ -512,7 +537,7 @@ function PerformanceAuditScreenInner() {
               App v{report.environment.appVersion} (build {report.environment.buildVersion})
             </AppText>
             <AppText variant="small" color="textMuted">
-              Results are stored locally. No report or log was uploaded automatically.
+              Results are saved locally. The log upload and clipboard status are shown above.
             </AppText>
             <Button
               title="Share deidentified report"

@@ -1,6 +1,40 @@
 import { trustedExternalUrl } from '../src/lib/trustedExternalUrl';
 
 describe('trustedExternalUrl', () => {
+  it('uses standards parsing even when the global URL is React Native\'s getter-only fallback', () => {
+    const original = globalThis.URL;
+    const native = jest.requireActual('react-native/Libraries/Blob/URL').URL;
+    globalThis.URL = native;
+    try {
+      const source = 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv?format=csv#forecast';
+      expect(trustedExternalUrl({ url: source, purpose: 'official_economic_source', label: 'RBA survey' })).toMatchObject({
+        ok: true,
+        url: 'https://www.rba.gov.au/statistics/tables/csv/j1-cash-rate.csv?format=csv',
+      });
+      expect(trustedExternalUrl({ url: 'https://www.rba.gov.au:443/statistics/tables/', purpose: 'official_economic_source', label: 'RBA' })).toMatchObject({
+        ok: true, url: 'https://www.rba.gov.au/statistics/tables/',
+      });
+      expect(trustedExternalUrl({ url: 'https://www.rba.gov.au/?%61ccess_token=private', purpose: 'official_economic_source', label: 'RBA' }).ok).toBe(false);
+    } finally {
+      globalThis.URL = original;
+    }
+  });
+
+  it('allows only the ASX tracker page for the market-source purpose', () => {
+    const path = '/markets/trade-our-derivatives-market/futures-market/rba-rate-tracker';
+    for (const host of ['asx.com.au', 'www.asx.com.au']) {
+      expect(trustedExternalUrl({ url: `https://${host}${path}`, purpose: 'official_market_source', label: 'ASX tracker' }).ok).toBe(true);
+    }
+    for (const url of [
+      'https://www.asx.com.au/',
+      `https://other.asx.com.au${path}`,
+      `https://www.asx.com.au${path}?redirect=https://example.com`,
+      'https://www.asx.com.au/content/dam/asx/data/market_exp.csv',
+    ]) {
+      expect(trustedExternalUrl({ url, purpose: 'official_market_source', label: 'ASX tracker' }).ok).toBe(false);
+    }
+    expect(trustedExternalUrl({ url: `https://www.asx.com.au${path}`, purpose: 'official_economic_source', label: 'ASX tracker' }).ok).toBe(false);
+  });
   it('accepts only purpose-matched official destinations and strips fragments', () => {
     expect(trustedExternalUrl({
       url: 'https://www.rba.gov.au/statistics/tables/#cash-rate',

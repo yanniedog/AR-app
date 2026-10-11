@@ -7,9 +7,15 @@ import { canonicalTermsComparison } from '../../data/canonicalTermsComparison';
 import { useStore } from '../../data/store';
 import { AppText, Button, Disclosure } from '../ui';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 
 function RevisionCell({ terms, revisions }: { terms: ProductTerms; revisions: TermRevision[] }) {
   const { requestExternalUrl } = useTrustedExternalUrl();
+  useAuditExternalLinks(revisions.flatMap((revision) => revision.clause_ids.flatMap((id) => {
+    const clause = terms.clauses.find((item) => item.clause_id === id);
+    const document = terms.documents.find((item) => item.document_version_id === clause?.document_version_id);
+    return document ? [{ url: document.source_url, label: revision.parameter_key, purpose: 'lender_source' as const }] : [];
+  })));
   return <View style={{ gap: 6 }}>
     {revisions.length > 1 && <AppText variant="small">Multiple revisions in this scope; no single value selected.</AppText>}
     {revisions.map(revision => <View key={revision.term_revision_id} style={{ gap: 4 }}>

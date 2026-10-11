@@ -15,7 +15,7 @@ import {
   type UpdateCheckResult,
 } from '../lib/appUpdate';
 import { IDLE_APK_DOWNLOAD, updateBannerCopy } from '../lib/appUpdateDownloadLogic';
-import { getPerformanceAuditState, subscribePerformanceAudit } from '../lib/performanceAudit';
+import { getPerformanceAuditState, isPerformanceAuditActive, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { shouldShowUpdateBanner } from '../lib/updateBanner';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Row } from './ui';
@@ -57,12 +57,11 @@ export function useAppUpdateBanner(enabled = true): AppUpdateBannerState {
   const wifiOnly = useStore((s) => s.prefs.apkUpdatesWifiOnly);
   const autoDownload = useStore((s) => s.prefs.apkUpdatesAutoDownload);
   const setPref = useStore((s) => s.setPref);
-  const auditState = useSyncExternalStore(
+  const auditOwnsNetwork = useSyncExternalStore(
     subscribePerformanceAudit,
-    getPerformanceAuditState,
-    getPerformanceAuditState,
+    isPerformanceAuditActive,
+    isPerformanceAuditActive,
   );
-  const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
   const [result, setResult] = useState<UpdateCheckResult | null>(null);
   const [download, setDownload] = useState<ApkDownloadSnapshot>(() => ({
     ...IDLE_APK_DOWNLOAD,

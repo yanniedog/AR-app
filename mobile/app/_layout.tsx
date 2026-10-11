@@ -1,4 +1,5 @@
 import * as Application from 'expo-application';
+import { Header, getHeaderTitle } from '@react-navigation/elements';
 import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { Stack, router, usePathname, type Href } from 'expo-router';
@@ -30,6 +31,8 @@ import {
   NavigationMenuProvider,
 } from '../src/components/AppNavigationMenu';
 import { AppTabBar } from '../src/components/AppTabBar';
+import { AppBreadcrumbBar } from '../src/components/AppBreadcrumbBar';
+import { NavigatorSafeArea } from '../src/components/NavigatorSafeArea';
 import {
   AppUpdateBanner,
   AppUpdateBannerLayoutProvider,
@@ -54,6 +57,7 @@ import { shouldRefreshOnResume } from '../src/data/resumeRefresh';
 import { CURRENT_PRIVACY_CHOICE_VERSION } from '../src/data/storeTypes';
 import { androidStackScreenOptions } from '../src/lib/androidChrome';
 import { shouldShowAppTabBar } from '../src/lib/tabRouting';
+import { shouldShowBreadcrumbs } from '../src/lib/breadcrumbs';
 import { useReducedMotion } from '../src/hooks/useReducedMotion';
 import { debugLog, formatErrorTrace, installGlobalErrorHandlers } from '../src/lib/debugLog';
 import { logSwallowedError } from '../src/lib/degradationLog';
@@ -64,8 +68,7 @@ import {
 import { ThemeProvider, useTheme } from '../src/theme/ThemeProvider';
 import { HEADER_TYPOGRAPHY } from '../src/theme/typography';
 
-// Gives cold-start deep links a real back destination instead of relying on
-// the bottom bar that focused routes deliberately hide.
+// Cold-start deep links keep a real Home destination for the native Back action.
 export const unstable_settings = {
   initialRouteName: 'index',
 };
@@ -263,9 +266,10 @@ function RootNavigator() {
   const showUpdateBanner = updateBanner.visible && updateBanner.remote != null;
 
   const privacyChoiceCurrent = privacyChoiceVersion === CURRENT_PRIVACY_CHOICE_VERSION;
-  // Reserve the tab-bar strip only on the four destination roots. Focused
-  // stack routes and auxiliary settings use the full viewport.
+  // Section navigation stays visible throughout normal journeys. Comparison
+  // uses a focused modal; onboarding precedes the main navigation shell.
   const tabBarVisible = shouldShowAppTabBar(pathname, onboarded);
+  const breadcrumbVisible = shouldShowBreadcrumbs(pathname, onboarded);
 
   useLayoutEffect(() => {
     if (!hydrated) return;
@@ -445,6 +449,8 @@ function RootNavigator() {
           >
             <StatusBar style={theme.dark ? 'light' : 'dark'} />
             <NavigationMenuProvider>
+            <AppBreadcrumbBar />
+            <NavigatorSafeArea topInsetConsumed={showUpdateBanner || breadcrumbVisible}>
             <View style={{ flex: 1 }}>
               <Stack
                 screenOptions={{
@@ -455,58 +461,71 @@ function RootNavigator() {
                     ...HEADER_TYPOGRAPHY,
                   },
                   headerTintColor: theme.colors.primary,
+                  headerBackTitle: 'Back',
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: theme.colors.bg },
                   ...androidHeader,
-                  ...(showUpdateBanner ? { headerStatusBarHeight: 0 } : {}),
+                  // Native Android toolbars force a window-level top inset in
+                  // edge-to-edge mode. A JS header respects the consumed inset.
+                  header: showUpdateBanner || breadcrumbVisible
+                    ? ({ options, route, back }) => (
+                      <Header
+                        {...options}
+                        title={getHeaderTitle(options, route.name)}
+                        back={options.headerBackVisible === false ? undefined : back && {
+                          ...back, title: options.headerBackTitle ?? back.title,
+                        }}
+                        headerStatusBarHeight={0}
+                      />
+                    )
+                    : undefined,
                   headerRight: () => <NavigationMenuButton />,
                 }}
               >
               <Stack.Screen name="index" options={{ headerShown: false }} />
               <Stack.Screen name="onboarding" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="node" options={{ title: 'Explore' }} />
+              <Stack.Screen name="node" options={{ title: 'Categories' }} />
+              <Stack.Screen name="categories" options={{ title: 'Product categories' }} />
+              <Stack.Screen name="matches" options={{ title: 'Matched rates' }} />
+              <Stack.Screen name="catalogue" options={{ title: 'Products without listed rates' }} />
+              <Stack.Screen name="bank-rates" options={{ title: 'Bank rates over time' }} />
+              <Stack.Screen name="passthrough" options={{ title: 'Recent rate changes' }} />
               <Stack.Screen name="search" options={{ title: 'Search' }} />
               <Stack.Screen name="product/[key]" options={{ title: 'Product', headerBackTitle: 'Back' }} />
               <Stack.Screen name="bank/[provider]" options={{ title: 'Bank' }} />
               <Stack.Screen name="banks" options={{ title: 'Banks' }} />
               <Stack.Screen name="compare" options={{ title: 'Compare', presentation: 'modal' }} />
-              <Stack.Screen name="calculator" options={{ title: 'My scenario' }} />
-              <Stack.Screen name="projections" options={{ title: 'What if rates change?' }} />
-              <Stack.Screen name="rba-response" options={{ title: 'Bank response', headerBackTitle: 'Changes' }} />
+              <Stack.Screen name="calculator" options={{ title: 'Check my rate' }} />
+              <Stack.Screen name="calculation-receipt" options={{ title: 'Calculation receipt' }} />
+              <Stack.Screen name="projections" options={{ title: 'Project my balance' }} />
+              <Stack.Screen name="rba-response" options={{ title: 'Bank response' }} />
               <Stack.Screen
                 name="rate-receipt"
-                options={{ title: 'Bank-call brief', headerBackTitle: 'Product' }}
+                options={{ title: 'Bank-call brief' }}
               />
               <Stack.Screen
                 name="rba"
-                options={{ title: 'Why rates move', animation: 'none', headerShown: false }}
+                options={{ title: 'RBA rates and outlook', animation: 'none' }}
               />
               <Stack.Screen name="profile" options={{ title: 'Your profile' }} />
               <Stack.Screen name="settings" options={{ title: 'Settings' }} />
-              <Stack.Screen name="research" options={{ title: 'Rate research', headerBackTitle: 'Changes' }} />
+              <Stack.Screen name="research" options={{ title: 'Market research' }} />
               <Stack.Screen name="trends" options={{ headerShown: false }} />
-              <Stack.Screen name="about" options={{ title: 'About' }} />
+              <Stack.Screen name="about" options={{ title: 'About and help' }} />
               <Stack.Screen
                 name="third-party-notices"
-                options={{ title: 'Open-source notices', headerBackTitle: 'About' }}
+                options={{ title: 'Open-source notices' }}
               />
               <Stack.Screen
                 name="performance-audit"
-                options={{ title: 'App health audit', headerBackTitle: 'About' }}
+                options={{ title: 'App health audit' }}
               />
-              <Stack.Screen name="debug-log" options={{ title: 'Debug log', headerBackTitle: 'About' }} />
-              <Stack.Screen name="terms" options={{ title: 'Terms', headerBackTitle: 'About' }} />
+              <Stack.Screen name="debug-log" options={{ title: 'Debug log' }} />
+              <Stack.Screen name="terms" options={{ title: 'Terms' }} />
               </Stack>
-              {appReady ? (
-                <BrandedSplashOverlay
-                  visible={overlayVisible}
-                  morphTarget={morphTarget}
-                  onboarded={onboarded}
-                  onMorphComplete={handleMorphComplete}
-                />
-              ) : null}
             </View>
+            </NavigatorSafeArea>
             <AppTabBar />
             <AppNavigationMenu />
             </NavigationMenuProvider>
@@ -518,6 +537,16 @@ function RootNavigator() {
             onAccept={acceptDiagnostics}
             onDecline={declineDiagnostics}
           />
+          {/* Splash targets use measureInWindow; keep the overlay above every
+              layout strip in the root coordinate space as well. */}
+          {appReady ? (
+            <BrandedSplashOverlay
+              visible={overlayVisible}
+              morphTarget={morphTarget}
+              onboarded={onboarded}
+              onMorphComplete={handleMorphComplete}
+            />
+          ) : null}
         </View>
       </AppUpdateBannerLayoutProvider>
     </SplashMorphProvider>

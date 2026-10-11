@@ -4,6 +4,7 @@ import type { CorePayload, DetailsPayload, Manifest, ProductDetail, RateRow, Sec
 import type { CoreIntegrityContext } from '../sectionIntegrity';
 import { verifiedCatalogueDetails } from '../detailsCatalogue';
 import { revisionTag } from '../payloadRevision';
+import { payloadBundleIdentity } from '../payloadBundleIdentity';
 import { isValidCalendarDate } from '../../lib/calendarDate';
 import { downloadInflate } from '../payload';
 import { canonical, hashText } from '../../lib/productTermsEngine/validation';
@@ -22,11 +23,7 @@ function verifyContext(context: EligibilityContext, target: EligibilityTarget) {
   return { m, c, d };
 }
 /** Producer bundle preimage: transport URLs and publication envelope fields are excluded. */
-export function eligibilityBundleIdentity(m: Manifest) {
-  const value = Object.fromEntries(Object.entries(m).filter(([key]) => !['generated_at', 'tag', 'payload_revision', 'files'].includes(key)));
-  value.files = Object.fromEntries(Object.entries(m.files).map(([key, file]) => [key, Object.fromEntries(Object.entries(file).filter(([field]) => field !== 'url'))]));
-  return hashText(canonical(value));
-}
+export const eligibilityBundleIdentity = payloadBundleIdentity;
 function namespace(m: Manifest) {
   if (utf8ToBytes(JSON.stringify(m)).length > 64 * 1024) throw new Error('Manifest exceeds eligibility limit');
   assertEligibilityWire(m.executable_v2, 'namespace'); const n = m.executable_v2!;

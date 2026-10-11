@@ -16,6 +16,10 @@ interface TrustedExternalUrlContextValue {
 
 const TrustedExternalUrlContext = createContext<TrustedExternalUrlContextValue | null>(null);
 
+// Linking.openURL calls instance methods on native and web. Passing the method
+// itself loses its receiver and rejects every approved destination.
+const openExternalUrl = (url: string): Promise<unknown> => Linking.openURL(url);
+
 type DialogState =
   | { kind: 'confirm'; request: TrustedExternalUrlRequest; trusted: Extract<TrustedExternalUrlResult, { ok: true }> }
   | { kind: 'error'; message: string };
@@ -129,7 +133,7 @@ export function ExternalLinkConfirmation({
 
 export function TrustedExternalUrlProvider({
   children,
-  openUrl = Linking.openURL,
+  openUrl = openExternalUrl,
 }: {
   children: ReactNode;
   openUrl?: (url: string) => Promise<unknown>;

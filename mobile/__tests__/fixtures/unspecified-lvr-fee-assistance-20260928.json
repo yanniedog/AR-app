@@ -1,0 +1,28 @@
+{
+  "provenance": {
+    "url": "https://github.com/yanniedog/AR-local/releases/download/app-payload-2026-09-28-r000001/core-2026-09-28-254bf68a15a3.json.gz",
+    "sha256": "254bf68a15a30b7f1245ac3bdd6b37b58a70b25bee60c631c4dbbbecd8ffbf4a",
+    "run_date": "2026-09-28"
+  },
+  "row": {
+    "provider": "People First and Heritage Bank",
+    "product_id": "22339aa7-2f1c-42c9-9db9-011f486c2871",
+    "product_key": "People First and Heritage Bank|22339aa7-2f1c-42c9-9db9-011f486c2871|RESIDENTIAL_MORTGAGES|Fee Assistance Loan - Sub",
+    "product_name": "Fee Assistance Loan - Sub",
+    "category": "RESIDENTIAL_MORTGAGES",
+    "rate": "0",
+    "rate_type": "VARIABLE",
+    "repayment_type": "PRINCIPAL_AND_INTEREST",
+    "loan_purpose": "OWNER_OCCUPIED",
+    "lvr_tier": "lvr_unspecified",
+    "ribbon_normalized": true,
+    "security_purpose": "owner_occupied",
+    "ribbon_repayment_type": "principal_and_interest",
+    "ribbon_rate_structure": "variable",
+    "feature_set": "basic",
+    "account_class": "standard",
+    "rate_index": 1,
+    "last_updated": "2026-05-04T14:35:32.505Z",
+    "taxonomy_path": "HOME_LOAN.OO.PI.VARIABLE.LVR_UNSP"
+  }
+}

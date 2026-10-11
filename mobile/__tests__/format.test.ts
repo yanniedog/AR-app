@@ -255,7 +255,7 @@ describe('format', () => {
       account_class: 'standard',
     } as RateRow;
     const occupationLenderGenericTitle = {
-      provider: 'Australian Military Bank',
+      provider: 'Police Bank',
       product_name: 'RateSaver Home Loan',
       account_class: 'standard',
       product_key: 'amb|ratesaver',

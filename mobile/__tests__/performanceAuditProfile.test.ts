@@ -1,4 +1,4 @@
-import { canPrepareAuditSearchIndex } from '../src/lib/performanceAuditProfile';
+import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../src/lib/performanceAuditProfile';
 import type { Manifest } from '../src/types';
 import { SECTION_ORDER } from '../src/constants';
 import { DEFAULT_PREFS, type Prefs } from '../src/data/storeTypes';
@@ -9,6 +9,14 @@ import {
 } from '../src/lib/performanceAuditProfile';
 
 describe('maximum performance audit profile', () => {
+  it('accepts only an explicitly unavailable offline index as basic-search coverage', () => {
+    expect(auditSearchUsesBasicFallback(true, 'unavailable', false)).toBe(true);
+    expect(auditSearchUsesBasicFallback(false, 'unavailable', false)).toBe(false);
+    expect(auditSearchUsesBasicFallback(true, 'unavailable', true)).toBe(false);
+    for (const status of ['idle', 'loading', 'error', 'ready'] as const) {
+      expect(auditSearchUsesBasicFallback(true, status, false)).toBe(false);
+    }
+  });
   it('enables every safe local feature and section', () => {
     const profile = maximumPerformanceAuditPrefs(DEFAULT_PREFS);
     expect(MAXIMUM_PERFORMANCE_AUDIT_PROFILE_ID).toBe('maximum-safe-coverage-v1');

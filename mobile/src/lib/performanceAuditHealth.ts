@@ -122,6 +122,8 @@ export function appHealthDataSnapshot(
 
 interface ParsedProbe {
   surfaceId: string;
+  probeId: string;
+  required: boolean;
   kind: 'data' | 'list' | 'logo' | 'graphic' | 'layout';
   ready: boolean;
   actual: number | null;
@@ -136,7 +138,7 @@ interface ParsedProbe {
 function parseProbe(line: string): ParsedProbe | null {
   const parts = line.split(':');
   if (parts.length < 5) return null;
-  const [surfaceId, , kind, status, counts] = parts;
+  const [surfaceId, probeId, kind, status, counts] = parts;
   if (!['data', 'list', 'logo', 'graphic', 'layout'].includes(kind)) return null;
   const match = /^(\d+)\/(\d+)$/.exec(counts);
   const fallback = parts
@@ -156,6 +158,8 @@ function parseProbe(line: string): ParsedProbe | null {
     .find((value): value is string => value != null);
   return {
     surfaceId,
+    probeId,
+    required: !parts.includes('required=0'),
     kind: kind as ParsedProbe['kind'],
     ready: status === 'ready',
     actual: match ? Number(match[1]) : null,
@@ -202,9 +206,12 @@ function evidenceFor(probe: ParsedProbe): AppHealthDisplayEvidence[] {
   if (probe.kind === 'graphic') {
     return [{
       role: 'chart',
-      modelPointCount: expected,
-      renderedPointCount: actual,
+      modelPointCount: probe.expected ?? 0,
+      renderedPointCount: probe.actual ?? 0,
       accessibleSummary: probe.accessibleSummary === true,
+      layoutMeasured: probe.layoutMeasured === true,
+      emptyStateRendered: probe.emptyStateRendered === true,
+      unverifiedCount: !probe.ready || probe.actual == null || probe.expected == null ? 1 : 0,
     }];
   }
   return [{
@@ -229,7 +236,10 @@ function observedEvidenceCount(evidence: AppHealthDisplayEvidence): number {
 
 function observedEvidenceQuality(evidence: AppHealthDisplayEvidence): number {
   switch (evidence.role) {
-    case 'chart': return evidence.accessibleSummary ? 1 : 0;
+    case 'chart': return evidence.layoutMeasured &&
+      ((evidence.modelPointCount > 0 && evidence.accessibleSummary) ||
+       (evidence.modelPointCount === 0 && evidence.emptyStateRendered)) &&
+      !evidence.unverifiedCount ? 1 : 0;
     case 'critical-layout': return evidence.measured ? 1 : 0;
     case 'empty-state': return evidence.rendered === evidence.expected ? 1 : 0;
     case 'logo': return evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
@@ -244,12 +254,32 @@ export function appHealthDisplayObservations(
   checks: readonly AuditCheck[],
 ): AppHealthSurfaceObservation[] {
   const bySurface = new Map<string, Map<AppHealthDisplayRole, AppHealthDisplayEvidence>>();
+  const chartsBySurface = new Map<string, Map<string, ParsedProbe>>();
   for (const check of checks) {
     const raw = check.metrics.readinessEvidence;
     if (typeof raw !== 'string') continue;
-    for (const line of raw.split(' | ')) {
+    const graphEvidence = typeof check.metrics.graphicEvidence === 'string'
+      ? check.metrics.graphicEvidence : '';
+    for (const line of `${raw} | ${graphEvidence}`.split(' | ')) {
       const probe = parseProbe(line);
       if (!probe) continue;
+      if (probe.kind === 'graphic') {
+        // A closed optional chart is not a graph the journey expected to show.
+        if (!probe.required && probe.expected === 0 && probe.actual === 0 &&
+            probe.emptyStateRendered !== true) continue;
+        const charts = chartsBySurface.get(probe.surfaceId) ?? new Map<string, ParsedProbe>();
+        const prior = charts.get(probe.probeId);
+        const valid = (entry: ParsedProbe) => entry.ready && entry.actual != null &&
+          entry.expected != null && entry.actual === entry.expected &&
+          entry.layoutMeasured === true && (entry.expected > 0
+            ? entry.accessibleSummary === true : entry.emptyStateRendered === true);
+        // A later successful visit cannot erase a missing graph observed earlier.
+        if (!prior || (valid(prior) && (!valid(probe) ||
+            (prior.expected !== 0 && probe.expected === 0)))) charts.set(probe.probeId, probe);
+        chartsBySurface.set(probe.surfaceId, charts);
+        if (!bySurface.has(probe.surfaceId)) bySurface.set(probe.surfaceId, new Map());
+        continue;
+      }
       const roles = bySurface.get(probe.surfaceId) ?? new Map();
       for (const evidence of evidenceFor(probe)) {
         const prior = roles.get(evidence.role);
@@ -268,6 +298,20 @@ export function appHealthDisplayObservations(
       }
       bySurface.set(probe.surfaceId, roles);
     }
+  }
+  for (const [surfaceId, charts] of chartsBySurface) {
+    const probes = [...charts.values()];
+    bySurface.get(surfaceId)!.set('chart', {
+      role: 'chart',
+      modelPointCount: probes.reduce((sum, probe) => sum + (probe.expected ?? 0), 0),
+      renderedPointCount: probes.reduce((sum, probe) => sum + (probe.actual ?? 0), 0),
+      accessibleSummary: probes.every((probe) => probe.expected === 0 || probe.accessibleSummary === true),
+      layoutMeasured: probes.every((probe) => probe.layoutMeasured === true),
+      emptyStateRendered: probes.every((probe) => probe.expected !== 0 || probe.emptyStateRendered === true),
+      unverifiedCount: probes.filter((probe) => !probe.ready || probe.actual == null ||
+        probe.expected == null || probe.actual !== probe.expected).length,
+      unavailableCount: probes.filter((probe) => probe.expected === 0 && probe.emptyStateRendered === true).length,
+    });
   }
   return [...bySurface].map(([surfaceId, roles]) => ({
     surfaceId,
@@ -352,7 +396,7 @@ export function buildIntegratedAppHealthReport(input: {
       'Display checks use screen probes captured during this run; a physical-device review is still required for visual polish and assistive technology.',
       input.mode === 'local'
         ? 'Local mode performs no network transport.'
-        : 'Live-source mode permits only the configured public manifest, dates index and manifest-authenticated release assets.',
+        : 'Live-source mode also checks exact approved external destinations with bounded HEAD requests; blocked sites and timeouts remain unverified.',
     ],
   });
 }

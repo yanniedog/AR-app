@@ -17,6 +17,7 @@ import { isLoanSection, moveTone } from '../../lib/moveSemantics';
 import type { HistoryWindow, RbaEntry, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartSliceControls, useChartScrub } from '../charts/ChartSliceControls';
 import { AppText, Row } from '../ui';
 
@@ -46,7 +47,7 @@ export function MarketSeismograph({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
-  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
+  onGraphicReadiness?: (state: ChartRenderEvidence) => void;
   height?: number;
 }) {
   const theme = useTheme();
@@ -77,7 +78,10 @@ export function MarketSeismograph({
   });
   if (!model) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {
+        if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
+          accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+      }}>
         Move activity appears here as the daily feed accumulates.
       </AppText>
     );
@@ -119,9 +123,7 @@ export function MarketSeismograph({
         onLayout={(event) => {
           const nextWidth = event.nativeEvent.layout.width;
           setWidth(nextWidth);
-          if (nextWidth > 0 && auditRevision) {
-            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
-          }
+
         }}
         onTouchStart={scrub.onTouchStart}
         onTouchMove={scrub.onTouchMove}
@@ -142,7 +144,13 @@ export function MarketSeismograph({
         style={{ width: '100%', height }}
       >
         {width > 0 ? (
-          <Svg width={width} height={height}>
+          <Svg key={auditRevision} width={width} height={height}
+            onLayout={(event) => {
+              if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: model.days.length,
+                pointCount: Number.isFinite(scale) ? model.days.filter((day) => hasFiniteChartDate(day.date) &&
+                  [day.hikeBps, day.cutBps, day.hikes, day.cuts, day.mixed].every(Number.isFinite)).length : 0,
+                accessibleSummary: true, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false });
+            }}>
             <Line x1={padL} y1={midY} x2={width - padR} y2={midY} stroke={theme.colors.border} strokeWidth={1} />
             {model.days.map((d, i) => {
               const x = xAt(i);

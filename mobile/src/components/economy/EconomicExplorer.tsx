@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
@@ -16,6 +16,7 @@ import {
   type EconomicWindow,
 } from '../../data/economicModels';
 import { formatRunDate } from '../../data/format';
+import { hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import type { RbaEntry } from '../../types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { AppText, Chip, Row } from '../ui';
@@ -41,7 +42,7 @@ export interface EconomicExplorerProps {
   window?: EconomicWindow;
   onWindowChange?: (window: EconomicWindow) => void;
   selectionStep?: number;
-  onGraphicReady?: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
+  onGraphicReady?: (result: ChartRenderEvidence) => void;
 }
 
 function signalColor(
@@ -165,9 +166,14 @@ function MiniTile({
   );
 }
 
-function EmptyLens() {
+function EmptyLens({ auditRevision = '', onGraphicReady }: {
+  auditRevision?: string; onGraphicReady?: (evidence: ChartRenderEvidence) => void;
+}) {
   return (
-    <AppText variant="small" color="textMuted">
+    <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {
+      onGraphicReady?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
+        accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+    }}>
       This view needs more official observations.
     </AppText>
   );
@@ -234,15 +240,7 @@ export function EconomicExplorer({
     if (controlledLens == null) setLocalExpanded(id);
     onLensChange?.(id);
   };
-  const pointCount = data.indicators.reduce((count, indicator) => count + indicator.points.length, 0);
   const graphicRevision = `${data.checkedAt || data.fetchedAt}:${expanded}:${window}:${selectionStep ?? 0}`;
-  useEffect(() => {
-    if (!expanded) return;
-    const frame = requestAnimationFrame(() => {
-      onGraphicReady?.({ revision: graphicRevision, pointCount, accessibleSummary: true });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [expanded, graphicRevision, onGraphicReady, pointCount]);
 
   const indicatorTiles = data.indicators.map((indicator) => {
     const latest = indicator.points[indicator.points.length - 1];
@@ -335,7 +333,8 @@ export function EconomicExplorer({
       ) : null}
 
       {expanded && data.indicators.some((item) => item.id === expanded) ? (
-        <IndicatorExpanded data={data} id={expanded as EconomicIndicatorId} window={window} selectionStep={selectionStep} />
+        <IndicatorExpanded data={data} id={expanded as EconomicIndicatorId} window={window} selectionStep={selectionStep}
+          auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
       ) : null}
 
       {expanded === 'compare' ? (
@@ -360,20 +359,21 @@ export function EconomicExplorer({
               targetBand={comparison.targetBand}
               accessibilitySummary={comparison.summary}
               selectionStep={selectionStep}
+              auditRevision={graphicRevision} onGraphicReady={onGraphicReady}
             />
           </ExpandedDetail>
         ) : (
-          <EmptyLens />
+          <EmptyLens auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
         )
       ) : null}
 
       {expanded === 'momentum' ? (
         momentum ? (
           <ExpandedDetail title="Momentum" detail="Recent percentage-point change">
-            <MomentumChart model={momentum} />
+            <MomentumChart model={momentum} auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
           </ExpandedDetail>
         ) : (
-          <EmptyLens />
+          <EmptyLens auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
         )
       ) : null}
 
@@ -408,13 +408,14 @@ export function EconomicExplorer({
               holdSeriesId="actual"
               accessibilitySummary={policy.summary}
               selectionStep={selectionStep}
+              auditRevision={graphicRevision} onGraphicReady={onGraphicReady}
             />
             <AppText variant="tiny" color="textFaint" style={{ marginTop: 5 }}>
               Solid = official cash-rate history · dashed = survey median, not a probability · hollow diamonds = held
             </AppText>
           </ExpandedDetail>
         ) : (
-          <EmptyLens />
+          <EmptyLens auditRevision={graphicRevision} onGraphicReady={onGraphicReady} />
         )
       ) : null}
     </View>
@@ -426,16 +427,20 @@ function IndicatorExpanded({
   id,
   window,
   selectionStep,
+  auditRevision,
+  onGraphicReady,
 }: {
   data: EconomicOutlookPayload;
   id: EconomicIndicatorId;
   window: EconomicWindow;
   selectionStep?: number;
+  auditRevision?: string;
+  onGraphicReady?: (evidence: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const indicator = useMemo(() => indicatorHistoryModel(data, id, window), [data, id, window]);
   const live = data.indicators.find((item) => item.id === id);
-  if (!indicator || !live) return <EmptyLens />;
+  if (!indicator || !live) return <EmptyLens auditRevision={auditRevision} onGraphicReady={onGraphicReady} />;
   const color = signalColor(live.signal.direction, theme);
   return (
     <ExpandedDetail
@@ -452,6 +457,7 @@ function IndicatorExpanded({
         targetBand={indicator.targetBand}
         accessibilitySummary={indicator.summary}
         selectionStep={selectionStep}
+        auditRevision={auditRevision} onGraphicReady={onGraphicReady}
       />
       <AppText variant="tiny" color="textMuted" style={{ marginTop: 6 }}>
         {live.signal.explanation}

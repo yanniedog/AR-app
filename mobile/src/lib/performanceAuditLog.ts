@@ -19,6 +19,8 @@ const AUDIT_PROOF_METRIC_KEYS = [
   'executionAttempted',
   'actionInvoked',
   'actionCompleted',
+  'searchMode',
+  'deepSearchAvailable',
   'actionSource',
   'actionRevisionBefore',
   'actionRevisionAfter',

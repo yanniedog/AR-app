@@ -10,6 +10,7 @@ import { Platform, Pressable, TextInput, useWindowDimensions, View } from 'react
 import {
   LifecycleChart,
   type LifecycleChartController,
+  type LifecycleChartRenderEvidence,
 } from '../src/components/projections/LifecycleChart';
 import { ProjectionSummary } from '../src/components/scenario/ProjectionSummary';
 import { StaySwitchChart } from '../src/components/scenario/StaySwitchChart';
@@ -24,11 +25,13 @@ import {
   MAX_MORTGAGE_BALANCE,
   MAX_PERIODIC_AMOUNT,
   MAX_PROJECTION_YEARS,
+  metricValue,
   projectionMetricLabel,
   type ProjectionDimension,
   type ProjectionMetric,
 } from '../src/data/projections';
 import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
+import { useScenarioSection } from '../src/hooks/useScenarioSection';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useStore } from '../src/data/store';
 import type { SectionKey } from '../src/types';
@@ -51,11 +54,6 @@ const FREQUENCY_OPTIONS: { label: string; value: ProjectionFrequency }[] = [
   { label: 'Fortnightly', value: 'fortnightly' },
   { label: 'Monthly', value: 'monthly' },
 ];
-
-function requestedSection(value: string | string[] | undefined): SectionKey {
-  const first = Array.isArray(value) ? value[0] : value;
-  return first === 'Savings' || first === 'TD' ? first : 'Mortgage';
-}
 
 function enteredNumber(value: string): number | null {
   if (!value.trim()) return null;
@@ -210,7 +208,7 @@ export default function Projections() {
   const ensureDetails = useStore((s) => s.ensureDetails);
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 860 && fontScale < 1.5;
-  const [section, setSection] = useState<SectionKey>(() => requestedSection(params.section));
+  const [section, changeSection] = useScenarioSection('Mortgage');
   const {
     scenario,
     storageStatus,
@@ -228,17 +226,18 @@ export default function Projections() {
     revision: string;
     selectionIndex: number;
     accessibleSummary: boolean;
+    expectedCount: number;
+    pointCount: number;
+    layoutMeasured: boolean;
+    emptyStateRendered: boolean;
   } | null>(null);
   const chartControllerRef = useRef<LifecycleChartController | null>(null);
   const auditRenderRevisionTracker = useRef<OpaquePerformanceAuditRenderRevision | null>(null);
   auditRenderRevisionTracker.current ??= new OpaquePerformanceAuditRenderRevision();
 
-  const changeSection = useCallback((next: SectionKey) => setSection(next), []);
   const toggleAdvanced = useCallback(() => setAdvanced((value) => !value), []);
   const changeDimension = useCallback((next: ProjectionDimension) => setDimension(next), []);
   const changeMetric = useCallback((next: ProjectionMetric) => setMetric(next), []);
-
-  useEffect(() => changeSection(requestedSection(params.section)), [changeSection, params.section]);
 
   const projectionKey = section === 'Mortgage' ? 'mortgage' : section === 'TD' ? 'termDeposit' : 'savings';
   const projectionInputs = scenario.projections[projectionKey];
@@ -416,20 +415,20 @@ export default function Projections() {
     result.history.length,
     activeSeries.reduce((sum, item) => sum + item.points.length, 0),
   ].join(':');
-  const recordChartEvidence = useCallback(({ renderRevision, selectionIndex, accessibleSummary }: {
-    renderRevision: string;
-    selectionIndex: number;
-    accessibleSummary: boolean;
-  }) => {
+  const recordChartEvidence = useCallback(({ renderRevision, ...evidence }: LifecycleChartRenderEvidence) => {
     setChartEvidence((current) => {
       if (
         current?.revision === renderRevision &&
-        current.selectionIndex === selectionIndex &&
-        current.accessibleSummary === accessibleSummary
+        current.selectionIndex === evidence.selectionIndex &&
+        current.accessibleSummary === evidence.accessibleSummary &&
+        current.pointCount === evidence.pointCount &&
+        current.expectedCount === evidence.expectedCount &&
+        current.layoutMeasured === evidence.layoutMeasured &&
+        current.emptyStateRendered === evidence.emptyStateRendered
       ) {
         return current;
       }
-      return { revision: renderRevision, selectionIndex, accessibleSummary };
+      return { revision: renderRevision, ...evidence };
     });
   }, []);
   const auditSelectSection = useCallback((...args: unknown[]) => {
@@ -633,8 +632,11 @@ export default function Projections() {
         kind: 'graphic',
         required: result.ready,
         status: !result.ready || chartEvidence?.revision === projectionRenderRevision ? 'ready' : 'pending',
-        expectedCount: result.ready ? 1 : 0,
-        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? 1 : 0,
+        expectedCount: result.ready ? [...result.history, ...activeSeries.flatMap((item) => item.points)]
+          .filter((point) => metricValue(point, metric) != null).length : 0,
+        actualCount: result.ready && chartEvidence?.revision === projectionRenderRevision ? chartEvidence.pointCount : 0,
+        layoutMeasured: chartEvidence?.revision === projectionRenderRevision && chartEvidence.layoutMeasured,
+        emptyStateRendered: chartEvidence?.revision === projectionRenderRevision && chartEvidence.emptyStateRendered,
         accessibleSummary: chartEvidence?.revision === projectionRenderRevision
           ? chartEvidence.accessibleSummary
           : false,
@@ -684,7 +686,7 @@ export default function Projections() {
       <View>
         <AppText variant="h3">Start with today</AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 3 }}>
-          These values are shared with Today and My scenario. Editing them updates only your private local scenario.
+          These values are shared with your rate calculator. Editing them updates only your private local scenario.
         </AppText>
       </View>
       {section === 'Mortgage' ? (
@@ -895,7 +897,7 @@ export default function Projections() {
             Fix or add {result.missing.join(', ')} above to build this projection.
           </AppText>
           <Button
-            title="Edit My scenario"
+            title="Edit Check my rate"
             variant="secondary"
             onPress={() => { void flush().then((saved) => { if (saved) router.push('/calculator'); }); }}
           />

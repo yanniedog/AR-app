@@ -46,12 +46,12 @@ export const parseBrowsePath = (pathRaw?: string | string[]): string[] => {
   return (raw ?? '').split('.').filter(Boolean);
 };
 
-/** Switch to Browse tab and drill to a taxonomy node (replaces stacked /node pushes). */
+/** Open a category and keep subsequent taxonomy drills on the same screen. */
 export const openBrowseDrill = (section: SectionKey, path: string[] = []) => {
   markDrillAttempt(section, path);
   logNavDrillAttempt({ fn: 'openBrowseDrill', section, path });
   router.navigate({
-    pathname: '/browse',
+    pathname: '/categories',
     params: buildBrowseRouteParams(section, path),
   } as unknown as Href);
 };

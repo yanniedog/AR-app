@@ -11,6 +11,7 @@ import type { EconomicOutlookPayload } from '../../data/economicOutlook';
 import { formatRunDate } from '../../data/format';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useTrustedExternalUrl } from '../ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../../hooks/useAuditExternalLinks';
 import { TOUCH_TARGET_MIN, TouchTarget } from '../TouchTarget';
 import { AppText, Divider, Row } from '../ui';
 
@@ -126,6 +127,7 @@ export function EconomicReleasesList({ data }: { data: EconomicOutlookPayload })
   const [open, setOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const bias = useMemo(() => meetingBiasModel(data), [data]);
+  useAuditExternalLinks((bias?.rows ?? []).flatMap((row) => row.sourceUrl ? [{ url: row.sourceUrl, label: `${row.label} source`, purpose: 'official_economic_source' as const }] : []));
   if (!bias?.rows.length) return null;
 
   const headline = bias.rows.find((row) => row.id === 'headline_inflation') ?? bias.rows[0];

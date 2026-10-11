@@ -2,11 +2,9 @@ import Ionicons from './icons/AppIcon';
 import React from 'react';
 import { Pressable, View } from 'react-native';
 
-import { SECTIONS } from '../constants';
 import type { RateStats } from '../data/taxonomy';
 import type { SectionKey } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
-import { Ribbon } from './Ribbon';
 import { AppText, Row } from './ui';
 
 /** Shared taxonomy category row — Home shortcuts and Browse drill-down. */
@@ -17,10 +15,6 @@ export function CategoryRow({
   rate,
   section,
   onPress,
-  accent,
-  showAccent = false,
-  ribbonStats,
-  ribbonDomain,
 }: {
   label: string;
   productCount: number;
@@ -35,22 +29,21 @@ export function CategoryRow({
   ribbonDomain?: { min: number; max: number } | null;
 }) {
   const theme = useTheme();
-  const meta = SECTIONS[section];
-  const chromeAccent = accent ?? meta.accentColor;
-  const rateColor = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
+  // Category aggregates may include advertised-rate fallbacks when a comparison
+  // rate is unpublished. Exact product-level metric labels live on ProductCard.
+  const rateLabel = section === 'Mortgage' ? 'Rates from' : 'Rates up to';
   const productLabel = productCount === 1 ? 'product' : 'products';
 
   return (
     <Pressable
       onPress={onPress}
+      accessibilityRole="button"
       style={({ pressed }) => ({
-        backgroundColor: theme.colors.card,
-        borderRadius: theme.radius.lg,
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-        borderLeftWidth: showAccent ? 3 : 1,
-        borderLeftColor: showAccent ? chromeAccent : theme.colors.border,
-        padding: theme.spacing(4),
+        backgroundColor: pressed ? theme.colors.surfaceAlt : 'transparent',
+        borderBottomWidth: 1,
+        borderColor: theme.ledger.rule,
+        paddingVertical: theme.spacing(5),
+        minHeight: 72,
         opacity: pressed ? 0.85 : 1,
       })}
     >
@@ -58,25 +51,28 @@ export function CategoryRow({
         style={{
           justifyContent: 'space-between',
           alignItems: 'flex-start',
-          marginBottom: ribbonStats ? theme.spacing(2) : 0,
+          flexWrap: 'wrap',
+          rowGap: theme.spacing(3),
         }}
       >
-        <View style={{ flex: 1, paddingRight: theme.spacing(3) }}>
-          <AppText variant="body" weight="700" numberOfLines={2}>
+        <View style={{ flexGrow: 1, flexBasis: 150, paddingRight: theme.spacing(2) }}>
+          <AppText variant="body" weight="600">
             {label}
           </AppText>
           <AppText variant="tiny" color="textFaint" style={{ marginTop: theme.spacing(1) / 2 }}>
-            {productCount} {productLabel} · {providerCount} lenders
+            {productCount} {productLabel} · {providerCount} banks
           </AppText>
         </View>
         <Row gap={theme.spacing(1)}>
-          <AppText variant="h3" weight="800" style={{ color: rateColor }}>
-            {rate !== null ? `${(rate * 100).toFixed(2)}%` : '—'}
-          </AppText>
+          <View style={{ alignItems: 'flex-end', gap: theme.spacing(1) }}>
+            <AppText variant="tiny" color="textMuted">{rateLabel}</AppText>
+            <AppText variant="rate" weight="600">
+              {rate !== null ? `${(rate * 100).toFixed(2)}%` : 'Not published'}
+            </AppText>
+          </View>
           <Ionicons name="chevron-forward" size={18} color={theme.colors.textFaint} />
         </Row>
       </Row>
-      {ribbonStats ? <Ribbon stats={ribbonStats} section={section} compact domain={ribbonDomain} /> : null}
     </Pressable>
   );
 }

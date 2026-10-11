@@ -9,6 +9,7 @@ import { moveTone } from '../../lib/moveSemantics';
 import type { BankHistoryPoint, SectionKey } from '../../types';
 import { withAlpha } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeProvider';
+import { hasFiniteChartDate, hasPositiveChartLayout, type ChartRenderEvidence } from '../../lib/chartRenderEvidence';
 import { ChartSliceControls } from '../charts/ChartSliceControls';
 import { DECORATIVE_SVG_ACCESSIBILITY_PROPS } from '../decorativeSvgAccessibility';
 import { AppText, Row } from '../ui';
@@ -37,14 +38,17 @@ export function RateHeatCalendar({
   selectedDate?: string | null;
   onDateSelect?: (date: string | null) => void;
   auditRevision?: string;
-  onGraphicReadiness?: (state: { revision: string; accessibleSummary: boolean }) => void;
+  onGraphicReadiness?: (state: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
   const model = useMemo(() => rateHeatmapModel(dates, points), [dates, points]);
   if (!model) {
     return (
-      <AppText variant="small" color="textMuted">
+      <AppText key={auditRevision} variant="small" color="textMuted" onLayout={(event) => {
+        if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: 0, pointCount: 0,
+          accessibleSummary: false, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: true });
+      }}>
         The calendar needs at least two days of history — check back after the next refresh.
       </AppText>
     );
@@ -98,14 +102,18 @@ export function RateHeatCalendar({
         onLayout={(event) => {
           const nextWidth = event.nativeEvent.layout.width;
           setWidth(nextWidth);
-          if (nextWidth > 0 && auditRevision) {
-            onGraphicReadiness?.({ revision: auditRevision, accessibleSummary: true });
-          }
+
         }}
         style={{ width: '100%' }}
       >
         {width > 0 ? (
-          <Svg width={gridW} height={gridH} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}>
+          <Svg key={auditRevision} width={gridW} height={gridH} {...DECORATIVE_SVG_ACCESSIBILITY_PROPS}
+            onLayout={(event) => {
+              if (auditRevision) onGraphicReadiness?.({ revision: auditRevision, expectedCount: observations.length,
+                pointCount: observations.filter((item) => item && hasFiniteChartDate(item.date) &&
+                  Number.isFinite(item.intensity) && (item.deltaBps == null || Number.isFinite(item.deltaBps))).length,
+                accessibleSummary: true, layoutMeasured: hasPositiveChartLayout(event), emptyStateRendered: false });
+            }}>
           {model.monthLabels.map((m) => (
             <SvgText
               key={`${m.weekIndex}-${m.label}`}

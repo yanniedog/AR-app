@@ -10,7 +10,7 @@ import {
 } from '../data/bankBrand';
 import { useStore } from '../data/store';
 import type { LogoRenderState } from '../lib/logoReadiness';
-import { getPerformanceAuditState, subscribePerformanceAudit } from '../lib/performanceAudit';
+import { isPerformanceAuditActive, subscribePerformanceAudit } from '../lib/performanceAudit';
 import { useTheme } from '../theme/ThemeProvider';
 
 function contrastText(hex: string): string {
@@ -40,12 +40,11 @@ export function BankAvatar({
 }) {
   const theme = useTheme();
   const brand = useStore((s) => s.core?.brands?.[provider]);
-  const auditState = useSyncExternalStore(
+  const auditOwnsNetwork = useSyncExternalStore(
     subscribePerformanceAudit,
-    getPerformanceAuditState,
-    getPerformanceAuditState,
+    isPerformanceAuditActive,
+    isPerformanceAuditActive,
   );
-  const auditOwnsNetwork = auditState.status === 'queued' || auditState.status === 'running';
   const remoteLogo = brand?.logo_uri ?? brand?.logo_svg_uri;
   const sources = useMemo(
     () => resolveBankLogoSourcesForRuntime(

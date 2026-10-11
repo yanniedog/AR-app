@@ -1,4 +1,5 @@
-import { canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Application from 'expo-application';
@@ -25,6 +26,8 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
+import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
+import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import {
   getApkDownloadSnapshot,
   getHydratedApkDownloadSnapshot,
@@ -43,6 +46,12 @@ import {
   type AuditTransportTarget,
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
+import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
+import { collectExternalAuditLinks, beginExternalLinkCapture, endExternalLinkCapture,
+  getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
+import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
+import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
+import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
   buildDeepPerformanceAuditPlan,
   ScenarioReentryGate,
@@ -98,6 +107,7 @@ import {
   scoreLatency,
   subscribePerformanceAudit,
   summarizePerformanceAudit,
+  summarizePartialPerformanceAudit,
   updatePerformanceAuditProgress,
   worstStatus,
   type AuditCheck,
@@ -131,7 +141,7 @@ const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
 // Maximum-profile preparation, runtime, storage, filesystem, log I/O, payload,
 // network, update readiness, and durable audit-state restoration.
-const FIXED_BENCHMARK_CHECKS = 9;
+const FIXED_BENCHMARK_CHECKS = 10;
 const STORAGE_KEY_PREFIX = '@ar/performance-audit/';
 const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
@@ -382,7 +392,7 @@ function datasetRevisionLabel(revision: AuditDatasetRevision): string {
 
 function assertDatasetRevision(expected: AuditDatasetRevision): void {
   const state = useStore.getState();
-  if (state.refreshing || state.postRefreshWarming) {
+  if (state.refreshing || state.postRefreshWarming || state.bankRateHistoryLoading) {
     throw new AuditDatasetChangedError('Dataset refresh started during the performance audit');
   }
   const actual = captureDatasetRevision();
@@ -397,13 +407,13 @@ async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog):
   while (true) {
     assertSessionActive(watchdog);
     const state = useStore.getState();
-    if (!state.refreshing && !state.postRefreshWarming) {
+    if (!state.refreshing && !state.postRefreshWarming && !state.bankRateHistoryLoading) {
       // Require a short quiet window so the refresh finally block cannot move
       // into post-warm between the check and the audit snapshot.
       await delay(150);
       assertSessionActive(watchdog);
       const settled = useStore.getState();
-      if (!settled.refreshing && !settled.postRefreshWarming) return;
+      if (!settled.refreshing && !settled.postRefreshWarming && !settled.bankRateHistoryLoading) return;
     }
     await delay(50);
   }
@@ -468,14 +478,19 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
   const selectionTokens = stringArrayParameter(step, 'selectionTokens');
   switch (step.semanticActionId) {
     case 'onboarding.open': return '/onboarding' as Href;
-    case 'today.open': return '/(tabs)' as Href;
-    case 'browse.open': return '/browse' as Href;
+    case 'home.open': return '/(tabs)' as Href;
+    case 'rates.open': return '/browse' as Href;
+    case 'market.open': return '/market' as Href;
+    case 'tools.open': return '/tools' as Href;
+    case 'bank-rates.open': return '/bank-rates' as Href;
+    case 'today.open': return '/matches' as Href;
+    case 'browse.open': return '/categories' as Href;
     case 'search.open':
       return {
         pathname: '/search',
         params: section ? { section } : {},
       } as unknown as Href;
-    case 'changes.open': return '/(tabs)/passthrough' as Href;
+    case 'changes.open': return '/passthrough' as Href;
     case 'compare.open':
       return {
         pathname: '/compare',
@@ -509,6 +524,7 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
         params: section ? { section } : {},
       } as unknown as Href;
     case 'moves.open': return '/rba-response' as Href;
+    case 'rba.open': return '/rba' as Href;
     case 'outlook.open': return '/research' as Href;
     case 'saved.open': return '/watchlist' as Href;
     case 'profile.open': return '/profile' as Href;
@@ -517,7 +533,6 @@ function routeEntryHref(step: DeepAuditStep): Href | null {
     case 'debug-log.open': return '/debug-log' as Href;
     case 'not-found.open': return '/__audit-not-found__' as Href;
     case 'audit.pass.complete': return AUDIT_HOME_PATH as Href;
-    case 'redirect.rba.verify': return '/rba' as Href;
     case 'redirect.root.verify': return '/' as Href;
     case 'redirect.node.verify': {
       const taxonomyPath = stringArrayParameter(step, 'taxonomyPath');
@@ -540,6 +555,12 @@ function readinessMetrics(snapshot: PerformanceAuditReadinessSnapshot): Record<s
     readinessRequiredProbeCount: snapshot.requiredProbes,
     readinessPendingRequiredProbeCount: snapshot.pendingRequiredProbes,
     readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot),
+    graphicEvidence: compactPerformanceAuditReadinessEvidence({
+      ...snapshot,
+      surfaces: snapshot.surfaces.map((surface) => ({
+        ...surface, probes: surface.probes.filter((probe) => probe.kind === 'graphic'),
+      })),
+    }),
     readinessActionEvidence: snapshot.surfaces
       .map((surface) => `${surface.id}:${surface.lastCompletedAction ?? 'none'}:${surface.actionRevision}`)
       .join(' | '),
@@ -563,15 +584,21 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
   switch (root) {
     case 'calculator': return '/calculator';
     case 'search': return '/search';
-    case 'browse': return '/browse';
+    case 'home': return '/';
+    case 'rates': return '/browse';
+    case 'market': return '/market';
+    case 'tools': return '/tools';
+    case 'bank-rates': return '/bank-rates';
+    case 'browse': return '/categories';
     case 'projections': return '/projections';
     case 'lenders': return '/banks';
     case 'saved': return '/watchlist';
     case 'settings': return '/settings';
     case 'onboarding': return '/onboarding';
-    case 'today': return '/';
+    case 'today': return '/matches';
     case 'changes': return '/passthrough';
     case 'moves': return '/rba-response';
+    case 'rba': return '/rba';
     case 'outlook': return '/research';
     default: return null;
   }
@@ -1342,7 +1369,7 @@ async function runMaximumCoverageProfileCheck(
   // Only prepare the pinned edition after its descriptor was authenticated in
   // this live session. Local runs remain cache-only; newer publications cannot
   // silently change the rates being exercised by the route checks.
-  if (canPrepareAuditSearchIndex(auditMode, original.manifest, liveSnapshot?.manifest)) {
+  if (auditMode === 'local' || canPrepareAuditSearchIndex(auditMode, original.manifest, liveSnapshot?.manifest)) {
     await awaitAuditWork(useStore.getState().ensureSearchIndex(), watchdog, 'Preparing authenticated search index');
     const prepared = useStore.getState();
     if (liveSnapshot) {
@@ -2081,8 +2108,9 @@ function journeyDataRequirements(
     );
     if (optionalData.deepSearch) {
       add(
-        'Deep-search index',
-        (state) => !!state.searchIndex,
+        'Search index availability',
+        (state) => (state.searchIndexStatus === 'ready' && !!state.searchIndex) ||
+          auditSearchUsesBasicFallback(isLocalAppHealthAudit(), state.searchIndexStatus, !!state.searchIndex),
         () => {
           const failure = [...debugLog.getEntriesAfter(logCursor)]
             .reverse()
@@ -2100,7 +2128,7 @@ function journeyDataRequirements(
   const needsRbaCalendar =
     source === 'remote' &&
     !!manifest?.files.rba_calendar &&
-    ['response', 'outlook', 'rba-redirect'].includes(journey.id);
+    ['response', 'outlook', 'rba'].includes(journey.id);
   if (needsRbaCalendar) {
     add(
       'RBA calendar',
@@ -2412,6 +2440,10 @@ export async function runJourney(
       executionAttempted: true,
       actionInvoked: true,
       actionCompleted: routeError == null,
+      ...(journey.id === 'search' ? {
+        searchMode: useStore.getState().searchIndexStatus === 'ready' && useStore.getState().searchIndex ? 'deep' : 'basic',
+        deepSearchAvailable: useStore.getState().searchIndexStatus === 'ready' && !!useStore.getState().searchIndex,
+      } : {}),
       journeyId: journey.id,
       journeyLabel: journey.label,
       iteration,
@@ -2475,6 +2507,9 @@ export function PerformanceAuditRunner() {
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
   const state = usePerformanceAuditState();
+  const uploadBusy = useSyncExternalStore(
+    subscribeDebugLogUpload, isDebugLogUploadBusy, isDebugLogUploadBusy,
+  );
   const runGate = usePerformanceAuditRunGate();
   const { claim: claimRun, release: releaseRun, releaseCount } = runGate;
   const pathnameRef = useRef(pathname);
@@ -2482,12 +2517,22 @@ export function PerformanceAuditRunner() {
 
   useEffect(() => {
     if (state.status !== 'queued' || !state.sessionId || !state.startedAt) return;
+    // A run can be queued after the prior result publishes but before its
+    // final flush starts sharing. Do not install a new measurement transport
+    // guard until that sharing finishes; the subscription wakes this effect.
+    if (isDebugLogUploadBusy()) return;
     // Teardown outlives the previous audit's terminal state; releaseCount
     // re-runs this effect once that run lets go of the gate.
     if (!claimRun(state.sessionId)) return;
 
     const execute = async () => {
       const sessionId = state.sessionId!;
+      const wakeLockTag = `${AUDIT_KEEP_AWAKE_TAG}:${sessionId}`;
+      const wakeLock = createPerformanceAuditWakeLock(
+        () => activateKeepAwakeAsync(wakeLockTag),
+        () => deactivateKeepAwake(wakeLockTag),
+      );
+      let wakeLockSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
       const startedMs = Date.now();
@@ -2526,6 +2571,9 @@ export function PerformanceAuditRunner() {
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       const checks: AuditCheck[] = [];
+      let externalLinks: TrustedExternalUrlRequest[] = [];
+      const linkCapture = beginExternalLinkCapture();
+      const linkAbort = new AbortController();
       let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
       const monitor = new ResponsivenessMonitor();
       let completed = 0;
@@ -2587,6 +2635,33 @@ export function PerformanceAuditRunner() {
       };
 
       try {
+        wakeLockSubscription = AppState.addEventListener('change', (nextState) => {
+          if (nextState !== 'active') return;
+          // Returning from lock/background may have released the platform wake lock.
+          void wakeLock.acquire().catch((error: unknown) => {
+            debugLog.error(PERFORMANCE_AUDIT_LOG_TAG,
+              `Keep-awake refresh failed: ${formatAuditErrorForLog(error)}`);
+          });
+        });
+        // Protect setup as well as measured checks from automatic screen timeout.
+        // Wait for a foreground activity before asking the native module.
+        await waitWhilePaused(watchdog);
+        await awaitAuditWork(wakeLock.acquire(), watchdog, 'Keep-awake activation');
+        logAuditEvent(app, {
+          kind: 'start',
+          phase: 'preflight',
+          schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+          sessionId,
+          startedAt,
+          plannedChecks: total,
+          hangTimeoutMs: watchdog.hangTimeoutMs,
+          watchdogMode: 'stored-check-inactivity',
+          storedCheckCount: watchdog.storedCheckCount,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
+        });
+        // Persist the begin marker even when setup never reaches its first check.
+        // Logging is not completed-check progress and does not reset the watchdog.
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit start log flush');
         if (Platform.OS === 'android') {
           auditApkDownloadSnapshot = await awaitAuditWork(
             getHydratedApkDownloadSnapshot(),
@@ -2600,14 +2675,6 @@ export function PerformanceAuditRunner() {
           }
         }
         markPerformanceAuditRunning(total);
-        // Setup belongs inside the protected region so an unexpected native
-        // keep-awake or monitor failure cannot leave the global running flag
-        // latched forever.
-        await awaitAuditWork(
-          activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG),
-          watchdog,
-          'Keep-awake activation',
-        );
         monitor.start();
         rollbackSnapshot = await awaitAuditWork(
           beginPerformanceAuditRollback(useStore),
@@ -2620,6 +2687,10 @@ export function PerformanceAuditRunner() {
           total,
           'Waiting for active payload work to finish',
         );
+        logAuditEvent(app, {
+          kind: 'setup', phase: 'waiting-for-payload-work', sessionId,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
+        });
         await waitForRefreshWork(watchdog);
         // Setup snapshots the store, plan and environment the whole run is
         // pinned to. Capturing that from a backgrounded process would pin the
@@ -2644,7 +2715,8 @@ export function PerformanceAuditRunner() {
           'Capturing device and app state',
         );
         logAuditEvent(app, {
-          kind: 'start',
+          kind: 'setup',
+          phase: 'payload-work-settled',
           schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
           sessionId,
           startedAt,
@@ -2654,9 +2726,10 @@ export function PerformanceAuditRunner() {
           storedCheckCount: watchdog.storedCheckCount,
           lastStoredCheckAt,
           datasetRevision,
+          payloadWork: captureAuditPayloadWork(useStore.getState()),
         });
-        // Keep start logging outside the first measured phase.
-        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit start log flush');
+        // Keep setup logging outside the first measured phase.
+        await awaitAuditWork(debugLog.flushToFile(), watchdog, 'Audit setup log flush');
 
         let environment = await awaitAuditWork(collectEnvironment(
           app,
@@ -2891,6 +2964,44 @@ export function PerformanceAuditRunner() {
           }
         }
 
+        // Collect the exact links encountered during the journeys, plus all
+        // available lender detail destinations. Do not silently certify a sample.
+        externalLinks = collectExternalAuditLinks({
+          details: useStore.getState().details,
+          observed: getCapturedExternalAuditLinks(),
+        });
+        total += externalLinks.length;
+        await record({
+          id: 'external-link-inventory', label: 'External link coverage', kind: 'data',
+          status: useStore.getState().details ? 'pass' : 'warn', durationMs: null,
+          metrics: {
+            executionAttempted: true, uniqueDestinations: externalLinks.length,
+            lenderDetailsLoaded: useStore.getState().details != null,
+            observedDestinations: getCapturedExternalAuditLinks().length,
+            reason: 'Covers official sources, loaded lender details and links rendered during this run. Unloaded lazy sources remain outside this inventory.',
+          },
+        });
+        const linkDeadline = Date.now() + 90_000;
+        transportGuard.allowExternalUrls(externalLinks);
+        for (let offset = 0; offset < externalLinks.length; offset += 4) {
+          await waitWhilePaused(watchdog);
+          assertSessionActive(watchdog);
+          const chunk = externalLinks.slice(offset, offset + 4);
+          const remaining = Math.max(0, linkDeadline - Date.now());
+          const pending = chunk.map((request, index) => runExternalLinkAuditCheck(request, offset + index, {
+            platform: Platform.OS,
+            reachability: auditMode === 'live-source' && remaining > 0,
+            handler: remaining > 0,
+            timeoutMs: Math.max(1, Math.min(5_000, remaining || 5_000)),
+            signal: linkAbort.signal,
+          }));
+          for (let index = 0; index < pending.length; index += 1) {
+            const label = `Checking external link ${offset + index + 1} of ${externalLinks.length}`;
+            updatePerformanceAuditProgress(completed, total, label);
+            await recordContinuable(label, () => pending[index]);
+          }
+        }
+
         for (const section of SECTION_ORDER) {
           assertSessionActive(watchdog);
           assertDatasetRevision(datasetRevision);
@@ -3058,6 +3169,8 @@ export function PerformanceAuditRunner() {
         ).length;
         const plannedCheckIds = [
           'maximum-coverage-profile',
+          'external-link-inventory',
+          ...externalLinks.map((_, index) => `external-link-${index + 1}`),
           'runtime-responsiveness',
           ...navigationJourneys.flatMap((journey) => [
             `journey-${journey.id}-cold`,
@@ -3198,12 +3311,12 @@ export function PerformanceAuditRunner() {
             'Virtualized product lists prove the complete pinned source/model count and each deterministic viewport they visit; they do not mount every off-screen cell simultaneously.',
             'Section benchmarks time named selector, filter, hierarchy, statistics and ranking phases. Their deliberately synchronous work is recorded but excluded from responsiveness scoring; they do not provide native CPU instruction sampling or React component commit attribution.',
             auditMode === 'local'
-              ? 'Local mode blocks fetch and XMLHttpRequest before transport. It records the existing Android download snapshot without contacting a host or launching the installer.'
-              : 'Live-source mode permits only the configured public manifest, dates index and manifest-authenticated release assets. It never uploads diagnostics or launches the installer.',
+              ? 'Local mode validates link addresses and OS browser handlers without HTTP transport. Website reachability remains unverified. It records the existing Android download snapshot without contacting a host or launching the installer.'
+              : 'Live-source mode permits public payload files and exact approved external destinations for credential-free HEAD checks. Link checks have a 90-second transport/handler budget; remaining destinations are validated but stay unverified. No browser or installer is launched.',
             `The run is pinned to dataset revision ${datasetRevisionLabel(datasetRevision)} and stops only after ${watchdog.hangTimeoutMs}ms without storing another completed check.`,
             auditMode === 'local'
-              ? 'The audit performs no network or clipboard action. The complete report and tracebacks remain local unless you later choose a separate export.'
-              : 'The explicit live-source run may read allowlisted public payload files. It performs no upload or clipboard action, and the complete report remains local unless you later choose a separate export.',
+              ? 'Local audit measurements perform no network or clipboard action. After completion, the full log and report are uploaded to paste and the verified link is copied.'
+              : 'The live-source audit may read allowlisted public payload files during measurement. After completion, the full log and report are uploaded to paste and the verified link is copied.',
           ],
         };
         const summaryMarker = [
@@ -3311,7 +3424,22 @@ export function PerformanceAuditRunner() {
           );
         }
 
+        // All checks, rollback, report storage and final log writes precede
+        // sharing. The transport guard is already restored and results remain
+        // complete even if upload or clipboard access fails.
+        // Reserve sharing's busy state before finally releases the run gate,
+        // but let finally release audit resources without awaiting the network.
+        void startDebugLogUpload({
+          sessionId,
+          appVersion: app.appVersion,
+          buildVersion: app.buildVersion,
+          audit: { summaryMarker, report },
+        });
+
       } catch (caught) {
+        // Route recovery/rollback can change loading flags. Preserve failure-time
+        // evidence before either starts, including preflight failures with no pin.
+        const failedPayloadWork = captureAuditPayloadWork(useStore.getState());
         let recoveryError: string | null = null;
         try {
           await recoverAuditRoute(() => pathnameRef.current);
@@ -3356,6 +3484,7 @@ export function PerformanceAuditRunner() {
             lastStoredCheckAt,
             trace: formatAuditErrorForLog(caught),
             recoveryError: recoveryError ? flattenAuditLogText(recoveryError) : null,
+            payloadWork: failedPayloadWork,
           }, 'warn');
           await timeoutAfter(debugLog.flushToFile(), 5_000, 'Cancellation log flush').catch(() => {});
           restoreTransportGuard();
@@ -3375,7 +3504,17 @@ export function PerformanceAuditRunner() {
             metrics: {
               completedBeforeFailure: completed,
               plannedChecks: total,
+              executionAttempted: false,
               currentPath: pathnameRef.current,
+              payloadWorkCapturedAt: failedPayloadWork.capturedAt,
+              payloadWorkActive: failedPayloadWork.activeWork.join(' | ') || null,
+              refreshing: failedPayloadWork.refreshing,
+              postRefreshWarming: failedPayloadWork.postRefreshWarming,
+              bankRateHistoryLoading: failedPayloadWork.bankRateHistoryLoading,
+              detailsLoading: failedPayloadWork.detailsLoading,
+              currentDatasetRevision: datasetRevisionLabel(failedPayloadWork.revision),
+              currentPayloadRevision: failedPayloadWork.revision.payloadRevision,
+              currentBundleSha: failedPayloadWork.revision.bundleSha,
               datasetRevision: activeDatasetRevision
                 ? datasetRevisionLabel(activeDatasetRevision)
                 : null,
@@ -3408,6 +3547,7 @@ export function PerformanceAuditRunner() {
             storedCheckCount: watchdog.storedCheckCount,
             lastStoredCheckAt,
             error: flattenAuditLogText(error),
+            payloadWork: failedPayloadWork,
             failedCheck: compactAuditCheckForLog({
               ...failedCheck,
               error: failedCheck.error ? flattenAuditLogText(failedCheck.error) : null,
@@ -3446,7 +3586,7 @@ export function PerformanceAuditRunner() {
                 maxFrameGapMs: entry.metrics.maxFrameGapMs ?? undefined,
               })),
           }, 'error');
-          const partialSummary = summarizePerformanceAudit(checks);
+          const partialSummary = summarizePartialPerformanceAudit(checks, total, completed);
           const partialReport: PerformanceAuditReport = {
             schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
             sessionId,
@@ -3488,6 +3628,10 @@ export function PerformanceAuditRunner() {
             `pass=${partialSummary.pass}`,
             `warn=${partialSummary.warn}`,
             `fail=${partialSummary.fail}`,
+            `executed=${partialSummary.executed}`,
+            `stored=${completed}`,
+            `planned=${total}`,
+            `coverage_percent=${partialSummary.coveragePercent}`,
             `slowest=${partialSummary.slowestCheckId ?? 'none'}`,
             `slowest_ms=${partialSummary.slowestCheckMs}`,
           ].join(' ');
@@ -3511,12 +3655,21 @@ export function PerformanceAuditRunner() {
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
           ].join('\n'));
+          void startDebugLogUpload({
+            sessionId,
+            appVersion: app.appVersion,
+            buildVersion: app.buildVersion,
+            audit: { summaryMarker: partialMarker, report: partialReport },
+          });
         }
       } finally {
+        wakeLockSubscription?.remove();
         restoreTransportGuard();
         unsubscribePause();
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
+        linkAbort.abort();
+        endExternalLinkCapture(linkCapture);
         try {
           monitor.stop();
         } catch {
@@ -3524,7 +3677,7 @@ export function PerformanceAuditRunner() {
         }
         try {
           await timeoutAfter(
-            deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG),
+            wakeLock.release(),
             5_000,
             'Keep-awake release',
           );
@@ -3548,6 +3701,7 @@ export function PerformanceAuditRunner() {
     state.startedAt,
     state.auditMode,
     state.status,
+    uploadBusy,
   ]);
 
   useEffect(() => {
@@ -3616,7 +3770,8 @@ export function PerformanceAuditRunner() {
         paddingBottom: Math.max(16, insets.bottom + 12),
       }}
     >
-      <Card style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
+      <AuditScreenAwake />
+      <Card variant="elevated" style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
           <AppText variant="body" weight="700">
             App health audit

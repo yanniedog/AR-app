@@ -12,11 +12,13 @@ import {
 import type { EconomicWindow } from '../data/economicModels';
 import { relativeDate } from '../data/format';
 import { debugLog } from '../lib/debugLog';
+import type { ChartRenderEvidence } from '../lib/chartRenderEvidence';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
 import type { RbaEntry } from '../types';
 import { useTheme } from '../theme/ThemeProvider';
 import { EconomicExplorer, EconomicReleasesList } from './economy';
 import { useTrustedExternalUrl } from './ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../hooks/useAuditExternalLinks';
 import type { EconomicExplorerLens } from './economy/EconomicExplorer';
 import { AppText, Button, Row } from './ui';
 
@@ -39,7 +41,7 @@ function OutlookContent({
   window: EconomicWindow;
   onWindowChange: (window: EconomicWindow) => void;
   selectionStep: number;
-  onGraphicReady: (result: { revision: string; pointCount: number; accessibleSummary: boolean }) => void;
+  onGraphicReady: (result: ChartRenderEvidence) => void;
 }) {
   const theme = useTheme();
   const { requestExternalUrl } = useTrustedExternalUrl();
@@ -69,6 +71,10 @@ function OutlookContent({
     .filter(Boolean)
     .join(' · ');
   const usesAbsCpi = data.indicators.some((indicator) => indicator.sourceAgency === 'abs');
+  useAuditExternalLinks([
+    { url: RBA_ECONOMIC_TABLE_URL, purpose: 'official_economic_source', label: 'RBA statistics tables' },
+    ...(usesAbsCpi ? [{ url: ABS_CPI_RELEASE_URL, purpose: 'official_economic_source' as const, label: 'ABS CPI release' }] : []),
+  ]);
 
   return (
     <View style={{ marginTop: 12 }}>
@@ -167,6 +173,9 @@ export interface RbaOutlookAuditState {
   revision: string | null;
   indicatorCount: number;
   pointCount: number;
+  expectedCount: number;
+  layoutMeasured: boolean;
+  emptyStateRendered: boolean;
   layoutReady: boolean;
   graphicReady: boolean;
   accessibleSummary: boolean;
@@ -188,11 +197,7 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const [window, setWindow] = useState<EconomicWindow>('5Y');
   const [selectionStep, setSelectionStep] = useState(0);
   const [layoutRevision, setLayoutRevision] = useState<string | null>(null);
-  const [graphic, setGraphic] = useState<{
-    revision: string;
-    pointCount: number;
-    accessibleSummary: boolean;
-  } | null>(null);
+  const [graphic, setGraphic] = useState<ChartRenderEvidence | null>(null);
 
   const availableLenses = useMemo<EconomicExplorerLens[]>(() => {
     const indicatorLenses = data?.indicators.map((indicator) => indicator.id) ?? [];
@@ -248,19 +253,22 @@ export const RbaOutlook = forwardRef<RbaOutlookAuditHandle, {
   const revision = data ? data.checkedAt || data.fetchedAt : null;
   const expectedGraphicRevision = revision ? `${revision}:${lens}:${window}:${selectionStep}` : null;
   const layoutReady = revision != null && layoutRevision === revision;
-  const graphicReady = expectedGraphicRevision != null && graphic?.revision === expectedGraphicRevision;
+  const graphicReady = expectedGraphicRevision != null && graphic?.revision === expectedGraphicRevision && graphic.layoutMeasured;
   useEffect(() => {
     onAuditStateChange?.({
       status: data && !loading && layoutReady && graphicReady ? 'ready' : !data && !loading && error ? 'error' : 'pending',
       revision,
       indicatorCount: data?.indicators.length ?? 0,
       pointCount: graphic?.pointCount ?? 0,
+      expectedCount: graphic?.expectedCount ?? 0,
+      layoutMeasured: graphicReady,
+      emptyStateRendered: graphicReady && graphic.emptyStateRendered,
       layoutReady,
       graphicReady,
       accessibleSummary: graphic?.accessibleSummary === true,
       error,
     });
-  }, [data, error, graphic?.accessibleSummary, graphic?.pointCount, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
+  }, [data, error, graphic, graphicReady, layoutReady, loading, onAuditStateChange, revision]);
 
   return (
     <View

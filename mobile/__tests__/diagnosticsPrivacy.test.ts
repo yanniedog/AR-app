@@ -60,6 +60,25 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it.each(['rba', 'rba-redirect'])(
+    'retains fixed %s journey IDs and the slowest check while rejecting private suffixes',
+    (journey) => {
+      const checks: AuditCheck[] = [
+        { id: `journey-${journey}-cold`, label: 'Private label', kind: 'journey', status: 'pass', durationMs: 20, metrics: { forwardMs: 20 } },
+        { id: `journey-${journey}-warm`, label: 'Private label', kind: 'journey', status: 'warn', durationMs: 40, metrics: { forwardMs: 40 } },
+        { id: `journey-${journey}-private-account-cold`, label: 'Private label', kind: 'journey', status: 'pass', durationMs: 10, metrics: { forwardMs: 10 } },
+      ];
+      const prepared = createDeidentifiedDiagnosticsShare(reportFixture(checks));
+      const parsed = JSON.parse(prepared.body);
+      expect(parsed.checks.map((check: { id: string | null }) => check.id)).toEqual([
+        `journey-${journey}-cold`, `journey-${journey}-warm`, null,
+      ]);
+      expect(parsed.summary.slowestCheckId).toBe(`journey-${journey}-warm`);
+      expect(prepared.body).not.toContain('private-account');
+      expect(prepared.body).not.toContain('Private label');
+    },
+  );
+
   it('shares only fixed identities, allowlisted metrics and proven zero measurements', () => {
     const report = reportFixture([
       {
@@ -133,7 +152,7 @@ describe('deidentified diagnostics privacy boundary', () => {
     );
   });
 
-  it('keeps running and post-result sharing separate from network, clipboard and raw-log export', () => {
+  it('keeps paste sharing after measurements and retains explicit deidentified sharing', () => {
     const runner = read('src/components/PerformanceAuditRunner.tsx');
     const screen = read('app/performance-audit.tsx');
     const debugScreen = read('app/debug-log.tsx');
@@ -155,8 +174,14 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).not.toContain('Clipboard');
     expect(screen).not.toContain('uploadDebugLog');
     expect(screen).not.toContain('fetch(');
-    expect(debugScreen).toContain('Open expert public-upload flow?');
-    expect(debugScreen).toContain('Upload private log now?');
+    expect(debugScreen).toContain('Upload full log?');
+    expect(screen).toContain('Anyone with the link can read the log.');
+    const completion = runner.indexOf('completePerformanceAudit(report)');
+    const upload = runner.indexOf('void startDebugLogUpload(');
+    expect(runner).not.toContain('await startDebugLogUpload(');
+    expect(upload).toBeGreaterThan(completion);
+    expect(runner.lastIndexOf('restoreTransportGuard();', completion)).toBeGreaterThan(0);
+    expect(upload).toBeGreaterThan(runner.indexOf("'Final audit log flush'"));
     expect(debugScreen).toContain('!receiptLoaded');
     expect(debugScreen).not.toContain('setStringAsync(result.url)');
     expect(layout).toContain('routeClass=');

@@ -1,4 +1,6 @@
 import { cache } from './cache';
+import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
+import { parseHistoryDatesIndex } from './historyDatesIndex';
 import type { PayloadProgressSnapshot } from './downloadProgress';
 import { computeChanges, notify } from './notifications';
 import {
@@ -122,6 +124,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             while (get().detailsLoading) await yieldToUi();
           }
           await warmDetails();
+          if (!background && get().prefs.enableDeepSearch && get().manifest?.files.search_index) {
+            await get().ensureSearchIndex();
+          }
           const afterWarm = get();
           const afterCoreSha = afterWarm.manifest?.files.core.sha256 ?? '';
           const afterDetailsSha = afterWarm.manifest?.files.details.sha256 ?? '';
@@ -212,6 +217,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
       set({ refreshing: true });
       const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
       let deferWarm = false;
+      let historyWork: Promise<void> | null = null;
       let notifyCtx: NotifyContext | null = null;
       let optionalWork: OptionalRefreshWork = {
         historyBanks: false,
@@ -322,6 +328,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
 
         const meta = await cache.readMeta();
         assertNoRevisionRollback(meta?.manifest, remote);
+        const historyDatesIndex = parseHistoryDatesIndex(resolution.datesIndex, remote);
         const upToDate =
           !repairCache &&
           meta?.source === 'remote' &&
@@ -337,22 +344,27 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           const searchIndexChanged =
             live.manifest?.files.search_index?.sha256 !==
             remote.files.search_index?.sha256;
-          // Persist enriched optional file entries so the next cold start does
-          // not re-load a core/details-only dated manifest from cache meta.
+          // Persist enriched optional entries so the next cold start retains
+          // both legacy files and corrected detached transport/schema metadata.
+          // Its asset SHA can stay unchanged when bytes/enc/schema are repaired.
           const cachedOptionalChanged =
             !!meta?.manifest &&
-            OPTIONAL_MANIFEST_KEYS.some(
+            (OPTIONAL_MANIFEST_KEYS.some(
               (key) =>
                 meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
-            );
-          if (cachedOptionalChanged) {
+            ) || JSON.stringify(meta.manifest.bank_rate_history_catalogue) !==
+              JSON.stringify(remote.bank_rate_history_catalogue));
+          const historyIndexChanged = historyDatesIndex &&
+            JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
+          if (cachedOptionalChanged || historyIndexChanged) {
             await cache.updateMeta({
               coreSha: remote.files.core.sha256,
               manifest: remote,
+              ...(historyDatesIndex ? { historyDatesIndex } : {}),
             });
             debugLog.info(
               'store',
-              `refresh persisted optional assets onto cached manifest run_date=${remote.run_date}`,
+              `refresh persisted assets and history selection onto cached manifest run_date=${remote.run_date}`,
             );
           }
           const liveMatches =
@@ -389,6 +401,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             }
             set({
               manifest: remote,
+              status: 'ready',
+              bankRateHistoryLoading: true,
               source: 'remote',
               offline: false,
               pendingIngestRunDate,
@@ -419,6 +433,10 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                 ),
               } : {}),
             });
+            if (get().core) historyWork = prepareBankRateHistoryAfterPaint(
+              set, get, get().core!, remote, resolution.datesIndex, liveMatches ? live.details : null,
+              { warm: !background, readCachedDetails: true },
+            );
             deferWarm = true;
             set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
             return false;
@@ -497,6 +515,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             savedAt: new Date().toISOString(),
             coreSha: remote.files.core.sha256,
             detailsSha: stagedDetails || detailsUnchanged ? remote.files.details.sha256 : null,
+            ...(historyDatesIndex ? { historyDatesIndex } : {}),
           },
           text,
         );
@@ -531,6 +550,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           manifest: remote,
           source: 'remote',
           status: 'ready',
+          bankRateHistoryLoading: true,
           error: null,
           pendingIngestRunDate,
           details: stagedDetails ?? (detailsUnchanged ? get().details : null),
@@ -548,6 +568,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             bankSpreadHistoryError: null,
           } : {}),
         });
+        historyWork = prepareBankRateHistoryAfterPaint(set, get, core, remote, resolution.datesIndex, stagedDetails, { warm: !background });
         notifyCtx = {
           previousCore,
           previousSource,
@@ -589,6 +610,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         try {
           if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
         } finally {
+          await historyWork;
           if (deferWarm) set({ postRefreshWarming: false });
         }
       }

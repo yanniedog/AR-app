@@ -1,5 +1,7 @@
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from './storeTypes';
 import { cache } from './cache';
+import { prepareBankRateHistoryAfterPaint } from './storeBankRateHistory';
+import { parseHistoryDatesIndex } from './historyDatesIndex';
 import {
   effectiveDeepSearch,
   effectiveHistoryRibbon,
@@ -42,6 +44,7 @@ export function createBootstrapActions(
     async bootstrap(opts: { skipRefresh?: boolean } = {}) {
       if (get().status === 'ready' || get().status === 'loading') return;
       debugLog.info('store', 'bootstrap');
+      const started = Date.now();
       set({
         status: 'loading',
         error: null,
@@ -116,12 +119,17 @@ export function createBootstrapActions(
             source: bundle.meta.source,
             status: 'ready',
             error: null,
+            bankRateHistoryLoading: true,
             ...(cachedSearch
               ? { searchIndex: cachedSearch, searchIndexStatus: 'ready' as const, searchIndexError: null }
               : { searchIndexStatus: 'idle' as const, searchIndexError: null }),
             ...(cachedHistory ? { historyBanks: cachedHistory } : {}),
             ...(cachedProductHistory ? { productHistory: cachedProductHistory } : {}),
           });
+          debugLog.info('store', `cached core ready elapsed_ms=${Date.now() - started}`);
+          void prepareBankRateHistoryAfterPaint(set, get, bundle.core, bundle.meta.manifest,
+            parseHistoryDatesIndex(bundle.meta.historyDatesIndex, bundle.meta.manifest), null,
+            { readCachedDetails: true });
           if (!suitabilityIndex) {
             // Start with matching cached details when available, independent of
             // the manifest refresh/network. ensureDetails claims the load
@@ -207,6 +215,7 @@ export const bootstrapInitialState = {
   status: 'idle' as const,
   refreshing: false,
   postRefreshWarming: false,
+  bankRateHistoryLoading: false,
   source: 'sample' as const,
   manifest: null,
   core: null,

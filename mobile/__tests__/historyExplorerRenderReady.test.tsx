@@ -1,6 +1,7 @@
 import React from 'react';
 import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { View } from 'react-native';
+import Svg from 'react-native-svg';
 
 import { HistoryExplorer } from '../src/components/viz/HistoryExplorer';
 import type { BankHistoryChartModel } from '../src/types';
@@ -37,7 +38,7 @@ jest.mock('../src/theme/ThemeProvider', () => ({
 
 type InspectableRenderer = ReactTestRenderer & {
   root: {
-    findAllByType: (type: typeof View) => {
+    findAllByType: (type: React.ElementType) => {
       props: { onLayout?: (event: {
         nativeEvent: { layout: { width: number; height: number } };
       }) => void };
@@ -101,10 +102,12 @@ describe('HistoryExplorer graphic evidence', () => {
       nativeEvent: { layout: { width: 320, height: 150 } },
     }));
 
+    expect(onGraphicReadiness).not.toHaveBeenCalled();
+    act(() => tree.root.findAllByType(Svg)[0].props.onLayout?.({ nativeEvent: { layout: { width: 320, height: 150 } } }));
     expect(onGraphicReadiness).toHaveBeenCalledTimes(1);
     expect(onGraphicReadiness).toHaveBeenCalledWith({
       revision: 'history:ready',
-      accessibleSummary: true,
+      accessibleSummary: true, expectedCount: 1, pointCount: 1, layoutMeasured: true, emptyStateRendered: false,
     });
     act(() => tree.unmount());
   });

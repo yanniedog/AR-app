@@ -1,5 +1,8 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
+import * as bankRateHistorySync from '../src/data/historicalBankRateCatalogueSync';
+import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
+import * as payload from '../src/data/payload';
 
 const mockReadBundle = jest.fn();
 const mockReadMeta = jest.fn();
@@ -56,6 +59,7 @@ jest.mock('../src/data/historyDaily', () => {
 
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: () => mockYieldToUi(),
+  yieldToPaintFrames: async () => {},
 }));
 
 // eslint-disable-next-line import/first -- store import must follow jest mocks
@@ -73,6 +77,7 @@ const originalEnsureBankInsights = useStore.getState().ensureBankInsights;
 const originalEnsureBankSpreadHistory = useStore.getState().ensureBankSpreadHistory;
 const originalEnsureRbaCalendar = useStore.getState().ensureRbaCalendar;
 const originalEnsureDetails = useStore.getState().ensureDetails;
+const originalEnsureSearchIndex = useStore.getState().ensureSearchIndex;
 const originalPrefs = useStore.getState().prefs;
 
 const remoteManifest: Manifest = sampleManifest;
@@ -105,6 +110,7 @@ function resetStore() {
     ensureBankInsights: originalEnsureBankInsights,
     ensureBankSpreadHistory: originalEnsureBankSpreadHistory,
     ensureRbaCalendar: originalEnsureRbaCalendar,
+    ensureSearchIndex: originalEnsureSearchIndex,
     ensureDetails: originalEnsureDetails,
     bankSpreadHistory: null,
     bankSpreadHistoryError: null,
@@ -131,7 +137,73 @@ describe('store refresh lifecycle', () => {
     });
   });
 
+  it.each([false, true])('installs current rates before history finishes (quiet refresh=%s)', async background => {
+    mockReadMeta.mockResolvedValue(null);
+    mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+    let release!: () => void;
+    let entered!: () => void;
+    const waiting = new Promise<boolean>(resolve => { release = () => resolve(true); });
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+      entered();
+      return waiting;
+    });
+    useStore.setState({ status: 'loading', core: null, manifest: null,
+      ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureHistoryBanks: mockEnsureHistoryBanks, ensureBankInsights: mockEnsureBankInsights,
+      ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+    const refreshing = useStore.getState().refresh({ background });
+    await started;
+    expect(useStore.getState()).toMatchObject({ core: remoteCore, status: 'ready', refreshing: false,
+      payloadProgress: null, bankRateHistoryLoading: true, postRefreshWarming: true });
+    release();
+    await refreshing;
+    expect(useStore.getState().bankRateHistoryLoading).toBe(false);
+    expect(useStore.getState().postRefreshWarming).toBe(false);
+    prepare.mockRestore();
+  });
+
+  it.each([false, true])('persists the selected history index before deferring history (same core=%s)', async sameCore => {
+    const manifest = revisionManifest(1, { files: { core: remoteManifest.files.core, details: remoteManifest.files.details } });
+    const day = manifest.run_date;
+    const priorDay = new Date(Date.parse(day) - 86_400_000).toISOString().slice(0, 10);
+    const oldHead = { ...revisionHead(manifest), manifest_url: revisionHead(manifest).manifest_url.replace(day, priorDay) };
+    const oldIndex = { schema_version: 1, revision_protocol: 1 as const, dates: [priorDay, day], count: 2,
+      min_date: priorDay, latest_date: day, revision_heads: { [priorDay]: oldHead, [day]: revisionHead(manifest) } };
+    const index = { ...oldIndex, revision_heads: { ...oldIndex.revision_heads, [priorDay]: {
+      ...oldHead, revision: 2, generation_id: 'corrected', manifest_sha256: 'f'.repeat(64),
+      manifest_url: oldHead.manifest_url.replace('r000001', 'r000002'),
+    } } };
+    // Today's core/assets are unchanged; only a prior day's selected head changes.
+    mockReadMeta.mockResolvedValue(sameCore ? { manifest, source: 'remote', savedAt: manifest.generated_at,
+      coreSha: manifest.files.core.sha256, detailsSha: manifest.files.details.sha256, historyDatesIndex: oldIndex } : null);
+    mockFetchManifest.mockResolvedValue(manifest);
+    mockFetchDatesIndexJson.mockResolvedValue(index);
+    mockDownloadCore.mockResolvedValue({ core: remoteCore, text: JSON.stringify(remoteCore), integrity: sampleCoreIntegrity });
+    jest.mocked(payload.downloadDetails).mockResolvedValue({ text: '{}', details: { schema_version: 1, run_date: day, products: {} } });
+    useStore.setState({ source: 'remote', manifest: sameCore ? manifest : null,
+      core: sameCore ? remoteCore : null, ensureDetails: mockEnsureDetails, ensureRbaCalendar: mockEnsureRbaCalendar,
+      ensureHistoryBanks: mockEnsureHistoryBanks, ensureBankInsights: mockEnsureBankInsights,
+      ensureBankSpreadHistory: mockEnsureBankSpreadHistory });
+    let finish!: () => void;
+    const pending = new Promise<boolean>(resolve => { finish = () => resolve(true); });
+    let entered!: () => void;
+    const started = new Promise<void>(resolve => { entered = resolve; });
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+      entered(); return pending;
+    });
+    const refreshing = useStore.getState().refresh({});
+    await started;
+    const writer = sameCore ? mockUpdateMeta : mockWriteBundle;
+    expect(writer.mock.calls[0][0]).toMatchObject({ manifest, historyDatesIndex: index });
+    expect(useStore.getState()).toMatchObject({ status: 'ready', bankRateHistoryLoading: true });
+    finish();
+    await refreshing;
+    prepare.mockRestore();
+  });
+
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'remote',
@@ -152,6 +224,7 @@ describe('store refresh lifecycle', () => {
 
     const changed = await useStore.getState().refresh({});
 
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), null);
     expect(changed).toBe(false);
     expect(mockDownloadCore).not.toHaveBeenCalled();
     expect(mockReadBundle).not.toHaveBeenCalled();
@@ -267,6 +340,11 @@ describe('store refresh lifecycle', () => {
   });
 
   it('invalidates a loaded deep-search index when a same-core manifest revises its hash', async () => {
+    const prepareSearch = jest.fn(async () => {
+      expect(useStore.getState().searchIndex).toBeNull();
+      expect(useStore.getState().manifest?.files.search_index?.sha256).toBe('search-new');
+    });
+    useStore.setState({ ensureSearchIndex: prepareSearch });
     const searchAsset = (sha256: string) => ({
       name: 'search-index.json.gz',
       bytes: 100,
@@ -313,6 +391,7 @@ describe('store refresh lifecycle', () => {
     expect(useStore.getState().searchIndex).toBeNull();
     expect(useStore.getState().searchIndexStatus).toBe('idle');
     expect(useStore.getState().searchIndexError).toBeNull();
+    expect(prepareSearch).toHaveBeenCalledTimes(1);
   });
 
   it('keeps OS-scheduled refresh bounded when optional asset hashes change', async () => {
@@ -364,8 +443,10 @@ describe('store refresh lifecycle', () => {
       detailsSha: revisedManifest.files.details.sha256,
     });
 
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
 
+    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), null);
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
@@ -514,8 +595,10 @@ describe('store refresh lifecycle', () => {
       integrity: sampleCoreIntegrity,
     });
 
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
 
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), null);
     expect(useStore.getState().manifest?.files.core.sha256).toBe('b'.repeat(64));
     expect(useStore.getState().bankSpreadHistory).toBeNull();
     expect(useStore.getState().bankSpreadHistoryError).toBeNull();

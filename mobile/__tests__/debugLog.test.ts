@@ -6,7 +6,6 @@ import * as SecureStore from 'expo-secure-store';
 import {
   ANDROID_LOG_PATH_HINT,
   DEBUG_LOG_UPLOAD_RECEIPT_KEY,
-  MAX_APPENDED_AUDIT_REPORT_CHARS,
   MAX_AUDIT_SNAPSHOT_BODY_CHARS,
   MAX_AUDIT_SNAPSHOT_STORAGE_CHARS,
   MAX_LOG_BYTES,
@@ -56,12 +55,38 @@ const crashlyticsApi: CrashlyticsLike = {
 };
 
 describe('redactSecrets', () => {
+  it('keeps every redaction family protected behind the fast prefilters', () => {
+    const inputs = [
+      'ExPo_ToKeN=confidential', 'Bearer confidential', 'Authorization: confidential',
+      'API-KEY=confidential', 'secret:confidential', 'Password confidential', 'token=confidential',
+      '"api_key":"confidential"', "'password':'confidential'",
+      'uid=confidential', 'user-id=confidential', 'subscription_id=confidential', 'subscriptionId=confidential',
+      'confidential@example.com',
+    ];
+    for (const input of inputs) expect(redactSecrets(input)).not.toContain('confidential');
+  });
   it('redacts EXPO_TOKEN and bearer tokens', () => {
     const input = 'auth EXPO_TOKEN=abc123 Bearer sk-live-xyz token=secretval';
     const out = redactSecrets(input);
     expect(out).not.toContain('abc123');
     expect(out).not.toContain('sk-live-xyz');
     expect(out).toContain('[REDACTED]');
+  });
+
+  it.each(['Authorization: Bearer', 'authorization: bearer', 'Authorization: Basic'])(
+    'redacts the complete %s credential', (header) => {
+      const out = redactSecrets(`${header} sk-live-xyz request=completed`);
+      expect(out).not.toContain('sk-live-xyz');
+      expect(out).toContain('[REDACTED]');
+      expect(out).toContain('request=completed');
+    },
+  );
+
+  it.each(['Bearer', 'Basic'])('redacts quoted Authorization %s values and preserves JSON', (scheme) => {
+    const out = redactSecrets(JSON.stringify({ headers: { Authorization: `${scheme} sk-live-xyz` }, request: 'completed' }));
+    expect(out).not.toContain('sk-live-xyz');
+    expect(JSON.parse(out)).toEqual({ headers: { Authorization: '[REDACTED]' }, request: 'completed' });
+    expect(redactSecrets(`'authorization': '${scheme} sk-live-xyz'`)).toBe("'authorization': '[REDACTED]'");
   });
 
   it('redacts account identifiers and email addresses', () => {
@@ -354,7 +379,7 @@ describe('uploadDebugLog', () => {
         }),
       }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1 });
+    await expect(uploadDebugLog(body, mockFetch)).rejects.toMatchObject({ attempts: 1, mayHaveUploaded: true });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -370,9 +395,7 @@ describe('uploadDebugLog', () => {
         }),
       }) as unknown as typeof fetch;
 
-    await expect(uploadDebugLog('small log', mockFetch)).rejects.toThrow(
-      'may have been accepted',
-    );
+    await expect(uploadDebugLog('small log', mockFetch)).rejects.toMatchObject({ mayHaveUploaded: true });
     expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 
@@ -477,7 +500,7 @@ describe('durable debug-log upload deletion receipt', () => {
     await expect(loadDebugLogUploadReceipt()).resolves.toEqual(receipt);
     expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
       DEBUG_LOG_UPLOAD_RECEIPT_KEY,
-      JSON.stringify(receipt),
+      JSON.stringify([receipt]),
       { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY },
     );
     await expect(saveDebugLogUploadReceipt({
@@ -797,6 +820,20 @@ describe('persistent log file', () => {
     expect(complete.match(/physical-complete-audit/g)).toHaveLength(1);
   });
 
+  it('redacts decoded JSON escapes in an older sidecar before export', async () => {
+    const files = installPathAwareFiles();
+    files[AUDIT_SIDECAR_PATH] = JSON.stringify({
+      schemaVersion: PERFORMANCE_AUDIT_SCHEMA_VERSION,
+      summaryMarker: 'PERFORMANCE_AUDIT_SUMMARY token=marker-private',
+      reportJson: String.raw`{"schemaVersion":7,"sentinel":"\u0074oken=body-private contact=person@example.com"}`,
+    });
+    const complete = await debugLog.readCompleteText();
+    expect(complete).toContain('[REDACTED]');
+    expect(complete).not.toContain('body-private');
+    expect(complete).not.toContain('marker-private');
+    expect(complete).not.toContain('person@example.com');
+  });
+
   it('keeps the audit block when the physical log is already near capacity', async () => {
     const noiseLine = `${'n'.repeat(8_000)}\n`;
     const nearlyFull = noiseLine.repeat(Math.ceil(MAX_LOG_FILE_BYTES / noiseLine.length));
@@ -848,8 +885,8 @@ describe('persistent log file', () => {
     const complete = await debugLog.readCompleteText();
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain('oversized-audit-body');
-    // Log compaction still drops the giant blob from the export.
-    expect(complete).not.toContain(report.blob.slice(0, 64));
+    // The full export includes even fields larger than the rotating log budget.
+    expect(JSON.parse(complete.split(`${marker}\n`).at(-1)!).blob).toBe(report.blob);
   });
 
   it('appends ordinary flushes instead of rewriting the whole log', async () => {
@@ -1075,7 +1112,7 @@ describe('persistent log file', () => {
     expect(files[AUDIT_SIDECAR_PATH]).toContain('escaping-headroom');
   });
 
-  it('omits an oversized compact report from the export instead of building it', async () => {
+  it('includes the complete canonical report even above the old paste export cutoff', async () => {
     const files = installPathAwareFiles();
     const marker = `PERFORMANCE_AUDIT_SUMMARY schema=${PERFORMANCE_AUDIT_SCHEMA_VERSION} session=huge-export app_version=9.8.7 build_version=654`;
     const detail = 'D'.repeat(2_048);
@@ -1092,9 +1129,11 @@ describe('persistent log file', () => {
 
     expect(complete).toContain('# Latest complete performance audit');
     expect(complete).toContain(marker);
-    expect(complete).toContain('compact report omitted from this export');
-    expect(complete).not.toContain(detail);
-    expect(complete.length).toBeLessThan(MAX_APPENDED_AUDIT_REPORT_CHARS);
+    expect(complete).not.toContain('compact report omitted from this export');
+    expect(complete).toContain(detail);
+    const exported = JSON.parse(complete.split(`${marker}\n`)[1]);
+    expect(exported.checks).toHaveLength(400);
+    expect(exported.checks[399]).toEqual({ id: 'c399', detail });
   });
 
   it('does not report physical audit persistence when the filesystem write fails', async () => {

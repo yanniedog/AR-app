@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, Share, type ScrollView, View } from 'react-native';
 
 import { useTrustedExternalUrl } from '../src/components/ExternalLinkConfirmation';
+import { useAuditExternalLinks } from '../src/hooks/useAuditExternalLinks';
 import { EmptyState, ScreenSkeleton } from '../src/components/feedback';
 import { SectionTitle } from '../src/components/product/ProductDetailParts';
 import { RateConditionsDisclosure } from '../src/components/product/RateConditionsDisclosure';
@@ -106,6 +107,7 @@ export default function RateReceiptScreen() {
       : null,
     [core, detailsProducts, found, receipt, scenario],
   );
+  useAuditExternalLinks((receipt?.officialSources ?? []).map((source) => ({ url: source.url, purpose: 'lender_source', label: source.label })));
   const shareText = useMemo(() => {
     if (!receipt || !brief) return '';
     const lines = [
@@ -428,7 +430,7 @@ export default function RateReceiptScreen() {
           ) : (
             <>
               <AppText variant="small" color="textMuted" style={{ marginBottom: 12, lineHeight: 20 }}>
-                Add your current rate and balance in My scenario to make this brief specific.
+                Add your current rate and balance in Check my rate to make this brief specific.
               </AppText>
               <Button title="Add scenario" variant="secondary" onPress={() => router.push('/calculator')} />
             </>

@@ -234,14 +234,14 @@ export function resolveAuditJourneyOptionalData(
     deepSearch: journeyId === 'search' && hasSearchIndex && effectiveDeepSearch(prefs),
     bankInsights:
       effectiveBankInsights() &&
-      ['response', 'outlook', 'rba-redirect', 'product', 'lender'].includes(journeyId),
+      ['response', 'outlook', 'product', 'lender'].includes(journeyId),
     // Product and lender screens intentionally suppress their deferred history
     // fan-out while an audit is active. Waiting for that suppressed work caused
     // deterministic 30-second false failures on a cold product-history cache.
     bankHistory:
       historyEnabled &&
       prefs.includeNonStandard &&
-      ['outlook', 'rba-redirect'].includes(journeyId),
+      journeyId === 'outlook',
     productHistory: false,
   };
 }
@@ -647,17 +647,17 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
   const enabled = interests.includes(section);
   return {
     id: `browse-${section.toLowerCase()}`,
-    label: `Browse: ${SECTIONS[section].title}`,
+    label: `Categories: ${SECTIONS[section].title}`,
     href: enabled
       ? ({
-          pathname: '/browse',
+          pathname: '/categories',
           params: buildBrowseRouteParams(section),
         } as unknown as Href)
       : undefined,
-    expectedPath: '/browse',
+    expectedPath: '/categories',
     expectedSurface: 'browse.hierarchy',
     expectedSection: section,
-    navigationKind: 'tab',
+    navigationKind: 'stack',
     skipReason: enabled ? undefined : `${SECTIONS[section].title} is disabled in interests`,
   };
 }
@@ -682,8 +682,56 @@ export function buildPerformanceAuditJourneys(
       label: 'Home',
       href: '/(tabs)' as Href,
       expectedPath: '/',
-      expectedSurface: 'today.hero',
+      expectedSurface: 'home.hub',
       navigationKind: 'tab',
+    },
+    {
+      id: 'rates',
+      label: 'Rates',
+      href: '/browse' as Href,
+      expectedPath: '/browse',
+      expectedSurface: 'rates.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'market',
+      label: 'Market',
+      href: '/market' as Href,
+      expectedPath: '/market',
+      expectedSurface: 'market.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'tools',
+      label: 'Tools',
+      href: '/tools' as Href,
+      expectedPath: '/tools',
+      expectedSurface: 'tools.hub',
+      navigationKind: 'tab',
+    },
+    {
+      id: 'matches',
+      label: 'My matches',
+      href: '/matches' as Href,
+      expectedPath: '/matches',
+      expectedSurface: 'today.hero',
+      navigationKind: 'stack',
+    },
+    {
+      id: 'bank-rates',
+      label: 'Bank rates',
+      href: '/bank-rates' as Href,
+      expectedPath: '/bank-rates',
+      expectedSurface: 'bank-rates.dashboard',
+      navigationKind: 'stack',
+    },
+    {
+      id: 'changes',
+      label: 'Rate moves',
+      href: '/passthrough' as Href,
+      expectedPath: '/passthrough',
+      expectedSurface: 'changes.feed',
+      navigationKind: 'stack',
     },
     ...SECTION_ORDER.map((section) => browseJourney(section, interests)),
     {
@@ -700,15 +748,15 @@ export function buildPerformanceAuditJourneys(
       href: '/research' as Href,
       expectedPath: '/research',
       expectedSurface: 'outlook.dashboard',
-      navigationKind: 'tab',
+      navigationKind: 'stack',
     },
     {
-      id: 'rba-redirect',
-      label: 'Why rates move',
+      id: 'rba',
+      label: 'RBA rates',
       href: '/rba' as Href,
-      expectedPath: '/research',
-      expectedSurface: 'outlook.rba-response',
-      navigationKind: 'tab',
+      expectedPath: '/rba',
+      expectedSurface: 'rba.dashboard',
+      navigationKind: 'stack',
     },
     {
       id: 'watchlist',
@@ -724,7 +772,7 @@ export function buildPerformanceAuditJourneys(
       href: '/settings' as Href,
       expectedPath: '/settings',
       expectedSurface: 'settings.sections',
-      navigationKind: 'tab',
+      navigationKind: 'stack',
     },
     {
       id: 'search',
@@ -1244,6 +1292,22 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
     slowestCheckMs: slowest ? roundMetric(slowest.latencyMs) : null,
     maxEventLoopLagMs: maxEventLoopLagMs == null ? null : roundMetric(maxEventLoopLagMs),
     maxFrameGapMs: maxFrameGapMs == null ? null : roundMetric(maxFrameGapMs),
+  };
+}
+
+/** A terminal diagnostic is not a completed planned check, nor is an unflushed result. */
+export function summarizePartialPerformanceAudit(
+  checks: AuditCheck[], plannedChecks: number, storedChecks: number,
+): PerformanceAuditSummary {
+  const summary = summarizePerformanceAudit(checks);
+  const durableCount = Number.isFinite(storedChecks) ? Math.max(0, Math.floor(storedChecks)) : 0;
+  const executed = summarizePerformanceAudit(checks.slice(0, durableCount)).executed;
+  return {
+    ...summary,
+    executed,
+    coveragePercent: plannedChecks > 0 && Number.isFinite(plannedChecks)
+      ? roundMetric((executed / plannedChecks) * 100)
+      : null,
   };
 }
 

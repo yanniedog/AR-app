@@ -22,7 +22,10 @@ describe('history graphic audit evidence', () => {
       window: '30D',
       availability: 'rendered',
       pointCount: 2,
+      expectedCount: 2,
       accessibleSummary: true,
+      layoutMeasured: true,
+      emptyStateRendered: false,
     };
     expect(isCurrentHistoryGraphicEvidence(evidence, 'sha-a')).toBe(true);
     expect(isCurrentHistoryGraphicEvidence(evidence, 'sha-b')).toBe(false);
@@ -32,6 +35,9 @@ describe('history graphic audit evidence', () => {
       availability: 'unavailable',
       pointCount: 0,
       accessibleSummary: false,
+      expectedCount: 0,
+      emptyStateRendered: true,
     }, 'sha-a')).toBe(true);
+    expect(isCurrentHistoryGraphicEvidence({ ...evidence, layoutMeasured: false }, 'sha-a')).toBe(false);
   });
 });

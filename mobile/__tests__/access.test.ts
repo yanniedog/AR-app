@@ -28,7 +28,7 @@ describe('assessAccess', () => {
   });
 
   it('does not mark provider-brand occupation badges as unverified', () => {
-    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    const a = assessAccess('RateSaver Home Loan', null, 'Police Bank');
     expect(a.categories).toContain('occupation');
     expect(a.verify).toBe(false);
     expect(a.badge).toBe('Occupation-restricted');
@@ -59,7 +59,7 @@ describe('assessAccess', () => {
   });
 
   it('flags occupation lenders with generic product titles via provider', () => {
-    const a = assessAccess('RateSaver Home Loan', null, 'Australian Military Bank');
+    const a = assessAccess('RateSaver Home Loan', null, 'Police Bank');
     expect(a.categories).toContain('occupation');
     expect(a.restricted).toBe(true);
   });
@@ -268,7 +268,6 @@ describe('assessAccess', () => {
 
 describe('providerRestrictsAccess', () => {
   it('returns true for known occupation-limited providers', () => {
-    expect(providerRestrictsAccess('Australian Military Bank')).toBe(true);
     expect(providerRestrictsAccess('Police Bank')).toBe(true);
   });
 
@@ -276,6 +275,19 @@ describe('providerRestrictsAccess', () => {
     expect(providerRestrictsAccess('Some Credit Union')).toBe(false);
     expect(providerRestrictsAccess('Bank of Sydney')).toBe(false);
   });
+
+  it.each(['Australian Military Bank', 'Defence Bank', 'Police Credit Union Ltd', 'Police Credit Union Limited'])(
+    'uses verified public membership for %s without waiving product eligibility', (provider) => {
+      expect(providerRestrictsAccess(provider)).toBe(false);
+      const detail = { description: `A savings account from ${provider}.`, eligibility: [{ label: 'OTHER', info: `You must be a member of ${provider}.` }] };
+      expect(assessAccess('Saver', detail, provider).restricted).toBe(false);
+      expect(rowRestrictsAccess({ product_name: `${provider} Saver`, provider })).toBe(false);
+      expect(assessAccess('Staff Saver', detail, provider).restricted).toBe(true);
+      expect(assessAccess('DHOAS Home Loan', detail, provider).restricted).toBe(true);
+      expect(assessAccess('Saver', { eligibility: [{ label: 'OTHER', info: 'Available to ADF members only.' }] }, provider).restricted).toBe(true);
+      expect(assessAccess('Saver', { eligibility: [{ label: 'STAFF' }] }, provider).restricted).toBe(true);
+    },
+  );
 });
 
 describe('rowRestrictsAccess', () => {

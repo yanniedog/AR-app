@@ -1,0 +1,7 @@
+{
+  "name": "@ar/history-codec",
+  "version": "1.0.0",
+  "private": true,
+  "main": "index.ts",
+  "peerDependencies": { "expo": "*" }
+}
