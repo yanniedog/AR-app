@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-11T07:30:54.017Z",
+  "generated_at": "2026-10-11T12:33:47.035Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -966,6 +966,15 @@
         "build(deps): bump fast-uri from 3.1.7 to 3.1.8 in /mobile (#347)"
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.223"
+    },
+    {
+      "version": "1.0.224",
+      "date": "2026-10-11",
+      "summaryBullets": [
+        "Restore Cloudflare payload delivery and release readiness (#351)",
+        "Prepare history upstream and deliver app data directly from GitHub (#350)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.224"
     }
   ]
 }
