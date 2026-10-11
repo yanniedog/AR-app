@@ -121,7 +121,31 @@ rate multiplicity and dated evidence before a new baseline can be compiled.
 
 The public payload auditor checks ready, packed and legacy capabilities
 independently. Passing a local candidate audit does not establish publication,
-service deployment, APK delivery or acceptance on the user's physical phone.
-The producer's delivery-service allowlist must support the new filename before
-publishing ready assets. App and producer must use the same pinned compiler;
-compiler changes require coordinated publication and app delivery.
+APK delivery or acceptance on the user's physical phone. App and producer must
+use the same pinned compiler; compiler changes require coordinated publication
+and app delivery.
+
+## Direct GitHub delivery
+
+AR-local publishes the readable app inventory on a dedicated GitHub branch,
+`app-payload-public`. Immutable editions live under `tags/<canonical tag>/`;
+current manifest and index selectors live under `latest/`.
+Canonical manifest URLs and revision identities keep their `app-payload-*`
+namespace. The app maps these validated identities to the corresponding public
+raw GitHub file and verifies the original sizes and hashes. New manifests advertise
+`delivery: {mode: 'github-public-v1'}`. These bytes need no Cloudflare service or
+device decryption keys. Unexpected encrypted responses fail closed.
+
+The producer verifies the staged commit's raw files before atomically updating
+the branch reference, publishing files and selectors together. Only explicitly
+declared app assets are included;
+preservation archives, source evidence, logs and keys are excluded. Existing
+encrypted releases remain available to older clients. Every public branch
+edition remains available to apps retaining that edition in their cache.
+
+Historical index entries remain provenance receipts for prepared history. The
+app downloads the selected current edition, without fetching every old core.
+The raw endpoint supports browser access as well as native Android downloads.
+The public auditor rejects redirects from this fixed route and records canonical,
+requested and final URLs separately. A successful direct public readback is
+required before reporting delivery complete.

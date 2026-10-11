@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const zlib = require('node:zlib');
+const { gzipSync } = require('fflate');
 const { spawnSync } = require('node:child_process');
 const { unpackHistoricalBankRateCatalogue } = require('./bundle-historical-bank-catalogue.cjs');
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -25,7 +26,9 @@ function buildReadySnapshot(snapshot) {
   const ready = JSON.parse(result.stdout);
   const compiled = Buffer.from(JSON.stringify(ready));
   if (compiled.length > 4 * 1024 * 1024) throw new Error('Prepared history exceeds the app processing budget');
-  const compressed = zlib.gzipSync(compiled, { level: 9, mtime: 0 });
+  // The pinned JS codec is reproducible across build hosts. Native zlib embeds
+  // an OS byte and can change deflate output between Node patch releases.
+  const compressed = Buffer.from(gzipSync(compiled, { level: 9, mtime: 0 }));
   if (compressed.length > 1024 * 1024) throw new Error('Prepared history exceeds the compressed app budget');
   return { schema_version: 1, run_date: snapshot.run_date, core_sha256: snapshot.core_sha256,
     source_index: snapshot.source_index, source_catalogue_sha256: hash(raw),

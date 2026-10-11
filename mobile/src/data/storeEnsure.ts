@@ -1,5 +1,4 @@
-import { COMPACT_HISTORY_NORMALIZATION_VERSION } from './historyDerivation';
-import type { DetailsPayload } from '../types';
+import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from './historyDerivation';
 import { cache } from './cache';
 import {
   downloadBankInsights,
@@ -11,7 +10,7 @@ import {
 } from './payload';
 import { shouldWarmDetails } from './optionalPrefs';
 import { verifiedDetailsSha } from './detailsIdentity';
-import { dailyHistorySha, syncHistoryFromDailyPayloads } from './historyDaily';
+import { dailyHistorySha } from './historyDaily';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import type { HistoryBanksPayload } from './historyPayload';
 import { normalizeBankInsightsPayload } from './bankInsights';
@@ -52,6 +51,7 @@ import { samePayloadIdentity } from './payloadRevision';
 import { waitForBankRateHistoryPreparation } from './storeBankRateHistory';
 import { cachedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
+import { createMissingPublicPayloadRecovery } from './missingPublicPayloadRecovery';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -64,6 +64,7 @@ let historyBanksRequest = 0;
 let historyBanksInFlightManifest: AppState['manifest'] = null;
 
 export function createEnsureActions(set: StoreSet, get: StoreGet) {
+  const recoverMissingPublication = createMissingPublicPayloadRecovery(get);
   // Only values verified by this action may bypass the disk cache. A bare
   // bankSpreadHistory value in the store is not evidence of its generation.
   let verifiedSpread: {
@@ -243,6 +244,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         } catch (err) {
           workOutcome = 'failed';
           if (myGeneration !== detailsEnsureGeneration) return;
+          recoverMissingPublication(err, manifest, () => get().ensureDetails({ force: true, forProductView }));
           const msg = String((err as Error)?.message ?? err);
           debugLog.warn('store', `ensureDetails failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureDetails', error: msg });
@@ -397,6 +399,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           if (!editionStillCurrent()) return;
           set({ searchIndex: fresh, searchIndexStatus: 'ready', searchIndexError: null });
         } catch (err) {
+          recoverMissingPublication(err, manifest, () => get().ensureSearchIndex());
           const msg = String((err as Error)?.message ?? err);
           debugLog.warn('store', `ensureSearchIndex failed: ${msg}`);
           logDegradation('warn', 'store.ensureFailed', { fn: 'ensureSearchIndex', error: msg });
@@ -427,7 +430,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         return;
       }
       // Trends + refresh + product screens all call this; coalesce so we never
-      // download the compact asset (or fan out dated cores) three times at once.
+      // download the compact asset three times at once.
       // Key on core + history asset revision so a same-core manifest that only
       // bumps history_banks.sha256 starts a fresh ensure instead of joining stale work.
       const currentCoreSha = get().manifest?.files.core.sha256 ?? '';
@@ -523,6 +526,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             await installHistory(validated, compactAsset.sha256);
             return;
           } catch (err) {
+            recoverMissingPublication(err, manifest, () => get().ensureHistoryBanks({ force: true }));
             const msg = String((err as Error)?.message ?? err);
             debugLog.warn(
               'store',
@@ -546,28 +550,20 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
 
 
-        try {
-          const synced = await syncHistoryFromDailyPayloads({
-            targetRunDate: core.run_date,
-            currentCore: core,
-            existing: cached,
-            cachedDates: new Set(cached?.run_dates ?? []),
-            coreSha,
-            isCurrent,
-          });
-          if (synced.run_dates.length > 1) {
-            await installHistory(synced, dailyHistorySha(synced.run_dates));
-            return;
-          }
-        } catch (err) {
-          debugLog.warn(
-            'store',
-            `ensureHistoryBanks daily sync failed: ${String((err as Error)?.message ?? err)}`,
-          );
-        }
-
-        // An unsuccessful legacy refresh cannot certify the previous edition.
-        set({ historyBanks: null, historyBanksError: 'history dates unavailable' });
+        // A legacy publication without a prepared summary must not rebuild it
+        // from dozens of dated cores. Keep only a previously validated daily
+        // summary bound to this exact core; READY profile history is separate.
+        const saved = normalizeHistoryBanksPayload(cached);
+        const reusable = saved?.run_date === core.run_date &&
+          saved.derivation_version === HISTORY_DERIVATION_VERSION &&
+          saved.source_identities?.[core.run_date] === `core:${coreSha}` &&
+          shaMatches(dailyHistorySha(saved.run_dates)) ? saved : null;
+        set({
+          historyBanks: reusable,
+          historyBanksError: reusable
+            ? 'Saved history is available. Refresh data to download the prepared history summary.'
+            : 'This data edition has no prepared history summary. Refresh data to load a current edition.',
+        });
       })();
       historyBanksInFlightManifest = requested.manifest;
       historyBanksSyncState.inFlightCoreSha = currentCoreSha;
@@ -629,6 +625,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           `ensureBankInsights ok run_date=${downloaded.run_date} banks=${Object.keys(downloaded.banks).length} events=${downloaded.events.length}`,
         );
       } catch (err) {
+        recoverMissingPublication(err, manifest, () => get().ensureBankInsights({ force: true }));
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureBankInsights failed: ${msg}`);
         logDegradation('warn', 'store.ensureFailed', { fn: 'ensureBankInsights', error: msg });
@@ -723,6 +720,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         retainVerifiedSpread(snapshot, downloaded);
         set({ bankSpreadHistory: downloaded, bankSpreadHistoryError: null });
       } catch (error) {
+        recoverMissingPublication(error, manifest, () => get().ensureBankSpreadHistory({ force: true }));
         const message = String((error as Error)?.message ?? error);
         const live = liveSnapshot();
         if (!live) return;
@@ -809,6 +807,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           await notify(messages.filter((message) => message.title.startsWith('RBA')));
         }
       } catch (err) {
+        recoverMissingPublication(err, manifest, () => get().ensureRbaCalendar());
         const msg = String((err as Error)?.message ?? err);
         debugLog.warn('store', `ensureRbaCalendar failed: ${msg}`);
         set({

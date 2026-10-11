@@ -85,7 +85,9 @@ function acceptedFinalFetchUrl(
   if (!requested || !finalValue) return false;
   const finalCanonical = canonical(finalValue);
   const automatic = automaticDataUrl(requestedUrl);
-  if (automatic && finalCanonical === canonical(automatic)) return true;
+  // Managed public bytes come directly from their exact raw GitHub path.
+  // A redirect to a release, proxy, sibling file or other host is not accepted.
+  if (automatic) return finalCanonical === canonical(automatic);
   if (finalCanonical === requested) return true;
   try {
     const requestedParsed = new URL(requested);

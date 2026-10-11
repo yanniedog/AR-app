@@ -51,8 +51,8 @@ function publicationSource(source, repo) {
 async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = []) {
   const url = publicationSource(source, repo);
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_COMPRESSED) throw new Error('Invalid publication byte limit');
-  // Reuse the shipping app's fixed, allowlisted service. It opens ARE2 only;
-  // immutable manifest byte counts/hashes still describe the returned domain bytes.
+  // Use the shipping app's readable GitHub data branch. Canonical identities and
+  // manifest byte counts/hashes still describe the exact published domain bytes.
   const delivery = automaticDataUrl(url);
   const requested = delivery ?? url;
   const signal = AbortSignal.timeout(60_000);
@@ -63,9 +63,9 @@ async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transpo
     if (response.url !== target) { await cancel(); throw new Error('Unexpected publication response URL'); }
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       await cancel();
-      // The fixed delivery endpoint returns bytes directly. Never let it turn
-      // this audit into a request to another path or origin.
       const location = response.headers.get('location');
+      // The fixed raw data route returns bytes directly; never follow it to an
+      // encrypted legacy release, another branch or an alternate service.
       if (delivery || redirects >= 5 || !location) throw new Error('Unexpected publication redirect');
       const next = new URL(location, target);
       if (next.protocol !== 'https:' || next.port || next.username || next.password || next.hash ||
@@ -88,7 +88,7 @@ async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transpo
     const bytes = Buffer.concat(chunks);
     if (isReleaseTransport(bytes)) throw new Error('Publication delivery returned unopened ARE2 transport');
     transports.push({ source_url: url, requested_url: requested, final_url: response.url,
-      route: delivery ? 'automatic_data_service' : 'github_release' });
+      route: delivery ? 'github_public_branch' : 'github_release' });
     return bytes;
   }
 }

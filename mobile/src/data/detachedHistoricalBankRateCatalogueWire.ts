@@ -1,7 +1,7 @@
 import type { Manifest, ManifestFile, ManifestEnc } from '../types';
 import type { CompressedCatalogue } from './historicalBankRateCatalogueCompression';
 import { isValidCalendarDate } from '../lib/calendarDate';
-import { automaticDataUrl } from '../lib/automaticDataAccess';
+import { trustedPayloadReleaseUrl } from '../lib/automaticDataAccess';
 
 export const DETACHED_HISTORY_MAX_COMPRESSED = 8 * 1024 * 1024;
 export const DETACHED_HISTORY_MAX_DECODED = 24 * 1024 * 1024;
@@ -52,7 +52,7 @@ function validateUrlFreeHistoricalDescriptor(manifest: Manifest,
         !new RegExp(`^app-payload-${manifest.run_date}-r[0-9]{6}$`).test(manifest.tag)) return null;
     const name = `${prefix}-${manifest.run_date}-${file.sha256.slice(0, 12)}.json.gz${enc ? '.enc' : ''}`;
     const url = `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`;
-    if (file.name !== name || !automaticDataUrl(url) || Object.values(manifest.files).some(entry => entry?.name === name)) return null;
+    if (file.name !== name || !trustedPayloadReleaseUrl(url) || Object.values(manifest.files).some(entry => entry?.name === name)) return null;
     return { name, bytes: Number(file.bytes), sha256: file.sha256, url,
       ...(encryption ? { enc: { ...encryption } } : {}) };
   } catch { return null; }
@@ -82,7 +82,7 @@ export function validateLegacyHistoricalCatalogueDescriptor(manifest: Manifest, 
     // asset on another release. Immutable revisions never borrow alias assets.
     const tags = !manifest.payload_revision && legacyTags.includes(manifest.tag) ? legacyTags : [manifest.tag];
     if (file.name !== name || typeof file.url !== 'string' || manifest.repo !== expectedRepo ||
-        !tags.some(tag => file.url === `https://github.com/${manifest.repo}/releases/download/${tag}/${name}`) || !automaticDataUrl(file.url) ||
+        !tags.some(tag => file.url === `https://github.com/${manifest.repo}/releases/download/${tag}/${name}`) || !trustedPayloadReleaseUrl(file.url) ||
         Object.values(manifest.files).some(entry => entry?.name === name)) return null;
     return { name, bytes: file.bytes as number, sha256: file.sha256, url: file.url,
       ...(encryption ? { enc: { ...encryption } } : {}) };

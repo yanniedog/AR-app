@@ -10,7 +10,7 @@ import { gzipSync } from 'node:zlib';
 
 const require = createRequire(import.meta.url);
 const { audit, options, fetchBytes } = require('./audit-public-payload.cjs');
-const { automaticDataUrl, APP_DATA_ORIGIN } = require('../src/lib/automaticDataAccess.ts');
+const { automaticDataUrl } = require('../src/lib/automaticDataAccess.ts');
 const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { packHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
@@ -43,7 +43,7 @@ function encryptedTransport(plain) {
 
 const publication = 'https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json';
 
-test('public transport requests the shipping allowlisted service and retains the original identity', async t => {
+test('public transport requests the shipping GitHub data branch and retains the original identity', async t => {
   const bytes = gzipSync(Buffer.from('{"verified":"domain bytes"}')), transports = [];
   mockFetch(t, async (url, init) => {
     assert.equal(url, automaticDataUrl(publication));
@@ -54,7 +54,7 @@ test('public transport requests the shipping allowlisted service and retains the
   });
   assert.deepEqual(await fetchBytes(publication, bytes.length, 'yanniedog/AR-local', transports), bytes);
   assert.deepEqual(transports, [{ source_url: publication, requested_url: automaticDataUrl(publication),
-    final_url: automaticDataUrl(publication), route: 'automatic_data_service' }]);
+    final_url: automaticDataUrl(publication), route: 'github_public_branch' }]);
 });
 
 test('an actual unopened ARE2 wire envelope is rejected before index JSON parsing', async t => {
@@ -75,7 +75,8 @@ for (const target of [
   await assert.rejects(fetchBytes(target, 100), /Invalid publication source URL/);
 });
 
-for (const target of [APP_DATA_ORIGIN + '/other-path', publication, 'https://evil.invalid/manifest.json']) {
+for (const target of ['https://ar-app-data.jkokavec.workers.dev/other-path', publication,
+  automaticDataUrl(publication).replace('manifest.json', 'dates-index.json'), 'https://evil.invalid/manifest.json']) {
   test(`delivery redirect is rejected before following ${target}`, async t => {
     let requests = 0;
     mockFetch(t, async url => { requests++; return httpResponse(url, null, 302, { location: target }); });
@@ -84,7 +85,20 @@ for (const target of [APP_DATA_ORIGIN + '/other-path', publication, 'https://evi
   });
 }
 
-test('non-proxied GitHub releases retain bounded approved CDN redirects and actual provenance', async t => {
+test('public data branch refuses unexpected CDN redirects', async t => {
+  const requested = automaticDataUrl(publication);
+  const cdn = 'https://release-assets.githubusercontent.com/github-production-release-asset/123/asset?token=example';
+  const calls = [];
+  mockFetch(t, async (url, init) => {
+    calls.push({ url, signal: init.signal });
+    assert.equal(url, requested);
+    return httpResponse(url, null, 302, { location: cdn });
+  });
+  await assert.rejects(fetchBytes(publication, 100), /Unexpected publication redirect/);
+  assert.deepEqual(calls.map(call => call.url), [requested]);
+});
+
+test('other GitHub releases retain bounded approved CDN redirects and actual provenance', async t => {
   const source = publication.replace('yanniedog/AR-local', 'example/payload'), bytes = Buffer.from('{}');
   const cdn = 'https://release-assets.githubusercontent.com/github-production-release-asset/123/asset?token=example';
   const calls = [], transports = [];
@@ -100,7 +114,7 @@ test('non-proxied GitHub releases retain bounded approved CDN redirects and actu
 
 for (const target of ['https://evil.invalid/a', 'http://release-assets.githubusercontent.com/a',
   'https://user:secret@release-assets.githubusercontent.com/a', 'https://release-assets.githubusercontent.com:8443/a',
-  publication, APP_DATA_ORIGIN + '/v1/release/app-payload-latest/manifest.json']) {
+  publication, 'https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json']) {
   test(`direct GitHub redirect cannot escape its trusted publication route to ${target}`, async t => {
     let requests = 0;
     mockFetch(t, async url => { requests++; return httpResponse(url, null, 302, { location: target }); });
@@ -302,7 +316,7 @@ test('public audit exposes a superseded current source without comparing its pri
   assert.equal(proof.status, 'PASS'); // The declared archive bytes are authentic.
   assert.equal(report.publication_verified, true);
   assert.ok(report.public_transport.length >= 5);
-  assert.ok(report.public_transport.every(value => value.route === 'automatic_data_service' &&
+  assert.ok(report.public_transport.every(value => value.route === 'github_public_branch' &&
     value.source_url.startsWith('https://github.com/') && value.final_url === automaticDataUrl(value.source_url)));
   assert.equal(report.historical_coverage_verified, false);
   assert.equal(proof.source_selection.status, 'WARN');

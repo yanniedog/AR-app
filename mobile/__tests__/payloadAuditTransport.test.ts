@@ -2,6 +2,7 @@ import { strToU8 } from 'fflate';
 import { downloadSearchIndex } from '../src/data/payload';
 import { installAppHealthTransportGuard, hasAppHealthFetchGuard } from '../src/lib/appHealthTransportGuard';
 import { createV1AppHealthSourceContract } from '../src/lib/appHealth';
+import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 
 jest.mock('../src/lib/yieldToUi', () => ({
   yieldToUi: jest.fn(async () => undefined),
@@ -14,7 +15,7 @@ const index = { schema_version: 1, run_date: '2026-09-05', products: { product: 
 
 it.each(['local', 'live-source'] as const)('keeps payload transport behind the %s audit policy', async (mode) => {
   const original = globalThis.fetch;
-  const fetchSpy = jest.fn(async () => ({ ok: true, status: 200, url,
+  const fetchSpy = jest.fn(async () => ({ ok: true, status: 200, url: automaticDataUrl(url),
     arrayBuffer: async () => strToU8(JSON.stringify(index)).buffer }));
   globalThis.fetch = fetchSpy as unknown as typeof fetch;
   const guard = installAppHealthTransportGuard({ target: globalThis, mode, contract });
