@@ -287,8 +287,8 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
 /** One rich cache prepares every bank and filter. It never fetches dated cores. */
 export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Manifest,
   index: DatesIndex | null = null, details: DetailsPayload | null = null,
-  detached: HistoricalBankRateCatalogue | null = null): Promise<boolean> {
-  const evidence = backgroundPayloadWork.begin('Historical catalogue preparation', core.run_date, 'Queued behind previous catalogue preparation');
+  detached: HistoricalBankRateCatalogue | null = null, isCurrent?: () => boolean): Promise<boolean> {
+  const evidence = backgroundPayloadWork.begin('Historical catalogue preparation', core.run_date, 'Queued behind previous catalogue preparation', isCurrent);
   const work = preparation.then(async () => {
     processingWork = evidence;
     try {

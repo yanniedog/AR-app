@@ -29,7 +29,7 @@ export async function prepareBankRateHistoryAfterPaint(
   options: { warm?: boolean; readCachedDetails?: boolean } = {},
 ): Promise<void> {
   let finish!: () => void;
-  const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint');
+  const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint', () => isCurrent());
   const completion = new Promise<void>(resolve => { finish = resolve; });
   const request = { completion, finish, work };
   const previous = requests.get(get);
@@ -74,9 +74,7 @@ export async function prepareBankRateHistoryAfterPaint(
     }
     if (!isCurrent()) return;
     work.stage(detached ? 'Preparing verified historical catalogue' : 'Preparing fallback historical catalogue');
-    const ready = detached
-      ? await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached)
-      : await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
+    const ready = await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached, isCurrent);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) {

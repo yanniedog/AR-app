@@ -138,7 +138,7 @@ test.each(['paint', 'native setup', 'cached details'] as const)(
     expect(downloadInflate).toHaveBeenCalledTimes(1);
     expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
     expect(prepareHistoricalBankRateHistory).toHaveBeenCalledTimes(1);
-    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, freshIndex, freshDetails, catalogue);
+    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, freshIndex, freshDetails, catalogue, expect.any(Function));
     expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
   },
 );
@@ -161,7 +161,7 @@ test('detached history starts after paint and native setup, respecting the local
   expect(get().status).toBe('ready');
   paint.resolve();
   await pending;
-  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, catalogue);
+  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, catalogue, expect.any(Function));
   expect(get().bankRateHistoryRevision).toBe(1);
 });
 
@@ -169,7 +169,7 @@ test('missing detached archive keeps the bundled preparation path available', as
   const { get, set } = store(), manifest = detachedManifest();
   set({ manifest });
   await prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
-  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null);
+  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, null, expect.any(Function));
   expect(get().bankRateHistoryLoading).toBe(false);
 });
 
@@ -224,7 +224,7 @@ test.each(['missing', 'corrupt', 'partial'])(
     expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalled();
     if (kind === 'partial') {
       expect(await jest.mocked(loadDetachedHistoricalBankRateCatalogue).mock.results.at(-1)!.value).not.toBeNull();
-      expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(current, manifest, datesOnly, null, partial);
+      expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(current, manifest, datesOnly, null, partial, expect.any(Function));
     }
     expect(downloadInflate).not.toHaveBeenCalled();
     expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
@@ -272,7 +272,7 @@ test.each(['valid', 'malformed', 'oversized', 'wrong-head'])(
     paint.resolve();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest,
-      kind === 'valid' ? index : null, details);
+      kind === 'valid' ? index : null, details, null, expect.any(Function));
     expect(get().bankRateHistoryLoading).toBe(false);
     expect(get().refresh).not.toHaveBeenCalled();
   },
@@ -395,6 +395,21 @@ test('product history waits for the replacement preparation before choosing a so
   await waiting;
   expect(settled).toBe(true);
   expect(get().bankRateHistoryLoading).toBe(false);
+});
+
+test('reset retires the outer history worker before native setup settles', async () => {
+  const blocked = deferred(), entered = deferred(), { get, set } = store();
+  jest.mocked(configureNativeHistoricalCatalogueCodec).mockImplementationOnce(async () => {
+    entered.resolve(); await blocked.promise; return false;
+  });
+  const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  await entered.promise;
+  const worker = backgroundPayloadWork.snapshot().find(job => job.label === 'Bank rate history preparation' && job.outcome === null)!;
+  set({ core: null, manifest: null, bankRateHistoryLoading: false });
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBe('superseded');
+  blocked.resolve(); await pending;
+  expect(get().bankRateHistoryRevision).toBe(0);
 });
 
 test('a cancelled preparation without a successor releases its flag and product waiter', async () => {
