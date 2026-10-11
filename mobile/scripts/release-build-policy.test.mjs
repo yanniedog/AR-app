@@ -106,7 +106,7 @@ test('APK publication serializes universal before ARM and delays README mutation
     'utf8',
   );
   assert.match(workflow, /inputs\.apk_channel == 'universal' && inputs\.follow_with_arm == true/);
-  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
+  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ github\.event_name == 'push' && 'workflow-check' \|\| inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
   assert.match(workflow, /-f apk_channel=arm/);
   assert.match(workflow, /-f follow_with_arm=false/);
   assert.match(workflow, /-f release_version="\$\{\{ steps\.release\.outputs\.version \}\}"/);
@@ -142,13 +142,14 @@ test('a rejected publication still uploads the signed Gradle APK without an unpu
   assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
 });
 
-test('only queue-coordinated builds publish and superseded failures recheck the release queue', async () => {
+test('workflow repairs build on main and superseded failures recheck the release queue', async () => {
   const apkWorkflow = await readFile(
     new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
     'utf8',
   );
-  assert.doesNotMatch(apkWorkflow, /^  push:/m);
-  assert.match(apkWorkflow, /^  workflow_dispatch:/m);
+  assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
+  assert.match(apkWorkflow, /id: publish\n\s+if: github\.event_name == 'workflow_dispatch'/);
+  assert.match(apkWorkflow, /github\.event_name == 'push' && 'workflow-check'/);
   const recoveryWorkflow = await readFile(
     new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url),
     'utf8',

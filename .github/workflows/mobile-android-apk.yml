@@ -15,11 +15,16 @@
 # Signing: prefers ANDROID_KEYSTORE_* secrets; else fetches default keystore from EAS credentials.
 
 name: mobile-android-apk
-run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
+run-name: mobile-android-apk (${{ github.event_name == 'push' && 'workflow-check' || inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches this after the final patch-version PR
-# merges. Building on preceding main pushes produces duplicate or stale APKs.
+# Queue-drain automation dispatches ordinary app releases after the final
+# patch-version PR merges. A change to this workflow builds an artifact only
+# so pipeline repairs can be verified without publishing ahead of the queue.
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
     inputs:
       apk_channel:
@@ -230,6 +235,7 @@ jobs:
 
       - name: Publish preview APK manifest (GitHub release)
         id: publish
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}

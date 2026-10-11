@@ -109,6 +109,12 @@ test('successful ARM publication reconciles after the README without depending o
   assert.match(reconcile.run, /gh workflow run mobile-auto-release-on-queue-drain\.yml\s+\\\s+--ref main\s+\\\s+--repo "\$\{\{ github\.repository \}\}"/);
 });
 
+test('artifact-only workflow checks never count as an in-flight release channel', () => {
+  const rows = [{ headSha: 'abc', status: 'in_progress', displayTitle: 'mobile-android-apk (workflow-check)' }];
+  assert.equal(hasApkBuildInFlight(rows, 'abc', ['arm']), false);
+  assert.equal(hasApkBuildInFlight(rows, 'abc', ['universal', 'arm']), false);
+});
+
 test('release inspection distinguishes absence from infrastructure failure', () => {
   assert.equal(
     releaseSnapshotFromGhResult('v1.2.3', {
