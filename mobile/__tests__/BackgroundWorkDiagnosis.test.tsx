@@ -3,6 +3,12 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import type { AuditBackgroundWorkWait } from '../src/lib/performanceAuditBackgroundWork';
 
+type TestNode = { type: unknown; children: unknown[]; props: { onPress: () => void } };
+type Renderer = ReactTestRenderer & { root: {
+  findAll: (predicate: (node: TestNode) => boolean) => TestNode[];
+  find: (predicate: (node: TestNode) => boolean) => TestNode;
+} };
+
 jest.mock('../src/components/ui', () => ({ AppText: 'AppText', Card: 'Card', Button: 'Button' }));
 
 test('shows wait separately from pre-existing worker age and reveals earlier stage timings', async () => {
@@ -18,8 +24,8 @@ test('shows wait separately from pre-existing worker age and reveals earlier sta
       stages: [{ label: 'Baseline decode', startedAt: '', durationMs: 277_000, active: false },
         { label: 'Merge', startedAt: '', durationMs: 143_000, active: true }] }],
   };
-  let tree!: ReactTestRenderer;
-  await act(async () => { tree = TestRenderer.create(<BackgroundWorkDiagnosis wait={wait} />); });
+  let tree!: Renderer;
+  await act(async () => { tree = TestRenderer.create(<BackgroundWorkDiagnosis wait={wait} />) as Renderer; });
   const text = () => tree.root.findAll(node => node.type === ('AppText' as unknown)).map(node => node.children.join('')).join('\n');
   expect(text()).toContain('Audit waited 300.0 s');
   expect(text()).toContain('History (2026-10-04): 420.0 s');
