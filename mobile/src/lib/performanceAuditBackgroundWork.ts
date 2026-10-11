@@ -24,7 +24,8 @@ export function captureAuditBackgroundWorkWait(
 export function describeAuditBackgroundWork(wait: AuditBackgroundWorkWait): string {
   const active = wait.jobs.filter(job => job.outcome === null);
   const detail = active.map(job =>
-    `${job.label}${job.runDate ? ` (${job.runDate})` : ''}: ${job.stage} — ${(job.stageElapsedMs / 1000).toFixed(1)}s in stage, ${(job.elapsedMs / 1000).toFixed(1)}s total`);
+    `${job.label}${job.runDate ? ` (${job.runDate})` : ''}: ${job.stage} — ${(job.stageElapsedMs / 1000).toFixed(1)}s in stage, ${(job.elapsedMs / 1000).toFixed(1)}s total` +
+    (job.lastCheckpointAgeMs != null ? `; ${job.processingCheckpoints} processing checkpoints, last ${(job.lastCheckpointAgeMs / 1000).toFixed(1)}s ago` : '; no processing checkpoint recorded'));
   return `Background work: ${(wait.elapsedMs / 1000).toFixed(1)}s waiting.\n${detail.join('\n') ||
     (wait.payloadWork.activeWork.length ? `${wait.payloadWork.activeWork.join(', ')} (stage unavailable)` : 'Work settled')}`;
 }

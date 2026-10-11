@@ -41,7 +41,10 @@ let lastPrepared: {
   catalogue: NonNullable<ReturnType<typeof cachedHistoricalBankRateCatalogue>>;
   checkpoint: DecodedCheckpoint | null;
 } | null = null;
-const yieldHistoryWork = () => yieldToUi(0);
+// Catalogue preparation is serialized below. These signals come from real
+// cooperative processing batches, independently of audit observation timers.
+let processingWork: BackgroundWorkHandle | null = null;
+const yieldHistoryWork = () => { processingWork?.checkpoint(); return yieldToUi(0); };
 
 function bundledHistory(): typeof import('./bundledHistoricalBankRateCatalogue') {
   // Metro keeps this module lazy: importing sync must not initialize the large
@@ -287,6 +290,8 @@ export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Ma
   detached: HistoricalBankRateCatalogue | null = null): Promise<boolean> {
   const evidence = backgroundPayloadWork.begin('Historical catalogue preparation', core.run_date, 'Queued behind previous catalogue preparation');
   const work = preparation.then(async () => {
+    processingWork = evidence;
+    try {
     evidence.stage('Checking prepared catalogue receipt');
     // Only the last serialized successful preparation can be reused. An
     // intervening core/index may advance the revision high-water mark, even if
@@ -302,6 +307,7 @@ export function prepareHistoricalBankRateHistory(core: CorePayload, manifest: Ma
     const catalogue = ready ? cachedHistoricalBankRateCatalogue(core) : null;
     if (catalogue && completion.reusable) lastPrepared = { core, embedded: detached ?? core.bank_rate_history_catalogue, receipt, catalogue, checkpoint: decodedCheckpoint };
     return ready;
+    } finally { if (processingWork === evidence) processingWork = null; }
   });
   preparation = work.then(ready => {
     evidence.finish(ready ? 'completed' : 'unavailable');

@@ -43,3 +43,22 @@ test('bounds completed diagnostics and stages without hiding any in-flight worke
   expect(entry.stages).toHaveLength(32);
   expect(entry.omittedStages).toBe(49);
 });
+
+test('observer snapshots do not fabricate worker progress', () => {
+  let now = 1_800_000_000_000;
+  const registry = new BackgroundPayloadWorkRegistry(() => now);
+  const work = registry.begin('History', null, 'Decode');
+  now += 60_000;
+  expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 0, lastCheckpointAgeMs: null });
+  work.checkpoint();
+  now += 2_000;
+  expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 1, lastCheckpointAgeMs: 2_000 });
+  now += 10_000;
+  expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 1, lastCheckpointAgeMs: 12_000 });
+  work.checkpoint();
+  expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 2, lastCheckpointAgeMs: 0 });
+  work.finish();
+  now += 100_000;
+  work.checkpoint();
+  expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 2, lastCheckpointAgeMs: 0 });
+});

@@ -98,6 +98,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       if (!isCurrent()) throw new Error('Detached history preparation superseded');
       await yieldToUi(0);
       if (!isCurrent()) throw new Error('Detached history preparation superseded');
+      work.checkpoint();
     };
     const prepare = async (text: string): Promise<HistoricalBankRateCatalogue | null> => {
       if (text.length > DETACHED_HISTORY_MAX_DECODED) {

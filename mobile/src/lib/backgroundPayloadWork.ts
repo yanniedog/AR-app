@@ -19,16 +19,21 @@ export interface BackgroundWorkSnapshot {
   stageElapsedMs: number;
   stages: BackgroundWorkStage[];
   omittedStages: number;
+  processingCheckpoints?: number;
+  lastCheckpointAgeMs?: number | null;
 }
 export interface BackgroundWorkHandle {
   stage(label: string): void;
   finish(outcome?: BackgroundWorkOutcome): void;
+  checkpoint(): void;
 }
 type Work = {
   id: number; label: string; runDate: string | null; start: number; end: number | null;
   outcome: BackgroundWorkOutcome | null;
   stages: { label: string; start: number; end: number | null }[];
   omittedStages: number;
+  checkpoints: number;
+  lastCheckpoint: number | null;
 };
 const MAX_COMPLETED = 32;
 const MAX_STAGES = 32;
@@ -44,7 +49,8 @@ export class BackgroundPayloadWorkRegistry {
     const start = this.clock();
     const work: Work = { id: ++this.sequence, label: bounded(label),
       runDate: runDate?.slice(0, 128) ?? null, start, end: null, outcome: null,
-      stages: [{ label: bounded(stage), start, end: null }], omittedStages: 0 };
+      stages: [{ label: bounded(stage), start, end: null }], omittedStages: 0,
+      checkpoints: 0, lastCheckpoint: null };
     this.active.set(work.id, work);
     // Never evict an in-flight worker: the oldest may be the reason for a hang.
     return {
@@ -66,6 +72,11 @@ export class BackgroundPayloadWorkRegistry {
         this.completed.push(work);
         if (this.completed.length > MAX_COMPLETED) this.completed.shift();
       },
+      checkpoint: () => {
+        if (work.end !== null) return;
+        work.checkpoints++;
+        work.lastCheckpoint = this.clock();
+      },
     };
   }
 
@@ -82,6 +93,8 @@ export class BackgroundPayloadWorkRegistry {
         elapsedMs: Math.max(0, (work.end ?? now) - work.start), outcome: work.outcome,
         stage: stage.label, stageElapsedMs: Math.max(0, (stage.end ?? now) - stage.start),
         omittedStages: work.omittedStages,
+        processingCheckpoints: work.checkpoints,
+        lastCheckpointAgeMs: work.lastCheckpoint === null ? null : Math.max(0, (work.end ?? now) - work.lastCheckpoint),
         stages: work.stages.map(stage => ({ label: stage.label,
           startedAt: new Date(stage.start).toISOString(),
           durationMs: Math.max(0, (stage.end ?? now) - stage.start), active: stage.end === null })),
