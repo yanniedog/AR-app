@@ -125,6 +125,7 @@ import {
   boundAuditCheckEvidence,
   compactAuditCheckForLog,
   compactAuditLogJson,
+  encodePerformanceAuditEvent,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
@@ -1158,8 +1159,15 @@ function logAuditEvent(
   level: 'info' | 'warn' | 'error' = 'info',
   options: { includeApp?: boolean } = {},
 ): void {
-  const includeApp = options.includeApp === true || event.kind === 'start';
-  const line = compactAuditLogJson(includeApp ? { ...event, app } : event);
+  const line = encodePerformanceAuditEvent(app, {
+    platform: Platform.OS,
+    platformVersion: String(Platform.Version),
+    manufacturer: Device.manufacturer ?? null,
+    brand: Device.brand ?? null,
+    model: Device.modelName ?? null,
+    osName: Device.osName ?? null,
+    osVersion: Device.osVersion ?? null,
+  }, event, options.includeApp);
   if (level === 'error') debugLog.error(PERFORMANCE_AUDIT_LOG_TAG, line);
   else if (level === 'warn') debugLog.warn(PERFORMANCE_AUDIT_LOG_TAG, line);
   else debugLog.info(PERFORMANCE_AUDIT_LOG_TAG, line);
