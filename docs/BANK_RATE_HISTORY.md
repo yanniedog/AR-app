@@ -155,6 +155,11 @@ npm run benchmark:history -- --snapshot /path/to/previous.snapshot.json --measur
 The default uses browser streams and WebCrypto on Node. JSON output identifies
 the engine, CPU, codec, archive digest, full observation counts, individual stage
 timings, cold and warm readiness, required-offset profile timing and budget checks.
+The same five-second total includes encoding and decoding the snapshot's exact
+compressed bytes through the detached cache codecs. Their byte roundtrip is
+verified; this approximates detached transport size without claiming to measure
+encrypted delivery, outer-envelope inflation or disk writes. Cache codecs yield
+by elapsed work rather than scheduling a timer for every small block.
 The script fails above 5,000 ms, 10 MiB decoded dictionary JSON or 3 MiB compressed;
 `--max-ms` changes the timing threshold and `--measure-only` reports failures without
 a failing exit code for baseline comparisons. Each work yield crosses one timer

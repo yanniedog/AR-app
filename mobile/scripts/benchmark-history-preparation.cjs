@@ -24,6 +24,7 @@ const { prepareHistoricalBankRateCatalogueAsync, historicalBankRateSnapshotsAsyn
   cachedHistoricalBankRateSnapshots } = require('../src/data/historicalBankRateCatalogue.ts');
 const { bankRateScope } = require('../src/data/bankRateOverview.ts');
 const { EMPTY_PROFILE } = require('../src/data/profile.ts');
+const { encodeDetachedHistoryBytes, decodeDetachedHistoryBytes } = require('../src/data/detachedHistoricalCatalogueBytes.ts');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -69,6 +70,15 @@ async function main() {
   const scope = bankRateScope({ Mortgage: [], Savings: [], TD: [] });
   const filters = { profileFilters: EMPTY_PROFILE, interests: ['Mortgage', 'Savings', 'TD'], includeNonStandard: false };
   const ready = await measure('profile_aggregate_ms', () => historicalBankRateSnapshotsAsync(prepared, core, scope, filters, yieldControl));
+  // The compressed snapshot approximates detached transport size. Exercise the
+  // shipping cache byte codecs as well: fixed per-block timers previously hid
+  // seconds of work outside this preparation budget. Disk IO is still excluded.
+  const cacheInput = Buffer.from(envelope.gzip_base64, 'base64');
+  const encodedCache = await measure('cache_encode_ms', () => encodeDetachedHistoryBytes(cacheInput, yieldControl));
+  const decodedCache = await measure('cache_decode_ms', () => decodeDetachedHistoryBytes(encodedCache, yieldControl));
+  if (!decodedCache || !Buffer.from(decodedCache).equals(cacheInput) || encodedCache !== cacheInput.toString('base64')) {
+    throw new Error('Cache byte codecs must preserve the exact authenticated transport bytes');
+  }
   timings.cold_ready_ms = performance.now() - coldStarted;
   const coldYields = yields;
   const warmPrepared = await measure('warm_prepare_ms', () => prepareHistoricalBankRateCatalogueAsync(catalogue, yieldControl));
@@ -85,7 +95,7 @@ async function main() {
   const checks = { processing: timings.cold_ready_ms <= maxMs,
     required_feature_profile: timings.required_feature_profile_ms <= maxMs,
     decoded_size: envelope.bytes <= budgets.decoded_bytes, compressed_size: compressedBytes <= budgets.compressed_bytes,
-    warm_identity_reused: true };
+    warm_identity_reused: true, exact_cache_bytes_reused: true };
   const result = {
     kind: 'historical-catalogue-regression-proxy', timestamp: new Date().toISOString(),
     environment: { runtime: process.version, engine: `V8 ${process.versions.v8}`, platform: process.platform,
@@ -97,6 +107,8 @@ async function main() {
       tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])) },
     timings: Object.fromEntries(Object.entries(timings).map(([key, value]) => [key, Number(value.toFixed(3))])),
     yields: { cold: coldYields, profile_change: yields - coldYields }, budgets, checks,
+    cache_proxy: { bytes: cacheInput.length, source: 'compressed snapshot approximates detached transport size',
+      included_in_processing_budget: ['encode', 'decode'] },
     passed: Object.values(checks).every(Boolean), measure_only: measureOnly,
     device_acceptance: 'unverified',
     exclusions: ['network', 'filesystem latency', 'module initialization', 'current-core classification', 'cache persistence', 'React rendering', 'Android/Hermes and mobile-browser runtime'],

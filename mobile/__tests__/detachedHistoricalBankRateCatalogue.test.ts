@@ -538,3 +538,27 @@ test('URL-free compact capability remains revision-bound across publication reta
   expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
   expect(downloadInflate).not.toHaveBeenCalled();
 });
+
+test('cache byte codecs avoid one timer per block and check ownership at both boundaries', async () => {
+  // A coarse clock models blocks finishing inside one work slice. The old
+  // implementation scheduled hundreds of timers for this exact same input.
+  jest.spyOn(Date, 'now').mockReturnValue(1000);
+  const raw = new Uint8Array(2 * 1024 * 1024); raw.fill(173);
+  const encodeWork = jest.fn(async () => {}), decodeWork = jest.fn(async () => {});
+  const encoded = await encodeDetachedHistoryBytes(raw, encodeWork);
+  expect(encoded).toBe(base64(raw));
+  const decoded = await decodeDetachedHistoryBytes(encoded, decodeWork);
+  expect(decoded && Buffer.from(decoded).equals(Buffer.from(raw))).toBe(true);
+  expect(encodeWork).toHaveBeenCalledTimes(2);
+  expect(decodeWork).toHaveBeenCalledTimes(2);
+});
+
+test.each(['encode', 'decode'] as const)('cache %s stops when ownership is lost during a bounded work slice', async direction => {
+  let now = 1000;
+  jest.spyOn(Date, 'now').mockImplementation(() => (now += 8));
+  const raw = new Uint8Array(50_003), cancelled = new Error('superseded');
+  const work = jest.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(cancelled);
+  const result = direction === 'encode' ? encodeDetachedHistoryBytes(raw, work) : decodeDetachedHistoryBytes(base64(raw), work);
+  await expect(result).rejects.toBe(cancelled);
+  expect(work).toHaveBeenCalledTimes(2);
+});
