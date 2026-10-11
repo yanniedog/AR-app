@@ -148,6 +148,11 @@ Device decryption keys are not needed for managed delivery. Legacy ARE1 assets
 are hashed first, then opened by the service using `X-AR-Legacy-SHA256` for that
 verified ciphertext identity. An unopened service response fails closed.
 
+Production READY/PACKED assets contain ordinary gzip inside ARE2 transport;
+the producer rejects inner ARE1 encryption. The legacy encrypted-catalogue cache
+still needs its matching local key when read offline and otherwise uses the
+verified fallback. Service-opened bytes are not stored under a ciphertext hash.
+
 The Worker allowlists declared app assets only, including URL-free
 `bank_rate_history_ready.file` and `bank_rate_history_catalogue_packed.file`.
 Their canonical URLs are derived from the selected immutable manifest tag.
