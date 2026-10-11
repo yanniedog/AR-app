@@ -120,3 +120,17 @@ test('full catalogue opt-in still waits for mandatory profile verification', () 
     expect(tree.root.findByType('SearchReportExport' as any).props.disabled).toBe(true);
   } finally { act(() => tree.unmount()); }
 });
+
+test('audit comparison reports a missing filtered rate immediately and can clear the bank filter', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    act(() => mockSurfaces.get('search.results').actions['search.filter.provider.first']({ provider: 'Missing Bank' }));
+    expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    expect(mockSurfaces.get('search.results').actions['search.compare.select.0']({ selectionToken: 'missing' }))
+      .toEqual({ unavailableReason: 'The selected exact rate is not in the current filtered search results' });
+    act(() => mockSurfaces.get('search.results').actions['search.filters.clear']());
+    expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
+  } finally { act(() => tree.unmount()); }
+});

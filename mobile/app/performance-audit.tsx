@@ -8,6 +8,7 @@ import { Alert, TextInput, View } from 'react-native';
 import { ScreenScrollView } from '../src/components/Screen';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
 import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
+import { AuditCatalogueCoverage } from '../src/components/AuditCatalogueCoverage';
 import {
   getDebugLogUploadSnapshot,
   isDebugLogUploadBusy,
@@ -36,6 +37,7 @@ import {
 import { blocksPerformanceAudit } from '../src/lib/appUpdateDownloadLogic';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { getPassiveAuditStatus, subscribePassiveAudit } from '../src/lib/passiveAudit';
 
 const DEIDENTIFIED_AUDIT_SHARE_FILE = `${FileSystem.cacheDirectory ?? ''}ar-app-health-report.json`;
 
@@ -178,6 +180,7 @@ function PerformanceAuditScreenInner() {
   const [hangTimeoutInput, setHangTimeoutInput] = useState(
     String(DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS / 1_000),
   );
+  const passive = useSyncExternalStore(subscribePassiveAudit, getPassiveAuditStatus, getPassiveAuditStatus);
   const [hangTimeoutLoaded, setHangTimeoutLoaded] = useState(false);
   const [layoutReady, setLayoutReady] = useState(false);
   const [sharingReport, setSharingReport] = useState(false);
@@ -361,8 +364,16 @@ function PerformanceAuditScreenInner() {
           information actually render. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          When results are ready, you can separately review and share a byte-capped deidentified
-          report. Raw debug logs are never included in that report.
+          When the audit finishes, its full debug log and complete report are uploaded to paste.
+          Anyone with the resulting link can read them. A separate deidentified report is also available.
+        </AppText>
+        <AppText variant="small" weight="700">Background checks: {passive.completed} of {passive.total} data checks and {passive.linksCompleted} of {passive.linksTotal} links preloaded</AppText>
+        <AppText variant="tiny" color="textMuted">
+          Data and link checks preload slowly from data already on this device. Screen-off work runs
+          when Android or iOS permits; visual and interaction checks run in the foreground.
+          {passive.nativeStatus === 'restricted' ? ' Background execution is currently restricted by the system.' : ''}
+          {passive.nativeStatus === 'unavailable' ? ' This device supports preloading while the app is open only.' : ''}
+          {passive.updatedAt ? ` Last background evidence: ${new Date(passive.updatedAt).toLocaleString()}.` : ''}
         </AppText>
         <AppText variant="tiny" color="textMuted">
           The screen stays awake throughout the audit. Locking the phone or leaving the app pauses the run and it
@@ -371,11 +382,11 @@ function PerformanceAuditScreenInner() {
         </AppText>
         <View style={{ gap: 6 }}>
           <AppText variant="small" weight="700">
-            Hang prevention timeout
+            Stall timeout
           </AppText>
           <Row style={{ alignItems: 'center' }} gap={8}>
             <TextInput
-              accessibilityLabel="Audit hang prevention timeout in seconds"
+              accessibilityLabel="Audit stall timeout in seconds"
               accessibilityHint={`Enter a value from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} seconds`}
               value={hangTimeoutInput}
               onChangeText={setHangTimeoutInput}
@@ -410,14 +421,14 @@ function PerformanceAuditScreenInner() {
           >
             {hangTimeoutSeconds == null
               ? `Enter a whole number from ${MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS} to ${MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS}.`
-              : 'The timer restarts only after a completed check is saved to the debug log.'}
+              : 'Default: 10 seconds. Every individual check has a fixed 10-second limit even if this stall timeout is increased.'}
           </AppText>
         </View>
         <Button
           title={report ? 'Run audit and upload log again' : 'Run audit and upload log'}
           icon="pulse-outline"
           loading={(running && state.auditMode === 'local') || auditPreflightMode === 'local'}
-          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('local')}
         />
         <Button
@@ -425,7 +436,7 @@ function PerformanceAuditScreenInner() {
           icon="cloud-download-outline"
           variant="secondary"
           loading={(running && state.auditMode === 'live-source') || auditPreflightMode === 'live-source'}
-          disabled={running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
+          disabled={state.recoveryRequired || running || uploadBusy || !hangTimeoutLoaded || hangTimeoutSeconds == null || updateBlocksAudit || auditPreflightMode != null}
           onPress={() => void runAudit('live-source')}
         />
         <AppText variant="tiny" color="textMuted">
@@ -496,7 +507,7 @@ function PerformanceAuditScreenInner() {
               variant="small"
               color={report.summary.unexpectedSkipped > 0 ? 'danger' : 'textMuted'}
             >
-              Coverage {report.summary.coveragePercent == null
+              Audit check completion {report.summary.coveragePercent == null
                 ? 'unavailable'
                 : `${report.summary.coveragePercent.toFixed(1)}%`} · {report.summary.executed}{' '}
               executed · {report.summary.justifiedSkipped} declared unavailable ·{' '}
@@ -531,7 +542,7 @@ function PerformanceAuditScreenInner() {
                 : ''}
             </AppText>
             <AppText variant="small" color="textMuted">
-              Hang timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}
+              Stall timeout {(report.watchdog.hangTimeoutMs / 1_000).toFixed(0)} s; saved{' '}
               {report.watchdog.storedCheckCount} checks
             </AppText>
             <AppText variant="small" color="textMuted">
@@ -552,12 +563,17 @@ function PerformanceAuditScreenInner() {
 
           {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait} /> : null}
 
+          <AuditCatalogueCoverage
+            check={report.appHealth?.checks.find(check => check.code === 'catalogue-identity-coverage')}
+            sampling={report.plan?.inputs.sampling}
+          />
+
           {report.appHealth ? (
             <View style={{ gap: 8 }}>
               <AppText variant="h3">Data and display health</AppText>
               <AppText variant="small" color="textMuted">
                 Mode: {report.appHealth.mode === 'local' ? 'Local · zero network' : 'Live-source allowlist'}
-                {' · '}Coverage {report.appHealth.summary.coveragePercent == null
+                {' · '}Check completion {report.appHealth.summary.coveragePercent == null
                   ? 'unavailable'
                   : `${report.appHealth.summary.coveragePercent.toFixed(1)}%`}
               </AppText>

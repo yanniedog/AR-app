@@ -78,8 +78,26 @@ describe('app-health data quality', () => {
     const { snapshot, contract } = makeHealthyDataFixture();
     const checks = evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS);
 
-    expect(checks).toHaveLength(15);
-    expect(checks.every((check) => check.status === 'pass')).toBe(true);
+    expect(checks).toHaveLength(16);
+    expect(checks.filter(check => check.code !== APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)
+      .every((check) => check.status === 'pass')).toBe(true);
+    expect(byCode(checks, APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE).status).toBe('unavailable');
+  });
+
+  it('does not infer product identity coverage from equal detail counts', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    delete snapshot.details!.matchedProductCount;
+    delete snapshot.details!.orphanProductCount;
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS)).toMatchObject({ status: 'unavailable',
+      metrics: { matchedProducts: null, coveragePercent: null } });
+  });
+
+  it('does not pass when attempted providers have no recorded outcome', () => {
+    const { snapshot, contract } = makeHealthyDataFixture();
+    snapshot.core!.coverage!.providers_attempted = 4;
+    expect(byCode(evaluateAppHealthDataQuality(snapshot, contract, FIXTURE_NOW_MS),
+      APP_HEALTH_CHECK_CODES.COVERAGE)).toMatchObject({ status: 'warn', metrics: { unaccountedProviders: 1 } });
   });
 
   it('rejects a core payload schema that the app contract does not support', () => {

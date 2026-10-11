@@ -388,9 +388,10 @@ export default function MatchedRates() {
       },
       {
         id: 'today.hero-layout',
-        kind: 'graphic',
+        // This is a rate summary card, not a plotted graph.
+        kind: 'layout',
         status: heroLayoutRevision === todayRenderRevision ? 'ready' : 'pending',
-        accessibleSummary: heroLayoutRevision === todayRenderRevision,
+        layoutMeasured: heroLayoutRevision === todayRenderRevision,
         renderRevision: todayRenderRevision,
       },
       {

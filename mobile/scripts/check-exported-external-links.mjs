@@ -43,7 +43,10 @@ export function checkExternalLinksInBundle(code) {
     assert.equal(result.ok, true, `Compiled ${request.purpose} rejected: ${result.message}`);
     assert.equal(result.url, request.url.split('#')[0], 'Compiled URL changed path or query');
   }
-  for (const url of ['http://www.commbank.com.au/', 'https://localhost/', 'https://www.commbank.com.au/?token=secret']) {
+  assert.equal(trustedExternalUrl({ url: 'http://www.anz.com/terms', purpose: 'lender_source', label: 'Legacy CDR' }).url,
+    'https://www.anz.com/terms', 'Legacy CDR links must upgrade before any transport');
+  for (const url of ['http://example.com/', 'https://localhost/', 'https://www.commbank.com.au/?token=secret',
+    'https://cdn.bfldr.com/UNAPPROVED/as/document']) {
     assert.equal(trustedExternalUrl({ url, purpose: 'lender_source', label: 'Rejected' }).ok, false);
   }
   return requests.length;

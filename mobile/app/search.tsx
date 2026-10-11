@@ -301,6 +301,17 @@ export default function Search() {
     setSelectMode((value) => !value);
     setSelected([]);
   }, []);
+  const clearSearchFilters = useCallback(() => {
+    setQuery('');
+    setFilters({ ...EMPTY_FILTERS, includeNonStandard });
+  }, [includeNonStandard]);
+  const selectAuditToken = useCallback((...args: unknown[]) => {
+    const token = auditActionString(args, 'selectionToken');
+    if (!token || !baseRows.some(row => rowToken(row) === token)) {
+      return { unavailableReason: 'The selected exact rate is not in the current filtered search results' };
+    }
+    toggleSelect(token);
+  }, [baseRows, toggleSelect]);
   const auditActions = useMemo(() => ({
     'search.open': () => undefined,
     'search.query.product': (...args: unknown[]) => {
@@ -318,21 +329,16 @@ export default function Search() {
       if (provider) setFilters((current) => ({ ...current, providers: [provider] }));
     },
     'search.filters.apply': () => setFilterOpen(false),
+    'search.filters.clear': clearSearchFilters,
     'search.compare.mode': toggleCompareMode,
-    'search.compare.select.0': (...args: unknown[]) => {
-      const token = auditActionString(args, 'selectionToken');
-      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
-    },
-    'search.compare.select.1': (...args: unknown[]) => {
-      const token = auditActionString(args, 'selectionToken');
-      if (token && baseRows.some((row) => rowToken(row) === token)) toggleSelect(token);
-    },
+    'search.compare.select.0': selectAuditToken,
+    'search.compare.select.1': selectAuditToken,
     'search.compare.open': (...args: unknown[]) => {
       const exactTokens = auditActionStrings(args, 'selectionTokens');
       const tokens = exactTokens.length >= 2 ? exactTokens : selected;
       if (tokens.length >= 2) openCompare(tokens);
     },
-  }), [baseRows, selected, sortOptions, toggleCompareMode, toggleSelect]);
+  }), [clearSearchFilters, selected, selectAuditToken, sortOptions, toggleCompareMode]);
   const searchPending = detailFiltersPending || searchIndexLoading;
   const listRevision = JSON.stringify([
     coreSha ?? core?.run_date ?? 'none',
@@ -519,10 +525,7 @@ export default function Search() {
                 <Button
                   title="Clear search and filters"
                   variant="secondary"
-                  onPress={() => {
-                    setQuery('');
-                    setFilters({ ...EMPTY_FILTERS, includeNonStandard });
-                  }}
+                  onPress={clearSearchFilters}
                 />
                 <Button title="Edit product profile" variant="ghost" onPress={() => router.push('/profile')} />
               </View>

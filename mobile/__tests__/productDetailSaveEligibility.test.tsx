@@ -3,6 +3,7 @@ import TestRenderer, { act, type ReactTestRenderer } from 'react-test-renderer';
 
 import type { CorePayload, RateRow } from '../src/types';
 import { rateConditionFixture } from '../testUtils/rateConditions';
+import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 
 type TestNode = {
   props: Record<string, any>;
@@ -186,6 +187,10 @@ it('opens verified details-only product through the actual route without fabrica
   act(() => tree.unmount()); mockRoute.ri = 'bad';
   await act(async () => { tree = TestRenderer.create(<ProductDetail />) as InspectableRenderer; });
   expect(tree.root.findAllByProps({ title: 'Exact rate no longer available' })).toHaveLength(1);
+  const surface = jest.mocked(usePerformanceAuditSurface).mock.calls.at(-1)![0];
+  expect(surface.probes?.find(probe => probe.id === 'product.data')).toMatchObject({
+    status: 'error', error: 'The selected exact rate is absent from the eligible current catalogue',
+  });
   expect(tree.root.findAllByType('OfficialLinks')).toHaveLength(0);
   act(() => tree.unmount());
 });

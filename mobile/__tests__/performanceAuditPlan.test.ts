@@ -10,6 +10,10 @@ import {
   type DeepAuditStep,
 } from '../src/lib/performanceAuditPlan';
 import type { CorePayload, RateRow, Ribbon } from '../src/types';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
+import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
+import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
+
 
 const EMPTY_RIBBON: Ribbon = {
   counts: { rates: 0, products: 0, providers: 0 },
@@ -84,6 +88,10 @@ function allSteps(core: CorePayload | null = corePayload()): DeepAuditStep[] {
 }
 
 describe('deep performance audit plan', () => {
+  afterEach(() => {
+    installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
+    setSuitabilityAllowed(null);
+  });
   test('builds structurally identical first and repeat whole-app passes with stable unique ids', () => {
     const plan = buildDeepPerformanceAuditPlan(corePayload());
     expect(plan.passes.map((pass) => pass.id)).toEqual(DEEP_AUDIT_PASS_IDS);
@@ -188,6 +196,9 @@ describe('deep performance audit plan', () => {
       'route.not-found',
       'redirect.root',
       'route.audit',
+      'sample.catalogue.0',
+      'sample.catalogue.1',
+      'sample.catalogue.2',
     ]));
 
     const actions = new Set(steps.map((step) => step.semanticActionId));
@@ -318,85 +329,84 @@ describe('deep performance audit plan', () => {
     }
   });
 
-  test('derives exact deterministic same-section comparison inputs and preserves rate_index', () => {
-    const inputs = deriveDeepAuditInputs(corePayload());
+  test('replays exact same-section comparison tiers and sample ordering from the recorded seed', () => {
+    const core = corePayload();
+    const options = { seed: 'session-example' };
+    const inputs = deriveDeepAuditInputs(core, options);
+    expect(deriveDeepAuditInputs(core, options)).toEqual(inputs);
+    const reversed = { ...core, sections: { ...core.sections,
+      Mortgage: { ...core.sections.Mortgage, rates: [...core.sections.Mortgage.rates].reverse() } } };
+    expect(deriveDeepAuditInputs(reversed, options)).toEqual(inputs);
     expect(inputs.section).toBe('Mortgage');
-    expect(inputs.primaryProduct).toMatchObject({
-      section: 'Mortgage',
-      productKey: 'mortgage-alpha',
-      rateIndex: 7,
-      selectionToken: '7#mortgage-alpha',
-      taxonomyPath: ['OO', 'PI', 'VARIABLE', 'LVR_60_70'],
-    });
-    expect(inputs.secondaryProduct).toMatchObject({
-      section: 'Mortgage',
-      productKey: 'mortgage-zed',
-      rateIndex: 19,
-      selectionToken: '19#mortgage-zed',
-    });
     expect(inputs.primaryProduct?.productKey).not.toBe(inputs.secondaryProduct?.productKey);
-    expect(inputs.compareSelectionTokens).toEqual(['7#mortgage-alpha', '19#mortgage-zed']);
-
-    const compareOpen = allSteps().find(
-      (step) => step.passId === 'first-pass' && step.semanticActionId === 'search.compare.open',
-    );
-    expect(compareOpen?.parameters).toMatchObject({
-      section: 'Mortgage',
-      selectionTokens: ['7#mortgage-alpha', '19#mortgage-zed'],
-      primaryRateIndex: 7,
-      secondaryRateIndex: 19,
-    });
-
-    const browseNext = allSteps().find(
-      (step) => step.passId === 'first-pass' && step.semanticActionId === 'browse.section.next',
-    );
-    const browseFirst = allSteps().find(
-      (step) => step.passId === 'first-pass' && step.semanticActionId === 'browse.category.first',
-    );
-    expect(browseNext?.parameters).toEqual({});
-    expect(browseFirst?.parameters).toMatchObject({
-      section: 'Mortgage',
-      taxonomyPath: ['OO', 'PI', 'VARIABLE', 'LVR_60_70'],
-    });
-    const todayBest = allSteps().find(
-      (step) => step.passId === 'first-pass' && step.semanticActionId === 'today.best.open',
-    );
-    expect(todayBest).toMatchObject({ expectedPath: '/product', parameters: {} });
+    expect(inputs.primaryProduct?.provider).not.toBe(inputs.secondaryProduct?.provider);
+    for (const product of inputs.sampledProducts) {
+      expect(core.sections[product.section].rates).toEqual(expect.arrayContaining([
+        expect.objectContaining({ product_key: product.productKey, rate_index: product.rateIndex }),
+      ]));
+      expect(product.selectionToken).toBe(`${product.rateIndex}#${product.productKey}`);
+    }
+    const steps = buildDeepPerformanceAuditPlan(core, options).passes[0].steps;
+    expect(steps.find(step => step.semanticActionId === 'search.compare.open')?.parameters)
+      .toMatchObject({ section: 'Mortgage', selectionTokens: inputs.compareSelectionTokens,
+        primaryRateIndex: inputs.primaryProduct?.rateIndex, secondaryRateIndex: inputs.secondaryProduct?.rateIndex });
+    expect(steps.find(step => step.semanticActionId === 'today.best.open'))
+      .toMatchObject({ expectedPath: '/product', parameters: {} });
   });
 
-  test('prefers a primary provider represented across multiple sections', () => {
+  test('randomizes across all eligible banks, products and tiers while sampling every non-empty category', () => {
     const core = corePayload();
-    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
-      section: 'Mortgage',
-      provider: 'Alpha Bank',
-      productKey: 'mortgage-alpha',
-    });
-    core.sections.Savings.rates.push(rate({
-      provider: 'Zed Bank',
-      product_key: 'savings-zed',
-      taxonomy_path: 'SAVINGS.STANDARD',
+    for (let index = 0; index < 6; index += 1) core.sections.Mortgage.rates.push(rate({
+      provider: `Bank ${index}`, product_key: `loan-${index}`, rate_index: index,
     }));
+    core.sections.TD.rates.push(rate({ provider: 'Deposit Bank', product_key: 'term-one', rate_index: 1 }));
+    const reached = new Set<string>();
+    const primaries = new Set<string>();
+    for (let index = 0; index < 120; index += 1) {
+      const inputs = deriveDeepAuditInputs(core, { seed: `run-${index}` });
+      expect(inputs.sampling).toMatchObject({ sampledSections: 3, fullCatalogueRendered: false });
+      expect(new Set(inputs.sampledProducts.map(product => product.section))).toEqual(new Set(['Mortgage', 'Savings', 'TD']));
+      inputs.sampledProducts.forEach(product => reached.add(product.selectionToken));
+      primaries.add(inputs.primaryProduct!.provider);
+    }
+    expect(reached).toEqual(new Set(Object.values(core.sections).flatMap(section => section.rates)
+      .map(row => `${row.rate_index}#${row.product_key}`)));
+    expect(primaries.size).toBe(8);
+  });
 
-    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
-      section: 'Mortgage',
-      provider: 'Zed Bank',
-      productKey: 'mortgage-zed',
+  test('never samples profile-excluded products even with full-catalogue opt-in', () => {
+    const core = corePayload();
+    const permitted = core.sections.Mortgage.rates.filter(row => row.provider === 'Zed Bank');
+    installMandatoryEligibility({ active: true, loading: false,
+      rows: new WeakSet(permitted), productKeys: new Set(permitted.map(row => row.product_key)) });
+    const inputs = deriveDeepAuditInputs(core, { seed: 'blocked-ANZ', includeNonStandard: true });
+    expect(inputs.primaryProduct?.provider).toBe('Zed Bank');
+    expect(inputs.sampledProducts).toHaveLength(1);
+    expect(inputs.secondaryProduct).toBeNull();
+    expect(inputs.compareSelectionTokens).toEqual([]);
+    installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() });
+    expect(deriveDeepAuditInputs(core, { includeNonStandard: true })).toMatchObject({
+      primaryProduct: null, sampledProducts: [], sampling: { filterReady: false },
     });
   });
 
-  test('ignores provider coverage from rows without a product key', () => {
-    const core = corePayload();
-    core.sections.Savings.rates.push(rate({
-      provider: 'Zed Bank',
-      product_key: '',
-      taxonomy_path: 'SAVINGS.STANDARD',
-    }));
+  test('does not convert a blocked suitability gate into an empty catalogue sample', () => {
+    setSuitabilityAllowed(new Set(), { rebuildClosed: true });
+    expect(deriveDeepAuditInputs(corePayload()).sampling.filterReady).toBe(false);
+    expect(deriveDeepAuditInputs(corePayload(), { includeNonStandard: true }).sampling.filterReady).toBe(true);
+  });
 
-    expect(deriveDeepAuditInputs(core).primaryProduct).toMatchObject({
-      section: 'Mortgage',
-      provider: 'Alpha Bank',
-      productKey: 'mortgage-alpha',
-    });
+  test('ignores invalid identities without biasing the random sample', () => {
+    const core = corePayload();
+    const before = deriveDeepAuditInputs(core);
+    core.sections.Savings.rates.push(rate({ provider: 'Zed Bank', product_key: '' }));
+    expect(deriveDeepAuditInputs(core)).toEqual(before);
+  });
+
+  test('keeps hidden optional graphics outside the base Outlook entry barrier', () => {
+    const steps = buildDeepPerformanceAuditPlan(corePayload()).passes[0].steps;
+    expect(steps.find(step => step.semanticActionId === 'outlook.open')?.readiness).not.toContain('graphics');
+    expect(steps.find(step => step.semanticActionId === 'outlook.economy.lens.next')?.readiness).toContain('graphics');
   });
 
   test('does not inherit graphic readiness when compare.dismiss returns to search.results', () => {

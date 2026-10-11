@@ -1,22 +1,23 @@
 import type { Href } from 'expo-router';
+import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, type PerformanceAuditEstimate } from './performanceAuditTiming';
 import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
-import type { CorePayload, PayloadSource, RateRow, SectionKey } from '../types';
+import type { CorePayload, PayloadSource, SectionKey } from '../types';
 import type { AppHealthAuditMode, AppHealthReport } from './appHealth';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
-import type { DeepPerformanceAuditPlan } from './performanceAuditPlan';
+import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions } from './performanceAuditPlan';
 
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
 export const PERFORMANCE_AUDIT_LOG_TAG = 'perf-audit';
-export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = 300_000;
-export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 30;
+export const DEFAULT_PERFORMANCE_AUDIT_HANG_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
+export const MIN_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 1;
 export const MAX_PERFORMANCE_AUDIT_HANG_TIMEOUT_SECONDS = 3_600;
 export const PERFORMANCE_AUDIT_HANG_TIMEOUT_STORAGE_KEY =
-  '@ar/performance-audit/hang-timeout-seconds';
+  '@ar/performance-audit/stall-timeout-seconds-v2';
 
 export type PerformanceAuditStatus =
   | 'idle'
@@ -175,11 +176,13 @@ export interface PerformanceAuditState {
   storedCheckCount: number;
   lastStoredCheckAt: string | null;
   progress: PerformanceAuditProgress;
+  estimate?: PerformanceAuditEstimate | null;
   cancelRequested: boolean;
   /** The run is suspended because the app left the foreground. */
   paused: boolean;
   report: PerformanceAuditReport | null;
   error: string | null;
+  recoveryRequired?: boolean;
 }
 
 export interface AuditJourney {
@@ -444,7 +447,62 @@ export class PerformanceAuditInactivityWatchdog {
   }
 }
 
+/** A per-check budget cannot be extended by readiness events or sub-waits. */
+export class PerformanceAuditStepWatchdog extends PerformanceAuditInactivityWatchdog {
+  private readonly elapsed: ForegroundElapsed;
+  private readonly unsubscribeElapsed: () => void;
+  private closed = false;
+
+  constructor(readonly stepLabel: string, clock: MonotonicClock = monotonicNow) {
+    super(PERFORMANCE_AUDIT_STEP_LIMIT_MS, clock);
+    this.elapsed = new ForegroundElapsed(clock);
+    this.unsubscribeElapsed = subscribePerformanceAudit(() => this.elapsed.accrue());
+  }
+
+  get elapsedMs(): number {
+    this.elapsed.accrue();
+    return this.elapsed.foregroundMs;
+  }
+
+  override remainingMs(): number {
+    return this.closed ? 0 : Math.max(0, PERFORMANCE_AUDIT_STEP_LIMIT_MS - this.elapsedMs);
+  }
+
+  override isExpired(): boolean {
+    return this.closed || (!getPerformanceAuditState().paused && this.remainingMs() <= 0);
+  }
+
+  override touchProgress(): void { /* The whole-step deadline is non-renewable. */ }
+
+  assertWithinBudget(): void {
+    if (this.isExpired()) throw new PerformanceAuditStepTimeoutError(this.stepLabel, this.elapsedMs);
+  }
+
+  close(): void {
+    this.closed = true;
+    this.unsubscribeElapsed();
+  }
+}
+
+export function enforcePerformanceAuditStepLimit(check: AuditCheck, elapsedMs = check.durationMs): AuditCheck {
+  if (elapsedMs == null || elapsedMs <= PERFORMANCE_AUDIT_STEP_LIMIT_MS ||
+    check.metrics.interruptedByBackground === true) return check;
+  return {
+    ...check,
+    status: 'fail',
+    durationMs: roundMetric(elapsedMs),
+    metrics: { ...check.metrics, stepLimitExceeded: true, stepLimitMs: PERFORMANCE_AUDIT_STEP_LIMIT_MS },
+    error: [check.error, `Step exceeded the 10-second limit (${Math.round(elapsedMs)}ms)`].filter(Boolean).join('\n'),
+  };
+}
+
+export function updatePerformanceAuditEstimate(estimate: PerformanceAuditEstimate): void {
+  if (!isPerformanceAuditActive()) return;
+  emit({ ...auditState, estimate });
+}
+
 export function requestPerformanceAudit(options: RequestPerformanceAuditOptions = {}): string {
+  if (auditState.recoveryRequired) return 'recovery-required';
   if (auditState.status === 'queued' || auditState.status === 'running') {
     return auditState.sessionId ?? 'active';
   }
@@ -459,6 +517,7 @@ export function requestPerformanceAudit(options: RequestPerformanceAuditOptions 
     storedCheckCount: 0,
     lastStoredCheckAt: null,
     progress: { completed: 0, total: 0, label: 'Preparing audit' },
+    estimate: null,
     cancelRequested: false,
     paused: false,
     report: null,
@@ -571,10 +630,11 @@ export function markPerformanceAuditCancelled(): void {
   });
 }
 
-export function failPerformanceAudit(error: string): void {
+export function failPerformanceAudit(error: string, recoveryRequired = false): void {
   emit({
     ...auditState,
     status: 'failed',
+    recoveryRequired,
     cancelRequested: false,
     paused: false,
     progress: { ...auditState.progress, label: 'Audit failed' },
@@ -631,21 +691,6 @@ export function formatAuditErrorForLog(error: unknown): string {
   return flattenAuditLogText(formatAuditError(error));
 }
 
-function firstComparableRows(core: CorePayload | null): RateRow[] {
-  if (!core) return [];
-  for (const section of SECTION_ORDER) {
-    const seen = new Set<string>();
-    const rows: RateRow[] = [];
-    for (const row of core.sections[section]?.rates ?? []) {
-      if (seen.has(row.product_key)) continue;
-      seen.add(row.product_key);
-      rows.push(row);
-      if (rows.length >= 2) return rows;
-    }
-  }
-  return [];
-}
-
 function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourney {
   const enabled = interests.includes(section);
   return {
@@ -673,11 +718,12 @@ function browseJourney(section: SectionKey, interests: SectionKey[]): AuditJourn
 export function buildPerformanceAuditJourneys(
   core: CorePayload | null,
   interests: SectionKey[] = SECTION_ORDER,
+  options: DeepAuditSelectionOptions = {},
 ): AuditJourney[] {
-  const rows = firstComparableRows(core);
-  const first = rows[0];
-  const second = rows[1];
-  const provider = first?.provider ?? Object.keys(core?.brands ?? {})[0];
+  const inputs = deriveDeepAuditInputs(core, options);
+  const first = inputs.primaryProduct;
+  const second = inputs.secondaryProduct;
+  const provider = inputs.provider;
 
   return [
     {
@@ -830,12 +876,12 @@ export function buildPerformanceAuditJourneys(
         ? ({
             pathname: '/product/[key]',
             params: {
-              key: first.product_key,
-              ...(first.rate_index != null ? { ri: String(first.rate_index) } : {}),
+              key: first.productKey,
+              ...(first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
             },
           } as unknown as Href)
         : undefined,
-      expectedPath: first ? `/product/${encodeURIComponent(first.product_key)}` : '/product',
+      expectedPath: first ? `/product/${encodeURIComponent(first.productKey)}` : '/product',
       expectedSurface: 'product.details',
       navigationKind: 'stack',
       skipReason: first ? undefined : 'No product is loaded',
@@ -847,8 +893,8 @@ export function buildPerformanceAuditJourneys(
         ? ({
             pathname: '/rate-receipt',
             params: {
-              key: first.product_key,
-              ...(first.rate_index != null ? { ri: String(first.rate_index) } : {}),
+              key: first.productKey,
+              ...(first.rateIndex != null ? { ri: String(first.rateIndex) } : {}),
             },
           } as unknown as Href)
         : undefined,
@@ -878,7 +924,7 @@ export function buildPerformanceAuditJourneys(
         first && second
           ? ({
               pathname: '/compare',
-              params: { keys: JSON.stringify([first.product_key, second.product_key]) },
+              params: { keys: JSON.stringify(inputs.compareSelectionTokens) },
             } as unknown as Href)
           : undefined,
       expectedPath: '/compare',
@@ -1229,7 +1275,11 @@ export function summarizePerformanceAudit(checks: AuditCheck[]): PerformanceAudi
         ));
     const maximum = (values: number[]) => values.length ? Math.max(...values) : null;
     if (check.kind === 'journey') {
-      return maximum(numeric('forwardMs', 'backMs'));
+      const phases = numeric('forwardMs', 'backMs');
+      // Failed readiness waits often have no completed forward/back sample.
+      // Keep their measured total so a 25-second failure cannot disappear.
+      if (check.status === 'fail' && check.durationMs != null && check.durationMs > 0) phases.push(check.durationMs);
+      return maximum(phases);
     }
     if (check.id === 'runtime-responsiveness') {
       return maximum(numeric('maxEventLoopLagMs', 'maxFrameGapMs'));

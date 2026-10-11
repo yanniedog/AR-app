@@ -3,11 +3,15 @@ import {
   appHealthDataSnapshot,
   appHealthDisplayObservations,
   appHealthSurfaceContracts,
+  buildIntegratedAppHealthReport,
 } from '../src/lib/performanceAuditHealth';
 import type { AppState } from '../src/data/storeTypes';
 import type { DeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
 import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { APP_HEALTH_CHECK_CODES } from '../src/lib/appHealth/types';
+import { makeHealthyDataFixture } from '../__fixtures__/appHealth';
+import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
+import { DEFAULT_PREFS } from '../src/data/storeTypes';
 
 function check(readinessEvidence: string): AuditCheck {
   return {
@@ -21,6 +25,50 @@ function check(readinessEvidence: string): AuditCheck {
 }
 
 describe('integrated app-health display evidence', () => {
+  it('includes app catalogue evidence in live-source reports only for the same verified publication', () => {
+    const { snapshot } = makeHealthyDataFixture();
+    const normalized = normalizeCoreWithIntegrity(snapshot.core!, { coreSha256: snapshot.manifest!.files.core.sha256 });
+    const state = { core: normalized.core, coreIntegrity: normalized.integrity, manifest: snapshot.manifest,
+      prefs: { ...DEFAULT_PREFS, includeNonStandard: true }, details: null, searchIndex: null } as unknown as AppState;
+    const report = (current: AppState, remote = snapshot) => buildIntegratedAppHealthReport({
+      sessionId: 'live-catalogue-binding', mode: 'live-source', startedAt: '2026-10-12T00:00:00Z',
+      finishedAt: '2026-10-12T00:00:01Z', state: current, appVersion: '1.0.0',
+      performanceChecks: [], journeys: [], plan: { passes: [] } as unknown as DeepPerformanceAuditPlan,
+      network: { mode: 'live-source', authorizationAttempts: 0, authorizedAttempts: 0, blockedAttempts: 0,
+        transportCalls: 0, policyViolations: 0 }, dataSnapshot: remote,
+    }).checks.find(check => check.code === APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE)!;
+    expect(report(state).metrics.catalogueAvailable).toBe(true);
+    expect(report({ ...state, coreIntegrity: null })).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+    const revised = { ...snapshot, manifest: { ...snapshot.manifest!, files: { ...snapshot.manifest!.files,
+      core: { ...snapshot.manifest!.files.core, sha256: 'c'.repeat(64) } } } };
+    expect(report(state, revised)).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+    const wrongDate = { ...snapshot, core: { ...snapshot.core!, run_date: '2026-10-11' } };
+    expect(report(state, wrongDate)).toMatchObject({ status: 'unavailable', metrics: { catalogueAvailable: false } });
+  });
+
+  it.each([false, true])('keeps empty and populated list evidence coherent (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:12/12:visible=4:empty=0'),
+      check('search.results:items:list:ready:0/0:visible=0:empty=1'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE)?.status).toBe('pass');
+  });
+
+  it('does not erase a missing empty-state after a later populated visit', () => {
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations([
+        check('search.results:items:list:ready:0/0:visible=0:empty=0'),
+        check('search.results:items:list:ready:12/12:visible=4:empty=0'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE)?.status).toBe('fail');
+  });
+
   it('reports an attempted deep-search failure as a failed asset', () => {
     const snapshot = appHealthDataSnapshot({
       source: 'network',

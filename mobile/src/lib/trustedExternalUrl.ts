@@ -28,11 +28,28 @@ export type TrustedExternalUrlResult =
 const MAX_EXTERNAL_URL_LENGTH = 2_048;
 const AUSTRALIAN_LENDER_SUFFIXES = ['.au', '.bank'] as const;
 const APPROVED_GLOBAL_LENDER_HOSTS = [
+  'anz.com',
+  'bankofchina.com',
   'paypal.com',
+  'qantasmoney.com',
+  'racq.com',
   'revolut.com',
   'tyro.com',
+  'unloan.com',
+  'unbankcompany.com',
   'wise.com',
 ] as const;
+// Tenant paths from the published CDR source-document inventory. Shared CDN
+// domains are not lender domains: never approve an entire multi-tenant host.
+const LENDER_DOCUMENT_PATHS: Readonly<Record<string, RegExp>> = {
+  'd9a7lp1kie9ya.cloudfront.net': /^\/\d{4}\/\d{2}\/[^/]+\.pdf$/i,
+  'cdn.bfldr.com': /^\/1R31Y8GR\/as\//,
+  'cdn.intelligencebank.com': /^\/au\/share\/(?:e3Gq6M|NZw2|w8gXkZ)\//,
+  'cdn.mediavalet.com': /^\/aunsw\/policebank\//,
+  'cdn.gsb1.prod.cxnpl.io': /^\/files\/(?:products\/|app\/Terms%20and%20Conditions\.pdf$)/,
+  'cdn.moby-prod.prod.cxnpl.io': /^\/files\/products\//,
+  'cdn.troy-prod.troy-prod.cxnpl.io': /^\/files\/products\//,
+};
 const CREDENTIAL_QUERY_KEYS = new Set([
   'accesstoken',
   'apikey',
@@ -95,7 +112,8 @@ function purposeAllowsUrl(parsed: InstanceType<typeof StandardUrl>, purpose: Tru
   // the small explicit set of global CDR providers used by the catalogue.
   return (
     AUSTRALIAN_LENDER_SUFFIXES.some((suffix) => host.endsWith(suffix)) ||
-    APPROVED_GLOBAL_LENDER_HOSTS.some((approved) => isHostOrSubdomain(host, approved))
+    APPROVED_GLOBAL_LENDER_HOSTS.some((approved) => isHostOrSubdomain(host, approved)) ||
+    LENDER_DOCUMENT_PATHS[host]?.test(parsed.pathname) === true
   );
 }
 
@@ -123,6 +141,16 @@ export function trustedExternalUrl(
     return { ok: false, message: 'This destination is not a valid web address.' };
   }
 
+  // Some CDR publishers retain legacy HTTP links or a DNS trailing dot. Open
+  // only their approved HTTPS equivalent; never contact the insecure source.
+  if (request.purpose === 'lender_source') {
+    const candidate = new StandardUrl(parsed.toString());
+    candidate.hostname = candidate.hostname.replace(/\.$/, '');
+    if (purposeAllowsUrl(candidate, request.purpose)) {
+      parsed = candidate;
+      if (parsed.protocol === 'http:' && !parsed.port) parsed.protocol = 'https:';
+    }
+  }
   const host = parsed.hostname.toLowerCase();
   if (
     parsed.protocol !== 'https:' ||

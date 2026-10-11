@@ -301,8 +301,15 @@ export const APP_HEALTH_PUBLIC_METRIC_ALLOWLIST: Readonly<
     'providersSucceeded',
     'providersFailed',
     'providersPartial',
+    'unaccountedProviders',
     'limitations',
     'invalidCounts',
+  ],
+  [APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE]: [
+    'catalogueAvailable', 'exhaustiveLoadedCatalogueScan', 'sourceIdentityInventoryAvailable',
+    'allProductsRendered', 'publishedRates', 'publishedProducts', 'publishedProviders',
+    'sourceProducts', 'sourceRates', 'identityMismatches', 'missingDetails', 'missingSearchIndex',
+    'searchIndexRunMatches',
   ],
   [APP_HEALTH_CHECK_CODES.QUARANTINE]: [
     'evidenceAvailable',

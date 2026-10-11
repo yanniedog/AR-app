@@ -50,7 +50,6 @@ import { debugLog } from '../lib/debugLog';
 import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
 import { collectExternalAuditLinks, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
-import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
@@ -101,6 +100,9 @@ import {
   PERFORMANCE_AUDIT_LOG_TAG,
   PERFORMANCE_AUDIT_SCHEMA_VERSION,
   PerformanceAuditInactivityWatchdog,
+  PerformanceAuditStepWatchdog,
+  enforcePerformanceAuditStepLimit,
+  updatePerformanceAuditEstimate,
   ResponsivenessMonitor,
   resolveAuditJourneyOptionalData,
   requiresPerformanceAuditRouteRecovery,
@@ -124,21 +126,20 @@ import {
 import {
   boundAuditCheckEvidence,
   compactAuditCheckForLog,
-  compactAuditLogJson,
   encodePerformanceAuditEvent,
   omitNullishDeep,
 } from '../lib/performanceAuditLog';
 import { yieldToUi } from '../lib/yieldToUi';
+import { setPassiveAuditPaused } from '../lib/passiveAudit';
+import { PERFORMANCE_AUDIT_STEP_LIMIT_MS, PerformanceAuditStepTimeoutError, PerformanceAuditPendingMutationError, PerformanceAuditMutationBarrier, estimatePerformanceAuditTime, formatPerformanceAuditEstimate } from '../lib/performanceAuditTiming';
 import { buildIntegratedAppHealthReport } from '../lib/performanceAuditHealth';
 import { useTheme } from '../theme/ThemeProvider';
 import { AppText, Button, Card, Row } from './ui';
 
 const AUDIT_HOME_PATH = '/performance-audit';
 const ROUTE_TIMEOUT_MS = 8_000;
-/** Floor for surface settle waits; hang prevention can extend this further. */
-const DATA_SETTLE_TIMEOUT_MS = 30_000;
-/** Graphic/list-heavy destinations may need longer than the historical 30s floor. */
-const DATA_SETTLE_TIMEOUT_MAX_MS = 180_000;
+/** Readiness shares the complete check budget; sub-waits never extend it. */
+const DATA_SETTLE_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
 const ROUTE_DWELL_MS = 350;
 const READINESS_QUIET_WINDOW_MS = 650;
 const RUNTIME_SAMPLE_MS = 1_250;
@@ -150,9 +151,10 @@ const FILE_PAYLOAD_BYTES = 128 * 1024;
 const STORAGE_PAYLOAD_BYTES = 64 * 1024;
 const AUDIT_KEEP_AWAKE_TAG = 'performance-audit';
 /** Teardown may read/write a full 2MB log and compact a large report off the JS thread budget. */
-const FINALIZATION_STORE_TIMEOUT_MS = 120_000;
-const FINALIZATION_FLUSH_TIMEOUT_MS = 30_000;
+const FINALIZATION_STORE_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
+const FINALIZATION_FLUSH_TIMEOUT_MS = PERFORMANCE_AUDIT_STEP_LIMIT_MS;
 type JourneyIteration = 'cold' | 'warm';
+const mountedMutationBarrier = new PerformanceAuditMutationBarrier();
 
 class AuditCancelledError extends Error {
   constructor() {
@@ -199,6 +201,7 @@ function assertAuditActive(): void {
 
 function assertSessionActive(watchdog: PerformanceAuditInactivityWatchdog): void {
   assertAuditActive();
+  if (watchdog instanceof PerformanceAuditStepWatchdog) watchdog.assertWithinBudget();
   if (watchdog.isExpired()) throw new AuditInactivityError(watchdog);
 }
 
@@ -247,6 +250,7 @@ async function waitWhilePaused(watchdog: PerformanceAuditInactivityWatchdog): Pr
 }
 
 function rethrowAuditControl(error: unknown): void {
+  if (error instanceof PerformanceAuditPendingMutationError) throw error;
   if (error instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
     throw error instanceof AuditCancelledError ? error : new AuditCancelledError();
   }
@@ -301,7 +305,11 @@ async function awaitAuditWork<T>(
     }, 50);
   });
   try {
-    return await Promise.race([promise, control]);
+    const result = await Promise.race([promise, control]);
+    // A blocked JS thread may resolve before its timeout callback can run.
+    assertSessionActive(watchdog);
+    watchdog.touchProgress();
+    return result;
   } catch (error) {
     rethrowAuditControl(error);
     throw new Error(`${label} failed: ${formatAuditError(error)}`);
@@ -346,7 +354,11 @@ async function awaitAuditWorkWithTimeout<T>(
     }, 50);
   });
   try {
-    return await Promise.race([promise, control]);
+    const result = await Promise.race([promise, control]);
+    elapsed.accrue();
+    assertSessionActive(watchdog);
+    if (elapsed.foregroundMs > timeoutMs) throw new PerformanceAuditStepTimeoutError(label, elapsed.foregroundMs);
+    return result;
   } catch (error) {
     rethrowAuditControl(error);
     if (error instanceof Error && error.message.includes('timed out after')) throw error;
@@ -597,14 +609,9 @@ function inferMountedActionEntryRoute(semanticActionId: string): string | null {
   }
 }
 
-/** Bound readiness waits by hang remaining so long audits outlive slow chart settles. */
+/** A new readiness wait receives only the remainder of the same step. */
 function readinessTimeoutMs(watchdog: PerformanceAuditInactivityWatchdog): number {
-  const hangBudget = Math.max(0, watchdog.remainingMs() - 5_000);
-  const desired = Math.max(
-    DATA_SETTLE_TIMEOUT_MS,
-    Math.min(DATA_SETTLE_TIMEOUT_MAX_MS, Math.floor(watchdog.hangTimeoutMs / 10)),
-  );
-  return Math.max(1_000, Math.min(desired, hangBudget || desired));
+  return Math.max(1, Math.min(DATA_SETTLE_TIMEOUT_MS, watchdog.remainingMs()));
 }
 
 async function runDeepAuditStep(
@@ -796,6 +803,7 @@ async function runDeepAuditStepBody(
   const pathBeforeAction = currentPath();
   let expectedPath = step.expectedPath;
   let preActionWaitMs = 0;
+  let verifiedIdempotentFixture = false;
   let measuredAction: {
     result: unknown;
     startedAt: number;
@@ -871,9 +879,10 @@ async function runDeepAuditStepBody(
     actionRevisionBefore = sourceBefore?.actionRevision ?? null;
     renderRevisionBefore = sourceBefore?.renderRevision ?? null;
     execution.attempted = true;
-    measuredAction = await measureAuditAction(
+    const pendingAction = mountedMutationBarrier.track(measureAuditAction(
       () => {
         execution.invoked = true;
+        assertSessionActive(watchdog);
         return performanceAuditReadinessRegistry.invokeAction(
           source.id,
           step.semanticActionId,
@@ -882,7 +891,13 @@ async function runDeepAuditStepBody(
       },
       () => monitor.snapshot(),
       now,
-    );
+    ));
+    try {
+      measuredAction = await awaitAuditWork(pendingAction, watchdog, `${label} mounted action`);
+    } catch (error) {
+      if (mountedMutationBarrier.hasPending) throw new PerformanceAuditPendingMutationError(label);
+      throw error;
+    }
     const immediateCompletion = performanceAuditReadinessRegistry.snapshot().surfaces
       .find((surface) => surface.id === source.id);
     const durableImmediateCompletion = performanceAuditReadinessRegistry.actionCompletion(source.id);
@@ -898,6 +913,15 @@ async function runDeepAuditStepBody(
     renderRevisionAfter = immediateCompletion?.renderRevision ?? null;
     completedActionName = authoritativeImmediateCompletion?.actionName ?? null;
     const actionResult = measuredAction.result;
+    if (step.semanticActionId === 'saved.fixture.ensure-exact-pair' &&
+      actionResult != null && typeof actionResult === 'object' &&
+      'fixtureReady' in actionResult && actionResult.fixtureReady === true &&
+      'selectionTokens' in actionResult && Array.isArray(actionResult.selectionTokens)) {
+      const expectedTokens = stringArrayParameter(step, 'selectionTokens');
+      const actualTokens = actionResult.selectionTokens;
+      verifiedIdempotentFixture = expectedTokens.length === 2 && new Set(expectedTokens).size === 2 &&
+        actualTokens.length === 2 && expectedTokens.every(token => actualTokens.includes(token));
+    }
     if (
       actionResult != null &&
       typeof actionResult === 'object' &&
@@ -980,6 +1004,7 @@ async function runDeepAuditStepBody(
       ...(actionSource === step.expectedSurface &&
         pathMatches(currentPath(), pathBeforeAction) &&
         step.safety.stateImpact !== 'none' &&
+        !verifiedIdempotentFixture &&
         !step.semanticActionId.includes('.scroll.')
         ? { changedRender: { surfaceId: actionSource, previousRevision: renderRevisionBefore } }
         : {}),
@@ -1938,13 +1963,17 @@ async function runLogIoCheck(
     flushMs = now() - at;
     assertSessionActive(watchdog);
     at = now();
-    const complete = await awaitAuditWork(
-      debugLog.readCompleteText(),
-      watchdog,
-      'Debug-log benchmark read',
-    );
+    const uri = debugLog.getLogFileUri();
+    const info = await awaitAuditWork(FileSystem.getInfoAsync(uri), watchdog, 'Debug-log file metadata');
+    if (!info.exists || info.isDirectory) throw new Error('The persisted debug-log file is unavailable');
+    bytes = info.size;
+    // Read a bounded 16 KiB prefix. Full exports combine and redact multi-MB
+    // sidecars, which is a different operation and distorted this I/O check.
+    const sample = await awaitAuditWork(FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64, position: 0, length: Math.min(bytes, 16 * 1024),
+    }), watchdog, 'Debug-log bounded read');
+    if (bytes > 0 && sample.length === 0) throw new Error('Persisted debug-log sample was empty');
     readMs = now() - at;
-    bytes = new TextEncoder().encode(complete).length;
   } catch (caught) {
     rethrowAuditControl(caught);
     error = formatAuditError(caught);
@@ -1952,7 +1981,7 @@ async function runLogIoCheck(
   const responsiveness = monitor.metricsSince(responsivenessAt);
   return {
     id: 'debug-log-io',
-    label: 'Complete debug-log persistence',
+    label: 'Debug-log persistence and bounded read',
     kind: 'storage',
     status: error
       ? 'fail'
@@ -1964,6 +1993,8 @@ async function runLogIoCheck(
     durationMs: roundMetric(now() - started),
     metrics: {
       bytes,
+      sampledBytes: bytes == null ? null : Math.min(bytes, 16 * 1024),
+      fullExportMeasured: false,
       flushMs: flushMs == null ? null : roundMetric(flushMs),
       readMs: readMs == null ? null : roundMetric(readMs),
       ...responsivenessRecord(responsiveness),
@@ -2526,6 +2557,7 @@ export function PerformanceAuditRunner() {
     if (!claimRun(state.sessionId)) return;
 
     const execute = async () => {
+      setPassiveAuditPaused(true);
       const sessionId = state.sessionId!;
       const wakeLockTag = `${AUDIT_KEEP_AWAKE_TAG}:${sessionId}`;
       const wakeLock = createPerformanceAuditWakeLock(
@@ -2561,20 +2593,36 @@ export function PerformanceAuditRunner() {
       mirrorPauseToWatchdog();
       const unsubscribePause = subscribePerformanceAudit(mirrorPauseToWatchdog);
       const originalStore = useStore.getState();
-      let plan = buildDeepPerformanceAuditPlan(originalStore.core);
+      let plan = buildDeepPerformanceAuditPlan(originalStore.core, { seed: sessionId, includeNonStandard: true, detailsProducts: originalStore.details?.products });
       let navigationJourneys = buildPerformanceAuditJourneys(
         originalStore.core,
         SECTION_ORDER,
+        { seed: sessionId, includeNonStandard: true, detailsProducts: originalStore.details?.products },
       );
       const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS - (Platform.OS === 'android' ? 0 : 1);
-      let total = platformBenchmarkChecks + SECTION_ORDER.length +
+      let externalLinks = collectExternalAuditLinks({ details: originalStore.details });
+      let reservedLinkChecks = externalLinks.length;
+      let etaCompletedLinks = 0;
+      let etaLinkElapsedMs = 0;
+      let etaLastRecordedMs = 0;
+      let total = platformBenchmarkChecks + SECTION_ORDER.length + reservedLinkChecks +
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
       let backgroundWorkWait: AuditBackgroundWorkWait | undefined;
       let lastBackgroundLogMs = -Infinity;
       let lastBackgroundStage = '';
       const checks: AuditCheck[] = [];
-      let externalLinks: TrustedExternalUrlRequest[] = [];
+      let finalizationStartedMs: number | null = null;
+      const refreshEstimate = () => {
+        const elapsedMs = activeDurationMs();
+        updatePerformanceAuditEstimate(estimatePerformanceAuditTime({
+          elapsedMs, completed, total,
+          links: { total: reservedLinkChecks, completed: etaCompletedLinks, elapsedMs: etaLinkElapsedMs },
+          finalizing: finalizationStartedMs != null,
+          finalizationElapsedMs: finalizationStartedMs == null ? undefined : elapsedMs - finalizationStartedMs,
+        }));
+      };
+      const estimateTimer = setInterval(refreshEstimate, 1_000);
       const linkCapture = beginExternalLinkCapture();
       const linkAbort = new AbortController();
       let liveSourceSnapshot: AppHealthDataSnapshot | null = null;
@@ -2583,6 +2631,7 @@ export function PerformanceAuditRunner() {
       let lastStoredCheckAt: string | null = null;
       let rollbackSnapshot: Awaited<ReturnType<typeof beginPerformanceAuditRollback>> | null = null;
       let rollbackRestored = false;
+      let mutationRecoveryRequired = false;
       let rollbackAttempts = 0;
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
       let auditEnvironment: AuditEnvironment | null = null;
@@ -2626,7 +2675,7 @@ export function PerformanceAuditRunner() {
         // Bound evidence at the one place every check enters the report. ~260
         // unbounded stacks and readiness dumps are what pushed the finished
         // report past the megabyte range and exhausted the heap in teardown.
-        const check = boundAuditCheckEvidence(rawCheck);
+        const check = boundAuditCheckEvidence(enforcePerformanceAuditStepLimit(rawCheck));
         checks.push(check);
         logAuditCheck(app, sessionId, check);
         // Only durable completed-check progress keeps the hang watchdog alive.
@@ -2634,10 +2683,17 @@ export function PerformanceAuditRunner() {
         watchdog.recordStoredCheck();
         lastStoredCheckAt = new Date().toISOString();
         completed += 1;
+        const recordedMs = activeDurationMs();
+        if (/^external-link-\d+$/.test(check.id)) {
+          etaCompletedLinks += 1;
+          etaLinkElapsedMs += Math.max(0, recordedMs - etaLastRecordedMs);
+        }
+        etaLastRecordedMs = recordedMs;
         markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
       };
 
       try {
+        refreshEstimate();
         wakeLockSubscription = AppState.addEventListener('change', (nextState) => {
           if (nextState !== 'active') return;
           // Returning from lock/background may have released the platform wake lock.
@@ -2718,12 +2774,15 @@ export function PerformanceAuditRunner() {
         // too rather than only at the first measured check.
         await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
-        plan = buildDeepPerformanceAuditPlan(initialStore.core);
+        plan = buildDeepPerformanceAuditPlan(initialStore.core, { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products });
         navigationJourneys = buildPerformanceAuditJourneys(
           initialStore.core,
           SECTION_ORDER,
+          { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products },
         );
-        total = platformBenchmarkChecks + SECTION_ORDER.length +
+        externalLinks = collectExternalAuditLinks({ details: initialStore.details });
+        reservedLinkChecks = externalLinks.length;
+        total = platformBenchmarkChecks + SECTION_ORDER.length + reservedLinkChecks +
           navigationJourneys.length * 2 +
           plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
         const datasetRevision = captureDatasetRevision();
@@ -2765,11 +2824,12 @@ export function PerformanceAuditRunner() {
         // screen was replaced under it.
         const recordContinuable = async (
           label: string,
-          run: () => Promise<AuditCheck>,
+          run: (stepWatchdog: PerformanceAuditInactivityWatchdog) => Promise<AuditCheck>,
         ): Promise<boolean> => {
           const recoverAfterFailure = async () => {
             try {
               await recoverAuditRoute(() => pathnameRef.current);
+              watchdog.touchProgress();
             } catch (recoveryCaught) {
               debugLog.warn(
                 PERFORMANCE_AUDIT_LOG_TAG,
@@ -2799,11 +2859,18 @@ export function PerformanceAuditRunner() {
           await waitWhilePaused(watchdog);
           let check: AuditCheck;
           const runOnce = async (): Promise<AuditCheck> => {
+            const stepWatchdog = new PerformanceAuditStepWatchdog(label);
             try {
-              return await run();
+              const result = await run(stepWatchdog);
+              return enforcePerformanceAuditStepLimit(result, stepWatchdog.elapsedMs);
             } catch (caught) {
               rethrowAuditControl(caught);
-              return continuedFailureCheck(caught);
+              return enforcePerformanceAuditStepLimit(continuedFailureCheck(caught), stepWatchdog.elapsedMs);
+            } finally {
+              // Latch this scope closed: late native work cannot resume a later step.
+              stepWatchdog.close();
+              // Step timing is separate from durable storage stall prevention.
+              watchdog.touchProgress();
             }
           };
           const startedPaused = getPerformanceAuditPauseCount();
@@ -2878,7 +2945,7 @@ export function PerformanceAuditRunner() {
           auditMode === 'live-source'
             ? 'Validating the current public publication'
             : 'Recording the local-only network exclusion',
-          () => runNetworkCheck(
+          (watchdog) => runNetworkCheck(
             monitor,
             watchdog,
             auditMode,
@@ -2893,7 +2960,7 @@ export function PerformanceAuditRunner() {
         const maximumProfileResult: { check: AuditCheck | null } = { check: null };
         await recordContinuable(
           'Preparing maximum safe feature coverage',
-          async () => {
+          async (watchdog) => {
             maximumProfileResult.check = await runMaximumCoverageProfileCheck(
               monitor,
               watchdog,
@@ -2922,7 +2989,7 @@ export function PerformanceAuditRunner() {
         // Android has stopped drawing.
         await recordContinuable(
           'Sampling idle responsiveness',
-          () => runRuntimeCheck(monitor, watchdog),
+          (watchdog) => runRuntimeCheck(monitor, watchdog),
         );
 
         // Deep semantic callbacks deliberately keep their screen mounted so a
@@ -2935,7 +3002,7 @@ export function PerformanceAuditRunner() {
             updatePerformanceAuditProgress(completed, total, label);
             await recordContinuable(
               label,
-              () => runJourney(
+              (watchdog) => runJourney(
                 journey,
                 iteration,
                 () => pathnameRef.current,
@@ -2972,7 +3039,7 @@ export function PerformanceAuditRunner() {
             }
             const recovered = await recordContinuable(
               label,
-              () => runDeepAuditStep(
+              (watchdog) => runDeepAuditStep(
                 step,
                 () => pathnameRef.current,
                 monitor,
@@ -2990,7 +3057,9 @@ export function PerformanceAuditRunner() {
           details: useStore.getState().details,
           observed: getCapturedExternalAuditLinks(),
         });
-        total += externalLinks.length;
+        total += externalLinks.length - reservedLinkChecks;
+        reservedLinkChecks = externalLinks.length;
+        refreshEstimate();
         await record({
           id: 'external-link-inventory', label: 'External link coverage', kind: 'data',
           status: useStore.getState().details ? 'pass' : 'warn', durationMs: null,
@@ -3028,7 +3097,7 @@ export function PerformanceAuditRunner() {
           updatePerformanceAuditProgress(completed, total, `Benchmarking ${section} data models`);
           await recordContinuable(
             `Benchmarking ${section} data models`,
-            () => runSectionModelCheck(section, monitor, watchdog),
+            (watchdog) => runSectionModelCheck(section, monitor, watchdog),
           );
         }
 
@@ -3037,7 +3106,7 @@ export function PerformanceAuditRunner() {
         updatePerformanceAuditProgress(completed, total, 'Testing preferences storage');
         await recordContinuable(
           'Testing preferences storage',
-          () => runStorageCheck(sessionId, monitor, watchdog),
+          (watchdog) => runStorageCheck(sessionId, monitor, watchdog),
         );
 
         assertSessionActive(watchdog);
@@ -3045,14 +3114,14 @@ export function PerformanceAuditRunner() {
         updatePerformanceAuditProgress(completed, total, 'Testing log file storage');
         await recordContinuable(
           'Testing log file storage',
-          () => runFileSystemCheck(sessionId, monitor, watchdog),
+          (watchdog) => runFileSystemCheck(sessionId, monitor, watchdog),
         );
 
         assertSessionActive(watchdog);
-        updatePerformanceAuditProgress(completed, total, 'Reading the complete diagnostic log');
+        updatePerformanceAuditProgress(completed, total, 'Checking diagnostic log persistence');
         await recordContinuable(
-          'Reading the complete diagnostic log',
-          () => runLogIoCheck(monitor, watchdog),
+          'Checking diagnostic log persistence',
+          (watchdog) => runLogIoCheck(monitor, watchdog),
         );
 
         assertSessionActive(watchdog);
@@ -3061,7 +3130,7 @@ export function PerformanceAuditRunner() {
         await nextFrame();
         await recordContinuable(
           'Processing the active rates payload',
-          () => runDataCheck(monitor, watchdog),
+          (watchdog) => runDataCheck(monitor, watchdog),
         );
 
         assertSessionActive(watchdog);
@@ -3070,7 +3139,7 @@ export function PerformanceAuditRunner() {
           updatePerformanceAuditProgress(completed, total, 'Inspecting Android update readiness');
           await recordContinuable(
             'Inspecting Android update readiness',
-            () => runUpdateReadinessCheck(
+            (watchdog) => runUpdateReadinessCheck(
               app,
               monitor,
               watchdog,
@@ -3081,6 +3150,9 @@ export function PerformanceAuditRunner() {
           assertDatasetRevision(datasetRevision);
         }
 
+        watchdog.beginFinalization();
+        finalizationStartedMs = activeDurationMs();
+        refreshEstimate();
         updatePerformanceAuditProgress(completed, total, 'Restoring settings and saved data exactly');
         // The last measured step, and the only one not routed through
         // recordContinuable. Start it in the foreground like the rest.
@@ -3091,7 +3163,7 @@ export function PerformanceAuditRunner() {
           async (attemptNumber) => {
             rollbackAttempts = attemptNumber;
             return await awaitAuditWorkWithTimeout(
-              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined),
+              mountedMutationBarrier.track(tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot ?? undefined)),
               watchdog,
               attemptNumber === 1
                 ? 'Audit state restoration'
@@ -3147,7 +3219,6 @@ export function PerformanceAuditRunner() {
               'Performance audit state was not durably restored after three attempts',
             );
         }
-        watchdog.beginFinalization();
         // Publish the terminal state in the foreground. A terminal run cannot be
         // resumed, so completing while paused would leave the pause set with no
         // AppState listener left to clear it.
@@ -3391,6 +3462,9 @@ export function PerformanceAuditRunner() {
             report,
             storeError: message,
           }, 'warn');
+          // A failed or over-budget finalization stage is a failed audit step;
+          // publish the partial failure report through the normal fatal path.
+          throw storeError;
         }
         updatePerformanceAuditProgress(completed, total, 'Returning to the audit screen');
         try {
@@ -3462,6 +3536,11 @@ export function PerformanceAuditRunner() {
         // evidence before either starts, including preflight failures with no pin.
         const failedPayloadWork = captureAuditPayloadWork(useStore.getState());
         let recoveryError: string | null = null;
+        if (mountedMutationBarrier.hasPending) {
+          watchdog.beginFinalization();
+          updatePerformanceAuditProgress(completed, total, 'Waiting for the interrupted action before restoring settings');
+          mutationRecoveryRequired = !(await mountedMutationBarrier.drain());
+        }
         try {
           await recoverAuditRoute(() => pathnameRef.current);
         } catch (recoveryCaught) {
@@ -3470,11 +3549,11 @@ export function PerformanceAuditRunner() {
         // Finish the last rollback attempt before publishing any terminal UI
         // state. A retry from finally could otherwise overwrite edits made
         // after the audit overlay disappears.
-        if (!rollbackRestored && rollbackSnapshot && rollbackAttempts < 3) {
+        if (!mutationRecoveryRequired && !rollbackRestored && rollbackSnapshot && rollbackAttempts < 3) {
           try {
             rollbackAttempts += 1;
             const rollbackRetry = await timeoutAfter(
-              tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot),
+              mountedMutationBarrier.track(tryRestorePerformanceAuditRollback(useStore, rollbackSnapshot)),
               5_000,
               'Pre-terminal audit rollback',
             );
@@ -3494,7 +3573,10 @@ export function PerformanceAuditRunner() {
             await timeoutAfter(debugLog.flushToFile(), 5_000, 'Rollback error log flush').catch(() => {});
           }
         }
-        if (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested) {
+        // A timed-out native restoration also must finish before terminal UI.
+        // Never start another restoration or expose a new run while it can write.
+        if (mountedMutationBarrier.hasPending) mutationRecoveryRequired = !(await mountedMutationBarrier.drain());
+        if (!mutationRecoveryRequired && (caught instanceof AuditCancelledError || getPerformanceAuditState().cancelRequested)) {
           logAuditEvent(app, {
             kind: 'cancelled',
             sessionId,
@@ -3513,6 +3595,7 @@ export function PerformanceAuditRunner() {
         } else {
           const error = [
             formatAuditError(caught),
+            ...(mutationRecoveryRequired ? ['An interrupted action is still pending. The restoration journal has been retained. Close and reopen the app to recover before starting another audit.'] : []),
             ...(recoveryError ? [`Route recovery failed: ${recoveryError}`] : []),
           ].join('\n');
           const readinessSnapshot = performanceAuditReadinessRegistry.snapshot();
@@ -3526,6 +3609,8 @@ export function PerformanceAuditRunner() {
               backgroundWorkWaitMs: backgroundWorkWait?.elapsedMs ?? null,
               backgroundWorkDetail: backgroundWorkWait ? describeAuditBackgroundWork(backgroundWorkWait) : null,
               completedBeforeFailure: completed,
+              recoveryRequired: mutationRecoveryRequired,
+              rollbackRestored,
               plannedChecks: total,
               executionAttempted: false,
               currentPath: pathnameRef.current,
@@ -3678,7 +3763,7 @@ export function PerformanceAuditRunner() {
           failPerformanceAudit([
             error,
             ...(partialStoreError ? [`Partial report storage failed: ${partialStoreError}`] : []),
-          ].join('\n'));
+          ].join('\n'), mutationRecoveryRequired);
           void startDebugLogUpload({
             sessionId,
             appVersion: app.appVersion,
@@ -3687,9 +3772,11 @@ export function PerformanceAuditRunner() {
           });
         }
       } finally {
+        setPassiveAuditPaused(mutationRecoveryRequired);
         wakeLockSubscription?.remove();
         restoreTransportGuard();
         unsubscribePause();
+        clearInterval(estimateTimer);
         unsubscribeRunElapsed();
         if (readinessCapture) performanceAuditReadinessRegistry.endCapture(readinessCapture);
         linkAbort.abort();
@@ -3804,6 +3891,9 @@ export function PerformanceAuditRunner() {
             {percent}%
           </AppText>
         </Row>
+        <AppText variant="small" color="textMuted" accessibilityLiveRegion="polite">
+          {formatPerformanceAuditEstimate(state.estimate, state.paused)}
+        </AppText>
         {!state.paused && state.progress.label.startsWith('Background work:') ? (
           <ScrollView style={{ maxHeight: 180 }}>
             <AppText variant="small" color="textMuted">{state.progress.label}</AppText>
