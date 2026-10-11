@@ -225,6 +225,21 @@ describe('product-wide history context on an exact-tier page', () => {
     act(() => tree.unmount());
   });
 
+  it('does not replace empty compact filtered history with an unfiltered legacy ribbon', async () => {
+    mockState.prefs.showHistoryRibbon = true;
+    mockRateHistory.historyAvailable = true;
+    mockRateHistory.richHistory = false;
+    // The user selected Mortgage only; this savings product has no matching
+    // market history, even though the legacy selector has savings observations.
+    mockRateHistory.snapshots = { '2026-09-12': { sectionTotals: { Mortgage: {
+      min: 4, max: 6, mean: 5, median: 5, count: 1,
+    } } } };
+    const tree = await renderProduct();
+    const charts = tree.root.findAllByType('BankHistoryChart');
+    expect(charts.every(chart => chart.props.points.every((point: { mean: number | null }) => point.mean === null))).toBe(true);
+    act(() => tree.unmount());
+  });
+
   it('retains earlier product observations and explicit gaps independently of market history', async () => {
     mockState.prefs.showHistoryRibbon = true;
     mockState.productHistory = {

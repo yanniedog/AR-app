@@ -139,7 +139,7 @@ export async function auditExternalLink(
           result.reachability = check('fail', 'The response destination does not satisfy the approved source policy.');
           return;
         }
-        if ([401, 403, 405, 407, 429].includes(response.status)) {
+        if ([401, 403, 405, 407, 429, 501].includes(response.status)) {
           result.reachability = check('unknown', `HTTP ${response.status}: the source blocked the audit request; browser availability is unverified.`);
         } else if (response.status >= 200 && response.status < 300) {
           result.reachability = check('pass', `HTTP ${response.status}: the approved destination responded to HEAD.`);

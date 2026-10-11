@@ -63,7 +63,7 @@ describe('external link audit', () => {
     expect(result.reachability.status).toBe('pass');
   });
 
-  it.each([401, 403, 405, 407, 429, 0, 301])('keeps blocked, unsupported and redirect HTTP %i unknown', async (status) => {
+  it.each([401, 403, 405, 407, 429, 501, 0, 301])('keeps blocked, unsupported and redirect HTTP %i unknown', async (status) => {
     const result = await auditExternalLink(request, options({ fetch: jest.fn(async () => response(status)) }));
     expect(result.reachability.status).toBe('unknown');
     expect(result.reachability.attempted).toBe(true);
