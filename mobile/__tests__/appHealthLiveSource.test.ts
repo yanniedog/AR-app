@@ -1,4 +1,5 @@
 import * as Crypto from 'expo-crypto';
+import { automaticDataUrl } from '../src/lib/automaticDataAccess';
 
 import core from '../assets/sample/core.json';
 import details from '../assets/sample/details.json';
@@ -17,7 +18,7 @@ describe('live app-health source validation', () => {
       ok: true,
       status: 200,
       redirected: false,
-      url: contract.manifestUrl,
+      url: automaticDataUrl(contract.manifestUrl),
       json: async () => ({ schema_version: 1, files: {} }),
     })) as unknown as typeof fetch;
     globalThis.fetch = fetchSpy;
@@ -65,7 +66,7 @@ describe('live app-health source validation', () => {
       ok: true,
       status: 200,
       redirected: false,
-      url,
+      url: automaticDataUrl(url),
       json: async () => value,
       arrayBuffer: async () => bytes?.buffer.slice(
         bytes.byteOffset,
