@@ -10,7 +10,7 @@ import { normalizeInterests } from './interests';
 import { samePayloadIdentity } from './payloadRevision';
 import type { StoreGet, StoreSet } from './storeTypes';
 
-const requests = new WeakMap<StoreGet, { completion: Promise<void> }>();
+const requests = new WeakMap<StoreGet, { completion: Promise<void>; finish: () => void }>();
 
 /** Product history shares the prepared catalogue instead of racing it with a
  * second download of every historical core. Follow a superseding request too. */
@@ -28,8 +28,13 @@ export async function prepareBankRateHistoryAfterPaint(
   options: { warm?: boolean; readCachedDetails?: boolean } = {},
 ): Promise<void> {
   let finish!: () => void;
-  const request = { completion: new Promise<void>(resolve => { finish = resolve; }) };
+  const completion = new Promise<void>(resolve => { finish = resolve; });
+  const request = { completion, finish };
+  const previous = requests.get(get);
   requests.set(get, request);
+  // Wake existing consumers so they follow the successor even if the retired
+  // native/cache operation never settles. Only the successor owns loading state.
+  previous?.finish();
   const isAssetCurrent = () => !!get().core &&
     historicalCatalogueOwner(get().core!) === historicalCatalogueOwner(core) &&
     samePayloadIdentity(get().manifest, manifest) &&

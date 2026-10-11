@@ -466,6 +466,19 @@ describe('PerformanceAuditReadinessRegistry', () => {
     });
   });
 
+  it.each(['pending', 'error'] as const)('a promoted zero-count graph still blocks when %s', status => {
+    const registry = new PerformanceAuditReadinessRegistry(new FakeClock());
+    registry.beginCapture('pa-zero-count-graphic');
+    registry.registerSurface({ id: 'product.details', probes: [
+      { id: 'data', kind: 'data', status: 'ready' },
+      { id: 'history-chart', kind: 'graphic', required: false, status,
+        expectedCount: 0, actualCount: 0, error: status === 'error' ? 'failed to render' : undefined },
+    ] });
+    expect(registry.snapshot(['product.details']).ready).toBe(true);
+    expect(registry.snapshot(['product.details'], ['graphic'])).toMatchObject({ ready: false,
+      blockers: [expect.objectContaining({ code: status === 'error' ? 'probe-error' : 'probe-pending', probeId: 'history-chart' })] });
+  });
+
   it('fails immediately when a required readiness kind is never registered', async () => {
     const clock = new FakeClock();
     const registry = new PerformanceAuditReadinessRegistry(clock);
