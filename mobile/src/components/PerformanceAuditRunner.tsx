@@ -48,8 +48,9 @@ import {
 } from '../lib/appHealthTransportGuard';
 import { debugLog } from '../lib/debugLog';
 import { runExternalLinkAuditCheck } from '../lib/performanceAuditLinks';
-import { collectExternalAuditLinks, beginExternalLinkCapture, endExternalLinkCapture,
+import { createExternalAuditLinkCollector, FIXED_EXTERNAL_AUDIT_LINKS, beginExternalLinkCapture, endExternalLinkCapture,
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
+import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
 import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
@@ -2600,8 +2601,11 @@ export function PerformanceAuditRunner() {
         { seed: sessionId, includeNonStandard: true, detailsProducts: originalStore.details?.products },
       );
       const platformBenchmarkChecks = FIXED_BENCHMARK_CHECKS - (Platform.OS === 'android' ? 0 : 1);
-      let externalLinks = collectExternalAuditLinks({ details: originalStore.details });
-      let reservedLinkChecks = externalLinks.length;
+      const collectExternalLinks = createExternalAuditLinkCollector();
+      let externalLinks: TrustedExternalUrlRequest[] = [];
+      // The full inventory is prepared after payload work settles, inside the
+      // run's cancellation/deadline scope and with the ETA timer already alive.
+      let reservedLinkChecks = FIXED_EXTERNAL_AUDIT_LINKS.length;
       let etaCompletedLinks = 0;
       let etaLinkElapsedMs = 0;
       let etaLastRecordedMs = 0;
@@ -2692,6 +2696,42 @@ export function PerformanceAuditRunner() {
         markPerformanceAuditCheckStored(completed, total, check.label, lastStoredCheckAt);
       };
 
+      const prepareExternalLinks = async (input: Parameters<typeof collectExternalLinks>[0]) => {
+        await waitWhilePaused(watchdog);
+        const inventoryWatchdog = new PerformanceAuditStepWatchdog('External link inventory preparation');
+        let lastProgress = -Infinity;
+        const progress = (count: number, finished = false) => {
+          if (!finished && now() - lastProgress < 100) return;
+          lastProgress = now();
+          const reserved = finished ? count : Math.max(reservedLinkChecks, count);
+          total += reserved - reservedLinkChecks;
+          reservedLinkChecks = reserved;
+          updatePerformanceAuditProgress(completed, total,
+            `Preparing external link inventory (${count} unique destinations)`);
+          refreshEstimate();
+        };
+        try {
+          const links = await collectExternalLinks(input, async count => {
+            await waitWhilePaused(inventoryWatchdog);
+            assertSessionActive(watchdog);
+            assertSessionActive(inventoryWatchdog);
+            if (activeDatasetRevision) assertDatasetRevision(activeDatasetRevision);
+            progress(count);
+            await yieldToUi(0);
+            await waitWhilePaused(inventoryWatchdog);
+            assertSessionActive(watchdog);
+            assertSessionActive(inventoryWatchdog);
+            if (activeDatasetRevision) assertDatasetRevision(activeDatasetRevision);
+          });
+          assertSessionActive(inventoryWatchdog);
+          progress(links.length, true);
+          assertSessionActive(inventoryWatchdog);
+          return { links, durationMs: roundMetric(inventoryWatchdog.elapsedMs) };
+        } finally {
+          inventoryWatchdog.close();
+        }
+      };
+
       try {
         refreshEstimate();
         wakeLockSubscription = AppState.addEventListener('change', (nextState) => {
@@ -2774,19 +2814,19 @@ export function PerformanceAuditRunner() {
         // too rather than only at the first measured check.
         await waitWhilePaused(watchdog);
         const initialStore = useStore.getState();
+        const datasetRevision = captureDatasetRevision();
+        activeDatasetRevision = datasetRevision;
+        assertDatasetRevision(datasetRevision);
         plan = buildDeepPerformanceAuditPlan(initialStore.core, { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products });
         navigationJourneys = buildPerformanceAuditJourneys(
           initialStore.core,
           SECTION_ORDER,
           { seed: sessionId, includeNonStandard: true, detailsProducts: initialStore.details?.products },
         );
-        externalLinks = collectExternalAuditLinks({ details: initialStore.details });
-        reservedLinkChecks = externalLinks.length;
+        externalLinks = (await prepareExternalLinks({ details: initialStore.details })).links;
         total = platformBenchmarkChecks + SECTION_ORDER.length + reservedLinkChecks +
           navigationJourneys.length * 2 +
           plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
-        const datasetRevision = captureDatasetRevision();
-        activeDatasetRevision = datasetRevision;
         assertDatasetRevision(datasetRevision);
         updatePerformanceAuditProgress(
           completed,
@@ -3053,16 +3093,14 @@ export function PerformanceAuditRunner() {
 
         // Collect the exact links encountered during the journeys, plus all
         // available lender detail destinations. Do not silently certify a sample.
-        externalLinks = collectExternalAuditLinks({
+        const externalInventory = await prepareExternalLinks({
           details: useStore.getState().details,
           observed: getCapturedExternalAuditLinks(),
         });
-        total += externalLinks.length - reservedLinkChecks;
-        reservedLinkChecks = externalLinks.length;
-        refreshEstimate();
+        externalLinks = externalInventory.links;
         await record({
           id: 'external-link-inventory', label: 'External link coverage', kind: 'data',
-          status: useStore.getState().details ? 'pass' : 'warn', durationMs: null,
+          status: useStore.getState().details ? 'pass' : 'warn', durationMs: externalInventory.durationMs,
           metrics: {
             executionAttempted: true, uniqueDestinations: externalLinks.length,
             lenderDetailsLoaded: useStore.getState().details != null,

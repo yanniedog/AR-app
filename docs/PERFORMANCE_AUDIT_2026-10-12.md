@@ -15,6 +15,9 @@ saved-list fixtures. Its complete report contains 2,732 checks and 109 failures.
 - ETA updates throughout setup, execution and finalization. Link checks and
   screen interactions have separate estimates; leaving the app pauses the
   foreground estimate and measurement.
+  Manual link inventory preparation also yields within bounded slices, checks
+  cancellation and its ten-second budget, and reuses URL parsing within the run
+  while rebuilding current source membership. Rejected links remain included.
 - Data-quality checks and approved-link validation/installed-handler checks
   preload from data already on the device. Foreground work waits for idle and
   runs small slices every five seconds. A native background task can resume
