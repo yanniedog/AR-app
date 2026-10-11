@@ -8,6 +8,7 @@ import {
   getSuitabilityIndex,
 } from '../src/data/suitabilityIndex';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 
 const sampleDetails = loadSampleDetails();
 
@@ -160,6 +161,7 @@ describe('ensureDetails suitability unblock', () => {
 
     expect(isSuitabilityFilterReady(false)).toBe(false);
     expect(store.getState().details).toBeNull();
+    expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Product details and suitability index')?.outcome).toBe('unavailable');
   });
 
   it('lets a second caller await the in-flight load instead of no-oping', async () => {
@@ -185,6 +187,18 @@ describe('ensureDetails suitability unblock', () => {
     expect(mockDownloadDetails).toHaveBeenCalledTimes(1);
     expect(isSuitabilityFilterReady(false)).toBe(true);
     expect(store.getState().detailsLoading).toBe(false);
+  });
+
+  it('reports completed when trusted live details recover after a metadata read failure', async () => {
+    closeSuitabilityGateUntilRebuild();
+    store.setState({ details: remoteDetails });
+    mockReadMeta.mockRejectedValueOnce(new Error('temporary metadata failure')).mockResolvedValue({
+      coreSha: remoteManifest.files.core.sha256,
+      detailsSha: remoteManifest.files.details.sha256,
+    });
+    await store.getState().ensureDetails({ force: true });
+    expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Product details and suitability index')?.outcome).toBe('completed');
   });
 
   it('leaves the suitability gate closed when details download fails', async () => {
@@ -290,5 +304,24 @@ describe('ensureDetails suitability unblock', () => {
     expect(store.getState().details).toEqual(remoteDetails);
     expect(store.getState().detailsLoading).toBe(false);
     expect(isSuitabilityFilterReady(false)).toBe(true);
+    expect(backgroundPayloadWork.snapshot().filter(job => job.label === 'Product details and suitability index' && job.outcome === null)).toEqual([]);
+  });
+
+  it('records details-only manifest supersession separately from the replacement load', async () => {
+    mockReadMeta.mockResolvedValue({ detailsSha: null });
+    mockReadDetails.mockResolvedValue(null);
+    let finishFirst!: (value: unknown) => void;
+    const download = new Promise(resolve => { finishFirst = resolve; });
+    mockDownloadDetails.mockReturnValueOnce(download).mockResolvedValueOnce({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    const first = store.getState().ensureDetails({ force: true });
+    for (let i = 0; i < 80 && mockDownloadDetails.mock.calls.length < 1; i++) await new Promise(resolve => setImmediate(resolve));
+    const job = backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Product details and suitability index')!;
+    store.setState({ manifest: { ...remoteManifest, files: { ...remoteManifest.files,
+      details: { ...remoteManifest.files.details, sha256: 'details-sha-replacement' } } } });
+    finishFirst({ text: JSON.stringify(remoteDetails), details: remoteDetails });
+    await first;
+    expect(backgroundPayloadWork.snapshot().find(entry => entry.id === job.id)?.outcome).toBe('superseded');
+    await store.getState().ensureDetails({ force: true });
+    expect(mockDownloadDetails).toHaveBeenCalledTimes(2);
   });
 });

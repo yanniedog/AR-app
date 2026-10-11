@@ -1,6 +1,35 @@
 /** Compact perf-audit encodings for bounded local raw-log exports; full report stays in the sidecar. */
 
 import { readCompatibleAppHealthReport, toPublicAppHealthReport } from './appHealth';
+import type { AuditAppIdentity, AuditEnvironment } from './performanceAudit';
+
+type AuditLogDevice = Pick<AuditEnvironment,
+  'platform' | 'platformVersion' | 'manufacturer' | 'brand' | 'model' | 'osName' | 'osVersion'>;
+
+/** Keep pasted start/terminal records self-contained even when the report sidecar is absent. */
+export function encodePerformanceAuditEvent(
+  app: AuditAppIdentity,
+  device: AuditLogDevice,
+  event: Record<string, unknown>,
+  includeIdentity = false,
+): string {
+  const identityNeeded = includeIdentity ||
+    ['start', 'report', 'report-fallback', 'fatal', 'cancelled'].includes(String(event.kind));
+  if (!identityNeeded) return compactAuditLogJson(event);
+  return compactAuditLogJson({
+    app: { appVersion: app.appVersion, buildVersion: app.buildVersion },
+    device: {
+      platform: device.platform,
+      platformVersion: device.platformVersion,
+      manufacturer: device.manufacturer ?? 'unknown',
+      brand: device.brand ?? 'unknown',
+      model: device.model ?? 'unknown',
+      osName: device.osName ?? 'unknown',
+      osVersion: device.osVersion ?? 'unknown',
+    },
+    ...event,
+  });
+}
 
 const LONG_HEX = /\b[a-f0-9]{24,}\b/gi;
 
@@ -214,7 +243,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
   const kept = new Set([
     'schemaVersion', 'sessionId', 'startedAt', 'finishedAt', 'durationMs', 'partial',
     'app', 'watchdog', 'environment', 'plan', 'coverage', 'summary', 'checks', 'routeAggregates', 'limitations',
-    'appHealth',
+    'appHealth', 'backgroundWorkWait',
   ]);
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -240,6 +269,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
     routeAggregates: source.routeAggregates,
     limitations: source.limitations,
     appHealth: compactAppHealth,
+    backgroundWorkWait: source.backgroundWorkWait,
     ...extras,
   });
 }

@@ -1,4 +1,5 @@
 import { prepareBankRateHistoryAfterPaint, waitForBankRateHistoryPreparation } from '../src/data/storeBankRateHistory';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import { createBootstrapActions } from '../src/data/storeBootstrap';
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from '../src/data/storeTypes';
 import { sampleCore, sampleManifest } from '../src/data/sample';
@@ -137,7 +138,7 @@ test.each(['paint', 'native setup', 'cached details'] as const)(
     expect(downloadInflate).toHaveBeenCalledTimes(1);
     expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalledTimes(1);
     expect(prepareHistoricalBankRateHistory).toHaveBeenCalledTimes(1);
-    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, freshIndex, freshDetails, catalogue);
+    expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, freshIndex, freshDetails, catalogue, expect.any(Function));
     expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
   },
 );
@@ -160,7 +161,7 @@ test('detached history starts after paint and native setup, respecting the local
   expect(get().status).toBe('ready');
   paint.resolve();
   await pending;
-  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, catalogue);
+  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, catalogue, expect.any(Function));
   expect(get().bankRateHistoryRevision).toBe(1);
 });
 
@@ -168,7 +169,7 @@ test('missing detached archive keeps the bundled preparation path available', as
   const { get, set } = store(), manifest = detachedManifest();
   set({ manifest });
   await prepareBankRateHistoryAfterPaint(set, get, sampleCore, manifest);
-  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null);
+  expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest, null, null, null, expect.any(Function));
   expect(get().bankRateHistoryLoading).toBe(false);
 });
 
@@ -223,7 +224,7 @@ test.each(['missing', 'corrupt', 'partial'])(
     expect(cache.readDetachedBankRateHistoryAsset).toHaveBeenCalled();
     if (kind === 'partial') {
       expect(await jest.mocked(loadDetachedHistoricalBankRateCatalogue).mock.results.at(-1)!.value).not.toBeNull();
-      expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(current, manifest, datesOnly, null, partial);
+      expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(current, manifest, datesOnly, null, partial, expect.any(Function));
     }
     expect(downloadInflate).not.toHaveBeenCalled();
     expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
@@ -271,7 +272,7 @@ test.each(['valid', 'malformed', 'oversized', 'wrong-head'])(
     paint.resolve();
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(prepareHistoricalBankRateHistory).toHaveBeenCalledWith(sampleCore, manifest,
-      kind === 'valid' ? index : null, details);
+      kind === 'valid' ? index : null, details, null, expect.any(Function));
     expect(get().bankRateHistoryLoading).toBe(false);
     expect(get().refresh).not.toHaveBeenCalled();
   },
@@ -304,8 +305,11 @@ test('slow or failed history does not change readiness and settles its loading s
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: true });
+  const observed = backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Bank rate history preparation')!;
+  expect(observed).toMatchObject({ outcome: null, stage: 'Preparing fallback historical catalogue', runDate: sampleCore.run_date });
   work.resolve();
   await pending;
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === observed.id)).toMatchObject({ outcome: 'failed' });
   expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
 });
 
@@ -317,9 +321,11 @@ test('a superseded core cannot publish completion over the new history request',
   const { get, set } = store();
   const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
   await new Promise(resolve => setTimeout(resolve, 0));
+  const oldWork = backgroundPayloadWork.snapshot().find(job => job.label === 'Bank rate history preparation' && job.outcome === null)!;
   const replacement = { ...sampleCore };
   set({ core: replacement });
   const second = prepareBankRateHistoryAfterPaint(set, get, replacement, sampleManifest);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === oldWork.id)?.outcome).toBe('superseded');
   await new Promise(resolve => setTimeout(resolve, 0));
   old.resolve();
   await first;
@@ -346,6 +352,27 @@ test('a later request cancels queued startup work and uses the latest filters', 
   expect(get().bankRateHistoryRevision).toBe(1);
 });
 
+test.each(['native setup', 'cached details'] as const)('existing product waiters follow the replacement while the old request hangs in %s', async phase => {
+  const entered = deferred(), blocked = deferred(), { get, set } = store();
+  if (phase === 'native setup') {
+    jest.mocked(configureNativeHistoricalCatalogueCodec).mockImplementationOnce(async () => {
+      entered.resolve(); await blocked.promise; return false;
+    });
+  } else {
+    jest.mocked(cache.readDetails).mockImplementationOnce(async () => {
+      entered.resolve(); await blocked.promise; return null;
+    });
+  }
+  const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest, null, null, { readCachedDetails: true });
+  await entered.promise;
+  const waiting = waitForBankRateHistoryPreparation(get);
+  await prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  await waiting;
+  expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+  blocked.resolve(); await first;
+  expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+});
+
 test('product history waits for the replacement preparation before choosing a source', async () => {
   const old = deferred(), next = deferred();
   jest.mocked(prepareHistoricalBankRateHistory)
@@ -368,6 +395,21 @@ test('product history waits for the replacement preparation before choosing a so
   await waiting;
   expect(settled).toBe(true);
   expect(get().bankRateHistoryLoading).toBe(false);
+});
+
+test('reset retires the outer history worker before native setup settles', async () => {
+  const blocked = deferred(), entered = deferred(), { get, set } = store();
+  jest.mocked(configureNativeHistoricalCatalogueCodec).mockImplementationOnce(async () => {
+    entered.resolve(); await blocked.promise; return false;
+  });
+  const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  await entered.promise;
+  const worker = backgroundPayloadWork.snapshot().find(job => job.label === 'Bank rate history preparation' && job.outcome === null)!;
+  set({ core: null, manifest: null, bankRateHistoryLoading: false });
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === worker.id)?.outcome).toBe('superseded');
+  blocked.resolve(); await pending;
+  expect(get().bankRateHistoryRevision).toBe(0);
 });
 
 test('a cancelled preparation without a successor releases its flag and product waiter', async () => {
