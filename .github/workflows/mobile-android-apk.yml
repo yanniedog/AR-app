@@ -17,14 +17,9 @@
 name: mobile-android-apk
 run-name: mobile-android-apk (${{ inputs.apk_channel || 'arm' }}${{ inputs.follow_with_arm && '+arm' || '' }})
 
-# Queue-drain automation dispatches ordinary app releases after the final
-# patch-version PR merges. A change to this workflow also builds an APK so
-# release-pipeline repairs can be verified without waiting for the PR queue.
+# Queue-drain automation dispatches this after the final patch-version PR
+# merges. Building on preceding main pushes produces duplicate or stale APKs.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/mobile-android-apk.yml'
   workflow_dispatch:
     inputs:
       apk_channel:

@@ -142,12 +142,13 @@ test('a rejected publication still uploads the signed Gradle APK without an unpu
   assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
 });
 
-test('workflow repairs build on main and superseded failures recheck the release queue', async () => {
+test('only queue-coordinated builds publish and superseded failures recheck the release queue', async () => {
   const apkWorkflow = await readFile(
     new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
     'utf8',
   );
-  assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
+  assert.doesNotMatch(apkWorkflow, /^  push:/m);
+  assert.match(apkWorkflow, /^  workflow_dispatch:/m);
   const recoveryWorkflow = await readFile(
     new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url),
     'utf8',
