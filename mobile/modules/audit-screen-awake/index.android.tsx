@@ -1,10 +1,14 @@
-import { requireNativeViewManager } from 'expo-modules-core';
+import { requireNativeViewManager, requireOptionalNativeModule } from 'expo-modules-core';
 import React from 'react';
 import type { ViewProps } from 'react-native';
 
-const NativeAuditScreenAwake = requireNativeViewManager<ViewProps>('ArAuditScreenAwake');
+// Expo Go and older development clients do not contain local native modules.
+const NativeAuditScreenAwake = requireOptionalNativeModule('ArAuditScreenAwake')
+  ? requireNativeViewManager<ViewProps>('ArAuditScreenAwake')
+  : null;
 
 export function AuditScreenAwake() {
+  if (!NativeAuditScreenAwake) return null;
   return (
     <NativeAuditScreenAwake
       pointerEvents="none"
