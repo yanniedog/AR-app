@@ -2,6 +2,6 @@
   "name": "@ar/audit-screen-awake",
   "version": "1.0.0",
   "private": true,
-  "main": "index.tsx",
+  "main": "index",
   "peerDependencies": { "expo": "*" }
 }
