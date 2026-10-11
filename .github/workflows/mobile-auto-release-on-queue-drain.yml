@@ -6,6 +6,12 @@ name: mobile-auto-release-on-queue-drain
 
 on:
   workflow_dispatch:
+    inputs:
+      failed_apk_run_id:
+        description: Failed APK run to exclude from in-flight release coverage
+        required: false
+        default: ''
+        type: string
   # Run trusted main code even when the final closed PR came from a fork.
   # Never check out or execute the closing PR's head in this write-capable job.
   pull_request_target:
@@ -50,5 +56,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          FAILED_APK_RUN_ID: ${{ inputs.failed_apk_run_id || '' }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha || '' }}
         run: node mobile/scripts/mobile-auto-release-on-drain.mjs
