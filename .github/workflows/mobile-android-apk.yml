@@ -316,3 +316,21 @@ jobs:
             mobile/build/apk-publish/install.html
           if-no-files-found: error
           compression-level: 0
+
+      - name: Reconcile superseded failed APK build
+        if: failure() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SOURCE_SHA: ${{ inputs.release_source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          main_sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+          if [ "$main_sha" != "$RELEASE_SOURCE_SHA" ]; then
+            # Token-dispatched runs may not emit workflow_run. Use the actual
+            # pinned checkout, which can differ from the dispatch ref SHA.
+            gh workflow run mobile-auto-release-on-queue-drain.yml \
+              --ref main \
+              --repo "${{ github.repository }}"
+          else
+            echo "Failed APK source is still main; leaving the failure for investigation."
+          fi

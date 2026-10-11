@@ -29,7 +29,7 @@ concurrency:
 
 jobs:
   maybe-release:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     # A PR closed without merge (or against another base) can empty the queue.
     # The script checks whether current main still needs a release, including
     # after generated README PRs, instead of skipping events by title.
@@ -46,26 +46,7 @@ jobs:
         with:
           node-version: 24
 
-      - name: Check whether a failed build was superseded
-        id: recovery
-        if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'failure'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          FAILED_BUILD_SHA: ${{ github.event.workflow_run.head_sha }}
-        run: |
-          set -euo pipefail
-          main_sha=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
-          if [ "$main_sha" = "$FAILED_BUILD_SHA" ]; then
-            # A genuine build failure on unchanged source needs a fix, not an
-            # unbounded retry loop. Only recover builds superseded by new main.
-            echo "recover=false" >> "$GITHUB_OUTPUT"
-            echo "Failed APK source is still main; leaving the failure for investigation."
-          else
-            echo "recover=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Release current main (APK via mobile-android-apk)
-        if: steps.recovery.outputs.recover != 'false'
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}

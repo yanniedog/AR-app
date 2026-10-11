@@ -115,7 +115,7 @@ test('APK publication serializes universal before ARM and delays README mutation
   assert.match(workflow, /ref: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
   assert.equal(
     workflow.match(/RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/g)?.length,
-    3,
+    4,
   );
   assert.match(workflow, /Queue ARM channel after universal publish[\s\S]*verify-github-release-source\.mjs/);
   assert.match(workflow, /-f release_source_sha="\$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}"/);
@@ -150,14 +150,10 @@ test('workflow repairs build on main and superseded failures recheck the release
   assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
   assert.match(apkWorkflow, /id: publish\n\s+if: github\.event_name == 'workflow_dispatch'/);
   assert.match(apkWorkflow, /github\.event_name == 'push' && 'workflow-check'/);
-  const recoveryWorkflow = await readFile(
-    new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url),
-    'utf8',
-  );
-  assert.match(recoveryWorkflow, /github\.event\.workflow_run\.conclusion == 'failure'/);
-  assert.match(recoveryWorkflow, /FAILED_BUILD_SHA: \$\{\{ github\.event\.workflow_run\.head_sha \}\}/);
-  assert.match(recoveryWorkflow, /if \[ "\$main_sha" = "\$FAILED_BUILD_SHA" \]; then[\s\S]*echo "recover=false"/);
-  assert.match(recoveryWorkflow, /Release current main \(APK via mobile-android-apk\)\n\s+if: steps\.recovery\.outputs\.recover != 'false'/);
+  const recovery = apkWorkflow.split('- name: Reconcile superseded failed APK build')[1];
+  assert.match(recovery, /if: failure\(\) && github\.ref == 'refs\/heads\/main'/);
+  assert.match(recovery, /RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
+  assert.match(recovery, /if \[ "\$main_sha" != "\$RELEASE_SOURCE_SHA" \]; then[\s\S]*gh workflow run mobile-auto-release-on-queue-drain\.yml/);
 });
 
 test('EAS submission validates an environment-delivered build UUID', async () => {
