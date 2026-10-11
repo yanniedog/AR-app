@@ -63,5 +63,10 @@ jobs:
           chmod +x android/gradlew
           cd android
           ./gradlew :ar-apk-identity-verifier:compileReleaseKotlin :ar-history-codec:compileReleaseKotlin :ar-history-codec:compileReleaseJavaWithJavac :ar-audit-screen-awake:compileReleaseKotlin --no-daemon
+      - name: Verify EAS project generator compatibility
+        run: |
+          npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          npm run compat --prefix tools/eas-cli
+          npm test --prefix tools/eas-cli
       - name: Mobile CI (doctor - typecheck - lint - test - export)
         run: npm run ci

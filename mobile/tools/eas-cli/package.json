@@ -9,6 +9,13 @@
   "overrides": {
     "minimatch@5.1.2": "5.1.8",
     "nanoid@3.3.8": "3.3.18",
-    "tar@7.5.19": "7.5.21"
+    "tar@7.5.19": "7.5.21",
+    "ts-deepmerge": "8.0.0"
+  },
+  "scripts": {
+    "compat": "node scripts/apply-dependency-compat.cjs",
+    "postinstall": "npm run compat",
+    "pretest": "npm run compat",
+    "test": "node --test test/*.test.cjs"
   }
 }
