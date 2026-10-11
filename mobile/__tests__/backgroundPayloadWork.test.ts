@@ -62,3 +62,13 @@ test('observer snapshots do not fabricate worker progress', () => {
   work.checkpoint();
   expect(registry.snapshot()[0]).toMatchObject({ processingCheckpoints: 2, lastCheckpointAgeMs: 0 });
 });
+
+test('observations retire invalidated ownership without inventing processing checkpoints', () => {
+  const registry = new BackgroundPayloadWorkRegistry(() => 1_800_000_000_000);
+  let current = true;
+  registry.begin('Detached history', null, 'Native cache read', () => current);
+  expect(registry.hasActiveWork()).toBe(true);
+  current = false;
+  expect(registry.snapshot()[0]).toMatchObject({ outcome: 'superseded', processingCheckpoints: 0 });
+  expect(registry.hasActiveWork()).toBe(false);
+});

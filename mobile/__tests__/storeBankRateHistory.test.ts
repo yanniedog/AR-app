@@ -352,6 +352,27 @@ test('a later request cancels queued startup work and uses the latest filters', 
   expect(get().bankRateHistoryRevision).toBe(1);
 });
 
+test.each(['native setup', 'cached details'] as const)('existing product waiters follow the replacement while the old request hangs in %s', async phase => {
+  const entered = deferred(), blocked = deferred(), { get, set } = store();
+  if (phase === 'native setup') {
+    jest.mocked(configureNativeHistoricalCatalogueCodec).mockImplementationOnce(async () => {
+      entered.resolve(); await blocked.promise; return false;
+    });
+  } else {
+    jest.mocked(cache.readDetails).mockImplementationOnce(async () => {
+      entered.resolve(); await blocked.promise; return null;
+    });
+  }
+  const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest, null, null, { readCachedDetails: true });
+  await entered.promise;
+  const waiting = waitForBankRateHistoryPreparation(get);
+  await prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
+  await waiting;
+  expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+  blocked.resolve(); await first;
+  expect(get()).toMatchObject({ bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
+});
+
 test('product history waits for the replacement preparation before choosing a source', async () => {
   const old = deferred(), next = deferred();
   jest.mocked(prepareHistoricalBankRateHistory)

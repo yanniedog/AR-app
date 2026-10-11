@@ -29,6 +29,14 @@ type PendingAsset = {
 };
 let pendingAsset: PendingAsset | null = null;
 
+function retireUnusedPendingAsset(): void {
+  if (pendingAsset && ![...pendingAsset.consumers].some(caller => caller.isAssetCurrent())) {
+    pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
+    pendingAsset = null;
+  }
+}
+
 async function consume(load: PendingAsset, consumer: Consumer): Promise<HistoricalBankRateCatalogue | null> {
   try {
     const catalogue = await load.promise;
@@ -53,6 +61,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
   const stage = (name: string) => { phase = name; debugLog.debug('bank-history-detached', `${name} run_date=${manifest.run_date} elapsed_ms=${Date.now() - started}`); };
   const file = validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO);
   if (!file) {
+    retireUnusedPendingAsset();
     if (manifest.bank_rate_history_catalogue !== undefined) debugLog.warn('bank-history-detached', 'Invalid optional history descriptor; using fallback.');
     return null;
   }
@@ -64,6 +73,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       }
     }
   } catch {
+    retireUnusedPendingAsset();
     debugLog.warn('bank-history-detached', 'Invalid optional history revision identity; using fallback.');
     return null;
   }
@@ -75,7 +85,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     JSON.stringify(validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO)) === JSON.stringify(file);
   const callerIsCurrent = () => (options.isCurrent?.() ?? true) && sameManifest();
   const assetIsCurrent = () => (options.isAssetCurrent?.() ?? options.isCurrent?.() ?? true) && sameManifest();
-  if (!callerIsCurrent() || !assetIsCurrent()) return null;
+  if (!callerIsCurrent() || !assetIsCurrent()) { retireUnusedPendingAsset(); return null; }
   if (pendingAsset && pendingAsset.receipt !== receipt) {
     pendingAsset.superseded = true;
     pendingAsset.work.finish('superseded');
@@ -88,7 +98,12 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     stage('matching preparation joined');
     return consume(pendingAsset, consumer);
   }
-  const work = backgroundPayloadWork.begin('Detached historical catalogue', runDate, 'Reading asset cache');
+  const work = backgroundPayloadWork.begin('Detached historical catalogue', runDate, 'Reading asset cache', () => {
+    if (!load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent())) return true;
+    load.superseded = true;
+    if (pendingAsset === load) pendingAsset = null;
+    return false;
+  });
   const load: PendingAsset = { work, receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
   pendingAsset = load;
   const isCurrent = () => !load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent());

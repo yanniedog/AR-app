@@ -34,6 +34,8 @@ type Work = {
   omittedStages: number;
   checkpoints: number;
   lastCheckpoint: number | null;
+  isCurrent?: () => boolean;
+  finish?: (outcome: BackgroundWorkOutcome) => void;
 };
 const MAX_COMPLETED = 32;
 const MAX_STAGES = 32;
@@ -45,15 +47,15 @@ export class BackgroundPayloadWorkRegistry {
   private completed: Work[] = [];
   constructor(private clock: () => number = () => Date.now()) {}
 
-  begin(label: string, runDate: string | null = null, stage = 'Starting'): BackgroundWorkHandle {
+  begin(label: string, runDate: string | null = null, stage = 'Starting', isCurrent?: () => boolean): BackgroundWorkHandle {
     const start = this.clock();
     const work: Work = { id: ++this.sequence, label: bounded(label),
       runDate: runDate?.slice(0, 128) ?? null, start, end: null, outcome: null,
       stages: [{ label: bounded(stage), start, end: null }], omittedStages: 0,
-      checkpoints: 0, lastCheckpoint: null };
+      checkpoints: 0, lastCheckpoint: null, isCurrent };
     this.active.set(work.id, work);
     // Never evict an in-flight worker: the oldest may be the reason for a hang.
-    return {
+    const handle: BackgroundWorkHandle = {
       stage: label => {
         if (work.end !== null) return;
         const current = work.stages[work.stages.length - 1];
@@ -69,6 +71,8 @@ export class BackgroundPayloadWorkRegistry {
         work.outcome = outcome;
         work.stages[work.stages.length - 1].end = work.end;
         this.active.delete(work.id);
+        delete work.isCurrent;
+        delete work.finish;
         this.completed.push(work);
         if (this.completed.length > MAX_COMPLETED) this.completed.shift();
       },
@@ -78,12 +82,24 @@ export class BackgroundPayloadWorkRegistry {
         work.lastCheckpoint = this.clock();
       },
     };
+    work.finish = handle.finish;
+    return handle;
   }
 
-  hasActiveWork(): boolean { return this.active.size > 0; }
+  private retireSuperseded(): void {
+    for (const work of this.active.values()) {
+      if (work.isCurrent && !work.isCurrent()) work.finish?.('superseded');
+    }
+  }
+
+  hasActiveWork(): boolean {
+    this.retireSuperseded();
+    return this.active.size > 0;
+  }
 
   /** Include work that began before observation but finished during it. */
   snapshot(since = 0): BackgroundWorkSnapshot[] {
+    this.retireSuperseded();
     const now = this.clock();
     return [...this.completed.filter(work => work.end! >= since), ...this.active.values()].map(work => {
       const stage = work.stages[work.stages.length - 1];
