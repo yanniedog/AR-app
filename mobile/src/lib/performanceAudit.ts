@@ -1,4 +1,5 @@
 import type { Href } from 'expo-router';
+import type { AuditBackgroundWorkWait } from './performanceAuditBackgroundWork';
 
 import { SECTIONS, SECTION_ORDER } from '../constants';
 import type { Prefs } from '../data/storeTypes';
@@ -109,6 +110,8 @@ export interface PerformanceAuditReport {
   app: AuditAppIdentity;
   watchdog: PerformanceAuditWatchdogDiagnostics;
   environment: AuditEnvironment;
+  /** Observed setup wait and worker stages; never counted as executed checks. */
+  backgroundWorkWait?: AuditBackgroundWorkWait;
   plan?: DeepPerformanceAuditPlan;
   coverage?: PerformanceAuditCoverage;
   summary: PerformanceAuditSummary;
