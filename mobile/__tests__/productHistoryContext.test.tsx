@@ -16,7 +16,7 @@ type InspectableRenderer = ReactTestRenderer & { root: TestNode };
 const [row, prize] = fixture.rates as RateRow[];
 const mockParams = { key: row.product_key, ri: '4' };
 const mockHistoryModel = { section: 'Savings', dates: ['2026-09-12', '2026-09-13'], allDates: ['2026-09-12', '2026-09-13'], points: [] };
-const mockSelectLegacyHistory = jest.fn(() => mockHistoryModel);
+const mockSelectLegacyHistory = jest.fn<typeof mockHistoryModel, unknown[]>(() => mockHistoryModel);
 const mockRateHistory: Record<string, any> = {
   snapshots: null, updating: false, failed: false, historyAvailable: false,
   richHistory: false, missingDates: [], revision: 'history-1',
