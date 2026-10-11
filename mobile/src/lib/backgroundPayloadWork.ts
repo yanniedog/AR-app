@@ -67,6 +67,7 @@ export class BackgroundPayloadWorkRegistry {
       },
       finish: (outcome = 'completed') => {
         if (work.end !== null) return;
+        if (work.isCurrent && !work.isCurrent()) outcome = 'superseded';
         work.end = this.clock();
         work.outcome = outcome;
         work.stages[work.stages.length - 1].end = work.end;

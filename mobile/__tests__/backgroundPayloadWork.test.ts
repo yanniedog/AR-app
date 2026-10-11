@@ -72,3 +72,12 @@ test('observations retire invalidated ownership without inventing processing che
   expect(registry.snapshot()[0]).toMatchObject({ outcome: 'superseded', processingCheckpoints: 0 });
   expect(registry.hasActiveWork()).toBe(false);
 });
+
+test('invalidated work settles as superseded even without an intervening audit observation', () => {
+  const registry = new BackgroundPayloadWorkRegistry();
+  let current = true;
+  const work = registry.begin('Catalogue', null, 'Cache', () => current);
+  current = false;
+  work.finish('completed');
+  expect(registry.snapshot()[0].outcome).toBe('superseded');
+});
