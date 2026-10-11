@@ -24,7 +24,7 @@ export function BackgroundWorkDiagnosis({ wait }: { wait: AuditBackgroundWorkWai
           </AppText>
           <AppText variant="tiny" color="textMuted">
             {job.lastCheckpointAgeMs != null
-              ? `${job.processingCheckpoints} processing checkpoints · last ${(job.lastCheckpointAgeMs / 1_000).toFixed(1)} s before capture`
+              ? `${job.processingCheckpoints} processing checkpoints · last ${(job.lastCheckpointAgeMs / 1_000).toFixed(1)} s before ${job.finishedAt ? 'completion' : 'capture'}`
               : 'No processing checkpoint recorded; activity within this stage is unverified.'}
           </AppText>
           {expanded ? job.stages.map((stage, index) => (
