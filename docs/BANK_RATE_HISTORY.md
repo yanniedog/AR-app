@@ -161,3 +161,11 @@ The raw endpoint supports browser access as well as native Android downloads.
 The public auditor rejects redirects from this fixed route and records canonical,
 requested and final URLs separately. A successful direct public readback is
 required before reporting delivery complete.
+
+A transport-only copy of an older edition can initialize the branch, but does
+not establish that future daily publications use it. Release automation checks
+the producer's `github-public-v1` marker and exact index, rolling manifest and
+immutable manifest bindings before allocating a version, building a public APK
+and publishing it. Missing or inconsistent metadata holds the release; ordinary
+artifact-only builds remain available. Producer activation and fresh public
+readback complete this handoff.
