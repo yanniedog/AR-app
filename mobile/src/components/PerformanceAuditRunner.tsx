@@ -27,6 +27,8 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
+import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
+import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import {
   getApkDownloadSnapshot,
   getHydratedApkDownloadSnapshot,
@@ -2517,6 +2519,12 @@ export function PerformanceAuditRunner() {
 
     const execute = async () => {
       const sessionId = state.sessionId!;
+      const wakeLockTag = `${AUDIT_KEEP_AWAKE_TAG}:${sessionId}`;
+      const wakeLock = createPerformanceAuditWakeLock(
+        () => activateKeepAwakeAsync(wakeLockTag),
+        () => deactivateKeepAwake(wakeLockTag),
+      );
+      let wakeLockSubscription: ReturnType<typeof AppState.addEventListener> | null = null;
       const startedAt = state.startedAt!;
       const auditMode = state.auditMode;
       const startedMs = Date.now();
@@ -2622,6 +2630,18 @@ export function PerformanceAuditRunner() {
       };
 
       try {
+        wakeLockSubscription = AppState.addEventListener('change', (nextState) => {
+          if (nextState !== 'active') return;
+          // Returning from lock/background may have released the platform wake lock.
+          void wakeLock.acquire().catch((error: unknown) => {
+            debugLog.error(PERFORMANCE_AUDIT_LOG_TAG,
+              `Keep-awake refresh failed: ${formatAuditErrorForLog(error)}`);
+          });
+        });
+        // Protect setup as well as measured checks from automatic screen timeout.
+        // Wait for a foreground activity before asking the native module.
+        await waitWhilePaused(watchdog);
+        await awaitAuditWork(wakeLock.acquire(), watchdog, 'Keep-awake activation');
         logAuditEvent(app, {
           kind: 'start',
           phase: 'preflight',
@@ -2650,14 +2670,6 @@ export function PerformanceAuditRunner() {
           }
         }
         markPerformanceAuditRunning(total);
-        // Setup belongs inside the protected region so an unexpected native
-        // keep-awake or monitor failure cannot leave the global running flag
-        // latched forever.
-        await awaitAuditWork(
-          activateKeepAwakeAsync(AUDIT_KEEP_AWAKE_TAG),
-          watchdog,
-          'Keep-awake activation',
-        );
         monitor.start();
         rollbackSnapshot = await awaitAuditWork(
           beginPerformanceAuditRollback(useStore),
@@ -3667,6 +3679,7 @@ export function PerformanceAuditRunner() {
           });
         }
       } finally {
+        wakeLockSubscription?.remove();
         restoreTransportGuard();
         unsubscribePause();
         unsubscribeRunElapsed();
@@ -3680,7 +3693,7 @@ export function PerformanceAuditRunner() {
         }
         try {
           await timeoutAfter(
-            deactivateKeepAwake(AUDIT_KEEP_AWAKE_TAG),
+            wakeLock.release(),
             5_000,
             'Keep-awake release',
           );
@@ -3773,6 +3786,7 @@ export function PerformanceAuditRunner() {
         paddingBottom: Math.max(16, insets.bottom + 12),
       }}
     >
+      <AuditScreenAwake />
       <Card variant="elevated" style={{ gap: 12, borderWidth: 1, borderColor: theme.colors.border }}>
         <Row style={{ justifyContent: 'space-between', alignItems: 'baseline' }}>
           <AppText variant="body" weight="700">
