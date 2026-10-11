@@ -117,7 +117,21 @@
     "@expo/metro-config": {
       "postcss": "^8.5.10"
     },
-    "@grpc/grpc-js@1.9.16": "1.13.6"
+    "@grpc/grpc-js@1.9.16": "1.13.6",
+    "metro@0.83.3": "0.83.8",
+    "metro-babel-transformer@0.83.3": "0.83.8",
+    "metro-cache@0.83.3": "0.83.8",
+    "metro-cache-key@0.83.3": "0.83.8",
+    "metro-config@0.83.3": "0.83.8",
+    "metro-core@0.83.3": "0.83.8",
+    "metro-file-map@0.83.3": "0.83.8",
+    "metro-minify-terser@0.83.3": "0.83.8",
+    "metro-resolver@0.83.3": "0.83.8",
+    "metro-runtime@0.83.3": "0.83.8",
+    "metro-source-map@0.83.3": "0.83.8",
+    "metro-symbolicate@0.83.3": "0.83.8",
+    "metro-transform-plugins@0.83.3": "0.83.8",
+    "metro-transform-worker@0.83.3": "0.83.8"
   },
   "jest": {
     "preset": "jest-expo",

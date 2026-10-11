@@ -56,6 +56,10 @@ jobs:
         run: npm run pr:automation:verify
       - name: Install
         run: npm ci --no-audit --no-fund
+      - name: Verify release CLI dependency compatibility
+        run: |
+          npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          npm test --prefix tools/eas-cli
       - name: Compile native APK identity verifier, history codec and audit screen awake view
         run: |
           node scripts/ensure-firebase-config.mjs
