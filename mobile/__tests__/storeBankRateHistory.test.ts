@@ -1,4 +1,5 @@
 import { prepareBankRateHistoryAfterPaint, waitForBankRateHistoryPreparation } from '../src/data/storeBankRateHistory';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import { createBootstrapActions } from '../src/data/storeBootstrap';
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from '../src/data/storeTypes';
 import { sampleCore, sampleManifest } from '../src/data/sample';
@@ -304,8 +305,11 @@ test('slow or failed history does not change readiness and settles its loading s
   const pending = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
   await new Promise(resolve => setTimeout(resolve, 0));
   expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: true });
+  const observed = backgroundPayloadWork.snapshot().reverse().find(job => job.label === 'Bank rate history preparation')!;
+  expect(observed).toMatchObject({ outcome: null, stage: 'Preparing fallback historical catalogue', runDate: sampleCore.run_date });
   work.resolve();
   await pending;
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === observed.id)).toMatchObject({ outcome: 'failed' });
   expect(get()).toMatchObject({ status: 'ready', bankRateHistoryLoading: false, bankRateHistoryRevision: 1 });
 });
 

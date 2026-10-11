@@ -1,4 +1,5 @@
 import { SECTION_KEYS, type CorePayload, type DetailsPayload, type Manifest } from '../types';
+import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
@@ -39,6 +40,8 @@ export async function prepareBankRateHistoryAfterPaint(
   const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
+  const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint');
+  let outcome: BackgroundWorkOutcome = 'superseded';
   try {
     await yieldToPaintFrames(2);
     if (!isCurrent()) return;
@@ -46,8 +49,10 @@ export async function prepareBankRateHistoryAfterPaint(
     // repository's Jest runtime without enabling experimental VM modules.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { configureNativeHistoricalCatalogueCodec } = require('./historicalBankRateCatalogueNative') as typeof import('./historicalBankRateCatalogueNative');
+    work.stage('Configuring native history decoder');
     await configureNativeHistoricalCatalogueCodec();
     if (!isCurrent()) return;
+    work.stage('Reading cached product details');
     const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
     if (!isCurrent()) return;
     // Keep transport, cache and archive decoding outside the first-paint path.
@@ -56,23 +61,32 @@ export async function prepareBankRateHistoryAfterPaint(
     if (manifest.bank_rate_history_catalogue) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
+      work.stage('Loading detached historical catalogue');
       detached = await loadDetachedHistoricalBankRateCatalogue(manifest, {
         allowNetwork: !isLocalAppHealthAudit(), isCurrent, isAssetCurrent,
       });
     }
     if (!isCurrent()) return;
-    if (detached) await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached);
-    else await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
+    work.stage(detached ? 'Preparing verified historical catalogue' : 'Preparing fallback historical catalogue');
+    const ready = detached
+      ? await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached)
+      : await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails);
     if (!isCurrent()) return;
     const prefs = get().prefs;
-    if (options.warm !== false) await warmHistoricalBankRateCatalogue(get().core!, {
-      profileFilters: prefs.profileFilters, includeNonStandard: prefs.includeNonStandard,
-      interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
-    });
+    if (options.warm !== false) {
+      work.stage('Warming bank/section/profile history views');
+      await warmHistoricalBankRateCatalogue(get().core!, {
+        profileFilters: prefs.profileFilters, includeNonStandard: prefs.includeNonStandard,
+        interests: prefs.onboarded ? normalizeInterests(prefs.interests) : SECTION_KEYS,
+      });
+    }
+    if (isCurrent()) outcome = !ready ? 'unavailable' : detached ? 'completed' : 'fallback';
     if (isCurrent()) debugLog.info('store', `bank history prepared after first paint elapsed_ms=${Date.now() - started}`);
   } catch (error) {
+    outcome = 'failed';
     debugLog.warn('store', `optional bank history preparation failed: ${String((error as Error)?.message ?? error)}`);
   } finally {
+    work.finish(outcome);
     // An old completion must not clear a newer core/revision's loading state.
     // A cancelled request without a successor must still release its own flag.
     if (requests.get(get) === request) {

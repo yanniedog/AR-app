@@ -22,6 +22,7 @@ import {
   type ProductHistoryPayload,
 } from './productHistory';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from '../lib/proAccess';
+import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { logDegradation, logEnsureSkipped } from '../lib/degradationLog';
@@ -142,6 +143,8 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       const myGeneration = detailsEnsureGeneration;
       let reensureAfter = false;
 
+      const work = backgroundPayloadWork.begin('Product details and suitability index', runDate, 'Reading details cache metadata');
+      let workOutcome: BackgroundWorkOutcome = 'completed';
       const run = (async () => {
         // Claim the load before the first await. Home, Browse, and product screens
         // can request details in the same frame; without this synchronous claim
@@ -153,6 +156,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           const shaOk = !wantSha || meta?.detailsSha === wantSha;
           if (details && details.run_date === core.run_date && shaOk && (!wantSha || verifiedDetailsSha(details) === wantSha)) {
             if (!suitabilityIndexMatches(getSuitabilityIndex(), runDate, coreSha, detailsSha)) {
+              work.stage('Rebuilding suitability index from loaded details');
               await rebuildAndInstallSuitabilityIndex(
                 core,
                 details,
@@ -177,10 +181,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
           // A stale details file expands to several megabytes. Its hash mismatch
           // already proves it cannot satisfy this core, so do not parse it merely
           // to throw it away before downloading the current asset.
+          work.stage('Reading and validating cached product details');
           const cached = shaOk ? await cache.readDetails() : null;
           if (cached && cached.run_date === core.run_date && (!wantSha || verifiedDetailsSha(cached) === wantSha)) {
             if (datasetUnchanged()) {
               set({ details: cached });
+              work.stage('Rebuilding suitability index from cached details');
               await rebuildAndInstallSuitabilityIndex(
                 core,
                 cached,
@@ -192,11 +198,13 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             return;
           }
           if (source === 'remote' && manifest) {
+            work.stage('Downloading and decoding product details');
             const { text, details: fresh } = await downloadDetails(
               manifest.files.details.url,
               manifest.files.details.sha256,
             );
             if (!datasetUnchanged()) return;
+            work.stage('Saving verified product details');
             await cache.writeDetails(text, manifest.payload_revision ? manifest.files.details.sha256 : undefined, manifest.files.details.sha256);
             if (!datasetUnchanged()) return;
             await cache.updateMeta({
@@ -208,6 +216,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             });
             if (!datasetUnchanged()) return;
             set({ details: fresh });
+            work.stage('Rebuilding suitability index from downloaded details');
             await rebuildAndInstallSuitabilityIndex(
               core,
               fresh,
@@ -224,6 +233,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             return;
           }
         } catch (err) {
+          workOutcome = 'failed';
           if (myGeneration !== detailsEnsureGeneration) return;
           const msg = String((err as Error)?.message ?? err);
           debugLog.warn('store', `ensureDetails failed: ${msg}`);
@@ -269,6 +279,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
               get().core?.run_date === liveRunDate &&
               (get().manifest?.files.core.sha256 ?? '') === liveCoreSha &&
               (get().manifest?.files.details.sha256 ?? '') === wantDetailsSha;
+            work.stage('Recovering suitability index from trusted details');
             debugLog.warn(
               'store',
               'ensureDetails rebuilding suitability index from trusted details',
@@ -293,7 +304,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         }
       })();
 
-      const tracked = run.finally(() => {
+      const tracked = run.catch(error => { workOutcome = 'failed'; throw error; }).finally(() => {
+        work.finish(myGeneration !== detailsEnsureGeneration || get().core?.run_date !== runDate ||
+          (get().manifest?.files.core.sha256 ?? '') !== coreSha ? 'superseded' : workOutcome);
         if (detailsEnsureInFlight === tracked) detailsEnsureInFlight = null;
         if (reensureAfter && myGeneration === detailsEnsureGeneration) {
           void get().ensureDetails(opts);

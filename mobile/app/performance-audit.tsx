@@ -7,6 +7,7 @@ import { Alert, TextInput, View } from 'react-native';
 
 import { ScreenScrollView } from '../src/components/Screen';
 import { DebugLogUploadStatus } from '../src/components/DebugLogUploadStatus';
+import { BackgroundWorkDiagnosis } from '../src/components/BackgroundWorkDiagnosis';
 import {
   getDebugLogUploadSnapshot,
   isDebugLogUploadBusy,
@@ -548,6 +549,8 @@ function PerformanceAuditScreenInner() {
               onPress={confirmShareReport}
             />
           </Card>
+
+          {report.backgroundWorkWait ? <BackgroundWorkDiagnosis wait={report.backgroundWorkWait} /> : null}
 
           {report.appHealth ? (
             <View style={{ gap: 8 }}>
