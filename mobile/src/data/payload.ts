@@ -2,7 +2,7 @@ import { hasAppHealthFetchGuard } from '../lib/appHealthTransportGuard';
 import { bindVerifiedDetails } from './detailsIdentity';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
-import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
+import { Gunzip, strFromU8 } from 'fflate';
 
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { automaticDataUrl, MissingPublicPayloadError } from '../lib/automaticDataAccess';
@@ -13,13 +13,14 @@ import { MANIFEST_URL, SUPPORTED_SCHEMA } from '../config';
 import { debugLog } from '../lib/debugLog';
 import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
-import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
+import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
+import { decodePayloadUtf8, inflatePayloadOffThread, MAX_PAYLOAD_INFLATED_BYTES } from './payloadInflation';
 import {
   fileNameFromUrl,
   type PayloadProgressHandler,
@@ -27,8 +28,6 @@ import {
   type PayloadProgressSnapshot,
 } from './downloadProgress';
 
-/** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
-const YIELD_BEFORE_HEAVY_BYTES = HEAVY_JSON_BYTES;
 const INFLATE_CHUNK_BYTES = 64 * 1024;
 export const BANK_SPREAD_MAX_COMPRESSED_BYTES = 8 * 1024 * 1024;
 export const BANK_SPREAD_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
@@ -395,11 +394,17 @@ export async function downloadInflate(
       startedAt: inflateStarted,
       phaseComplete: true,
     });
-    return strFromU8(bytes);
+    return decodePayloadUtf8(bytes);
   }
-  const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES || opts.maxInflatedBytes != null
-    ? await gunzipCooperatively(bytes, INFLATE_CHUNK_BYTES, opts.maxInflatedBytes)
-    : gunzipSync(bytes);
+  const limit = Math.min(opts.maxInflatedBytes ?? MAX_PAYLOAD_INFLATED_BYTES, MAX_PAYLOAD_INFLATED_BYTES);
+  const expectedInflated = opts.requireExactBytes ? opts.expectedInflatedBytes : undefined;
+  const decoded = await inflatePayloadOffThread(bytes, limit, expectedInflated);
+  if (decoded !== null) {
+    emit(opts.onProgress, { phase: 'inflate', fileName, bytesReceived: byteLen, totalBytes: byteLen,
+      startedAt: inflateStarted, phaseComplete: true });
+    return decoded;
+  }
+  const inflated = await gunzipCooperatively(bytes, INFLATE_CHUNK_BYTES, limit);
   if (opts.requireExactBytes && opts.expectedInflatedBytes != null && inflated.length !== opts.expectedInflatedBytes) {
     throw new Error(`inflated asset size mismatch (expected ${opts.expectedInflatedBytes}, got ${inflated.length})`);
   }
@@ -411,7 +416,7 @@ export async function downloadInflate(
     startedAt: inflateStarted,
     phaseComplete: true,
   });
-  return strFromU8(inflated);
+  return decodePayloadUtf8(inflated);
 }
 
 export interface CoreResult {

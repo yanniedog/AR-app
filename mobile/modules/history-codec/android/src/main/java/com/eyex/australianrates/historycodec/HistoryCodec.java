@@ -105,6 +105,29 @@ public final class HistoryCodec {
 
   private static int digit(char value) { return ALPHABET.indexOf(value); }
 
+  /** Verified compressed payloads use the background module queue for both gzip
+   * and strict UTF-8 decoding. Bound each read before retaining output bytes. */
+  public static String inflatePayload(byte[] compressed, double maximumBytes, double expectedBytes) throws IOException {
+    if (compressed == null || compressed.length < 18 || compressed.length > 64 * 1024 * 1024 ||
+        !Double.isFinite(maximumBytes) || maximumBytes != Math.floor(maximumBytes) || maximumBytes < 1 || maximumBytes > 192 * 1024 * 1024 ||
+        !Double.isFinite(expectedBytes) || expectedBytes != Math.floor(expectedBytes) || expectedBytes < -1 || expectedBytes > maximumBytes)
+      throw new IllegalArgumentException("Invalid payload inflation bounds");
+    int maximum = (int) maximumBytes;
+    ByteArrayOutputStream output = new ByteArrayOutputStream(Math.min(65536, maximum));
+    byte[] block = new byte[65536];
+    try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(compressed), 65536)) {
+      int count;
+      while ((count = gzip.read(block)) != -1) {
+        if (output.size() > maximum - count) throw new IllegalArgumentException("Payload exceeds decoded budget");
+        output.write(block, 0, count);
+      }
+    }
+    if (expectedBytes >= 0 && output.size() != (int) expectedBytes)
+      throw new IllegalArgumentException("Payload inflated size mismatch");
+    return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+      .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(output.toByteArray())).toString();
+  }
+
   private static byte[] decode(String text) {
     if (text == null || text.isEmpty() || text.length() % 4 != 0 || text.length() > ((MAX_COMPRESSED + 2) / 3) * 4)
       throw new IllegalArgumentException("Invalid base64 length");

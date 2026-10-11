@@ -52,6 +52,7 @@ import { waitForBankRateHistoryPreparation } from './storeBankRateHistory';
 import { cachedHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { parseHistoryDatesIndex } from './historyDatesIndex';
 import { createMissingPublicPayloadRecovery } from './missingPublicPayloadRecovery';
+import { stagedSpreadFor } from './stagedOptionalAssets';
 
 /** Coalesce concurrent ensureDetails callers onto one in-flight load. */
 let detailsEnsureInFlight: Promise<void> | null = null;
@@ -673,6 +674,12 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
         };
       };
       if (!force) {
+        const staged = stagedSpreadFor(manifest);
+        if (staged && currentMatches()) {
+          retainVerifiedSpread(snapshot, staged);
+          set({ bankSpreadHistory: staged, bankSpreadHistoryError: null });
+          return;
+        }
         if (verifiedSpread &&
             verifiedSpread.coreSha === snapshot.coreSha &&
             verifiedSpread.spreadSha === snapshot.spreadSha &&

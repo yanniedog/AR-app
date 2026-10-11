@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import test from 'node:test';
 
 test('native history codec preserves bytes and rejects corrupt, noncanonical and oversized input', { timeout: 120_000 }, () => {
@@ -17,7 +17,7 @@ test('native history codec preserves bytes and rejects corrupt, noncanonical and
     assert.equal(compile.status, 0, String(compile.error ?? compile.stderr));
     const run = spawnSync(command('java'), ['-Xmx512m', '-cp', directory, 'HistoryCodecTest'], { encoding: 'utf8', timeout: 90_000 });
     assert.equal(run.status, 0, String(run.error ?? run.stderr));
-    assert.match(run.stdout, /history-codec assertions passed: 29\b/);
+    assert.match(run.stdout, /history-codec assertions passed: 47\b/);
   } finally {
     const target = path.resolve(directory), root = path.resolve(tmpdir());
     assert.equal(path.dirname(target), root);
