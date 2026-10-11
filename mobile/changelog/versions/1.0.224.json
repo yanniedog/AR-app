@@ -1,0 +1,36 @@
+{
+  "version": "1.0.224",
+  "releaseTag": "app-arm-v1.0.224",
+  "date": "2026-10-11",
+  "summaryBullets": [
+    "Restore Cloudflare payload delivery and release readiness (#351)",
+    "Prepare history upstream and deliver app data directly from GitHub (#350)"
+  ],
+  "sections": [
+    {
+      "title": "Changes",
+      "bullets": [
+        {
+          "text": "Restore Cloudflare payload delivery and release readiness (#351)"
+        },
+        {
+          "text": "Prepare history upstream and deliver app data directly from GitHub (#350)"
+        }
+      ]
+    },
+    {
+      "title": "Release metadata",
+      "bullets": [
+        {
+          "text": "Repository: yanniedog/AR-app"
+        },
+        {
+          "text": "Version tag: app-arm-v1.0.224"
+        },
+        {
+          "text": "Since tag: app-arm-v1.0.223"
+        }
+      ]
+    }
+  ]
+}
