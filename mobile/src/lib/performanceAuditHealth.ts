@@ -146,7 +146,10 @@ function observedEvidenceQuality(evidence: AppHealthDisplayEvidence): number {
     case 'empty-state': return evidence.rendered === evidence.expected ? 1 : 0;
     case 'logo': return evidence.decodedCount - evidence.fallbackCount - evidence.missingCount;
     case 'model': return evidence.modelCount === evidence.sourceCount ? 1 : 0;
-    case 'list': return evidence.renderedCount === evidence.modelCount ? 1 : 0;
+    // Virtualized lists may render only part of a non-empty model. This matches
+    // the display evaluator: zero rows or more rows than the model is a failure.
+    case 'list': return evidence.renderedCount <= evidence.modelCount &&
+      (evidence.modelCount === 0 || evidence.renderedCount > 0) ? 1 : 0;
     case 'visible': return evidence.visibleCount >= evidence.expectedMinimum ? 1 : 0;
   }
 }
@@ -156,6 +159,7 @@ export function appHealthDisplayObservations(
   checks: readonly AuditCheck[],
 ): AppHealthSurfaceObservation[] {
   const bySurface = new Map<string, Map<AppHealthDisplayRole, AppHealthDisplayEvidence>>();
+  const listFailuresBySurface = new Map<string, NonNullable<AppHealthSurfaceObservation['listFailureEvidence']>>();
   const chartsBySurface = new Map<string, Map<string, ParsedProbe>>();
   for (const check of checks) {
     const raw = check.metrics.readinessEvidence;
@@ -188,6 +192,16 @@ export function appHealthDisplayObservations(
         // list. Combining a populated visit with an empty visit invents a
         // contradiction that never appeared on screen. Retain real failures.
         const bundle = evidenceFor(probe);
+        const failures = listFailuresBySurface.get(probe.surfaceId) ?? {};
+        for (const evidence of bundle) {
+          if ((evidence.role === 'list' || evidence.role === 'visible' || evidence.role === 'empty-state') &&
+              observedEvidenceQuality(evidence) === 0 && !failures[evidence.role]) {
+            // At most three coherent bundles per surface; a later, different
+            // failure cannot erase an earlier failure of another list role.
+            failures[evidence.role] = bundle;
+          }
+        }
+        if (Object.keys(failures).length) listFailuresBySurface.set(probe.surfaceId, failures);
         const previous = (['list', 'visible', 'empty-state'] as const)
           .map(role => roles.get(role)).filter((entry): entry is AppHealthDisplayEvidence => entry != null);
         const failed = bundle.some(entry => observedEvidenceQuality(entry) === 0);
@@ -236,6 +250,8 @@ export function appHealthDisplayObservations(
   return [...bySurface].map(([surfaceId, roles]) => ({
     surfaceId,
     evidence: [...roles.values()],
+    ...(listFailuresBySurface.has(surfaceId)
+      ? { listFailureEvidence: listFailuresBySurface.get(surfaceId)! } : {}),
   }));
 }
 

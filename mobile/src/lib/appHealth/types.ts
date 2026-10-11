@@ -240,6 +240,10 @@ export interface AppHealthSurfaceContract {
 export interface AppHealthSurfaceObservation {
   surfaceId: string;
   evidence: readonly AppHealthDisplayEvidence[];
+  /** Keep each distinct list failure with counts from that same visit. */
+  listFailureEvidence?: Partial<Record<
+    'list' | 'visible' | 'empty-state', readonly AppHealthDisplayEvidence[]
+  >>;
 }
 
 export type AppHealthNetworkPurpose = 'manifest' | 'dates-index' | 'asset' | 'external-link';

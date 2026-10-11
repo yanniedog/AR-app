@@ -129,4 +129,3 @@ export function appHealthCatalogueSnapshot(state: AppState): AppHealthCatalogueO
     publishedProvidersWithoutBrand: [...publishedProviders].filter(provider => !core.brands[provider]).sort(),
   };
 }
-

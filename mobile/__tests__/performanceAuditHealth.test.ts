@@ -55,6 +55,44 @@ describe('integrated app-health display evidence', () => {
       [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'], allowsIntentionalEmpty: true }],
       appHealthDisplayObservations(reverse ? visits.reverse() : visits),
     );
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_LIST, APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY,
+      APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE]) {
+      expect(result.find(entry => entry.code === code)?.status).toBe('pass');
+    }
+  });
+
+  it.each([false, true])('retains distinct list failures across visits (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:0/0:visible=0:empty=0'),
+      check('search.results:items:list:ready:12/12:visible=0:empty=0'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'], allowsIntentionalEmpty: true }],
+      appHealthDisplayObservations([
+        ...(reverse ? visits.reverse() : visits),
+        check('search.results:items:list:ready:20/20:visible=4:empty=0'),
+      ]),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST)?.status).toBe('pass');
+    for (const code of [APP_HEALTH_CHECK_CODES.DISPLAY_VISIBILITY, APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE]) {
+      expect(result.find(entry => entry.code === code)).toMatchObject({
+        status: 'fail', metrics: { checked: 1, failed: 1 },
+        localEvidence: { failedSurfaceIds: ['search.results'] },
+      });
+    }
+  });
+
+  it.each([false, true])('retains missing rows alongside virtualized visits (reverse=%s)', reverse => {
+    const visits = [
+      check('search.results:items:list:ready:0/12:visible=0:empty=0'),
+      check('search.results:items:list:ready:4/12:visible=4:empty=0'),
+    ];
+    const result = evaluateAppHealthDisplayQuality(
+      [{ id: 'search.results', requiredRoles: ['list', 'visible', 'empty-state'] }],
+      appHealthDisplayObservations(reverse ? visits.reverse() : visits),
+    );
+    expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_LIST))
+      .toMatchObject({ status: 'fail', metrics: { checked: 1, failed: 1 } });
     expect(result.find(entry => entry.code === APP_HEALTH_CHECK_CODES.DISPLAY_EMPTY_STATE)?.status).toBe('pass');
   });
 
