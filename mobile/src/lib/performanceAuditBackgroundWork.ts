@@ -8,6 +8,7 @@ export interface AuditBackgroundWorkWait {
   status: 'waiting' | 'settled' | 'interrupted';
   payloadWork: ReturnType<typeof captureAuditPayloadWork>;
   jobs: BackgroundWorkSnapshot[];
+  omittedActiveJobs?: number;
 }
 
 export function captureAuditBackgroundWorkWait(
@@ -18,13 +19,14 @@ export function captureAuditBackgroundWorkWait(
   return { startedAt: new Date(startedMs).toISOString(), capturedAt,
     elapsedMs: Math.max(0, now - startedMs), status,
     payloadWork: captureAuditPayloadWork(state, capturedAt),
-    jobs: backgroundPayloadWork.snapshot(startedMs) };
+    jobs: backgroundPayloadWork.snapshot(startedMs), omittedActiveJobs: backgroundPayloadWork.omittedActiveJobs() };
 }
 
 export function describeAuditBackgroundWork(wait: AuditBackgroundWorkWait): string {
   const active = wait.jobs.filter(job => job.outcome === null);
   const detail = active.map(job =>
     `${job.label}${job.runDate ? ` (${job.runDate})` : ''}: ${job.stage} — ${(job.stageElapsedMs / 1000).toFixed(1)}s in stage, ${(job.elapsedMs / 1000).toFixed(1)}s total`);
+  if ((wait.omittedActiveJobs ?? 0) > 0) detail.push(`${wait.omittedActiveJobs} additional active workers (stage evidence omitted by diagnostic limit)`);
   return `Background work: ${(wait.elapsedMs / 1000).toFixed(1)}s waiting. ${detail.join('; ') ||
     (wait.payloadWork.activeWork.length ? `${wait.payloadWork.activeWork.join(', ')} (stage unavailable)` : 'Work settled')}`;
 }
@@ -46,7 +48,8 @@ export async function waitForAuditBackgroundWork(options: {
     options.observe(captureAuditBackgroundWorkWait(startedMs, options.getState(), status, clock()));
   const busy = () => {
     const state = options.getState();
-    return state.refreshing || state.postRefreshWarming || state.bankRateHistoryLoading || state.detailsLoading;
+    return state.refreshing || state.postRefreshWarming || state.bankRateHistoryLoading || state.detailsLoading ||
+      backgroundPayloadWork.hasActiveWork();
   };
   try {
     while (true) {

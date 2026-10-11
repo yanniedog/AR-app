@@ -39,6 +39,7 @@ export class BackgroundPayloadWorkRegistry {
   private sequence = 0;
   private active = new Map<number, Work>();
   private completed: Work[] = [];
+  private activeCount = 0;
   constructor(private clock: () => number = () => Date.now()) {}
 
   begin(label: string, runDate: string | null = null, stage = 'Starting'): BackgroundWorkHandle {
@@ -47,6 +48,7 @@ export class BackgroundPayloadWorkRegistry {
       runDate: runDate?.slice(0, 128) ?? null, start, end: null, outcome: null,
       stages: [{ label: bounded(stage), start, end: null }], omittedStages: 0 };
     this.active.set(work.id, work);
+    this.activeCount++;
     if (this.active.size > MAX_ACTIVE) this.active.delete(this.active.keys().next().value!);
     return {
       stage: label => {
@@ -62,6 +64,7 @@ export class BackgroundPayloadWorkRegistry {
         if (work.end !== null) return;
         work.end = this.clock();
         work.outcome = outcome;
+        this.activeCount--;
         work.stages[work.stages.length - 1].end = work.end;
         this.active.delete(work.id);
         this.completed.push(work);
@@ -69,6 +72,9 @@ export class BackgroundPayloadWorkRegistry {
       },
     };
   }
+
+  hasActiveWork(): boolean { return this.activeCount > 0; }
+  omittedActiveJobs(): number { return this.activeCount - this.active.size; }
 
   /** Include work that began before observation but finished during it. */
   snapshot(since = 0): BackgroundWorkSnapshot[] {

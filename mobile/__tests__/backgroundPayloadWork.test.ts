@@ -33,6 +33,8 @@ test('bounds long-lived diagnostics and reports omitted stages', () => {
   for (let i = 0; i < 80; i++) registry.begin('finished').finish();
   for (let i = 0; i < 80; i++) registry.begin('active');
   expect(registry.snapshot()).toHaveLength(64);
+  expect(registry.hasActiveWork()).toBe(true);
+  expect(registry.omittedActiveJobs()).toBe(48);
   const work = registry.begin('x'.repeat(2000), 'y'.repeat(2000));
   for (let i = 0; i < 80; i++) work.stage(`step ${i}`);
   const entry = registry.snapshot().at(-1)!;

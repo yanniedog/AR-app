@@ -42,3 +42,19 @@ test('retains work completed while waiting, observes details and requires a quie
   expect(observations.at(-1)).toMatchObject({ status: 'settled', elapsedMs: 400,
     jobs: [{ outcome: 'completed', elapsedMs: 50, stages: [{ durationMs: 50, active: false }] }] });
 });
+
+test('does not declare settlement while a tracked worker finishes after its loading flag clears', async () => {
+  let now = 1_900_002_000_000;
+  jest.spyOn(Date, 'now').mockImplementation(() => now);
+  const source = { ...state(), bankRateHistoryLoading: false };
+  const work = backgroundPayloadWork.begin('Product details and suitability index', null, 'Recovering suitability index');
+  const started = now;
+  const observations: AuditBackgroundWorkWait[] = [];
+  await waitForAuditBackgroundWork({ getState: () => source, assertActive: () => {},
+    observe: wait => observations.push(wait), delay: async ms => {
+      now += ms;
+      if (now - started >= 2_000) work.finish();
+    } });
+  expect(observations.at(-1)).toMatchObject({ status: 'settled', elapsedMs: 2_150,
+    jobs: [{ stage: 'Recovering suitability index', elapsedMs: 2_000, outcome: 'completed' }] });
+});
