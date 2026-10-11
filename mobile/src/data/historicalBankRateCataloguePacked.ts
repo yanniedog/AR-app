@@ -17,6 +17,12 @@ export const PACKED_HISTORY_LIMITS = {
 } as const;
 const FORMAT = 'ar-history-dag-v1';
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function referenceDigit(code: number): number {
+  if (code >= 65 && code <= 90) return code - 65;
+  if (code >= 97 && code <= 122) return code - 71;
+  if (code >= 48 && code <= 57) return code + 4;
+  return code === 43 ? 62 : code === 47 ? 63 : -1;
+}
 function encodeReferences(refs: number[]): string {
   let encoded = '';
   for (let ref of refs) {
@@ -90,10 +96,12 @@ function* unpackSteps(value: unknown): Generator<void, unknown | null, void> {
       const output: unknown[] | Record<string, unknown> = array ? [] : {};
       let ref = 0, shift = 0, index = 0;
       if (!array) size += sizes[shapeRef as number];
-      for (const character of references) {
-        const part = ALPHABET.indexOf(character);
+      for (let position = 0; position < references.length; position++) {
+        const part = referenceDigit(references.charCodeAt(position));
         if (part < 0 || shift > 15) return null;
-        ref += (part & 31) * (2 ** shift);
+        // At most four five-bit groups: the largest possible reference is
+        // 1,048,575, so integer shifts stay positive and exactly representable.
+        ref |= (part & 31) << shift;
         if (part & 32) { shift += 5; continue; }
         if (ref >= values.length || (shift > 0 && (part & 31) === 0) || ++edges > PACKED_HISTORY_LIMITS.edges) return null;
         size += sizes[ref]; depth = Math.max(depth, depths[ref] + 1);

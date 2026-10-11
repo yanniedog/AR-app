@@ -377,7 +377,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
                 meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
             ) || JSON.stringify(meta.manifest.bank_rate_history_catalogue) !==
               JSON.stringify(remote.bank_rate_history_catalogue) ||
-              JSON.stringify(meta.manifest.bank_rate_history_catalogue_packed) !== JSON.stringify(remote.bank_rate_history_catalogue_packed));
+              JSON.stringify(meta.manifest.bank_rate_history_catalogue_packed) !== JSON.stringify(remote.bank_rate_history_catalogue_packed) ||
+              JSON.stringify(meta.manifest.bank_rate_history_ready) !== JSON.stringify(remote.bank_rate_history_ready));
           const historyIndexChanged = historyDatesIndex &&
             JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
           if (cachedOptionalChanged || historyIndexChanged) {

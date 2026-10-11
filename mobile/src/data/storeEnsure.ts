@@ -953,6 +953,7 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
             coreSha,
             existing: cached,
             catalogue: cachedHistoricalBankRateCatalogue(get().core!),
+            preparedOnly: true,
             fallbackIndex,
             allowNetwork: !isLocalAppHealthAudit(),
             isCurrent: revisionIsCurrent,

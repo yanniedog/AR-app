@@ -9,6 +9,7 @@
   "scripts": {
     "audit:payload": "node scripts/audit-public-payload.cjs",
     "benchmark:history": "node scripts/benchmark-history-preparation.cjs",
+    "verify:prepared-history": "node scripts/export-history-ready-compiler.cjs --check && node scripts/bundle-ready-bank-history.cjs --check",
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -26,7 +27,7 @@
     "preexport": "node scripts/clean-export-dir.mjs && node scripts/ensure-firebase-config.mjs",
     "export": "expo export --platform all --source-maps && node scripts/separate-export-symbols.mjs && node scripts/check-exported-external-links.mjs && node scripts/check-exported-audit-screen-awake.mjs",
     "size:report": "node scripts/report-artifact-sizes.mjs --guard",
-    "ci": "npm run doctor && npm run typecheck && npm run lint && npm run benchmark:history && npm run benchmark:history -- --portable && npm run test:scripts && npm run test -- --ci && npm run export && npm run size:report",
+    "ci": "npm run doctor && npm run typecheck && npm run lint && npm run verify:prepared-history && npm run benchmark:history && npm run benchmark:history -- --portable && npm run test:scripts && npm run test -- --ci && npm run export && npm run size:report",
     "sample": "node scripts/build-sample.mjs",
     "icons": "node scripts/make-icons.mjs",
     "changelog:manifest": "node scripts/build-changelog-manifest.mjs",

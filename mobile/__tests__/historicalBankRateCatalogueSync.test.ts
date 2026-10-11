@@ -13,6 +13,7 @@ import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
 import * as overview from '../src/data/bankRateOverview';
+import * as catalogueWire from '../src/data/historicalBankRateCatalogueWire';
 
 let mockBaseline: HistoricalBankRateCatalogue;
 let mockCache: string | null = null;
@@ -112,12 +113,16 @@ test('legacy fallback retains dated feature evidence and excludes non-public bas
 test('unchanged first-run legacy fallback reuses baseline tiers and evidence while extending calendar gaps', async () => {
   const current = core('2026-09-29'), before = JSON.stringify(mockBaseline);
   const identify = jest.spyOn(overview, 'rateTierSignature');
+  const validate = jest.spyOn(catalogueWire, 'validateHistoricalBankRateCatalogue');
+  const validateAsync = jest.spyOn(catalogueWire, 'validateHistoricalBankRateCatalogueAsync');
   expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest(current.run_date))).toBe(true);
   const installed = history(current);
   expect(installed.sections).toBe(mockBaseline.sections);
   expect(installed.evidence).toBe(mockBaseline.evidence);
   expect(installed.sources).toBe(mockBaseline.sources);
   expect(identify).not.toHaveBeenCalled();
+  expect(validate).not.toHaveBeenCalled();
+  expect(validateAsync).not.toHaveBeenCalled();
   expect(rates(installed, '2026-09-25')).toEqual([5]);
   expect(rates(installed, '2026-09-26')).toEqual([6]);
   expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-27', '2026-09-28']);

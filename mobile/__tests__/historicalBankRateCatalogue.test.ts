@@ -1,5 +1,5 @@
 import fixture from './fixtures/bankwest-easy-saver-eligibility-20260913.json';
-import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshots, historicalBankRateSnapshotsAsync, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
+import { cachedHistoricalBankRateSnapshots, historicalBankRateSnapshots, historicalBankRateSnapshotsAsync, prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, prepareHistoricalCatalogueAxisExtension, type HistoricalCatalogueFilters } from '../src/data/historicalBankRateCatalogue';
 import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue,
   type HistoricalCatalogueEvidence, type HistoricalCatalogueTier, type HistoricalRateDescriptor } from '../src/data/historicalBankRateCatalogueWire';
 import { bankRateScope, buildBankRateChart, RATE_OBSERVATION_FIELDS, summarizeBankRates } from '../src/data/bankRateOverview';
@@ -326,3 +326,59 @@ test('accepts bounded selected and legacy source receipts', () => {
   catalogue.sources[day[0]] = { kind: 'retained_legacy_export', banks_sha256: hash, bytes: 128 * 1024 * 1024 + 1 };
   expect(validateHistoricalBankRateCatalogue(catalogue)).toBe(false);
 });
+
+test('axis-only extensions reuse validation but get fresh date/profile snapshot caches', async () => {
+  const original = pack();
+  original.evidence[1] = evidence(descriptor(), { facts: [fact()] });
+  const prior = prepareHistoricalBankRateCatalogue(original)!;
+  const current = core([], '2026-09-25'), currentScope = scope();
+  const settings = { ...filters, profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
+  const before = await historicalBankRateSnapshotsAsync(prior, current, currentScope, settings, async () => {});
+  const extension = { ...original, run_dates: [...original.run_dates, '2026-09-23', '2026-09-24'] };
+  const independentlyPrepared = prepareHistoricalBankRateCatalogue(JSON.parse(JSON.stringify(extension)))!;
+  const expected = historicalBankRateSnapshots(independentlyPrepared, current, currentScope, settings);
+  const wire = jest.requireActual<typeof import('../src/data/historicalBankRateCatalogueWire')>('../src/data/historicalBankRateCatalogueWire');
+  const scan = jest.spyOn(wire, 'validateHistoricalBankRateCatalogueAsync');
+  try {
+    const reused = prepareHistoricalCatalogueAxisExtension(original, extension.run_dates)!;
+    expect(reused).not.toBeNull();
+    expect(reused.catalogue).toEqual(extension);
+    expect(reused.catalogue.sections).toBe(original.sections);
+    expect(reused.catalogue.evidence).toBe(original.evidence);
+    expect(reused.catalogue.sources).toBe(original.sources);
+    expect(reused.catalogue.unavailable_dates).toBe(original.unavailable_dates);
+    expect(reused.catalogue.run_dates).not.toBe(extension.run_dates);
+    expect(reused.quarantinedTierCount).toBe(prior.quarantinedTierCount);
+    expect(cachedHistoricalBankRateSnapshots(reused, current, currentScope, settings)).toBeNull();
+    expect(await prepareHistoricalBankRateCatalogueAsync(reused.catalogue, async () => {})).toBe(reused);
+    expect(scan).not.toHaveBeenCalled();
+    const actual = await historicalBankRateSnapshotsAsync(reused, current, currentScope, settings, async () => {});
+    expect(actual).toEqual(expected);
+    expect(actual).not.toBe(before);
+    expect(Object.keys(actual)).toEqual([...extension.run_dates, current.run_date]);
+    expect(actual['2026-09-23'].sectionTotals?.Mortgage).toBeUndefined();
+    expect(actual['2026-09-24'].sectionTotals?.Mortgage).toBeUndefined();
+    expect(cachedHistoricalBankRateSnapshots(prior, current, currentScope, settings)).toBe(before);
+  } finally { scan.mockRestore(); }
+});
+
+test.each(['unprepared', 'prefix', 'gap', 'invalid-day', 'prepend', 'same-axis', 'oversize'] as const)(
+  'axis receipt reuse rejects %s rather than bypassing full validation', async mismatch => {
+    const original = pack();
+    if (mismatch !== 'unprepared') prepareHistoricalBankRateCatalogue(original);
+    const extension: HistoricalBankRateCatalogue = { ...original, run_dates: [...original.run_dates, '2026-09-23'] };
+    if (mismatch === 'prefix') extension.run_dates[0] = '2026-09-19';
+    if (mismatch === 'gap') extension.run_dates[3] = '2026-09-24';
+    if (mismatch === 'invalid-day') extension.run_dates[3] = '2026-09-32';
+    if (mismatch === 'prepend') extension.run_dates = ['2026-09-19', ...original.run_dates];
+    if (mismatch === 'same-axis') extension.run_dates = original.run_dates;
+    if (mismatch === 'oversize') extension.run_dates = new Array(HISTORICAL_CATALOGUE_LIMITS.days + 1).fill('2026-09-23');
+    expect(prepareHistoricalCatalogueAxisExtension(original, extension.run_dates)).toBeNull();
+    const wire = jest.requireActual<typeof import('../src/data/historicalBankRateCatalogueWire')>('../src/data/historicalBankRateCatalogueWire');
+    const scan = jest.spyOn(wire, 'validateHistoricalBankRateCatalogueAsync');
+    try {
+      const result = await prepareHistoricalBankRateCatalogueAsync(extension, async () => {});
+      expect(scan).toHaveBeenCalledTimes(1);
+      if (['prefix', 'gap', 'invalid-day', 'oversize'].includes(mismatch)) expect(result).toBeNull();
+    } finally { scan.mockRestore(); }
+  });

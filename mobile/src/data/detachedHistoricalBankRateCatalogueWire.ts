@@ -24,11 +24,20 @@ export function validateDetachedHistoricalCatalogueDescriptor(manifest: Manifest
 }
 
 export function validatePackedHistoricalCatalogueDescriptor(manifest: Manifest, expectedRepo = 'yanniedog/AR-local'): ManifestFile | null {
+  return validateUrlFreeHistoricalDescriptor(manifest, 'bank_rate_history_catalogue_packed', 'bank-rate-history-catalogue-packed', expectedRepo);
+}
+
+export function validateReadyHistoricalDescriptor(manifest: Manifest, expectedRepo = 'yanniedog/AR-local'): ManifestFile | null {
+  return validateUrlFreeHistoricalDescriptor(manifest, 'bank_rate_history_ready', 'bank-rate-history-ready', expectedRepo);
+}
+
+function validateUrlFreeHistoricalDescriptor(manifest: Manifest,
+  capability: 'bank_rate_history_catalogue_packed' | 'bank_rate_history_ready', prefix: string, expectedRepo: string): ManifestFile | null {
   try {
-    const namespace: unknown = manifest.bank_rate_history_catalogue_packed;
+    const namespace: unknown = manifest[capability];
     if (!record(namespace) || !keys(namespace, ['schema_version', 'file']) || namespace.schema_version !== 1 ||
         !record(namespace.file) || !keys(namespace.file, ['name', 'bytes', 'sha256'], ['enc']) ||
-        Object.hasOwn(manifest.files, 'bank_rate_history_catalogue_packed') || !isValidCalendarDate(manifest.run_date) ||
+        Object.hasOwn(manifest.files, capability) || !isValidCalendarDate(manifest.run_date) ||
         !sha(manifest.files.core.sha256) ||
         manifest.repo !== expectedRepo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(manifest.repo)) return null;
     const file = namespace.file;
@@ -41,7 +50,7 @@ export function validatePackedHistoricalCatalogueDescriptor(manifest: Manifest, 
     if (encryption ? !coreEnc || coreEnc.alg !== encryption.alg || coreEnc.key_id !== encryption.key_id : coreEnc !== undefined) return null;
     if (manifest.tag !== 'app-payload-latest' && manifest.tag !== `app-payload-${manifest.run_date}` &&
         !new RegExp(`^app-payload-${manifest.run_date}-r[0-9]{6}$`).test(manifest.tag)) return null;
-    const name = `bank-rate-history-catalogue-packed-${manifest.run_date}-${file.sha256.slice(0, 12)}.json.gz${enc ? '.enc' : ''}`;
+    const name = `${prefix}-${manifest.run_date}-${file.sha256.slice(0, 12)}.json.gz${enc ? '.enc' : ''}`;
     const url = `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`;
     if (file.name !== name || !automaticDataUrl(url) || Object.values(manifest.files).some(entry => entry?.name === name)) return null;
     return { name, bytes: Number(file.bytes), sha256: file.sha256, url,

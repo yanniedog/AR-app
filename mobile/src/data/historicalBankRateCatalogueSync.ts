@@ -10,7 +10,7 @@ import { verifiedDetailsSha } from './detailsIdentity';
 import { historicalSourceIdentity } from './historyIdentity';
 import { assertHistoryDatesIndexAdvances } from './historyDatesIndex';
 import { assertRevisionManifest } from './payloadRevision';
-import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
+import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync, prepareHistoricalCatalogueAxisExtension } from './historicalBankRateCatalogue';
 import { overlayHistoricalCatalogueDaysAsync, upsertHistoricalCatalogueDayAsync } from './historicalBankRateCatalogueMerge';
 import { cachedHistoricalBankRateCatalogue, clearHistoricalBankRateCatalogue, historicalCatalogueOwner, installHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { compressCatalogueAsync, decompressCatalogue, decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
@@ -254,7 +254,11 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
           if (++count % 8 === 0 && Date.now() - started >= 8) { await yieldHistoryWork(); started = Date.now(); }
         }
       }
-      catalogue = { ...catalogue, run_dates, sections };
+      const extended = { ...catalogue, run_dates, sections };
+      // Reuse only an already validated, unchanged observation graph whose
+      // calendar gained trailing gaps. Other edits take the normal full scan.
+      const reused = sections === catalogue.sections ? prepareHistoricalCatalogueAxisExtension(catalogue, run_dates) : null;
+      catalogue = reused?.catalogue ?? extended;
     }
     work.stage('Merging legacy history observations');
     for (const candidate of [saved?.public_fallback, saved?.catalogue, baseline]) if (candidate) {

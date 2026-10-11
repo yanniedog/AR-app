@@ -8,7 +8,7 @@ import {
   type DatesIndex,
 } from './historyDaily';
 import { fetchManifest } from './payload';
-import { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor } from './detachedHistoricalBankRateCatalogueWire';
+import { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor, validateReadyHistoricalDescriptor } from './detachedHistoricalBankRateCatalogueWire';
 
 /** Optional assets that dated tags often omit (core/details only). */
 export const OPTIONAL_MANIFEST_KEYS = [
@@ -52,6 +52,12 @@ export function mergeOptionalManifestFiles(
     packedHistory = source.bank_rate_history_catalogue_packed;
     changed ||= packedHistory !== target.bank_rate_history_catalogue_packed;
   }
+  let readyHistory = target.bank_rate_history_ready;
+  if (source.bank_rate_history_ready && source.tag === target.tag && source.repo === target.repo &&
+      (replaceExisting || !readyHistory) && validateReadyHistoricalDescriptor(source, PAYLOAD_REPO)) {
+    readyHistory = source.bank_rate_history_ready;
+    changed ||= readyHistory !== target.bank_rate_history_ready;
+  }
   const files: Manifest['files'] = { ...target.files };
   for (const key of OPTIONAL_MANIFEST_KEYS) {
     const fromSource: ManifestFile | undefined = source.files[key as OptionalManifestKey];
@@ -62,7 +68,8 @@ export function mergeOptionalManifestFiles(
     }
   }
   return changed ? { ...target, files, ...(history ? { bank_rate_history_catalogue: history } : {}),
-    ...(packedHistory ? { bank_rate_history_catalogue_packed: packedHistory } : {}) } : target;
+    ...(packedHistory ? { bank_rate_history_catalogue_packed: packedHistory } : {}),
+    ...(readyHistory ? { bank_rate_history_ready: readyHistory } : {}) } : target;
 }
 
 /**

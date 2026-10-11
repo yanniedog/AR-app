@@ -1,5 +1,6 @@
 import { bundledHistoricalCatalogueBinding, getBundledHistoricalBankRateCatalogue } from '../src/data/bundledHistoricalBankRateCatalogue';
-import { prepareHistoricalBankRateCatalogue, type PreparedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
+import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateReady, type PreparedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogue';
+import { getBundledHistoricalBankRateReady } from '../src/data/bundledHistoricalBankRateReady';
 import { productRatesFromHistoricalCatalogue } from '../src/data/productHistoryCatalogue';
 import { syncProductHistoryFromDailyPayloads } from '../src/data/productHistorySync';
 import { bestRatesForCore, productKeysForCore } from '../src/data/productHistoryModel';
@@ -11,8 +12,8 @@ import type { CorePayload, Manifest } from '../src/types';
 import type { DatesIndex } from '../src/data/datesIndex';
 import { createEnsureActions } from '../src/data/storeEnsure';
 import { prepareBankRateHistoryAfterPaint } from '../src/data/storeBankRateHistory';
-import { prepareHistoricalBankRateHistory } from '../src/data/historicalBankRateCatalogueSync';
-import { installHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
+import { prepareReadyBankRateHistory } from '../src/data/historicalBankRateReadySync';
+import { installHistoricalBankRateCatalogue, installPreparedHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCatalogueStore';
 import { DEFAULT_PREFS, type AppState, type StoreGet, type StoreSet } from '../src/data/storeTypes';
 import { cache } from '../src/data/cache';
 import type { CacheMeta } from '../src/data/cache';
@@ -28,7 +29,7 @@ jest.mock('../src/data/cache', () => ({ cache: {
   readProductHistory: jest.fn(async () => null), writeProductHistory: jest.fn(async () => {}),
   readMeta: jest.fn(async () => null),
 } }));
-jest.mock('../src/data/historicalBankRateCatalogueSync', () => ({ prepareHistoricalBankRateHistory: jest.fn() }));
+jest.mock('../src/data/historicalBankRateReadySync', () => ({ prepareReadyBankRateHistory: jest.fn() }));
 
 let prepared: PreparedHistoricalBankRateCatalogue;
 const originalIndex = bundledHistoricalCatalogueBinding.index!;
@@ -154,9 +155,11 @@ function productStore(manifest: Manifest = { ...sampleManifest, run_date: target
 function deferredPreparation() {
   let release!: () => void;
   const gate = new Promise<void>(resolve => { release = resolve; });
-  jest.mocked(prepareHistoricalBankRateHistory).mockImplementationOnce(async core => {
+  jest.mocked(prepareReadyBankRateHistory).mockImplementationOnce(async core => {
     await gate;
-    return installHistoricalBankRateCatalogue(core, prepared.catalogue);
+    const ready = await getBundledHistoricalBankRateReady();
+    installPreparedHistoricalBankRateCatalogue(core, prepareHistoricalBankRateReady(ready!)!);
+    return true;
   });
   return release;
 }
@@ -325,4 +328,60 @@ test('store abandons a superseded product request after the catalogue waiter res
   expect(downloadDatedCore).not.toHaveBeenCalled();
   expect(cache.writeProductHistory).not.toHaveBeenCalled();
   expect(get().productHistory).toBeNull();
+});
+
+
+test('prepared product series preserve all real publications without dated-core downloads', async () => {
+  const ready = await getBundledHistoricalBankRateReady();
+  const catalogue = prepareHistoricalBankRateReady(ready!)!;
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha, catalogue });
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(Object.keys(result.products).length).toBeGreaterThan(3000);
+  expect(result.run_dates).toHaveLength(135);
+  for (const day of originalIndex.dates) expect(result.source_identities?.[day]).toBe(historicalSourceIdentity(originalIndex, day));
+});
+
+test('ready history leaves a corrected publication missing instead of rebuilding it on the phone', async () => {
+  const ready = await getBundledHistoricalBankRateReady();
+  const catalogue = prepareHistoricalBankRateReady(ready!)!;
+  const index = selectedIndex(), day = originalIndex.latest_date;
+  index.revision_heads![day] = { ...index.revision_heads![day], revision: index.revision_heads![day].revision + 1,
+    manifest_sha256: 'f'.repeat(64), bundle_sha256: 'd'.repeat(64) };
+  jest.mocked(fetchDatesIndexJson).mockResolvedValue(index);
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha, catalogue });
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(result.date_status?.[day]).not.toBe('verified');
+  expect(result.source_identities?.[day]).toBeUndefined();
+});
+
+test('prepared producer product rates retain their independent provenance', async () => {
+  const ready = (await getBundledHistoricalBankRateReady())!;
+  const day = originalIndex.latest_date, banks = 'e'.repeat(64);
+  const independent = { ...ready, sources: { ...ready.sources, [day]: { kind: 'selected_contract' as const,
+    generation_id: 'retained-contract', contract_digest: 'f'.repeat(64), banks_sha256: banks, bytes: 100 } } };
+  const catalogue = prepareHistoricalBankRateReady(independent)!;
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha, catalogue });
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+  expect(result.source_identities?.[day]).toBe(`prepared:${ready.compiler_sha256}:${banks}`);
+  expect(result.date_status?.[day]).toBe('verified');
+});
+
+
+test('a rejected stale index preserves verified cached product slices with ready history installed', async () => {
+  const ready = (await getBundledHistoricalBankRateReady())!;
+  const catalogue = prepareHistoricalBankRateReady(ready)!;
+  const existing = await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha, catalogue });
+  const day = originalIndex.latest_date, identity = `revision:999:${'a'.repeat(64)}:${'b'.repeat(64)}`;
+  existing.source_identities![day] = identity;
+  existing.revision_high_water = { ...existing.revision_high_water, [day]: identity };
+  const result = await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha, catalogue, existing });
+  expect(result.source_identities?.[day]).toBe(identity);
+  expect(result.date_status?.[day]).toBe('verified');
+  expect(downloadDatedCore).not.toHaveBeenCalled();
+});
+
+test('prepared-only runtime does not fetch dated cores when every ready source is unavailable', async () => {
+  await syncProductHistoryFromDailyPayloads({ targetRunDate: target, currentCore: current, coreSha,
+    catalogue: null, preparedOnly: true });
+  expect(downloadDatedCore).not.toHaveBeenCalled();
 });

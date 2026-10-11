@@ -235,12 +235,22 @@ test('a failed shared asset load is released so a later attempt can recover', as
 
 test('cached multi-megabyte envelopes use the standard 64KiB inflate slices', async () => {
   const value = fixture();
+  let inflateWaits = 0;
+  const inflate = jest.requireActual<typeof import('../src/data/payload')>('../src/data/payload').gunzipCooperatively;
+  const mockedPayload = jest.requireMock<typeof import('../src/data/payload')>('../src/data/payload');
+  jest.spyOn(mockedPayload, 'gunzipCooperatively').mockImplementation(async (...args) => {
+    const before = jest.mocked(yieldToUi).mock.calls.length;
+    const result = await inflate(...args);
+    const calls = jest.mocked(yieldToUi).mock.calls.slice(before);
+    inflateWaits = calls.length;
+    expect(calls.every(args => args[0] === 0)).toBe(true);
+    return result;
+  });
   // Valid envelope plus legal JSON whitespace, stored without compression to
   // isolate the real outer inflater's scheduling from the rate catalogue.
   const raw = gzipSync(strToU8(value.text + ' '.repeat(2_229_400)), { level: 0 });
   attach(value.manifest, raw); stored(raw);
   expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
-  const inflateWaits = jest.mocked(yieldToUi).mock.calls.filter(args => args.length === 0).length;
   expect(inflateWaits).toBe(Math.ceil(raw.length / (64 * 1024)) - 1);
   expect(inflateWaits).toBeLessThan(36);
   expect(downloadInflate).not.toHaveBeenCalled();

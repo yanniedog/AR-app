@@ -1,6 +1,6 @@
 import type { CorePayload, Manifest } from '../src/types';
 import { sampleCore, sampleCoreIntegrity, sampleManifest } from '../src/data/sample';
-import * as bankRateHistorySync from '../src/data/historicalBankRateCatalogueSync';
+import * as bankRateHistorySync from '../src/data/historicalBankRateReadySync';
 import { revisionHead, revisionManifest } from '../testUtils/payloadRevision';
 import * as payload from '../src/data/payload';
 
@@ -18,6 +18,12 @@ const mockEnsureBankSpreadHistory = jest.fn(async () => {});
 const mockEnsureRbaCalendar = jest.fn(async () => {});
 const mockEnsureDetails = jest.fn(async () => {});
 const mockYieldToUi = jest.fn(async () => {});
+
+// These tests exercise refresh ownership and ordering. Prepared history has
+// dedicated semantic/retention tests; keep its deferred boundary controllable.
+jest.mock('../src/data/historicalBankRateReadySync', () => ({
+  prepareReadyBankRateHistory: jest.fn(async () => true),
+}));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- jest mock factory
@@ -123,6 +129,7 @@ function resetStore() {
 describe('store refresh lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(bankRateHistorySync.prepareReadyBankRateHistory).mockResolvedValue(true);
     clearSuitabilityIndex();
     resetStore();
     mockFetchManifest.mockResolvedValue(remoteManifest);
@@ -144,7 +151,7 @@ describe('store refresh lifecycle', () => {
     let entered!: () => void;
     const waiting = new Promise<boolean>(resolve => { release = () => resolve(true); });
     const started = new Promise<void>(resolve => { entered = resolve; });
-    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareReadyBankRateHistory').mockImplementationOnce(() => {
       entered();
       return waiting;
     });
@@ -189,7 +196,7 @@ describe('store refresh lifecycle', () => {
     const pending = new Promise<boolean>(resolve => { finish = () => resolve(true); });
     let entered!: () => void;
     const started = new Promise<void>(resolve => { entered = resolve; });
-    const prepare = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory').mockImplementationOnce(() => {
+    const prepare = jest.spyOn(bankRateHistorySync, 'prepareReadyBankRateHistory').mockImplementationOnce(() => {
       entered(); return pending;
     });
     const refreshing = useStore.getState().refresh({});
@@ -203,7 +210,7 @@ describe('store refresh lifecycle', () => {
   });
 
   it('syncs source to remote on up-to-date refresh and clears refreshing', async () => {
-    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareReadyBankRateHistory');
     mockReadMeta.mockResolvedValue({
       manifest: remoteManifest,
       source: 'remote',
@@ -224,7 +231,7 @@ describe('store refresh lifecycle', () => {
 
     const changed = await useStore.getState().refresh({});
 
-    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), null, null, expect.any(Function));
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), null, expect.any(Function));
     expect(changed).toBe(false);
     expect(mockDownloadCore).not.toHaveBeenCalled();
     expect(mockReadBundle).not.toHaveBeenCalled();
@@ -443,10 +450,10 @@ describe('store refresh lifecycle', () => {
       detailsSha: revisedManifest.files.details.sha256,
     });
 
-    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareReadyBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
 
-    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), null, null, expect.any(Function));
+    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), null, expect.any(Function));
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
@@ -595,10 +602,10 @@ describe('store refresh lifecycle', () => {
       integrity: sampleCoreIntegrity,
     });
 
-    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
+    const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareReadyBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
 
-    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), null, null, expect.any(Function));
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), null, expect.any(Function));
     expect(useStore.getState().manifest?.files.core.sha256).toBe('b'.repeat(64));
     expect(useStore.getState().bankSpreadHistory).toBeNull();
     expect(useStore.getState().bankSpreadHistoryError).toBeNull();

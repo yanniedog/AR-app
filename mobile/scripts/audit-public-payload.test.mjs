@@ -14,6 +14,8 @@ const { automaticDataUrl, APP_DATA_ORIGIN } = require('../src/lib/automaticDataA
 const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
 const { packHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
+const { compileHistoricalBankRateReady } = require('../src/data/historicalBankRateReadyCompiler.ts');
+const readyCompiler = require('../contracts/history-ready/compiler-manifest.json');
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 
@@ -252,7 +254,8 @@ function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}
   const assets = new Map([[`${base}${manifest.tag}/manifest.json`, manifestBytes],
     [`${base}app-payload-latest/dates-index.json`, Buffer.from(JSON.stringify(index))],
     ...[...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : []),
-      ...(manifest.bank_rate_history_catalogue_packed ? [manifest.bank_rate_history_catalogue_packed.file] : [])].map(file =>
+      ...(manifest.bank_rate_history_catalogue_packed ? [manifest.bank_rate_history_catalogue_packed.file] : []),
+      ...(manifest.bank_rate_history_ready ? [manifest.bank_rate_history_ready.file] : [])].map(file =>
       [file.url ?? `${base}${manifest.tag}/${file.name}`, fs.readFileSync(path.join(directory, file.name))])]);
   const deliveredAssets = new Map([...assets].map(([url, bytes]) => [automaticDataUrl(url), bytes]));
   mockFetch(t, async url => {
@@ -400,4 +403,33 @@ test('audit refuses stale compact-only bundle identity before reading optional a
   delete value.manifest.bank_rate_history_catalogue;
   const opts = publicCandidate(t, value, () => {}, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
   await assert.rejects(audit(opts), /Detached history bundle identity mismatch/);
+});
+
+function addReady(value, edit = () => {}) {
+  const { directory, manifest, catalogue } = value;
+  const ready = compileHistoricalBankRateReady(catalogue, readyCompiler.sha256);
+  edit(ready);
+  const inner = Buffer.from(JSON.stringify(ready));
+  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  const bytes = gzipSync(Buffer.from(JSON.stringify(envelope))), sha256 = hash(bytes);
+  const name = `bank-rate-history-ready-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
+  manifest.bank_rate_history_ready = { schema_version: 1, file: { name, sha256, bytes: bytes.length } };
+  fs.writeFileSync(path.join(directory, name), bytes);
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  return value;
+}
+for (const acquisition of ['private', 'public']) test(`${acquisition} audit verifies prepared history and its compiler pin`, async t => {
+  const value = addReady(detachedCandidate(t));
+  const report = await audit(acquisition === 'public' ? publicCandidate(t, value) : value.opts);
+  assert.equal(report.assets.bank_rate_history_ready.status, 'PASS');
+  assert.equal(report.assets.bank_rate_history_ready.compiler_sha256, readyCompiler.sha256);
+  assert.equal(report.assets.bank_rate_history_ready.observed_dates, 1);
+});
+test('audit rejects a prepared projection from an unrecognized compiler', async t => {
+  const value = addReady(detachedCandidate(t), ready => { ready.compiler_sha256 = 'f'.repeat(64); });
+  const report = await audit(value.opts);
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.assets.bank_rate_history_catalogue.status, 'PASS');
+  assert.equal(report.assets.bank_rate_history_ready.status, 'FAIL');
 });

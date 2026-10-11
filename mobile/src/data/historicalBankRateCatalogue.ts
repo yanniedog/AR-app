@@ -6,7 +6,10 @@ import { isExplicitTermDepositProduct } from './sectionIntegrity';
 import { normalizeProfileFilters, profileFeaturesForSection, profileFilterRows, type ProfileFilters } from './profile';
 import { featureEvidenceMatches, featureEvidenceScope } from './productFacts';
 import { bankRateScope, snapshotBankRates, type BankRateScope, type BankRateSnapshot, type RateSummary } from './bankRateOverview';
-import { validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
+import { HISTORICAL_CATALOGUE_LIMITS, validateHistoricalBankRateCatalogue, validateHistoricalBankRateCatalogueAsync, type HistoricalBankRateCatalogue, type HistoricalCatalogueTier } from './historicalBankRateCatalogueWire';
+import { isValidCalendarDate } from '../lib/calendarDate';
+import { historicalReadySnapshots, validateHistoricalBankRateReadyForApp, type ReadyHistorySource } from './historicalBankRateReady';
+import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
 
 export type { HistoricalBankRateCatalogue, HistoricalCatalogueEvidence, HistoricalCatalogueSource } from './historicalBankRateCatalogueWire';
 export interface HistoricalCatalogueFilters {
@@ -20,12 +23,55 @@ export interface PreparedHistoricalBankRateCatalogue {
 }
 interface TierState { tier: HistoricalCatalogueTier; broad: Map<number, boolean>; features: Map<string, boolean> }
 interface PreparedState {
+  ready?: readonly ReadyHistorySource[];
   sections: Record<SectionKey, TierState[]>;
   snapshots: Map<string, Record<string, BankRateSnapshot>>;
   current: WeakMap<CorePayload, Map<string, Record<string, BankRateSnapshot>>>;
   broad: Map<string, boolean>;
   pendingSnapshots: Map<string, Promise<Record<string, BankRateSnapshot>>>;
   scopes: WeakMap<CorePayload, WeakMap<BankRateScope, Map<string, { revision: number; snapshots: Record<string, BankRateSnapshot> }>>>;
+}
+/** Ready inputs have already completed producer classification. Date ownership
+ * is explicit, so a newer source cannot accidentally double-count a baseline. */
+export function prepareHistoricalBankRateReadySources(inputs: readonly ReadyHistorySource[]): PreparedHistoricalBankRateCatalogue | null {
+  if (!inputs.length || inputs.some(input => !validateHistoricalBankRateReadyForApp(input.ready))) return null;
+  const sources: HistoricalBankRateCatalogue['sources'] = {}, unavailable: Record<string, string> = {};
+  const selected = new Set<string>();
+  const ready: ReadyHistorySource[] = [];
+  let first = inputs[0].ready.run_dates[0], last = inputs[0].ready.run_dates.at(-1)!;
+  for (const input of inputs) {
+    first = first < input.ready.run_dates[0] ? first : input.ready.run_dates[0];
+    last = last > input.ready.run_dates.at(-1)! ? last : input.ready.run_dates.at(-1)!;
+    const axis = new Set(input.ready.run_dates);
+    for (const day of input.acceptedDates) {
+      if (!axis.has(day) || selected.has(day) || !Object.hasOwn(input.ready.sources, day) || Object.hasOwn(input.ready.unavailable_dates, day)) return null;
+      selected.add(day); sources[day] = input.ready.sources[day];
+    }
+    ready.push({ ready: input.ready, acceptedDates: [...input.acceptedDates] });
+  }
+  const length = (Date.parse(last) - Date.parse(first)) / 86_400_000 + 1;
+  if (length > HISTORICAL_CATALOGUE_LIMITS.days) return null;
+  const run_dates = Array.from({ length }, (_, index) => new Date(Date.parse(first) + index * 86_400_000).toISOString().slice(0, 10));
+  for (const day of run_dates) if (!selected.has(day)) unavailable[day] = inputs.map(input => input.ready.unavailable_dates[day]).find(Boolean) ?? 'No accepted historical source';
+  const catalogue: HistoricalBankRateCatalogue = { schema_version: 2, run_dates, sources, unavailable_dates: unavailable,
+    evidence: [{ status: 'unknown' }], sections: { Mortgage: [], Savings: [], TD: [] } };
+  const result = installPrepared(catalogue, { Mortgage: [], Savings: [], TD: [] }, inputs.reduce((sum, input) => sum + input.ready.quarantined_tier_count, 0));
+  states.get(result)!.ready = ready;
+  return result;
+}
+const readyPrepared = new WeakMap<HistoricalBankRateReady, Map<string, PreparedHistoricalBankRateCatalogue>>();
+export function prepareHistoricalBankRateReady(ready: HistoricalBankRateReady, acceptedDates: readonly string[] = Object.keys(ready.sources).filter(day => !Object.hasOwn(ready.unavailable_dates, day))): PreparedHistoricalBankRateCatalogue | null {
+  const key = JSON.stringify(acceptedDates), cache = readyPrepared.get(ready) ?? new Map<string, PreparedHistoricalBankRateCatalogue>();
+  if (cache.has(key)) return cache.get(key)!;
+  const result = prepareHistoricalBankRateReadySources([{ ready, acceptedDates }]);
+  if (result) {
+    if (cache.size >= 8) cache.delete(cache.keys().next().value!);
+    cache.set(key, result); readyPrepared.set(ready, cache);
+  }
+  return result;
+}
+export function preparedReadySources(value: PreparedHistoricalBankRateCatalogue): readonly ReadyHistorySource[] | null {
+  return states.get(value)?.ready ?? null;
 }
 const prepared = new WeakMap<object, PreparedHistoricalBankRateCatalogue | null>();
 const states = new WeakMap<PreparedHistoricalBankRateCatalogue, PreparedState>();
@@ -43,6 +89,29 @@ function installPrepared(value: HistoricalBankRateCatalogue, sections: PreparedS
 /** Render-safe lookup; validation and preparation belong outside rendering. */
 export function cachedPreparedHistoricalBankRateCatalogue(value: unknown): PreparedHistoricalBankRateCatalogue | null {
   return value && typeof value === 'object' ? prepared.get(value) ?? null : null;
+}
+
+/** Carry the validation receipt across an immutable, append-only calendar
+ * extension. Observations and evidence must retain their exact references.
+ * New dates have no observations, so existing spans remain valid. Snapshot and
+ * current-core caches start empty; only tier classification state is shared.
+ * Null means the caller must use normal full validation/preparation. */
+export function prepareHistoricalCatalogueAxisExtension(original: HistoricalBankRateCatalogue,
+  runDates: readonly string[]): PreparedHistoricalBankRateCatalogue | null {
+  const previous = cachedPreparedHistoricalBankRateCatalogue(original);
+  const state = previous && states.get(previous);
+  if (!previous || !state || !Array.isArray(runDates) ||
+      runDates.length <= original.run_dates.length || runDates.length > HISTORICAL_CATALOGUE_LIMITS.days) return null;
+  for (let index = 0; index < runDates.length; index++) {
+    const day = runDates[index];
+    if (index < original.run_dates.length) {
+      if (day !== original.run_dates[index]) return null;
+    } else if (!isValidCalendarDate(day) || Date.parse(day) - Date.parse(runDates[index - 1]) !== 86_400_000) return null;
+  }
+  const extension = { ...original, run_dates: [...runDates] };
+  const result = installPrepared(extension, state.sections, previous.quarantinedTierCount);
+  if (state.ready) states.get(result)!.ready = state.ready;
+  return result;
 }
 
 /** Call once for an immutable, transport-verified payload, before core adoption. */
@@ -176,6 +245,16 @@ function* historicalSnapshots(preparation: PreparedHistoricalBankRateCatalogue, 
   if (state.snapshots.has(normalized.key)) return state.snapshots.get(normalized.key)!;
   const catalogue = preparation.catalogue;
   const snapshots: Record<string, BankRateSnapshot> = Object.fromEntries(catalogue.run_dates.map(day => [day, {}]));
+  if (state.ready) {
+    for (const day of catalogue.run_dates) snapshots[day] = Object.fromEntries(normalized.interests.map(section => [section, {}]));
+    for (const source of state.ready) {
+      const observed = yield* historicalReadySnapshots(source.ready, filters);
+      for (const day of source.acceptedDates) snapshots[day] = observed[day];
+    }
+    if (state.snapshots.size >= 8) state.snapshots.delete(state.snapshots.keys().next().value!);
+    state.snapshots.set(normalized.key, snapshots);
+    return snapshots;
+  }
   const structural = { ...normalized.profile, accountFeatures: [] };
   for (const section of normalized.interests) {
     const events: Changes[] = catalogue.run_dates.map(() => new Map());

@@ -5,6 +5,12 @@ import { yieldToUi } from '../lib/yieldToUi';
 
 const supplemental = new WeakMap<CorePayload, { prepared: PreparedHistoricalBankRateCatalogue; missing: readonly string[] }>();
 const owners = new WeakMap<CorePayload, CorePayload>();
+const readyOnly = new WeakSet<CorePayload>();
+
+/** Runtime preparation must never silently fall back to classifying a raw archive. */
+export function markPreparedHistoricalBankRateHistory(core: CorePayload): void {
+  readyOnly.add(historicalCatalogueOwner(core));
+}
 
 export function historicalCatalogueOwner(core: CorePayload): CorePayload {
   return owners.get(core) ?? core;
@@ -20,15 +26,15 @@ export function inheritHistoricalBankRateCatalogue(core: CorePayload, replacemen
 }
 
 export function availableHistoricalBankRateCatalogue(core: CorePayload): PreparedHistoricalBankRateCatalogue | null {
-  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
+  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? (readyOnly.has(historicalCatalogueOwner(core)) ? null : prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue));
 }
 
 export function cachedHistoricalBankRateCatalogue(core: CorePayload): PreparedHistoricalBankRateCatalogue | null {
-  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? cachedPreparedHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
+  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? (readyOnly.has(historicalCatalogueOwner(core)) ? null : cachedPreparedHistoricalBankRateCatalogue(core.bank_rate_history_catalogue));
 }
 
 export async function prepareAvailableHistoricalBankRateCatalogue(core: CorePayload): Promise<PreparedHistoricalBankRateCatalogue | null> {
-  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? await prepareHistoricalBankRateCatalogueAsync(core.bank_rate_history_catalogue, () => yieldToUi(0));
+  return supplemental.get(historicalCatalogueOwner(core))?.prepared ?? (readyOnly.has(historicalCatalogueOwner(core)) ? null : await prepareHistoricalBankRateCatalogueAsync(core.bank_rate_history_catalogue, () => yieldToUi(0)));
 }
 
 export function installHistoricalBankRateCatalogue(core: CorePayload, value: unknown, missing: readonly string[] = []): boolean {
@@ -38,6 +44,12 @@ export function installHistoricalBankRateCatalogue(core: CorePayload, value: unk
   return true;
 }
 
+/** The ready projection has its own bounded validator and preparation receipt. */
+export function installPreparedHistoricalBankRateCatalogue(core: CorePayload,
+  prepared: PreparedHistoricalBankRateCatalogue, missing: readonly string[] = []): void {
+  supplemental.set(historicalCatalogueOwner(core), { prepared, missing });
+}
+
 export function clearHistoricalBankRateCatalogue(core: CorePayload): void {
   supplemental.delete(historicalCatalogueOwner(core));
 }
@@ -45,6 +57,7 @@ export function clearHistoricalBankRateCatalogue(core: CorePayload): void {
 export function missingHistoricalCatalogueDates(core: CorePayload): readonly string[] {
   const installed = supplemental.get(historicalCatalogueOwner(core));
   if (installed) return installed.missing;
+  if (readyOnly.has(historicalCatalogueOwner(core))) return [];
   const embedded = prepareHistoricalBankRateCatalogue(core.bank_rate_history_catalogue);
   return embedded ? embedded.catalogue.run_dates.filter(day => day < core.run_date &&
     (!embedded.catalogue.sources[day] || embedded.catalogue.unavailable_dates[day])) : [];

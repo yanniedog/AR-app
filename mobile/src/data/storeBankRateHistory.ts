@@ -3,10 +3,9 @@ import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgr
 import { debugLog } from '../lib/debugLog';
 import { yieldToPaintFrames } from '../lib/yieldToUi';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
-import { cache } from './cache';
 import type { DatesIndex } from './datesIndex';
-import { prepareHistoricalBankRateHistory } from './historicalBankRateCatalogueSync';
-import { historicalCatalogueOwner, warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
+import { prepareReadyBankRateHistory } from './historicalBankRateReadySync';
+import { historicalCatalogueOwner, markPreparedHistoricalBankRateHistory, warmHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import { normalizeInterests } from './interests';
 import { samePayloadIdentity } from './payloadRevision';
 import type { StoreGet, StoreSet } from './storeTypes';
@@ -28,6 +27,7 @@ export async function prepareBankRateHistoryAfterPaint(
   index: DatesIndex | null = null, details: DetailsPayload | null = null,
   options: { warm?: boolean; readCachedDetails?: boolean } = {},
 ): Promise<void> {
+  markPreparedHistoricalBankRateHistory(core);
   let finish!: () => void;
   const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint', () => isCurrent());
   const completion = new Promise<void>(resolve => { finish = resolve; });
@@ -44,7 +44,8 @@ export async function prepareBankRateHistoryAfterPaint(
     get().manifest?.files.core.sha256 === manifest.files.core.sha256 &&
     get().manifest?.files.details.sha256 === manifest.files.details.sha256 &&
     JSON.stringify(get().manifest?.bank_rate_history_catalogue) === JSON.stringify(manifest.bank_rate_history_catalogue) &&
-    JSON.stringify(get().manifest?.bank_rate_history_catalogue_packed) === JSON.stringify(manifest.bank_rate_history_catalogue_packed);
+    JSON.stringify(get().manifest?.bank_rate_history_catalogue_packed) === JSON.stringify(manifest.bank_rate_history_catalogue_packed) &&
+    JSON.stringify(get().manifest?.bank_rate_history_ready) === JSON.stringify(manifest.bank_rate_history_ready);
   const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
@@ -59,23 +60,20 @@ export async function prepareBankRateHistoryAfterPaint(
     work.stage('Configuring native history decoder');
     await configureNativeHistoricalCatalogueCodec();
     if (!isCurrent()) return;
-    work.stage('Reading cached product details');
-    const historyDetails = details ?? (options.readCachedDetails ? await cache.readDetails() : null);
-    if (!isCurrent()) return;
-    // Keep transport, cache and archive decoding outside the first-paint path.
-    // The loader authenticates the detached asset without changing sealed core.
+    // Prepared charts are the only mobile history path. Older publishers use
+    // the preclassified APK fallback; they never trigger raw archive rebuilding.
     let detached = null;
-    if (manifest.bank_rate_history_catalogue || manifest.bank_rate_history_catalogue_packed) {
+    if (manifest.bank_rate_history_ready) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
-      work.stage('Loading detached historical catalogue');
-      detached = await loadDetachedHistoricalBankRateCatalogue(manifest, {
+      const { loadDetachedHistoricalBankRateReady } = require('./detachedHistoricalBankRateReady') as typeof import('./detachedHistoricalBankRateReady');
+      work.stage('Loading prepared bank history');
+      detached = await loadDetachedHistoricalBankRateReady(manifest, {
         allowNetwork: !isLocalAppHealthAudit(), isCurrent, isAssetCurrent,
       });
     }
     if (!isCurrent()) return;
-    work.stage(detached ? 'Preparing verified historical catalogue' : 'Preparing fallback historical catalogue');
-    const ready = await prepareHistoricalBankRateHistory(core, manifest, index, historyDetails, detached, isCurrent);
+    work.stage('Selecting verified prepared history');
+    const ready = await prepareReadyBankRateHistory(core, manifest, index, detached, isCurrent);
     if (!isCurrent()) return;
     const prefs = get().prefs;
     if (options.warm !== false) {

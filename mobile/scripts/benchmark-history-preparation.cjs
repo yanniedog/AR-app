@@ -19,16 +19,17 @@ require.extensions['.ts'] = (module, filename) => {
 
 const codec = require('../src/data/historicalBankRateCatalogueCompression.ts');
 const { getWebHistoryCodec } = require('../src/data/historicalBankRateCatalogueWeb.ts');
-const { unpackHistoricalBankRateCatalogueAsync } = require('../src/data/historicalBankRateCataloguePacked.ts');
-const { prepareHistoricalBankRateCatalogueAsync, historicalBankRateSnapshotsAsync,
+const { prepareHistoricalBankRateReady, historicalBankRateSnapshotsAsync,
   cachedHistoricalBankRateSnapshots } = require('../src/data/historicalBankRateCatalogue.ts');
 const { bankRateScope } = require('../src/data/bankRateOverview.ts');
 const { EMPTY_PROFILE } = require('../src/data/profile.ts');
 const { encodeDetachedHistoryBytes, decodeDetachedHistoryBytes } = require('../src/data/detachedHistoricalCatalogueBytes.ts');
+const { productRatesFromHistoricalCatalogue } = require('../src/data/productHistoryCatalogue.ts');
+const { buildProductHistoryFromRates } = require('../src/data/productHistoryModel.ts');
 
 async function main() {
   const args = process.argv.slice(2);
-  let snapshotPath = path.join(sourceRoot, 'data/historicalBankRateCatalogue.snapshot.json');
+  let snapshotPath = path.join(sourceRoot, 'data/historicalBankRateReady.snapshot.json');
   let mode = 'web-codec', maxMs = 5000, measureOnly = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--snapshot' && args[i + 1]) snapshotPath = path.resolve(args[++i]);
@@ -61,8 +62,8 @@ async function main() {
   const envelope = await measure('envelope_parse_ms', () => JSON.parse(source));
   const decoded = await measure('decode_verify_parse_ms', () => codec.decompressCatalogueAsync(envelope, { yieldControl }));
   if (!decoded) throw new Error('Snapshot failed transport verification');
-  const catalogue = await measure('unpack_ms', () => unpackHistoricalBankRateCatalogueAsync(decoded, { yieldControl }));
-  const prepared = await measure('validate_prepare_ms', () => prepareHistoricalBankRateCatalogueAsync(catalogue, yieldControl));
+  const prepared = await measure('validate_prepare_ms', () => prepareHistoricalBankRateReady(decoded));
+  const catalogue = prepared?.catalogue;
   if (!prepared) throw new Error('Snapshot failed catalogue validation');
   // All real historical dates remain historical; no invented current-day rates.
   const nextDay = new Date(Date.parse(catalogue.run_dates.at(-1)) + 86_400_000).toISOString().slice(0, 10);
@@ -70,6 +71,14 @@ async function main() {
   const scope = bankRateScope({ Mortgage: [], Savings: [], TD: [] });
   const filters = { profileFilters: EMPTY_PROFILE, interests: ['Mortgage', 'Savings', 'TD'], includeNonStandard: false };
   const ready = await measure('profile_aggregate_ms', () => historicalBankRateSnapshotsAsync(prepared, core, scope, filters, yieldControl));
+  const productRates = await measure('product_projection_ms', () => productRatesFromHistoricalCatalogue(prepared,
+    envelope.source_index, catalogue.run_dates, () => true, yieldControl));
+  // Every key is an actual observed product. Empty current observations keep
+  // this a conservative history-only fixture without invented current rates.
+  const keys = new Set(Object.values(decoded.products).flatMap(products => products.map(([key]) => key)));
+  const ledger = await measure('product_ledger_ms', () => buildProductHistoryFromRates(productRates, keys,
+    [...catalogue.run_dates, nextDay], nextDay, undefined, envelope.core_sha256));
+  if (Object.keys(ledger.products).length !== keys.size) throw new Error('Prepared product ledger lost observed products');
   // The compressed snapshot approximates detached transport size. Exercise the
   // shipping cache byte codecs as well: fixed per-block timers previously hid
   // seconds of work outside this preparation budget. Disk IO is still excluded.
@@ -81,7 +90,7 @@ async function main() {
   }
   timings.cold_ready_ms = performance.now() - coldStarted;
   const coldYields = yields;
-  const warmPrepared = await measure('warm_prepare_ms', () => prepareHistoricalBankRateCatalogueAsync(catalogue, yieldControl));
+  const warmPrepared = await measure('warm_prepare_ms', () => prepareHistoricalBankRateReady(decoded));
   const warm = await measure('warm_ready_ms', () => historicalBankRateSnapshotsAsync(warmPrepared, core, scope, filters, yieldControl));
   const cached = await measure('cached_ready_ms', () => cachedHistoricalBankRateSnapshots(prepared, core, scope, filters));
   if (warmPrepared !== prepared || warm !== ready || cached !== ready || yields !== coldYields) {
@@ -91,20 +100,21 @@ async function main() {
     profileFilters: { ...EMPTY_PROFILE, accountFeatures: ['OFFSET'] } };
   await measure('required_feature_profile_ms', () => historicalBankRateSnapshotsAsync(prepared, core, scope, featureFilters, yieldControl));
   const compressedBytes = Buffer.from(envelope.gzip_base64, 'base64').length;
-  const budgets = { cold_ready_ms: maxMs, profile_change_ms: maxMs, decoded_bytes: 10 * 1024 * 1024, compressed_bytes: 3 * 1024 * 1024 };
+  const budgets = { cold_ready_ms: maxMs, profile_change_ms: maxMs, decoded_bytes: 4 * 1024 * 1024, compressed_bytes: 1024 * 1024 };
   const checks = { processing: timings.cold_ready_ms <= maxMs,
     required_feature_profile: timings.required_feature_profile_ms <= maxMs,
     decoded_size: envelope.bytes <= budgets.decoded_bytes, compressed_size: compressedBytes <= budgets.compressed_bytes,
     warm_identity_reused: true, exact_cache_bytes_reused: true };
   const result = {
-    kind: 'historical-catalogue-regression-proxy', timestamp: new Date().toISOString(),
+    kind: 'prepared-history-regression-proxy', timestamp: new Date().toISOString(),
     environment: { runtime: process.version, engine: `V8 ${process.versions.v8}`, platform: process.platform,
       arch: process.arch, cpu: os.cpus()[0]?.model, codec: mode, scheduler: 'one zero-delay timer per app work yield' },
     snapshot: { file: path.relative(path.resolve(__dirname, '..'), snapshotPath), sha256: envelope.sha256,
       format: decoded.format ?? `schema-${decoded.schema_version}`, decoded_bytes: envelope.bytes,
       compressed_bytes: compressedBytes, calendar_dates: catalogue.run_dates.length,
-      observed_dates: Object.keys(catalogue.sources).length, evidence: catalogue.evidence.length,
-      tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])) },
+      observed_dates: Object.keys(catalogue.sources).length, compiler_sha256: decoded.compiler_sha256,
+      cohorts: Object.fromEntries(Object.entries(decoded.sections).map(([section, cohorts]) => [section, cohorts.length])),
+      products: Object.fromEntries(Object.entries(decoded.products).map(([section, products]) => [section, products.length])) },
     timings: Object.fromEntries(Object.entries(timings).map(([key, value]) => [key, Number(value.toFixed(3))])),
     yields: { cold: coldYields, profile_change: yields - coldYields }, budgets, checks,
     cache_proxy: { bytes: cacheInput.length, source: 'compressed snapshot approximates detached transport size',

@@ -11,6 +11,10 @@ import {
 
 describe('yieldToUi', () => {
   let runSpy: jest.SpyInstance;
+  const originalScheduler = Object.getOwnPropertyDescriptor(globalThis, 'nativeRuntimeScheduler');
+  const installScheduler = (value: unknown) => Object.defineProperty(globalThis, 'nativeRuntimeScheduler', {
+    configurable: true, writable: true, value,
+  });
 
   beforeEach(() => {
     runSpy = jest
@@ -24,6 +28,8 @@ describe('yieldToUi', () => {
 
   afterEach(() => {
     runSpy.mockRestore();
+    if (originalScheduler) Object.defineProperty(globalThis, 'nativeRuntimeScheduler', originalScheduler);
+    else Reflect.deleteProperty(globalThis, 'nativeRuntimeScheduler');
   });
 
   it('resolves after flushing interactions', async () => {
@@ -49,6 +55,52 @@ describe('yieldToUi', () => {
       expect(runSpy).not.toHaveBeenCalled();
       expect(jest.getTimerCount()).toBe(0);
     } finally { jest.useRealTimers(); }
+  });
+
+  it('resumes processing through the native normal-priority queue after queued input', async () => {
+    jest.useFakeTimers();
+    try {
+      const events: string[] = [];
+      const queue: { priority: number; callback: () => unknown }[] = [
+        { priority: 2, callback: () => events.push('input') },
+      ];
+      const schedule = jest.fn((priority: number, callback: () => null) => queue.push({ priority, callback }));
+      installScheduler({ unstable_NormalPriority: 3, unstable_scheduleCallback: schedule });
+      const pending = yieldToUi(0).then(() => events.push('processing'));
+      expect(events).toEqual([]);
+      expect(schedule).toHaveBeenCalledWith(3, expect.any(Function));
+      expect(jest.getTimerCount()).toBe(0);
+      queue.sort((a, b) => a.priority - b.priority).forEach(task => task.callback());
+      await pending;
+      expect(events).toEqual(['input', 'processing']);
+      expect(runSpy).not.toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+
+  it.each(['throws', 'incomplete'])('falls back to a macrotask when the native scheduler %s', async condition => {
+    jest.useFakeTimers();
+    try {
+      installScheduler(condition === 'throws' ? {
+        unstable_NormalPriority: 3,
+        unstable_scheduleCallback: () => { throw new Error('Native scheduler unavailable'); },
+      } : { unstable_NormalPriority: 3 });
+      const input = jest.fn();
+      setTimeout(input, 0);
+      const pending = yieldToUi(0);
+      expect(input).not.toHaveBeenCalled();
+      await jest.runOnlyPendingTimersAsync();
+      await pending;
+      expect(input).toHaveBeenCalledTimes(1);
+      expect(runSpy).not.toHaveBeenCalled();
+    } finally { jest.useRealTimers(); }
+  });
+
+  it('keeps positive interaction waits on the existing path when native scheduling is available', async () => {
+    const schedule = jest.fn();
+    installScheduler({ unstable_NormalPriority: 3, unstable_scheduleCallback: schedule });
+    await yieldToUi(5);
+    expect(schedule).not.toHaveBeenCalled();
+    expect(runSpy).toHaveBeenCalled();
   });
 
   it('yieldToPaintFrames requires a real animation callback for every requested frame', async () => {

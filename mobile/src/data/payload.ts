@@ -56,7 +56,9 @@ export async function gunzipCooperatively(
   for (let offset = 0; offset < bytes.length; offset += safeChunkBytes) {
     const end = Math.min(bytes.length, offset + safeChunkBytes);
     stream.push(bytes.subarray(offset, end), end === bytes.length);
-    if (end < bytes.length) await yieldToUi();
+    // Bounded inflate slices need an input macrotask, not an interaction wait:
+    // a running audit animation can otherwise add 48 ms to every 64 KiB block.
+    if (end < bytes.length) await yieldToUi(0);
   }
   const result = new Uint8Array(outputBytes);
   let writeOffset = 0;
