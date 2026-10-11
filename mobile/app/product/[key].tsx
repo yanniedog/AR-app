@@ -223,7 +223,7 @@ export default function ProductDetail() {
     if (!historyEnabled || !core || !found) return null;
     if (rateHistory.updating || rateHistory.failed) return null;
     const detailed = rateHistory.historyAvailable ? rateHistoryChartModel(rateHistory.snapshots, found.section) : null;
-    if (detailed || rateHistory.richHistory) return detailed;
+    if (rateHistory.historyAvailable || rateHistory.richHistory) return detailed;
     return selectBankHistoryChartModel(
       {
         core,
