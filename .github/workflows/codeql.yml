@@ -1,0 +1,85 @@
+name: CodeQL
+
+# Advanced setup replaces GitHub's default setup: Expo generates the Android
+# build during prebuild, so Java/Kotlin cannot use CodeQL's autobuild mode.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+          - language: java-kotlin
+            build-mode: manual
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        if: matrix.language == 'java-kotlin'
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        if: matrix.language == 'java-kotlin'
+        with:
+          packages: platform-tools
+      - name: Generate Android build
+        if: matrix.language == 'java-kotlin'
+        working-directory: mobile
+        run: |
+          npm ci --no-audit --no-fund
+          node scripts/ensure-firebase-config.mjs
+          npx expo prebuild --platform android --no-install
+          chmod +x android/gradlew
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@cee97f86b972a3ded3c58d04148362b193ddc518 # v4.38.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+      - name: Compile native modules for CodeQL
+        if: matrix.language == 'java-kotlin'
+        working-directory: mobile/android
+        # Force compilation under the tracer, even if Gradle has cached outputs.
+        run: >-
+          ./gradlew
+          :ar-apk-identity-verifier:compileReleaseKotlin
+          :ar-history-codec:compileReleaseKotlin
+          :ar-history-codec:compileReleaseJavaWithJavac
+          :ar-audit-screen-awake:compileReleaseKotlin
+          --no-daemon --no-build-cache --rerun-tasks
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@cee97f86b972a3ded3c58d04148362b193ddc518 # v4.38.3
+        with:
+          category: /language:${{ matrix.language }}
