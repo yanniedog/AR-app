@@ -22,9 +22,13 @@
     "xcode": {
       "uuid": "11.1.1"
     },
-    "diff@7.0.0": "8.0.3"
+    "diff@7.0.0": "8.0.3",
+    "ts-deepmerge": "8.0.0"
   },
   "scripts": {
-    "test": "node --test test/*.test.cjs"
+    "test": "node --test test/*.test.cjs",
+    "compat": "node scripts/apply-dependency-compat.cjs",
+    "postinstall": "npm run compat",
+    "pretest": "npm run compat"
   }
 }

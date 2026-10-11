@@ -59,6 +59,7 @@ jobs:
       - name: Verify release CLI dependency compatibility
         run: |
           npm ci --prefix tools/eas-cli --ignore-scripts --no-audit --no-fund
+          npm run compat --prefix tools/eas-cli
           npm test --prefix tools/eas-cli
       - name: Compile native APK identity verifier, history codec and audit screen awake view
         run: |
