@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
 import yaml from 'js-yaml';
 
@@ -53,6 +56,38 @@ test('queue reconciliation accepts PR closures, explicit dispatch and APK comple
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
 });
 
+test('failed APK jobs explicitly reconcile only superseded checkout sources, including chained ref races', () => {
+  const workflow = yaml.load(readFileSync(new URL(
+    '../../.github/workflows/mobile-android-apk.yml', import.meta.url,
+  ), 'utf8'));
+  const recovery = workflow.jobs['android-apk'].steps.find((step) => step.name === 'Reconcile superseded failed APK build');
+  assert.equal(recovery.if, "failure() && github.ref == 'refs/heads/main'");
+  assert.equal(recovery.env.RELEASE_SOURCE_SHA, '${{ inputs.release_source_sha || github.sha }}');
+  const run = recovery.run.replaceAll('${{ github.repository }}', 'owner/repo');
+  const directory = mkdtempSync(join(tmpdir(), 'apk-recovery-'));
+  try {
+    for (const [mainSha, ghStatus, expected] of [
+      ['a'.repeat(40), '0', false],
+      ['b'.repeat(40), '0', true],
+      ['b'.repeat(40), '1', null],
+    ]) {
+      const output = join(directory, `${ghStatus}-${mainSha}`);
+      const mockGh = `gh() { if [ "$1" = api ]; then printf '%s' "$MOCK_MAIN_SHA"; return "$MOCK_GH_STATUS"; fi; printf '%s\\n' "$*" >> "$MOCK_DISPATCH_OUTPUT"; }`;
+      const result = spawnSync('bash', ['-c', `${mockGh}\n${run}`], {
+        encoding: 'utf8',
+        env: { ...process.env, MOCK_MAIN_SHA: mainSha, MOCK_GH_STATUS: ghStatus,
+          RELEASE_SOURCE_SHA: 'a'.repeat(40), GITHUB_SHA: mainSha, GITHUB_RUN_ID: '123', MOCK_DISPATCH_OUTPUT: output },
+      });
+      assert.equal(result.status, expected === null ? 1 : 0, result.stderr);
+      assert.equal(existsSync(output), expected === true);
+      if (expected === true) assert.equal(readFileSync(output, 'utf8'),
+        'workflow run mobile-auto-release-on-queue-drain.yml --ref main --repo owner/repo -f failed_apk_run_id=123\n');
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test('successful ARM publication reconciles after the README without depending on artifact upload', () => {
   const workflow = yaml.load(readFileSync(new URL(
     '../../.github/workflows/mobile-android-apk.yml', import.meta.url,
@@ -72,6 +107,12 @@ test('successful ARM publication reconciles after the README without depending o
   assert.equal(reconcile.env.GH_TOKEN, '${{ github.token }}');
   assert.equal(workflow.permissions.actions, 'write');
   assert.match(reconcile.run, /gh workflow run mobile-auto-release-on-queue-drain\.yml\s+\\\s+--ref main\s+\\\s+--repo "\$\{\{ github\.repository \}\}"/);
+});
+
+test('artifact-only workflow checks never count as an in-flight release channel', () => {
+  const rows = [{ headSha: 'abc', status: 'in_progress', displayTitle: 'mobile-android-apk (workflow-check)' }];
+  assert.equal(hasApkBuildInFlight(rows, 'abc', ['arm']), false);
+  assert.equal(hasApkBuildInFlight(rows, 'abc', ['universal', 'arm']), false);
 });
 
 test('release inspection distinguishes absence from infrastructure failure', () => {
@@ -828,4 +869,24 @@ test('rolling-manifest timeouts reject the release decision', async () => {
     ),
     /request timed out/i,
   );
+});
+
+
+test('failed recovery runs cannot mask current-head coverage while still in progress', () => {
+  const runs = [
+    { databaseId: 123, headSha: 'new-main', status: 'in_progress', displayTitle: 'mobile-android-apk (arm)' },
+  ];
+  assert.equal(hasApkBuildInFlight(runs, 'new-main', ['arm'], '123'), false);
+  assert.equal(hasApkBuildInFlight(runs, 'new-main', ['arm']), true);
+  runs.push({ databaseId: 124, headSha: 'new-main', status: 'queued', displayTitle: 'mobile-android-apk (arm)' });
+  assert.equal(hasApkBuildInFlight(runs, 'new-main', ['arm'], '123'), true);
+  const workflow = yaml.load(readFileSync(new URL('../../.github/workflows/mobile-auto-release-on-queue-drain.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.on.workflow_dispatch.inputs.failed_apk_run_id.required, false);
+  const step = workflow.jobs['maybe-release'].steps.find((entry) => entry.env?.FAILED_APK_RUN_ID);
+  assert.equal(step.env.FAILED_APK_RUN_ID, "${{ inputs.failed_apk_run_id || '' }}");
+});
+
+test('artifact workflow checks cannot displace queued public releases', () => {
+  const workflow = yaml.load(readFileSync(new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.concurrency.group, "${{ github.event_name == 'push' && 'mobile-apk-workflow-check' || 'mobile-apk-release' }}");
 });

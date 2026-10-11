@@ -106,7 +106,7 @@ test('APK publication serializes universal before ARM and delays README mutation
     'utf8',
   );
   assert.match(workflow, /inputs\.apk_channel == 'universal' && inputs\.follow_with_arm == true/);
-  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
+  assert.match(workflow, /run-name: mobile-android-apk \(\$\{\{ github\.event_name == 'push' && 'workflow-check' \|\| inputs\.apk_channel \|\| 'arm' \}\}\$\{\{ inputs\.follow_with_arm && '\+arm' \|\| '' \}\}\)/);
   assert.match(workflow, /-f apk_channel=arm/);
   assert.match(workflow, /-f follow_with_arm=false/);
   assert.match(workflow, /-f release_version="\$\{\{ steps\.release\.outputs\.version \}\}"/);
@@ -115,11 +115,45 @@ test('APK publication serializes universal before ARM and delays README mutation
   assert.match(workflow, /ref: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
   assert.equal(
     workflow.match(/RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/g)?.length,
-    3,
+    4,
   );
   assert.match(workflow, /Queue ARM channel after universal publish[\s\S]*verify-github-release-source\.mjs/);
   assert.match(workflow, /-f release_source_sha="\$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}"/);
   assert.match(workflow, /inputs\.apk_channel == 'arm'[\s\S]*publish-readme-app-install\.mjs/);
+});
+
+test('a rejected publication still uploads the signed Gradle APK without an unpublished manifest', async () => {
+  const workflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(workflow, /Publish preview APK manifest \(GitHub release\)\n\s+id: publish/);
+  const fallback = workflow.split('- name: Upload built APK when publication fails')[1]
+    .split('- name: Upload workflow artifact')[0];
+  assert.match(fallback, /if: always\(\) && steps\.size\.outcome == 'success' && steps\.validated_apk\.outcome == 'success' && steps\.publish\.outcome != 'success'/);
+  const validationIndex = workflow.indexOf('id: validated_apk');
+  assert.ok(validationIndex > 0 && validationIndex < workflow.indexOf('id: publish'));
+  const validation = workflow.slice(validationIndex, workflow.indexOf('id: publish'));
+  assert.match(validation, /inspectApkIdentity\(process\.env\.APK_PATH/);
+  assert.match(validation, /certificateSha256: identity\.signing_certificate_sha256/);
+  assert.match(validation, /verifyNativeApkPrivacy\(readFileSync\(process\.env\.APK_PATH\), process\.cwd\(\)\)/);
+  assert.match(fallback, /path: mobile\/\$\{\{ steps\.apk\.outputs\.path \}\}/);
+  assert.doesNotMatch(fallback, /apk-publish|app-apk-latest\.json/);
+  assert.match(workflow, /Upload workflow artifact\n\s+if: always\(\) && steps\.publish\.outcome == 'success'/);
+});
+
+test('workflow repairs build on main and superseded failures recheck the release queue', async () => {
+  const apkWorkflow = await readFile(
+    new URL('../../.github/workflows/mobile-android-apk.yml', import.meta.url),
+    'utf8',
+  );
+  assert.match(apkWorkflow, /push:\n\s+branches: \[main\]\n\s+paths:\n\s+- '\.github\/workflows\/mobile-android-apk\.yml'/);
+  assert.match(apkWorkflow, /id: publish\n\s+if: github\.event_name == 'workflow_dispatch'/);
+  assert.match(apkWorkflow, /github\.event_name == 'push' && 'workflow-check'/);
+  const recovery = apkWorkflow.split('- name: Reconcile superseded failed APK build')[1];
+  assert.match(recovery, /if: failure\(\) && github\.ref == 'refs\/heads\/main'/);
+  assert.match(recovery, /RELEASE_SOURCE_SHA: \$\{\{ inputs\.release_source_sha \|\| github\.sha \}\}/);
+  assert.match(recovery, /if \[ "\$main_sha" != "\$RELEASE_SOURCE_SHA" \]; then[\s\S]*gh workflow run mobile-auto-release-on-queue-drain\.yml/);
 });
 
 test('EAS submission validates an environment-delivered build UUID', async () => {
