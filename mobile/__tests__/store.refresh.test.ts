@@ -224,7 +224,7 @@ describe('store refresh lifecycle', () => {
 
     const changed = await useStore.getState().refresh({});
 
-    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), null);
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, remoteManifest, expect.any(Object), null, null, expect.any(Function));
     expect(changed).toBe(false);
     expect(mockDownloadCore).not.toHaveBeenCalled();
     expect(mockReadBundle).not.toHaveBeenCalled();
@@ -446,7 +446,7 @@ describe('store refresh lifecycle', () => {
     const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(false);
 
-    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), null);
+    expect(prepareHistory).toHaveBeenCalledWith(expect.any(Object), revisedManifest, expect.any(Object), null, null, expect.any(Function));
     expect(mockEnsureHistoryBanks).not.toHaveBeenCalled();
     expect(mockEnsureBankInsights).not.toHaveBeenCalled();
     expect(mockEnsureRbaCalendar).toHaveBeenCalledTimes(1);
@@ -598,7 +598,7 @@ describe('store refresh lifecycle', () => {
     const prepareHistory = jest.spyOn(bankRateHistorySync, 'prepareHistoricalBankRateHistory');
     await expect(useStore.getState().refresh({ background: true })).resolves.toBe(true);
 
-    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), null);
+    expect(prepareHistory).toHaveBeenCalledWith(remoteCore, replacementManifest, expect.any(Object), null, null, expect.any(Function));
     expect(useStore.getState().manifest?.files.core.sha256).toBe('b'.repeat(64));
     expect(useStore.getState().bankSpreadHistory).toBeNull();
     expect(useStore.getState().bankSpreadHistoryError).toBeNull();
