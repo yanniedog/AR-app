@@ -787,7 +787,7 @@ export async function releaseWhenQueueEmpty({
     return;
   }
   // Hold before allocating a version or dispatching a build. No-op events above
-  // remain successful even while the producer handoff is awaiting activation.
+  // remain successful even while managed payload delivery is unavailable.
   await verifyDelivery();
   const dispatchIfQueueEmpty = () => {
     // New work can arrive while the generated version PR is passing CI.

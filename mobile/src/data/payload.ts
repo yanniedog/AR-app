@@ -107,9 +107,13 @@ function manifestFetchUrl(url: string): string {
 
 async function downloadWireBytes(
   url: string,
-  opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
+  opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
 ): Promise<ArrayBuffer> {
   const deliveryUrl = automaticDataUrl(url);
+  const legacyHeaders = opts.legacySha ? { 'X-AR-Legacy-SHA256': opts.legacySha } : undefined;
+  if (opts.legacySha && (!deliveryUrl || !/^[a-f0-9]{64}$/.test(opts.legacySha))) {
+    throw new Error('Historical data delivery identity is invalid');
+  }
   if (
     opts.requireExactBytes &&
     (
@@ -141,7 +145,7 @@ async function downloadWireBytes(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const response = await globalThis.fetch(url, { signal: controller.signal });
+      const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
       if (!response.ok) {
         if (deliveryUrl && response.status === 404) throw new MissingPublicPayloadError(url);
         throw new Error(`asset HTTP ${response.status}`);
@@ -164,6 +168,7 @@ async function downloadWireBytes(
     let lastEmitAt = 0;
     const xhr = new XMLHttpRequest();
     xhr.open('GET', deliveryUrl ?? url);
+    if (opts.legacySha) xhr.setRequestHeader('X-AR-Legacy-SHA256', opts.legacySha);
     xhr.timeout = 30000;
     xhr.responseType = 'arraybuffer';
     xhr.ontimeout = () => reject(new Error('network timeout'));
@@ -241,10 +246,10 @@ async function downloadBytes(
   const wire = new Uint8Array(await downloadWireBytes(url, {
     ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
   }));
-  // A missing/readability-broken public projection must not trigger a key prompt or
-  // another service. Existing verified cache and bundled history remain usable.
-  if (automaticDataUrl(url) && (isReleaseTransport(wire) || isEncryptedAsset(wire))) {
-    throw new Error('Public GitHub payload is encrypted; readable publication unavailable');
+  // Managed transport must be opened on the service, never by a device key.
+  // Legacy ARE1 domain bytes remain hashed before the service opens them below.
+  if (automaticDataUrl(url) && isReleaseTransport(wire)) {
+    throw new Error('Data service returned unopened transport');
   }
   const bytes = isReleaseTransport(wire)
     ? await decryptReleaseTransport(wire, resolvePayloadKeyHex, limit)
@@ -366,9 +371,13 @@ export async function downloadInflate(
   // sha256 above was computed over the ciphertext, matching the manifest.
   if (isEncryptedAsset(bytes)) {
     if (opts.allowEncrypted === false) throw new Error('encrypted asset is not allowed by this contract');
-    // Explicit non-managed legacy imports may still use an already imported
-    // local key. Managed GitHub delivery rejected encrypted bytes above.
-    bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
+    if (automaticDataUrl(url)) {
+      const sourceSha = expectedSha ?? toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(bytes)));
+      bytes = new Uint8Array(await downloadWireBytes(url, { ...opts, legacySha: sourceSha,
+        requireExactBytes: false, expectedBytes: undefined,
+        maxCompressedBytes: opts.maxCompressedBytes ?? MAX_TRANSPORT_ENCODED_BYTES }));
+      if (isEncryptedAsset(bytes) || isReleaseTransport(bytes)) throw new Error('Historical data service returned unopened transport');
+    } else bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
   }
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.

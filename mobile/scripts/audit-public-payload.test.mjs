@@ -43,7 +43,7 @@ function encryptedTransport(plain) {
 
 const publication = 'https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json';
 
-test('public transport requests the shipping GitHub data branch and retains the original identity', async t => {
+test('public transport requests the shipping Cloudflare service and retains the original identity', async t => {
   const bytes = gzipSync(Buffer.from('{"verified":"domain bytes"}')), transports = [];
   mockFetch(t, async (url, init) => {
     assert.equal(url, automaticDataUrl(publication));
@@ -54,7 +54,7 @@ test('public transport requests the shipping GitHub data branch and retains the 
   });
   assert.deepEqual(await fetchBytes(publication, bytes.length, 'yanniedog/AR-local', transports), bytes);
   assert.deepEqual(transports, [{ source_url: publication, requested_url: automaticDataUrl(publication),
-    final_url: automaticDataUrl(publication), route: 'github_public_branch' }]);
+    final_url: automaticDataUrl(publication), route: 'cloudflare_service' }]);
 });
 
 test('an actual unopened ARE2 wire envelope is rejected before index JSON parsing', async t => {
@@ -85,7 +85,7 @@ for (const target of ['https://ar-app-data.jkokavec.workers.dev/other-path', pub
   });
 }
 
-test('public data branch refuses unexpected CDN redirects', async t => {
+test('managed delivery refuses unexpected CDN redirects', async t => {
   const requested = automaticDataUrl(publication);
   const cdn = 'https://release-assets.githubusercontent.com/github-production-release-asset/123/asset?token=example';
   const calls = [];
@@ -316,7 +316,7 @@ test('public audit exposes a superseded current source without comparing its pri
   assert.equal(proof.status, 'PASS'); // The declared archive bytes are authentic.
   assert.equal(report.publication_verified, true);
   assert.ok(report.public_transport.length >= 5);
-  assert.ok(report.public_transport.every(value => value.route === 'github_public_branch' &&
+  assert.ok(report.public_transport.every(value => value.route === 'cloudflare_service' &&
     value.source_url.startsWith('https://github.com/') && value.final_url === automaticDataUrl(value.source_url)));
   assert.equal(report.historical_coverage_verified, false);
   assert.equal(proof.source_selection.status, 'WARN');

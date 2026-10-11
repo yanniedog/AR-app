@@ -2,10 +2,10 @@
 
 AR-local owns immutable payload publication. The canonical `dates-index.json`
 identity remains the existing `app-payload-latest` release; AR-app retrieves its
-verified readable bytes directly from the `app-payload-public` GitHub branch.
-Current selectors live under `latest/` and immutable files under
-`tags/<canonical tag>/`. See [Direct GitHub delivery](BANK_RATE_HISTORY.md#direct-github-delivery).
-Cloudflare and device decryption keys are not part of this delivery path.
+verified domain bytes through the fixed Cloudflare delivery service. The service
+opens encrypted GitHub release transport; canonical URLs, byte counts and hashes
+remain unchanged. See [Cloudflare payload delivery](BANK_RATE_HISTORY.md#cloudflare-payload-delivery).
+Release keys remain in the service and are not required on the device.
 When `revision_protocol: 1` is
 present, `revision_heads[latest_date]` selects the only edition that the app may
 install. The head binds an immutable manifest URL and its raw SHA-256. The
@@ -25,7 +25,7 @@ paint, and its failure cannot prevent adoption of usable current rates.
 Revision details and optional caches use
 content hashes; assets from rolling, dated, or older editions are never merged
 into a selected revision. Older cached editions remain usable; an uncached
-edition absent from the public branch requires a refresh to the current edition.
+edition unavailable through the delivery service requires a refresh to the current edition.
 The dormant v3 reader is not activated.
 
 The app keeps the installed and preceding revision's cache assets. Unreferenced

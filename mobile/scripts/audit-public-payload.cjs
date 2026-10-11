@@ -51,7 +51,7 @@ function publicationSource(source, repo) {
 async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = []) {
   const url = publicationSource(source, repo);
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_COMPRESSED) throw new Error('Invalid publication byte limit');
-  // Use the shipping app's readable GitHub data branch. Canonical identities and
+  // Use the shipping app's Cloudflare service. Canonical identities and
   // manifest byte counts/hashes still describe the exact published domain bytes.
   const delivery = automaticDataUrl(url);
   const requested = delivery ?? url;
@@ -88,7 +88,7 @@ async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transpo
     const bytes = Buffer.concat(chunks);
     if (isReleaseTransport(bytes)) throw new Error('Publication delivery returned unopened ARE2 transport');
     transports.push({ source_url: url, requested_url: requested, final_url: response.url,
-      route: delivery ? 'github_public_branch' : 'github_release' });
+      route: delivery ? 'cloudflare_service' : 'github_release' });
     return bytes;
   }
 }

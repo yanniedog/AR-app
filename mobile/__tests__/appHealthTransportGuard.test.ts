@@ -127,13 +127,13 @@ describe('installAppHealthTransportGuard', () => {
     guard.restore();
   });
 
-  it('accepts exact raw GitHub delivery but rejects an untrusted final host', async () => {
+  it('accepts exact Cloudflare delivery but rejects an untrusted final host', async () => {
     const fetchSpy = jest
       .fn()
       .mockResolvedValueOnce({
         ok: true,
         redirected: false,
-        url: 'https://raw.githubusercontent.com/yanniedog/AR-local/app-payload-public/latest/manifest.json',
+        url: 'https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json',
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -174,9 +174,9 @@ describe('installAppHealthTransportGuard', () => {
     'https://github.com/yanniedog/AR-local/releases/download/app-payload-latest/manifest.json',
     'https://github.com/yanniedog/AR-local/releases/download/app-payload-public-2026-09-18/manifest.json',
     'https://release-assets.githubusercontent.com/github-production-release-asset/file?sp=r',
-    'https://raw.githubusercontent.com/yanniedog/AR-local/app-payload-public/latest/other.json',
-    'https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/manifest.json',
-  ])('rejects a readable companion redirect back to an unrelated delivery route: %s', async finalUrl => {
+    'https://ar-app-data.jkokavec.workers.dev/v1/release/app-payload-latest/other.json',
+    'https://raw.githubusercontent.com/yanniedog/AR-local/app-payload-public/latest/manifest.json',
+  ])('rejects a service redirect to an unrelated delivery route: %s', async finalUrl => {
     const target = { fetch: jest.fn(async () => ({ ok: true, url: finalUrl })) as unknown as typeof fetch };
     const githubContract = createV1AppHealthSourceContract();
     const guard = installAppHealthTransportGuard({ target, mode: 'live-source', contract: githubContract });

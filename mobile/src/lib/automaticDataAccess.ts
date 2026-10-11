@@ -1,7 +1,8 @@
 import { StandardUrl as URL } from './standardUrl';
 
 export const GITHUB_RELEASE_ORIGIN = 'https://github.com';
-export const PUBLIC_PAYLOAD_BASE = 'https://raw.githubusercontent.com/yanniedog/AR-local/app-payload-public';
+/** Fixed delivery service; release master keys never enter the app. */
+export const APP_DATA_ORIGIN = 'https://ar-app-data.jkokavec.workers.dev';
 
 /** Canonical publication identities remain unchanged by their delivery route. */
 export function trustedPayloadReleaseUrl(source: string): string | null {
@@ -16,18 +17,16 @@ export function trustedPayloadReleaseUrl(source: string): string | null {
   } catch { return null; }
 }
 
-/** Direct readable GitHub data branch, shared by native and CORS-bound browsers. */
+/** Cloudflare opens release transport while preserving canonical domain identities. */
 export function automaticDataUrl(source: string): string | null {
   const canonical = trustedPayloadReleaseUrl(source);
   if (!canonical) return null;
   const url = new URL(canonical);
   const [tag, name] = url.pathname.slice('/yanniedog/AR-local/releases/download/'.length).split('/');
-  const directory = tag === 'app-payload-latest' && ['manifest.json', 'dates-index.json'].includes(name)
-    ? 'latest' : `tags/${tag}`;
-  return `${PUBLIC_PAYLOAD_BASE}/${directory}/${name}${url.search}`;
+  return `${APP_DATA_ORIGIN}/v1/release/${tag}/${name}${url.search}`;
 }
 
-/** A historical encrypted release may have no readable public projection. */
+/** An unavailable historical edition must retain verified cache and fallback data. */
 export class MissingPublicPayloadError extends Error {
   readonly sourceUrl: string;
   constructor(sourceUrl: string) {
