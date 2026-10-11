@@ -8,7 +8,7 @@ import {
   type DatesIndex,
 } from './historyDaily';
 import { fetchManifest } from './payload';
-import { validateDetachedHistoricalCatalogueDescriptor } from './detachedHistoricalBankRateCatalogueWire';
+import { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor } from './detachedHistoricalBankRateCatalogueWire';
 
 /** Optional assets that dated tags often omit (core/details only). */
 export const OPTIONAL_MANIFEST_KEYS = [
@@ -41,9 +41,16 @@ export function mergeOptionalManifestFiles(
   let changed = false;
   let history = target.bank_rate_history_catalogue;
   if (source.bank_rate_history_catalogue && (replaceExisting || !history) &&
-      validateDetachedHistoricalCatalogueDescriptor(source, PAYLOAD_REPO)) {
+      validateLegacyHistoricalCatalogueDescriptor(source, PAYLOAD_REPO)) {
     history = source.bank_rate_history_catalogue;
     changed = history !== target.bank_rate_history_catalogue;
+  }
+  let packedHistory = target.bank_rate_history_catalogue_packed;
+  // A URL-free descriptor cannot borrow a different rolling alias's routing.
+  if (source.bank_rate_history_catalogue_packed && source.tag === target.tag && source.repo === target.repo &&
+      (replaceExisting || !packedHistory) && validatePackedHistoricalCatalogueDescriptor(source, PAYLOAD_REPO)) {
+    packedHistory = source.bank_rate_history_catalogue_packed;
+    changed ||= packedHistory !== target.bank_rate_history_catalogue_packed;
   }
   const files: Manifest['files'] = { ...target.files };
   for (const key of OPTIONAL_MANIFEST_KEYS) {
@@ -54,7 +61,8 @@ export function mergeOptionalManifestFiles(
       changed = true;
     }
   }
-  return changed ? { ...target, files, ...(history ? { bank_rate_history_catalogue: history } : {}) } : target;
+  return changed ? { ...target, files, ...(history ? { bank_rate_history_catalogue: history } : {}),
+    ...(packedHistory ? { bank_rate_history_catalogue_packed: packedHistory } : {}) } : target;
 }
 
 /**

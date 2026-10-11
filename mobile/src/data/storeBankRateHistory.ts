@@ -43,7 +43,8 @@ export async function prepareBankRateHistoryAfterPaint(
     samePayloadIdentity(get().manifest, manifest) &&
     get().manifest?.files.core.sha256 === manifest.files.core.sha256 &&
     get().manifest?.files.details.sha256 === manifest.files.details.sha256 &&
-    JSON.stringify(get().manifest?.bank_rate_history_catalogue) === JSON.stringify(manifest.bank_rate_history_catalogue);
+    JSON.stringify(get().manifest?.bank_rate_history_catalogue) === JSON.stringify(manifest.bank_rate_history_catalogue) &&
+    JSON.stringify(get().manifest?.bank_rate_history_catalogue_packed) === JSON.stringify(manifest.bank_rate_history_catalogue_packed);
   const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
@@ -64,7 +65,7 @@ export async function prepareBankRateHistoryAfterPaint(
     // Keep transport, cache and archive decoding outside the first-paint path.
     // The loader authenticates the detached asset without changing sealed core.
     let detached = null;
-    if (manifest.bank_rate_history_catalogue) {
+    if (manifest.bank_rate_history_catalogue || manifest.bank_rate_history_catalogue_packed) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { loadDetachedHistoricalBankRateCatalogue } = require('./detachedHistoricalBankRateCatalogue') as typeof import('./detachedHistoricalBankRateCatalogue');
       work.stage('Loading detached historical catalogue');

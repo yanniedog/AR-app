@@ -176,7 +176,7 @@ async function discardSupersededPublicDates(catalogue: HistoricalBankRateCatalog
  * verified earlier public editions still have their own provenance and features. */
 async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifest, freshIndex: DatesIndex | null,
   completion: { reusable: boolean }, embedded: HistoricalBankRateCatalogue | undefined, work: BackgroundWorkHandle): Promise<boolean> {
-  if (manifest.bank_rate_history_catalogue === undefined || manifest.repo !== PAYLOAD_REPO ||
+  if ((manifest.bank_rate_history_catalogue === undefined && manifest.bank_rate_history_catalogue_packed === undefined) || manifest.repo !== PAYLOAD_REPO ||
       !isValidCalendarDate(core.run_date) || manifest.run_date !== core.run_date ||
       !['app-payload-latest', `app-payload-${core.run_date}`].includes(manifest.tag) ||
       !SHA.test(manifest.files.core.sha256) || !SHA.test(manifest.files.details.sha256)) return false;
@@ -228,7 +228,17 @@ async function prepareLegacyCompactFallback(core: CorePayload, manifest: Manifes
     const days = (Date.parse(last) - Date.parse(first)) / 86_400_000 + 1;
     if (days > HISTORICAL_CATALOGUE_LIMITS.days) throw new Error('Historical catalogue date budget exceeded');
     const run_dates = Array.from({ length: days }, (_, day) => new Date(Date.parse(first) + day * 86_400_000).toISOString().slice(0, 10));
-    let catalogue: HistoricalBankRateCatalogue = embedded ? await discardSupersededPublicDates(embedded, index, true) : {
+    // The common first-run fallback already contains exactly the authorized
+    // public observations. Reuse its immutable tiers/evidence instead of copying
+    // and re-identifying the whole archive through an empty catalogue. Saved
+    // candidates keep their existing precedence by using the normal overlay path.
+    const reusableBaseline = !embedded && !saved?.public_fallback && !saved?.catalogue && baseline &&
+      baseline.run_dates[0] === first && baseline.run_dates.at(-1)! < core.run_date &&
+      !Object.keys(baseline.unavailable_dates).length &&
+      Object.entries(baseline.sources).every(([day, source]) => day < core.run_date && source.kind === 'published_core' &&
+        source.manifest_sha256 === baselineIndex.revision_heads![day]?.manifest_sha256 &&
+        source.manifest_sha256 === index.revision_heads![day]?.manifest_sha256);
+    let catalogue: HistoricalBankRateCatalogue = embedded ? await discardSupersededPublicDates(embedded, index, true) : reusableBaseline ? baseline : {
       schema_version: 2, run_dates, sources: {}, unavailable_dates: {}, evidence: [{ status: 'unknown' }],
       sections: { Mortgage: [], Savings: [], TD: [] } };
     // Extend only the axis; never synthesize observations for absent days or
@@ -332,7 +342,7 @@ async function prepare(core: CorePayload, manifest: Manifest, freshIndex: DatesI
   const embedded = (await prepareHistoricalBankRateCatalogueAsync(detached ?? core.bank_rate_history_catalogue, yieldHistoryWork))?.catalogue;
   // Legacy compact payloads also need reconciliation when their detached asset
   // succeeds: it can be partial or contain superseded public observations.
-  if (!manifest.payload_revision && manifest.bank_rate_history_catalogue !== undefined) {
+  if (!manifest.payload_revision && (manifest.bank_rate_history_catalogue !== undefined || manifest.bank_rate_history_catalogue_packed !== undefined)) {
     return prepareLegacyCompactFallback(core, manifest, freshIndex, completion, embedded, work);
   }
   if (detached && embedded) installHistoricalBankRateCatalogue(core, embedded, embedded.run_dates.filter(day =>

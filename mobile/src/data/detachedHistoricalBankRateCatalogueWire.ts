@@ -6,6 +6,7 @@ import { automaticDataUrl } from '../lib/automaticDataAccess';
 export const DETACHED_HISTORY_MAX_COMPRESSED = 8 * 1024 * 1024;
 export const DETACHED_HISTORY_MAX_DECODED = 24 * 1024 * 1024;
 export const DETACHED_HISTORY_MAX_ENCODED = Math.ceil(DETACHED_HISTORY_MAX_COMPRESSED / 3) * 4;
+export const PACKED_HISTORY_MAX_DECODED = 10 * 1024 * 1024;
 const SHA = /^[a-f0-9]{64}$/;
 const INNER_COMPRESSED = 16 * 1024 * 1024, INNER_DECODED = 128 * 1024 * 1024;
 
@@ -19,6 +20,36 @@ function sha(value: unknown): value is string { return typeof value === 'string'
 
 /** Pure, optional capability validation. Failure never invalidates usable core data. */
 export function validateDetachedHistoricalCatalogueDescriptor(manifest: Manifest, expectedRepo = 'yanniedog/AR-local'): ManifestFile | null {
+  return validatePackedHistoricalCatalogueDescriptor(manifest, expectedRepo) ?? validateLegacyHistoricalCatalogueDescriptor(manifest, expectedRepo);
+}
+
+export function validatePackedHistoricalCatalogueDescriptor(manifest: Manifest, expectedRepo = 'yanniedog/AR-local'): ManifestFile | null {
+  try {
+    const namespace: unknown = manifest.bank_rate_history_catalogue_packed;
+    if (!record(namespace) || !keys(namespace, ['schema_version', 'file']) || namespace.schema_version !== 1 ||
+        !record(namespace.file) || !keys(namespace.file, ['name', 'bytes', 'sha256'], ['enc']) ||
+        Object.hasOwn(manifest.files, 'bank_rate_history_catalogue_packed') || !isValidCalendarDate(manifest.run_date) ||
+        !sha(manifest.files.core.sha256) ||
+        manifest.repo !== expectedRepo || !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(manifest.repo)) return null;
+    const file = namespace.file;
+    if (!sha(file.sha256) || !Number.isSafeInteger(file.bytes) || Number(file.bytes) <= 0 ||
+        Number(file.bytes) > DETACHED_HISTORY_MAX_COMPRESSED) return null;
+    const enc = file.enc, coreEnc = manifest.files.core.enc;
+    if (Object.hasOwn(file, 'enc') && (!record(enc) || !keys(enc, ['alg', 'key_id']) || enc.alg !== 'aes-256-gcm' ||
+        typeof enc.key_id !== 'string' || !/^[a-f0-9]{8}$/.test(enc.key_id))) return null;
+    const encryption = enc as ManifestEnc | undefined;
+    if (encryption ? !coreEnc || coreEnc.alg !== encryption.alg || coreEnc.key_id !== encryption.key_id : coreEnc !== undefined) return null;
+    if (manifest.tag !== 'app-payload-latest' && manifest.tag !== `app-payload-${manifest.run_date}` &&
+        !new RegExp(`^app-payload-${manifest.run_date}-r[0-9]{6}$`).test(manifest.tag)) return null;
+    const name = `bank-rate-history-catalogue-packed-${manifest.run_date}-${file.sha256.slice(0, 12)}.json.gz${enc ? '.enc' : ''}`;
+    const url = `https://github.com/${manifest.repo}/releases/download/${manifest.tag}/${name}`;
+    if (file.name !== name || !automaticDataUrl(url) || Object.values(manifest.files).some(entry => entry?.name === name)) return null;
+    return { name, bytes: Number(file.bytes), sha256: file.sha256, url,
+      ...(encryption ? { enc: { ...encryption } } : {}) };
+  } catch { return null; }
+}
+
+export function validateLegacyHistoricalCatalogueDescriptor(manifest: Manifest, expectedRepo = 'yanniedog/AR-local'): ManifestFile | null {
   try {
     if (!manifest || !isValidCalendarDate(manifest.run_date) || !sha(manifest.files?.core?.sha256) ||
         Object.hasOwn(manifest.files, 'bank_rate_history_catalogue')) return null;

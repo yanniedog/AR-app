@@ -1,7 +1,7 @@
 import { SECTION_KEYS, type ProductDetail, type RateRow, type SectionKey } from '../types';
 import { isValidCalendarDate } from '../lib/calendarDate';
 import { normalizedProductFacts } from './productFacts';
-import { MAX_BANK_RATE_PERCENT, RATE_OBSERVATION_FIELDS, rateTierSignature } from './bankRateOverview';
+import { MAX_BANK_RATE_PERCENT, RATE_OBSERVATION_FIELDS } from './bankRateOverview';
 import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 
@@ -39,6 +39,14 @@ const rowFields = new Set(['provider', 'product_id', 'product_key', 'product_nam
   'repayment_type', 'loan_purpose', 'term', 'term_months', 'lvr_tier', 'ribbon_normalized', 'security_purpose',
   'ribbon_repayment_type', 'ribbon_rate_structure', 'ribbon_fixed_term', 'account_type', 'ribbon_deposit_kind',
   'balance_min', 'balance_max', 'interest_payment', 'feature_set', 'account_class', 'taxonomy_path']);
+// Validation admits only this fixed field vocabulary. Sort it once instead of
+// repeating locale-aware key sorting for every historical tier. Preserve the
+// exact generic rateTierSignature encoding, including absent vs present fields.
+const orderedRowFields = [...rowFields].sort((a, b) => a.localeCompare(b));
+function descriptorSignature(row: HistoricalRateDescriptor): string {
+  return JSON.stringify(orderedRowFields.filter(key => Object.hasOwn(row, key))
+    .map(key => [key, row[key as keyof HistoricalRateDescriptor]]));
+}
 // Duplicate detection is not transport authentication. Keep ordinary exact
 // signatures without hashing every tier, but bound JSON escaping amplification.
 const MAX_RETAINED_SIGNATURE = 4096, MAX_SECTION_SIGNATURE_CHARACTERS = 16 * 1024 * 1024;
@@ -138,7 +146,7 @@ function* validateCatalogueSteps(value: unknown): Generator<void, boolean, void>
       if (!record(tier) || !validDescriptor(tier.row) || !Array.isArray(tier.spans) ||
           (metadata += metadataSize(tier.row, HISTORICAL_CATALOGUE_LIMITS.metadataCharacters - metadata)) > HISTORICAL_CATALOGUE_LIMITS.metadataCharacters ||
           (spans += tier.spans.length) > HISTORICAL_CATALOGUE_LIMITS.spans) return false;
-      const identity = rateTierSignature(tier.row as RateRow);
+      const identity = descriptorSignature(tier.row);
       if (identities.has(identity)) return false;
       if (identity.length <= MAX_RETAINED_SIGNATURE &&
           signatureCharacters + identity.length <= MAX_SECTION_SIGNATURE_CHARACTERS) {
@@ -148,7 +156,7 @@ function* validateCatalogueSteps(value: unknown): Generator<void, boolean, void>
         // strings. Exact comparison also distinguishes a digest collision.
         const digest = bytesToHex(sha256(utf8ToBytes(identity)));
         const collisions = overflowIdentities.get(digest) ?? [];
-        if (collisions.some(row => rateTierSignature(row as RateRow) === identity)) return false;
+        if (collisions.some(row => descriptorSignature(row) === identity)) return false;
         collisions.push(tier.row); overflowIdentities.set(digest, collisions);
       }
       let end = 0;

@@ -3,6 +3,14 @@ import { configureHistoricalCatalogueCodec } from './historicalBankRateCatalogue
 
 /** Called after first paint; portable serializers never import Expo themselves. */
 export async function configureNativeHistoricalCatalogueCodec(): Promise<boolean> {
+  if (Platform.OS === 'web') {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getWebHistoryCodec } = require('./historicalBankRateCatalogueWeb') as typeof import('./historicalBankRateCatalogueWeb');
+    const codec = getWebHistoryCodec();
+    if (!codec) return false;
+    configureHistoricalCatalogueCodec(codec);
+    return true;
+  }
   if (Platform.OS !== 'android') return false;
   // Metro resolves this literal lazily; Node tooling never enters this adapter.
   // eslint-disable-next-line @typescript-eslint/no-require-imports

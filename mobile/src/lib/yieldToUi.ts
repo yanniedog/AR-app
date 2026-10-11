@@ -133,6 +133,9 @@ export function scheduleAfterNavigation(
  */
 export async function yieldToUi(timeoutMs: number = YIELD_TIMEOUT_MS): Promise<void> {
   await nextMacrotask();
+  // One macrotask lets queued input run. Cooperative slices explicitly request
+  // no interaction wait; a second timer doubles clamping overhead unnecessarily.
+  if (timeoutMs <= 0) return;
   await new Promise<void>((resolve) => {
     let settled = false;
     const finish = () => {

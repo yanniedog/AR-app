@@ -36,6 +36,21 @@ describe('yieldToUi', () => {
     expect(runSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
+  it('zero-delay processing yields to input without waiting for interactions again', async () => {
+    jest.useFakeTimers();
+    try {
+      const input = jest.fn();
+      setTimeout(input, 0);
+      const pending = yieldToUi(0);
+      expect(input).not.toHaveBeenCalled();
+      await jest.runOnlyPendingTimersAsync();
+      await pending;
+      expect(input).toHaveBeenCalledTimes(1);
+      expect(runSpy).not.toHaveBeenCalled();
+      expect(jest.getTimerCount()).toBe(0);
+    } finally { jest.useRealTimers(); }
+  });
+
   it('yieldToPaintFrames requires a real animation callback for every requested frame', async () => {
     const originalRaf = globalThis.requestAnimationFrame;
     const originalCancel = globalThis.cancelAnimationFrame;

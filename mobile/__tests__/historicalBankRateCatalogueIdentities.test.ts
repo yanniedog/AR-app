@@ -39,6 +39,22 @@ test('duplicate identity remains scoped to its section', () => {
   expect(sha256).not.toHaveBeenCalled();
 });
 
+test('validated descriptors retain the generic signature bytes without sorting each tier', () => {
+  const descriptor: HistoricalRateDescriptor = { ...row, product_name: '\u0001'.repeat(800),
+    term_months: 0, balance_min: 0, balance_max: 1, ribbon_normalized: false,
+    ribbon_fixed_term: 0, taxonomy_path: '', feature_set: '' };
+  const expected = new Uint8Array(Buffer.from(signature(descriptor), 'utf8'));
+  const localeCompare = jest.spyOn(String.prototype, 'localeCompare');
+  try {
+    expect(validateHistoricalBankRateCatalogue(pack([descriptor]))).toBe(true);
+    expect(localeCompare).not.toHaveBeenCalled();
+    expect(sha256).toHaveBeenCalledWith(expected);
+    // Omitted optional fields must not collide with an explicitly empty value.
+    const omitted = { ...descriptor }; delete omitted.taxonomy_path;
+    expect(validateHistoricalBankRateCatalogue(pack([descriptor, omitted]))).toBe(true);
+  } finally { localeCompare.mockRestore(); }
+});
+
 test('the large-signature fallback bounds escaped length rather than unescaped scalar length', () => {
   // Structural stress only; the captured observed rate is unchanged.
   const escaped = { ...row, product_name: '\u0001'.repeat(800) };

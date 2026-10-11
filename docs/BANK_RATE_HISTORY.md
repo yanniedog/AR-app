@@ -20,10 +20,20 @@ Bank selection reuses the prepared chart model and SVG paths without network
 requests. New profile filters evaluate local spans rather than downloading daily
 payloads or expanding every historical row observation. After the current rates
 paint, deferred preparation warms the user's historical filter result.
-Cold hydration splits decompression, hashing, validation and cache compression
-into cooperative work slices so queued input can run between them. JSON parsing
-still runs atomically. The catalogue is decoded once per process; switching banks
-does not repeat hydration.
+The bundled archive uses a build-time dictionary of shared strings, arrays and
+objects (`ar-history-dag-v1`) so the app parses repeated descriptions and evidence
+once. Unpacking links earlier dictionary nodes without expanding every repeated
+value. The decoded catalogue retains the same schema-2 descriptors, dated evidence,
+rate multiplicities and source receipts. Bounded reference, depth and expanded-size
+checks precede the existing catalogue validation. Plain schema-2 archives remain
+readable. Live producer archives gain this representation through a coordinated
+compact capability; deployment and public readback remain separate from local
+consumer support.
+Cold hydration splits remaining decompression, hashing and validation work into
+cooperative slices so queued input can run between them. JSON parsing still runs
+atomically. The catalogue is decoded once per process; switching banks does not
+repeat hydration. Descriptor validation orders its fixed field vocabulary once
+rather than sorting every historical tier.
 
 ## Producer and offline recovery
 
@@ -66,6 +76,14 @@ identities are rejected. Cache failures do not fabricate history.
 
 ## Startup and refresh
 
+New consumers prefer `manifest.bank_rate_history_catalogue_packed` when its
+descriptor is valid. Its namespace is `{schema_version: 1, file: {name, bytes,
+sha256, enc?}}`, deliberately without a URL. The app derives routing from the
+validated repository, release tag and content-addressed filename. The unchanged
+legacy capability remains available to older consumers; keeping the new descriptor
+URL-free preserves their canonical bundle identity during release retagging. The
+compact inner payload must be `ar-history-dag-v1` and at most 10 MiB decoded.
+
 The optional namespace is `{schema_version: 1, file: {name, bytes, sha256, url, enc?}}`.
 Its content-addressed asset is a gzip JSON envelope containing `schema_version: 1`,
 `run_date`, `core_sha256` (exactly the selected `files.core.sha256`) and
@@ -81,7 +99,11 @@ original descriptor URL is retained and its envelope must still match the exact
 core. Selected immutable revisions never inherit assets from another alias.
 
 The native Android codec performs inner gzip and digest work off the JavaScript
-thread after first paint. A matching prepared archive is reused for subsequent
+thread after first paint. Capable browsers use native `DecompressionStream` and
+WebCrypto SHA-256, including the web app on mobile Safari; unavailable APIs retain
+the bounded portable implementation. Native browser output is length- and
+digest-checked before fatal UTF-8 decoding and JSON parsing.
+A matching prepared archive is reused for subsequent
 refreshes. Local audits read verified caches without initiating history downloads.
 Missing or corrupt optional archives retain bundled/current history fallback.
 
@@ -106,15 +128,50 @@ resume refreshes still prepare history. Identical successful preparations reuse
 their exact core, manifest, selected-date and verified-details receipts; changed
 heads, details, failed saves or intervening preparations invalidate the shortcut.
 The bundled catalogue module is initialized only when history work starts.
+When a first-run legacy fallback's complete public baseline still matches the
+selected heads, its immutable tiers and evidence are installed directly while
+only the calendar axis is extended. This avoids rebuilding the complete archive
+through a blank catalogue. Saved candidate precedence, superseded heads, missing
+dates and non-public provenance still use the existing reconciliation path.
 
-A desktop Node proxy using the verified 26 September core, a rebuilt persisted
-suitability index and the full bundled catalogue measured cached store readiness
-at 19.77 seconds before this change and 0.20 seconds afterward. Total historical
-preparation remained about 20 seconds, retaining all 134 published observations
-on the 137-day axis. This single-run proxy uses actual cache verification,
-decoding, validation, aggregation and timer yields with native filesystem reads
-adapted to verified in-memory bytes. It excludes React rendering, storage latency
-and Android/Hermes, so it is not a phone launch-time guarantee.
+## Processing budget and verification
+
+Payload processing must finish within **5,000 ms after the payload bytes are
+available**, including verification, decoding, preparation and the selected
+profile's ready history. Cold startup, refreshed live archives and warm cached
+startup need separate measurements. Yielding work keeps controls responsive but
+does not relax this elapsed-time budget. Warm reuse must return the already
+prepared result without background processing; required-feature profile changes
+must also meet the budget.
+
+From `mobile/`, run the real bundled archive through the shipping algorithms:
+
+```sh
+npm run benchmark:history
+npm run benchmark:history -- --portable
+npm run benchmark:history -- --snapshot /path/to/previous.snapshot.json --measure-only
+```
+
+The default uses browser streams and WebCrypto on Node. JSON output identifies
+the engine, CPU, codec, archive digest, full observation counts, individual stage
+timings, cold and warm readiness, required-offset profile timing and budget checks.
+The script fails above 5,000 ms, 10 MiB decoded dictionary JSON or 3 MiB compressed;
+`--max-ms` changes the timing threshold and `--measure-only` reports failures without
+a failing exit code for baseline comparisons. Each work yield crosses one timer
+boundary to approximate the app scheduler. No historical observations are
+subsampled. An empty following-day core keeps all archive dates historical without
+inventing current rates.
+
+This is a **Node regression proxy**, excluding current-core classification, network,
+filesystem latency, module initialization, cache persistence and React rendering.
+Passing it does not establish phone acceptance. Android/Hermes and mobile Safari
+must independently satisfy the complete post-download processing budget on the
+actual supported devices; native-device acceptance remains unverified until those
+runs are recorded. Browser and portable codecs have separate performance results;
+both regression commands run in `npm run ci` before tests and export. A Windows
+Node 24 / i7-1265U run of the compact archive measured 1.68 seconds with browser
+primitives and 2.59 seconds with the portable codec; warm reuse was below 0.1 ms.
+These are environment-specific proxy results, not native acceptance evidence.
 
 ## Reproduce the bundled catalogue
 
@@ -142,8 +199,9 @@ The wrapper rechecks all source bindings and raw assets, validates the catalogue
 using the shipping app's schema, and independently rebuilds each observed day
 from its verified core/details pair. Every descriptor, rate multiplicity and dated
 evidence record must match before it writes
-`src/data/historicalBankRateCatalogue.snapshot.json`. The decoded catalogue is
-42,691,597 bytes; gzip is 2,228,451 bytes. Decoded SHA-256:
-`7d6c81f3d69944350b7e45697b789ee130626cba2004899775e9764a11ef8014`.
+`src/data/historicalBankRateCatalogue.snapshot.json`. The legacy decoded catalogue
+is 42,691,597 bytes; the dictionary stores the same data in 9,621,972 bytes with a
+2,152,089-byte gzip. Decoded dictionary SHA-256:
+`c1ca46075668334b3737accd321590301f58ae63114caffe125d3ec384b5f8b9`.
 Only public product data is included. The older numerical baseline is no longer
 imported by the runtime refresh path.

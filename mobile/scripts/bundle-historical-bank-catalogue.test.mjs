@@ -56,7 +56,9 @@ test('catalogue wrapper binds both assets and round-trips deterministic compress
     const decoded = gunzipSync(Buffer.from(snapshot.gzip_base64, 'base64'));
     assert.equal(hash(decoded), snapshot.sha256);
     assert.equal(decoded.length, snapshot.bytes);
-    assert.deepEqual(JSON.parse(decoded), data.catalogue);
+    assert.equal(snapshot.catalogue_sha256, hash(JSON.stringify(data.catalogue)));
+    assert.equal(JSON.parse(decoded).format, 'ar-history-dag-v1');
+    assert.deepEqual(generator.unpackHistoricalBankRateCatalogue(JSON.parse(decoded)), data.catalogue);
     assert.equal(report.observed_dates, 1);
     assert.deepEqual(generator.build(data.directory, data.filename).snapshot, snapshot);
   } finally { cleanup(data.directory); }

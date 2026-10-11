@@ -13,6 +13,7 @@ const { audit, options, fetchBytes } = require('./audit-public-payload.cjs');
 const { automaticDataUrl, APP_DATA_ORIGIN } = require('../src/lib/automaticDataAccess.ts');
 const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts');
+const { packHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
 const sample = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../assets/sample');
 const hash = (body) => createHash('sha256').update(body).digest('hex');
 
@@ -234,7 +235,7 @@ function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}
   const { manifest, directory, catalogue } = value;
   const base = `https://github.com/${manifest.repo}/releases/download/`;
   manifest.tag = `app-payload-${manifest.run_date}-r000001`;
-  for (const file of [...Object.values(manifest.files), manifest.bank_rate_history_catalogue.file]) file.url = `${base}${manifest.tag}/${file.name}`;
+  for (const file of [...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : [])]) file.url = `${base}${manifest.tag}/${file.name}`;
   const bundle = payloadBundleIdentity(manifest);
   manifest.payload_revision = { schema_version: 1, revision: 1, parent_revision: null,
     bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
@@ -250,8 +251,9 @@ function publicCandidate(t, value, editIndex = () => {}, editRevision = () => {}
   editIndex(index);
   const assets = new Map([[`${base}${manifest.tag}/manifest.json`, manifestBytes],
     [`${base}app-payload-latest/dates-index.json`, Buffer.from(JSON.stringify(index))],
-    ...[...Object.values(manifest.files), manifest.bank_rate_history_catalogue.file].map(file =>
-      [file.url, fs.readFileSync(path.join(directory, file.name))])]);
+    ...[...Object.values(manifest.files), ...(manifest.bank_rate_history_catalogue ? [manifest.bank_rate_history_catalogue.file] : []),
+      ...(manifest.bank_rate_history_catalogue_packed ? [manifest.bank_rate_history_catalogue_packed.file] : [])].map(file =>
+      [file.url ?? `${base}${manifest.tag}/${file.name}`, fs.readFileSync(path.join(directory, file.name))])]);
   const deliveredAssets = new Map([...assets].map(([url, bytes]) => [automaticDataUrl(url), bytes]));
   mockFetch(t, async url => {
     const clean = String(url).split('?')[0], bytes = deliveredAssets.get(clean);
@@ -341,4 +343,61 @@ for (const [label, change] of [
   const report = await audit(opts);
   assert.equal(report.status, 'FAIL');
   assert.equal(report.assets.bank_rate_history_catalogue.status, 'FAIL');
+});
+
+function addPacked(value, editEnvelope = () => {}, editInner = value => value) {
+  const { directory, manifest, catalogue } = value;
+  const inner = Buffer.from(JSON.stringify(editInner(packHistoricalBankRateCatalogue(catalogue))));
+  const envelope = { schema_version: 1, run_date: manifest.run_date, core_sha256: manifest.files.core.sha256,
+    catalogue: { sha256: hash(inner), bytes: inner.length, gzip_base64: gzipSync(inner).toString('base64') } };
+  editEnvelope(envelope);
+  const bytes = gzipSync(Buffer.from(JSON.stringify(envelope))), sha256 = hash(bytes);
+  const name = `bank-rate-history-catalogue-packed-${manifest.run_date}-${sha256.slice(0, 12)}.json.gz`;
+  manifest.bank_rate_history_catalogue_packed = { schema_version: 1, file: { name, sha256, bytes: bytes.length } };
+  fs.writeFileSync(path.join(directory, name), bytes);
+  fs.writeFileSync(path.join(directory, 'manifest.json'), JSON.stringify(manifest));
+  return value;
+}
+
+for (const acquisition of ['private', 'public']) test(`${acquisition} audit verifies both compact and legacy assets independently`, async t => {
+  const value = addPacked(detachedCandidate(t));
+  const report = await audit(acquisition === 'public' ? publicCandidate(t, value) : value.opts);
+  for (const key of ['bank_rate_history_catalogue', 'bank_rate_history_catalogue_packed']) {
+    assert.equal(report.assets[key].status, 'PASS');
+    assert.equal(report.assets[key].sha256, value.manifest[key].file.sha256);
+    assert.equal(report.assets[key].observed_dates, 1);
+  }
+  assert.notEqual(report.assets.bank_rate_history_catalogue.sha256, report.assets.bank_rate_history_catalogue_packed.sha256);
+  if (acquisition === 'public') assert.ok(report.assets.bank_rate_history_catalogue_packed.url.includes('/app-payload-' + value.manifest.run_date + '-r000001/'));
+});
+
+for (const acquisition of ['private', 'public']) test(`${acquisition} audit verifies compact-only publication`, async t => {
+  const value = addPacked(detachedCandidate(t));
+  delete value.manifest.bank_rate_history_catalogue;
+  fs.writeFileSync(path.join(value.directory, 'manifest.json'), JSON.stringify(value.manifest));
+  const report = await audit(acquisition === 'public' ? publicCandidate(t, value) : value.opts);
+  assert.equal(report.assets.bank_rate_history_catalogue_packed.status, 'PASS');
+  assert.equal(report.assets.bank_rate_history_catalogue, undefined);
+  assert.ok(report.checks.some(check => check.code === 'bank-history-selected-sources'));
+});
+
+for (const [failure, editEnvelope, editInner] of [
+  ['oversized', value => { value.catalogue.bytes = 10 * 1024 * 1024 + 1; }],
+  ['wrong core', value => { value.core_sha256 = 'f'.repeat(64); }],
+  ['wrong digest', value => { value.catalogue.sha256 = 'f'.repeat(64); }],
+  ['malformed DAG', undefined, () => ({ format: 'ar-history-dag-v1', root: 0, nodes: [[0, 'A']] })],
+  ['legacy inner', undefined, () => ({ schema_version: 2 })],
+]) test(`audit reports bad compact ${failure} independently from valid legacy`, async t => {
+  const value = addPacked(detachedCandidate(t), editEnvelope, editInner);
+  const report = await audit(value.opts);
+  assert.equal(report.status, 'FAIL');
+  assert.equal(report.assets.bank_rate_history_catalogue.status, 'PASS');
+  assert.equal(report.assets.bank_rate_history_catalogue_packed.status, 'FAIL');
+});
+
+test('audit refuses stale compact-only bundle identity before reading optional asset', async t => {
+  const value = addPacked(detachedCandidate(t));
+  delete value.manifest.bank_rate_history_catalogue;
+  const opts = publicCandidate(t, value, () => {}, revision => { revision.generation_id = `sha256-${'f'.repeat(64)}`; });
+  await assert.rejects(audit(opts), /Detached history bundle identity mismatch/);
 });
