@@ -14,6 +14,7 @@ import {
   AppState,
   InteractionManager,
   Platform,
+  ScrollView,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -3781,9 +3782,15 @@ export function PerformanceAuditRunner() {
             {percent}%
           </AppText>
         </Row>
-        <AppText variant="small" color="textMuted" numberOfLines={2}>
-          {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
-        </AppText>
+        {!state.paused && state.progress.label.startsWith('Background work:') ? (
+          <ScrollView style={{ maxHeight: 180 }}>
+            <AppText variant="small" color="textMuted">{state.progress.label}</AppText>
+          </ScrollView>
+        ) : (
+          <AppText variant="small" color="textMuted" numberOfLines={2}>
+            {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
+          </AppText>
+        )}
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="App health audit progress"

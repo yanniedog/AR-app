@@ -27,7 +27,7 @@ export function describeAuditBackgroundWork(wait: AuditBackgroundWorkWait): stri
   const detail = active.map(job =>
     `${job.label}${job.runDate ? ` (${job.runDate})` : ''}: ${job.stage} — ${(job.stageElapsedMs / 1000).toFixed(1)}s in stage, ${(job.elapsedMs / 1000).toFixed(1)}s total`);
   if ((wait.omittedActiveJobs ?? 0) > 0) detail.push(`${wait.omittedActiveJobs} additional active workers (stage evidence omitted by diagnostic limit)`);
-  return `Background work: ${(wait.elapsedMs / 1000).toFixed(1)}s waiting. ${detail.join('; ') ||
+  return `Background work: ${(wait.elapsedMs / 1000).toFixed(1)}s waiting.\n${detail.join('\n') ||
     (wait.payloadWork.activeWork.length ? `${wait.payloadWork.activeWork.join(', ')} (stage unavailable)` : 'Work settled')}`;
 }
 
