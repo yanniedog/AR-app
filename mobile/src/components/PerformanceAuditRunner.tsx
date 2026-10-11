@@ -14,6 +14,7 @@ import {
   AppState,
   InteractionManager,
   Platform,
+  ScrollView,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -51,6 +52,7 @@ import { collectExternalAuditLinks, beginExternalLinkCapture, endExternalLinkCap
   getCapturedExternalAuditLinks } from '../lib/externalLinkInventory';
 import type { TrustedExternalUrlRequest } from '../lib/trustedExternalUrl';
 import { captureAuditPayloadWork } from '../lib/performanceAuditPayloadWork';
+import { waitForAuditBackgroundWork, describeAuditBackgroundWork, type AuditBackgroundWorkWait } from '../lib/performanceAuditBackgroundWork';
 import { isDebugLogUploadBusy, startDebugLogUpload, subscribeDebugLogUpload } from '../lib/debugLogSharing';
 import {
   buildDeepPerformanceAuditPlan,
@@ -404,20 +406,10 @@ function assertDatasetRevision(expected: AuditDatasetRevision): void {
   }
 }
 
-async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog): Promise<void> {
-  while (true) {
-    assertSessionActive(watchdog);
-    const state = useStore.getState();
-    if (!state.refreshing && !state.postRefreshWarming && !state.bankRateHistoryLoading) {
-      // Require a short quiet window so the refresh finally block cannot move
-      // into post-warm between the check and the audit snapshot.
-      await delay(150);
-      assertSessionActive(watchdog);
-      const settled = useStore.getState();
-      if (!settled.refreshing && !settled.postRefreshWarming && !settled.bankRateHistoryLoading) return;
-    }
-    await delay(50);
-  }
+async function waitForRefreshWork(watchdog: PerformanceAuditInactivityWatchdog,
+  observe: (wait: AuditBackgroundWorkWait) => void): Promise<void> {
+  await waitForAuditBackgroundWork({ getState: useStore.getState,
+    assertActive: () => assertSessionActive(watchdog), observe, delay });
 }
 
 async function waitForPath(
@@ -2578,6 +2570,9 @@ export function PerformanceAuditRunner() {
       let total = platformBenchmarkChecks + SECTION_ORDER.length +
         navigationJourneys.length * 2 +
         plan.passes.reduce((sum, pass) => sum + pass.steps.length, 0);
+      let backgroundWorkWait: AuditBackgroundWorkWait | undefined;
+      let lastBackgroundLogMs = -Infinity;
+      let lastBackgroundStage = '';
       const checks: AuditCheck[] = [];
       let externalLinks: TrustedExternalUrlRequest[] = [];
       const linkCapture = beginExternalLinkCapture();
@@ -2699,7 +2694,24 @@ export function PerformanceAuditRunner() {
           kind: 'setup', phase: 'waiting-for-payload-work', sessionId,
           payloadWork: captureAuditPayloadWork(useStore.getState()),
         });
-        await waitForRefreshWork(watchdog);
+        await waitForRefreshWork(watchdog, wait => {
+          backgroundWorkWait = wait;
+          updatePerformanceAuditProgress(completed, total, describeAuditBackgroundWork(wait));
+          const signature = JSON.stringify([wait.status, wait.payloadWork.activeWork,
+            wait.jobs.map(job => [job.id, job.stage, job.outcome])]);
+          if (signature !== lastBackgroundStage || Date.now() - lastBackgroundLogMs >= 10_000) {
+            logAuditEvent(app, { kind: 'setup', phase: 'background-work-progress', sessionId,
+              status: wait.status, elapsedMs: wait.elapsedMs, payloadWork: wait.payloadWork,
+              jobs: wait.jobs.map(({ stages: _stages, ...job }) => job),
+            });
+            lastBackgroundLogMs = Date.now();
+            lastBackgroundStage = signature;
+          }
+          if (wait.status !== 'waiting') logAuditEvent(app, {
+            kind: 'setup', phase: 'background-work-wait-finished', sessionId, backgroundWorkWait: wait,
+          });
+          // Setup observations never extend the watchdog or increase coverage.
+        });
         // Setup snapshots the store, plan and environment the whole run is
         // pinned to. Capturing that from a backgrounded process would pin the
         // report to state the user cannot see, so wait for the foreground here
@@ -3264,6 +3276,7 @@ export function PerformanceAuditRunner() {
             lastStoredCheckAt,
           },
           environment,
+          backgroundWorkWait,
           plan,
           coverage: {
             plannedChecks: total,
@@ -3510,6 +3523,8 @@ export function PerformanceAuditRunner() {
             status: 'fail',
             durationMs: null,
             metrics: {
+              backgroundWorkWaitMs: backgroundWorkWait?.elapsedMs ?? null,
+              backgroundWorkDetail: backgroundWorkWait ? describeAuditBackgroundWork(backgroundWorkWait) : null,
               completedBeforeFailure: completed,
               plannedChecks: total,
               executionAttempted: false,
@@ -3615,6 +3630,7 @@ export function PerformanceAuditRunner() {
               dimensions.fontScale,
             ),
             plan,
+            backgroundWorkWait,
             summary: partialSummary,
             checks,
             routeAggregates: aggregateRepeatedJourneys(checks),
@@ -3788,9 +3804,15 @@ export function PerformanceAuditRunner() {
             {percent}%
           </AppText>
         </Row>
-        <AppText variant="small" color="textMuted" numberOfLines={2}>
-          {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
-        </AppText>
+        {!state.paused && state.progress.label.startsWith('Background work:') ? (
+          <ScrollView style={{ maxHeight: 180 }}>
+            <AppText variant="small" color="textMuted">{state.progress.label}</AppText>
+          </ScrollView>
+        ) : (
+          <AppText variant="small" color="textMuted" numberOfLines={2}>
+            {state.paused ? 'Paused — the audit continues when you return' : state.progress.label}
+          </AppText>
+        )}
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="App health audit progress"

@@ -243,7 +243,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
   const kept = new Set([
     'schemaVersion', 'sessionId', 'startedAt', 'finishedAt', 'durationMs', 'partial',
     'app', 'watchdog', 'environment', 'plan', 'coverage', 'summary', 'checks', 'routeAggregates', 'limitations',
-    'appHealth',
+    'appHealth', 'backgroundWorkWait',
   ]);
   const extras: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
@@ -269,6 +269,7 @@ export function compactPerformanceAuditReportForLog(report: unknown): unknown {
     routeAggregates: source.routeAggregates,
     limitations: source.limitations,
     appHealth: compactAppHealth,
+    backgroundWorkWait: source.backgroundWorkWait,
     ...extras,
   });
 }
