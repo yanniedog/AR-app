@@ -29,11 +29,13 @@ export interface PassiveAuditStatus {
   busy: boolean;
   linksCompleted: number;
   linksTotal: number;
+  linksPreparing: boolean;
+  linksCapped: boolean;
   lastError: string | null;
 }
 const listeners = new Set<() => void>();
 let status: PassiveAuditStatus = { completed: 0, total: APP_HEALTH_DATA_CHECKS.length,
-  updatedAt: null, nativeStatus: 'unknown', busy: false, linksCompleted: 0, linksTotal: 0, lastError: null };
+  updatedAt: null, nativeStatus: 'unknown', busy: false, linksCompleted: 0, linksTotal: 0, linksPreparing: false, linksCapped: false, lastError: null };
 let record: PassiveAuditRecord | null = null;
 let recordDirty = false;
 let snapshot: AppHealthDataSnapshot | null = null;
@@ -54,7 +56,7 @@ function emit(patch: Partial<PassiveAuditStatus> = {}): void {
   const links = passiveLinkProgress();
   status = { ...status, ...patch, completed: Object.values(record?.entries ?? {}).filter(entry =>
     Date.now() >= entry.checkedAt && Date.now() - entry.checkedAt < PASSIVE_AUDIT_MAX_AGE_MS).length,
-    linksCompleted: links.completed, linksTotal: links.total,
+    linksCompleted: links.completed, linksTotal: links.total, linksPreparing: links.preparing, linksCapped: links.capped,
     updatedAt: record ? new Date(Math.max(record.inputAt,
       ...Object.values(record.entries).map(entry => entry.checkedAt))).toISOString() : null };
   for (const listener of listeners) listener();

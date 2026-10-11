@@ -368,12 +368,14 @@ function PerformanceAuditScreenInner() {
           and profile-based coverage counts, are uploaded to paste.
           Anyone with the resulting link can read them. A separate deidentified report is also available.
         </AppText>
-        <AppText variant="small" weight="700">Background checks: {passive.completed} of {passive.total} data checks and {passive.linksCompleted} of {passive.linksTotal} links preloaded</AppText>
+        <AppText variant="small" weight="700">Background checks: {passive.completed} of {passive.total} data checks and {passive.linksCompleted} of {passive.linksPreparing || passive.linksCapped ? 'at least ' : ''}{passive.linksTotal} links preloaded</AppText>
         <AppText variant="tiny" color="textMuted">
           Data and link checks preload slowly from data already on this device. Screen-off work runs
           when Android or iOS permits; visual and interaction checks run in the foreground.
           {passive.nativeStatus === 'restricted' ? ' Background execution is currently restricted by the system.' : ''}
           {passive.nativeStatus === 'unavailable' ? ' This device supports preloading while the app is open only.' : ''}
+          {passive.linksPreparing ? ' More links await preparation from the loaded catalogue.' : ''}
+          {passive.linksCapped ? ' The background storage limit was reached; additional links are checked in the manual audit.' : ''}
           {passive.updatedAt ? ` Last background evidence: ${new Date(passive.updatedAt).toLocaleString()}.` : ''}
           {passive.lastError ? ` ${passive.lastError} Unfinished checks still run during the manual audit.` : ''}
         </AppText>

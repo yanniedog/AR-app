@@ -24,6 +24,10 @@ saved-list fixtures. Its complete report contains 2,732 checks and 109 failures.
 - Cached results require matching inputs, publication and app build and expire
   after six hours. Resumable public inputs last seven days so a delayed native
   wake can make progress. Link checkpoints are compact and bounded below 900 KiB.
+  Link discovery also yields: each slice allows at most 16 new URL validations,
+  256 raw candidates or 20 ms. Repeated raw URLs are skipped before parsing.
+  Partial discovery and storage-capped inventories are labeled separately;
+  remaining links are checked by the manual audit.
   Freshness and all rendered/interaction evidence are checked in the manual run.
 - Products, banks and tiers are sampled using a recorded random session seed.
   Samples span every populated category and prefer different banks. Repeat

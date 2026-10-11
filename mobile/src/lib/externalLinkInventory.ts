@@ -26,7 +26,7 @@ export function uniqueExternalAuditLinks(requests: readonly TrustedExternalUrlRe
   return [...unique.values()];
 }
 
-export function collectExternalAuditLinks({
+export function* iterateExternalAuditLinks({
   details,
   economicOutlook,
   releaseNotes = [],
@@ -36,24 +36,30 @@ export function collectExternalAuditLinks({
   economicOutlook?: Pick<EconomicOutlookPayload, 'indicators'> | null;
   releaseNotes?: readonly Pick<VersionChangelogSummary, 'releaseUrl' | 'version'>[];
   observed?: readonly TrustedExternalUrlRequest[];
-} = {}): TrustedExternalUrlRequest[] {
-  const requests: TrustedExternalUrlRequest[] = [...FIXED_EXTERNAL_AUDIT_LINKS, ...observed];
-  for (const detail of Object.values(details?.products ?? {})) {
+} = {}): Generator<TrustedExternalUrlRequest> {
+  yield* FIXED_EXTERNAL_AUDIT_LINKS;
+  yield* observed;
+  for (const productKey in details?.products ?? {}) {
+    if (!Object.prototype.hasOwnProperty.call(details?.products, productKey)) continue;
+    const detail = details!.products[productKey];
     for (const [kind, url] of Object.entries(detail.links ?? {})) {
-      if (url) requests.push({ url, label: `Lender ${kind} source`, purpose: 'lender_source' });
+      if (url) yield { url, label: `Lender ${kind} source`, purpose: 'lender_source' };
     }
     for (const document of detail.sourceDocuments ?? []) {
       const url = document.sourceUrl ?? document.url;
-      if (url) requests.push({ url, label: document.label || 'Lender source document', purpose: 'lender_source' });
+      if (url) yield { url, label: document.label || 'Lender source document', purpose: 'lender_source' };
     }
   }
   for (const indicator of economicOutlook?.indicators ?? []) {
-    if (indicator.sourceUrl) requests.push({ url: indicator.sourceUrl, label: `${indicator.label} source`, purpose: 'official_economic_source' });
+    if (indicator.sourceUrl) yield { url: indicator.sourceUrl, label: `${indicator.label} source`, purpose: 'official_economic_source' };
   }
   for (const entry of releaseNotes) {
-    requests.push({ url: entry.releaseUrl, label: `Australian Rates ${entry.version} changelog`, purpose: 'app_release' });
+    yield { url: entry.releaseUrl, label: `Australian Rates ${entry.version} changelog`, purpose: 'app_release' };
   }
-  return uniqueExternalAuditLinks(requests);
+}
+
+export function collectExternalAuditLinks(input: Parameters<typeof iterateExternalAuditLinks>[0] = {}): TrustedExternalUrlRequest[] {
+  return uniqueExternalAuditLinks([...iterateExternalAuditLinks(input)]);
 }
 
 export interface ExternalLinkCaptureHandle { generation: number }

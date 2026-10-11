@@ -3,19 +3,20 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
 import type { DetailsPayload } from '../types';
 import { auditExternalLink, type ExternalLinkAuditResult } from './externalLinkAudit';
-import { collectExternalAuditLinks } from './externalLinkInventory';
+import { advancePassiveLinkQueue, createPassiveLinkQueue, passiveLinkRequestIdentity,
+  PASSIVE_LINK_MAX_BYTES as MAX_BYTES, PASSIVE_LINK_MAX_COUNT as MAX_LINKS, type PassiveLinkQueue } from './passiveAuditLinkQueue';
 import { trustedExternalUrl, type TrustedExternalUrlRequest } from './trustedExternalUrl';
 import { StandardUrl } from './standardUrl';
 import { PASSIVE_AUDIT_MAX_AGE_MS, PASSIVE_AUDIT_INPUT_MAX_AGE_MS } from './passiveAuditCache';
 
 const KEY = 'ar-passive-links-v1';
-const MAX_BYTES = 900 * 1024;
-const MAX_LINKS = 5_000;
 interface Entry { result: ExternalLinkAuditResult; checkedAt: number; durationMs: number }
 type CompactEntry = [ExternalLinkAuditResult['handler']['status'], number, number, boolean];
 interface Record {
   schema: 1; appBuild: string; revision: string; createdAt: number;
   pending: TrustedExternalUrlRequest[]; cursor: number; entries: (CompactEntry | null)[];
+  inventoryComplete?: boolean;
+  inventoryCapped?: boolean;
 }
 let record: Record | null = null;
 let loaded = false;
@@ -26,15 +27,17 @@ let indexedRecord: Record | null = null;
 let lookup = new Map<string, number>();
 let writes: Promise<void> = Promise.resolve();
 let detailsRef: DetailsPayload | null = null;
+let preparation: { queue: PassiveLinkQueue; target: Record; prior: Map<string, CompactEntry> } | null = null;
 const requestKey = (request: TrustedExternalUrlRequest) =>
   bytesToHex(sha256(utf8ToBytes(JSON.stringify([request.purpose, request.url]))));
 const fresh = (value: Record, appBuild: string, now: number) => value.appBuild === appBuild &&
   now >= value.createdAt && now - value.createdAt < PASSIVE_AUDIT_INPUT_MAX_AGE_MS;
 
-export function passiveLinkProgress(): { completed: number; total: number } {
+export function passiveLinkProgress(): { completed: number; total: number; preparing: boolean; capped: boolean } {
   const now = Date.now();
   return { completed: record?.entries.filter(entry => entry && now >= entry[1] && now - entry[1] < PASSIVE_AUDIT_MAX_AGE_MS).length ?? 0,
-    total: record?.pending.length ?? 0 };
+    total: record?.pending.length ?? 0, preparing: record?.inventoryComplete === false && !record?.inventoryCapped,
+    capped: record?.inventoryCapped === true };
 }
 
 /** Only public, credential-free destinations are persisted. Rejected URLs are
@@ -60,28 +63,37 @@ export async function preloadPassiveLinks(input: {
   if (input.stopped()) return;
   if (input.details && input.revision && (detailsRef !== input.details || !record ||
       record.revision !== input.revision || !fresh(record, input.appBuild, now))) {
-    const pending: TrustedExternalUrlRequest[] = [];
-    let bytes = 0;
-    for (const request of collectExternalAuditLinks({ details: input.details })) {
-      if (!trustedExternalUrl(request).ok) continue;
-      const next = { ...request, label: request.label.slice(0, 60) };
-      bytes += utf8ToBytes(JSON.stringify(next)).length + 80;
-      if (bytes > MAX_BYTES - 2048 || pending.length >= MAX_LINKS) break;
-      pending.push(next);
+    const prior = new Map<string, CompactEntry>();
+    if (record?.revision === input.revision && fresh(record, input.appBuild, now)) {
+      record.pending.forEach((request, index) => {
+        const entry = record!.entries[index];
+        if (entry) prior.set(passiveLinkRequestIdentity(request), entry);
+      });
     }
-    if (!record || record.revision !== input.revision || !fresh(record, input.appBuild, now)) {
-      record = { schema: 1, appBuild: input.appBuild, revision: input.revision,
-        createdAt: now, pending, cursor: 0, entries: [] };
-    } else {
-      // Exact request hashes make additions/removals safe on a same-revision
-      // in-memory details replacement; existing results remain attributable.
-      if (JSON.stringify(record.pending) !== JSON.stringify(pending)) { record.entries = []; record.cursor = 0; }
-      record.pending = pending;
-    }
+    preparation?.queue.iterator.return(undefined);
+    const queue = createPassiveLinkQueue(input.details);
+    record = { schema: 1, appBuild: input.appBuild, revision: input.revision,
+      createdAt: now, pending: queue.pending, cursor: 0, entries: [], inventoryComplete: false };
+    preparation = { queue, target: record, prior };
     detailsRef = input.details;
     dirty = true; indexedRecord = null;
   }
-  if (!record || !fresh(record, input.appBuild, now)) { record = null; return; }
+  if (!record || !fresh(record, input.appBuild, now)) {
+    preparation?.queue.iterator.return(undefined); record = null; preparation = null; return;
+  }
+  if (preparation?.target === record) {
+    const count = record.pending.length;
+    advancePassiveLinkQueue(preparation.queue, input.stopped);
+    for (let index = count; index < record.pending.length; index++) {
+      record.entries[index] = preparation.prior.get(passiveLinkRequestIdentity(record.pending[index])) ?? null;
+    }
+    if (record.pending.length !== count) { dirty = true; indexedRecord = null; }
+    if (preparation.queue.done) {
+      record.inventoryComplete = !preparation.queue.capped;
+      record.inventoryCapped = preparation.queue.capped;
+      dirty = true; preparation = null;
+    }
+  }
   const active = record;
   if (active.cursor === active.pending.length && active.entries.some(entry => !entry || now - entry[1] >= PASSIVE_AUDIT_MAX_AGE_MS)) {
     active.cursor = 0;
@@ -107,7 +119,7 @@ export async function preloadPassiveLinks(input: {
     await new Promise<void>(resolve => setTimeout(resolve, 15));
   }
   if (lastWriteAt === 0 || Date.now() - lastWriteAt >= 30_000 ||
-    active.cursor - lastWrittenCursor >= 64 || active.cursor === active.pending.length) await flushPassiveLinks();
+    active.cursor - lastWrittenCursor >= 64 || (!preparation && active.cursor === active.pending.length)) await flushPassiveLinks();
 }
 
 /** Checkpoint at most every 30 seconds/64 links, plus background/completion.
@@ -136,7 +148,8 @@ export function preloadedPassiveLink(request: TrustedExternalUrlRequest, appBuil
     indexedRecord = record;
   }
   const index = lookup.get(requestKey(request));
-  const entry = index == null ? null : record.entries[index];
+  const entry = (index == null ? null : record.entries[index]) ?? (preparation?.target === record
+    ? preparation.prior.get(passiveLinkRequestIdentity(request)) : null);
   if (!entry || !Number.isFinite(entry[1]) || entry[1] > now || now - entry[1] >= PASSIVE_AUDIT_MAX_AGE_MS ||
     !Number.isFinite(entry[2]) || entry[2] < 0 || !['pass', 'fail', 'unknown'].includes(entry[0])) return null;
   const trusted = trustedExternalUrl(request);
