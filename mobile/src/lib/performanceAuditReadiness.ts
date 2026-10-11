@@ -642,7 +642,8 @@ export class PerformanceAuditReadinessRegistry {
       for (const probe of surface.probes) {
         if (limitedKinds && !limitedKinds.has(probe.kind)) continue;
         if (!limitedKinds && !probe.required && !selectedKinds?.has(probe.kind)) continue;
-        if (probe.kind === 'graphic' && !probe.required && probe.expectedCount === 0 &&
+        if (probe.kind === 'graphic' && !probe.required && !selectedKinds?.has('graphic') &&
+            !limitedKinds?.has('graphic') && probe.status === 'ready' && probe.expectedCount === 0 &&
             probe.actualCount === 0 && probe.emptyStateRendered !== true) continue;
         if (probe.status === 'error') {
           blockers.push({
