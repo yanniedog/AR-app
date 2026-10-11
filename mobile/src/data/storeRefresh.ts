@@ -13,6 +13,7 @@ import {
   needsDetailsForNotifications,
   profileAccountFeaturesNeedDetails,
 } from './optionalPrefs';
+import { backgroundPayloadWork, type BackgroundWorkOutcome } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { logStoreRefreshSkipped } from '../lib/degradationLog';
 import { hapticRefreshComplete } from '../lib/haptics';
@@ -105,26 +106,38 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         notifyCtx: NotifyContext | null,
         optionalWork: OptionalRefreshWork,
       ) => {
+        const work = backgroundPayloadWork.begin('Post-refresh warming', get().core?.run_date ?? null, 'Preparing optional history assets');
+        const warmAsset = async (label: string, action: () => Promise<void>, error: () => string | null | undefined) => {
+          const asset = backgroundPayloadWork.begin(label, get().core?.run_date ?? null, 'Loading and validating optional asset');
+          try { await action(); asset.finish(error() ? 'failed' : 'completed'); }
+          catch (caught) { asset.finish('failed'); throw caught; }
+        };
         try {
           if (!background) {
             await yieldToUi();
             await Promise.all([
-              optionalWork.historyBanks ? get().ensureHistoryBanks() : Promise.resolve(),
-              optionalWork.bankInsights ? get().ensureBankInsights() : Promise.resolve(),
-              optionalWork.bankSpreadHistory ? get().ensureBankSpreadHistory() : Promise.resolve(),
+              optionalWork.historyBanks ? warmAsset('Bank summary history', () => get().ensureHistoryBanks(), () => get().historyBanksError) : Promise.resolve(),
+              optionalWork.bankInsights ? warmAsset('Bank insights', () => get().ensureBankInsights(), () => get().bankInsightsError) : Promise.resolve(),
+              optionalWork.bankSpreadHistory ? warmAsset('Bank spread history', () => get().ensureBankSpreadHistory(), () => get().bankSpreadHistoryError) : Promise.resolve(),
             ]);
           }
           // The calendar is tiny and drives decision alerts/countdowns. Keep it
           // current even in a bounded OS-scheduled refresh; heavy ledgers remain
           // foreground-only.
-          if (optionalWork.rbaCalendar) await get().ensureRbaCalendar();
+          if (optionalWork.rbaCalendar) {
+            work.stage('Loading RBA calendar');
+            await warmAsset('RBA calendar', () => get().ensureRbaCalendar(), () => get().rbaCalendarError);
+          }
           // A product screen may have started ensureDetails during the yield;
           // wait for that in-flight load so we do not race on detailsLoading.
           if (!background) {
+            work.stage('Waiting for in-flight product details');
             while (get().detailsLoading) await yieldToUi();
           }
+          work.stage('Warming product details');
           await warmDetails();
           if (!background && get().prefs.enableDeepSearch && get().manifest?.files.search_index) {
+            work.stage('Loading search index');
             await get().ensureSearchIndex();
           }
           const afterWarm = get();
@@ -143,12 +156,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             // The suitability gate is required for standard-only product
             // integrity. Build it after refreshing=false; subsequent startups
             // hydrate the small persisted Set instead of parsing details again.
+            work.stage('Rebuilding product suitability index');
             await get().ensureDetails({ force: true });
           }
           // Suitability index is built inside ensureDetails; if details were
           // already warm (up-to-date refresh), rebuild from the live pair.
           const live = get();
           if (!background && live.core && live.details && !getSuitabilityIndex()) {
+            work.stage('Rebuilding product suitability index');
             await rebuildAndInstallSuitabilityIndex(
               live.core,
               live.details,
@@ -173,6 +188,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             if (!state.prefs.notificationsEnabled) return;
             // Re-read favorites/subscriptions at notify time so a user who
             // unsubscribes during the yield window is not notified for them.
+            work.stage('Computing rate-change notifications');
             const messages = computeChanges(
               notifyCtx.previousCore,
               notifyCtx.core,
@@ -184,10 +200,12 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               state.prefs.depositRankMetric,
               state.prefs.mortgageRateMetric,
             );
+            work.stage('Delivering rate-change notifications');
             await notify(messages);
             debugLog.info('store', `notified ${messages.length} rate-change message(s)`);
           }
         } catch (err) {
+          work.finish('failed');
           debugLog.warn(
             'store',
             `post-refresh warm failed: ${String((err as Error)?.message ?? err)}`,
@@ -196,7 +214,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           // refresh remains resilient, while headless notification work must
           // reject so the task handler can return BackgroundTaskResult.Failed.
           if (background) throw err;
-        }
+        } finally { work.finish(); }
       };
 
       if (get().refreshing) {
@@ -214,8 +232,13 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         'store',
         `refresh start manual=${manual} repairCache=${repairCache} background=${background}`,
       );
+      const work = backgroundPayloadWork.begin('Payload refresh', null, 'Fetching current manifest');
+      let workOutcome: BackgroundWorkOutcome = 'completed';
       set({ refreshing: true });
-      const onProgress = (snapshot: PayloadProgressSnapshot) => set({ payloadProgress: snapshot });
+      const onProgress = (snapshot: PayloadProgressSnapshot) => {
+        work.stage(`${snapshot.phase}: ${snapshot.fileName}`);
+        set({ payloadProgress: snapshot });
+      };
       let deferWarm = false;
       let historyWork: Promise<void> | null = null;
       let notifyCtx: NotifyContext | null = null;
@@ -584,6 +607,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         set({ refreshOutcome: pendingIngestRunDate ? null : 'success' });
         return true;
       } catch (err) {
+        workOutcome = 'failed';
         const msg = String((err as Error)?.message ?? err);
         debugLog.error('store', `refresh failed: ${msg}`);
         const hasData = !!get().core;
@@ -608,9 +632,14 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         });
         if (manual) hapticRefreshComplete();
         try {
-          if (deferWarm) await runPostRefreshWork(notifyCtx, optionalWork);
+          if (deferWarm) {
+            work.stage('Waiting for post-refresh warming');
+            await runPostRefreshWork(notifyCtx, optionalWork);
+          }
         } finally {
+          work.stage('Waiting for bank rate history preparation');
           await historyWork;
+          work.finish(workOutcome);
           if (deferWarm) set({ postRefreshWarming: false });
         }
       }
