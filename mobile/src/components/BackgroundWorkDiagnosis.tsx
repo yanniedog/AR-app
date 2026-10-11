@@ -34,7 +34,6 @@ export function BackgroundWorkDiagnosis({ wait }: { wait: AuditBackgroundWorkWai
         <AppText variant="tiny" color="textMuted">Active flags at capture: {wait.payloadWork.activeWork.join(', ')}</AppText>
       ) : null}
       {!wait.jobs.length ? <AppText variant="small">Worker stage evidence unavailable.</AppText> : null}
-      {(wait.omittedActiveJobs ?? 0) > 0 ? <AppText variant="tiny" color="textMuted">{wait.omittedActiveJobs} additional active jobs omitted by the diagnostic limit.</AppText> : null}
       <Button title={expanded ? 'Hide stage timings' : 'Show stage timings'} variant="ghost" onPress={() => setExpanded(value => !value)} />
     </Card>
   );

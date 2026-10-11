@@ -1,4 +1,4 @@
-/** Bounded, process-local evidence from the workers themselves. No payload rows,
+/** Process-local evidence with bounded completed history and per-worker stages. No payload rows,
  * URLs, preferences or arbitrary exception text are retained here. */
 export type BackgroundWorkOutcome = 'completed' | 'failed' | 'fallback' | 'superseded' | 'unavailable';
 export interface BackgroundWorkStage {
@@ -31,7 +31,6 @@ type Work = {
   omittedStages: number;
 };
 const MAX_COMPLETED = 32;
-const MAX_ACTIVE = 32;
 const MAX_STAGES = 32;
 const bounded = (text: string) => text.slice(0, 160);
 
@@ -39,7 +38,6 @@ export class BackgroundPayloadWorkRegistry {
   private sequence = 0;
   private active = new Map<number, Work>();
   private completed: Work[] = [];
-  private activeCount = 0;
   constructor(private clock: () => number = () => Date.now()) {}
 
   begin(label: string, runDate: string | null = null, stage = 'Starting'): BackgroundWorkHandle {
@@ -48,8 +46,7 @@ export class BackgroundPayloadWorkRegistry {
       runDate: runDate?.slice(0, 128) ?? null, start, end: null, outcome: null,
       stages: [{ label: bounded(stage), start, end: null }], omittedStages: 0 };
     this.active.set(work.id, work);
-    this.activeCount++;
-    if (this.active.size > MAX_ACTIVE) this.active.delete(this.active.keys().next().value!);
+    // Never evict an in-flight worker: the oldest may be the reason for a hang.
     return {
       stage: label => {
         if (work.end !== null) return;
@@ -64,7 +61,6 @@ export class BackgroundPayloadWorkRegistry {
         if (work.end !== null) return;
         work.end = this.clock();
         work.outcome = outcome;
-        this.activeCount--;
         work.stages[work.stages.length - 1].end = work.end;
         this.active.delete(work.id);
         this.completed.push(work);
@@ -73,8 +69,7 @@ export class BackgroundPayloadWorkRegistry {
     };
   }
 
-  hasActiveWork(): boolean { return this.activeCount > 0; }
-  omittedActiveJobs(): number { return this.activeCount - this.active.size; }
+  hasActiveWork(): boolean { return this.active.size > 0; }
 
   /** Include work that began before observation but finished during it. */
   snapshot(since = 0): BackgroundWorkSnapshot[] {

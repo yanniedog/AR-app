@@ -28,13 +28,13 @@ test('times pre-existing work, overlapping jobs, queue waits and completed stage
   expect(registry.snapshot(now + 1)).toEqual([]);
 });
 
-test('bounds long-lived diagnostics and reports omitted stages', () => {
+test('bounds completed diagnostics and stages without hiding any in-flight worker', () => {
   const registry = new BackgroundPayloadWorkRegistry(() => 1_800_000_000_000);
   for (let i = 0; i < 80; i++) registry.begin('finished').finish();
   for (let i = 0; i < 80; i++) registry.begin('active');
-  expect(registry.snapshot()).toHaveLength(64);
+  expect(registry.snapshot()).toHaveLength(112);
+  expect(registry.snapshot().filter(job => job.outcome === null)).toHaveLength(80);
   expect(registry.hasActiveWork()).toBe(true);
-  expect(registry.omittedActiveJobs()).toBe(48);
   const work = registry.begin('x'.repeat(2000), 'y'.repeat(2000));
   for (let i = 0; i < 80; i++) work.stage(`step ${i}`);
   const entry = registry.snapshot().at(-1)!;
