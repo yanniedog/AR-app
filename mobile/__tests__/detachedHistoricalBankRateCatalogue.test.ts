@@ -3,6 +3,7 @@ import { sha256 } from '@noble/hashes/sha256';
 import { bytesToHex } from '@noble/hashes/utils';
 import { gcm } from '@noble/ciphers/aes';
 import { loadDetachedHistoricalBankRateCatalogue } from '../src/data/detachedHistoricalBankRateCatalogue';
+import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope,
   DETACHED_HISTORY_MAX_COMPRESSED, DETACHED_HISTORY_MAX_DECODED } from '../src/data/detachedHistoricalBankRateCatalogueWire';
 import { encodeDetachedHistoryBytes, decodeDetachedHistoryBytes } from '../src/data/detachedHistoricalCatalogueBytes';
@@ -186,7 +187,10 @@ test('a corrected descriptor supersedes an older in-flight asset without replaci
   });
   const first = loadDetachedHistoricalBankRateCatalogue(old.manifest, { allowNetwork: true });
   await started.promise;
+  const oldWork = backgroundPayloadWork.snapshot().find(job => job.label === 'Detached historical catalogue' && job.outcome === null)!;
   const result = await loadDetachedHistoricalBankRateCatalogue(changed.manifest, { allowNetwork: true });
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === oldWork.id)?.outcome).toBe('superseded');
+  expect(backgroundPayloadWork.hasActiveWork()).toBe(false);
   release.resolve();
   expect(await first).toBeNull();
   expect(result?.sources[day]).toMatchObject({ manifest_sha256: 'd'.repeat(64) });

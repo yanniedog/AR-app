@@ -11,7 +11,7 @@ import { normalizeInterests } from './interests';
 import { samePayloadIdentity } from './payloadRevision';
 import type { StoreGet, StoreSet } from './storeTypes';
 
-const requests = new WeakMap<StoreGet, { completion: Promise<void> }>();
+const requests = new WeakMap<StoreGet, { completion: Promise<void>; work: ReturnType<typeof backgroundPayloadWork.begin> }>();
 
 /** Product history shares the prepared catalogue instead of racing it with a
  * second download of every historical core. Follow a superseding request too. */
@@ -29,7 +29,9 @@ export async function prepareBankRateHistoryAfterPaint(
   options: { warm?: boolean; readCachedDetails?: boolean } = {},
 ): Promise<void> {
   let finish!: () => void;
-  const request = { completion: new Promise<void>(resolve => { finish = resolve; }) };
+  requests.get(get)?.work.finish('superseded');
+  const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint');
+  const request = { work, completion: new Promise<void>(resolve => { finish = resolve; }) };
   requests.set(get, request);
   const isAssetCurrent = () => !!get().core &&
     historicalCatalogueOwner(get().core!) === historicalCatalogueOwner(core) &&
@@ -40,7 +42,6 @@ export async function prepareBankRateHistoryAfterPaint(
   const isCurrent = () => requests.get(get) === request && isAssetCurrent();
   set({ bankRateHistoryLoading: true });
   const started = Date.now();
-  const work = backgroundPayloadWork.begin('Bank rate history preparation', core.run_date, 'Waiting for first paint');
   let outcome: BackgroundWorkOutcome = 'superseded';
   try {
     await yieldToPaintFrames(2);

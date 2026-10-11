@@ -321,9 +321,11 @@ test('a superseded core cannot publish completion over the new history request',
   const { get, set } = store();
   const first = prepareBankRateHistoryAfterPaint(set, get, sampleCore, sampleManifest);
   await new Promise(resolve => setTimeout(resolve, 0));
+  const oldWork = backgroundPayloadWork.snapshot().find(job => job.label === 'Bank rate history preparation' && job.outcome === null)!;
   const replacement = { ...sampleCore };
   set({ core: replacement });
   const second = prepareBankRateHistoryAfterPaint(set, get, replacement, sampleManifest);
+  expect(backgroundPayloadWork.snapshot().find(job => job.id === oldWork.id)?.outcome).toBe('superseded');
   await new Promise(resolve => setTimeout(resolve, 0));
   old.resolve();
   await first;

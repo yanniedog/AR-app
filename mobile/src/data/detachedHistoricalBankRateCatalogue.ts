@@ -14,13 +14,14 @@ import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
 import { resolvePayloadKeyHex } from '../lib/keyVault';
 import { PAYLOAD_REPO } from '../config';
-import { backgroundPayloadWork } from '../lib/backgroundPayloadWork';
+import { backgroundPayloadWork, type BackgroundWorkHandle } from '../lib/backgroundPayloadWork';
 import { debugLog } from '../lib/debugLog';
 import { payloadBundleIdentity } from './payloadBundleIdentity';
 
 let preparedAsset: { receipt: string; catalogue: HistoricalBankRateCatalogue } | null = null;
 type Consumer = { isCurrent: () => boolean; isAssetCurrent: () => boolean; allowNetwork: boolean };
 type PendingAsset = {
+  work: BackgroundWorkHandle;
   receipt: string;
   consumers: Set<Consumer>;
   superseded: boolean;
@@ -77,6 +78,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
   if (!callerIsCurrent() || !assetIsCurrent()) return null;
   if (pendingAsset && pendingAsset.receipt !== receipt) {
     pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
     pendingAsset = null;
   }
   if (preparedAsset?.receipt === receipt) { stage('prepared cache hit'); return preparedAsset.catalogue; }
@@ -87,7 +89,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
     return consume(pendingAsset, consumer);
   }
   const work = backgroundPayloadWork.begin('Detached historical catalogue', runDate, 'Reading asset cache');
-  const load: PendingAsset = { receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
+  const load: PendingAsset = { work, receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
   pendingAsset = load;
   const isCurrent = () => !load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent());
   // A superseded caller's mutable manifest must not invalidate a live joiner's
