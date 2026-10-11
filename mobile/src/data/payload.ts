@@ -329,7 +329,7 @@ export async function downloadInflate(
   });
   if (expectedSha) {
     // expo-crypto on Android bridges Uint8Array → Kotlin ByteArray; raw ArrayBuffer fails.
-    await yieldToUi();
+    await yieldToUi(0);
     const digest = await Crypto.digest(
       Crypto.CryptoDigestAlgorithm.SHA256,
       new Uint8Array(buf),
@@ -360,7 +360,7 @@ export async function downloadInflate(
   });
   // Always yield before inflate/decrypt/gunzip — compressed byteLen can be well
   // under the parse threshold while the expanded JSON is multi-MB on the JS thread.
-  await yieldToUi();
+  await yieldToUi(0);
   let bytes: Uint8Array = new Uint8Array(buf);
   // Encrypted assets (ARE1 magic) are decrypted to the gzip layer first; the
   // sha256 above was computed over the ciphertext, matching the manifest.

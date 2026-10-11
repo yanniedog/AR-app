@@ -10,6 +10,7 @@ import {
 import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
+import * as format from '../src/data/format';
 import { debugLog } from '../src/lib/debugLog';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src/types';
@@ -64,9 +65,26 @@ describe('suitabilityIndex', () => {
     expect(yieldToUi).not.toHaveBeenCalled();
     const actual = await buildSuitabilityIndex(core, null, 'details', 'core');
     expect(actual).toEqual(expected);
-    // 128 scanned rows and 64 distinct identities: both phases share the budget.
-    expect(yieldToUi).toHaveBeenCalledTimes(6);
+    // All 128 rows are scanned once, including classification of first identities.
+    expect(yieldToUi).toHaveBeenCalledTimes(4);
     expect(jest.mocked(yieldToUi).mock.calls.every(args => args.length === 1 && args[0] === 0)).toBe(true);
+  });
+
+  it('short-circuits allowed products while preserving per-row parity for mixed sibling identities', async () => {
+    const open = row({ product_key: 'mixed|open', product_name: 'Standard Variable' });
+    const staff = row({ product_key: 'mixed|staff', product_name: 'Staff Home Loan' });
+    const rates = [staff, open, ...Array.from({ length: 120 }, (_, i) => ({
+      ...open, product_name: i % 2 ? 'Staff Home Loan' : `Standard Variable ${i}`,
+      account_class: i % 3 ? 'standard' : 'non_standard', rate: i / 10000,
+    })), { ...staff, product_name: 'Everyday Home Loan' }, staff];
+    const core = { run_date: '2026-07-15', sections: { Mortgage: { rates } } } as unknown as CorePayload;
+    const expected = new Set(rates.filter(item => isBroadlyAvailable(item, null)).map(item => item.product_key));
+    const nonStandard = jest.spyOn(format, 'isNonStandard');
+    const classify = jest.spyOn(format, 'isBroadlyAvailable');
+    expect((await buildSuitabilityIndex(core, null)).allowed).toEqual(expected);
+    expect(classify).toHaveBeenCalledTimes(3);
+    // Only unresolved product identities need the expensive dedup invariants.
+    expect(nonStandard).toHaveBeenCalledTimes(3);
   });
 
   it('never installs or persists a build superseded while a processing slice yields', async () => {

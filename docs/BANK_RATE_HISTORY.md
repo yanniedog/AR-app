@@ -97,17 +97,23 @@ be presented as Android acceptance. Android acceptance uses a release Hermes
 build with real observations and records input/progress responsiveness.
 
 The 11 October 2026 release-Hermes test on an Android API 36 x86_64 emulator
-processed the exact current day's producer candidate in 2.292 s; an identical
-refresh reused the complete product ledger in 47 ms. The candidate preserves
-144 original source receipts across a 152-day calendar and constructs 363,582
-product observations using the authentic current core and public dates index.
-The older raw history preparation/profile path took 70.520 s on the same
-emulator with the 137-day fallback. These are different datasets and emulator
-measurements, not physical ARM-device acceptance. They exclude network,
-original current-core parsing, persistent disk I/O and rendering. A separate
-134-public-date retention test took 238 ms, reusing the original archive with
-zero compression calls. Native measurements must accompany future substantial
-changes in catalogue size or the consumer's processing path.
+processed the exact current immutable assets and prepared producer candidate
+in **4.166 s**: 2.194 s for current core, details, optional assets and suitability,
+plus 1.971 s for history, profile results, the complete product ledger and cache
+serialization. Identical warm history reused the ledger in 48 ms. The candidate
+preserves 144 original source receipts across a 152-day calendar and constructs
+363,582 product observations. All seven current asset decodes used the native
+codec; the 35 MB details document completed within the normal Java heap. The
+largest observed JavaScript heartbeat gap was 326 ms.
+
+These are emulator measurements, not physical ARM-device acceptance. They
+exclude network, persistent disk I/O, module initialization, React rendering,
+notification comparisons and delivery. The earlier 2.292 s history-only result
+does not represent combined payload processing. The earlier combined decoder
+repair measured 5.059 s and failed the budget; removing fixed processing waits
+and duplicate suitability work produced the passing result above. Native
+measurements must accompany future substantial changes in catalogue size or
+the consumer's processing path.
 
 Run the canonical app checks with `cd mobile && npm run ci`. They include:
 

@@ -141,7 +141,7 @@ export async function buildSuitabilityIndex(
   const rows = allCoreRateRows(core);
   const products = details?.products ?? null;
   const allowed = new Set<string>();
-  const identities = new Map<string, RateRow>();
+  const identities = new Set<string>();
   const t0 = Date.now();
   let sliceStarted = t0;
   let processed = 0;
@@ -152,17 +152,18 @@ export async function buildSuitabilityIndex(
     ++processed % clockInterval === 0 && Date.now() - sliceStarted >= 8;
 
   for (const row of rows) {
-    const identity = suitabilityIdentity(row);
-    if (!identities.has(identity)) identities.set(identity, row);
-    if (sliceExpired()) {
-      await yieldToUi(0);
-      sliceStarted = Date.now();
-    }
-  }
-
-  for (const row of identities.values()) {
-    if (isBroadlyAvailable(row, products?.[row.product_key] ?? null)) {
-      allowed.add(row.product_key);
+    // The index is an existential product-key gate: once any identity passes,
+    // no later tier can revoke it. Avoid repeating row classifiers and identity
+    // serialization for the remaining tiers of that already-allowed product.
+    // Rendering still applies its existing row-level exclusions independently.
+    if (!allowed.has(row.product_key)) {
+      const identity = suitabilityIdentity(row);
+      if (!identities.has(identity)) {
+        identities.add(identity);
+        if (isBroadlyAvailable(row, products?.[row.product_key] ?? null)) {
+          allowed.add(row.product_key);
+        }
+      }
     }
     if (sliceExpired()) {
       await yieldToUi(0);

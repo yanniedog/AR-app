@@ -1,7 +1,12 @@
 # CDR publication revisions
 
-AR-local owns immutable payload publication. AR-app reads `dates-index.json`
-from its existing `app-payload-latest` release. When `revision_protocol: 1` is
+AR-local owns immutable payload publication. The canonical `dates-index.json`
+identity remains the existing `app-payload-latest` release; AR-app retrieves its
+verified readable bytes directly from the `app-payload-public` GitHub branch.
+Current selectors live under `latest/` and immutable files under
+`tags/<canonical tag>/`. See [Direct GitHub delivery](BANK_RATE_HISTORY.md#direct-github-delivery).
+Cloudflare and device decryption keys are not part of this delivery path.
+When `revision_protocol: 1` is
 present, `revision_heads[latest_date]` selects the only edition that the app may
 install. The head binds an immutable manifest URL and its raw SHA-256. The
 manifest binds the generation, revision, bundle digest, and every asset's URL,
@@ -19,7 +24,8 @@ namespace is optional: its exact asset and core binding are verified after first
 paint, and its failure cannot prevent adoption of usable current rates.
 Revision details and optional caches use
 content hashes; assets from rolling, dated, or older editions are never merged
-into a selected revision. Legacy releases remain readable before adoption.
+into a selected revision. Older cached editions remain usable; an uncached
+edition absent from the public branch requires a refresh to the current edition.
 The dormant v3 reader is not activated.
 
 The app keeps the installed and preceding revision's cache assets. Unreferenced
