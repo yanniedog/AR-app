@@ -1,6 +1,6 @@
 {
-  "version": "1.0.222",
-  "releaseTag": "app-arm-v1.0.222",
+  "version": "1.0.223",
+  "releaseTag": "app-arm-v1.0.223",
   "date": "2026-10-11",
   "summaryBullets": [
     "Fix decoder and deep-merge advisories with guarded caller compatibility (#345)",
@@ -76,7 +76,7 @@
           "text": "Repository: yanniedog/AR-app"
         },
         {
-          "text": "Version tag: app-arm-v1.0.222"
+          "text": "Version tag: app-arm-v1.0.223"
         },
         {
           "text": "Since tag: app-arm-v1.0.221"

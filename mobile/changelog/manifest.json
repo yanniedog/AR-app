@@ -956,7 +956,7 @@
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.202"
     },
     {
-      "version": "1.0.222",
+      "version": "1.0.223",
       "date": "2026-10-11",
       "summaryBullets": [
         "Fix decoder and deep-merge advisories with guarded caller compatibility (#345)",
@@ -965,7 +965,7 @@
         "Preserve signed APKs when stale-source publication is rejected (#344)",
         "build(deps): bump fast-uri from 3.1.7 to 3.1.8 in /mobile (#347)"
       ],
-      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.222"
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.223"
     }
   ]
 }
