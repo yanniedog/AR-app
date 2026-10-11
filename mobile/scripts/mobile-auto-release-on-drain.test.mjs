@@ -54,6 +54,11 @@ test('queue reconciliation accepts PR closures, explicit dispatch and APK comple
   assert.equal(checkout.with.ref, 'main');
   assert.equal(checkout.with['persist-credentials'], false);
   assert.equal(workflow.concurrency['cancel-in-progress'], false);
+  const installIndex = job.steps.findIndex(step => step.name === 'Install public delivery validator dependencies');
+  const releaseIndex = job.steps.findIndex(step => step.run === 'node mobile/scripts/mobile-auto-release-on-drain.mjs');
+  assert.ok(installIndex > 0 && installIndex < releaseIndex);
+  assert.equal(job.steps[installIndex].working_directory ?? job.steps[installIndex]['working-directory'], 'mobile');
+  assert.match(job.steps[installIndex].run, /npm ci --omit=optional --no-audit --no-fund/);
 });
 
 test('failed APK jobs explicitly reconcile only superseded checkout sources, including chained ref races', () => {
@@ -304,6 +309,7 @@ function queueReleaseHarness(openPrs = [], overrides = {}) {
     sync: () => calls.push('sync'),
     alreadyPublished: () => false,
     releasePending: () => false,
+    verifyDelivery: async () => {},
     alreadyBumped: () => false,
     readVersion: () => '1.0.187',
     readPublished: async () => '1.0.187',
@@ -316,6 +322,37 @@ function queueReleaseHarness(openPrs = [], overrides = {}) {
   };
   return { calls, run: () => releaseWhenQueueEmpty(options) };
 }
+
+test('an unactivated payload producer prevents version allocation and APK dispatch', async () => {
+  for (const alreadyBumped of [false, true]) {
+    const release = queueReleaseHarness([], {
+      alreadyBumped: () => alreadyBumped,
+      verifyDelivery: async () => { throw new Error('producer handoff pending'); },
+    });
+    await assert.rejects(release.run, /producer handoff pending/);
+    assert.deepEqual(release.calls, ['sync']);
+  }
+});
+
+test('published and in-flight releases do not require a producer handoff check', async () => {
+  for (const state of ['alreadyPublished', 'releasePending']) {
+    const release = queueReleaseHarness([], {
+      [state]: () => true,
+      verifyDelivery: async () => { throw new Error('must not check'); },
+    });
+    await release.run();
+    assert.deepEqual(release.calls, ['sync']);
+  }
+});
+
+test('a recoverable version PR is not merged while producer delivery is held', async () => {
+  const release = queueReleaseHarness([{ number: 247 }], {
+    findRecoverableBumps: () => [{ number: 247, branchName: 'chore/mobile-auto-release-v1.0.188' }],
+    verifyDelivery: async () => { throw new Error('producer handoff pending'); },
+  });
+  await assert.rejects(release.run, /producer handoff pending/);
+  assert.deepEqual(release.calls, []);
+});
 
 test('merges defer release while any unrelated PR remains open', async () => {
   const unrelated = Array.from({ length: 8 }, (_, index) => ({

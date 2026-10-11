@@ -4,9 +4,11 @@ import type { Manifest, ManifestFile } from '../types';
 import { cache } from './cache';
 import { downloadInflate, gunzipCooperatively } from './payload';
 import { decompressCatalogueAsync } from './historicalBankRateCatalogueCompression';
+import { unpackHistoricalBankRateCatalogueAsync } from './historicalBankRateCataloguePacked';
 import { prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import type { HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
 import { DETACHED_HISTORY_MAX_COMPRESSED, DETACHED_HISTORY_MAX_DECODED,
+  PACKED_HISTORY_MAX_DECODED, validatePackedHistoricalCatalogueDescriptor,
   validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope } from './detachedHistoricalBankRateCatalogueWire';
 import { decodeDetachedHistoryBytes, encodeDetachedHistoryBytes } from './detachedHistoricalCatalogueBytes';
 import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
@@ -60,6 +62,7 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
   const started = Date.now(); let phase = 'descriptor';
   const stage = (name: string) => { phase = name; debugLog.debug('bank-history-detached', `${name} run_date=${manifest.run_date} elapsed_ms=${Date.now() - started}`); };
   const file = validateDetachedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO);
+  const packed = !!validatePackedHistoricalCatalogueDescriptor(manifest, PAYLOAD_REPO);
   if (!file) {
     retireUnusedPendingAsset();
     if (manifest.bank_rate_history_catalogue !== undefined) debugLog.warn('bank-history-detached', 'Invalid optional history descriptor; using fallback.');
@@ -125,14 +128,19 @@ export async function loadDetachedHistoricalBankRateCatalogue(manifest: Manifest
       work.stage('Parsing and validating history envelope');
       const inner = validateDetachedHistoricalCatalogueEnvelope(await parseJsonHeavy<unknown>(text), boundManifest);
       if (!inner) { debugLog.warn('bank-history-detached', 'Optional history envelope binding is invalid; using fallback.'); return null; }
+      if (packed && inner.bytes > PACKED_HISTORY_MAX_DECODED) throw new Error('Packed history exceeds processing byte budget');
       if (!isCurrent()) return null;
       work.stage('Decoding compressed historical catalogue');
       stage('inner decode begin');
       const decoded = await decompressCatalogueAsync(inner, { yieldControl: checkpoint });
       if (!isCurrent()) return null;
+      if (packed && (!decoded || typeof decoded !== 'object' || (decoded as { format?: unknown }).format !== 'ar-history-dag-v1')) {
+        throw new Error('Packed history capability requires the compact format');
+      }
+      const catalogue = await unpackHistoricalBankRateCatalogueAsync(decoded, { yieldControl: checkpoint });
       work.stage('Validating historical catalogue');
       stage('inner decode complete; validation begin');
-      const prepared = await prepareHistoricalBankRateCatalogueAsync(decoded, checkpoint);
+      const prepared = await prepareHistoricalBankRateCatalogueAsync(catalogue, checkpoint);
       const result = isCurrent() && prepared && prepared.catalogue.run_dates.every(day => day <= runDate) ? prepared.catalogue : null;
       if (result) stage('verified catalogue ready');
       else {

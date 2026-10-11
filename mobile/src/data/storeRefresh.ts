@@ -8,6 +8,8 @@ import {
   downloadDetails,
   downloadInflate,
   fetchManifest,
+  BANK_SPREAD_MAX_COMPRESSED_BYTES,
+  BANK_SPREAD_MAX_INFLATED_BYTES,
 } from './payload';
 import {
   needsDetailsForNotifications,
@@ -35,6 +37,7 @@ import {
   liveAssetStateForProviderCoverage,
 } from './assetState';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
+import { bindStagedSpread, normalizeStagedOptionalAsset, type StagedOptionalAssets } from './stagedOptionalAssets';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -376,7 +379,9 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
               (key) =>
                 meta.manifest.files[key]?.sha256 !== remote.files[key]?.sha256,
             ) || JSON.stringify(meta.manifest.bank_rate_history_catalogue) !==
-              JSON.stringify(remote.bank_rate_history_catalogue));
+              JSON.stringify(remote.bank_rate_history_catalogue) ||
+              JSON.stringify(meta.manifest.bank_rate_history_catalogue_packed) !== JSON.stringify(remote.bank_rate_history_catalogue_packed) ||
+              JSON.stringify(meta.manifest.bank_rate_history_ready) !== JSON.stringify(remote.bank_rate_history_ready));
           const historyIndexChanged = historyDatesIndex &&
             JSON.stringify(historyDatesIndex) !== JSON.stringify(meta.historyDatesIndex);
           if (cachedOptionalChanged || historyIndexChanged) {
@@ -467,6 +472,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           debugLog.warn('store', 'matching cache metadata had no readable core; repairing');
         }
 
+        const adoptionOwner = get().manifest;
+        const canAdopt = () => get().manifest === adoptionOwner;
         const previousCore = get().core;
         const previousSource = get().source;
         let previousDetailsProducts = get().details?.products ?? null;
@@ -497,6 +504,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         // details by content hash keeps the installed offline edition usable if
         // any subsequent asset download or cache write fails.
         let stagedDetails: DetailsPayload | null = null;
+        const stagedOptional: StagedOptionalAssets = {};
         if (remote.payload_revision) {
           const downloaded = await downloadDetails(remote.files.details.url, remote.files.details.sha256, {
             expectedBytes: remote.files.details.bytes, requireExactBytes: true,
@@ -508,15 +516,18 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             const assetText = await downloadInflate(file.url, file.sha256, {
               expectedBytes: file.bytes, requireExactBytes: true,
               maxCompressedBytes: 64 * 1024 * 1024, maxInflatedBytes: 192 * 1024 * 1024,
+              ...(key === 'bank_spread_history' ? { maxCompressedBytes: BANK_SPREAD_MAX_COMPRESSED_BYTES,
+                maxInflatedBytes: BANK_SPREAD_MAX_INFLATED_BYTES, expectedEncoding: 'gzip' as const, allowEncrypted: false } : {}),
             });
             const decoded = await parseJsonHeavy<Record<string, unknown>>(assetText);
             if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded) ||
                 (key !== 'rba_calendar' && decoded.run_date !== remote.run_date)) {
               throw new Error(`Revision ${key} publication date or structure mismatch`);
             }
+            Object.assign(stagedOptional, normalizeStagedOptionalAsset(key, decoded, remote));
             if (key === 'search_index') await cache.writeSearchIndex(assetText, file.sha256);
-            if (key === 'history_banks') await cache.writeHistoryBanks(assetText, file.sha256);
-            if (key === 'bank_history') await cache.writeBankInsights(assetText, file.sha256);
+            if (key === 'history_banks') await cache.writeHistoryBanks(JSON.stringify(stagedOptional.historyBanks), file.sha256);
+            if (key === 'bank_history') await cache.writeBankInsights(JSON.stringify(stagedOptional.bankInsights), file.sha256);
           }
           await cache.writeDetails(downloaded.text, remote.files.details.sha256);
           stagedDetails = downloaded.details;
@@ -531,6 +542,7 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           phaseComplete: false,
         });
         if (!background) await yieldToUi();
+        if (!canAdopt()) return false;
         await cache.writeBundle(
           {
             manifest: remote,
@@ -542,6 +554,20 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
           },
           text,
         );
+        if (!canAdopt()) return false;
+        // Publish the exact asset bindings after the core commits, but before
+        // exposing its values: an on-screen ensure must not race a missing sidecar.
+        if (stagedOptional.searchIndex || stagedOptional.historyBanks || stagedOptional.bankInsights) {
+          try {
+            await cache.writeOptionalMeta({ coreSha: remote.files.core.sha256,
+              ...(stagedOptional.searchIndex ? { searchIndexSha: remote.files.search_index!.sha256 } : {}),
+              ...(stagedOptional.historyBanks ? { historyBanksSha: remote.files.history_banks!.sha256 } : {}),
+              ...(stagedOptional.bankInsights ? { bankInsightsSha: remote.files.bank_history!.sha256 } : {}),
+            }, canAdopt);
+          } catch { /* Live values remain verified; future ensures can repair the optional sidecar. */ }
+        }
+        if (!canAdopt()) return false;
+        if (stagedOptional.bankSpreadHistory) bindStagedSpread(remote, stagedOptional.bankSpreadHistory);
         onProgress({
           phase: 'install',
           fileName: remote.files.core.name,
@@ -590,6 +616,8 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
             bankSpreadHistory: null,
             bankSpreadHistoryError: null,
           } : {}),
+          ...stagedOptional,
+          ...(stagedOptional.searchIndex ? { searchIndexStatus: 'ready' as const } : {}),
         });
         historyWork = prepareBankRateHistoryAfterPaint(set, get, core, remote, resolution.datesIndex, stagedDetails, { warm: !background });
         notifyCtx = {

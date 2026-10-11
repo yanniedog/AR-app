@@ -3,6 +3,7 @@ import { parseDatesIndex } from './datesIndex';
 import { decompressCatalogue, decompressCatalogueAsync, type CatalogueCodecOptions } from './historicalBankRateCatalogueCompression';
 import { prepareHistoricalBankRateCatalogue, prepareHistoricalBankRateCatalogueAsync } from './historicalBankRateCatalogue';
 import type { HistoricalBankRateCatalogue } from './historicalBankRateCatalogueWire';
+import { unpackHistoricalBankRateCatalogue, unpackHistoricalBankRateCatalogueAsync } from './historicalBankRateCataloguePacked';
 
 export const bundledHistoricalCatalogueBinding = {
   core_sha256: snapshot.core_sha256,
@@ -14,7 +15,7 @@ let decoding: Promise<HistoricalBankRateCatalogue | null> | undefined;
 /** Decode the verified rich baseline once. Never import the numerical baseline. */
 export function getBundledHistoricalBankRateCatalogue(): HistoricalBankRateCatalogue | null {
   if (decoded === undefined) {
-    const value = decompressCatalogue(snapshot);
+    const value = unpackHistoricalBankRateCatalogue(decompressCatalogue(snapshot));
     decoded = prepareHistoricalBankRateCatalogue(value)?.catalogue ?? null;
   }
   return decoded;
@@ -26,7 +27,7 @@ export function getBundledHistoricalBankRateCatalogueAsync(options: CatalogueCod
   if (decoded !== undefined) return Promise.resolve(decoded);
   if (decoding) return decoding;
   decoding = (async () => {
-    const value = await decompressCatalogueAsync(snapshot, options);
+    const value = await unpackHistoricalBankRateCatalogueAsync(await decompressCatalogueAsync(snapshot, options), options);
     const prepared = await prepareHistoricalBankRateCatalogueAsync(value, options.yieldControl);
     // A synchronous script/test caller could have populated this while we yielded.
     if (decoded === undefined) decoded = prepared?.catalogue ?? null;

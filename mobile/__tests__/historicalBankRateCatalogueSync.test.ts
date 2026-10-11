@@ -12,6 +12,8 @@ import type { PayloadRevisionHead } from '../src/data/payloadRevision';
 import { integrateRbaCalendarIntoCore } from '../src/data/rbaOfficialLive';
 import { backgroundPayloadWork } from '../src/lib/backgroundPayloadWork';
 import type { RbaCalendar } from '../src/data/rbaCalendar';
+import * as overview from '../src/data/bankRateOverview';
+import * as catalogueWire from '../src/data/historicalBankRateCatalogueWire';
 
 let mockBaseline: HistoricalBankRateCatalogue;
 let mockCache: string | null = null;
@@ -106,6 +108,36 @@ test('legacy fallback retains dated feature evidence and excludes non-public bas
   expect(rates(history(current), '2026-09-25')).toEqual([5]);
   expect(rates(history(current), '2026-09-26')).toEqual([]);
   expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-26']);
+});
+
+test('unchanged first-run legacy fallback reuses baseline tiers and evidence while extending calendar gaps', async () => {
+  const current = core('2026-09-29'), before = JSON.stringify(mockBaseline);
+  const identify = jest.spyOn(overview, 'rateTierSignature');
+  const validate = jest.spyOn(catalogueWire, 'validateHistoricalBankRateCatalogue');
+  const validateAsync = jest.spyOn(catalogueWire, 'validateHistoricalBankRateCatalogueAsync');
+  expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest(current.run_date))).toBe(true);
+  const installed = history(current);
+  expect(installed.sections).toBe(mockBaseline.sections);
+  expect(installed.evidence).toBe(mockBaseline.evidence);
+  expect(installed.sources).toBe(mockBaseline.sources);
+  expect(identify).not.toHaveBeenCalled();
+  expect(validate).not.toHaveBeenCalled();
+  expect(validateAsync).not.toHaveBeenCalled();
+  expect(rates(installed, '2026-09-25')).toEqual([5]);
+  expect(rates(installed, '2026-09-26')).toEqual([6]);
+  expect(missingHistoricalCatalogueDates(current)).toEqual(['2026-09-27', '2026-09-28']);
+  expect(JSON.stringify(mockBaseline)).toBe(before);
+});
+
+test.each(['public_fallback', 'catalogue'] as const)('saved %s retains precedence over direct baseline reuse', async field => {
+  const saved = upsertHistoricalCatalogueDay(mockBaseline, core('2026-09-25', '0.08'), details('2026-09-25'), source('2026-09-25'));
+  mockCache = JSON.stringify(compression.compressCatalogue({ schema_version: field === 'catalogue' ? 2 : 3,
+    core_bindings: { '2026-09-26': { core_sha256: 'a'.repeat(64), manifest_sha256: head('2026-09-26').manifest_sha256 } },
+    index: mockIndex(), [field]: saved }));
+  const current = core('2026-09-27');
+  expect(await prepareHistoricalBankRateHistory(current, compactLegacyManifest())).toBe(true);
+  expect(rates(history(current), '2026-09-25')).toEqual([8]);
+  expect(rates(history(current), '2026-09-26')).toEqual([6]);
 });
 
 test('a legacy fallback persists an index-only correction and does not resurrect its old observations offline', async () => {

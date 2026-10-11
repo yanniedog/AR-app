@@ -1,8 +1,7 @@
 import type { CorePayload, RateRow, Ribbon, RibbonProvider, RibbonStats, SectionKey } from '../types';
 import { attachBankRateHistoryTiers } from './bankRateHistoryWire';
 import { withBundledBankRateHistory } from './bundledBankRateHistory';
-import { sha256 } from '@noble/hashes/sha256';
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils';
+import { jsonContentHash } from '../lib/jsonContentHash';
 
 interface CoreContents { digest: string; history: CorePayload['bank_rate_history_catalogue']; detachedHistory: boolean }
 const coreContents = new WeakMap<CoreIntegrityContext, CoreContents>();
@@ -71,7 +70,7 @@ export async function sealCoreHistoryAsync(core: CorePayload,
 function contentDigest(core: CorePayload, detachedHistory: boolean) {
   const projection = detachedHistory ? { ...core } : core;
   if (detachedHistory) delete projection.bank_rate_history_catalogue;
-  return bytesToHex(sha256(utf8ToBytes(JSON.stringify(projection))));
+  return jsonContentHash(projection);
 }
 
 function bindCoreContents(core: CorePayload): CoreContents {

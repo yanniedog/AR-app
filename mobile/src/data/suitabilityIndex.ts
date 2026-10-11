@@ -128,8 +128,8 @@ function suitabilityIdentity(row: RateRow): string {
 }
 
 /**
- * Build the allowed-product Set. Chunks + yields so a post-ingest warm does not
- * freeze tab navigation for hundreds of ms on mid-range Android.
+ * Build the allowed-product Set in bounded work slices, including deduplication.
+ * Processing yields let queued input run without waiting for a loading animation.
  */
 export async function buildSuitabilityIndex(
   core: CorePayload,
@@ -141,22 +141,33 @@ export async function buildSuitabilityIndex(
   const rows = allCoreRateRows(core);
   const products = details?.products ?? null;
   const allowed = new Set<string>();
-  const identities = new Map<string, RateRow>();
+  const identities = new Set<string>();
   const t0 = Date.now();
+  let sliceStarted = t0;
+  let processed = 0;
+  // Check the clock periodically, without adding a promise per rate row. Keep
+  // the existing chunkSize=0 opt-out for synchronous tooling/parity comparisons.
+  const clockInterval = chunkSize > 0 ? Math.max(1, Math.min(32, Math.floor(chunkSize))) : 0;
+  const sliceExpired = () => clockInterval > 0 &&
+    ++processed % clockInterval === 0 && Date.now() - sliceStarted >= 8;
 
   for (const row of rows) {
-    const identity = suitabilityIdentity(row);
-    if (!identities.has(identity)) identities.set(identity, row);
-  }
-
-  let classified = 0;
-  for (const row of identities.values()) {
-    if (isBroadlyAvailable(row, products?.[row.product_key] ?? null)) {
-      allowed.add(row.product_key);
+    // The index is an existential product-key gate: once any identity passes,
+    // no later tier can revoke it. Avoid repeating row classifiers and identity
+    // serialization for the remaining tiers of that already-allowed product.
+    // Rendering still applies its existing row-level exclusions independently.
+    if (!allowed.has(row.product_key)) {
+      const identity = suitabilityIdentity(row);
+      if (!identities.has(identity)) {
+        identities.add(identity);
+        if (isBroadlyAvailable(row, products?.[row.product_key] ?? null)) {
+          allowed.add(row.product_key);
+        }
+      }
     }
-    classified += 1;
-    if (chunkSize > 0 && classified % chunkSize === 0) {
-      await yieldToUi();
+    if (sliceExpired()) {
+      await yieldToUi(0);
+      sliceStarted = Date.now();
     }
   }
 

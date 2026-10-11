@@ -8,9 +8,22 @@ function digit(code: number): number {
   return code === 43 ? 62 : code === 47 ? 63 : -1;
 }
 
+/** Yield by elapsed work, not by encoded block count. Always check ownership
+ * before starting and before returning, including small cache entries. */
+async function cacheCheckpoint(yieldWork: () => Promise<void>) {
+  await yieldWork();
+  let started = Date.now();
+  return async (force = false) => {
+    if (force || Date.now() - started >= 8) {
+      await yieldWork(); started = Date.now();
+    }
+  };
+}
+
 /** A bounded representation of the original asset bytes, never parsed JSON. */
 export async function encodeDetachedHistoryBytes(bytes: Uint8Array, yieldWork: () => Promise<void>): Promise<string> {
   if (!bytes.length || bytes.length > DETACHED_HISTORY_MAX_COMPRESSED) throw new Error('Detached history asset exceeds cache budget');
+  const checkpoint = await cacheCheckpoint(yieldWork);
   const parts: string[] = [];
   for (let start = 0; start < bytes.length; start += 12_288) {
     let part = '';
@@ -20,8 +33,9 @@ export async function encodeDetachedHistoryBytes(bytes: Uint8Array, yieldWork: (
       part += ALPHABET[a >>> 2] + ALPHABET[(a & 3) << 4 | b >>> 4] +
         (i + 1 < end ? ALPHABET[(b & 15) << 2 | c >>> 6] : '=') + (i + 2 < end ? ALPHABET[c & 63] : '=');
     }
-    parts.push(part); await yieldWork();
+    parts.push(part); await checkpoint();
   }
+  await checkpoint(true);
   return parts.join('');
 }
 
@@ -30,6 +44,7 @@ export async function decodeDetachedHistoryBytes(value: string, yieldWork: () =>
   const padding = value.endsWith('==') ? 2 : value.endsWith('=') ? 1 : 0;
   const length = value.length / 4 * 3 - padding;
   if (length <= 0 || length > DETACHED_HISTORY_MAX_COMPRESSED) return null;
+  const checkpoint = await cacheCheckpoint(yieldWork);
   const bytes = new Uint8Array(length); let written = 0;
   for (let start = 0; start < value.length; start += 16_384) {
     const end = Math.min(value.length, start + 16_384);
@@ -43,7 +58,8 @@ export async function decodeDetachedHistoryBytes(value: string, yieldWork: () =>
       if (written < length) bytes[written++] = (b & 15) << 4 | c >>> 2;
       if (written < length) bytes[written++] = (c & 3) << 6 | d;
     }
-    await yieldWork();
+    await checkpoint();
   }
+  await checkpoint(true);
   return bytes;
 }

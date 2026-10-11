@@ -78,3 +78,30 @@ it('never borrows legacy history into a selected revision or from another revisi
   const invalid = { ...rolling, bank_rate_history_catalogue: { schema_version: 2, file: rolling.bank_rate_history_catalogue!.file } } as unknown as Manifest;
   expect(mergeOptionalManifestFiles(dated, invalid)).toBe(dated);
 });
+
+it('packed history changes invalidate a legacy payload even when core and legacy history are unchanged', () => {
+  const original = structuredClone(historyManifestFixture) as Manifest;
+  const oldFile = original.bank_rate_history_catalogue!.file;
+  const packed: Manifest = { ...original, bank_rate_history_catalogue_packed: { schema_version: 1, file: {
+    name: oldFile.name.replace('catalogue-', 'catalogue-packed-'), bytes: oldFile.bytes, sha256: oldFile.sha256,
+    ...(oldFile.enc ? { enc: oldFile.enc } : {}),
+  } } };
+  expect(samePayloadIdentity(original, packed)).toBe(false);
+  expect(samePayloadIdentity(packed, structuredClone(packed))).toBe(true);
+  expect(samePayloadIdentity(packed, { ...packed, bank_rate_history_catalogue_packed: { schema_version: 1,
+    file: { ...packed.bank_rate_history_catalogue_packed!.file, sha256: 'f'.repeat(64) } } })).toBe(false);
+});
+
+it('URL-free packed history merges only within its exact legacy release routing', () => {
+  const source = structuredClone(historyManifestFixture) as Manifest;
+  const oldFile = source.bank_rate_history_catalogue!.file;
+  source.bank_rate_history_catalogue_packed = { schema_version: 1, file: {
+    name: oldFile.name.replace('catalogue-', 'catalogue-packed-'), bytes: oldFile.bytes, sha256: oldFile.sha256,
+    ...(oldFile.enc ? { enc: oldFile.enc } : {}),
+  } };
+  const target = { ...source, bank_rate_history_catalogue_packed: undefined };
+  expect(mergeOptionalManifestFiles(target, source).bank_rate_history_catalogue_packed).toEqual(source.bank_rate_history_catalogue_packed);
+  expect(mergeOptionalManifestFiles({ ...target, tag: `app-payload-${target.run_date}` }, source).bank_rate_history_catalogue_packed).toBeUndefined();
+  const invalidLegacy = { ...source, bank_rate_history_catalogue: { schema_version: 2, file: oldFile } } as unknown as Manifest;
+  expect(mergeOptionalManifestFiles({ ...target, bank_rate_history_catalogue: undefined }, invalidLegacy).bank_rate_history_catalogue).toBeUndefined();
+});

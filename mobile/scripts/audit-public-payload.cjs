@@ -27,8 +27,11 @@ const { payloadBundleIdentity } = require('../src/data/payloadBundleIdentity.ts'
 const { isValidCalendarDate } = require('../src/lib/calendarDate.ts');
 const { automaticDataUrl } = require('../src/lib/automaticDataAccess.ts');
 const { isReleaseTransport } = require('../src/lib/releaseTransport.ts');
-const { validateDetachedHistoricalCatalogueDescriptor, validateDetachedHistoricalCatalogueEnvelope } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
+const { validateLegacyHistoricalCatalogueDescriptor, validatePackedHistoricalCatalogueDescriptor, validateReadyHistoricalDescriptor,
+  validateDetachedHistoricalCatalogueEnvelope, PACKED_HISTORY_MAX_DECODED } = require('../src/data/detachedHistoricalBankRateCatalogueWire.ts');
 const { validateHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCatalogueWire.ts');
+const { unpackHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
+const { validateHistoricalBankRateReadyForApp } = require('../src/data/historicalBankRateReady.ts');
 
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
 const MAX_COMPRESSED = 64 * 1024 * 1024;
@@ -48,8 +51,8 @@ function publicationSource(source, repo) {
 async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transports = []) {
   const url = publicationSource(source, repo);
   if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0 || maxBytes > MAX_COMPRESSED) throw new Error('Invalid publication byte limit');
-  // Reuse the shipping app's fixed, allowlisted service. It opens ARE2 only;
-  // immutable manifest byte counts/hashes still describe the returned domain bytes.
+  // Use the shipping app's readable GitHub data branch. Canonical identities and
+  // manifest byte counts/hashes still describe the exact published domain bytes.
   const delivery = automaticDataUrl(url);
   const requested = delivery ?? url;
   const signal = AbortSignal.timeout(60_000);
@@ -60,9 +63,9 @@ async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transpo
     if (response.url !== target) { await cancel(); throw new Error('Unexpected publication response URL'); }
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       await cancel();
-      // The fixed delivery endpoint returns bytes directly. Never let it turn
-      // this audit into a request to another path or origin.
       const location = response.headers.get('location');
+      // The fixed raw data route returns bytes directly; never follow it to an
+      // encrypted legacy release, another branch or an alternate service.
       if (delivery || redirects >= 5 || !location) throw new Error('Unexpected publication redirect');
       const next = new URL(location, target);
       if (next.protocol !== 'https:' || next.port || next.username || next.password || next.hash ||
@@ -85,7 +88,7 @@ async function fetchBytes(source, maxBytes, repo = 'yanniedog/AR-local', transpo
     const bytes = Buffer.concat(chunks);
     if (isReleaseTransport(bytes)) throw new Error('Publication delivery returned unopened ARE2 transport');
     transports.push({ source_url: url, requested_url: requested, final_url: response.url,
-      route: delivery ? 'automatic_data_service' : 'github_release' });
+      route: delivery ? 'github_public_branch' : 'github_release' });
     return bytes;
   }
 }
@@ -161,7 +164,7 @@ async function audit(opts) {
     assertRevisionManifest(manifest, binding, date, opts.repo);
   }
   if (manifest.run_date !== date || manifest.repo !== opts.repo) throw new Error('Manifest run/repository mismatch');
-  if (manifest.bank_rate_history_catalogue && manifest.payload_revision) {
+  if ((manifest.bank_rate_history_catalogue || manifest.bank_rate_history_catalogue_packed || manifest.bank_rate_history_ready) && manifest.payload_revision) {
     const bundle = payloadBundleIdentity(manifest);
     if (manifest.payload_revision.bundle_sha256 !== bundle ||
         manifest.payload_revision.generation_id !== `sha256-${bundle}`) throw new Error('Detached history bundle identity mismatch');
@@ -189,32 +192,47 @@ async function audit(opts) {
       observations[key] = { state: 'failed' };
     }
   }
-  if (manifest.bank_rate_history_catalogue !== undefined) {
-    const key = 'bank_rate_history_catalogue';
+  for (const [key, validateDescriptor] of [
+    ['bank_rate_history_catalogue', validateLegacyHistoricalCatalogueDescriptor],
+    ['bank_rate_history_catalogue_packed', validatePackedHistoricalCatalogueDescriptor],
+    ['bank_rate_history_ready', validateReadyHistoricalDescriptor],
+  ]) {
+    if (manifest[key] === undefined) continue;
+    const packed = key === 'bank_rate_history_catalogue_packed';
+    const ready = key === 'bank_rate_history_ready';
     try {
-      const file = validateDetachedHistoricalCatalogueDescriptor(manifest, opts.repo);
+      const file = validateDescriptor(manifest, opts.repo);
       if (!file || file.enc) throw new Error('Invalid or encrypted detached history descriptor');
+      if (ready && file.bytes > 1024 * 1024) throw new Error('Prepared history exceeds transport byte budget');
       if (manifest.files.core.bytes > 512 * 1024 || decoded.core?.bank_rate_history !== undefined ||
-          decoded.core?.bank_rate_history_catalogue !== undefined) throw new Error('Detached history must preserve the compact startup core');
+          decoded.core?.bank_rate_history_catalogue !== undefined || decoded.core?.bank_rate_history_catalogue_packed !== undefined ||
+          decoded.core?.bank_rate_history_ready !== undefined) throw new Error('Detached history must preserve the compact startup core');
       const bytes = directory ? privateFile(directory, file.name, file.bytes + 1) : await publicBytes(file.url, file.bytes + 1);
       if (bytes.length !== file.bytes || hash(bytes) !== file.sha256) throw new Error('Detached history asset size/hash mismatch');
-      const envelope = zlib.gunzipSync(bytes, { maxOutputLength: 24 * 1024 * 1024 });
+      const envelope = zlib.gunzipSync(bytes, { maxOutputLength: (ready ? 2 : 24) * 1024 * 1024 });
       const archive = validateDetachedHistoricalCatalogueEnvelope(JSON.parse(envelope.toString('utf8')), manifest);
       if (!archive) throw new Error('Detached history envelope binding mismatch');
+      if (packed && archive.bytes > PACKED_HISTORY_MAX_DECODED) throw new Error('Packed history exceeds processing byte budget');
+      if (ready && archive.bytes > 4 * 1024 * 1024) throw new Error('Prepared history exceeds processing byte budget');
       const compressed = Buffer.from(archive.gzip_base64, 'base64');
       if (!compressed.length || compressed.length > 16 * 1024 * 1024 || compressed.toString('base64') !== archive.gzip_base64) {
         throw new Error('Detached history archive base64 is invalid');
       }
       const body = zlib.gunzipSync(compressed, { maxOutputLength: archive.bytes });
       if (body.length !== archive.bytes || hash(body) !== archive.sha256) throw new Error('Detached history catalogue size/hash mismatch');
-      const catalogue = JSON.parse(body.toString('utf8'));
-      if (!validateHistoricalBankRateCatalogue(catalogue) || catalogue.run_dates.some(day => day > manifest.run_date)) throw new Error('Detached history catalogue is invalid');
+      const decodedCatalogue = JSON.parse(body.toString('utf8'));
+      if (packed && decodedCatalogue?.format !== 'ar-history-dag-v1') throw new Error('Packed history capability requires the compact format');
+      const catalogue = ready ? decodedCatalogue : unpackHistoricalBankRateCatalogue(decodedCatalogue);
+      if (!(ready ? validateHistoricalBankRateReadyForApp(catalogue) : validateHistoricalBankRateCatalogue(catalogue)) ||
+          catalogue.run_dates.some(day => day > manifest.run_date)) throw new Error('Detached history catalogue is invalid');
       evidence[key] = { status: 'PASS', url: directory ? null : file.url, sha256: file.sha256, bytes: bytes.length,
         decoded_bytes: envelope.length, catalogue_sha256: archive.sha256, catalogue_bytes: body.length,
         observed_dates: Object.keys(catalogue.sources).length, calendar_dates: catalogue.run_dates.length,
         unavailable_dates: Object.keys(catalogue.unavailable_dates).length,
         source_selection: historySourceSelection(catalogue, manifest, index),
-        tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
+        [ready ? 'cohorts' : 'tiers']: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
+        ...(ready ? { compiler_sha256: catalogue.compiler_sha256,
+          products: Object.fromEntries(Object.entries(catalogue.products).map(([section, products]) => [section, products.length])) } : {}),
         acquisition: directory ? 'local_file' : 'public_http' };
     } catch (error) { evidence[key] = { status: 'FAIL', error: error.message }; }
   }
@@ -233,7 +251,7 @@ async function audit(opts) {
       countImpacts: normalized.integrity.quarantines.countImpacts } : null,
   };
   const checks = evaluateAppHealthDataQuality(snapshot, contract);
-  const historySelection = evidence.bank_rate_history_catalogue?.source_selection;
+  const historySelection = evidence.bank_rate_history_ready?.source_selection ?? evidence.bank_rate_history_catalogue_packed?.source_selection ?? evidence.bank_rate_history_catalogue?.source_selection;
   if (historySelection) checks.push({ id: 'bank-history-selected-sources', code: 'bank-history-selected-sources',
     label: 'Historical source selection', domain: 'data-integrity',
     status: historySelection.status === 'PASS' ? 'pass' : 'warn',

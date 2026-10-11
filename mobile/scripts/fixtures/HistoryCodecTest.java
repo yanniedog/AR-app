@@ -57,6 +57,17 @@ public final class HistoryCodecTest {
     byte[] invalidUtf8 = new byte[] { 34, (byte) 0xc0, (byte) 0xaf, 34 };
     rejects(() -> HistoryCodec.decompress(Base64.getEncoder().encodeToString(gzip(invalidUtf8)), invalidUtf8.length, sha(invalidUtf8)));
     rejects(() -> HistoryCodec.compress("\"\ud800\""));
+    equal(json, String.join("", HistoryCodec.inflatePayload(compressed, expected.length, expected.length)));
+    equal(json, String.join("", HistoryCodec.inflatePayload(compressed, expected.length + 10, -1)));
+    rejects(() -> HistoryCodec.inflatePayload(compressed, expected.length - 1, -1));
+    rejects(() -> HistoryCodec.inflatePayload(compressed, expected.length + 1, expected.length + 1));
+    rejects(() -> HistoryCodec.inflatePayload(badCrc, expected.length, -1));
+    rejects(() -> HistoryCodec.inflatePayload(Arrays.copyOf(compressed, compressed.length - 4), expected.length, -1));
+    rejects(() -> HistoryCodec.inflatePayload(gzip(invalidUtf8), 100, -1));
+    for (double limit : new double[] { 0, -1, 1.5, Double.NaN, Double.POSITIVE_INFINITY, 192 * 1024 * 1024 + 1.0 })
+      rejects(() -> HistoryCodec.inflatePayload(compressed, limit, -1));
+    for (double length : new double[] { -2, 1.5, Double.NaN, Double.POSITIVE_INFINITY, expected.length + 1 })
+      rejects(() -> HistoryCodec.inflatePayload(compressed, expected.length, length));
     // Character count fits, but streaming UTF-8 exceeds the decoded byte cap.
     rejects(() -> HistoryCodec.compress(repeat("\u0800", HistoryCodec.MAX_DECODED / 3 + 1)));
     // Real incompressible output must fail while writing, not after allocation.

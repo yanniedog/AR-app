@@ -22,6 +22,7 @@ const { parseDatesIndex } = require('../src/data/datesIndex.ts');
 const { assertRevisionManifest } = require('../src/data/payloadRevision.ts');
 const { upsertHistoricalCatalogueDay } = require('../src/data/historicalBankRateCatalogueMerge.ts');
 const { rateTierSignature } = require('../src/data/bankRateOverview.ts');
+const { packHistoricalBankRateCatalogue, unpackHistoricalBankRateCatalogue } = require('../src/data/historicalBankRateCataloguePacked.ts');
 
 function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
@@ -107,13 +108,16 @@ function build(directory, cataloguePath) {
     verifyObservations(catalogue, observations, day, assets.core, assets.details, source);
     lastManifest = manifest;
   }
-  const compressed = zlib.gzipSync(catalogueBytes, { level: 9, mtime: 0 });
+  const packed = packHistoricalBankRateCatalogue(catalogue);
+  if (JSON.stringify(unpackHistoricalBankRateCatalogue(packed)) !== JSON.stringify(catalogue)) throw new Error('Packed catalogue failed lossless roundtrip');
+  const packedBytes = Buffer.from(JSON.stringify(packed));
+  const compressed = zlib.gzipSync(packedBytes, { level: 9, mtime: 0 });
   if (compressed.length > 16 * 1024 * 1024) throw new Error('Catalogue exceeds compressed app budget');
   const snapshot = { schema_version: 2, run_date: index.latest_date, core_sha256: lastManifest.files.core.sha256,
-    source_index: index, sha256: hash(catalogueBytes), bytes: catalogueBytes.length, gzip_base64: compressed.toString('base64') };
+    source_index: index, catalogue_sha256: hash(JSON.stringify(catalogue)), sha256: hash(packedBytes), bytes: packedBytes.length, gzip_base64: compressed.toString('base64') };
   return { snapshot, report: { observed_dates: index.dates.length, calendar_dates: catalogue.run_dates.length,
     tiers: Object.fromEntries(Object.entries(catalogue.sections).map(([section, tiers]) => [section, tiers.length])),
-    evidence: catalogue.evidence.length, sha256: snapshot.sha256, bytes: snapshot.bytes, gzip_bytes: compressed.length,
+    evidence: catalogue.evidence.length, sha256: snapshot.sha256, bytes: snapshot.bytes, legacy_bytes: catalogueBytes.length, gzip_bytes: compressed.length,
     source_core_sha256: snapshot.core_sha256 } };
 }
 
@@ -124,4 +128,4 @@ if (require.main === module) {
   fs.writeFileSync(path.resolve(output), JSON.stringify(snapshot) + '\n', 'utf8');
   console.log(JSON.stringify(report));
 }
-module.exports = { build };
+module.exports = { build, packHistoricalBankRateCatalogue, unpackHistoricalBankRateCatalogue };

@@ -10,7 +10,9 @@ import {
 import { cache } from '../src/data/cache';
 import { setSuitabilityAllowed, getSuitabilityAllowed } from '../src/data/suitabilityGate';
 import { visibleAccountRows, isBroadlyAvailable } from '../src/data/format';
+import * as format from '../src/data/format';
 import { debugLog } from '../src/lib/debugLog';
+import { yieldToUi } from '../src/lib/yieldToUi';
 import type { CorePayload, DetailsPayload, ProductDetail, RateRow } from '../src/types';
 
 jest.mock('../src/data/cache', () => ({
@@ -19,6 +21,7 @@ jest.mock('../src/data/cache', () => ({
     writeSuitabilityIndex: jest.fn(async () => undefined),
   },
 }));
+jest.mock('../src/lib/yieldToUi', () => ({ yieldToUi: jest.fn(async () => {}) }));
 
 function row(partial: Partial<RateRow> & Pick<RateRow, 'product_key' | 'product_name'>): RateRow {
   return {
@@ -37,6 +40,69 @@ describe('suitabilityIndex', () => {
 
   afterEach(() => {
     clearSuitabilityIndex();
+    jest.restoreAllMocks();
+  });
+
+  it('does not charge a timer per row chunk when classification fits the work budget', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(100);
+    const core = {
+      run_date: '2026-07-15',
+      sections: { Mortgage: { rates: Array.from({ length: 1200 }, (_, i) =>
+        row({ product_key: `fast|${i}`, product_name: i % 2 ? 'Staff Home Loan' : 'Standard Variable' })) } },
+    } as unknown as CorePayload;
+    const index = await buildSuitabilityIndex(core, null);
+    expect(index.allowed.size).toBe(600);
+    expect(yieldToUi).not.toHaveBeenCalled();
+  });
+
+  it('yields during duplicate scanning and classification without changing exact allowed products', async () => {
+    let now = 0;
+    jest.spyOn(Date, 'now').mockImplementation(() => { now += 9; return now; });
+    const rates = Array.from({ length: 64 }, (_, i) =>
+      row({ product_key: `slice|${i}`, product_name: i % 2 ? 'Staff Home Loan' : 'Standard Variable' }));
+    const core = { run_date: '2026-07-15', sections: { Mortgage: { rates: [...rates, ...rates] } } } as unknown as CorePayload;
+    const expected = await buildSuitabilityIndex(core, null, 'details', 'core', 0);
+    expect(yieldToUi).not.toHaveBeenCalled();
+    const actual = await buildSuitabilityIndex(core, null, 'details', 'core');
+    expect(actual).toEqual(expected);
+    // All 128 rows are scanned once, including classification of first identities.
+    expect(yieldToUi).toHaveBeenCalledTimes(4);
+    expect(jest.mocked(yieldToUi).mock.calls.every(args => args.length === 1 && args[0] === 0)).toBe(true);
+  });
+
+  it('short-circuits allowed products while preserving per-row parity for mixed sibling identities', async () => {
+    const open = row({ product_key: 'mixed|open', product_name: 'Standard Variable' });
+    const staff = row({ product_key: 'mixed|staff', product_name: 'Staff Home Loan' });
+    const rates = [staff, open, ...Array.from({ length: 120 }, (_, i) => ({
+      ...open, product_name: i % 2 ? 'Staff Home Loan' : `Standard Variable ${i}`,
+      account_class: i % 3 ? 'standard' : 'non_standard', rate: String(i / 10000),
+    })), { ...staff, product_name: 'Everyday Home Loan' }, staff];
+    const core = { run_date: '2026-07-15', sections: { Mortgage: { rates } } } as unknown as CorePayload;
+    const expected = new Set(rates.filter(item => isBroadlyAvailable(item, null)).map(item => item.product_key));
+    const nonStandard = jest.spyOn(format, 'isNonStandard');
+    const classify = jest.spyOn(format, 'isBroadlyAvailable');
+    expect((await buildSuitabilityIndex(core, null)).allowed).toEqual(expected);
+    expect(classify).toHaveBeenCalledTimes(3);
+    // Only unresolved product identities need the expensive dedup invariants.
+    expect(nonStandard).toHaveBeenCalledTimes(3);
+  });
+
+  it('never installs or persists a build superseded while a processing slice yields', async () => {
+    let now = 0;
+    let current = true;
+    jest.spyOn(Date, 'now').mockImplementation(() => { now += 9; return now; });
+    jest.mocked(yieldToUi).mockImplementationOnce(async () => { current = false; });
+    const core = {
+      run_date: '2026-07-15',
+      sections: { Mortgage: { rates: Array.from({ length: 64 }, (_, i) =>
+        row({ product_key: `old|${i}`, product_name: 'Standard Variable' })) } },
+    } as unknown as CorePayload;
+    closeSuitabilityGateUntilRebuild();
+    await expect(rebuildAndInstallSuitabilityIndex(core, null, 'old-details', () => current, 'old-core')).resolves.toBeNull();
+    expect(yieldToUi).toHaveBeenCalled();
+    expect(getSuitabilityIndex()).toBeNull();
+    expect(getSuitabilityAllowed()).toEqual(new Set());
+    expect(cache.writeSuitabilityIndex).not.toHaveBeenCalled();
   });
 
   it('builds an allowed set matching isBroadlyAvailable', async () => {

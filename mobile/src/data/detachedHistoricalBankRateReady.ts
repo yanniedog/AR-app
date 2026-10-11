@@ -1,0 +1,205 @@
+import * as Crypto from 'expo-crypto';
+import { strFromU8 } from 'fflate';
+import type { Manifest, ManifestFile } from '../types';
+import { cache } from './cache';
+import { downloadInflate, gunzipCooperatively } from './payload';
+import { decodeReadyHistoryArchive } from './historicalBankRateReadyRetention';
+import type { HistoricalBankRateReady } from './historicalBankRateReadyWire';
+import { validateHistoricalBankRateReadyForApp } from './historicalBankRateReady';
+import { validateReadyHistoricalDescriptor, validateDetachedHistoricalCatalogueEnvelope } from './detachedHistoricalBankRateCatalogueWire';
+import { decodeDetachedHistoryBytes, encodeDetachedHistoryBytes } from './detachedHistoricalCatalogueBytes';
+import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
+import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
+import { resolvePayloadKeyHex } from '../lib/keyVault';
+import { PAYLOAD_REPO } from '../config';
+import { backgroundPayloadWork, type BackgroundWorkHandle } from '../lib/backgroundPayloadWork';
+import { debugLog } from '../lib/debugLog';
+import { payloadBundleIdentity } from './payloadBundleIdentity';
+
+const DETACHED_HISTORY_MAX_COMPRESSED = 1024 * 1024;
+const DETACHED_HISTORY_MAX_DECODED = 2 * 1024 * 1024;
+
+let preparedAsset: { receipt: string; catalogue: HistoricalBankRateReady } | null = null;
+type Consumer = { isCurrent: () => boolean; isAssetCurrent: () => boolean; allowNetwork: boolean };
+type PendingAsset = {
+  work: BackgroundWorkHandle;
+  receipt: string;
+  consumers: Set<Consumer>;
+  superseded: boolean;
+  promise: Promise<HistoricalBankRateReady | null>;
+};
+let pendingAsset: PendingAsset | null = null;
+
+function retireUnusedPendingAsset(): void {
+  if (pendingAsset && ![...pendingAsset.consumers].some(caller => caller.isAssetCurrent())) {
+    pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
+    pendingAsset = null;
+  }
+}
+
+async function consume(load: PendingAsset, consumer: Consumer): Promise<HistoricalBankRateReady | null> {
+  try {
+    const catalogue = await load.promise;
+    return !load.superseded && consumer.isCurrent() && consumer.isAssetCurrent() ? catalogue : null;
+  } finally { load.consumers.delete(consumer); }
+}
+
+async function authentic(bytes: Uint8Array, file: ManifestFile): Promise<boolean> {
+  if (bytes.length !== file.bytes || bytes.length > DETACHED_HISTORY_MAX_COMPRESSED) return false;
+  const hash = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(bytes));
+  return Array.from(new Uint8Array(hash), value => value.toString(16).padStart(2, '0')).join('') === file.sha256;
+}
+
+/** Optional lazy asset: the caller owns installation and the bundled fallback. */
+export async function loadDetachedHistoricalBankRateReady(manifest: Manifest, options: {
+  allowNetwork: boolean;
+  isCurrent?: () => boolean;
+  /** Keep the same immutable asset alive while a replacement request paints. */
+  isAssetCurrent?: () => boolean;
+}): Promise<HistoricalBankRateReady | null> {
+  const started = Date.now(); let phase = 'descriptor';
+  const stage = (name: string) => { phase = name; debugLog.debug('bank-history-ready', `${name} run_date=${manifest.run_date} elapsed_ms=${Date.now() - started}`); };
+  const file = validateReadyHistoricalDescriptor(manifest, PAYLOAD_REPO);
+  if (!file || file.bytes > DETACHED_HISTORY_MAX_COMPRESSED) {
+    retireUnusedPendingAsset();
+    if (manifest.bank_rate_history_ready !== undefined) debugLog.warn('bank-history-ready', 'Invalid optional history descriptor; using fallback.');
+    return null;
+  }
+  try {
+    if (manifest.payload_revision) {
+      const bundle = payloadBundleIdentity(manifest);
+      if (manifest.payload_revision.bundle_sha256 !== bundle || manifest.payload_revision.generation_id !== `sha256-${bundle}`) {
+        throw new Error('Optional history revision identity mismatch');
+      }
+    }
+  } catch {
+    retireUnusedPendingAsset();
+    debugLog.warn('bank-history-ready', 'Invalid optional history revision identity; using fallback.');
+    return null;
+  }
+  const runDate = manifest.run_date, coreSha = manifest.files.core.sha256;
+  const revision = JSON.stringify(manifest.payload_revision);
+  const receipt = JSON.stringify([runDate, coreSha, file]);
+  const sameManifest = () => manifest.run_date === runDate && manifest.files.core.sha256 === coreSha &&
+    JSON.stringify(manifest.payload_revision) === revision &&
+    JSON.stringify(validateReadyHistoricalDescriptor(manifest, PAYLOAD_REPO)) === JSON.stringify(file);
+  const callerIsCurrent = () => (options.isCurrent?.() ?? true) && sameManifest();
+  const assetIsCurrent = () => (options.isAssetCurrent?.() ?? options.isCurrent?.() ?? true) && sameManifest();
+  if (!callerIsCurrent() || !assetIsCurrent()) { retireUnusedPendingAsset(); return null; }
+  if (pendingAsset && pendingAsset.receipt !== receipt) {
+    pendingAsset.superseded = true;
+    pendingAsset.work.finish('superseded');
+    pendingAsset = null;
+  }
+  if (preparedAsset?.receipt === receipt) { stage('prepared cache hit'); return preparedAsset.catalogue; }
+  const consumer: Consumer = { isCurrent: callerIsCurrent, isAssetCurrent: assetIsCurrent, allowNetwork: options.allowNetwork };
+  if (pendingAsset?.receipt === receipt) {
+    pendingAsset.consumers.add(consumer);
+    stage('matching preparation joined');
+    return consume(pendingAsset, consumer);
+  }
+  const work = backgroundPayloadWork.begin('Prepared bank history', runDate, 'Reading asset cache', () => {
+    if (!load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent())) return true;
+    load.superseded = true;
+    if (pendingAsset === load) pendingAsset = null;
+    return false;
+  });
+  const load: PendingAsset = { work, receipt, consumers: new Set([consumer]), superseded: false, promise: Promise.resolve(null) };
+  pendingAsset = load;
+  const isCurrent = () => !load.superseded && [...load.consumers].some(caller => caller.isAssetCurrent());
+  // A superseded caller's mutable manifest must not invalidate a live joiner's
+  // identical asset. Its immutable envelope binds only this captured day/core.
+  const boundManifest = { ...manifest, files: { ...manifest.files, core: { ...manifest.files.core } } };
+  load.promise = Promise.resolve().then(async () => {
+    const checkpoint = async () => {
+      if (!isCurrent()) throw new Error('Detached history preparation superseded');
+      await yieldToUi(0);
+      if (!isCurrent()) throw new Error('Detached history preparation superseded');
+      work.checkpoint();
+    };
+    const prepare = async (text: string): Promise<HistoricalBankRateReady | null> => {
+      if (text.length > DETACHED_HISTORY_MAX_DECODED) {
+        debugLog.warn('bank-history-ready', 'Optional history envelope exceeds its byte budget; using fallback.'); return null;
+      }
+      await checkpoint();
+      work.stage('Parsing and validating history envelope');
+      const inner = validateDetachedHistoricalCatalogueEnvelope(await parseJsonHeavy<unknown>(text), boundManifest);
+      if (!inner) { debugLog.warn('bank-history-ready', 'Optional history envelope binding is invalid; using fallback.'); return null; }
+      if (inner.bytes > 4 * 1024 * 1024) throw new Error('Prepared history exceeds processing byte budget');
+      if (!isCurrent()) return null;
+      work.stage('Opening prepared chart data');
+      stage('inner decode begin');
+      const decoded = await decodeReadyHistoryArchive(inner, { yieldControl: checkpoint });
+      if (!isCurrent()) return null;
+      const valid = validateHistoricalBankRateReadyForApp(decoded);
+      const result = isCurrent() && valid && decoded.run_dates.every(day => day <= runDate) ? decoded : null;
+      if (result) stage('verified catalogue ready');
+      else {
+        work.stage(!isCurrent() ? 'History request superseded' : valid
+          ? 'Catalogue contains dates after payload date; using fallback'
+          : 'Catalogue validation rejected; using fallback');
+        debugLog.warn('bank-history-ready', 'Optional historical catalogue rejected; using fallback.');
+      }
+      return result;
+    };
+    try {
+      stage('asset cache read');
+      const cached = await cache.readDetachedBankRateHistoryAsset(async encoded => {
+        await checkpoint();
+        work.stage('Decoding and verifying cached asset bytes');
+        const raw = await decodeDetachedHistoryBytes(encoded, checkpoint);
+        if (!raw || !await authentic(raw, file) || !isCurrent() || isEncryptedAsset(raw) !== !!file.enc) return null;
+        const bytes = file.enc ? decryptAsset(raw, await resolvePayloadKeyHex(file.enc.key_id)) : raw;
+        if (!isCurrent() || bytes.length < 18 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) return null;
+        const length = new DataView(bytes.buffer, bytes.byteOffset + bytes.length - 4, 4).getUint32(0, true);
+        if (!length || length > DETACHED_HISTORY_MAX_DECODED) return null;
+        await checkpoint();
+        work.stage('Inflating cached history asset');
+        const inflated = await gunzipCooperatively(bytes, undefined, DETACHED_HISTORY_MAX_DECODED);
+        if (inflated.length !== length || !isCurrent()) return null;
+        return prepare(strFromU8(inflated));
+      });
+      if (!isCurrent()) return null;
+      if (cached) { stage('verified asset cache hit'); preparedAsset = { receipt, catalogue: cached }; return cached; }
+      // A local audit may begin while cache validation is yielding.
+      if (!isCurrent() || isLocalAppHealthAudit() || ![...load.consumers].some(caller => caller.allowNetwork && caller.isAssetCurrent())) {
+        stage('offline asset cache miss'); return null;
+      }
+      let verified: Uint8Array | null = null;
+      work.stage('Downloading, verifying and inflating history asset');
+      stage('asset download begin');
+      const text = await downloadInflate(file.url, file.sha256, {
+        fileName: file.name, expectedBytes: file.bytes, requireExactBytes: true,
+        expectedEncoding: 'gzip', allowEncrypted: !!file.enc,
+        maxCompressedBytes: DETACHED_HISTORY_MAX_COMPRESSED, maxInflatedBytes: DETACHED_HISTORY_MAX_DECODED,
+        onVerifiedBytes: bytes => { verified = bytes; },
+      });
+      if (!isCurrent()) return null;
+      if (!verified || !await authentic(verified, file) || isEncryptedAsset(verified) !== !!file.enc) {
+        debugLog.warn('bank-history-ready', 'Optional history asset verification failed; using fallback.'); return null;
+      }
+      stage('asset bytes verified');
+      const catalogue = await prepare(text);
+      if (!catalogue || !isCurrent()) return null;
+      work.stage('Encoding verified asset for cache');
+      const encoded = await encodeDetachedHistoryBytes(verified, checkpoint);
+      if (!isCurrent()) return null;
+      work.stage('Saving verified asset cache');
+      try { await cache.writeDetachedBankRateHistoryAsset(encoded, isCurrent); }
+      catch { debugLog.warn('bank-history-ready', 'History is verified; its original asset bytes could not be cached.'); }
+      if (!isCurrent()) return null;
+      preparedAsset = { receipt, catalogue };
+      return catalogue;
+    } catch {
+      debugLog.warn('bank-history-ready', `Optional history unavailable during ${phase}; using fallback. elapsed_ms=${Date.now() - started}`);
+      return null;
+    }
+  }).then(result => {
+    work.finish(!isCurrent() ? 'superseded' : result ? 'completed' : 'fallback');
+    return result;
+  }, error => { work.finish('failed'); throw error; })
+    .finally(() => { if (pendingAsset === load) pendingAsset = null; });
+  return consume(load, consumer);
+}

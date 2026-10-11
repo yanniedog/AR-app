@@ -69,5 +69,7 @@ export function samePayloadIdentity(a: Manifest | null | undefined, b: Manifest)
       a.payload_revision.bundle_sha256 === b.payload_revision.bundle_sha256;
   }
   return a.files.core.sha256 === b.files.core.sha256 && a.files.details.sha256 === b.files.details.sha256 &&
-    a.bank_rate_history_catalogue?.file?.sha256 === b.bank_rate_history_catalogue?.file?.sha256;
+    a.bank_rate_history_catalogue?.file?.sha256 === b.bank_rate_history_catalogue?.file?.sha256 &&
+    a.bank_rate_history_catalogue_packed?.file?.sha256 === b.bank_rate_history_catalogue_packed?.file?.sha256 &&
+    a.bank_rate_history_ready?.file?.sha256 === b.bank_rate_history_ready?.file?.sha256;
 }

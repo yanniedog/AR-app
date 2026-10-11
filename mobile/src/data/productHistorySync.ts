@@ -6,9 +6,9 @@ import { yieldToUi } from '../lib/yieldToUi';
 import type { DatesIndex } from './datesIndex';
 import { normalizeTimelineDates } from './bankHistoryTransform';
 import { assertHistoricalIdentitiesAdvance, historicalRevisionHighWater, historicalSourceIdentity, normalizeHistoryIdentities } from './historyIdentity';
-import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRates, type ProductHistoryPayload } from './productHistoryModel';
-import type { PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
-import { productRatesFromHistoricalCatalogue } from './productHistoryCatalogue';
+import { bestRatesForCore, productKeysForCore, buildProductHistoryFromRatesAsync, type ProductHistoryPayload } from './productHistoryModel';
+import { preparedReadySources, type PreparedHistoricalBankRateCatalogue } from './historicalBankRateCatalogue';
+import { productRatesFromHistoricalCatalogue, readyProductHistoryIdentity } from './productHistoryCatalogue';
 import {
   createDatedFetchCircuit,
   DATED_FETCH_CIRCUIT_LIMIT,
@@ -24,6 +24,8 @@ export interface SyncProductHistoryOpts {
   existing?: ProductHistoryPayload | null;
   /** Already validated, transport-bound history for the current core owner. */
   catalogue?: PreparedHistoricalBankRateCatalogue | null;
+  /** Runtime consumers never rebuild missing producer history from dated cores. */
+  preparedOnly?: boolean;
   /** Exact current-manifest receipt already validated by the cache reader. */
   fallbackIndex?: DatesIndex | null;
   /** Local audits must project verified cache data without starting transport. */
@@ -63,6 +65,9 @@ export async function syncProductHistoryFromDailyPayloads(
 ): Promise<ProductHistoryPayload> {
   const targetRunDate = String(opts.targetRunDate || '').slice(0, 10);
   if (!targetRunDate) throw new Error('syncProductHistoryFromDailyPayloads: missing targetRunDate');
+  const preparedSources = opts.catalogue ? preparedReadySources(opts.catalogue) : null;
+  const preparedOnly = opts.preparedOnly === true || preparedSources !== null;
+  const preparedDates = new Set(preparedSources?.flatMap(input => [...input.acceptedDates]) ?? []);
 
   let indexedDates: string[] = [];
   let selectedIndex: DatesIndex | undefined;
@@ -95,25 +100,35 @@ export async function syncProductHistoryFromDailyPayloads(
   }
   const wantedDates = normalizeTimelineDates([
     ...indexedDates,
+    ...preparedDates,
     ...(opts.existing?.run_dates ?? []),
     targetRunDate,
   ]);
 
   const keys = productKeysForCore(opts.currentCore);
   const sameDerivation = opts.existing?.derivation_version === HISTORY_DERIVATION_VERSION;
-  const publications = selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
-  const selectedIdentity = (date: string): string | undefined => selectedIndex?.revision_heads?.[date]
-    ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity;
+  const publications = !preparedOnly && selectedIndex && networkAvailable ? await resolveLegacyPublications(selectedIndex, indexedDates.filter(d => d !== targetRunDate), opts.isCurrent) : new Map();
+  const selectedIdentity = (date: string): string | undefined => readyProductHistoryIdentity(opts.catalogue, selectedIndex, date) ??
+    (selectedIndex?.revision_heads?.[date] ? historicalSourceIdentity(selectedIndex, date) : publications.get(date)?.identity);
   // A local receipt cannot re-resolve mutable legacy manifests. Preserve their
   // already verified cached slices, without inventing identities for new ones.
-  const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => sameDerivation && !!opts.existing?.source_identities?.[date] &&
-    (!selectedIndex || !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
-      ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || opts.existing.source_identities[date] === selectedIdentity(date))))));
+  const reusableDates = new Set((opts.existing?.run_dates ?? []).filter(date => {
+    const previous = opts.existing?.source_identities?.[date];
+    if (!sameDerivation || !previous) return false;
+    const readyIdentity = readyProductHistoryIdentity(opts.catalogue, selectedIndex, date);
+    // Independent producer observations belong to the current core's ready
+    // payload. They neither need a public index nor survive its removal from
+    // that payload; a failed index refresh must not keep an older producer's rate.
+    if (previous.startsWith('prepared:') || readyIdentity?.startsWith('prepared:')) return previous === readyIdentity;
+    return !selectedIndex || (preparedDates.has(date) ? previous === selectedIdentity(date) :
+      !indexedDates.includes(date) || (opts.existing?.schema_version === 3 &&
+        ((!networkAvailable && !selectedIndex.revision_heads?.[date]) || previous === selectedIdentity(date))));
+  }));
   const sourceIdentities = Object.fromEntries([...reusableDates].map(date => [date, opts.existing!.source_identities![date]]));
   // Recent dates are useful to product charts immediately; older dates continue
   // warming in the same background task after progressive checkpoints land.
   let toFetch = wantedDates
-    .filter((d) => d !== targetRunDate && !reusableDates.has(d) && indexedDates.includes(d) && !!selectedIdentity(d))
+    .filter((d) => d !== targetRunDate && !reusableDates.has(d) && (indexedDates.includes(d) || preparedDates.has(d)) && !!selectedIdentity(d))
     .sort((a, b) => b.localeCompare(a));
 
   // Matching immutable core identity and date axis prove today's point and all
@@ -135,8 +150,8 @@ export async function syncProductHistoryFromDailyPayloads(
   ) {
     return opts.existing;
   }
-  const bestByDate = opts.catalogue && selectedIndex && toFetch.length
-    ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex, toFetch, opts.isCurrent)
+  const bestByDate = opts.catalogue && (selectedIndex || preparedSources) && toFetch.length
+    ? await productRatesFromHistoricalCatalogue(opts.catalogue, selectedIndex ?? null, toFetch, opts.isCurrent)
     : new Map<string, Map<string, number>>();
   const packedDates = bestByDate.size;
   for (const day of bestByDate.keys()) sourceIdentities[day] = selectedIdentity(day)!;
@@ -169,19 +184,19 @@ export async function syncProductHistoryFromDailyPayloads(
   let superseded = false;
   let terminalCheckpointPublished = false;
 
-  const buildAvailable = (): ProductHistoryPayload => {
+  const buildAvailable = async (): Promise<ProductHistoryPayload> => {
     // An empty authoritative map clears stale rates on failed/unselected dates,
     // while preserving those dates as explicit null gaps in every series.
     const availableRates = new Map(bestByDate);
     for (const date of wantedDates) if (!availableRates.has(date) && !reusableDates.has(date)) availableRates.set(date, new Map());
-    const built = buildProductHistoryFromRates(
+    const built = await buildProductHistoryFromRatesAsync([
       availableRates,
       keys,
       wantedDates,
       targetRunDate,
       opts.existing,
       opts.coreSha,
-    );
+    ], () => yieldToUi(0));
     built.source_identities = normalizeHistoryIdentities(sourceIdentities, wantedDates);
     built.date_status = historyDateStatuses(wantedDates, built.source_identities);
     built.revision_high_water = historicalRevisionHighWater(revisionHighWater, sourceIdentities);
@@ -193,12 +208,14 @@ export async function syncProductHistoryFromDailyPayloads(
 
   const publishCheckpoint = async (
     done: boolean,
+    prepared?: ProductHistoryPayload,
   ): Promise<ProductHistoryPayload | null> => {
     if (!isCurrent()) {
       superseded = true;
       return null;
     }
-    const built = buildAvailable();
+    const built = prepared ?? await buildAvailable();
+    if (!isCurrent()) { superseded = true; return null; }
     await opts.onCheckpoint?.(built, {
       successfulDates: fetchedOk,
       attemptedDates: attempted,
@@ -210,7 +227,9 @@ export async function syncProductHistoryFromDailyPayloads(
     return built;
   };
 
-  if (networkAvailable && toFetch.length) {
+  // A ready-payload app never rebuilds its history by downloading dated cores.
+  // Unprepared dates remain explicit gaps until the producer publishes them.
+  if (!preparedOnly && networkAvailable && toFetch.length) {
     const circuit = createDatedFetchCircuit(opts.circuitLimit ?? DATED_FETCH_CIRCUIT_LIMIT);
     for (let fetchIndex = 0; fetchIndex < toFetch.length; fetchIndex += 1) {
       const runDate = toFetch[fetchIndex];
@@ -269,14 +288,15 @@ export async function syncProductHistoryFromDailyPayloads(
     }
   }
 
-  const built = buildAvailable();
+  const built = await buildAvailable();
+  if (!isCurrent()) superseded = true;
   if (superseded) {
     debugLog.info(
       'productHistory',
       `sync superseded run_date=${targetRunDate} ok=${fetchedOk}/${toFetch.length}`,
     );
   } else if (!terminalCheckpointPublished) {
-    await publishCheckpoint(true);
+    await publishCheckpoint(true, built);
   }
   debugLog.info(
     'productHistory',

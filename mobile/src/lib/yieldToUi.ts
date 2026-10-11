@@ -20,6 +20,34 @@ function nextMacrotask(): Promise<void> {
   });
 }
 
+interface NativeRuntimeScheduler {
+  unstable_NormalPriority: number;
+  unstable_scheduleCallback(priority: number, callback: () => null): unknown;
+}
+
+/** RN timers wait for a frame. Its native task queue can instead let queued
+ * input/React work run between CPU slices without adding a frame per slice. */
+function nextProcessingTask(): Promise<void> {
+  return new Promise(resolve => {
+    try {
+      const scheduler = (globalThis as typeof globalThis & {
+        nativeRuntimeScheduler?: NativeRuntimeScheduler;
+      }).nativeRuntimeScheduler;
+      if (scheduler && typeof scheduler.unstable_scheduleCallback === 'function' &&
+          Number.isFinite(scheduler.unstable_NormalPriority)) {
+        scheduler.unstable_scheduleCallback(scheduler.unstable_NormalPriority, () => {
+          resolve();
+          return null;
+        });
+        return;
+      }
+    } catch {
+      // Older RN hosts and web retain the ordinary macrotask fallback.
+    }
+    armTimeout(0, resolve);
+  });
+}
+
 function nextPaintFrame(fallbackMs: number): Promise<void> {
   return new Promise((resolve) => {
     let settled = false;
@@ -132,6 +160,10 @@ export function scheduleAfterNavigation(
  *    zero-delay timer preempt an in-flight gesture/transition.
  */
 export async function yieldToUi(timeoutMs: number = YIELD_TIMEOUT_MS): Promise<void> {
+  if (timeoutMs <= 0) {
+    await nextProcessingTask();
+    return;
+  }
   await nextMacrotask();
   await new Promise<void>((resolve) => {
     let settled = false;

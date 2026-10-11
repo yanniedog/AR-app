@@ -1,149 +1,171 @@
 # Bank rate history
 
-AR-local prepackages the complete historical product catalogue in the optional
-`manifest.bank_rate_history_catalogue` archive. It stays outside the legacy
-`files` inventory and the critical core (512 KiB compressed maximum). The Rates and Gap charts apply the user's
-filters independently to each observed date, including products subsequently
-withdrawn. Each matching advertised rate tier has equal weight. Missing dates
-remain gaps; the app does not carry rates or eligibility across missing evidence.
+## Prepared data is the mobile contract
 
-Schema 2 contains historical row descriptors, compressed spans of rate values,
-dated product evidence, and source receipts. A span ends whenever its rates or
-evidence change. Structural filters use that historical descriptor; access and
-required-feature filters use that day's bound evidence. Unknown evidence cannot
-pass a required feature or the broadly applicable filter. The current-day chart
-still uses original current-core rows and the app's mandatory eligibility gate.
-Savings history also excludes products explicitly identified as term deposits.
+The app consumes `manifest.bank_rate_history_ready`. AR-local runs the pinned
+app compiler before publication; the phone does not classify historical product
+descriptions, merge raw tiers, or rebuild missing history from dated core files.
+A publisher without this capability uses the signed app's prepared fallback.
+Raw schema-2 and `ar-history-dag-v1` catalogues remain compatible producer/tooling
+assets for older apps. They are not the new mobile preparation path.
 
-The app computes all banks together and caches results by profile and catalogue.
-Bank selection reuses the prepared chart model and SVG paths without network
-requests. New profile filters evaluate local spans rather than downloading daily
-payloads or expanding every historical row observation. After the current rates
-paint, deferred preparation warms the user's historical filter result.
-Cold hydration splits decompression, hashing, validation and cache compression
-into cooperative work slices so queued input can run between them. JSON parsing
-still runs atomically. The catalogue is decoded once per process; switching banks
-does not repeat hydration.
+The ready projection contains preclassified bank cohorts, sparse changes to exact
+rate-frequency distributions, product-best rate spans, and original dated source
+receipts. Cohorts preserve every structural profile dimension, broadly available
+eligibility, unknown-evidence state, and curated feature predicate. Full rate
+multiplicities preserve exact minimum, maximum, mean, median and count; cohort
+means are never averaged. Savings excludes explicit term deposits. Required
+features and broad availability fail closed when dated evidence is unknown.
+
+The phone applies the user's filters to those cohorts and aggregates all banks
+once. Bank selection reuses the result. Profile changes reuse the prepared input;
+identical refreshes reuse the resulting chart model. Today's observations still
+use original current-core rows and the live mandatory eligibility gate.
+
+The verified fallback covers 134 observed dates across 137 calendar days, from
+13 May to 26 September 2026. The build-time compiler reduces 44,044 tier
+descriptors and 8,199 evidence records to 4,672 cohorts and 3,175 product series.
+The prepared JSON is about 2.62 MB and its gzip about 280 KB. May 14, June 26 and
+September 23 are gaps. Dates after the fallback's coverage also remain gaps until
+verified prepared data supplies them; no rate is carried across a missing date.
 
 ## Producer and offline recovery
 
-A valid schema-2 pack authenticated by the selected manifest and core is authoritative.
-Its original selected-contract or retained-export receipts remain attached. The
-app saves the exact verified asset bytes in a separate bounded cache, authenticates
-them again on restart, and never inserts the decoded archive into sealed core data.
-Legacy embedded schema-2 packs remain readable. If a raw-export selection is unresolved, the app may
-fill that blank from an independently verified published observation whose
-manifest still matches the selected index. It never replaces a producer
-observation with this fallback. The merged cache binds to the exact producer core,
-and a changed or missing public manifest removes its fallback observation.
-An independent, bounded public-observation archive retains editions that cannot
-be recovered from the bundled catalogue. A staged producer cannot destroy those
-editions while an older installed core still needs them after a failed update.
-Schema-1 `bank_rate_history` remains supported for
-older producer payloads, with its narrower current-tier behaviour identified in
-the chart text.
+The URL-free capability is `{schema_version: 1, file: {name, bytes, sha256, enc?}}`.
+The filename is `bank-rate-history-ready-YYYY-MM-DD-<sha12>.json.gz[.enc]`.
+The app derives the delivery URL from its allowlisted repository and validated
+release tag. The descriptor remains bound by canonical payload identity when a
+release is retagged; it cannot borrow routing from another alias.
 
-For current payloads predating schema 2, the signed app contains an independently
-verified catalogue generated by AR-local's same encoder. It covers 134 published
-observations across 137 calendar days, from 13 May to 26 September 2026: 44,044
-historical tier descriptors and 8,199 dated evidence records. May 14, June 26 and
-September 23 have no selected public observation. Individual banks and filters
-can have fewer matching dates.
+The outer gzip contains `{schema_version: 1, run_date, core_sha256, catalogue}`.
+`catalogue` is `{sha256, bytes, gzip_base64}`. Its independently verified inner
+JSON follows the contract in
+[`mobile/contracts/history-ready/README.md`](../mobile/contracts/history-ready/README.md).
+The outer asset is limited to 1 MiB, its decoded envelope to 2 MiB, and the inner
+projection to 4 MiB. Invalid sizes, hashes, base64, dates, source receipts,
+frequency conservation, semantic revision or compiler digest reject the asset.
+The original authenticated transport bytes are cached separately from core data.
 
-Each bundled observation binds its core and details to the same immutable
-manifest. Refresh checks those manifest identities against the selected index;
-superseded historical observations disappear until a replacement pack supplies
-them. A legacy current day's already verified core/details can extend the local
-catalogue without any additional historical downloads. Skipped dates remain
-unknown until the producer supplies a complete pack. Production schema 2 removes
-this legacy limitation by including the whole retained history in every update.
+Producer observations keep their selected-contract or retained-export identity.
+Public observations must match the independently selected publication revision.
+The greatest known revision is retained per date; equal-revision conflicts remove
+that date until resolved. A partial primary projection may use accepted public
+observations from the signed fallback. Overlapping sources cannot double-count
+a date. Product histories use the same prepared source masks and preserve their
+independent provenance. A missing projection never triggers bulk dated-core
+fetches, including during a local audit.
 
-The compressed offline cache is bounded, SHA-256 checked and tied to exact
-per-date core/manifest identities. A validated temporary checkpoint takes
-precedence over its older primary after an interrupted write. Staging a later day
-preserves the preceding installed day's binding; rollback or conflicting revision
-identities are rejected. Cache failures do not fabricate history.
+Verified public observations newer than the signed fallback are retained in a
+separate bounded prepared checkpoint. This compacts classified frequency events
+and product spans only; it never reopens raw descriptions or evidence. Partial
+later payloads cannot erase those dates across restart. Superseded editions are
+removed, revision high-water receipts survive compiler upgrades, and independent
+producer observations never carry across core bindings. Unchanged checkpoints
+reuse their validation receipt and are not re-encoded. A complete public source
+retains the producer's exact verified compressed archive, avoiding another
+compaction, serialization and compression pass on the phone. Partial sources
+are compacted once with disjoint date masks. Capacity or write failure
+preserves the previous file and records the recovery limitation.
 
 ## Startup and refresh
 
-The optional namespace is `{schema_version: 1, file: {name, bytes, sha256, url, enc?}}`.
-Its content-addressed asset is a gzip JSON envelope containing `schema_version: 1`,
-`run_date`, `core_sha256` (exactly the selected `files.core.sha256`) and
-`catalogue: {sha256, bytes, gzip_base64}`. The inner gzip decodes to schema 2.
-The outer asset is limited to 8 MiB compressed / 24 MiB decoded; the inner
-catalogue to 16 MiB compressed / 128 MiB decoded. Sizes, hashes, canonical base64,
-release routing, core binding, schema and historical dates are verified before use.
-Only `file.url` is excluded from the optional namespace's canonical bundle identity;
-its schema, byte identity and encryption metadata remain bound when releases are retagged.
-Before revision-protocol adoption, a dated manifest may retain a valid optional
-archive from the same day's rolling alias only when its core SHA matches. The
-original descriptor URL is retained and its envelope must still match the exact
-core. Selected immutable revisions never inherit assets from another alias.
+Preparation starts after the current screen paints. Native Android gzip and
+history SHA-256 run off the JavaScript thread. Current-core content hashing uses
+the native crypto implementation, preserving the exact JSON and UTF-8 digest.
+Large JSON assets decode into bounded text chunks to avoid simultaneous complete
+Java byte and character buffers. Verified optional assets are normalized once
+and reused after installation. The remaining bounded work yields through
+React Native's runtime scheduler; runtimes without it retain an asynchronous
+timer fallback. Explicit paint, navigation and interaction waits are unchanged.
+Capable browsers use DecompressionStream and WebCrypto; the bounded portable
+codec remains available.
 
-The native Android codec performs inner gzip and digest work off the JavaScript
-thread after first paint. A matching prepared archive is reused for subsequent
-refreshes. Local audits read verified caches without initiating history downloads.
-Missing or corrupt optional archives retain bundled/current history fallback.
+Newer requests supersede older owners without clearing a successor's loading
+state or installing stale results. Identical verified assets share in-flight
+work. Local audits read verified caches and the signed prepared fallback without
+starting history downloads. Unavailable dates stay visibly unknown.
 
-The payload auditor reports archive byte verification separately from historical
-coverage. Public `published_core` receipts are compared with selected index heads;
-superseded observations and missing historical dates produce a coverage warning.
-`historical_coverage_verified` is false for those gaps and null when selected
-heads were not checked, including private candidate audits. A repackaged current
-core is bound by the envelope; its earlier public source receipt cannot equal the
-new manifest's own digest without a circular dependency. Producer contract and
-retained-export sources keep their independent provenance.
+## Performance and verification
 
-Validated current rates and the matching suitability gate become ready before
-optional historical work begins. Two paint opportunities precede catalogue
-decoding, filter warming and offline checkpoint writes. The bank chart displays
-its historical loading state during this work; navigation and current-rate
-screens remain usable. The performance audit waits for history to settle.
+The acceptance budget is **five seconds of payload processing after asset bytes
+are available**, including current-core verification, JSON decoding, optional
+asset normalization, suitability classification, history preparation, profile
+results, product history construction and cache byte conversion. Network latency
+and persistent disk latency are recorded separately. A history-only measurement
+does not satisfy the combined budget. A Node result is a regression proxy and must not
+be presented as Android acceptance. Android acceptance uses a release Hermes
+build with real observations and records input/progress responsiveness.
 
-Each preparation owns its completion state. Superseded jobs cannot clear a newer
-request, and RBA-only core wrappers retain their original history owner. Quiet
-resume refreshes still prepare history. Identical successful preparations reuse
-their exact core, manifest, selected-date and verified-details receipts; changed
-heads, details, failed saves or intervening preparations invalidate the shortcut.
-The bundled catalogue module is initialized only when history work starts.
+The 11 October 2026 release-Hermes test on an Android API 36 x86_64 emulator
+processed the exact current immutable assets and prepared producer candidate
+in **4.166 s**: 2.194 s for current core, details, optional assets and suitability,
+plus 1.971 s for history, profile results, the complete product ledger and cache
+serialization. Identical warm history reused the ledger in 48 ms. The candidate
+preserves 144 original source receipts across a 152-day calendar and constructs
+363,582 product observations. All seven current asset decodes used the native
+codec; the 35 MB details document completed within the normal Java heap. The
+largest observed JavaScript heartbeat gap was 326 ms.
 
-A desktop Node proxy using the verified 26 September core, a rebuilt persisted
-suitability index and the full bundled catalogue measured cached store readiness
-at 19.77 seconds before this change and 0.20 seconds afterward. Total historical
-preparation remained about 20 seconds, retaining all 134 published observations
-on the 137-day axis. This single-run proxy uses actual cache verification,
-decoding, validation, aggregation and timer yields with native filesystem reads
-adapted to verified in-memory bytes. It excludes React rendering, storage latency
-and Android/Hermes, so it is not a phone launch-time guarantee.
+These are emulator measurements, not physical ARM-device acceptance. They
+exclude network, persistent disk I/O, module initialization, React rendering,
+notification comparisons and delivery. The earlier 2.292 s history-only result
+does not represent combined payload processing. The earlier combined decoder
+repair measured 5.059 s and failed the budget; removing fixed processing waits
+and duplicate suitability work produced the passing result above. Native
+measurements must accompany future substantial changes in catalogue size or
+the consumer's processing path.
 
-## Reproduce the bundled catalogue
+Run the canonical app checks with `cd mobile && npm run ci`. They include:
 
-The selected immutable history index is saved atomically with each installed
-core before deferred preparation starts. An offline restart after an interrupted
-preparation uses this receipt and verified cached details to recover history.
-Index-only corrections also update the receipt, and cache writes reject older,
-missing or conflicting previously verified historical heads. Malformed optional
-receipts do not prevent the current core from opening.
+- reproducible compiler and prepared fallback checks;
+- real-data history benchmarks in native-browser-codec and portable modes;
+- exact raw-versus-prepared parity for every curated feature and observed profile
+  dimension, including distributions, missing dates and product series;
+- transport binding, source supersession, cancellation, cache and local-audit tests;
+- the normal app tests, platform exports and artifact budgets.
 
-First use AR-local's canonical local prepacker with verified public inputs:
-`dates-index.json`, selected bytes at `manifests/YYYY-MM-DD.json`, and gzip bytes
-at `cores/<sha256>.gz` and `details/<sha256>.gz`. It validates every indexed
-manifest, revision, asset digest, length and date. This process does not publish
-or reserve a revision. Production publication belongs to the guarded Pi writer.
+`npm run verify:prepared-history` checks the compiler bytes/source receipts and
+rebuilds the fallback for comparison. To intentionally update them, run
+`node scripts/export-history-ready-compiler.cjs` and then
+`node scripts/bundle-ready-bank-history.cjs`. The raw fallback builder still
+independently verifies every source manifest, core/details receipt, descriptor,
+rate multiplicity and dated evidence before a new baseline can be compiled.
 
-Then, from this repository's `mobile/` directory:
+The public payload auditor checks ready, packed and legacy capabilities
+independently. Passing a local candidate audit does not establish publication,
+APK delivery or acceptance on the user's physical phone. App and producer must
+use the same pinned compiler; compiler changes require coordinated publication
+and app delivery.
 
-```sh
-node scripts/bundle-historical-bank-catalogue.cjs /path/to/verified-input /path/to/prepack/catalogue.json
-npm run ci
-```
+## Direct GitHub delivery
 
-The wrapper rechecks all source bindings and raw assets, validates the catalogue
-using the shipping app's schema, and independently rebuilds each observed day
-from its verified core/details pair. Every descriptor, rate multiplicity and dated
-evidence record must match before it writes
-`src/data/historicalBankRateCatalogue.snapshot.json`. The decoded catalogue is
-42,691,597 bytes; gzip is 2,228,451 bytes. Decoded SHA-256:
-`7d6c81f3d69944350b7e45697b789ee130626cba2004899775e9764a11ef8014`.
-Only public product data is included. The older numerical baseline is no longer
-imported by the runtime refresh path.
+AR-local publishes the readable app inventory on a dedicated GitHub branch,
+`app-payload-public`. Immutable editions live under `tags/<canonical tag>/`;
+current manifest and index selectors live under `latest/`.
+Canonical manifest URLs and revision identities keep their `app-payload-*`
+namespace. The app maps these validated identities to the corresponding public
+raw GitHub file and verifies the original sizes and hashes. New manifests advertise
+`delivery: {mode: 'github-public-v1'}`. These bytes need no Cloudflare service or
+device decryption keys. Unexpected encrypted responses fail closed.
+
+The producer verifies the staged commit's raw files before atomically updating
+the branch reference, publishing files and selectors together. Only explicitly
+declared app assets are included;
+preservation archives, source evidence, logs and keys are excluded. Existing
+encrypted releases remain available to older clients. Every public branch
+edition remains available to apps retaining that edition in their cache.
+
+Historical index entries remain provenance receipts for prepared history. The
+app downloads the selected current edition, without fetching every old core.
+The raw endpoint supports browser access as well as native Android downloads.
+The public auditor rejects redirects from this fixed route and records canonical,
+requested and final URLs separately. A successful direct public readback is
+required before reporting delivery complete.
+
+A transport-only copy of an older edition can initialize the branch, but does
+not establish that future daily publications use it. Release automation checks
+the producer's `github-public-v1` marker and exact index, rolling manifest and
+immutable manifest bindings before allocating a version, building a public APK
+and publishing it. Missing or inconsistent metadata holds the release; ordinary
+artifact-only builds remain available. Producer activation and fresh public
+readback complete this handoff.

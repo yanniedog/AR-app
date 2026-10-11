@@ -19,6 +19,8 @@ import { resolvePayloadKeyHex } from '../src/lib/keyVault';
 import { yieldToUi } from '../src/lib/yieldToUi';
 import type { Manifest } from '../src/types';
 import { payloadBundleIdentity } from '../src/data/payloadBundleIdentity';
+import { packHistoricalBankRateCatalogue } from '../src/data/historicalBankRateCataloguePacked';
+import { validatePackedHistoricalCatalogueDescriptor, validateLegacyHistoricalCatalogueDescriptor, PACKED_HISTORY_MAX_DECODED } from '../src/data/detachedHistoricalBankRateCatalogueWire';
 
 jest.mock('expo-crypto', () => ({ CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
   digest: jest.fn(async (_: unknown, bytes: Uint8Array) => new Uint8Array(jest.requireActual('@noble/hashes/sha256').sha256(bytes)).buffer),
@@ -62,6 +64,28 @@ function serve(value: ReturnType<typeof fixture>) {
     options!.onVerifiedBytes!(value.raw);
     return value.text;
   });
+}
+function bindRevision(manifest: Manifest) {
+  const bundle = payloadBundleIdentity(manifest);
+  manifest.payload_revision = { ...manifest.payload_revision!, bundle_sha256: bundle, generation_id: `sha256-${bundle}` };
+}
+function packedFixture(inner = packHistoricalBankRateCatalogue(catalogue)) {
+  const value = fixture(inner);
+  const hash = bytesToHex(sha256(value.raw));
+  value.manifest.bank_rate_history_catalogue_packed = { schema_version: 1, file: {
+    name: `bank-rate-history-catalogue-packed-${day}-${hash.slice(0, 12)}.json.gz`, bytes: value.raw.length, sha256: hash,
+  } };
+  delete value.manifest.bank_rate_history_catalogue;
+  bindRevision(value.manifest);
+  return value;
+}
+function reencodePacked(value: ReturnType<typeof packedFixture>) {
+  value.text = JSON.stringify(value.envelope); value.raw = gzipSync(strToU8(value.text));
+  const hash = bytesToHex(sha256(value.raw));
+  Object.assign(value.manifest.bank_rate_history_catalogue_packed!.file, {
+    name: `bank-rate-history-catalogue-packed-${day}-${hash.slice(0, 12)}.json.gz`, bytes: value.raw.length, sha256: hash,
+  });
+  bindRevision(value.manifest);
 }
 const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString('base64');
 function stored(raw: Uint8Array) {
@@ -211,12 +235,22 @@ test('a failed shared asset load is released so a later attempt can recover', as
 
 test('cached multi-megabyte envelopes use the standard 64KiB inflate slices', async () => {
   const value = fixture();
+  let inflateWaits = 0;
+  const inflate = jest.requireActual<typeof import('../src/data/payload')>('../src/data/payload').gunzipCooperatively;
+  const mockedPayload = jest.requireMock<typeof import('../src/data/payload')>('../src/data/payload');
+  jest.spyOn(mockedPayload, 'gunzipCooperatively').mockImplementation(async (...args) => {
+    const before = jest.mocked(yieldToUi).mock.calls.length;
+    const result = await inflate(...args);
+    const calls = jest.mocked(yieldToUi).mock.calls.slice(before);
+    inflateWaits = calls.length;
+    expect(calls.every(args => args[0] === 0)).toBe(true);
+    return result;
+  });
   // Valid envelope plus legal JSON whitespace, stored without compression to
   // isolate the real outer inflater's scheduling from the rate catalogue.
   const raw = gzipSync(strToU8(value.text + ' '.repeat(2_229_400)), { level: 0 });
   attach(value.manifest, raw); stored(raw);
   expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
-  const inflateWaits = jest.mocked(yieldToUi).mock.calls.filter(args => args.length === 0).length;
   expect(inflateWaits).toBe(Math.ceil(raw.length / (64 * 1024)) - 1);
   expect(inflateWaits).toBeLessThan(36);
   expect(downloadInflate).not.toHaveBeenCalled();
@@ -432,4 +466,109 @@ test('keeps a shared hung asset visible while one consumer still owns it', async
   release.resolve(null);
   expect(await first).toBeNull();
   expect(await second).toBeNull();
+});
+
+test('dual publication selects only compact history and preserves the legacy reader', async () => {
+  const compact = packedFixture(), legacy = fixture(catalogue, compact.manifest.files.core.sha256);
+  compact.manifest.bank_rate_history_catalogue = legacy.manifest.bank_rate_history_catalogue;
+  bindRevision(compact.manifest); serve(compact);
+  expect(validateLegacyHistoricalCatalogueDescriptor(compact.manifest)?.name).toBe(legacy.manifest.bank_rate_history_catalogue!.file.name);
+  const chosen = validateDetachedHistoricalCatalogueDescriptor(compact.manifest)!;
+  expect(chosen.name).toBe(compact.manifest.bank_rate_history_catalogue_packed!.file.name);
+  expect(chosen.url).toBe(`https://github.com/${compact.manifest.repo}/releases/download/${compact.manifest.tag}/${chosen.name}`);
+  expect(await loadDetachedHistoricalBankRateCatalogue(compact.manifest, { allowNetwork: true })).toEqual(catalogue);
+  expect(downloadInflate).toHaveBeenCalledTimes(1);
+  expect(downloadInflate).toHaveBeenCalledWith(chosen.url, chosen.sha256, expect.any(Object));
+  expect(cache.writeDetachedBankRateHistoryAsset).toHaveBeenCalledWith(base64(compact.raw), expect.any(Function));
+});
+
+test('compact cached bytes restore offline with full binding and schema validation', async () => {
+  const value = packedFixture(); stored(value.raw);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toEqual(catalogue);
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('invalid compact capability falls back to the valid legacy descriptor', async () => {
+  const value = fixture();
+  value.manifest.bank_rate_history_catalogue_packed = packedFixture().manifest.bank_rate_history_catalogue_packed;
+  value.manifest.bank_rate_history_catalogue_packed!.file.bytes = 0;
+  bindRevision(value.manifest); serve(value);
+  expect(validatePackedHistoricalCatalogueDescriptor(value.manifest)).toBeNull();
+  expect(validateDetachedHistoricalCatalogueDescriptor(value.manifest)?.name).toBe(value.manifest.bank_rate_history_catalogue!.file.name);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toEqual(catalogue);
+});
+
+test.each(['namespace', 'url', 'repo', 'tag', 'zero', 'fraction', 'too-large', 'sha', 'name', 'enc', 'misplaced', 'collision'] as const)(
+  'rejects invalid compact descriptor %s before transport', async invalid => {
+    const value = packedFixture(), file = value.manifest.bank_rate_history_catalogue_packed!.file;
+    if (invalid === 'namespace') Object.assign(value.manifest.bank_rate_history_catalogue_packed!, { extra: true });
+    if (invalid === 'url') Object.assign(file, { url: 'https://evil.invalid/data' });
+    if (invalid === 'repo') value.manifest.repo = 'elsewhere/AR-local';
+    if (invalid === 'tag') value.manifest.tag = 'app-payload-2099-01-01';
+    if (invalid === 'zero') file.bytes = 0;
+    if (invalid === 'fraction') file.bytes = 1.5;
+    if (invalid === 'too-large') file.bytes = DETACHED_HISTORY_MAX_COMPRESSED + 1;
+    if (invalid === 'sha') file.sha256 = 'bad';
+    if (invalid === 'name') file.name = '../catalogue.json.gz';
+    if (invalid === 'enc') file.enc = { alg: 'aes-256-gcm', key_id: '12345678' };
+    if (invalid === 'misplaced') Object.assign(value.manifest.files, { bank_rate_history_catalogue_packed: file });
+    if (invalid === 'collision') value.manifest.files.details.name = file.name;
+    if (invalid === 'fraction') delete value.manifest.payload_revision;
+    else bindRevision(value.manifest);
+    expect(validatePackedHistoricalCatalogueDescriptor(value.manifest)).toBeNull();
+    expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
+    expect(cache.readDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+    expect(downloadInflate).not.toHaveBeenCalled();
+  });
+
+test.each(['inner-size', 'day', 'core', 'inner-hash', 'legacy-inner', 'malformed-dag', 'schema'] as const)(
+  'rejects authenticated compact bytes with invalid %s', async invalid => {
+    const value = packedFixture();
+    if (invalid === 'inner-size') value.envelope.catalogue.bytes = PACKED_HISTORY_MAX_DECODED + 1;
+    if (invalid === 'day') value.envelope.run_date = '2099-01-01';
+    if (invalid === 'core') value.envelope.core_sha256 = 'f'.repeat(64);
+    if (invalid === 'inner-hash') value.envelope.catalogue.sha256 = 'f'.repeat(64);
+    if (invalid === 'legacy-inner') value.envelope.catalogue = compressCatalogue(catalogue);
+    if (invalid === 'malformed-dag') value.envelope.catalogue = compressCatalogue({ format: 'ar-history-dag-v1', root: 0, nodes: [[0, 'A']] });
+    if (invalid === 'schema') value.envelope.catalogue = compressCatalogue(packHistoricalBankRateCatalogue({ ...catalogue, evidence: [] }));
+    reencodePacked(value); stored(value.raw);
+    expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: false })).toBeNull();
+    expect(cache.writeDetachedBankRateHistoryAsset).not.toHaveBeenCalled();
+    expect(downloadInflate).not.toHaveBeenCalled();
+  });
+
+test('URL-free compact capability remains revision-bound across publication retagging', async () => {
+  const value = packedFixture(), before = payloadBundleIdentity(value.manifest);
+  value.manifest.tag = 'app-payload-latest';
+  for (const file of Object.values(value.manifest.files)) file.url = `https://github.com/${value.manifest.repo}/releases/download/${value.manifest.tag}/${file.name}`;
+  expect(payloadBundleIdentity(value.manifest)).toBe(before);
+  expect(validatePackedHistoricalCatalogueDescriptor(value.manifest)?.url).toContain('/app-payload-latest/');
+  value.manifest.bank_rate_history_catalogue_packed!.file.bytes++;
+  expect(payloadBundleIdentity(value.manifest)).not.toBe(before);
+  expect(await loadDetachedHistoricalBankRateCatalogue(value.manifest, { allowNetwork: true })).toBeNull();
+  expect(downloadInflate).not.toHaveBeenCalled();
+});
+
+test('cache byte codecs avoid one timer per block and check ownership at both boundaries', async () => {
+  // A coarse clock models blocks finishing inside one work slice. The old
+  // implementation scheduled hundreds of timers for this exact same input.
+  jest.spyOn(Date, 'now').mockReturnValue(1000);
+  const raw = new Uint8Array(2 * 1024 * 1024); raw.fill(173);
+  const encodeWork = jest.fn(async () => {}), decodeWork = jest.fn(async () => {});
+  const encoded = await encodeDetachedHistoryBytes(raw, encodeWork);
+  expect(encoded).toBe(base64(raw));
+  const decoded = await decodeDetachedHistoryBytes(encoded, decodeWork);
+  expect(decoded && Buffer.from(decoded).equals(Buffer.from(raw))).toBe(true);
+  expect(encodeWork).toHaveBeenCalledTimes(2);
+  expect(decodeWork).toHaveBeenCalledTimes(2);
+});
+
+test.each(['encode', 'decode'] as const)('cache %s stops when ownership is lost during a bounded work slice', async direction => {
+  let now = 1000;
+  jest.spyOn(Date, 'now').mockImplementation(() => (now += 8));
+  const raw = new Uint8Array(50_003), cancelled = new Error('superseded');
+  const work = jest.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(cancelled);
+  const result = direction === 'encode' ? encodeDetachedHistoryBytes(raw, work) : decodeDetachedHistoryBytes(base64(raw), work);
+  await expect(result).rejects.toBe(cancelled);
+  expect(work).toHaveBeenCalledTimes(2);
 });

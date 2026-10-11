@@ -16,5 +16,8 @@ class HistoryCodecModule : Module() {
     AsyncFunction("decompressAsync") { gzipBase64: String, bytes: Double, sha256: String ->
       HistoryCodec.decompress(gzipBase64, bytes, sha256)
     }
+    AsyncFunction("inflatePayloadAsync") { compressed: ByteArray, maxBytes: Double, expectedBytes: Double ->
+      HistoryCodec.inflatePayload(compressed, maxBytes, expectedBytes)
+    }
   }
 }

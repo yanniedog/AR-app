@@ -2,10 +2,10 @@ import { hasAppHealthFetchGuard } from '../lib/appHealthTransportGuard';
 import { bindVerifiedDetails } from './detailsIdentity';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
-import { Gunzip, gunzipSync, strFromU8 } from 'fflate';
+import { Gunzip, strFromU8 } from 'fflate';
 
 import { resolvePayloadKeyHex } from '../lib/keyVault';
-import { automaticDataUrl } from '../lib/automaticDataAccess';
+import { automaticDataUrl, MissingPublicPayloadError } from '../lib/automaticDataAccess';
 import { decryptAsset, isEncryptedAsset } from '../lib/payloadCrypto';
 import { decryptReleaseTransport, isReleaseTransport, MAX_TRANSPORT_ENCODED_BYTES, RELEASE_TRANSPORT_OVERHEAD } from '../lib/releaseTransport';
 
@@ -13,13 +13,14 @@ import { MANIFEST_URL, SUPPORTED_SCHEMA } from '../config';
 import { debugLog } from '../lib/debugLog';
 import { logFetchHttpError } from '../lib/degradationLog';
 import { versionLt } from '../lib/versionCompare';
-import { HEAVY_JSON_BYTES, parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
+import { parseJsonHeavy, yieldToUi } from '../lib/yieldToUi';
 import type { CorePayload, DetailsPayload, Manifest } from '../types';
 import { normalizeCoreWithIntegrity, sealCoreHistoryAsync, type CoreIntegrityContext } from './sectionIntegrity';
 import { normalizeBankInsightsPayload } from './bankInsights';
 import { normalizeBankSpreadHistoryPayload } from './bankSpreadHistory';
 import { normalizeHistoryBanksPayload } from './historyPayload';
 import { normalizeRbaCalendar } from './rbaCalendar';
+import { decodePayloadUtf8, inflatePayloadOffThread, MAX_PAYLOAD_INFLATED_BYTES } from './payloadInflation';
 import {
   fileNameFromUrl,
   type PayloadProgressHandler,
@@ -27,8 +28,6 @@ import {
   type PayloadProgressSnapshot,
 } from './downloadProgress';
 
-/** Yield before sync inflate/parse when the payload is large enough to jank the UI. */
-const YIELD_BEFORE_HEAVY_BYTES = HEAVY_JSON_BYTES;
 const INFLATE_CHUNK_BYTES = 64 * 1024;
 export const BANK_SPREAD_MAX_COMPRESSED_BYTES = 8 * 1024 * 1024;
 export const BANK_SPREAD_MAX_INFLATED_BYTES = 64 * 1024 * 1024;
@@ -56,7 +55,9 @@ export async function gunzipCooperatively(
   for (let offset = 0; offset < bytes.length; offset += safeChunkBytes) {
     const end = Math.min(bytes.length, offset + safeChunkBytes);
     stream.push(bytes.subarray(offset, end), end === bytes.length);
-    if (end < bytes.length) await yieldToUi();
+    // Bounded inflate slices need an input macrotask, not an interaction wait:
+    // a running audit animation can otherwise add 48 ms to every 64 KiB block.
+    if (end < bytes.length) await yieldToUi(0);
   }
   const result = new Uint8Array(outputBytes);
   let writeOffset = 0;
@@ -106,13 +107,9 @@ function manifestFetchUrl(url: string): string {
 
 async function downloadWireBytes(
   url: string,
-  opts: DownloadOpts & { phase?: PayloadProgressPhase; legacySha?: string } = {},
+  opts: DownloadOpts & { phase?: PayloadProgressPhase } = {},
 ): Promise<ArrayBuffer> {
   const deliveryUrl = automaticDataUrl(url);
-  const legacyHeaders = opts.legacySha ? { 'X-AR-Legacy-SHA256': opts.legacySha } : undefined;
-  if (opts.legacySha && (!deliveryUrl || !/^[a-f0-9]{64}$/.test(opts.legacySha))) {
-    throw new Error('Historical data delivery identity is invalid');
-  }
   if (
     opts.requireExactBytes &&
     (
@@ -144,8 +141,11 @@ async function downloadWireBytes(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30_000);
     try {
-      const response = await globalThis.fetch(url, { signal: controller.signal, headers: legacyHeaders });
-      if (!response.ok) throw new Error(`asset HTTP ${response.status}`);
+      const response = await globalThis.fetch(url, { signal: controller.signal });
+      if (!response.ok) {
+        if (deliveryUrl && response.status === 404) throw new MissingPublicPayloadError(url);
+        throw new Error(`asset HTTP ${response.status}`);
+      }
       const buf = await response.arrayBuffer();
       if (opts.maxCompressedBytes != null && buf.byteLength > opts.maxCompressedBytes) {
         throw new Error(`compressed asset exceeds ${opts.maxCompressedBytes} byte limit`);
@@ -164,7 +164,6 @@ async function downloadWireBytes(
     let lastEmitAt = 0;
     const xhr = new XMLHttpRequest();
     xhr.open('GET', deliveryUrl ?? url);
-    if (opts.legacySha) xhr.setRequestHeader('X-AR-Legacy-SHA256', opts.legacySha);
     xhr.timeout = 30000;
     xhr.responseType = 'arraybuffer';
     xhr.ontimeout = () => reject(new Error('network timeout'));
@@ -217,7 +216,7 @@ async function downloadWireBytes(
         return;
       }
       logFetchHttpError(url, xhr.status, phase);
-      reject(new Error(`asset HTTP ${xhr.status}`));
+      reject(deliveryUrl && xhr.status === 404 ? new MissingPublicPayloadError(url) : new Error(`asset HTTP ${xhr.status}`));
     };
     xhr.onerror = () => {
       debugLog.error('payload', `download failed url=${url}`);
@@ -239,19 +238,14 @@ async function downloadBytes(
         opts.expectedBytes! <= 0 || opts.expectedBytes! > limit))) {
     throw new Error('exact compressed asset size requires a positive safe-integer expectedBytes within the compressed byte limit');
   }
-  let wire: Uint8Array = new Uint8Array();
-  for (let attempt = 0; ; attempt++) {
-    try {
-      wire = new Uint8Array(await downloadWireBytes(url, {
-        ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
-      }));
-      break;
-    } catch (error) {
-      if (!automaticDataUrl(url) || attempt >= 2 || !/asset HTTP (429|503)/.test(String(error))) throw error;
-      await new Promise(resolve => setTimeout(resolve, 2000));
-    }
+  const wire = new Uint8Array(await downloadWireBytes(url, {
+    ...opts, requireExactBytes: false, maxCompressedBytes: limit + RELEASE_TRANSPORT_OVERHEAD,
+  }));
+  // A missing/readability-broken public projection must not trigger a key prompt or
+  // another service. Existing verified cache and bundled history remain usable.
+  if (automaticDataUrl(url) && (isReleaseTransport(wire) || isEncryptedAsset(wire))) {
+    throw new Error('Public GitHub payload is encrypted; readable publication unavailable');
   }
-  if (automaticDataUrl(url) && isReleaseTransport(wire)) throw new Error('Data service returned unopened transport');
   const bytes = isReleaseTransport(wire)
     ? await decryptReleaseTransport(wire, resolvePayloadKeyHex, limit)
     : wire;
@@ -335,7 +329,7 @@ export async function downloadInflate(
   });
   if (expectedSha) {
     // expo-crypto on Android bridges Uint8Array → Kotlin ByteArray; raw ArrayBuffer fails.
-    await yieldToUi();
+    await yieldToUi(0);
     const digest = await Crypto.digest(
       Crypto.CryptoDigestAlgorithm.SHA256,
       new Uint8Array(buf),
@@ -366,18 +360,15 @@ export async function downloadInflate(
   });
   // Always yield before inflate/decrypt/gunzip — compressed byteLen can be well
   // under the parse threshold while the expanded JSON is multi-MB on the JS thread.
-  await yieldToUi();
+  await yieldToUi(0);
   let bytes: Uint8Array = new Uint8Array(buf);
   // Encrypted assets (ARE1 magic) are decrypted to the gzip layer first; the
   // sha256 above was computed over the ciphertext, matching the manifest.
   if (isEncryptedAsset(bytes)) {
     if (opts.allowEncrypted === false) throw new Error('encrypted asset is not allowed by this contract');
-    if (automaticDataUrl(url)) {
-      const sourceSha = expectedSha ?? toHex(await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, new Uint8Array(bytes)));
-      bytes = new Uint8Array(await downloadWireBytes(url, { ...opts, legacySha: sourceSha,
-        requireExactBytes: false, expectedBytes: undefined, maxCompressedBytes: opts.maxCompressedBytes ?? MAX_TRANSPORT_ENCODED_BYTES }));
-      if (isEncryptedAsset(bytes) || isReleaseTransport(bytes)) throw new Error('Historical data service returned unopened transport');
-    } else bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
+    // Explicit non-managed legacy imports may still use an already imported
+    // local key. Managed GitHub delivery rejected encrypted bytes above.
+    bytes = decryptAsset(bytes, await resolvePayloadKeyHex());
   }
   // GitHub release assets are served raw; the bytes are our gzip. If a proxy
   // already decoded gzip transport, the bytes are plain JSON — handle both.
@@ -403,11 +394,17 @@ export async function downloadInflate(
       startedAt: inflateStarted,
       phaseComplete: true,
     });
-    return strFromU8(bytes);
+    return decodePayloadUtf8(bytes);
   }
-  const inflated = bytes.length >= YIELD_BEFORE_HEAVY_BYTES || opts.maxInflatedBytes != null
-    ? await gunzipCooperatively(bytes, INFLATE_CHUNK_BYTES, opts.maxInflatedBytes)
-    : gunzipSync(bytes);
+  const limit = Math.min(opts.maxInflatedBytes ?? MAX_PAYLOAD_INFLATED_BYTES, MAX_PAYLOAD_INFLATED_BYTES);
+  const expectedInflated = opts.requireExactBytes ? opts.expectedInflatedBytes : undefined;
+  const decoded = await inflatePayloadOffThread(bytes, limit, expectedInflated);
+  if (decoded !== null) {
+    emit(opts.onProgress, { phase: 'inflate', fileName, bytesReceived: byteLen, totalBytes: byteLen,
+      startedAt: inflateStarted, phaseComplete: true });
+    return decoded;
+  }
+  const inflated = await gunzipCooperatively(bytes, INFLATE_CHUNK_BYTES, limit);
   if (opts.requireExactBytes && opts.expectedInflatedBytes != null && inflated.length !== opts.expectedInflatedBytes) {
     throw new Error(`inflated asset size mismatch (expected ${opts.expectedInflatedBytes}, got ${inflated.length})`);
   }
@@ -419,7 +416,7 @@ export async function downloadInflate(
     startedAt: inflateStarted,
     phaseComplete: true,
   });
-  return strFromU8(inflated);
+  return decodePayloadUtf8(inflated);
 }
 
 export interface CoreResult {

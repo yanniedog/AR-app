@@ -33,6 +33,8 @@ const HISTORY_BANKS = `${DIR}history-banks.json`;
 const BANK_INSIGHTS = `${DIR}bank-history.json`;
 const BANK_RATE_HISTORY = `${DIR}bank-rate-history.json`;
 const DETACHED_BANK_RATE_HISTORY_ASSET = `${DIR}bank-rate-history-asset.base64`;
+const RETAINED_READY_HISTORY = `${DIR}bank-rate-history-ready-public.json`;
+const RETAINED_READY_HISTORY_MAX_TEXT = 2 * 1024 * 1024;
 const BANK_SPREAD_CONTENT_CACHE = `${DIR}bank-spread-history-v2`;
 const PRODUCT_HISTORY = `${DIR}product-history.json`;
 const PRODUCT_HISTORY_TMP = `${PRODUCT_HISTORY}.tmp`;
@@ -721,6 +723,39 @@ export const cache = {
       await writeText(temporary, text);
       await deletePath(BANK_RATE_HISTORY);
       await movePath(temporary, BANK_RATE_HISTORY);
+    });
+  },
+
+  /** A bounded prepared-only public checkpoint, independent of the currently
+   * installed producer's transport slot. Reads wait for in-flight writes. */
+  async readRetainedReadyHistory<T>(decode: (text: string) => Promise<T | null>): Promise<T | null> {
+    return serialize(async () => {
+      for (const path of [`${RETAINED_READY_HISTORY}.tmp`, RETAINED_READY_HISTORY]) {
+        try {
+          if (!IS_WEB) {
+            const info = await FileSystem.getInfoAsync(path);
+            if (!info.exists || info.isDirectory || (typeof info.size === 'number' && info.size > RETAINED_READY_HISTORY_MAX_TEXT)) continue;
+          }
+          const text = await readText(path);
+          if (!text || text.length > RETAINED_READY_HISTORY_MAX_TEXT) continue;
+          const result = await decode(text);
+          if (result) return result;
+        } catch { /* A torn temporary checkpoint cannot hide the primary. */ }
+      }
+      return null;
+    });
+  },
+
+  async writeRetainedReadyHistory(text: string, isCurrent: () => boolean = () => true): Promise<void> {
+    if (!text || text.length > RETAINED_READY_HISTORY_MAX_TEXT) throw new Error('Prepared history cache exceeds capacity');
+    return serialize(async () => {
+      if (!isCurrent()) return;
+      await ensureDir();
+      const temporary = `${RETAINED_READY_HISTORY}.tmp`;
+      await writeText(temporary, text);
+      if (!isCurrent()) { await deletePath(temporary); return; }
+      await deletePath(RETAINED_READY_HISTORY);
+      await movePath(temporary, RETAINED_READY_HISTORY);
     });
   },
 

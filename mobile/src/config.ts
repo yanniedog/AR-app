@@ -13,7 +13,6 @@ type Extra = {
   apkArmReleaseTag?: string;
   apkArmManifestUrl?: string;
   iosInstallUrl?: string;
-  payloadDecKeyHex?: string;
   selfUpdateEnabled?: boolean;
 };
 

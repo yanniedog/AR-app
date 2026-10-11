@@ -731,12 +731,18 @@ async function publishViaPullRequest(next, message) {
   return Number(prNumber);
 }
 
+async function verifyPublicPayloadDelivery() {
+  const { default: delivery } = await import('./verify-public-delivery.cjs');
+  await delivery.verifyPublicDelivery();
+}
+
 export async function releaseWhenQueueEmpty({
   countOpen = countOpenPrs,
   findRecoverableBumps = findRecoverableAutoBumps,
   sync = syncMain,
   alreadyPublished = hasPublishedMainRelease,
   releasePending = hasPendingMainRelease,
+  verifyDelivery = verifyPublicPayloadDelivery,
   alreadyBumped = alreadyAutoBumpedOnHead,
   readVersion = readCurrentVersion,
   readPublished = readPublishedVersion,
@@ -767,6 +773,7 @@ export async function releaseWhenQueueEmpty({
     // ordinary open work still prevents APK dispatch after it settles.
     const recoverable = findRecoverableBumps();
     if (recoverable.length !== 1) return;
+    await verifyDelivery();
     await settleBump(recoverable[0].number, recoverable[0].branchName);
     if (!queueIsEmpty()) return;
   }
@@ -779,6 +786,9 @@ export async function releaseWhenQueueEmpty({
     console.log('mobile-auto-release-on-drain: current main APK release is in flight — no new version PR');
     return;
   }
+  // Hold before allocating a version or dispatching a build. No-op events above
+  // remain successful even while the producer handoff is awaiting activation.
+  await verifyDelivery();
   const dispatchIfQueueEmpty = () => {
     // New work can arrive while the generated version PR is passing CI.
     sync();

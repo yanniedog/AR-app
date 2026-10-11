@@ -1,9 +1,10 @@
 import { cache } from '../src/data/cache';
-import { COMPACT_HISTORY_NORMALIZATION_VERSION } from '../src/data/historyDerivation';
+import { COMPACT_HISTORY_NORMALIZATION_VERSION, HISTORY_DERIVATION_VERSION } from '../src/data/historyDerivation';
 import type { CorePayload, Manifest } from '../src/types';
 import { needsDetailsForNotifications, shouldWarmDetails } from '../src/data/optionalPrefs';
 import { loadSampleDetails, sampleCore, sampleManifest } from '../src/data/sample';
 import { DEFAULT_PREFS } from '../src/data/store';
+import { MissingPublicPayloadError } from '../src/lib/automaticDataAccess';
 
 const sampleDetails = loadSampleDetails();
 
@@ -595,7 +596,61 @@ describe('optional feature prefs', () => {
     expect(mockSyncProductHistoryFromDailyPayloads).toHaveBeenCalledTimes(1);
   });
 
-  it('ensureHistoryBanks downloads the compact asset before daily fallback', async () => {
+  it.each(['missing', 'matching', 'other-core', 'old-derivation'] as const)(
+    'legacy summary without a prepared asset avoids dated-core downloads with %s cache', async cacheState => {
+      const legacy = { ...remoteManifest, files: { ...remoteManifest.files } };
+      delete legacy.payload_revision;
+      delete legacy.files.history_banks;
+      const saved = {
+        schema_version: 1,
+        derivation_version: cacheState === 'old-derivation' ? 'old' : HISTORY_DERIVATION_VERSION,
+        run_date: remoteCore.run_date, run_dates: [remoteCore.run_date],
+        source_identities: { [remoteCore.run_date]: `core:${remoteManifest.files.core.sha256}` },
+        sections: { Mortgage: { points: [
+          { date: remoteCore.run_date, min: .03, max: .08, mean: .05, median: .05, count: 1 },
+        ] } },
+      };
+      mockReadHistoryBanks.mockResolvedValue(cacheState === 'missing' ? null : saved);
+      mockReadMeta.mockResolvedValue({
+        coreSha: cacheState === 'other-core' ? 'previous-core' : legacy.files.core.sha256,
+        historyBanksSha: `daily:${remoteCore.run_date}`,
+      });
+      store.setState({ prefs: historyRibbonPrefs, source: 'remote', manifest: legacy, core: remoteCore });
+
+      await store.getState().ensureHistoryBanks({ force: true });
+
+      expect(mockSyncHistoryFromDailyPayloads).not.toHaveBeenCalled();
+      expect(mockFetchDatesIndexJson).not.toHaveBeenCalled();
+      expect(mockFetchManifest).not.toHaveBeenCalled();
+      expect(mockDownloadCore).not.toHaveBeenCalled();
+      expect(mockDownloadHistoryBanks).not.toHaveBeenCalled();
+      expect(cache.writeHistoryBanks).not.toHaveBeenCalled();
+      expect(store.getState().historyBanksError).toMatch(/refresh data/i);
+      if (cacheState === 'matching') expect(store.getState().historyBanks?.source_identities).toEqual(saved.source_identities);
+      else expect(store.getState().historyBanks).toBeNull();
+    },
+  );
+
+  it('a missing old optional companion settles its ensure before requesting one current refresh', async () => {
+    const originalRefresh = store.getState().refresh;
+    const refresh = jest.fn(async () => false);
+    const manifest = { ...remoteManifest, tag: 'app-payload-2026-05-18' };
+    mockReadMeta.mockResolvedValue(null);
+    mockReadSearchIndex.mockResolvedValue(null);
+    mockDownloadSearchIndex.mockRejectedValue(new MissingPublicPayloadError(manifest.files.search_index!.url));
+    store.setState({ prefs: deepSearchPrefs, source: 'remote', manifest, core: remoteCore,
+      postRefreshWarming: false, refresh });
+    try {
+      await store.getState().ensureSearchIndex();
+      expect(store.getState().searchIndexStatus).toBe('error');
+      await new Promise(resolve => setTimeout(resolve, 5));
+      expect(refresh).toHaveBeenCalledTimes(1);
+      expect(refresh).toHaveBeenCalledWith({ background: true });
+      expect(mockDownloadSearchIndex).toHaveBeenCalledTimes(1);
+    } finally { store.setState({ refresh: originalRefresh }); }
+  });
+
+  it('ensureHistoryBanks downloads the compact asset without daily fallback', async () => {
     const infoSpy = jest.spyOn(debugLog, 'info').mockImplementation(() => {});
     store.setState({
       prefs: historyRibbonPrefs,

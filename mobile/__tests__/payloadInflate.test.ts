@@ -28,6 +28,7 @@ describe('cooperative payload inflate', () => {
 
     expect(inflated).toEqual(original);
     expect(jest.mocked(yieldToUi).mock.calls.length).toBeGreaterThan(0);
+    expect(jest.mocked(yieldToUi).mock.calls.every(args => args[0] === 0)).toBe(true);
   });
 
   it('uses the synchronous path without yielding for a small payload', async () => {

@@ -3,6 +3,9 @@ package com.eyex.australianrates.historycodec;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.FilterInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.ByteBuffer;
@@ -12,6 +15,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 /** No Android dependency: the same bounded codec is exercised by host-JVM tests. */
 public final class HistoryCodec {
@@ -104,6 +109,51 @@ public final class HistoryCodec {
   }
 
   private static int digit(char value) { return ALPHABET.indexOf(value); }
+
+  /** Verified compressed payloads use the background module queue for both gzip
+   * and strict UTF-8 decoding. Bound each read before retaining output bytes. */
+  public static List<String> inflatePayload(byte[] compressed, double maximumBytes, double expectedBytes) throws IOException {
+    if (compressed == null || compressed.length < 18 || compressed.length > 64 * 1024 * 1024 ||
+        !Double.isFinite(maximumBytes) || maximumBytes != Math.floor(maximumBytes) || maximumBytes < 1 || maximumBytes > 192 * 1024 * 1024 ||
+        !Double.isFinite(expectedBytes) || expectedBytes != Math.floor(expectedBytes) || expectedBytes < -1 || expectedBytes > maximumBytes)
+      throw new IllegalArgumentException("Invalid payload inflation bounds");
+    List<String> output = new ArrayList<>();
+    char[] block = new char[65537];
+    try (BoundedDecodedInput decoded = new BoundedDecodedInput(
+        new GZIPInputStream(new ByteArrayInputStream(compressed), 65536), (int) maximumBytes);
+        InputStreamReader reader = new InputStreamReader(decoded, StandardCharsets.UTF_8.newDecoder()
+          .onMalformedInput(CodingErrorAction.REPORT).onUnmappableCharacter(CodingErrorAction.REPORT))) {
+      int count;
+      while ((count = reader.read(block, 0, 65536)) != -1) {
+        // Never expose a dangling UTF-16 surrogate to the Expo string bridge.
+        if (count > 0 && Character.isHighSurrogate(block[count - 1])) {
+          int low = reader.read();
+          if (low < 0 || !Character.isLowSurrogate((char) low)) throw new IOException("Invalid UTF-8 surrogate pair");
+          block[count++] = (char) low;
+        }
+        if (count > 0) output.add(new String(block, 0, count));
+      }
+      if (expectedBytes >= 0 && decoded.count != (int) expectedBytes)
+        throw new IllegalArgumentException("Payload inflated size mismatch");
+    }
+    return output;
+  }
+
+  private static final class BoundedDecodedInput extends FilterInputStream {
+    final int maximum; int count;
+    BoundedDecodedInput(InputStream source, int maximum) { super(source); this.maximum = maximum; }
+    private void add(int length) {
+      if (length < 0 || count > maximum - length) throw new IllegalArgumentException("Payload exceeds decoded budget");
+      count += length;
+    }
+    @Override public int read() throws IOException {
+      int value = in.read(); if (value != -1) add(1); return value;
+    }
+    @Override public int read(byte[] bytes, int offset, int length) throws IOException {
+      int amount = in.read(bytes, offset, Math.min(length, Math.max(1, maximum - count + 1)));
+      if (amount > 0) add(amount); return amount;
+    }
+  }
 
   private static byte[] decode(String text) {
     if (text == null || text.isEmpty() || text.length() % 4 != 0 || text.length() > ((MAX_COMPRESSED + 2) / 3) * 4)

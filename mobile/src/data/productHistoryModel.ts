@@ -233,48 +233,49 @@ export function buildProductHistoryFromCores(
   return buildProductHistoryFromRates(bestByDate, keys, run_dates, target, existing, coreSha);
 }
 
-export function buildProductHistoryFromRates(
-  bestByDate: Map<string, Map<string, number>>,
-  keys: Set<string>,
-  orderedDates: string[],
-  target: string,
-  existing?: ProductHistoryPayload | null,
-  coreSha = '',
-): ProductHistoryPayload {
-  const run_dates = normalizeTimelineDates(orderedDates);
-  // Reuse already-computed rates for days we didn't re-download.
-  const existingByKey = new Map<string, Map<string, number | null>>();
-  if (existing) {
-    for (const [key, arr] of Object.entries(existing.products)) {
-      const m = new Map<string, number | null>();
-      existing.run_dates.forEach((d, i) => m.set(d, arr[i] ?? null));
-      existingByKey.set(key, m);
-    }
-  }
+type ProductHistoryBuildArgs = [bestByDate: Map<string, Map<string, number>>, keys: Set<string>,
+  orderedDates: string[], target: string, existing?: ProductHistoryPayload | null, coreSha?: string];
 
+/** Shared bounded work units for tooling and the cooperative mobile path. */
+function* buildProductHistorySteps(...[bestByDate, keys, orderedDates, target, existing, coreSha = '']: ProductHistoryBuildArgs): Generator<void, ProductHistoryPayload> {
+  const run_dates = normalizeTimelineDates(orderedDates);
+  // Reuse existing arrays directly; constructing a per-product/date Map used
+  // another full matrix of allocations on every refresh.
+  const priorPositions = new Map(existing?.run_dates.map((day, index) => [day, index]) ?? []);
+  const dates = run_dates.map(day => ({ rates: bestByDate.get(day), authoritative: bestByDate.has(day), prior: priorPositions.get(day) }));
   const products: Record<string, (number | null)[]> = {};
-  const allKeys = new Set([...keys, ...existingByKey.keys()]);
+  const allKeys = new Set([...keys, ...Object.keys(existing?.products ?? {})]);
   for (const rates of bestByDate.values()) {
     for (const key of rates.keys()) allKeys.add(key);
+    yield;
   }
   for (const key of allKeys) {
-    const series = run_dates.map((d) => {
-      // A corrected snapshot is authoritative even when a former row is absent.
-      if (bestByDate.has(d)) return bestByDate.get(d)!.get(key) ?? null;
-      const fromExisting = existingByKey.get(key)?.get(d);
-      return fromExisting != null ? fromExisting : null;
-    });
-    if (series.some((v) => v != null)) products[key] = series;
+    const prior = existing && Object.hasOwn(existing.products, key) ? existing.products[key] : undefined;
+    const series = dates.map(date => date.authoritative ? date.rates!.get(key) ?? null :
+      date.prior !== undefined ? prior?.[date.prior] ?? null : null);
+    if (series.some(value => value != null)) Object.defineProperty(products, key, { value: series, enumerable: true, configurable: true, writable: true });
+    yield;
   }
+  return { schema_version: 3, derivation_version: HISTORY_DERIVATION_VERSION,
+    run_date: target, ...(coreSha ? { core_sha: coreSha } : {}), run_dates, products };
+}
 
-  return {
-    schema_version: 3,
-    derivation_version: HISTORY_DERIVATION_VERSION,
-    run_date: target,
-    ...(coreSha ? { core_sha: coreSha } : {}),
-    run_dates,
-    products,
-  };
+export function buildProductHistoryFromRates(...args: ProductHistoryBuildArgs): ProductHistoryPayload {
+  const steps = buildProductHistorySteps(...args);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
+  return step.value;
+}
+
+export async function buildProductHistoryFromRatesAsync(args: ProductHistoryBuildArgs,
+  yieldWork: () => Promise<void>): Promise<ProductHistoryPayload> {
+  const steps = buildProductHistorySteps(...args);
+  let step = steps.next(), started = Date.now();
+  while (!step.done) {
+    if (Date.now() - started >= 8) { await yieldWork(); started = Date.now(); }
+    step = steps.next();
+  }
+  return step.value;
 }
 
 /** A product's series aligned to an arbitrary `dates` axis (e.g. the chart's sliced dates). */
