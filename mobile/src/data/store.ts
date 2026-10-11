@@ -27,6 +27,7 @@ import { recoverInterruptedPerformanceAudit } from '../lib/performanceAuditRollb
 import { verifiedCatalogueDetails } from './detailsCatalogue';
 import { selectMandatoryEligibility } from './mandatoryEligibility';
 import { installMandatoryEligibility } from './eligibilityGate';
+import { configurePassiveAuditState, runPassiveAuditSlice } from '../lib/passiveAudit';
 
 // Expo/Metro emits Zustand's ESM middleware `import.meta.env` checks into a
 // classic web script. Use the package's CommonJS condition until upstream's
@@ -174,6 +175,7 @@ export const useStore = create<AppState>()(
 );
 
 storeRef.current = useStore;
+configurePassiveAuditState(() => useStore.getState());
 
 function refreshMandatoryEligibility(state: AppState): void {
   const verified = verifiedCatalogueDetails(state.core, state.coreIntegrity, state.manifest, state.details);
@@ -220,6 +222,9 @@ try {
           'background-maintenance',
           `scheduled refresh complete changed=${changed} durationMs=${Date.now() - startedAt}`,
         );
+        // Reuse the data this existing task already loaded. Passive audit never
+        // initiates its own refresh, history load, or network request.
+        await runPassiveAuditSlice(true);
         await debugLog.flushToFile();
         return BackgroundTask.BackgroundTaskResult.Success;
       } catch (error) {

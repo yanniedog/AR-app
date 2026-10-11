@@ -258,8 +258,10 @@ export default function MyRates() {
       trackedRates: JSON.parse(JSON.stringify(useStore.getState().trackedRates)) as TrackedRate[],
       favorites: [...useStore.getState().favorites],
     };
-    const rows = tokens.map(findExactRow).filter((row): row is RateRow => row != null);
-    if (rows.length < 2) return;
+    const rows = mandatoryEligibleRows(tokens.map(findExactRow).filter((row): row is RateRow => row != null));
+    if (rows.length < 2 || rows.length !== tokens.length) {
+      return { unavailableReason: 'The selected exact comparison pair is absent from the eligible current catalogue' };
+    }
     useStore.setState((state) => {
       const fixtureKeys = new Set(rows.map((row) => row.product_key));
       const retained = state.savedRates.filter((ref) => !fixtureKeys.has(ref.productKey));
@@ -274,7 +276,10 @@ export default function MyRates() {
         favorites: [...new Set(next.map((ref) => ref.productKey))],
       };
     });
-    return queueTrackedRatesSecureSave(useStore.getState().trackedRates);
+    return queueTrackedRatesSecureSave(useStore.getState().trackedRates).then(() => ({
+      fixtureReady: true,
+      selectionTokens: tokens,
+    }));
   }, [findExactRow]);
   const restoreSavedFixture = useCallback(() => {
     const snapshot = auditSavedFixtureSnapshot;

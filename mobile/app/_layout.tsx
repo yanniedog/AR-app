@@ -39,6 +39,7 @@ import {
   useAppUpdateBanner,
 } from '../src/components/AppUpdateBanner';
 import { SELF_UPDATE_ENABLED } from '../src/config';
+import { registerPassiveAuditBackground, startPassiveAuditPreloading } from '../src/lib/passiveAudit';
 import { RateMark } from '../src/components/RateMark';
 import { ScenarioRecoveryBanner } from '../src/components/ScenarioRecoveryBanner';
 import { SplashMorphProvider, type SplashMorphTarget } from '../src/components/BrandLockup';
@@ -334,6 +335,8 @@ function RootNavigator() {
   useEffect(() => {
     if (!appReady) return;
     void registerBackgroundRefresh();
+    void registerPassiveAuditBackground();
+    return startPassiveAuditPreloading();
   }, [appReady]);
 
   useEffect(() => {

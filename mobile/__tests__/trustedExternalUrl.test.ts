@@ -1,6 +1,45 @@
 import { trustedExternalUrl } from '../src/lib/trustedExternalUrl';
 
 describe('trustedExternalUrl', () => {
+  it.each([
+    'https://anz.com/plus/homeloantncs',
+    'https://www.bankofchina.com/au/en/pbservice/',
+    'https://www.qantasmoney.com/terms-and-forms/tmd',
+    'https://www.racq.com/downloads',
+    'https://cdn.bfldr.com/1R31Y8GR/as/document/Loan_fees_schedule',
+    'https://cdn.intelligencebank.com/au/share/e3Gq6M/document/original/TMD',
+    'https://cdn.intelligencebank.com/au/share/NZw2/document/original/TMD',
+    'https://cdn.intelligencebank.com/au/share/w8gXkZ/document/original/TMD',
+    'https://cdn.mediavalet.com/aunsw/policebank/document/Original/TMD.pdf',
+    'https://d9a7lp1kie9ya.cloudfront.net/2025/12/EXISTING-Fees-Charges-111225.pdf',
+    'https://cdn.gsb1.prod.cxnpl.io/files/products/product/v1/terms.pdf',
+  ])('accepts published lender/document destination %s', (url) => {
+    expect(trustedExternalUrl({ url, purpose: 'lender_source', label: 'Published source' }).ok).toBe(true);
+  });
+
+  it.each([
+    'https://cdn.bfldr.com/OTHER/as/document',
+    'https://cdn.intelligencebank.com/au/share/OTHER/document',
+    'https://cdn.mediavalet.com/another/tenant/file.pdf',
+    'https://other.cloudfront.net/2025/12/terms.pdf',
+    'https://cdn.gsb1.prod.cxnpl.io/other/file.pdf',
+    'https://anz.com.attacker.com/terms',
+    'http://localhost/terms',
+    'http://www.anz.com:8080/terms',
+    'http://user:secret@www.anz.com/terms',
+  ])('keeps unrelated tenants and unsafe legacy links blocked %s', (url) => {
+    expect(trustedExternalUrl({ url, purpose: 'lender_source', label: 'Source' }).ok).toBe(false);
+  });
+
+  it('canonicalizes approved legacy lender links without allowing HTTP transport', () => {
+    for (const [url, expected] of [
+      ['http://www.anz.com/terms#fees', 'https://www.anz.com/terms'],
+      ['http://brokenhill.bank/rates-and-fees', 'https://brokenhill.bank/rates-and-fees'],
+      ['https://www.summerland.com.au.', 'https://www.summerland.com.au/'],
+    ]) expect(trustedExternalUrl({ url, purpose: 'lender_source', label: 'Source' }))
+      .toMatchObject({ ok: true, url: expected });
+  });
+
   it('uses standards parsing even when the global URL is React Native\'s getter-only fallback', () => {
     const original = globalThis.URL;
     const native = jest.requireActual('react-native/Libraries/Blob/URL').URL;

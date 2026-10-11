@@ -1,4 +1,5 @@
 import type { ManifestFile, RateRow, SectionData, SectionKey } from '../../types';
+import { evaluateAppHealthCatalogueCoverage } from './catalogueCoverage';
 import { versionLt } from '../versionCompare';
 import { isValidCalendarDate } from '../calendarDate';
 import { validatePayloadAccounting } from './payloadAccounting';
@@ -702,7 +703,8 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
     !Number.isInteger(partialCount) ||
     partialCount < 0 ||
     (attempted != null && succeeded != null && succeeded + failedCount > attempted + partialCount);
-  const degraded = failedCount > 0 || partialCount > 0 || (coverage.limitations?.length ?? 0) > 0;
+  const unaccountedProviders = Math.max(0, attempted - succeeded - failedCount - partialCount);
+  const degraded = failedCount > 0 || partialCount > 0 || unaccountedProviders > 0 || (coverage.limitations?.length ?? 0) > 0;
   const status: AppHealthStatus = invalidCounts ? 'fail' : degraded ? 'warn' : 'pass';
   return check(
     APP_HEALTH_CHECK_CODES.COVERAGE,
@@ -715,13 +717,14 @@ function evaluateCoverage(snapshot: AppHealthDataSnapshot): AppHealthCheck {
       providersSucceeded: succeeded ?? null,
       providersFailed: failedCount,
       providersPartial: partialCount,
+      unaccountedProviders,
       limitations: coverage.limitations?.length ?? 0,
       invalidCounts,
     },
     invalidCounts
       ? 'Producer coverage counts do not reconcile.'
       : degraded
-        ? 'The producer reported failed, partial, or limited coverage.'
+        ? 'The producer reported failed, partial, limited, or unaccounted provider coverage.'
         : undefined,
   );
 }
@@ -808,7 +811,7 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
       'Product detail record coverage',
       'data-completeness',
       'fail',
-      { coreProducts: 0, detailProducts: 0, coveragePercent: null },
+      { coreProducts: null, detailProducts: null, coveragePercent: null },
       'Product detail coverage cannot be assessed without core data.',
     );
   }
@@ -818,13 +821,19 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
       'Product detail record coverage',
       'data-completeness',
       'unavailable',
-      { coreProducts: new Set(allRows(snapshot).map(([, row]) => row.product_key)).size, detailProducts: 0, coveragePercent: null },
+      { coreProducts: new Set(allRows(snapshot).map(([, row]) => row.product_key)).size, detailProducts: null, coveragePercent: null },
       'Product details were not available to this audit.',
     );
   }
   const coreProducts = new Set(
     allRows(snapshot).map(([, row]) => row.product_key).filter(Boolean),
   ).size;
+  if (snapshot.details.matchedProductCount == null || snapshot.details.orphanProductCount == null) {
+    return check(APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, 'Product detail record coverage',
+      'data-completeness', 'unavailable', { coreProducts, detailProducts: snapshot.details.productCount,
+        matchedProducts: null, orphanProducts: null, coveragePercent: null },
+      'Matching product counts do not establish identity coverage; an exact key intersection is required.');
+  }
   const detailProducts = Math.max(0, snapshot.details.productCount);
   const matchedProducts = Math.max(
     0,
@@ -842,7 +851,9 @@ function evaluateDetailsCompleteness(snapshot: AppHealthDataSnapshot): AppHealth
   const accounting = validatePayloadAccounting(snapshot);
   const explainedOrphans = accounting.valid && detailProducts === accounting.sourceProducts
     ? accounting.productsWithoutRates + (snapshot.quarantine?.countImpacts?.products ?? 0) : 0;
-  const impossibleCounts = matchedProducts > coreProducts || matchedProducts + orphanProducts > detailProducts;
+  const impossibleCounts = [snapshot.details.productCount, snapshot.details.matchedProductCount,
+    snapshot.details.orphanProductCount].some(value => !Number.isSafeInteger(value) || value < 0)
+    || matchedProducts > coreProducts || matchedProducts + orphanProducts !== detailProducts;
   const status: AppHealthStatus = !runMatches || impossibleCounts || (coreProducts > 0 && matchedProducts === 0)
     ? 'fail'
     : (coveragePercent != null && coveragePercent < 100) || orphanProducts !== explainedOrphans
@@ -944,27 +955,36 @@ function evaluateAssetAvailability(
   );
 }
 
+/** Independent jobs permit one low-priority check at a time. Metadata-only jobs
+ * can resume from the compact persisted snapshot on a headless OS wake. */
+export const APP_HEALTH_DATA_CHECKS: readonly {
+  code: AppHealthCheck['code'];
+  backgroundMetadataOnly?: boolean;
+  evaluate: (snapshot: AppHealthDataSnapshot, contract: AppHealthSourceContract, nowMs: number) => AppHealthCheck;
+}[] = [
+  { code: APP_HEALTH_CHECK_CODES.SOURCE_STATE, backgroundMetadataOnly: true, evaluate: evaluateSourceState },
+  { code: APP_HEALTH_CHECK_CODES.MANIFEST_CONTRACT, backgroundMetadataOnly: true, evaluate: evaluateManifest },
+  { code: APP_HEALTH_CHECK_CODES.CORE_SCHEMA, backgroundMetadataOnly: true, evaluate: evaluateCoreSchema },
+  { code: APP_HEALTH_CHECK_CODES.ASSET_DESCRIPTORS, backgroundMetadataOnly: true, evaluate: evaluateAssetDescriptors },
+  { code: APP_HEALTH_CHECK_CODES.RUN_IDENTITY, backgroundMetadataOnly: true, evaluate: evaluateRunIdentity },
+  { code: APP_HEALTH_CHECK_CODES.REQUIRED_SECTIONS, evaluate: evaluateRequiredSections },
+  { code: APP_HEALTH_CHECK_CODES.RATE_VALUES, evaluate: evaluateRateValues },
+  { code: APP_HEALTH_CHECK_CODES.EXACT_TIER_IDENTITIES, evaluate: evaluateExactTierIdentities },
+  { code: APP_HEALTH_CHECK_CODES.TAXONOMY_ROOTS, evaluate: evaluateTaxonomyRoots },
+  { code: APP_HEALTH_CHECK_CODES.RIBBON_RECONCILIATION, evaluate: evaluateRibbonReconciliation },
+  { code: APP_HEALTH_CHECK_CODES.COVERAGE, evaluate: evaluateCoverage },
+  { code: APP_HEALTH_CHECK_CODES.CATALOGUE_COVERAGE, evaluate: evaluateAppHealthCatalogueCoverage },
+  { code: APP_HEALTH_CHECK_CODES.QUARANTINE, backgroundMetadataOnly: true, evaluate: evaluateQuarantine },
+  { code: APP_HEALTH_CHECK_CODES.FRESHNESS, backgroundMetadataOnly: true, evaluate: evaluateFreshness },
+  { code: APP_HEALTH_CHECK_CODES.DETAILS_COMPLETENESS, evaluate: evaluateDetailsCompleteness },
+  { code: APP_HEALTH_CHECK_CODES.ASSET_AVAILABILITY, backgroundMetadataOnly: true, evaluate: evaluateAssetAvailability },
+];
+
 /** Evaluate payload correctness, completeness, freshness, and asset gaps without I/O. */
 export function evaluateAppHealthDataQuality(
   snapshot: AppHealthDataSnapshot,
   contract: AppHealthSourceContract,
   nowMs = Date.now(),
 ): AppHealthCheck[] {
-  return [
-    evaluateSourceState(snapshot),
-    evaluateManifest(snapshot, contract),
-    evaluateCoreSchema(snapshot, contract),
-    evaluateAssetDescriptors(snapshot, contract),
-    evaluateRunIdentity(snapshot),
-    evaluateRequiredSections(snapshot, contract),
-    evaluateRateValues(snapshot),
-    evaluateExactTierIdentities(snapshot),
-    evaluateTaxonomyRoots(snapshot, contract),
-    evaluateRibbonReconciliation(snapshot, contract),
-    evaluateCoverage(snapshot),
-    evaluateQuarantine(snapshot),
-    evaluateFreshness(snapshot, contract, nowMs),
-    evaluateDetailsCompleteness(snapshot),
-    evaluateAssetAvailability(snapshot, contract),
-  ];
+  return APP_HEALTH_DATA_CHECKS.map(job => job.evaluate(snapshot, contract, nowMs));
 }

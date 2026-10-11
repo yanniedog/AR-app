@@ -87,7 +87,13 @@ function evaluateRole(
 ): RoleResult {
   const result = blankRoleResult();
   for (const contract of contracts) {
-    const observation = observations.get(contract.id);
+    const representative = observations.get(contract.id);
+    const failedVisit = role === 'list' || role === 'visible' || role === 'empty-state'
+      ? representative?.listFailureEvidence?.[role] : undefined;
+    // Evaluate the role against its original visit, including that visit's
+    // model count for empty-state validation. Count a surface once per role.
+    const observation = failedVisit
+      ? { surfaceId: contract.id, evidence: failedVisit } : representative;
     const evidence = evidenceFor(observation, role);
     if (!evidence) {
       registerMissing(result, contract, role);

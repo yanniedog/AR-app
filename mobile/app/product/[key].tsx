@@ -191,6 +191,11 @@ export default function ProductDetail() {
         : found.siblings.find((candidate) => candidate.rate_index === rateIndex) ?? null
       : found.row
     : null;
+  const auditProductError = core && isMandatoryEligibilityReady() && !row
+    ? !mandatoryProductAllowed(productKey)
+      ? 'The selected product does not meet the current mandatory profile requirements'
+      : 'The selected exact rate is absent from the eligible current catalogue'
+    : null;
   const staySwitchProjection = useMemo(() => {
     if (!row || found?.section !== 'Mortgage' || !detail || !detailsProducts) return null;
     const currentRef = scenario.currentProducts.mortgage;
@@ -343,7 +348,8 @@ export default function ProductDetail() {
       {
         id: 'product.data',
         kind: 'data',
-        status: core && row ? 'ready' : 'pending',
+        status: auditProductError ? 'error' : core && row ? 'ready' : 'pending',
+        error: auditProductError,
         datasetRevision: core?.run_date ?? null,
       },
       {

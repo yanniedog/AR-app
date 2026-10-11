@@ -1,6 +1,7 @@
 import type { AuditCheck } from './performanceAudit';
 import { auditExternalLink, type ExternalLinkAuditOptions, type ExternalLinkAuditResult } from './externalLinkAudit';
 import type { TrustedExternalUrlRequest } from './trustedExternalUrl';
+import { getPreloadedExternalLink } from './passiveAudit';
 
 /** Each destination remains independently inspectable in the durable report. */
 export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: number, durationMs: number): AuditCheck {
@@ -33,6 +34,12 @@ export function externalLinkAuditCheck(result: ExternalLinkAuditResult, index: n
 }
 
 export async function runExternalLinkAuditCheck(request: TrustedExternalUrlRequest, index: number, options: ExternalLinkAuditOptions): Promise<AuditCheck> {
+  const prepared = !options.reachability && !options.signal?.aborted ? getPreloadedExternalLink(request) : null;
+  if (prepared) {
+    const result = externalLinkAuditCheck(prepared.result, index, prepared.durationMs);
+    result.metrics = { ...result.metrics, preloaded: true, preloadedAgeMs: Math.max(0, Date.now() - prepared.checkedAt) };
+    return result;
+  }
   const started = globalThis.performance?.now?.() ?? Date.now();
   try {
     const result = await auditExternalLink(request, options);
