@@ -1,7 +1,7 @@
 import { SearchReportExport } from '../src/components/SearchReportExport';
 import { isSuitabilityFilterReady } from '../src/data/suitabilityGate';
 import Ionicons from '../src/components/icons/AppIcon';
-import { FlashList } from '@shopify/flash-list';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -45,7 +45,7 @@ import {
 } from '../src/lib/performanceAuditActionParams';
 import { effectiveDeepSearch } from '../src/lib/proAccess';
 import { scheduleAfterInteractions } from '../src/lib/yieldToUi';
-import type { SectionKey } from '../src/types';
+import type { RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
 
 function availableSortOptions(
@@ -387,6 +387,13 @@ export default function Search() {
   // the same list and decoded logos while its result identities are unchanged.
   const listRevision = JSON.stringify([listDataRevision, filterOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, rows.length);
+  const listRef = useRef<FlashListRef<RateRow>>(null);
+  useEffect(() => {
+    // In-place selection/disclosure changes do not change visible indices, so
+    // FlashList may omit its usual viewability callback. Request a fresh native
+    // measurement after this render commits; layout alone is not visible proof.
+    if (listReadiness.ready) listRef.current?.recomputeViewableItems();
+  }, [listRevision, listReadiness.ready]);
   const logoReadiness = useLogoReadiness(listDataRevision);
   usePerformanceAuditSurface({
     id: 'search.results',
@@ -494,6 +501,7 @@ export default function Search() {
 
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
+          ref={listRef}
           // Only changed result identities require a new list. Selection and
           // filter-sheet visibility commit in place through extraData below.
           key={`search:${listDataRevision}`}
