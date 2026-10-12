@@ -1,5 +1,5 @@
 import Ionicons from './icons/AppIcon';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,6 +7,7 @@ import { distinctProviders, distinctValues, type Filters } from '../data/selecto
 import { distinctEligibilityCriteria } from '../data/eligibility';
 import { distinctAccountFeatures } from '../data/features';
 import { humanizeEnum } from '../data/format';
+import { compareLvrTiers, lvrTierDisplay } from '../data/lvrTier';
 import {
   boundedPublishedFactFilterOptions,
   factCriterionId,
@@ -48,6 +49,7 @@ export function FilterSheet({
   filters,
   onApply,
   detailsProducts,
+  resultCount,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -56,6 +58,8 @@ export function FilterSheet({
   filters: Filters;
   onApply: (f: Filters) => void;
   detailsProducts?: Record<string, ProductDetail> | null;
+  /** Products the list would show for a draft; labels the apply action. */
+  resultCount?: (draft: Filters) => number;
 }) {
   const theme = useTheme();
   const reducedMotion = useReducedMotion();
@@ -77,7 +81,12 @@ export function FilterSheet({
   const groupOptions = useMemo(
     () =>
       groups
-        .map((g) => ({ g, options: distinctValues(rows, g.field).slice(0, 24) }))
+        .map((g) => {
+          const values = distinctValues(rows, g.field);
+          // Bands read in order (≤60%, 60–70%, …), not by row frequency.
+          if (g.field === 'lvr_tier') values.sort(compareLvrTiers);
+          return { g, options: values.slice(0, 24) };
+        })
         .filter(({ options }) => options.length > 0),
     [rows, section], // eslint-disable-line react-hooks/exhaustive-deps -- groups is derived from section
   );
@@ -102,6 +111,16 @@ export function FilterSheet({
     ),
     [availablePublishedDetails, draft.factCriteria],
   );
+
+  // Counting re-runs the list filter, so let chip presses paint first.
+  const deferredDraft = useDeferredValue(draft);
+  const draftCount = useMemo(
+    () => (visible && resultCount ? resultCount(deferredDraft) : null),
+    [visible, resultCount, deferredDraft],
+  );
+  const applyTitle = draftCount === null
+    ? 'Apply'
+    : `Show ${draftCount} ${draftCount === 1 ? 'product' : 'products'}`;
 
   const toggle = (key: keyof Filters, value: string) => {
     setDraft((d) => {
@@ -175,7 +194,7 @@ export function FilterSheet({
                     {options.map((o) => (
                       <Chip
                         key={o}
-                        label={humanizeEnum(o)}
+                        label={g.field === 'lvr_tier' ? lvrTierDisplay(o) : humanizeEnum(o)}
                         selected={(draft[g.key] as string[]).includes(o)}
                         onPress={() => toggle(g.key, o)}
                       />
@@ -270,7 +289,7 @@ export function FilterSheet({
               onPress={() => setDraft({ ...filters, ...resetFilters() })}
             />
             <Button
-              title="Apply"
+              title={applyTitle}
               style={{ flex: 2 }}
               onPress={() => {
                 onApply(draft);
