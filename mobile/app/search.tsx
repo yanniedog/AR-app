@@ -4,7 +4,7 @@ import Ionicons from '../src/components/icons/AppIcon';
 import { FlashList } from '@shopify/flash-list';
 import { useIsFocused } from '@react-navigation/native';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -113,6 +113,7 @@ export default function Search() {
   const searchIndexSha = useStore((s) => s.manifest?.files.search_index?.sha256 ?? null);
   const searchIndexStatus = useStore((s) => s.searchIndexStatus);
   const searchIndexError = useStore((s) => s.searchIndexError);
+  const source = useStore((s) => s.source);
   const deepSearchActive = useStore((s) => effectiveDeepSearch(s.prefs));
   const subscriptions = useStore((s) => s.subscriptions);
   const restoredSub = useMemo(
@@ -147,6 +148,19 @@ export default function Search() {
       if (deepSearchActive) void ensureSearchIndex();
     });
   }, [deepSearchActive, ensureDetails, ensureSearchIndex, coreKey, detailsKey, searchIndexSha, isFocused]);
+  // A cached core reports deep search unavailable until a refresh confirms the
+  // same edition is live; that promotion changes only `source`, so retry on the
+  // transition itself. Status is read, not depended on: other unavailable
+  // results (e.g. local audits) cycle through loading and must not re-trigger.
+  const previousSource = useRef(source);
+  useEffect(() => {
+    const promotedToRemote = previousSource.current !== 'remote' && source === 'remote';
+    previousSource.current = source;
+    if (promotedToRemote && isFocused && deepSearchActive &&
+        useStore.getState().searchIndexStatus === 'unavailable') {
+      void ensureSearchIndex();
+    }
+  }, [deepSearchActive, ensureSearchIndex, isFocused, source]);
 
   const [query, setQuery] = useState(() => restoredSub?.query ?? queryRaw ?? '');
   const debouncedQuery = useDebouncedValue(query, 120);
@@ -216,6 +230,21 @@ export default function Search() {
       )
     ),
     [sortedBaseRows, effectiveFilters, debouncedQuery, section, deepSearchActive, details?.products, searchIndex, suitabilityRevision],
+  );
+
+  const draftResultCount = useCallback(
+    (draft: Filters) => (
+      // Suitability rebuilds can keep the same row array; count against the gate the list uses.
+      void suitabilityRevision,
+      filterRows(
+        baseRows,
+        { ...draft, query: debouncedQuery },
+        details?.products ?? null,
+        deepSearchActive ? searchIndex : null,
+        section,
+      ).length
+    ),
+    [baseRows, debouncedQuery, details?.products, deepSearchActive, searchIndex, section, suitabilityRevision],
   );
 
   const showDeepSearchHint =
@@ -419,7 +448,7 @@ export default function Search() {
             accessibilityLabel="Filter products"
           />
           <ToolbarIconButton
-            icon={selectMode ? 'git-compare' : 'git-compare-outline'}
+            icon={selectMode ? 'checkbox' : 'square-outline'}
             active={selectMode}
             onPress={toggleCompareMode}
             accessibilityLabel="Select products to compare"
@@ -429,13 +458,19 @@ export default function Search() {
           {sortOptions.map((o) => (
             <Chip key={o.key} label={o.label} selected={sortKey === o.key} onPress={() => setSortKey(o.key)} />
           ))}
-          <Button title="More" variant="ghost" onPress={() => setToolsOpen(true)} />
+          <Button title="Alert or export" variant="ghost" onPress={() => setToolsOpen(true)} />
         </Row>
         <AppText variant="tiny" color="textFaint">
           {searchPending ? 'Preparing products…' : `${rows.length} ${rows.length === 1 ? 'product' : 'products'}`}
           {searchSub ? ` · alert saved as ${searchSub.label}` : ''}
         </AppText>
-        {searchIndexUnavailable ? (
+        {searchIndexUnavailable && searchIndexStatus === 'unavailable' ? (
+          // Not retryable: this edition or data source has no search index.
+          <AppText variant="tiny" color="textFaint">
+            Searching product names only.
+          </AppText>
+        ) : null}
+        {searchIndexUnavailable && searchIndexStatus === 'error' ? (
           <Card variant="outlined" accessibilityRole="alert" style={{ gap: theme.spacing(2) }}>
             <AppText variant="small" weight="700">Deep search unavailable</AppText>
             <AppText variant="small" color="textMuted">
@@ -548,6 +583,7 @@ export default function Search() {
         filters={effectiveFilters}
         detailsProducts={details?.products}
         onApply={setFilters}
+        resultCount={draftResultCount}
       />
       <LedgerSheet visible={toolsOpen} title="Search tools" onClose={() => setToolsOpen(false)}>
         <ScrollView contentContainerStyle={{ gap: theme.spacing(4), paddingBottom: theme.spacing(4) }}>

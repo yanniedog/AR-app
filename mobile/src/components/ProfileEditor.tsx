@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { SECTIONS } from '../constants';
 import { humanizeEnum } from '../data/format';
+import { compareLvrTiers, lvrTierDisplay } from '../data/lvrTier';
 import {
   PROFILE_FEATURE_OPTIONS,
   PROFILE_GROUPS,
@@ -40,7 +41,10 @@ export function ProfileEditor({
         section: g.section,
         title: g.title,
         key: g.key,
-        options: distinctValues(core?.sections?.[g.section]?.rates ?? [], g.field).slice(0, 12),
+        options: (g.key === 'lvrTiers'
+          // Bands read in order (≤60%, 60–70%, …), not by row frequency.
+          ? distinctValues(core?.sections?.[g.section]?.rates ?? [], g.field).sort(compareLvrTiers)
+          : distinctValues(core?.sections?.[g.section]?.rates ?? [], g.field)).slice(0, 12),
       }))
       .filter((g) => g.options.length > 0);
 
@@ -100,7 +104,7 @@ export function ProfileEditor({
               {g.options.map((o) => (
                 <Chip
                   key={o}
-                  label={humanizeEnum(o)}
+                  label={g.key === 'lvrTiers' ? lvrTierDisplay(o) : humanizeEnum(o)}
                   selected={value[g.key].includes(o)}
                   onPress={() => toggle(g.key, o)}
                 />
