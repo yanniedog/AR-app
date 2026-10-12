@@ -315,5 +315,9 @@ exercise 1,000 notifications without timer growth or timers left after abort or
 completion. A deterministic sequence of 200 unchanged pre-action checks reuses
 proof without advancing the clock, while mutation, stronger-probe, longer-window,
 pending/error and changed-render cases retain their original waits and failures.
+Lifecycle invalidation resets in-flight quiet windows as well as cached proof;
+regressions cover a wait spanning pause/resume and one finishing in the background.
+Skipped checks, compact logs and deidentified exports retain the numeric/boolean
+reuse metrics without exporting private readiness evidence.
 These tests establish eliminated duplicate waiting; signed-APK timing is still
 needed to measure the complete run's improvement.

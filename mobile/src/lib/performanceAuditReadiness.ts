@@ -366,6 +366,7 @@ export class PerformanceAuditReadinessCaptureEndedError extends PerformanceAudit
 export class PerformanceAuditReadinessRegistry {
   private capture: PerformanceAuditCaptureHandle | null = null;
   private generation = 0;
+  private stabilityEpoch = 0;
   private nextInstance = 1;
   private readonly surfaces = new Map<string, MutableSurface>();
   /** Action proof keyed by surface ID; remounts must not erase completed-step evidence. */
@@ -400,6 +401,8 @@ export class PerformanceAuditReadinessRegistry {
   /** App lifecycle transitions invalidate evidence even if render tokens stay equal. */
   invalidateSettledReadiness(): void {
     this.settledEvidence.clear();
+    this.stabilityEpoch += 1;
+    this.emit();
   }
 
   beginCapture(sessionId: string): PerformanceAuditCaptureHandle {
@@ -789,6 +792,7 @@ export class PerformanceAuditReadinessRegistry {
     return new Promise((resolve, reject) => {
       let settled = false;
       let stableFingerprint: string | null = null;
+      let stableEpoch = this.stabilityEpoch;
       let stableSinceMs = 0;
       let quietTimer: unknown = null;
       let timeoutTimer: unknown = null;
@@ -834,6 +838,10 @@ export class PerformanceAuditReadinessRegistry {
         // one quiet timer instead of dropping its handle and leaking callbacks.
         if (quietTimer != null) this.clock.clearTimeout(quietTimer);
         quietTimer = null;
+        if (stableEpoch !== this.stabilityEpoch) {
+          stableEpoch = this.stabilityEpoch;
+          stableFingerprint = null;
+        }
         const snapshot = this.snapshot(
           options.surfaceIds,
           options.requiredKinds,

@@ -166,6 +166,41 @@ describe('PerformanceAuditReadinessRegistry', () => {
     await expect(longer).resolves.not.toHaveProperty('quietWindowReused');
   });
 
+  it('restarts an in-flight quiet window on pause and resume', async () => {
+    const { clock, registry, options, settled } = settledFixture();
+    await settled;
+    let done = false;
+    const pending = registry.waitForReady({ ...options, timeoutMs: 3000 })
+      .then((snapshot) => { done = true; return snapshot; });
+    clock.advanceBy(300);
+    registry.invalidateSettledReadiness(); // pause
+    clock.advanceBy(200);
+    registry.invalidateSettledReadiness(); // resume
+    clock.advanceBy(649);
+    await Promise.resolve();
+    expect(done).toBe(false);
+    expect(clock.pendingTimers()).toBe(2);
+    clock.advanceBy(1);
+    await expect(pending).resolves.not.toHaveProperty('quietWindowReused');
+    await expect(registry.waitForReady({ ...options, reuseSettledEvidence: true }))
+      .resolves.toMatchObject({ quietWindowReused: true });
+  });
+
+  it('discards evidence from a wait that finished while backgrounded', async () => {
+    const { clock, registry, options, settled } = settledFixture();
+    await settled;
+    const pending = registry.waitForReady({ ...options, timeoutMs: 3000 });
+    clock.advanceBy(300);
+    registry.invalidateSettledReadiness(); // pause
+    clock.advanceBy(700);
+    await pending;
+    registry.invalidateSettledReadiness(); // resume
+    const foreground = registry.waitForReady({ ...options, reuseSettledEvidence: true });
+    expect(clock.pendingTimers()).toBe(2);
+    clock.advanceBy(650);
+    await expect(foreground).resolves.not.toHaveProperty('quietWindowReused');
+  });
+
   it('still enforces changed render, pending probes, and probe errors when reuse is requested', async () => {
     const { clock, registry, surface, options, settled } = settledFixture();
     await settled;
