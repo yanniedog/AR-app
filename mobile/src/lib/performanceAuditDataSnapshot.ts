@@ -1,6 +1,6 @@
 import type { AppState } from '../data/storeTypes';
 import type { AppHealthAssetObservation, AppHealthAssetKey, AppHealthDataSnapshot } from './appHealth/types';
-import { appHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
+import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 
 function countRecord(value: unknown): number | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -79,7 +79,7 @@ export function appHealthDataSnapshot(
     ),
   };
   return {
-    catalogue: includeCatalogue ? appHealthCatalogueSnapshot(state) : null,
+    catalogue: includeCatalogue ? preparedAppHealthCatalogueSnapshot(state) : null,
     source: state.source,
     core: state.core,
     manifest: state.manifest,

@@ -3,7 +3,8 @@ import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { selectMandatoryEligibility } from '../src/data/mandatoryEligibility';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
 import type { AppState } from '../src/data/storeTypes';
-import { appHealthCatalogueSnapshot } from '../src/lib/performanceAuditCatalogueSnapshot';
+import { appHealthCatalogueSnapshot, preparedAppHealthCatalogueSnapshot } from '../src/lib/performanceAuditCatalogueSnapshot';
+import { appHealthDataSnapshot } from '../src/lib/performanceAuditDataSnapshot';
 import { evaluateAppHealthCatalogueCoverage } from '../src/lib/appHealth/catalogueCoverage';
 import { toPublicAppHealthReport, finalizeAppHealthReport } from '../src/lib/appHealth/report';
 import type { CorePayload, RateRow } from '../src/types';
@@ -30,6 +31,58 @@ function fixture() {
 afterEach(() => {
   installMandatoryEligibility(selectMandatoryEligibility(null, null, null));
   setSuitabilityAllowed(null);
+});
+
+test('manual snapshots reuse passive catalogue evidence without rerunning any selectors', () => {
+  const state = stateFor(makeHealthyDataFixture().snapshot.core!);
+  const search = jest.spyOn(selectors, 'filterRows');
+  const banks = jest.spyOn(selectors, 'groupByProvider');
+  try {
+    const passive = appHealthDataSnapshot(state, '1.0.0');
+    expect(search).toHaveBeenCalledTimes(3);
+    expect(banks).toHaveBeenCalledTimes(3);
+    for (let run = 0; run < 200; run++) {
+      const manual = appHealthDataSnapshot({ ...state, prefs: { ...state.prefs } }, '1.0.0');
+      expect(manual.catalogue).toBe(passive.catalogue);
+    }
+    expect(search).toHaveBeenCalledTimes(3);
+    expect(banks).toHaveBeenCalledTimes(3);
+    expect(preparedAppHealthCatalogueSnapshot(state)).toEqual(appHealthCatalogueSnapshot(state));
+  } finally { search.mockRestore(); banks.mockRestore(); }
+});
+
+test('prepared coverage invalidates on payloads, interests, rank settings and eligibility revisions', () => {
+  let state = stateFor(makeHealthyDataFixture().snapshot.core!);
+  let previous = preparedAppHealthCatalogueSnapshot(state);
+  const expectNew = () => {
+    const next = preparedAppHealthCatalogueSnapshot(state);
+    expect(next).not.toBe(previous);
+    expect(next).toEqual(appHealthCatalogueSnapshot(state));
+    previous = next;
+  };
+  state = { ...state, core: { ...state.core! } };
+  expectNew();
+  state = { ...state, details: { ...state.details!, products: {} } };
+  expectNew();
+  expect(previous!.sections[0].missingDetails).toHaveLength(1);
+  state = { ...state, searchIndex: { ...state.searchIndex!, products: {}, run_date: '2020-01-01' } };
+  expectNew();
+  expect(previous!.searchIndexRunMatches).toBe(false);
+  state = { ...state, prefs: { ...state.prefs, interests: ['Mortgage'], depositRankMetric: 'base' } };
+  expectNew();
+  expect(previous!.sections[1].selectedInterest).toBe(false);
+  state = { ...state, prefs: { ...state.prefs, mortgageRateMetric: 'headline' } };
+  expectNew();
+  state = { ...state, prefs: { ...state.prefs, includeNonStandard: false } };
+  expectNew();
+  setSuitabilityAllowed(new Set());
+  expectNew();
+  expect(previous!.sections.every(section => section.eligible?.rates === 0)).toBe(true);
+  installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() });
+  expectNew();
+  expect(previous!.filterState).toBe('blocked');
+  state = { ...state, core: null };
+  expect(preparedAppHealthCatalogueSnapshot(state)).toBeNull();
 });
 
 test('reconciles every category and bank while separating full loaded coverage from sampled rendering', () => {

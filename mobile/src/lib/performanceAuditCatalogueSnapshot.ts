@@ -1,12 +1,32 @@
-import { mandatoryEligibleRows } from '../data/eligibilityGate';
+import { getMandatoryEligibilityRevision, mandatoryEligibleRows } from '../data/eligibilityGate';
 import { visibleAccountRows } from '../data/format';
 import { normalizeInterests } from '../data/interests';
 import { EMPTY_FILTERS, excludeTokenDepositRates, filterRows, groupByProvider } from '../data/selectors';
 import type { AppState } from '../data/storeTypes';
-import { isSuitabilityFilterReady } from '../data/suitabilityGate';
+import { getSuitabilityRevision, isSuitabilityFilterReady } from '../data/suitabilityGate';
 import { SECTION_KEYS, type CorePayload, type RateRow } from '../types';
 
 import type { AppHealthCatalogueObservation, CatalogueCounts, CatalogueProviderCoverage, CatalogueSectionCoverage } from './appHealth/catalogueCoverage';
+
+let prepared: { inputs: readonly unknown[]; observation: AppHealthCatalogueObservation | null } | null = null;
+
+/** Reuse the passive scan only for the same immutable store inputs and gate
+ * revisions. Retain one publication, never a growing cache of private profiles.
+ * The uncached scanner below remains available for independent selector checks. */
+export function preparedAppHealthCatalogueSnapshot(state: AppState): AppHealthCatalogueObservation | null {
+  if (!state.core) { prepared = null; return null; }
+  const inputs = [state.core, state.core?.sections, state.core?.brands,
+    ...SECTION_KEYS.map(section => state.core?.sections[section]?.rates),
+    state.details, state.details?.products, state.searchIndex, state.searchIndex?.products,
+    state.searchIndex?.run_date, state.prefs.includeNonStandard,
+    state.prefs.depositRankMetric, state.prefs.mortgageRateMetric,
+    normalizeInterests(state.prefs.interests).join(','),
+    getMandatoryEligibilityRevision(), getSuitabilityRevision()];
+  if (prepared && inputs.every((value, index) => value === prepared!.inputs[index])) return prepared.observation;
+  const observation = appHealthCatalogueSnapshot(state);
+  prepared = { inputs, observation };
+  return observation;
+}
 
 function counts(rows: readonly RateRow[]): CatalogueCounts {
   return { rates: rows.length, products: new Set(rows.map(row => row.product_key)).size,

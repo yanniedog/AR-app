@@ -83,7 +83,8 @@ function prepareLoadedState(state: AppState): void {
     state.details, state.searchIndex, state.searchIndexStatus, state.historyBanks, state.historyBanksError,
     state.bankInsights, state.bankInsightsError, state.bankSpreadHistory, state.bankSpreadHistoryError,
     state.rbaCalendar, state.rbaCalendarError, state.prefs.profileFilters, state.prefs.interests,
-    state.prefs.includeNonStandard, getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
+    state.prefs.includeNonStandard, state.prefs.depositRankMetric, state.prefs.mortgageRateMetric,
+    getSuitabilityIndex(), getSuitabilityRevision(), getMandatoryEligibilityRevision()];
   if (record && snapshot && passiveAuditRecordFresh(record, Date.now()) &&
     next.length === references.length && next.every((value, i) => value === references[i])) return;
   // A cold standard-only catalogue would invoke expensive fallback classifiers.
