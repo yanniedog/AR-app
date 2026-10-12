@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "repo": "yanniedog/AR-app",
-  "generated_at": "2026-10-12T12:01:46.330Z",
+  "generated_at": "2026-10-12T17:20:11.114Z",
   "versions": [
     {
       "version": "1.0.0",
@@ -987,6 +987,14 @@
         "Improve dependency security, search responsiveness and performance-audit reliability."
       ],
       "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.232"
+    },
+    {
+      "version": "1.0.234",
+      "date": "2026-10-12",
+      "summaryBullets": [
+        "feat(ux): onboarding + navigation overhaul — radio-card onboarding, results-first Rates, dashboard Home (#388)"
+      ],
+      "releaseUrl": "https://github.com/yanniedog/AR-app/releases/tag/app-arm-v1.0.234"
     }
   ]
 }
