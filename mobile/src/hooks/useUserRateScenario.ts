@@ -205,6 +205,10 @@ export async function restoreUserRateScenarioForAudit(
   });
   const persisted = await flushUserRateScenario();
   if (!persisted) {
-    throw new Error('Encrypted rate scenario restore did not persist');
+    // The queue deliberately turns write rejection into UI state. Retain that
+    // cause here so interrupted-audit recovery does not hide the native error.
+    throw new Error(`Encrypted rate scenario restore did not persist: ${
+      snapshot.error ?? 'scenario changed before the write completed'
+    }`);
   }
 }

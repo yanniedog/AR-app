@@ -94,7 +94,7 @@ export function resolveRefreshOutcomeSnackbar(
     case 'failure':
       return {
         kind,
-        message: 'Couldn\u2019t reach the server. Showing cached data.',
+        message: 'Couldn\u2019t update rates. Showing your saved copy.',
         actionLabel: 'Retry',
         action: 'retry',
       };

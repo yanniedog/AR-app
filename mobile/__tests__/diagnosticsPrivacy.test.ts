@@ -60,6 +60,25 @@ function reportFixture(checks: AuditCheck[]): PerformanceAuditReport {
 }
 
 describe('deidentified diagnostics privacy boundary', () => {
+  it.each(['pass', 'skipped'] as const)('preserves measured readiness savings for %s checks without private evidence', (status) => {
+    const checks: AuditCheck[] = [true, false].map((reused) => ({
+      id: 'deep-first-pass.search.action', label: 'Private label', kind: 'journey', status,
+      durationMs: status === 'skipped' ? null : 700,
+      metrics: { executionAttempted: true, preActionWaitMs: reused ? 3 : 650,
+        preActionQuietWindowReused: reused, preActionQuietWindowAvoidedMs: reused ? 650 : 0,
+        readinessEvidence: 'Private screen content' },
+    }));
+    const prepared = createDeidentifiedDiagnosticsShare(reportFixture(checks));
+    const parsed = JSON.parse(prepared.body);
+    expect(parsed.checks[0].metrics).toMatchObject({
+      preActionWaitMs: 3, preActionQuietWindowReused: true, preActionQuietWindowAvoidedMs: 650,
+    });
+    expect(parsed.checks[1].metrics).toMatchObject({
+      preActionWaitMs: 650, preActionQuietWindowReused: false, preActionQuietWindowAvoidedMs: 0,
+    });
+    expect(prepared.body).not.toContain('Private');
+  });
+
   it.each(['rba', 'rba-redirect'])(
     'retains fixed %s journey IDs and the slowest check while rejecting private suffixes',
     (journey) => {
@@ -174,7 +193,7 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).not.toContain('Clipboard');
     expect(screen).not.toContain('uploadDebugLog');
     expect(screen).not.toContain('fetch(');
-    expect(debugScreen).toContain('Upload full log?');
+    expect(debugScreen).toContain('Upload diagnostic log?');
     expect(screen).toContain('Anyone with the link can read the log.');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');
     const upload = runner.indexOf('void startDebugLogUpload(');
