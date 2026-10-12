@@ -17,6 +17,7 @@ import { SECTIONS } from '../src/constants';
 import {
   formatBalanceRange,
   formatRate,
+  formatRunDate,
   formatTerm,
   humanizeEnum,
 } from '../src/data/format';
@@ -36,6 +37,7 @@ import {
 } from '../src/lib/comparePresentation';
 import type { ProductDetail, RateRow, SectionKey } from '../src/types';
 import { useTheme } from '../src/theme/ThemeProvider';
+import { lvrTierDisplay } from '../src/data/lvrTier';
 
 const LABEL_W = 108;
 const COL_W = 136;
@@ -226,13 +228,13 @@ export default function Compare() {
       label: 'Repayment',
       get: (e) => humanizeEnum(e.row.ribbon_repayment_type ?? e.row.repayment_type) || '—',
     },
-    { label: 'LVR', get: (e) => humanizeEnum(e.row.lvr_tier) || '—' },
+    { label: 'LVR', get: (e) => lvrTierDisplay(e.row.lvr_tier) || '—' },
     { label: 'Balance', get: (e) => formatBalanceRange(e.row.balance_min, e.row.balance_max) || '—' },
     { label: 'Fees', get: (e) => publishedItemCount(detailFor(e)?.fees) },
     { label: 'Eligibility', get: (e) => publishedItemCount(detailFor(e)?.eligibility) },
     { label: 'Features', get: (e) => publishedItemCount(detailFor(e)?.features) },
     { label: 'Constraints', get: (e) => publishedItemCount(detailFor(e)?.constraints) },
-    { label: 'Observed', get: (e) => e.row.last_updated?.slice(0, 10) || core.run_date },
+    { label: 'Last updated', get: (e) => formatRunDate(e.row.last_updated?.slice(0, 10) || core.run_date) },
   ];
   const attrRows = commonRows.filter((item) => {
     if (item.label === 'Comparison rate' || item.label === 'Repayment' || item.label === 'LVR') {

@@ -413,9 +413,9 @@ export default function MyRates() {
       <Screen onLayout={() => setLayoutReady(true)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
           <EmptyState
-            icon="shield-checkmark-outline"
-            title="Check your rate"
-            subtitle="Add your current rate, then watch exact product tiers. No bank login."
+            icon="star-outline"
+            title="No saved rates yet"
+            subtitle="Tap the star on any rate to watch it here, or add the rate you have now to see how it compares. No bank login."
           />
           {unavailableRefs.length ? (
             <Button
