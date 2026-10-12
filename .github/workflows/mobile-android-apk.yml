@@ -223,7 +223,7 @@ jobs:
           import { readFileSync } from 'node:fs';
           import { inspectApkIdentity } from './scripts/apk-identity.mjs';
           import { verifyNativeApkPrivacy } from './scripts/apk-payload-privacy.mjs';
-          import { verifyApkHeadlessLoader } from './scripts/apk-headless-loader.mjs';
+          import { verifyApkHeadlessLoader, verifyApkColdBackgroundPatches } from './scripts/apk-headless-loader.mjs';
           import { expectedAbisForApkChannel } from './scripts/app-release-utils.mjs';
           const app = JSON.parse(readFileSync('app.json', 'utf8')).expo;
           const identity = JSON.parse(readFileSync('release-identity.json', 'utf8'));
@@ -236,6 +236,7 @@ jobs:
             supportedAbis: expectedAbisForApkChannel(tag, identity.android_release_abis),
           });
           verifyApkHeadlessLoader(readFileSync(process.env.APK_PATH));
+          verifyApkColdBackgroundPatches(readFileSync(process.env.APK_PATH));
           verifyNativeApkPrivacy(readFileSync(process.env.APK_PATH), process.cwd());
           NODE
 
