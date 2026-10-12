@@ -25,7 +25,7 @@
           "text": "Saved products use a consistent star icon, and product disclosures use clearer wording."
         },
         {
-          "text": "Security fixes update vulnerable dependencies and protect release tooling from shell interpretation."
+          "text": "Update dependencies and protect review and release tooling from unsafe code or shell interpretation."
         },
         {
           "text": "Search remains responsive while suitability information loads, with more reliable recovery after delayed data."
