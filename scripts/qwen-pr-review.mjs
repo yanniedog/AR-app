@@ -85,30 +85,37 @@ export function changedLinesFromDiff(diffText) {
 }
 
 export function assertBranchName(name, label) {
-  if (typeof name !== 'string' || name.length === 0 || name.length > 250) {
+  if (typeof name !== 'string' || name.length === 0) {
     fail(`${label} is not a branch name`);
   }
   const check = spawnSync('git', ['check-ref-format', '--branch', name], { encoding: 'utf8' });
   if (check.status !== 0) fail(`${label} is not a branch name`);
 }
 
+export function canonicalPullNumber(prNumber) {
+  const raw = String(prNumber ?? '').trim();
+  if (!/^\d+$/.test(raw)) fail('PR_NUMBER is required to fetch the pull request ref');
+  const canonical = raw.replace(/^0+/, '');
+  if (!/^[1-9]\d*$/.test(canonical)) fail('PR_NUMBER is required to fetch the pull request ref');
+  return canonical;
+}
+
 export function fetchedPullRequestRef(prNumber) {
-  if (!/^\d+$/.test(String(prNumber || ''))) fail('PR_NUMBER is required to fetch the pull request ref');
-  return `refs/review-fetch/pr-${prNumber}`;
+  return `refs/review-fetch/pr-${canonicalPullNumber(prNumber)}`;
 }
 
 export function collectDiff(baseRef, headSha, maxChars, prNumber) {
-  if (!/^\d+$/.test(String(prNumber || ''))) fail('PR_NUMBER is required to fetch the pull request ref');
+  const pullNumber = canonicalPullNumber(prNumber);
   if (!/^[0-9a-f]{7,40}$/i.test(String(headSha || ''))) fail('HEAD_SHA must be the pull request commit id');
   assertBranchName(baseRef, 'BASE_REF');
-  const prRef = fetchedPullRequestRef(prNumber);
+  const prRef = fetchedPullRequestRef(pullNumber);
   const baseRemote = `refs/remotes/origin/${baseRef}`;
   const shallow = runGit(['rev-parse', '--is-shallow-repository']).trim() === 'true';
   const baseFetch = ['fetch', '--no-tags'];
   if (shallow) baseFetch.push('--unshallow');
   baseFetch.push('origin', `+refs/heads/${baseRef}:${baseRemote}`);
   runGit(baseFetch);
-  runGit(['fetch', '--no-tags', 'origin', `+refs/pull/${prNumber}/head:${prRef}`]);
+  runGit(['fetch', '--no-tags', 'origin', `+refs/pull/${pullNumber}/head:${prRef}`]);
   const resolvedHead = runGit(['rev-parse', '--verify', `${prRef}^{commit}`]).trim().toLowerCase();
   const expectedHead = String(headSha).trim().toLowerCase();
   if (resolvedHead !== expectedHead && !resolvedHead.startsWith(expectedHead)) {

@@ -66,7 +66,7 @@ jobs:
           if ($json.head.repo.full_name -ne $env:GITHUB_REPOSITORY) {
             throw "Fork PRs cannot run on the private Qwen runner."
           }
-          "number=$pr" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "number=$($json.number)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "head_sha=$($json.head.sha)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "base_ref=$($json.base.ref)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8
           "author=$($json.user.login)" | Out-File $env:GITHUB_OUTPUT -Append -Encoding utf8

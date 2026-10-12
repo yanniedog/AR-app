@@ -15,7 +15,7 @@ import {
   loginToBotKey,
   SPREADSHEET_BOT_KEYS,
 } from "./lib/pr-bot-roster.mjs";
-import { assertBranchName, changedLinesFromDiff, fetchedPullRequestRef, isReviewablePath } from "./qwen-pr-review.mjs";
+import { assertBranchName, canonicalPullNumber, changedLinesFromDiff, fetchedPullRequestRef, isReviewablePath } from "./qwen-pr-review.mjs";
 import {
   combineRequiredCheckState,
   renderDashboard,
@@ -403,6 +403,10 @@ assert.doesNotMatch(workflow, /checked out separately/);
 assert.match(reviewer, /refs\/heads\/\$\{baseRef\}:\$\{baseRemote\}/);
 assert.match(reviewer, /check-ref-format', '--branch'/);
 assert.equal(fetchedPullRequestRef('12'), 'refs/review-fetch/pr-12');
+assert.equal(canonicalPullNumber('0012'), '12');
+assert.equal(fetchedPullRequestRef('0012'), 'refs/review-fetch/pr-12');
+assert.doesNotThrow(() => assertBranchName(`${'a'.repeat(130)}/${'b'.repeat(130)}`, 'BASE_REF'));
+assert.match(workflow, /number=\$\(\$json\.number\)/);
 assert.notEqual(fetchedPullRequestRef('12'), 'refs/remotes/origin/pr-review-12');
 assert.doesNotThrow(() => assertBranchName('release+hotfix', 'BASE_REF'));
 assert.doesNotThrow(() => assertBranchName('foo@bar', 'BASE_REF'));
