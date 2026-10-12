@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import {
   adjustRequiredKeysForPrContext,
   allKnownBotLogins,
+  blockingMissingRequiredKeys,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   isQwenCodeReviewBody,
@@ -100,9 +101,13 @@ export function checkRequiredBotsOnPr(owner, name, prNumber, { requiredKeys, anc
   const anchor = resolveAnchorIso(anchorIso || state?.anchor, pr.createdAt);
   const events = collectBotEvents(pr, knownBots, anchor, pr.createdAt);
   const seenLogins = [...new Set(events.map((e) => e.login))];
-  const missing = missingRequiredKeysFromEvents(keys, events, {
-    expectedHeadSha: pr.headRefOid,
-  });
+  const missing = blockingMissingRequiredKeys(
+    missingRequiredKeysFromEvents(keys, events, {
+      expectedHeadSha: pr.headRefOid,
+    }),
+    events,
+    { expectedHeadSha: pr.headRefOid },
+  );
   return {
     requiredKeys: keys,
     anchor,

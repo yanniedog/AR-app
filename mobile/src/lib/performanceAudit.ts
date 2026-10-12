@@ -9,7 +9,7 @@ import type { CorePayload, PayloadSource, SectionKey } from '../types';
 import type { AppHealthAuditMode, AppHealthReport } from './appHealth';
 import { buildBrowseRouteParams } from './browseRoute';
 import { effectiveBankInsights, effectiveDeepSearch, effectiveHistoryRibbon } from './proAccess';
-import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions } from './performanceAuditPlan';
+import { deriveDeepAuditInputs, type DeepPerformanceAuditPlan, type DeepAuditSelectionOptions, type DeepAuditDerivedInputs } from './performanceAuditPlan';
 
 export { PERFORMANCE_AUDIT_SCHEMA_VERSION } from './performanceAuditSchema';
 
@@ -722,7 +722,13 @@ export function buildPerformanceAuditJourneys(
   interests: SectionKey[] = SECTION_ORDER,
   options: DeepAuditSelectionOptions = {},
 ): AuditJourney[] {
-  const inputs = deriveDeepAuditInputs(core, options);
+  return buildPerformanceAuditJourneysFromInputs(deriveDeepAuditInputs(core, options), interests);
+}
+
+export function buildPerformanceAuditJourneysFromInputs(
+  inputs: DeepAuditDerivedInputs,
+  interests: SectionKey[] = SECTION_ORDER,
+): AuditJourney[] {
   const first = inputs.primaryProduct;
   const second = inputs.secondaryProduct;
   const provider = inputs.provider;
