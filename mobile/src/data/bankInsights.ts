@@ -1,4 +1,4 @@
-import { hasMandatoryRequirements } from './eligibilityGate';
+import { getMandatoryEligibilityRevision, hasMandatoryRequirements } from './eligibilityGate';
 import type {
   CorePayload,
   ProductDetail,
@@ -129,6 +129,8 @@ let suitabilityFilterCache: {
   detailsProducts: Record<string, ProductDetail> | null | undefined;
   integrity: CoreIntegrityContext | null | undefined;
   revision: number;
+  mandatoryRevision: number;
+  includeNonStandard: boolean;
   result: BankInsightsPayload | null;
 } | null = null;
 
@@ -181,25 +183,30 @@ export function filterBankInsightsForSuitability(
 ): BankInsightsPayload | null {
   if (!payload) return null;
   if (!core) return null;
-  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, integrity);
-  if (includeNonStandard && !hasMandatoryRequirements()) return integrityPayload;
+  // Product and bank screens share this immutable projection. Profile changes
+  // install a new mandatory-gate revision; bypassing reuse for every active
+  // profile rescanned the complete catalogue on each screen mount.
+  const mandatoryRevision = getMandatoryEligibilityRevision();
   if (
-    !hasMandatoryRequirements() && suitabilityFilterCache?.payload === payload &&
+    suitabilityFilterCache?.payload === payload &&
     suitabilityFilterCache.core === core &&
     suitabilityFilterCache.detailsProducts === detailsProducts &&
     suitabilityFilterCache.integrity === integrity &&
-    suitabilityFilterCache.revision === suitabilityRevision
+    suitabilityFilterCache.revision === suitabilityRevision &&
+    suitabilityFilterCache.mandatoryRevision === mandatoryRevision &&
+    suitabilityFilterCache.includeNonStandard === includeNonStandard
   ) return suitabilityFilterCache.result;
-  if (getSuitabilityAllowed()?.size === 0) {
+  const remember = (result: BankInsightsPayload | null) => {
     suitabilityFilterCache = {
-      payload,
-      core,
-      detailsProducts,
-      integrity,
-      revision: suitabilityRevision,
-      result: null,
+      payload, core, detailsProducts, integrity, revision: suitabilityRevision,
+      mandatoryRevision, includeNonStandard, result,
     };
-    return null;
+    return result;
+  };
+  const integrityPayload = filterBankInsightsForSectionIntegrity(payload, integrity);
+  if (includeNonStandard && !hasMandatoryRequirements()) return remember(integrityPayload);
+  if (getSuitabilityAllowed()?.size === 0) {
+    return remember(null);
   }
 
   const historicalPairs = new Set<string>();
@@ -285,15 +292,7 @@ export function filterBankInsightsForSuitability(
     ),
     behaviour: Object.keys(behaviour).length ? behaviour : undefined,
   };
-  suitabilityFilterCache = {
-    payload,
-    core,
-    detailsProducts,
-    integrity,
-    revision: suitabilityRevision,
-    result,
-  };
-  return result;
+  return remember(result);
 }
 
 function numberOrNull(value: unknown): number | null {
