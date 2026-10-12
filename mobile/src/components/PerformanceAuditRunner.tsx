@@ -7,7 +7,7 @@ import * as Device from 'expo-device';
 import * as FileSystem from 'expo-file-system/legacy';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import * as Network from 'expo-network';
-import { router, usePathname, type Href } from 'expo-router';
+import { router, useNavigationContainerRef, usePathname, type Href } from 'expo-router';
 import React, { useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   BackHandler,
@@ -27,6 +27,7 @@ import { useStore } from '../data/store';
 import { childrenFromScoped, rowsUnder } from '../data/taxonomy';
 import { SECTION_ORDER } from '../constants';
 import { usePerformanceAuditRunGate } from '../hooks/usePerformanceAuditRunGate';
+import { PerformanceAuditNavigationAnchor } from '../lib/performanceAuditNavigation';
 import { createPerformanceAuditWakeLock } from '../lib/performanceAuditWakeLock';
 import { AuditScreenAwake } from '../../modules/audit-screen-awake';
 import {
@@ -422,9 +423,22 @@ async function waitForPath(
   }
 }
 
-async function recoverAuditRoute(currentPath: () => string): Promise<void> {
-  if (pathMatches(currentPath(), AUDIT_HOME_PATH)) return;
-  router.replace(AUDIT_HOME_PATH as Href);
+async function recoverAuditRoute(
+  currentPath: () => string,
+  anchor?: PerformanceAuditNavigationAnchor,
+): Promise<void> {
+  if (mountedMutationBarrier.hasPending) throw new PerformanceAuditPendingMutationError('Audit route recovery');
+  if (anchor) {
+    anchor.restore(false);
+    const deadline = now() + ROUTE_TIMEOUT_MS;
+    while (!anchor.isRestored() || !pathMatches(currentPath(), AUDIT_HOME_PATH)) {
+      if (now() >= deadline) throw new Error('The saved audit navigation stack did not restore.');
+      await delay(25);
+    }
+  } else {
+    if (pathMatches(currentPath(), AUDIT_HOME_PATH)) return;
+    router.replace(AUDIT_HOME_PATH as Href);
+  }
   await waitForPath(currentPath, AUDIT_HOME_PATH, 'Performance audit route recovery', {
     checkAuditState: false,
   });
@@ -786,24 +800,13 @@ async function runDeepAuditStepBody(
   };
   const href = routeEntryHref(step);
   if (href) {
-    if (
-      pathMatches(currentPath(), step.expectedPath) &&
-      !step.semanticActionId.startsWith('redirect.')
-    ) {
-      router.replace(AUDIT_HOME_PATH as Href);
-      await waitForPath(currentPath, AUDIT_HOME_PATH, `${label} route reset`, { watchdog });
-      await settleUi();
-      assertSessionActive(watchdog);
-    }
     execution.attempted = true;
     measuredAction = await measureAuditAction(
       () => {
         execution.invoked = true;
-        // A scenario entry is an independent sample, not a growing user back
-        // stack. Compatibility redirects remain pushes because following the
-        // redirect is the behaviour under test.
-        if (step.semanticActionId.startsWith('redirect.')) router.push(href);
-        else router.replace(href);
+        // The caller restored the saved origin before starting measurement.
+        // Keep that anchor underneath this scenario and its genuine back steps.
+        router.push(href);
       },
       () => monitor.snapshot(),
       now,
@@ -981,7 +984,7 @@ async function runDeepAuditStepBody(
       surfaceIds: [step.expectedSurface],
       requiredKinds: requiredProbeKinds(step),
       ...(actionSource === step.expectedSurface &&
-        pathMatches(currentPath(), pathBeforeAction) &&
+        pathMatches(currentPath(), pathBeforeAction, 'pathname') &&
         step.safety.stateImpact !== 'none' &&
         !verifiedIdempotentFixture &&
         !step.semanticActionId.includes('.scroll.')
@@ -1034,7 +1037,7 @@ async function runDeepAuditStepBody(
         `last action ${completedActionName ?? 'none'}`,
       );
     }
-    const pathChanged = !pathMatches(currentPath(), pathBeforeAction);
+    const pathChanged = !pathMatches(currentPath(), pathBeforeAction, 'pathname');
     const requiresChangedRender = step.safety.stateImpact !== 'none' &&
       !step.semanticActionId.includes('.scroll.');
     if (
@@ -2226,6 +2229,7 @@ export async function runJourney(
   monitor: ResponsivenessMonitor,
   watchdog: PerformanceAuditInactivityWatchdog,
   datasetRevision: AuditDatasetRevision,
+  navigationAnchor?: PerformanceAuditNavigationAnchor,
 ): Promise<AuditCheck> {
   const started = now();
   if (!journey.href) {
@@ -2265,9 +2269,12 @@ export async function runJourney(
     | 'none'
     | 'second-back'
     | 'replace-recovery'
-    | 'second-back+replace-recovery' = 'none';
+    | 'second-back+replace-recovery'
+    | 'anchor-reset'
+    | 'second-back+anchor-reset' = 'none';
   let secondBackMs: number | null = null;
   let replaceRecoveryMs: number | null = null;
+  let anchorResetMs: number | null = null;
   let originReadinessMs: number | null = null;
   let forwardResponsiveness = EMPTY_RESPONSIVENESS;
   let backgroundResponsiveness = EMPTY_RESPONSIVENESS;
@@ -2350,7 +2357,7 @@ export async function runJourney(
     backResponsiveness = monitor.metricsSince(backResponsivenessAt);
     backDestination = currentPath();
     backReturnedToAudit = pathMatches(backDestination, AUDIT_HOME_PATH);
-    backChangedPath = !pathMatches(backDestination, pathBeforeBack);
+    backChangedPath = !pathMatches(backDestination, pathBeforeBack, 'pathname');
 
     if (
       !backReturnedToAudit &&
@@ -2372,27 +2379,22 @@ export async function runJourney(
     if (!backReturnedToAudit) {
       returnNavigationKind =
         returnNavigationKind === 'second-back'
-          ? 'second-back+replace-recovery'
-          : 'replace-recovery';
+          ? navigationAnchor ? 'second-back+anchor-reset' : 'second-back+replace-recovery'
+          : navigationAnchor ? 'anchor-reset' : 'replace-recovery';
       const fallbackStarted = now();
-      router.replace(AUDIT_HOME_PATH as Href);
-      await waitForPath(
-        currentPath,
-        AUDIT_HOME_PATH,
-        `${journey.label} return fallback`,
-        { watchdog },
-      );
-      await settleUi();
+      await recoverAuditRoute(currentPath, navigationAnchor);
       assertSessionActive(watchdog);
-      replaceRecoveryMs = now() - fallbackStarted;
-      returnFallbackMs = (returnFallbackMs ?? 0) + replaceRecoveryMs;
+      const recoveryMs = now() - fallbackStarted;
+      if (navigationAnchor) anchorResetMs = recoveryMs;
+      else replaceRecoveryMs = recoveryMs;
+      returnFallbackMs = (returnFallbackMs ?? 0) + recoveryMs;
     }
   } catch (caught) {
     rethrowAuditControl(caught);
     routeError = formatAuditError(caught);
     if (!pathMatches(currentPath(), AUDIT_HOME_PATH)) {
       try {
-        await recoverAuditRoute(currentPath);
+        await recoverAuditRoute(currentPath, navigationAnchor);
       } catch (recoveryCaught) {
         throw new Error(
           `${routeError}\nRoute recovery failed: ${formatAuditError(recoveryCaught)}`,
@@ -2477,6 +2479,7 @@ export async function runJourney(
       returnNavigationKind,
       secondBackMs: secondBackMs == null ? null : roundMetric(secondBackMs),
       replaceRecoveryMs: replaceRecoveryMs == null ? null : roundMetric(replaceRecoveryMs),
+      anchorResetMs: anchorResetMs == null ? null : roundMetric(anchorResetMs),
       returnFallbackMs: returnFallbackMs == null ? null : roundMetric(returnFallbackMs),
       runtimeErrors: errors.journey.length,
       runtimeErrorMessages: errors.journey.join(' | ') || null,
@@ -2520,6 +2523,7 @@ export function PerformanceAuditRunner() {
   const insets = useSafeAreaInsets();
   const dimensions = useWindowDimensions();
   const pathname = usePathname();
+  const navigation = useNavigationContainerRef();
   const state = usePerformanceAuditState();
   const uploadBusy = useSyncExternalStore(
     subscribeDebugLogUpload, isDebugLogUploadBusy, isDebugLogUploadBusy,
@@ -2639,6 +2643,10 @@ export function PerformanceAuditRunner() {
       let mutationRecoveryRequired = false;
       let rollbackAttempts = 0;
       let readinessCapture: ReturnType<typeof performanceAuditReadinessRegistry.beginCapture> | null = null;
+      let navigationAnchor: PerformanceAuditNavigationAnchor | undefined;
+      const recoverToAudit = () => navigationAnchor
+        ? recoverAuditRoute(() => pathnameRef.current, navigationAnchor)
+        : Promise.resolve();
       let auditEnvironment: AuditEnvironment | null = null;
       let activeDatasetRevision: AuditDatasetRevision | null = null;
       let inventoryFailureEvidence: Record<string, string | number> = {};
@@ -2745,6 +2753,7 @@ export function PerformanceAuditRunner() {
       };
 
       try {
+        navigationAnchor = new PerformanceAuditNavigationAnchor(navigation, pathnameRef.current);
         refreshEstimate();
         wakeLockSubscription = AppState.addEventListener('change', (nextState) => {
           if (nextState !== 'active') return;
@@ -2881,7 +2890,7 @@ export function PerformanceAuditRunner() {
         ): Promise<boolean> => {
           const recoverAfterFailure = async () => {
             try {
-              await recoverAuditRoute(() => pathnameRef.current);
+              await recoverToAudit();
               watchdog.touchProgress();
             } catch (recoveryCaught) {
               debugLog.warn(
@@ -3056,6 +3065,11 @@ export function PerformanceAuditRunner() {
           for (const journey of navigationJourneys) {
             const label = `${journey.label} route round trip (${iteration})`;
             updatePerformanceAuditProgress(completed, total, label);
+            if (journey.href) {
+              await waitWhilePaused(watchdog);
+              assertSessionActive(watchdog);
+              await recoverToAudit();
+            }
             await recordContinuable(
               label,
               (watchdog) => runJourney(
@@ -3065,6 +3079,7 @@ export function PerformanceAuditRunner() {
                 monitor,
                 watchdog,
                 datasetRevision,
+                navigationAnchor,
               ),
             );
           }
@@ -3093,6 +3108,14 @@ export function PerformanceAuditRunner() {
               await record(skippedAfterScenarioRecovery(step));
               continue;
             }
+            if (!step.skipReason && routeEntryHref(step)) {
+              // Independent entries must not retain the prior scenario's
+              // product/bank drill stack. Preparation is outside step timings.
+              await waitWhilePaused(watchdog);
+              assertSessionActive(watchdog);
+              await recoverToAudit();
+              assertSessionActive(watchdog);
+            }
             const recovered = await recordContinuable(
               label,
               (watchdog) => runDeepAuditStep(
@@ -3105,6 +3128,7 @@ export function PerformanceAuditRunner() {
             );
             if (recovered) reentryGate.markRecovered(step);
           }
+          await recoverToAudit();
         }
 
         // Collect the exact links encountered during the journeys, plus all
@@ -3503,7 +3527,7 @@ export function PerformanceAuditRunner() {
         updatePerformanceAuditProgress(completed, total, 'Returning to the audit screen');
         try {
           await timeoutAfter(
-            recoverAuditRoute(() => pathnameRef.current),
+            recoverToAudit(),
             ROUTE_TIMEOUT_MS,
             'Audit home route recovery',
           );
@@ -3567,7 +3591,7 @@ export function PerformanceAuditRunner() {
           mutationRecoveryRequired = !(await mountedMutationBarrier.drain());
         }
         try {
-          await recoverAuditRoute(() => pathnameRef.current);
+          await recoverToAudit();
         } catch (recoveryCaught) {
           recoveryError = formatAuditError(recoveryCaught);
         }
@@ -3859,6 +3883,7 @@ export function PerformanceAuditRunner() {
     dimensions.fontScale,
     dimensions.height,
     dimensions.width,
+    navigation,
     releaseCount,
     releaseRun,
     state.hangTimeoutMs,

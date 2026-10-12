@@ -3,6 +3,7 @@ import {
   buildEconomicOutlookFromCsv,
   cashRateTargetSteps,
   economicSignal,
+  EconomicOutlookUnavailableError,
   loadEconomicOutlook,
   parseAbsCpiCsv,
   parseCashForecastCsv,
@@ -12,6 +13,9 @@ import {
   resetEconomicOutlookRuntimeCacheForTests,
 } from '../src/data/economicOutlook';
 import { cache } from '../src/data/cache';
+import { isLocalAppHealthAudit } from '../src/lib/appHealthTransportGuard';
+
+jest.mock('../src/lib/appHealthTransportGuard', () => ({ isLocalAppHealthAudit: jest.fn(() => false) }));
 
 function seriesCsv(seriesId: string, values: [string, number][], publication = '30-Apr-2026') {
   return multiSeriesCsv([{ id: seriesId, values }], publication);
@@ -177,7 +181,10 @@ function fullOutlookCsv(fetchedAt = '2026-07-16T00:00:00.000Z') {
 }
 
 describe('economic outlook', () => {
-  beforeEach(() => resetEconomicOutlookRuntimeCacheForTests());
+  beforeEach(() => {
+    resetEconomicOutlookRuntimeCacheForTests();
+    jest.mocked(isLocalAppHealthAudit).mockReturnValue(false);
+  });
   afterEach(() => jest.restoreAllMocks());
 
   it('parses a named sparse RBA CSV series and publication date', () => {
@@ -522,6 +529,61 @@ describe('economic outlook', () => {
         expect.stringContaining('Underlying inflation: offline'),
       ]),
     });
+  });
+
+  it.each([false, true])('uses stale observations without refreshing their timestamp in a local audit (force=%s)', async (force) => {
+    const cached = fullOutlookCsv('2020-01-01T00:00:00.000Z');
+    jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    const write = jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
+    expect(await loadEconomicOutlook(force)).toMatchObject({
+      fetchedAt: cached.fetchedAt, checkedAt: cached.checkedAt, indicators: cached.indicators,
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('reports absent local observations before attempting any official source', async () => {
+    jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(null);
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
+    await expect(loadEconomicOutlook()).rejects.toBeInstanceOf(EconomicOutlookUnavailableError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('rechecks local audit mode after reading the saved observations', async () => {
+    jest.spyOn(cache, 'readEconomicOutlook').mockImplementation(async () => {
+      jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+      return null;
+    });
+    const fetchSpy = jest.spyOn(global, 'fetch');
+
+    await expect(loadEconomicOutlook()).rejects.toBeInstanceOf(EconomicOutlookUnavailableError);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not join an online refresh already in progress when local audit starts', async () => {
+    const cached = fullOutlookCsv();
+    jest.spyOn(cache, 'readEconomicOutlook').mockResolvedValue(cached);
+    jest.spyOn(cache, 'writeEconomicOutlook').mockResolvedValue();
+    let release!: () => void;
+    const pending = new Promise<void>((resolve) => { release = resolve; });
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(async (input) => {
+      await pending;
+      return mockCsvResponse(String(input));
+    });
+    const online = loadEconomicOutlook(true);
+    for (let i = 0; i < 20 && !fetchSpy.mock.calls.length; i += 1) await Promise.resolve();
+    expect(fetchSpy).toHaveBeenCalledTimes(7);
+    jest.mocked(isLocalAppHealthAudit).mockReturnValue(true);
+    const local = await loadEconomicOutlook();
+    expect(local.checkedAt).toBe(cached.checkedAt);
+    expect(fetchSpy).toHaveBeenCalledTimes(7);
+    release();
+    await online;
   });
 
   it('keeps the policy indicators when the optional cash forecast fails', async () => {

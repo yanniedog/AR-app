@@ -1,4 +1,5 @@
 import { cache } from './cache';
+import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import {
   ABS_CPI_RELEASE_URL,
   ABS_HEADLINE_CPI_URL,
@@ -59,6 +60,19 @@ export { buildEconomicOutlookFromCsv, economicSignal } from './economicOutlookSi
 
 
 const SOURCE_KEYS = ECONOMIC_SOURCE_KEYS;
+
+export class EconomicOutlookUnavailableError extends Error {
+  constructor() {
+    super('Economic signals are not saved on this device. Refresh this section when online.');
+    this.name = 'EconomicOutlookUnavailableError';
+  }
+}
+
+function localEconomicOutlook(cached: EconomicOutlookPayload | null): EconomicOutlookPayload {
+  if (!cached) throw new EconomicOutlookUnavailableError();
+  // Reading saved observations cannot establish a new successful source check.
+  return cached;
+}
 
 function normalizeCachedOutlook(
   cached: EconomicOutlookPayload | null,
@@ -177,6 +191,13 @@ async function commitEconomicResult(
 }
 
 export async function loadEconomicOutlook(force = false): Promise<EconomicOutlookPayload> {
+  // Do not join an earlier online request, or start requests only to have the
+  // transport guard reject them. Local audits exercise saved observations only.
+  if (isLocalAppHealthAudit()) {
+    return localEconomicOutlook(normalizeCachedOutlook(
+      latestSuccessful?.payload ?? await cache.readEconomicOutlook(),
+    ));
+  }
   if (inFlight && (!force || inFlight.force)) return inFlight.promise;
   if (!force && latestSuccessful) {
     const checkedAt = latestSuccessful.payload.checkedAt || latestSuccessful.payload.fetchedAt;
@@ -193,6 +214,7 @@ export async function loadEconomicOutlook(force = false): Promise<EconomicOutloo
   const sequence = ++requestSequence;
   const run = (async () => {
     const cached = normalizeCachedOutlook(await cache.readEconomicOutlook());
+    if (isLocalAppHealthAudit()) return localEconomicOutlook(cached);
     const cacheAge = cached
       ? Date.now() - Date.parse(cached.checkedAt ?? cached.fetchedAt)
       : Number.POSITIVE_INFINITY;

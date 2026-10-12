@@ -3,6 +3,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as SecureStore from 'expo-secure-store';
 
 import { bridgeLogToCrashlytics } from './observability';
+import { compactDebugLogExport } from './compactDebugLogExport';
 import {
   LEGACY_PERFORMANCE_AUDIT_STORAGE_KEYS,
   LATEST_PERFORMANCE_AUDIT_STORAGE_KEY,
@@ -1060,8 +1061,9 @@ export function formatVersionedLogExport(
   appVersion: string,
   buildVersion: string,
   meta: Record<string, string> = {},
+  options: { fullEvidence?: boolean } = {},
 ): string {
-  return formatLogUploadBody(entriesText, {
+  return formatLogUploadBody(options.fullEvidence ? entriesText : compactDebugLogExport(entriesText), {
     ...meta,
     app_version: appVersion,
     build_version: buildVersion,
