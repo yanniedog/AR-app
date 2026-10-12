@@ -9,13 +9,15 @@ import { useTheme } from '../../theme/ThemeProvider';
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={{ marginBottom: 22 }}>
+      {/* Sentence case, per the design system's voice rules. */}
       <AppText
-        variant="tiny"
-        weight="700"
-        color="textFaint"
-        style={{ marginBottom: 8, marginLeft: 4, letterSpacing: 0.6 }}
+        variant="small"
+        weight="600"
+        color="textMuted"
+        accessibilityRole="header"
+        style={{ marginBottom: 8, marginLeft: 4 }}
       >
-        {title.toUpperCase()}
+        {title}
       </AppText>
       <Card style={{ gap: 2 }}>{children}</Card>
     </View>
