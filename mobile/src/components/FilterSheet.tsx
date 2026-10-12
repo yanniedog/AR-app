@@ -316,7 +316,7 @@ export function FilterSheet({
               <AppText variant="small" weight="700" style={{ marginBottom: 10 }}>
                 Lenders
               </AppText>
-              {providers.length > 12 ? (
+              {providers.length > 12 || lenderQuery.trim() !== '' ? (
                 <View style={{ marginBottom: 10 }}>
                   <SearchBar value={lenderQuery} onChangeText={setLenderQuery} placeholder="Search lenders" />
                 </View>
