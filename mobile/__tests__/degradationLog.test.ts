@@ -39,6 +39,14 @@ describe('degradationLog', () => {
     expect(debugLog.getText()).toContain('degrade: store.refreshSkipped reason=already_refreshing');
   });
 
+  it('escapes backslashes inside quoted field values', () => {
+    logDegradation('warn', 'evt', { msg: 'a\\b c' });
+    expect(debugLog.getText()).toContain('msg="a\\\\b c"');
+    debugLog.clear();
+    logDegradation('warn', 'evt', { msg: 'end\\' });
+    expect(debugLog.getText()).toContain('msg="end\\\\"');
+  });
+
   it('omits null/undefined/empty fields', () => {
     logDegradation('warn', 'evt', { keep: 'v', skipNull: null, skipUndef: undefined, skipEmpty: '' });
     expect(debugLog.getText()).toContain('evt keep=v');

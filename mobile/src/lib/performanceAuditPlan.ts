@@ -1144,7 +1144,11 @@ export function buildDeepPerformanceAuditPlan(
   core: CorePayload | null,
   options: DeepAuditSelectionOptions = {},
 ): DeepPerformanceAuditPlan {
-  const inputs = deriveDeepAuditInputs(core, options);
+  return buildDeepPerformanceAuditPlanFromInputs(deriveDeepAuditInputs(core, options));
+}
+
+/** Materialize both passes from the same pinned, seeded catalogue selection. */
+export function buildDeepPerformanceAuditPlanFromInputs(inputs: DeepAuditDerivedInputs): DeepPerformanceAuditPlan {
   const templates = templatesFor(inputs);
   const passes = DEEP_AUDIT_PASS_IDS.map((passId): DeepAuditPass => ({
     id: passId,

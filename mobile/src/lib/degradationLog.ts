@@ -23,7 +23,9 @@ function formatFields(fields: Record<string, string | number | boolean | null | 
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined || value === null || value === '') continue;
     const strValue = String(value);
-    const safeValue = strValue.includes(' ') ? `"${strValue.replace(/"/g, '\\"')}"` : strValue;
+    const safeValue = /[\s"\\]/.test(strValue)
+      ? `"${strValue.replace(/[\\"]/g, '\\$&')}"`
+      : strValue;
     parts.push(`${key}=${safeValue}`);
   }
   return parts.join(' ');

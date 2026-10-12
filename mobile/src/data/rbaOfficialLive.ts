@@ -1,3 +1,4 @@
+import { htmlPlainText } from '../lib/htmlPlainText';
 import type { CorePayload } from '../types';
 import { inheritHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
@@ -12,10 +13,7 @@ const MONTHS: Record<string, string> = {
 };
 
 function htmlText(html: string): string {
-  return html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+  return htmlPlainText(html)
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/\s+/g, ' ')

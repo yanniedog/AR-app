@@ -1,4 +1,17 @@
+import { getRandomBytes } from 'expo-crypto';
 import type { CorePayload } from '../src/types';
+
+jest.mock('expo-crypto', () => {
+  let sequence = 0;
+  return {
+    getRandomBytes: jest.fn((length: number) => {
+      sequence += 1;
+      const bytes = new Uint8Array(length);
+      bytes[0] = sequence;
+      return bytes;
+    }),
+  };
+});
 import { DEFAULT_PREFS } from '../src/data/storeTypes';
 import {
   aggregateRepeatedJourneys,
@@ -1174,6 +1187,21 @@ describe('performance audit inactivity watchdog', () => {
     elapsedMs = 600_000;
     expect(watchdog.isFinalizing).toBe(true);
     expect(watchdog.isExpired()).toBe(false);
+  });
+});
+
+describe('performance audit session ids', () => {
+  beforeEach(() => resetPerformanceAuditForTests());
+
+  it('uses cryptographic randomness for session ids', () => {
+    const first = requestPerformanceAudit();
+    resetPerformanceAuditForTests();
+    const second = requestPerformanceAudit();
+    expect(getRandomBytes).toHaveBeenCalledWith(8);
+    expect(first).toMatch(/^pa-[0-9a-z]+-[0-9a-f]{16}$/);
+    expect(second).toMatch(/^pa-[0-9a-z]+-[0-9a-f]{16}$/);
+    expect(first).not.toBe(second);
+    expect(first.slice(-16)).not.toBe(second.slice(-16));
   });
 });
 
