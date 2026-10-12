@@ -84,6 +84,11 @@ function scriptRawTextEnd(html: string, from: number): number {
     }
     if (html[index] !== '<') continue;
     if (state === 'data' && html.startsWith('<!--', index)) {
+      const after = index + 4;
+      if (html[after] === '>' || html.startsWith('->', after)) {
+        index = html[after] === '>' ? after : after + 1;
+        continue;
+      }
       state = 'escaped';
       index += 3;
       continue;

@@ -58,6 +58,12 @@ test('resumes double-escaped scanning after the script name', () => {
   expect(htmlPlainText(raw).trim()).toBe('Visible');
 });
 
+test('returns an abrupt script escape to script data', () => {
+  expect(htmlPlainText('<script><!--><script></script>Invalid request</script>Visible').replace(/\s+/g, ' ').trim())
+    .toBe('Invalid request Visible');
+  expect(htmlPlainText('<script><!--->hidden</script>Visible').replace(/\s+/g, ' ').trim()).toBe('Visible');
+});
+
 test('drops a processing instruction before the error text', () => {
   const raw = `${'<?xml-stylesheet ' + 'x'.repeat(120) + '?>'}<Error>Invalid key</Error>`;
   expect(htmlPlainText(raw).replace(/\s+/g, ' ').trim()).toBe('Invalid key');
