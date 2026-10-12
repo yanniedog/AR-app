@@ -137,6 +137,12 @@ test('drops script bodies when the end tag has whitespace before the closing bra
   });
 });
 
+test('ignores longer closing names and never reads an unterminated attribute as rates', () => {
+  const visible = '<h2>Cash rate target</h2><p>4.35%</p><p>Effective date 12 August 2026</p><p>Next update 2.30 pm, 29 September 2026</p>';
+  expect(parseRbaOfficialOverview(`<script>hidden</scripture>Cash rate target 9.99%</script>${visible}`)?.rate).toBe(4.35);
+  expect(parseRbaOfficialOverview('<div title="Cash rate target 9.99% Effective date 12 August 2026 Next update 2.30 pm, 29 September 2026 >')).toBeNull();
+});
+
 test('rejects an overview that does not correspond to the elapsed meeting', () => {
   expect(reconcileRbaOfficialOverview(
     calendar,

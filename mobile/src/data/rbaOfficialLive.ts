@@ -1,3 +1,4 @@
+import { htmlPlainText } from '../lib/htmlPlainText';
 import type { CorePayload } from '../types';
 import { inheritHistoricalBankRateCatalogue } from './historicalBankRateCatalogueStore';
 import type { RbaCalendar, RbaDecisionEntry } from './rbaCalendar';
@@ -11,126 +12,8 @@ const MONTHS: Record<string, string> = {
   july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
 };
 
-function foldAscii(char: string): string {
-  const code = char.charCodeAt(0);
-  return code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : char;
-}
-
-function asciiEqualsAt(html: string, index: number, lowerNeedle: string): boolean {
-  if (index < 0 || index + lowerNeedle.length > html.length) return false;
-  for (let offset = 0; offset < lowerNeedle.length; offset += 1) {
-    if (foldAscii(html[index + offset]) !== lowerNeedle[offset]) return false;
-  }
-  return true;
-}
-
-function indexOfAscii(html: string, lowerNeedle: string, from: number): number {
-  const last = html.length - lowerNeedle.length;
-  for (let index = Math.max(0, from); index <= last; index += 1) {
-    if (asciiEqualsAt(html, index, lowerNeedle)) return index;
-  }
-  return -1;
-}
-
-function findTagEnd(html: string, from: number): number {
-  let quote = '';
-  for (let cursor = from; cursor < html.length; cursor += 1) {
-    const char = html[cursor];
-    if (quote) {
-      if (char === quote) quote = '';
-      continue;
-    }
-    if (char === '"' || char === "'") {
-      quote = char;
-      continue;
-    }
-    if (char === '>') return cursor;
-  }
-  return -1;
-}
-
-function readTagName(html: string, start: number, end: number): string {
-  let cursor = start;
-  while (cursor < end && /\s/.test(html[cursor])) cursor += 1;
-  let name = '';
-  while (cursor < end && /[A-Za-z0-9:_-]/.test(html[cursor])) {
-    name += foldAscii(html[cursor]);
-    cursor += 1;
-  }
-  return name;
-}
-
-function stripElements(html: string, blocked: ReadonlySet<string>): string {
-  let out = '';
-  let index = 0;
-  while (index < html.length) {
-    const open = html.indexOf('<', index);
-    if (open < 0) {
-      out += html.slice(index);
-      break;
-    }
-    out += html.slice(index, open);
-    if (asciiEqualsAt(html, open + 1, '!--')) {
-      const commentEnd = html.indexOf('-->', open + 4);
-      index = commentEnd < 0 ? html.length : commentEnd + 3;
-      out += ' ';
-      continue;
-    }
-    const close = findTagEnd(html, open + 1);
-    if (close < 0) {
-      out += html.slice(open);
-      break;
-    }
-    const isClosing = html[open + 1] === '/';
-    const name = readTagName(html, open + (isClosing ? 2 : 1), close);
-    if (!isClosing && blocked.has(name)) {
-      const closer = `</${name}`;
-      let searchFrom = close + 1;
-      let foundAt = -1;
-      while (searchFrom < html.length) {
-        const candidate = indexOfAscii(html, closer, searchFrom);
-        if (candidate < 0) break;
-        const closingEnd = findTagEnd(html, candidate + closer.length);
-        if (closingEnd >= 0 && !html.slice(candidate + closer.length, closingEnd).includes('<')) {
-          foundAt = closingEnd + 1;
-          break;
-        }
-        searchFrom = candidate + 1;
-      }
-      index = foundAt < 0 ? html.length : foundAt;
-      out += ' ';
-      continue;
-    }
-    index = close + 1;
-    out += ' ';
-  }
-  return out;
-}
-
-function stripTags(html: string): string {
-  let out = '';
-  let index = 0;
-  while (index < html.length) {
-    const open = html.indexOf('<', index);
-    if (open < 0) {
-      out += html.slice(index);
-      break;
-    }
-    out += html.slice(index, open);
-    const close = findTagEnd(html, open + 1);
-    if (close < 0) {
-      out += html.slice(open);
-      break;
-    }
-    index = close + 1;
-    out += ' ';
-  }
-  return out;
-}
-
 function htmlText(html: string): string {
-  const withoutEmbedded = stripElements(html, new Set(['script', 'style']));
-  return stripTags(withoutEmbedded)
+  return htmlPlainText(html)
     .replace(/&nbsp;|&#160;/gi, ' ')
     .replace(/&amp;/gi, '&')
     .replace(/\s+/g, ' ')
