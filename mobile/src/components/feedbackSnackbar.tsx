@@ -1,12 +1,13 @@
 import Ionicons from './icons/AppIcon';
 import { router } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { Animated as RNAnimated, Pressable } from 'react-native';
+import { Animated as RNAnimated } from 'react-native';
 import { formatRunDate } from '../data/format';
 import { useStore } from '../data/store';
 import { logRetry } from '../lib/degradationLog';
 import { useTheme } from '../theme/ThemeProvider';
 import { resolveRefreshOutcomeSnackbar } from './bannerState';
+import { TouchTarget } from './TouchTarget';
 import { AppText, Row } from './ui';
 
 const SNACKBAR_DISMISS_MS: Record<'success' | 'failure' | 'wifi-skip', number> = {
@@ -14,6 +15,9 @@ const SNACKBAR_DISMISS_MS: Record<'success' | 'failure' | 'wifi-skip', number> =
   failure: 7000,
   'wifi-skip': 5000,
 };
+
+// 48 dp actions; negative margins keep the bar's visual height unchanged.
+const SNACKBAR_ACTION = { marginVertical: -12, marginRight: -10, paddingHorizontal: 4 } as const;
 
 /** Bottom snackbar for refresh success, failure, or Wi-Fi-only skip. Mount once per tab layout. */
 export function RefreshOutcomeSnackbar() {
@@ -107,25 +111,29 @@ export function RefreshOutcomeSnackbar() {
           {model.message}
         </AppText>
         {model.actionLabel ? (
-          <Pressable
+          <TouchTarget
+            square
             onPress={onAction}
-            hitSlop={8}
+            hitSlop={0}
             accessibilityRole="button"
             accessibilityLabel={model.actionLabel}
+            style={SNACKBAR_ACTION}
           >
             <AppText variant="small" weight="700" style={{ color: theme.colors.primary }}>
               {model.actionLabel}
             </AppText>
-          </Pressable>
+          </TouchTarget>
         ) : (
-          <Pressable
+          <TouchTarget
+            square
             onPress={() => clearRefreshOutcome()}
-            hitSlop={8}
+            hitSlop={0}
             accessibilityRole="button"
             accessibilityLabel="Dismiss"
+            style={SNACKBAR_ACTION}
           >
             <Ionicons name="close" size={18} color={theme.colors.textMuted} />
-          </Pressable>
+          </TouchTarget>
         )}
       </Row>
     </RNAnimated.View>

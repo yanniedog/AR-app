@@ -42,7 +42,7 @@ export function CanonicalTermsComparison({ rows }: { rows: RateRow[] }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, identity, manifest, retry]);
   const groups = current ? canonicalTermsComparison(current.values) : [];
-  return <Disclosure title="Compare scoped document terms" summary="Exact parameter keys and applicability" open={open} onToggle={() => setOpen(!open)}>
+  return <Disclosure title="Compare terms and conditions" summary="Matched only where documents use the same term" open={open} onToggle={() => setOpen(!open)}>
     <AppText variant="small">Only exact parameter, unit and known scope identifiers align. Missing terms remain unknown; different scopes stay separate. Rates and eligibility are not recalculated here.</AppText>
     {!current ? <AppText variant="small">{manifest ? 'Loading verified terms...' : 'Document terms unavailable.'}</AppText> : <>
       {current.values.filter(item => !item.terms).map(item => <AppText key={item.productKey} variant="small">{products.find(row => row.product_key === item.productKey)?.product_name}: {item.failed ? 'Current terms could not be verified.' : 'Canonical terms not reported.'}</AppText>)}

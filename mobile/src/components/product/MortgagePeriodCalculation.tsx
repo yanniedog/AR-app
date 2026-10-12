@@ -20,7 +20,7 @@ export function MortgagePeriodCalculation({ productKey, row, section }: { produc
     return () => { active = false; };
   }, [open, retry, identity, manifest, core, coreIntegrity, details, productKey, row, section]);
   if (row && section !== 'Mortgage') return null;
-  return <Disclosure title="Calculate a historical mortgage period" summary="Reviewed policies only" open={open} onToggle={() => setOpen(!open)}>
+  return <Disclosure title="Calculate a historical mortgage period" summary="Uses only policies we have reviewed" open={open} onToggle={() => setOpen(!open)}>
     {!current ? <AppText variant="small">Checking mortgage policies...</AppText> : current.selections?.length && current.target ? <MortgagePeriodForm key={identity} selections={current.selections} context={{ manifest, core, coreIntegrity, details }} target={current.target} /> : <><AppText variant="small">{current.error ?? 'A reviewed mortgage calculation is unavailable for this product in this publication.'}</AppText><Button title="Retry mortgage policies" variant="secondary" onPress={() => void ensureDetails({ forProductView: true }).catch(() => undefined).finally(() => setRetry(r => r + 1))} /></>}
   </Disclosure>;
 }

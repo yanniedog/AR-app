@@ -51,6 +51,7 @@ import { useUserRateScenario } from '../src/hooks/useUserRateScenario';
 import { usePerformanceAuditSurface } from '../src/hooks/usePerformanceAuditReadiness';
 import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
+import { CALCULATOR_FIELDS, type CalculatorIssue, visibleCalculatorIssues } from '../src/lib/calculatorIssues';
 import { openProduct } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
 import { applyCalculatorAuditSection } from '../src/lib/calculatorAuditSelection';
@@ -101,6 +102,7 @@ export default function Calculator() {
   const [layoutReady, setLayoutReady] = useState(false);
   const [detailsTerminalError, setDetailsTerminalError] = useState(false);
   const [assumptionsOpen, setAssumptionsOpen] = useState(false);
+  const [leftFields, setLeftFields] = useState<ReadonlySet<string>>(() => new Set());
   const appliedCheckIntent = useRef('');
   const sectionOptions = useMemo(() => sectionSegmentOptions(interests), [interests]);
   const suitabilityRevision = useSuitabilityRevision();
@@ -232,35 +234,41 @@ export default function Calculator() {
   const currentRate = calculatorRateFraction(currentRateInput);
   const years = calculatorYears(inputs.years);
   const months = years == null ? 0 : Math.round(years * 12);
-  const inputIssues: string[] = [];
+  const issues: CalculatorIssue[] = [];
+  const invalid = (message: string) => { issues.push({ message }); };
+  const empty = (emptyField: string, message: string) => { issues.push({ message, emptyField }); };
   if (isMortgage) {
-    if (!inputs.propertyValue.trim()) inputIssues.push('Enter a property value.');
+    const propertyField = inputs.mode === 'refi' ? CALCULATOR_FIELDS.propertyValue : CALCULATOR_FIELDS.propertyPrice;
+    if (!inputs.propertyValue.trim()) empty(propertyField, 'Enter a property value.');
     else if (calculatorAmount(inputs.propertyValue, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-      inputIssues.push('Property value must be a valid amount up to $100 million.');
+      invalid('Property value must be a valid amount up to $100 million.');
     }
     if (inputs.mode === 'refi') {
-      if (!inputs.loanBalance.trim()) inputIssues.push('Enter the current loan balance.');
+      if (!inputs.loanBalance.trim()) empty(CALCULATOR_FIELDS.loanBalance, 'Enter the current loan balance.');
       else if (calculatorAmount(inputs.loanBalance, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        inputIssues.push('Current loan must be a valid amount up to $100 million.');
+        invalid('Current loan must be a valid amount up to $100 million.');
       }
     } else {
       if (inputs.deposit.trim() && calculatorAmount(inputs.deposit, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        inputIssues.push('Savings must be a valid non-negative amount up to $100 million.');
+        invalid('Savings must be a valid non-negative amount up to $100 million.');
       }
       if (inputs.costs.trim() && calculatorAmount(inputs.costs, MAX_CALCULATOR_MORTGAGE_AMOUNT) == null) {
-        inputIssues.push('Upfront costs must be a valid non-negative amount up to $100 million.');
+        invalid('Upfront costs must be a valid non-negative amount up to $100 million.');
       }
     }
-    if (lvrResult.loan != null && lvrResult.loan <= 0) inputIssues.push('Loan needed must be greater than $0.');
-    if (!inputs.years.trim()) inputIssues.push('Enter the years left on the loan.');
-    else if (years == null) inputIssues.push(`Years left must be greater than 0 and no more than ${MAX_CALCULATOR_YEARS}.`);
+    if (lvrResult.loan != null && lvrResult.loan <= 0) invalid('Loan needed must be greater than $0.');
+    if (!inputs.years.trim()) empty(CALCULATOR_FIELDS.years, 'Enter the years left on the loan.');
+    else if (years == null) invalid(`Years left must be greater than 0 and no more than ${MAX_CALCULATOR_YEARS}.`);
   } else if (!depositInputs.balance.trim()) {
-    inputIssues.push(section === 'TD' ? 'Enter the deposit amount.' : 'Enter the current balance.');
+    empty(CALCULATOR_FIELDS.depositBalance, section === 'TD' ? 'Enter the deposit amount.' : 'Enter the current balance.');
   } else if (depositBalance == null || depositBalance <= 0) {
-    inputIssues.push(`Balance must be greater than $0 and no more than $${MAX_CALCULATOR_DEPOSIT_AMOUNT.toLocaleString('en-AU')}.`);
+    invalid(`Balance must be greater than $0 and no more than $${MAX_CALCULATOR_DEPOSIT_AMOUNT.toLocaleString('en-AU')}.`);
   }
-  if (!currentRateInput.trim()) inputIssues.push('Enter the current interest rate.');
-  else if (currentRate == null) inputIssues.push('Current rate must be greater than 0% and no more than 100%.');
+  if (!currentRateInput.trim()) empty(CALCULATOR_FIELDS.currentRate, 'Enter the current interest rate.');
+  else if (currentRate == null) invalid('Current rate must be greater than 0% and no more than 100%.');
+  const inputIssues = issues.map((issue) => issue.message);
+  // Empty fields are flagged once they have been left, not before any input.
+  const shownInputIssues = visibleCalculatorIssues(issues, leftFields);
   const inputIssueKey = inputIssues.join('|');
 
   const candidates = useMemo<Candidate[]>(() => {
@@ -561,6 +569,7 @@ export default function Calculator() {
         maxLength={20}
         style={[{ fontFamily: commissionerFamily() }, inputStyle]}
         accessibilityLabel={a11y}
+        onBlur={() => setLeftFields((prev) => (prev.has(a11y) ? prev : new Set(prev).add(a11y)))}
       />
     </View>
   );
@@ -603,7 +612,7 @@ export default function Calculator() {
             {inputs.mode === 'buy' ? (
               <>
                 <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
-                  {field('Property price ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '650,000', 'Property price in dollars')}
+                  {field('Property price ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '650,000', CALCULATOR_FIELDS.propertyPrice)}
                   {field('Your savings ($)', inputs.deposit, (t) => upd({ deposit: t }), '130,000', 'Savings available as deposit')}
                 </Row>
                 <Row gap={10} style={{ marginTop: 10, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
@@ -620,8 +629,8 @@ export default function Calculator() {
               </>
             ) : (
               <Row gap={10} style={compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : undefined}>
-                {field('Property value ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '800,000', 'Current property value')}
-                {field('Current loan ($)', inputs.loanBalance, (t) => upd({ loanBalance: t }), '600,000', 'Current loan balance')}
+                {field('Property value ($)', inputs.propertyValue, (t) => upd({ propertyValue: t }), '800,000', CALCULATOR_FIELDS.propertyValue)}
+                {field('Current loan ($)', inputs.loanBalance, (t) => upd({ loanBalance: t }), '600,000', CALCULATOR_FIELDS.loanBalance)}
               </Row>
             )}
 
@@ -658,8 +667,8 @@ export default function Calculator() {
             )}
 
             <Row gap={10} style={{ marginTop: 12, ...(compactFields ? { flexDirection: 'column', alignItems: 'stretch' } : null) }}>
-              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', 'Current interest rate percent')}
-              {field('Years left', inputs.years, (t) => upd({ years: t }), '25', 'Years remaining on loan', 86)}
+              {field('Current rate (%)', inputs.currentRate, (t) => upd({ currentRate: t }), median !== null ? (median * 100).toFixed(2) : '6.00', CALCULATOR_FIELDS.currentRate)}
+              {field('Years left', inputs.years, (t) => upd({ years: t }), '25', CALCULATOR_FIELDS.years, 86)}
             </Row>
             <View style={{ marginTop: 14 }}>
               <SwitchCostEditor
@@ -689,7 +698,7 @@ export default function Calculator() {
                   },
                 })),
                 '50,000',
-                'Balance in dollars',
+                CALCULATOR_FIELDS.depositBalance,
               )}
               {field(
                 'Current rate (%)',
@@ -702,14 +711,14 @@ export default function Calculator() {
                   },
                 })),
                 median !== null ? (median * 100).toFixed(2) : '4.50',
-                'Current interest rate percent',
+                CALCULATOR_FIELDS.currentRate,
               )}
             </Row>
           </>
         )}
-        {inputIssues.length ? (
+        {shownInputIssues.length ? (
           <View style={{ marginTop: 12, gap: 4 }}>
-            {inputIssues.map((issue) => (
+            {shownInputIssues.map((issue) => (
               <AppText key={issue} variant="tiny" color="danger">{issue}</AppText>
             ))}
           </View>
@@ -767,20 +776,20 @@ export default function Calculator() {
 
       <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8 }}>
         {inputIssues.length
-          ? 'CHECK YOUR INPUTS'
+          ? shownInputIssues.length ? 'Check your inputs' : 'Enter your details above'
           : profileFeaturesPending
           ? detailsLoading
-            ? 'PREPARING YOUR MATCHES…'
-            : 'COULD NOT PREPARE YOUR MATCHES'
+            ? 'Preparing your matches…'
+            : 'Could not prepare your matches'
           : candidates.length
             ? isLoan
-              ? 'LOWER MATCHED RATES'
-              : 'HIGHER MATCHED RATES'
+              ? 'Lower matched rates'
+              : 'Higher matched rates'
             : currentRate === null
-              ? 'ENTER YOUR CURRENT RATE'
+              ? 'Enter your current rate'
               : balance <= 0
-                ? 'ENTER YOUR LOAN DETAILS ABOVE'
-                : 'NO BETTER COMPARABLE RATES FOUND'}
+                ? 'Enter your loan details above'
+                : 'No better comparable rates found'}
       </AppText>
       {profileFeaturesPending ? (
         <Card style={{ marginBottom: 16 }}>

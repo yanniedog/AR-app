@@ -52,7 +52,7 @@ export function ErrorScreen({ error, retry }: { error: Error; retry: () => void 
           The app hit an unexpected error. Your downloaded rates are safe — try again.
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: 12, fontFamily: commissionerFamily(), textAlign: 'center', marginTop: 10 }}>
-          Technical details remain in the on-device Debug log.
+          Technical details are saved on this device for support.
         </Text>
         <Pressable
           onPress={retry}

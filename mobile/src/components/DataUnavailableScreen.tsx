@@ -1,8 +1,10 @@
 import Ionicons from './icons/AppIcon';
-import React from 'react';
+import * as Network from 'expo-network';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import { useStore } from '../data/store';
+import { connectivityFromNetworkState, dataUnavailableMessage, type Connectivity } from '../lib/dataUnavailableCopy';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandLockup } from './BrandLockup';
 import { Screen } from './Screen';
@@ -15,6 +17,25 @@ export function DataUnavailableScreen() {
   const status = useStore((s) => s.status);
   const retryDataLoad = useStore((s) => s.retryDataLoad);
   const busy = refreshing || status === 'loading';
+  const [connectivity, setConnectivity] = useState<Connectivity>(null);
+  useEffect(() => {
+    let active = true;
+    let receivedNetworkEvent = false;
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (!active) return;
+      receivedNetworkEvent = true;
+      setConnectivity(connectivityFromNetworkState(state));
+    });
+    // Events observed after subscription are newer than this initial snapshot.
+    Network.getNetworkStateAsync().then(
+      (state) => { if (active && !receivedNetworkEvent) setConnectivity(connectivityFromNetworkState(state)); },
+      () => { if (active && !receivedNetworkEvent) setConnectivity(null); },
+    );
+    return () => {
+      active = false;
+      subscription.remove();
+    };
+  }, []);
 
   return (
     <Screen style={{ justifyContent: 'center', paddingHorizontal: 28 }}>
@@ -37,10 +58,10 @@ export function DataUnavailableScreen() {
           Data unavailable
         </AppText>
         <AppText variant="small" color="textMuted" style={{ marginTop: 8, textAlign: 'center', lineHeight: 20 }}>
-          We couldn’t load the rates. Check your connection and try again.
+          {dataUnavailableMessage(connectivity)}
         </AppText>
         <AppText variant="tiny" color="textMuted" style={{ marginTop: 10, textAlign: 'center' }}>
-          Technical details remain in the on-device Debug log.
+          Technical details are saved on this device for support.
         </AppText>
         <View style={{ marginTop: 22, width: '100%', gap: 10 }}>
           <Button title="Try again" icon="refresh" onPress={() => void retryDataLoad()} loading={busy} disabled={busy} />

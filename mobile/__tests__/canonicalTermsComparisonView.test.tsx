@@ -15,7 +15,7 @@ test('lazy comparison exposes source-bound cells and invalidates old edition bef
   (loadProductTerms as jest.Mock).mockImplementation(async (_manifest, key) => key === 'a' ? terms : null);
   let tree: any; await act(async () => { tree = TestRenderer.create(<CanonicalTermsComparison rows={rows} />); });
   expect(loadProductTerms).not.toHaveBeenCalled();
-  await act(async () => tree.root.findByProps({ title: 'Compare scoped document terms' }).props.onToggle());
+  await act(async () => tree.root.findByProps({ title: 'Compare terms and conditions' }).props.onToggle());
   act(() => tree.root.findByProps({ title: 'fee.amount' }).props.onToggle());
   expect(JSON.stringify(tree.toJSON())).toContain('Technical clause'); expect(JSON.stringify(tree.toJSON())).toContain('Unknown in this exact scope');
   act(() => tree.root.findByProps({ title: 'Open source' }).props.onPress()); expect(mockOpen).toHaveBeenCalledWith(expect.objectContaining({ url: 'https://example.org/terms' }));

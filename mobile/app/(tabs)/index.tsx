@@ -15,7 +15,7 @@ export default function Home() {
         <LedgerAction label="Find rates" onPress={findRates} />
       </LedgerSection>
       <View>
-        <DestinationRow title="Saved products" description="Your shortlist and rate alerts." icon="save" onPress={() => router.navigate('/(tabs)/watchlist')} />
+        <DestinationRow title="Saved products" description="Your shortlist and rate alerts." icon="star" onPress={() => router.navigate('/(tabs)/watchlist')} />
         <DestinationRow title="Market" description="Bank rates, recent changes and the RBA." icon="changes" onPress={() => router.navigate('/(tabs)/market')} />
         <DestinationRow title="Tools" description="Check your rate and project your balance." icon="calculator" onPress={() => router.navigate('/(tabs)/tools')} />
       </View>

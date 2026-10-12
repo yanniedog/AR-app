@@ -843,7 +843,7 @@ export default function ProductDetail() {
         <ProductRatesList rows={rateRows} section={section} accent={accent} />
 
         <Button
-          title={productWideSaved ? 'Stop watching all tiers' : 'Watch every tier for this product'}
+          title={productWideSaved ? 'Stop watching all rates' : 'Watch all rates for this product'}
           icon={productWideSaved ? 'star' : 'star-outline'}
           variant="ghost"
           style={{ marginBottom: 16 }}
