@@ -71,9 +71,7 @@ function androidTool(name) {
     const buildTools = join(root, 'build-tools');
     if (existsSync(buildTools)) {
       for (const version of readdirSync(buildTools).sort().reverse()) {
-        const candidates = process.platform === 'win32'
-          ? [`${name}.exe`, `${name}.bat`, name]
-          : [name];
+        const candidates = process.platform === 'win32' ? [`${name}.exe`] : [name];
         for (const candidateName of candidates) {
           const candidate = join(buildTools, version, candidateName);
           if (existsSync(candidate)) return candidate;
@@ -84,12 +82,20 @@ function androidTool(name) {
   return name;
 }
 
+export function resolveToolInvocation(command, args) {
+  const executable = String(command || '');
+  if (/\.(?:bat|cmd)$/i.test(executable)) {
+    throw new Error(`Refusing to run APK identity tool through cmd.exe: ${executable}`);
+  }
+  return { executable, args: [...args] };
+}
+
 function runTool(command, args) {
-  const windowsBatch = process.platform === 'win32' && /\.(?:bat|cmd)$/i.test(command);
-  const executable = windowsBatch ? process.env.ComSpec || 'cmd.exe' : command;
-  const toolArgs = windowsBatch ? ['/d', '/s', '/c', command, ...args] : args;
-  const result = spawnSync(executable, toolArgs, {
+  const invocation = resolveToolInvocation(command, args);
+  const result = spawnSync(invocation.executable, invocation.args, {
     encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
     maxBuffer: 8 * 1024 * 1024,
   });
   if (result.error || result.status !== 0) {

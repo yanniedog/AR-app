@@ -9,12 +9,27 @@ import {
   assertExpectedSigningCertificate,
   parseAaptBadging,
   parseApksignerCertificateSha256,
+  resolveToolInvocation,
 } from './apk-identity.mjs';
 import {
   fetchRemoteManifest,
   releaseFloorTags,
   validateReusedReleaseIdentity,
 } from './bump-android-version-code.mjs';
+
+test('runs SDK tools as an argument array and never through cmd.exe', () => {
+  assert.deepEqual(
+    resolveToolInvocation('C:\\Android\\build-tools\\aapt.exe', ['dump', 'badging', 'app.apk']),
+    {
+      executable: 'C:\\Android\\build-tools\\aapt.exe',
+      args: ['dump', 'badging', 'app.apk'],
+    },
+  );
+  assert.throws(
+    () => resolveToolInvocation('C:\\Android\\aapt.bat', ['dump', 'badging', 'app.apk']),
+    /cmd\.exe/,
+  );
+});
 
 test('parses the package and version identity reported by aapt', () => {
   assert.deepEqual(
