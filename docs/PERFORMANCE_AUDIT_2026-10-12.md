@@ -293,3 +293,27 @@ checkpoints after global inactivity monitoring enters finalization. Controlled
 regressions cover fast settlement without timer advancement, blocked and late
 writes, pause/cancel, repeated UTF-8 rollovers, concurrent strict-flush failures,
 and successful or failed rollback results arriving after a timeout.
+
+## Redundant readiness work
+
+The saved v1.0.228 run contains 370 journey checks totaling 792,307 ms. Their
+pre-action waits total 173,863 ms, including route mounting and the repeated
+650 ms stability window. This is an optimization opportunity, not a claim that
+all 174 seconds can be removed. A pre-action check now reuses a completed
+stability window only when the exact mounted surface is unchanged, the earlier
+window is at least as long, and its proven required probes cover the new check.
+Every post-action wait still requires fresh stability. Probe changes, even a
+pending/ready transition back to the same value, render/data/action changes,
+remounts, capture changes and app pause/resume invalidate reuse. Pending actions
+cannot supply reusable evidence. Reports retain actual pre-action time and add
+`preActionQuietWindowReused` and the avoided quiet-window duration.
+
+Readiness notifications also used to discard the handle of an existing quiet
+timer without cancelling it, accumulating redundant callbacks and snapshots.
+The waiter now maintains one quiet timer and one deadline timer. Regressions
+exercise 1,000 notifications without timer growth or timers left after abort or
+completion. A deterministic sequence of 200 unchanged pre-action checks reuses
+proof without advancing the clock, while mutation, stronger-probe, longer-window,
+pending/error and changed-render cases retain their original waits and failures.
+These tests establish eliminated duplicate waiting; signed-APK timing is still
+needed to measure the complete run's improvement.

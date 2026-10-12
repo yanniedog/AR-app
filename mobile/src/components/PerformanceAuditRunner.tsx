@@ -776,6 +776,7 @@ async function runDeepAuditStepBody(
   const pathBeforeAction = currentPath();
   let expectedPath = step.expectedPath;
   let preActionWaitMs = 0;
+  let preActionQuietWindowReused = false;
   let verifiedIdempotentFixture = false;
   let measuredAction: {
     result: unknown;
@@ -834,20 +835,22 @@ async function runDeepAuditStepBody(
       }
     }, 50);
     try {
-      await performanceAuditReadinessRegistry.waitForReady({
+      const preActionReadiness = await performanceAuditReadinessRegistry.waitForReady({
         surfaceIds: [source.id],
         onlyKinds: PRE_ACTION_READINESS_KINDS,
         quietWindowMs: READINESS_QUIET_WINDOW_MS,
+        reuseSettledEvidence: true,
         timeoutMs: readinessTimeoutMs(watchdog),
         signal: preActionAbort.signal,
       });
+      preActionQuietWindowReused = preActionReadiness.quietWindowReused === true;
       watchdog.touchProgress();
     } finally {
       clearInterval(preActionGuard);
     }
     assertSessionActive(watchdog);
     preActionWaitMs = now() - preActionStarted;
-    const sourceBefore = performanceAuditReadinessRegistry.snapshot().surfaces
+    const sourceBefore = performanceAuditReadinessRegistry.snapshot([source.id]).surfaces
       .find((surface) => surface.id === source.id);
     actionRevisionBefore = sourceBefore?.actionRevision ?? null;
     renderRevisionBefore = sourceBefore?.renderRevision ?? null;
@@ -871,7 +874,7 @@ async function runDeepAuditStepBody(
       if (mountedMutationBarrier.hasPending) throw new PerformanceAuditPendingMutationError(label);
       throw error;
     }
-    const immediateCompletion = performanceAuditReadinessRegistry.snapshot().surfaces
+    const immediateCompletion = performanceAuditReadinessRegistry.snapshot([source.id]).surfaces
       .find((surface) => surface.id === source.id);
     const durableImmediateCompletion = performanceAuditReadinessRegistry.actionCompletion(source.id);
     const authoritativeImmediateCompletion = durableImmediateCompletion ?? (
@@ -1002,7 +1005,7 @@ async function runDeepAuditStepBody(
     }
   }
   if (actionSource !== 'router') {
-    const completedSurface = performanceAuditReadinessRegistry.snapshot().surfaces
+    const completedSurface = performanceAuditReadinessRegistry.snapshot([actionSource]).surfaces
       .find((surface) => surface.id === actionSource);
     const durableCompletion = performanceAuditReadinessRegistry.actionCompletion(actionSource);
     const authoritativeCompletion = durableCompletion ?? (
@@ -1084,7 +1087,11 @@ async function runDeepAuditStepBody(
         ? null
         : JSON.stringify(measuredAction.result).slice(0, 512),
       actionMs: roundMetric(actionMs),
-      ...(actionSource === 'router' ? {} : { preActionWaitMs: roundMetric(preActionWaitMs) }),
+      ...(actionSource === 'router' ? {} : {
+        preActionWaitMs: roundMetric(preActionWaitMs),
+        preActionQuietWindowReused,
+        preActionQuietWindowAvoidedMs: preActionQuietWindowReused ? READINESS_QUIET_WINDOW_MS : 0,
+      }),
       forwardMs: roundMetric(forwardMs),
       backgroundSettleMs: roundMetric(readinessMs),
       readinessQuietWindowMs: READINESS_QUIET_WINDOW_MS,
@@ -2556,8 +2563,14 @@ export function PerformanceAuditRunner() {
       // loop next reaches a step boundary. A step already in flight when the
       // app backgrounds keeps polling isExpired() every 50ms, so a short hang
       // timeout plus a phone call would otherwise abort the run as hung.
+      let readinessPaused = getPerformanceAuditState().paused;
       const mirrorPauseToWatchdog = () => {
-        watchdog.setPaused(getPerformanceAuditState().paused);
+        const paused = getPerformanceAuditState().paused;
+        if (paused !== readinessPaused) {
+          performanceAuditReadinessRegistry.invalidateSettledReadiness();
+          readinessPaused = paused;
+        }
+        watchdog.setPaused(paused);
       };
       // Seed from current state before subscribing: the run gate can hold a
       // queued audit until after it has already been paused, and a subscription
