@@ -52,11 +52,19 @@ export function checkExternalLinksInBundle(code) {
   return requests.length;
 }
 
+export function exportedWebEntry(names) {
+  // Expo Router's default entry and our explicit headless-task entry use these
+  // basenames. Keep ambiguity/missing-bundle failures rather than choosing a
+  // stale bundle or a secondary chunk silently.
+  names = names.filter(name => /^(?:entry|index)-.+\.js$/.test(name));
+  assert.equal(names.length, 1, 'Expected one exported web entry');
+  return names[0];
+}
+
 export async function checkExportedExternalLinks(dist = path.resolve('dist')) {
   const folder = path.join(dist, '_expo/static/js/web');
-  const names = (await readdir(folder)).filter(name => /^entry-.+\.js$/.test(name));
-  assert.equal(names.length, 1, 'Expected one exported web entry');
-  const count = checkExternalLinksInBundle(await readFile(path.join(folder, names[0]), 'utf8'));
+  const name = exportedWebEntry(await readdir(folder));
+  const count = checkExternalLinksInBundle(await readFile(path.join(folder, name), 'utf8'));
   console.log(`Compiled external links passed: ${count} approved purposes and unsafe destinations rejected.`);
 }
 
