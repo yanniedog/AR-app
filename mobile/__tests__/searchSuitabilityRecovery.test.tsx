@@ -10,6 +10,8 @@ import { rateConditionFixture } from '../testUtils/rateConditions';
 let mockState: any;
 const mockEnsureDetails = jest.fn(async () => undefined);
 const mockSurfaces = new Map<string, any>();
+const mockListMount = jest.fn();
+const mockListUnmount = jest.fn();
 jest.mock('../src/data/store', () => ({
   useStore: Object.assign((selector: any) => selector(mockState), { getState: () => mockState }),
 }));
@@ -32,10 +34,14 @@ jest.mock('../src/hooks/useVirtualizedListReadiness', () => ({
 }));
 jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => value }));
 jest.mock('@shopify/flash-list', () => ({
-  FlashList: (props: any) => jest.requireActual('react').createElement('FlashList', props,
-    props.data.length ? props.data.map((item: any, index: number) =>
-      jest.requireActual('react').createElement('Rate', { key: index }, props.renderItem({ item })))
-      : props.ListEmptyComponent),
+  FlashList: function MockFlashList(props: any) {
+    const React = jest.requireActual('react');
+    React.useEffect(() => { mockListMount(); return () => mockListUnmount(); }, []);
+    return React.createElement('FlashList', props,
+      props.data.length ? props.data.map((item: any, index: number) =>
+        React.createElement('Rate', { key: index }, props.renderItem({ item })))
+        : props.ListEmptyComponent);
+  },
 }));
 jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: 'SearchReportExport' }));
 jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
@@ -51,6 +57,7 @@ jest.mock('../src/components/ledger', () => ({ LedgerSheet: 'LedgerSheet' }));
 
 beforeEach(() => {
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
+  mockListMount.mockClear(); mockListUnmount.mockClear();
   const fixture = rateConditionFixture();
   mockState = { ...fixture, prefs: { ...DEFAULT_PREFS, enableDeepSearch: false }, subscriptions: [],
     detailsLoading: false, ensureDetails: mockEnsureDetails, searchIndexStatus: 'idle' };
@@ -132,5 +139,36 @@ test('audit comparison reports a missing filtered rate immediately and can clear
       .toEqual({ unavailableReason: 'The selected exact rate is not in the current filtered search results' });
     act(() => mockSurfaces.get('search.results').actions['search.filters.clear']());
     expect(tree.root.findByType('FlashList' as any).props.data.length).toBeGreaterThan(0);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('comparison and filter disclosure commit without remounting unchanged search results', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const initialRows = tree.root.findByType('FlashList' as any).props.data;
+    const first = initialRows[0];
+    const token = `${first.rate_index}#${first.product_key}`;
+    let previousRevision = mockSurfaces.get('search.results').renderRevision;
+    for (const [action, parameters] of [
+      ['search.filters.open'], ['search.filters.apply'], ['search.compare.mode'],
+      ['search.compare.select.0', { selectionToken: token }],
+    ] as const) {
+      act(() => mockSurfaces.get('search.results').actions[action](parameters));
+      expect(mockListMount).toHaveBeenCalledTimes(1);
+      expect(mockListUnmount).not.toHaveBeenCalled();
+      expect(tree.root.findByType('FlashList' as any).props.data).toBe(initialRows);
+      const revision = mockSurfaces.get('search.results').renderRevision;
+      expect(revision).not.toBe(previousRevision);
+      expect(tree.root.findByType('FlashList' as any).props.extraData).toBe(revision);
+      previousRevision = revision;
+    }
+    expect(tree.root.findAllByType('ProductCard' as any)[0].props.selected).toBe(true);
+    // A real result change still remounts, rejecting stale layout/viewability.
+    act(() => mockSurfaces.get('search.results').actions['search.filter.provider.first']({ provider: 'Missing Bank' }));
+    expect(mockListMount).toHaveBeenCalledTimes(2);
+    expect(mockListUnmount).toHaveBeenCalledTimes(1);
+    expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
   } finally { act(() => tree.unmount()); }
 });

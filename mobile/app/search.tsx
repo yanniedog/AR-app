@@ -340,7 +340,7 @@ export default function Search() {
     },
   }), [clearSearchFilters, selected, selectAuditToken, sortOptions, toggleCompareMode]);
   const searchPending = detailFiltersPending || searchIndexLoading;
-  const listRevision = JSON.stringify([
+  const listDataRevision = JSON.stringify([
     coreSha ?? core?.run_date ?? 'none',
     details?.run_date ?? 'none',
     section,
@@ -349,18 +349,16 @@ export default function Search() {
     debouncedQuery,
     sortKey,
     effectiveFilters,
-    filterOpen,
     deepSearchActive,
-    selectMode,
-    selected,
     searchIndex != null,
     suitabilityRevision,
     rows.length,
   ]);
+  // Selection and disclosure changes need a fresh committed render, but keep
+  // the same list and decoded logos while its result identities are unchanged.
+  const listRevision = JSON.stringify([listDataRevision, filterOpen, selectMode, selected]);
   const listReadiness = useVirtualizedListReadiness(listRevision, rows.length);
-  const logoReadiness = useLogoReadiness(
-    `${listRevision}:${selectMode ? 'select' : 'browse'}`,
-  );
+  const logoReadiness = useLogoReadiness(listDataRevision);
   usePerformanceAuditSurface({
     id: 'search.results',
     routeKey: '/search',
@@ -461,9 +459,9 @@ export default function Search() {
 
       <View style={{ flex: 1 }} onLayout={listReadiness.onRevisionLayout}>
         <FlashList
-          // Remount when the user-facing result identity changes so readiness
-          // cannot stall after FlashList recycles without a fresh viewability pass.
-          key={`search:${listRevision}`}
+          // Only changed result identities require a new list. Selection and
+          // filter-sheet visibility commit in place through extraData below.
+          key={`search:${listDataRevision}`}
           data={rows}
           onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
           onLoad={listReadiness.onLoad}
