@@ -2,6 +2,8 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import {
+  blockingMissingRequiredKeys,
+  isReviewerNonsenseFailure,
   DEFAULT_REQUIRED_KEYS,
   eventSatisfiesRequiredKey,
   missingRequiredKeysFromEvents,
@@ -69,7 +71,7 @@ assert.equal(workflowNeedsStateChange("disabled_manually", true), true);
 assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
-assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
+assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["coderabbit"]);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({
@@ -306,6 +308,98 @@ assert.equal(
   ),
   false,
 );
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["gemini", "codex", "sourcery", "qwen"],
+    [
+      { login: "gemini-code-assist[bot]", body: "ERROR: Gemini API quota exceeded" },
+      { login: "sourcery-ai[bot]", body: "Sorry, I couldn't review this pull request — rate limit" },
+    ],
+  ),
+  ["codex"],
+);
+assert.deepEqual(blockingMissingRequiredKeys(["gemini"], []), []);
+assert.deepEqual(blockingMissingRequiredKeys(["qwen"], []), []);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: findings\nReviewed commit: `abc`\nThe finding discusses HTTP 429 rate limit handling in the release path.",
+    }],
+  ),
+  [],
+);
+const codexQuotaFinding = "The retry path mishandles HTTP 429 rate limits and can drop the release artifact.";
+for (const finding of [
+  'When service unavailable is returned, this branch deletes the release artifact.',
+  'The retry task is unable to complete because the lock is never released.',
+  'The please try later branch drops the failed transaction permanently.',
+  'An empty review currently bypasses the security approval check.',
+  'This handler swallows API quota exceeded errors and reports successful publication.',
+  '**[P2]** ERROR: Gemini API quota exceeded is swallowed without retrying the upload.',
+]) {
+  assert.equal(isBotNoise(finding), false, finding);
+  assert.equal(isReviewerNonsenseFailure(finding), false, finding);
+  assert.equal(eventSatisfiesRequiredKey('chatgpt-codex-connector[bot]', finding, 'codex'), true, finding);
+}
+assert.equal(isBotNoise(codexQuotaFinding), false);
+assert.equal(
+  eventSatisfiesRequiredKey("chatgpt-codex-connector[bot]", codexQuotaFinding, "codex"),
+  true,
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    missingRequiredKeysFromEvents(
+      ["codex"],
+      [{ login: "chatgpt-codex-connector[bot]", body: codexQuotaFinding }],
+    ),
+    [{ login: "chatgpt-codex-connector[bot]", body: codexQuotaFinding }],
+  ),
+  [],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nQwen review did not complete successfully.",
+    }],
+  ),
+  [],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nReviewed commit: `aaaaaaa`\nQwen review did not complete successfully.",
+    }],
+    { expectedHeadSha: "bbbbbbb" },
+  ),
+  [],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: failed\nReviewed commit: `bbbbbbb`\nQwen review did not complete successfully.",
+    }],
+    { expectedHeadSha: "bbbbbbb" },
+  ),
+  [],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    missingRequiredKeysFromEvents(
+      ["codex"],
+      [{ login: "chatgpt-codex-connector[bot]", body: "This reachable branch drops the release artifact." }],
+    ),
+    [{ login: "chatgpt-codex-connector[bot]", body: "This reachable branch drops the release artifact." }],
+  ),
+  [],
+);
 assert.equal(
   eventSatisfiesRequiredKey(
     "coderabbitai[bot]",
@@ -494,4 +588,10 @@ assert.doesNotMatch(
   "third-party actions must use immutable commit SHAs",
 );
 
+const waitForBots = readFileSync("wait_for_bots.mjs", "utf8");
+assert.match(waitForBots, /substantiveBotEvents/);
+assert.doesNotMatch(
+  waitForBots,
+  /lastBotAt \|\|[\s\S]{0,180}botEventsSinceAnchor\[botEventsSinceAnchor\.length - 1\]/,
+);
 console.log("PASS verify-pr-review-bots");
