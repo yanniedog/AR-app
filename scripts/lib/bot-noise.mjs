@@ -29,7 +29,15 @@ const QUOTA_PATTERNS = [
   /^ERROR:\s*(?:Gemini|Qwen|CodeRabbit|Codex|Sourcery)(?: API)?(?: returned)?(?: HTTP)? [45]\d\d[.!]*$/i,
   /^(?:Your )?(?:CodeRabbit|Sourcery|Codex|Gemini|Qwen)(?: review)? (?:trial has expired|subscription expired)[.!]*$/i,
   /^The consumer version has been (?:sunset|retired|deprecated); review activity has ceased[.!]*$/i,
+  /^(?:You have|You've|We have|We've) (?:reached|exceeded|exhausted) (?:your |our |the )?(?:monthly|daily|free[- ]tier) (?:quota|limit)(?: for (?:code )?reviews)?(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
+  /^(?:Your |Our |The )?(?:monthly|daily|free[- ]tier) (?:review )?(?:quota|limit) (?:has been )?(?:reached|exceeded|exhausted)(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
 ];
+
+export function isQwenFailureNotice(bodyRaw) {
+  // Match the workflow's structured failed-run notice, including its fenced
+  // diagnostics. Finding text that merely mentions failed reviews stays live.
+  return /^<!-- qwen-code-review -->\r?\n## Qwen Code Review\r?\n\r?\nReviewed commit: `[0-9a-f]{7,40}`\r?\nReview outcome: failed\r?\n\r?\nQwen Code Review did not complete successfully\. Qwen is not a required reviewer, so this notice does not block merge\.\r?\n\r?\n```text\r?\n[\s\S]*\r?\n```$/i.test(String(bodyRaw || '').trim());
+}
 
 const TRIVIAL_PATTERNS = [
   // Ack/no-op replies (the whole body, modulo whitespace and trailing puncts).
@@ -73,5 +81,5 @@ export function isTrivialBotMessage(bodyRaw) {
  * @returns {boolean}
  */
 export function isBotNoise(bodyRaw) {
-  return isQuotaBotMessage(bodyRaw) || isTrivialBotMessage(bodyRaw);
+  return isQuotaBotMessage(bodyRaw) || isQwenFailureNotice(bodyRaw) || isTrivialBotMessage(bodyRaw);
 }

@@ -38,6 +38,7 @@ function tagEnd(html: string, from: number): number {
 }
 
 function rawTextEnd(html: string, name: string, from: number): number {
+  if (name === 'script') return scriptEnd(html, from);
   const needle = `</${name}`;
   let index = from;
   while ((index = html.indexOf('</', index)) >= 0) {
@@ -49,6 +50,53 @@ function rawTextEnd(html: string, name: string, from: number): number {
       return end < 0 ? html.length : end + 1;
     }
     index += 2;
+  }
+  return html.length;
+}
+
+function scriptEnd(html: string, from: number): number {
+  // HTML script data has escaped and double-escaped states. In the latter,
+  // </script> leaves double escaping instead of closing the element.
+  let state: 'data' | 'escaped' | 'double' = 'data';
+  let dashes = 0;
+  for (let index = from; index < html.length; index += 1) {
+    if (state === 'data' && html.startsWith('<!--', index)) {
+      state = 'escaped';
+      dashes = 2;
+      index += 3;
+      continue;
+    }
+    if (state !== 'data' && html[index] === '-') {
+      dashes = Math.min(2, dashes + 1);
+      continue;
+    }
+    if (state !== 'data' && dashes === 2 && html[index] === '>') state = 'data';
+    dashes = 0;
+    if (html[index] !== '<') continue;
+    if (state === 'escaped' && asciiEqualsAt(html, index, '<script')
+      && TAG_BOUNDARY.test(html[index + 7] ?? '')) {
+      state = 'double';
+      index += 7;
+    } else if (asciiEqualsAt(html, index, '</script') && TAG_BOUNDARY.test(html[index + 8] ?? '')) {
+      if (state === 'double') {
+        state = 'escaped';
+        index += 8;
+      } else {
+        const end = tagEnd(html, index + 8);
+        return end < 0 ? html.length : end + 1;
+      }
+    }
+  }
+  return html.length;
+}
+
+function commentEnd(html: string, from: number): number {
+  // HTML also closes empty comments abruptly, and accepts --!> as an ending.
+  if (html[from] === '>') return from + 1;
+  if (html.startsWith('->', from)) return from + 2;
+  for (let index = from; index < html.length; index += 1) {
+    if (html.startsWith('-->', index)) return index + 3;
+    if (html.startsWith('--!>', index)) return index + 4;
   }
   return html.length;
 }
@@ -65,8 +113,7 @@ export function htmlPlainText(html: string): string {
     }
     parts.push(html.slice(index, open), ' ');
     if (html.startsWith('<!--', open)) {
-      const end = html.indexOf('-->', open + 4);
-      index = end < 0 ? html.length : end + 3;
+      index = commentEnd(html, open + 4);
       continue;
     }
     const end = tagEnd(html, open + 1);

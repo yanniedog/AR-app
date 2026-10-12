@@ -78,6 +78,11 @@ assert.deepEqual(parseRequiredKeys("codex,qwen,sourcery"), ["codex", "sourcery"]
 assert.deepEqual(resolveRequiredKeys(["codex", "qwen", "sourcery"]), ["codex", "sourcery"]);
 assert.deepEqual(adjustRequiredKeysForPrContext(["sourcery", "qwen"]), ["sourcery"]);
 assert.deepEqual(missingRequiredKeysFromEvents(["qwen"], []), []);
+assert.deepEqual(parseRequiredKeys('codex,github-actions[bot],qwen'), ['codex']);
+assert.deepEqual(resolveRequiredKeys(['QWEN', 'GITHUB-ACTIONS[BOT]', 'sourcery']), ['sourcery']);
+assert.deepEqual(adjustRequiredKeysForPrContext(['github-actions[bot]', 'codex']), ['codex']);
+assert.deepEqual(missingRequiredKeysFromEvents(['github-actions[bot]'], []), []);
+assert.deepEqual(blockingMissingRequiredKeys(['github-actions[bot]'], []), []);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({
@@ -300,6 +305,26 @@ assert.deepEqual(
 );
 
 assert.equal(isBotNoise("ERROR: Gemini API returned HTTP 503"), true);
+for (const notice of [
+  'You have reached your monthly quota for code reviews; please upgrade your plan',
+  'You have exceeded your daily quota for reviews. Please try again tomorrow.',
+  'Your free-tier review quota has been exhausted; please upgrade your plan.',
+]) {
+  assert.equal(isBotNoise(notice), true, notice);
+  assert.equal(isReviewerNonsenseFailure(notice), true, notice);
+  const finding = `${notice}; this branch then deletes the release artifact.`;
+  assert.equal(isBotNoise(finding), false, finding);
+  assert.equal(isReviewerNonsenseFailure(finding), false, finding);
+}
+const emittedQwenFailure = [
+  '<!-- qwen-code-review -->', '## Qwen Code Review', '',
+  `Reviewed commit: \`${sha}\``, 'Review outcome: failed', '',
+  'Qwen Code Review did not complete successfully. Qwen is not a required reviewer, so this notice does not block merge.', '',
+  '```text', 'Local model returned an HTTP 503 error.', '```',
+].join('\n');
+assert.equal(isReviewerNonsenseFailure(emittedQwenFailure), true);
+assert.equal(isBotNoise(emittedQwenFailure), true);
+assert.equal(isBotNoise(`${qwenSuccess}\n${emittedQwenFailure}`), false);
 assert.equal(
   isBotNoise(
     "The consumer version has been sunset; review activity has ceased.",

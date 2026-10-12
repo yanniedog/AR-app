@@ -23,3 +23,23 @@ test('handles thousands of false closer prefixes in one forward scan', () => {
   const raw = `<script>${'</script'.repeat(8_000)}</script>Visible`;
   expect(htmlPlainText(raw).trim()).toBe('Visible');
 });
+
+test.each(['<!-- hidden --!>', '<!-->', '<!--->', '<!-- hidden --->'])('recognizes HTML comment ending %s', (comment) => {
+  expect(htmlPlainText(`${comment}Visible`).trim()).toBe('Visible');
+});
+
+test.each([
+  '<script><!--<script></script>alert(1)</script>',
+  '<script><!--<ScRiPt ></SCRIPT >alert(1)</script>',
+  '<script><!--<script/>hidden</script/>hidden</script>',
+  '<script><!--<script>--></script>',
+  '<script><!--></script>',
+  '<script><!---></script>',
+  '<script><!--<scripture></script>',
+])('tracks script escape states in %s', (script) => {
+  expect(htmlPlainText(`${script}Visible`).trim()).toBe('Visible');
+});
+
+test('does not expose text after an unclosed double-escaped script', () => {
+  expect(htmlPlainText('<script><!--<script></script>hidden')).toBe(' ');
+});

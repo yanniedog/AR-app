@@ -2,7 +2,7 @@
  * Required-bot aliases for wait-for-bots and pr-bot-feedback-check.
  * Keys are short names; values are GitHub logins to match.
  */
-import { isQuotaBotMessage } from './bot-noise.mjs';
+import { isQuotaBotMessage, isQwenFailureNotice } from './bot-noise.mjs';
 
 export const BOT_ALIASES = {
   gemini: [
@@ -115,7 +115,8 @@ export function isReviewerNonsenseFailure(bodyRaw) {
   // A completed Qwen review stays required even when a finding mentions quota
   // or an HTTP status. Only an actual failed or quota-only notice is nonsense.
   if (isSuccessfulQwenReview(body)) return false;
-  return isQuotaBotMessage(body) || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
+  return isQuotaBotMessage(body) || isQwenFailureNotice(body)
+    || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
 }
 
 function eventsForRequiredKey(key, events) {
@@ -142,7 +143,7 @@ function eventsForRequiredKey(key, events) {
  * feedback gate.
  */
 export function blockingMissingRequiredKeys(missing, events) {
-  return (missing || []).filter((key) => {
+  return omitNeverRequiredKeys(missing).filter((key) => {
     const normalized = String(key || '').toLowerCase();
     if (normalized === 'gemini' || normalized === 'qwen') return false;
     const related = eventsForRequiredKey(normalized, events);
@@ -160,10 +161,10 @@ export function parseRequiredKeys(raw) {
     .filter(Boolean));
 }
 
-const NEVER_REQUIRED_KEYS = new Set(['qwen']);
+const NEVER_REQUIRED_KEYS = new Set(['qwen', ...BOT_ALIASES.qwen]);
 
 export function omitNeverRequiredKeys(keys) {
-  return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').toLowerCase()));
+  return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').trim().toLowerCase()));
 }
 
 export function resolveRequiredKeys(argvKeys, envRaw) {
@@ -208,7 +209,7 @@ export function loginMatchesRequiredKey(login, key) {
 
 export function missingRequiredKeys(requiredKeys, seenLogins) {
   const seen = [...(seenLogins || [])];
-  return requiredKeys.filter(
+  return omitNeverRequiredKeys(requiredKeys).filter(
     (key) => !seen.some((login) => loginMatchesRequiredKey(login, key)),
   );
 }
