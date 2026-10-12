@@ -94,6 +94,55 @@ export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
   );
 }
 
+const REVIEWER_NONSENSE_PATTERNS = [
+  /could not review/i,
+  /couldn'?t review/i,
+  /\bempty review\b/i,
+];
+
+/**
+ * Quota, API errors, empty reviews, and "could not review" notices are not a
+ * completed review. A blank body is the same kind of non-substantive failure.
+ */
+export function isReviewerNonsenseFailure(bodyRaw) {
+  const body = String(bodyRaw ?? '').trim();
+  if (!body) return true;
+  return isQuotaBotMessage(body) || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
+}
+
+function eventsForRequiredKey(key, events) {
+  const normalized = String(key || '').toLowerCase();
+  return (events || []).filter((event) => {
+    const login = String(event?.login || '');
+    const body = event?.body || '';
+    if (normalized === 'qwen') {
+      return login.toLowerCase() === 'github-actions[bot]' && isQwenCodeReviewBody(body);
+    }
+    if (normalized === 'gemini') {
+      if (login.toLowerCase() === 'github-actions[bot]') return isGeminiCodeReviewBody(body);
+      return loginMatchesRequiredKey(login, 'gemini');
+    }
+    return loginMatchesRequiredKey(login, normalized);
+  });
+}
+
+/**
+ * Gemini absence, quota, and other non-substantive failures never block.
+ * Codex, Sourcery, and Qwen still block when they have not posted. A
+ * quota-only or nonsense-only post from those reviewers is the same kind of
+ * non-substantive failure and does not block; a real missing review does.
+ * Substantive Gemini threads stay on the feedback gate.
+ */
+export function blockingMissingRequiredKeys(missing, events) {
+  return (missing || []).filter((key) => {
+    const normalized = String(key || '').toLowerCase();
+    if (normalized === 'gemini') return false;
+    const related = eventsForRequiredKey(normalized, events);
+    if (related.length === 0) return true;
+    return !related.every((event) => isReviewerNonsenseFailure(event.body));
+  });
+}
+
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
   if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];

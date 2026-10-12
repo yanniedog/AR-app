@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import {
+  blockingMissingRequiredKeys,
   DEFAULT_REQUIRED_KEYS,
   eventSatisfiesRequiredKey,
   missingRequiredKeysFromEvents,
@@ -305,6 +306,37 @@ assert.equal(
     "gemini",
   ),
   false,
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["gemini", "codex", "sourcery", "qwen"],
+    [
+      { login: "gemini-code-assist[bot]", body: "ERROR: Gemini API quota exceeded" },
+      { login: "sourcery-ai[bot]", body: "Sorry, I couldn't review this pull request — rate limit" },
+    ],
+  ),
+  ["codex", "qwen"],
+);
+assert.deepEqual(blockingMissingRequiredKeys(["gemini"], []), []);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    ["qwen"],
+    [{
+      login: "github-actions[bot]",
+      body: "<!-- qwen-code-review -->\nReview outcome: findings\nReviewed commit: `abc`\nThe finding discusses a real defect in the release path.",
+    }],
+  ),
+  ["qwen"],
+);
+assert.deepEqual(
+  blockingMissingRequiredKeys(
+    missingRequiredKeysFromEvents(
+      ["codex"],
+      [{ login: "chatgpt-codex-connector[bot]", body: "This reachable branch drops the release artifact." }],
+    ),
+    [{ login: "chatgpt-codex-connector[bot]", body: "This reachable branch drops the release artifact." }],
+  ),
+  [],
 );
 assert.equal(
   eventSatisfiesRequiredKey(

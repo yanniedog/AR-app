@@ -10,6 +10,7 @@ import { setTimeout as sleepMs } from 'node:timers/promises';
 import {
   allKnownBotLogins,
   adjustRequiredKeysForPrContext,
+  blockingMissingRequiredKeys,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   isQwenCodeReviewBody,
@@ -310,11 +311,12 @@ function evaluate({
   const substantiveBotEvents = botEventsSinceAnchor.filter((e) => !e.noise);
   const noiseEventCount = botEventsSinceAnchor.length - substantiveBotEvents.length;
   const seenLogins = [...new Set(botEventsSinceAnchor.map((e) => e.login))];
-  const missing = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
+  const unsatisfied = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
     expectedHeadSha,
   });
-  const allRequiredPosted =
-    requiredKeys.length > 0 && botEventsSinceAnchor.length > 0 && missing.length === 0;
+  const missing = blockingMissingRequiredKeys(unsatisfied, botEventsSinceAnchor);
+  const waived = unsatisfied.filter((key) => !missing.includes(key));
+  const allRequiredPosted = missing.length === 0;
   const lastBotAt =
     substantiveBotEvents.length > 0
       ? new Date(substantiveBotEvents[substantiveBotEvents.length - 1].at)
@@ -326,8 +328,8 @@ function evaluate({
       : null);
   const quiet =
     allRequiredPosted &&
-    lastQuietAnchorAt !== null &&
-    Date.now() - lastQuietAnchorAt.getTime() >= QUIET_WINDOW_SEC * 1000;
+    (lastQuietAnchorAt === null ||
+      Date.now() - lastQuietAnchorAt.getTime() >= QUIET_WINDOW_SEC * 1000);
 
   const checks = fetchChecks(prNumber, repo, expectedHeadSha, baseRefName);
   if (checks.error && !checks.failed) {
@@ -373,10 +375,13 @@ function evaluate({
     const suffix = noiseEventCount > 0
       ? ` Ignored ${noiseEventCount} noise event(s) — quota / trivial replies.`
       : '';
+    const waivedNote = waived.length
+      ? ` Non-blocking reviewer gap: ${waived.join(', ')} (Gemini absence/quota, or the same nonsense failure from another required reviewer).`
+      : '';
     const quietNote = singleShot && !quiet ? ' (single-shot; quiet window skipped)' : `; ${QUIET_WINDOW_SEC}s quiet`;
     return {
       status: 'ready',
-      message: `Bot wait satisfied (required bots posted since anchor${quietNote}). Clear to sweep threads.${suffix}`,
+      message: `Bot wait satisfied (required bots posted since anchor${quietNote}). Clear to sweep threads.${suffix}${waivedNote}`,
       lastBotAt: lastBotAt?.toISOString() || null,
       botsSeen: seenLogins,
       missing: [],
