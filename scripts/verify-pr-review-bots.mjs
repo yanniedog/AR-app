@@ -15,7 +15,7 @@ import {
   loginToBotKey,
   SPREADSHEET_BOT_KEYS,
 } from "./lib/pr-bot-roster.mjs";
-import { changedLinesFromDiff, isReviewablePath } from "./qwen-pr-review.mjs";
+import { assertBranchName, changedLinesFromDiff, fetchedPullRequestRef, isReviewablePath } from "./qwen-pr-review.mjs";
 import {
   combineRequiredCheckState,
   renderDashboard,
@@ -401,6 +401,12 @@ assert.match(workflow, /working-directory:\s*_trusted-reviewer/);
 assert.match(workflow, /fetched and used only as diff data/);
 assert.doesNotMatch(workflow, /checked out separately/);
 assert.match(reviewer, /refs\/heads\/\$\{baseRef\}:\$\{baseRemote\}/);
+assert.match(reviewer, /check-ref-format', '--branch'/);
+assert.equal(fetchedPullRequestRef('12'), 'refs/review-fetch/pr-12');
+assert.notEqual(fetchedPullRequestRef('12'), 'refs/remotes/origin/pr-review-12');
+assert.doesNotThrow(() => assertBranchName('release+hotfix', 'BASE_REF'));
+assert.doesNotThrow(() => assertBranchName('foo@bar', 'BASE_REF'));
+assert.throws(() => assertBranchName('has space', 'BASE_REF'), /branch name/);
 assert.match(reviewer, /\$\{baseRemote\}\.\.\.\$\{resolvedHead\}/);
 assert.match(reviewer, /--unshallow/);
 assert.match(workflow, /fetch-depth:\s*0/);

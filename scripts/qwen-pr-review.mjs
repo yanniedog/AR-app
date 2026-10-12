@@ -84,25 +84,24 @@ export function changedLinesFromDiff(diffText) {
   return { left, right };
 }
 
-function assertBranchName(name, label) {
-  if (
-    typeof name !== 'string'
-    || !/^[A-Za-z0-9._/-]+$/.test(name)
-    || name.startsWith('-')
-    || name.startsWith('/')
-    || name.endsWith('/')
-    || name.includes('..')
-    || name.includes('//')
-  ) {
+export function assertBranchName(name, label) {
+  if (typeof name !== 'string' || name.length === 0 || name.length > 250) {
     fail(`${label} is not a branch name`);
   }
+  const check = spawnSync('git', ['check-ref-format', '--branch', name], { encoding: 'utf8' });
+  if (check.status !== 0) fail(`${label} is not a branch name`);
+}
+
+export function fetchedPullRequestRef(prNumber) {
+  if (!/^\d+$/.test(String(prNumber || ''))) fail('PR_NUMBER is required to fetch the pull request ref');
+  return `refs/review-fetch/pr-${prNumber}`;
 }
 
 export function collectDiff(baseRef, headSha, maxChars, prNumber) {
   if (!/^\d+$/.test(String(prNumber || ''))) fail('PR_NUMBER is required to fetch the pull request ref');
   if (!/^[0-9a-f]{7,40}$/i.test(String(headSha || ''))) fail('HEAD_SHA must be the pull request commit id');
   assertBranchName(baseRef, 'BASE_REF');
-  const prRef = `refs/remotes/origin/pr-review-${prNumber}`;
+  const prRef = fetchedPullRequestRef(prNumber);
   const baseRemote = `refs/remotes/origin/${baseRef}`;
   const shallow = runGit(['rev-parse', '--is-shallow-repository']).trim() === 'true';
   const baseFetch = ['fetch', '--no-tags'];
