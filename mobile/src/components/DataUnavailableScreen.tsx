@@ -19,14 +19,27 @@ export function DataUnavailableScreen() {
   const busy = refreshing || status === 'loading';
   const [connectivity, setConnectivity] = useState<Connectivity>(null);
   useEffect(() => {
-    if (busy) return;
     let active = true;
+    let heardChange = false;
+    // The first read can resolve after a change event; never let it overwrite newer state.
     Network.getNetworkStateAsync().then(
-      (state) => { if (active) setConnectivity(connectivityFromNetworkState(state)); },
-      () => { if (active) setConnectivity(null); },
+      (state) => { if (active && !heardChange) setConnectivity(connectivityFromNetworkState(state)); },
+      () => { if (active && !heardChange) setConnectivity(null); },
     );
-    return () => { active = false; };
-  }, [busy]);
+    let subscription: { remove(): void } | undefined;
+    try {
+      subscription = Network.addNetworkStateListener((state) => {
+        heardChange = true;
+        if (active) setConnectivity(connectivityFromNetworkState(state));
+      });
+    } catch {
+      // No listener on this platform: the one-off read above still applies.
+    }
+    return () => {
+      active = false;
+      subscription?.remove();
+    };
+  }, []);
 
   return (
     <Screen style={{ justifyContent: 'center', paddingHorizontal: 28 }}>

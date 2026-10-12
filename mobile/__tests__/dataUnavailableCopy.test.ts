@@ -1,11 +1,22 @@
-import { connectivityFromNetworkState, dataUnavailableMessage } from '../src/lib/dataUnavailableCopy';
+import {
+  connectivityFromNetworkState,
+  DATA_UNAVAILABLE_MESSAGES,
+  dataUnavailableMessage,
+} from '../src/lib/dataUnavailableCopy';
 
 describe('data unavailable copy', () => {
+  it('picks the message for each connectivity state', () => {
+    expect(dataUnavailableMessage('offline')).toBe(DATA_UNAVAILABLE_MESSAGES.offline);
+    expect(dataUnavailableMessage('online')).toBe(DATA_UNAVAILABLE_MESSAGES.online);
+    expect(dataUnavailableMessage(null)).toBe(DATA_UNAVAILABLE_MESSAGES.unknown);
+  });
+
   it('blames the connection only when the device reports it is offline', () => {
-    expect(dataUnavailableMessage('offline')).toMatch(/offline/i);
-    expect(dataUnavailableMessage('online')).toMatch(/rates service/i);
-    expect(dataUnavailableMessage('online')).not.toMatch(/check your connection/i);
-    expect(dataUnavailableMessage(null)).toMatch(/check your connection/i);
+    expect(DATA_UNAVAILABLE_MESSAGES.offline).toMatch(/offline/i);
+    // Online: no connection advice, and no guessed cause for the failure.
+    expect(DATA_UNAVAILABLE_MESSAGES.online).not.toMatch(/offline|check your connection|connect to/i);
+    expect(DATA_UNAVAILABLE_MESSAGES.online).not.toMatch(/didn.t respond|server|service/i);
+    expect(DATA_UNAVAILABLE_MESSAGES.unknown).toMatch(/check your connection/i);
   });
 
   it('reads expo-network state conservatively', () => {
