@@ -953,19 +953,26 @@ export function buildPerformanceAuditJourneys(
   ];
 }
 
-export function pathMatches(actual: string, expected: string): boolean {
+export function pathMatches(
+  actual: string,
+  expected: string,
+  expectedFormat: 'href' | 'pathname' = 'href',
+): boolean {
   const normalize = (value: string) => {
     const path = value.split('?')[0]?.replace(/\/+$/, '') || '/';
     return path === '/(tabs)' || path === '/(tabs)/index' ? '/' : path;
   };
   const a = normalize(actual);
   const e = normalize(expected);
-  if (a === e) return true;
-  // Expo Router exposes decoded dynamic route params from usePathname.
+  // Actual always comes from usePathname, which has already decoded dynamic
+  // params. Decoding it again confuses distinct product IDs ("%20" and " ").
+  // Captured pathnames also compare literally; route hrefs decode exactly once.
+  if (expectedFormat === 'pathname') return a === e;
   try {
-    return decodeURIComponent(a) === decodeURIComponent(e);
+    return a === decodeURIComponent(e);
   } catch {
-    return false;
+    // A malformed escape can be literal product text; never partially decode it.
+    return a === e;
   }
 }
 
