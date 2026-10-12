@@ -109,19 +109,10 @@ jobs:
           persist-credentials: false
           clean: true
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
-        with:
-          ref: ${{ steps.pr.outputs.head_sha }}
-          path: review-target
-          fetch-depth: 0
-          persist-credentials: false
-          clean: true
-
       - name: Run trusted Qwen reviewer
         id: qwen
         if: steps.exempt.outputs.value != 'true' && steps.existing.outputs.value != 'true'
-        working-directory: review-target
+        working-directory: _trusted-reviewer
         env:
           QWEN_API_BASE_URL: ${{ secrets.QWEN_API_BASE_URL }}
           QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}

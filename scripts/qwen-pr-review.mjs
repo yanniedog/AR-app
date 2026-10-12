@@ -84,9 +84,18 @@ export function changedLinesFromDiff(diffText) {
   return { left, right };
 }
 
-export function collectDiff(baseRef, maxChars) {
+export function collectDiff(baseRef, headSha, maxChars, prNumber) {
+  if (!/^\d+$/.test(String(prNumber || ''))) fail('PR_NUMBER is required to fetch the pull request ref');
+  if (!/^[0-9a-f]{7,40}$/i.test(String(headSha || ''))) fail('HEAD_SHA must be the pull request commit id');
+  const prRef = `refs/remotes/origin/pr-review-${prNumber}`;
   runGit(['fetch', '--no-tags', 'origin', baseRef]);
-  const range = `origin/${baseRef}...HEAD`;
+  runGit(['fetch', '--no-tags', 'origin', `+refs/pull/${prNumber}/head:${prRef}`]);
+  const resolvedHead = runGit(['rev-parse', '--verify', `${prRef}^{commit}`]).trim().toLowerCase();
+  const expectedHead = String(headSha).trim().toLowerCase();
+  if (resolvedHead !== expectedHead && !resolvedHead.startsWith(expectedHead)) {
+    fail(`PR ref SHA mismatch: expected ${expectedHead}, got ${resolvedHead}`);
+  }
+  const range = `origin/${baseRef}...${resolvedHead}`;
   const changedFiles = runGit(['diff', '--name-only', '--diff-filter=ACDMRTUXB', range])
     .split(/\r?\n/)
     .map((value) => value.trim())
@@ -204,10 +213,7 @@ async function main() {
   const baseRef = String(process.env.BASE_REF || '').trim();
   if (!baseRef) fail('BASE_REF is required');
   const expectedHead = String(process.env.HEAD_SHA || '').trim().toLowerCase();
-  const actualHead = runGit(['rev-parse', 'HEAD']).trim().toLowerCase();
-  if (!expectedHead || actualHead !== expectedHead) {
-    fail(`PR checkout SHA mismatch: expected ${expectedHead || '(missing)'}, got ${actualHead}`);
-  }
+  const prNumber = String(process.env.PR_NUMBER || '').trim();
   const promptPath = resolve(process.env.PROMPT_PATH || '.cursor/PR_REVIEW_PROMPT.md');
   if (!existsSync(promptPath)) fail(`Trusted prompt not found: ${promptPath}`);
   const rubric = readFileSync(promptPath, 'utf8').trim();
@@ -216,8 +222,11 @@ async function main() {
   const configuredMax = Number(process.env.DIFF_MAX_CHARS || DEFAULT_DIFF_MAX);
   const diff = collectDiff(
     baseRef,
+    expectedHead,
     Number.isFinite(configuredMax) && configuredMax > 0 ? configuredMax : DEFAULT_DIFF_MAX,
+    prNumber,
   );
+  const actualHead = expectedHead;
   let findings = [];
   let reason = '';
   let modelCalls = 0;
