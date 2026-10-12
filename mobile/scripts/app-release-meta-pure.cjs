@@ -8,8 +8,12 @@ function releaseTitle(version) {
   return `Australian Rates app \u2013 ${version} (Android)`;
 }
 
+function escapeRegExpLiteral(value) {
+  return String(value).replace(/[\\^$.*+?()[\]{}|]/g, '\\$&');
+}
+
 function extractChangelogSection(content, version) {
-  const heading = new RegExp(`^##\\s+\\[?${version.replace(/\./g, '\\.')}\\]?`, 'm');
+  const heading = new RegExp(`^##\\s+\\[?${escapeRegExpLiteral(version)}\\]?`, 'm');
   const match = content.match(heading);
   if (!match || match.index == null) {
     return null;

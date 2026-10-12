@@ -62,6 +62,24 @@ describe('app-release-meta', () => {
     expect(section).toContain('First release');
     expect(section).not.toContain('0.9.0');
   });
+
+  it('extractChangelogSection treats version metacharacters as literals', () => {
+    const md = `# Changelog
+
+## 1.0.0+build
+
+- Plus build
+
+## 1.0.0
+
+- Plain
+`;
+    const section = extractChangelogSection(md, '1.0.0+build');
+    expect(section).toContain('Plus build');
+    expect(section).not.toContain('Plain');
+    const escaped = extractChangelogSection('## 1.0.0\\beta\n\n- Escaped\n', '1.0.0\\beta');
+    expect(escaped).toContain('Escaped');
+  });
 });
 
 describe('changelog-lib', () => {
