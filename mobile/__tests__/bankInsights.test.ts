@@ -18,6 +18,7 @@ import {
 import type { RbaCalendar } from '../src/data/rbaCalendar';
 import { normalizeCoreWithIntegrity } from '../src/data/sectionIntegrity';
 import { setSuitabilityAllowed } from '../src/data/suitabilityGate';
+import { installMandatoryEligibility } from '../src/data/eligibilityGate';
 import { lenderRaceModel, marketActivityModel } from '../src/data/vizModels';
 import type { CorePayload, RbaEntry } from '../src/types';
 
@@ -87,7 +88,10 @@ function emptySection() {
 }
 
 describe('filterBankInsightsForSuitability', () => {
-  afterEach(() => setSuitabilityAllowed(null));
+  afterEach(() => {
+    setSuitabilityAllowed(null);
+    installMandatoryEligibility({ active: false, loading: false, rows: new WeakSet(), productKeys: new Set() });
+  });
 
   const filterCore: CorePayload = {
     schema_version: 1,
@@ -248,6 +252,47 @@ describe('filterBankInsightsForSuitability', () => {
     setSuitabilityAllowed(new Set(['alpha-standard']));
     const afterRevision = filterBankInsightsForSuitability(payload, filterCore, false);
     expect(afterRevision).not.toBe(first);
+  });
+
+  test('reuses mandatory-profile projections until the installed row selection changes', () => {
+    const [alpha, beta] = filterCore.sections.Mortgage.rates;
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet([alpha]),
+      productKeys: new Set([alpha.product_key]) });
+    const first = filterBankInsightsForSuitability(payload, filterCore, true);
+    expect(Object.keys(first!.banks)).toEqual(['AlphaBank']);
+    expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(first);
+
+    // Default callers do not pass a React combined suitability revision. The
+    // native mandatory-gate revision must invalidate this cache independently.
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet([beta]),
+      productKeys: new Set([beta.product_key]) });
+    const next = filterBankInsightsForSuitability(payload, filterCore, true);
+    expect(next).not.toBe(first);
+    expect(Object.keys(next!.banks)).toEqual(['BetaBank']);
+    expect(next!.banks.BetaBank.Mortgage?.count).toEqual([null, null, 1]);
+  });
+
+  test('does not reuse mandatory projections across standard-product policy changes', () => {
+    const rows = filterCore.sections.Mortgage.rates;
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet(rows),
+      productKeys: new Set(rows.map(row => row.product_key)) });
+    const standard = filterBankInsightsForSuitability(payload, filterCore, false);
+    expect(standard!.banks.BetaBank.Mortgage?.count).toEqual([null, null, 1]);
+    const all = filterBankInsightsForSuitability(payload, filterCore, true);
+    expect(all).not.toBe(standard);
+    expect(all!.banks.BetaBank.Mortgage?.count).toEqual([null, null, 2]);
+    expect(filterBankInsightsForSuitability(payload, filterCore, true)).toBe(all);
+    expect(filterBankInsightsForSuitability(payload, filterCore, false)).toEqual(standard);
+  });
+
+  test('invalidates a cached unavailable mandatory projection when the gate becomes ready', () => {
+    installMandatoryEligibility({ active: true, loading: true, rows: new WeakSet(), productKeys: new Set() });
+    const unavailable = filterBankInsightsForSuitability(payload, filterCore, true);
+    expect(Object.keys(unavailable!.banks)).toEqual([]);
+    const alpha = filterCore.sections.Mortgage.rates[0];
+    installMandatoryEligibility({ active: true, loading: false, rows: new WeakSet([alpha]),
+      productKeys: new Set([alpha.product_key]) });
+    expect(Object.keys(filterBankInsightsForSuitability(payload, filterCore, true)!.banks)).toEqual(['AlphaBank']);
   });
 
   test('fails closed while the post-ingest suitability gate is warming', () => {

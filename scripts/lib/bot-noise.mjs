@@ -21,27 +21,24 @@
  *   - Single-emoji or "lgtm" replies
  */
 
+// Match complete service notices, never keywords inside a code finding.
+const NOTICE_REASON = '(?:API (?:limit|quota)(?: (?:exceeded|reached|exhausted))?|quota (?:exceeded|reached|exhausted)|rate[ -]?limit(?:ed)?(?: (?:exceeded|reached|hit))?|out of (?:credits?|tokens?|quota|usage)|insufficient (?:credits?|tokens?|funds|balance|quota)|subscription (?:required|expired)|trial (?:expired|ended|has expired)|service (?:temporarily )?unavailable|too many requests|please (?:try|come back) (?:again )?later)';
 const QUOTA_PATTERNS = [
-  /\brate[\s-]?limit(?:ed)?\b/i,
-  /\bapi (?:limit|quota)\b/i,
-  /\bquota (?:exceeded|reached|exhausted)\b/i,
-  /\bout of (?:credits?|tokens?|quota|usage)\b/i,
-  /\binsufficient (?:credits?|tokens?|funds|balance|quota)\b/i,
-  /\bsubscription (?:required|expired)\b/i,
-  /\btrial (?:expired|ended|has expired)\b/i,
-  /\b(?:monthly|daily) (?:limit|quota)\b/i,
-  /\bfree[\s-]tier (?:limit|quota)\b/i,
-  /\bservice (?:temporarily )?unavailable\b/i,
-  /\btoo many requests\b/i,
-  /\b429\b/,
-  /\bplease (?:try|come back) (?:again )?later\b/i,
-  /couldn'?t (?:review|process|complete)/i,
-  /unable to (?:review|process|complete)/i,
-  /\breview activity has ceased\b/i,
-  /\bconsumer version (?:has been )?(?:sunset|retired|deprecated)\b/i,
-  /\bdid not complete successfully\b/i,
-  /^\s*ERROR:/i,
+  new RegExp(`^(?:ERROR:\\s*)?(?:(?:Gemini|Qwen|CodeRabbit|Codex|Sourcery)\\s+)?${NOTICE_REASON}[.!]*$`, 'i'),
+  new RegExp(`^(?:Sorry[,!.]?\\s*)?(?:(?:I|we)\\s+)?(?:could not|couldn't|unable to) review (?:this |the )?(?:PR|pull request)(?:\\s*[-—:]\\s*${NOTICE_REASON})?[.!]*$`, 'i'),
+  /^ERROR:\s*(?:Gemini|Qwen|CodeRabbit|Codex|Sourcery)(?: API)?(?: returned)?(?: HTTP)? [45]\d\d[.!]*$/i,
+  /^(?:Your )?(?:CodeRabbit|Sourcery|Codex|Gemini|Qwen)(?: review)? (?:trial has expired|subscription expired)[.!]*$/i,
+  /^The consumer version has been (?:sunset|retired|deprecated); review activity has ceased[.!]*$/i,
+  /^(?:You have|You've|We have|We've) (?:reached|exceeded|exhausted) (?:your |our |the )?(?:monthly|daily|free[- ]tier) (?:quota|limit)(?: for (?:code )?reviews)?(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
+  /^(?:Your |Our |The )?(?:monthly|daily|free[- ]tier) (?:review )?(?:quota|limit) (?:has been )?(?:reached|exceeded|exhausted)(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
+  /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)[.!]*(?:\s+Please wait until the next window(?: before requesting another review)?[.!]*)?$/i,
 ];
+
+export function isQwenFailureNotice(bodyRaw) {
+  // Match the workflow's structured failed-run notice, including its fenced
+  // diagnostics. Finding text that merely mentions failed reviews stays live.
+  return /^<!-- qwen-code-review -->\r?\n## Qwen Code Review\r?\n\r?\nReviewed commit: `[0-9a-f]{7,40}`\r?\nReview outcome: failed\r?\n\r?\nQwen Code Review did not complete successfully\. Qwen is not a required reviewer, so this notice does not block merge\.\r?\n\r?\n```text\r?\n[\s\S]*\r?\n```$/i.test(String(bodyRaw || '').trim());
+}
 
 const TRIVIAL_PATTERNS = [
   // Ack/no-op replies (the whole body, modulo whitespace and trailing puncts).
@@ -85,5 +82,5 @@ export function isTrivialBotMessage(bodyRaw) {
  * @returns {boolean}
  */
 export function isBotNoise(bodyRaw) {
-  return isQuotaBotMessage(bodyRaw) || isTrivialBotMessage(bodyRaw);
+  return isQuotaBotMessage(bodyRaw) || isQwenFailureNotice(bodyRaw) || isTrivialBotMessage(bodyRaw);
 }

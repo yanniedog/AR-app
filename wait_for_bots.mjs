@@ -10,9 +10,11 @@ import { setTimeout as sleepMs } from 'node:timers/promises';
 import {
   allKnownBotLogins,
   adjustRequiredKeysForPrContext,
+  blockingMissingRequiredKeys,
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   isQwenCodeReviewBody,
+  isReviewerNonsenseFailure,
   missingRequiredKeysFromEvents,
   parseRequiredKeys,
   resolveRequiredKeys,
@@ -152,20 +154,25 @@ function fetchBotActivity(owner, name, prNumber) {
   if (!pr) return { error: 'GraphQL: pull request not found', events: [] };
 
   const events = [];
-  const pushEvent = (login, at, body) => {
+  const pushEvent = (login, at, body, noFindingsReaction = false) => {
     if (!login || !at) return;
     if (
       login.toLowerCase() === 'github-actions[bot]' &&
       !isGeminiCodeReviewBody(body) &&
       !isQwenCodeReviewBody(body)
     ) return;
-    events.push({ login, at, body: body || '', noise: isBotNoise(body) });
+    events.push({
+      login,
+      at,
+      body: body || '',
+      noise: !noFindingsReaction && (isBotNoise(body) || isReviewerNonsenseFailure(body)),
+    });
   };
   for (const c of pr.comments?.nodes || []) {
     pushEvent(c.author?.login, c.createdAt, c.body);
     for (const reaction of c.reactions?.nodes || []) {
       if (reaction.content === 'THUMBS_UP') {
-        pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction');
+        pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction', true);
       }
     }
   }
@@ -179,7 +186,7 @@ function fetchBotActivity(owner, name, prNumber) {
   }
   for (const reaction of pr.reactions?.nodes || []) {
     if (reaction.content === 'THUMBS_UP') {
-      pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction');
+      pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction', true);
     }
   }
   events.sort((a, b) => new Date(a.at) - new Date(b.at));
@@ -310,24 +317,24 @@ function evaluate({
   const substantiveBotEvents = botEventsSinceAnchor.filter((e) => !e.noise);
   const noiseEventCount = botEventsSinceAnchor.length - substantiveBotEvents.length;
   const seenLogins = [...new Set(botEventsSinceAnchor.map((e) => e.login))];
-  const missing = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
+  const unsatisfied = missingRequiredKeysFromEvents(requiredKeys, botEventsSinceAnchor, {
     expectedHeadSha,
   });
-  const allRequiredPosted =
-    requiredKeys.length > 0 && botEventsSinceAnchor.length > 0 && missing.length === 0;
+  const missing = blockingMissingRequiredKeys(unsatisfied, botEventsSinceAnchor, {
+    expectedHeadSha,
+  });
+  const waived = unsatisfied.filter((key) => !missing.includes(key));
+  const allRequiredPosted = missing.length === 0;
   const lastBotAt =
     substantiveBotEvents.length > 0
       ? new Date(substantiveBotEvents[substantiveBotEvents.length - 1].at)
       : null;
-  const lastQuietAnchorAt =
-    lastBotAt ||
-    (botEventsSinceAnchor.length > 0
-      ? new Date(botEventsSinceAnchor[botEventsSinceAnchor.length - 1].at)
-      : null);
+  // Quota and other noise must not keep the quiet window open. An all-waived
+  // event set is the same as no activity.
   const quiet =
     allRequiredPosted &&
-    lastQuietAnchorAt !== null &&
-    Date.now() - lastQuietAnchorAt.getTime() >= QUIET_WINDOW_SEC * 1000;
+    (lastBotAt === null ||
+      Date.now() - lastBotAt.getTime() >= QUIET_WINDOW_SEC * 1000);
 
   const checks = fetchChecks(prNumber, repo, expectedHeadSha, baseRefName);
   if (checks.error && !checks.failed) {
@@ -373,10 +380,13 @@ function evaluate({
     const suffix = noiseEventCount > 0
       ? ` Ignored ${noiseEventCount} noise event(s) — quota / trivial replies.`
       : '';
+    const waivedNote = waived.length
+      ? ` Non-blocking reviewer gap: ${waived.join(', ')} (Gemini absence/quota, or the same nonsense failure from another required reviewer).`
+      : '';
     const quietNote = singleShot && !quiet ? ' (single-shot; quiet window skipped)' : `; ${QUIET_WINDOW_SEC}s quiet`;
     return {
       status: 'ready',
-      message: `Bot wait satisfied (required bots posted since anchor${quietNote}). Clear to sweep threads.${suffix}`,
+      message: `Bot wait satisfied (required bots posted since anchor${quietNote}). Clear to sweep threads.${suffix}${waivedNote}`,
       lastBotAt: lastBotAt?.toISOString() || null,
       botsSeen: seenLogins,
       missing: [],
