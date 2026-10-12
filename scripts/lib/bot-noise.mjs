@@ -29,6 +29,7 @@ const QUOTA_PATTERNS = [
   /^ERROR:\s*(?:Gemini|Qwen|CodeRabbit|Codex|Sourcery)(?: API)?(?: returned)?(?: HTTP)? [45]\d\d[.!]*$/i,
   /^(?:Your )?(?:CodeRabbit|Sourcery|Codex|Gemini|Qwen)(?: review)? (?:trial has expired|subscription expired)[.!]*$/i,
   /^The consumer version has been (?:sunset|retired|deprecated); review activity has ceased[.!]*$/i,
+  /^You have reached your (?:monthly|daily|free[- ]tier) (?:limit|quota)(?: for [\w ]+)?(?:; please upgrade your plan)?[.!]*$/i,
 ];
 
 const TRIVIAL_PATTERNS = [

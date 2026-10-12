@@ -108,11 +108,19 @@ function isSuccessfulQwenReview(body) {
     && !/did not complete successfully|review failed/i.test(body);
 }
 
+function isFailedQwenNotice(body) {
+  return isQwenCodeReviewBody(body)
+    && /Review outcome:\s*failed/i.test(body)
+    && /did not complete successfully/i.test(body);
+}
+
 export function isReviewerNonsenseFailure(bodyRaw) {
   const body = String(bodyRaw ?? '').trim();
   if (!body) return true;
-  // A completed Qwen review stays required even when a finding mentions quota
-  // or an HTTP status. Only an actual failed or quota-only notice is nonsense.
+  // The workflow's failed-review comment is advisory noise, including its
+  // fenced diagnostic. A completed Qwen review stays required even when a
+  // finding mentions quota or an HTTP status.
+  if (isFailedQwenNotice(body)) return true;
   if (isSuccessfulQwenReview(body)) return false;
   return isQuotaBotMessage(body) || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
 }

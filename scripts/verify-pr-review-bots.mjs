@@ -343,6 +343,23 @@ for (const finding of [
   assert.equal(isReviewerNonsenseFailure(finding), false, finding);
   assert.equal(eventSatisfiesRequiredKey('chatgpt-codex-connector[bot]', finding, 'codex'), true, finding);
 }
+const monthlyQuotaNotice = 'You have reached your monthly quota for code reviews; please upgrade your plan';
+assert.equal(isBotNoise(monthlyQuotaNotice), true);
+assert.equal(isReviewerNonsenseFailure(monthlyQuotaNotice), true);
+const failedQwenNotice = [
+  '<!-- qwen-code-review -->',
+  '## Qwen Code Review',
+  '',
+  'Reviewed commit: `abc`',
+  'Review outcome: failed',
+  '',
+  'Qwen Code Review did not complete successfully. This does not satisfy reviewer presence.',
+  '',
+  '```text',
+  'ERROR: model',
+  '```',
+].join('\n');
+assert.equal(isReviewerNonsenseFailure(failedQwenNotice), true);
 assert.equal(isBotNoise(codexQuotaFinding), false);
 assert.equal(
   eventSatisfiesRequiredKey("chatgpt-codex-connector[bot]", codexQuotaFinding, "codex"),
