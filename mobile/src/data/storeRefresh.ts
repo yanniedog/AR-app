@@ -38,6 +38,7 @@ import {
 } from './assetState';
 import { assertNoRevisionRollback, samePayloadIdentity } from './payloadRevision';
 import { bindStagedSpread, normalizeStagedOptionalAsset, type StagedOptionalAssets } from './stagedOptionalAssets';
+import { verifiedDetailsSha } from './detailsIdentity';
 
 type NotifyContext = {
   previousCore: CorePayload | null;
@@ -476,16 +477,21 @@ export function createRefreshActions(set: StoreSet, get: StoreGet) {
         const canAdopt = () => get().manifest === adoptionOwner;
         const previousCore = get().core;
         const previousSource = get().source;
-        let previousDetailsProducts = get().details?.products ?? null;
+        const previousDetailsSha = adoptionOwner?.files.details.sha256;
+        const matchesPreviousDetails = (details: DetailsPayload | null): details is DetailsPayload =>
+          !!details && details.run_date === previousCore?.run_date &&
+          (!previousDetailsSha || verifiedDetailsSha(details) === previousDetailsSha);
+        const previousDetails = get().details;
+        let previousDetailsProducts = matchesPreviousDetails(previousDetails) ? previousDetails.products ?? null : null;
         const needPreviousDetails = needsDetailsForNotifications(
           get().prefs,
           get().subscriptions,
         );
         if (!previousDetailsProducts && previousCore && needPreviousDetails) {
           const cachedDetails = await cache.readDetails();
-          if (cachedDetails && cachedDetails.run_date === previousCore.run_date) {
+          if (matchesPreviousDetails(cachedDetails)) {
             previousDetailsProducts = cachedDetails.products ?? null;
-            if (!get().details) set({ details: cachedDetails });
+            if (canAdopt() && !get().details) set({ details: cachedDetails });
           }
         }
         const { text, core, integrity } = await downloadCore(
