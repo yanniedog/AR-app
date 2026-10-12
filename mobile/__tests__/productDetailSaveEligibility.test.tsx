@@ -125,6 +125,7 @@ jest.mock('../src/lib/proAccess', () => ({ effectiveBankInsights: () => false, e
 jest.mock('../src/theme/ThemeProvider', () => ({
   useTheme: () => ({
     colors: { success: '#0a0', primary: '#00a', warning: '#fa0', rateLoan: '#00a', rateDeposit: '#0a0' },
+    ledger: { info: '#36c' },
   }),
 }));
 

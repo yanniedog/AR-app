@@ -7,7 +7,17 @@ import { FixedDepositCalculation } from '../../src/components/product/FixedDepos
 import { ProductTermsDisclosure } from '../../src/components/product/ProductTermsDisclosure';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, InteractionManager, Share, View } from 'react-native';
+import { HeaderTitle } from '@react-navigation/elements';
+import {
+  Alert,
+  InteractionManager,
+  Share,
+  useWindowDimensions,
+  View,
+  type LayoutChangeEvent,
+  type StyleProp,
+  type TextStyle,
+} from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import { NavigationMenuButton } from '../../src/components/AppNavigationMenu';
@@ -33,7 +43,7 @@ import { ScreenScrollView } from '../../src/components/Screen';
 import { AppText, Button, Card, IconButton, Row } from '../../src/components/ui';
 import { SECTIONS } from '../../src/constants';
 import { filterBankInsightsForSuitability } from '../../src/data/bankInsights';
-import { formatRate, isNonStandard, toFraction } from '../../src/data/format';
+import { formatRate, formatRunDate, isNonStandard, toFraction } from '../../src/data/format';
 import { normalizedProductFacts } from '../../src/data/productFacts';
 import { verifiedDetailsSha } from '../../src/data/detailsIdentity';
 import { isMandatoryEligibilityReady, mandatoryProductAllowed } from '../../src/data/eligibilityGate';
@@ -76,10 +86,16 @@ import {
 import { relativeDate } from '../../src/data/format';
 import { ratePresentation } from '../../src/data/ratePresentation';
 import { useTheme } from '../../src/theme/ThemeProvider';
+import { HEADER_TYPOGRAPHY } from '../../src/theme/typography';
 import {
   isCurrentHistoryGraphicEvidence,
   type HistoryGraphicEvidence,
 } from '../../src/lib/historyGraphicEvidence';
+
+/** Back button plus title margins in the JS stack header. */
+const HEADER_BACK_RESERVE = 72;
+/** Below this width the labelled Menu button leaves too little room for the title. */
+const COMPACT_HEADER_WIDTH = 400;
 
 export default function ProductDetail() {
   const suitabilityRevision = useSuitabilityRevision();
@@ -138,6 +154,8 @@ export default function ProductDetail() {
   const insightsRequestKey = useRef<string | null>(null);
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
+  const [headerActionsWidth, setHeaderActionsWidth] = useState(0);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
     useState<HistoryGraphicEvidence | null>(null);
   const { scenario } = useUserRateScenario();
@@ -473,8 +491,9 @@ export default function ProductDetail() {
   const presentation = ratePresentation(row, section, mortgageRateMetric);
 
   const sectionInk = meta.lowerIsBetter ? theme.colors.rateLoan : theme.colors.rateDeposit;
-  // Distinct from the market ribbon ink so the product line/marker stays readable.
-  const productInk = theme.colors.warning;
+  // Distinct from the market ribbon ink (clay/eucalyptus) and the RBA line (wattle)
+  // in both appearances; `warning` matched clay in light and wattle in dark.
+  const productInk = theme.ledger.info;
   // Match productHistory's section-best pick so the seeded point aligns with synced series.
   let currentBest: number | null = null;
   for (const sibling of siblings) {
@@ -527,8 +546,37 @@ export default function ProductDetail() {
       <Stack.Screen
         options={{
           title: row.provider,
+          // The JS header (used with breadcrumbs) reserves ~52 dp for headerRight;
+          // these actions are wider, so cap the title to the space left beside them.
+          headerTitleAlign: 'left',
+          headerTitle: ({ children, style, allowFontScaling, onLayout }: {
+            children: string;
+            tintColor?: string;
+            style?: StyleProp<TextStyle>;
+            allowFontScaling?: boolean;
+            onLayout?: (event: LayoutChangeEvent) => void;
+          }) => (
+            <HeaderTitle
+              allowFontScaling={allowFontScaling}
+              onLayout={onLayout}
+              style={[
+                style ?? { color: theme.colors.text, ...HEADER_TYPOGRAPHY },
+                headerActionsWidth
+                  ? { maxWidth: Math.max(64, windowWidth - HEADER_BACK_RESERVE - headerActionsWidth) }
+                  : null,
+              ]}
+            >
+              {children}
+            </HeaderTitle>
+          ),
           headerRight: () => (
-            <Row gap={2}>
+            <Row
+              gap={2}
+              onLayout={(e) => {
+                const next = Math.ceil(e.nativeEvent.layout.width);
+                setHeaderActionsWidth((current) => (current === next ? current : next));
+              }}
+            >
               {favorite || subscribed ? (
                 <IconButton
                   icon={subscribed ? 'notifications' : 'notifications-outline'}
@@ -546,7 +594,7 @@ export default function ProductDetail() {
                   : exactSaveEligible ? 'Save this exact rate to Saved' : 'Save all product variants to Saved'}
               />
               <IconButton icon="share-outline" onPress={onShare} accessibilityLabel="Share" />
-              <NavigationMenuButton />
+              <NavigationMenuButton compact={windowWidth < COMPACT_HEADER_WIDTH} />
             </Row>
           ),
         }}
@@ -588,7 +636,7 @@ export default function ProductDetail() {
             current={{ date: core?.run_date, rate: currentBest }}
           />
           <AppText variant="tiny" color="textFaint" style={{ marginTop: 6 }}>
-            Exact published tier · observed {core?.run_date}
+            This exact rate · checked {formatRunDate(core?.run_date)}
           </AppText>
           {isNonStandard(row) ? (
             <View
