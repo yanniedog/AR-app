@@ -106,6 +106,68 @@ test('applies multiple missing feed decisions in chronological order', () => {
   expect(resolved.schedule).toEqual([]);
 });
 
+test('drops slash-marked script bodies, comments, and length-changing characters', () => {
+  const html = `
+    <!-- <script>cash rate target 8.88%</script> -->
+    <script/>cash rate target 9.99%</script>
+    <script data-x="></script>">cash rate target 7.77%</script>
+    <script>İ</script >
+    <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
+    <p>Effective date 12 August 2026</p>
+    <p>Next update 2.30 pm, 29 September 2026</p>
+  `;
+  expect(parseRbaOfficialOverview(html)).toEqual({
+    rate: 4.35,
+    effectiveDate: '2026-08-12',
+    nextUpdateDate: '2026-09-29',
+  });
+});
+
+test('does not treat a longer tag name or a truncated attribute as the cash rate', () => {
+  const scripture = `
+    <script>cash rate target 9.99%</scripture>cash rate target 8.88%</script>
+    <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
+    <p>Effective date 12 August 2026</p>
+    <p>Next update 2.30 pm, 29 September 2026</p>
+  `;
+  const unquoted = `
+    <script data-x=foo">cash rate target 9.99%</script>
+    <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
+    <p>Effective date 12 August 2026</p>
+    <p>Next update 2.30 pm, 29 September 2026</p>
+  `;
+  for (const html of [scripture, unquoted]) {
+    expect(parseRbaOfficialOverview(html)).toEqual({
+      rate: 4.35,
+      effectiveDate: '2026-08-12',
+      nextUpdateDate: '2026-09-29',
+    });
+  }
+  expect(parseRbaOfficialOverview(
+    '<div title="Cash rate target 9.99% Effective date 12 August 2026 Next update 2.30 pm, 29 September 2026 >',
+  )).toBeNull();
+});
+
+test('drops script bodies when the end tag has whitespace before the closing bracket', () => {
+  const html = `
+    <script>cash rate target 9.99%</script >
+    <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
+    <p>Effective date 12 August 2026</p>
+    <p>Next update 2.30 pm, 29 September 2026</p>
+  `;
+  expect(parseRbaOfficialOverview(html)).toEqual({
+    rate: 4.35,
+    effectiveDate: '2026-08-12',
+    nextUpdateDate: '2026-09-29',
+  });
+});
+
+test('ignores longer closing names and never reads an unterminated attribute as rates', () => {
+  const visible = '<h2>Cash rate target</h2><p>4.35%</p><p>Effective date 12 August 2026</p><p>Next update 2.30 pm, 29 September 2026</p>';
+  expect(parseRbaOfficialOverview(`<script>hidden</scripture>Cash rate target 9.99%</script>${visible}`)?.rate).toBe(4.35);
+  expect(parseRbaOfficialOverview('<div title="Cash rate target 9.99% Effective date 12 August 2026 Next update 2.30 pm, 29 September 2026 >')).toBeNull();
+});
+
 test('rejects an overview that does not correspond to the elapsed meeting', () => {
   expect(reconcileRbaOfficialOverview(
     calendar,
