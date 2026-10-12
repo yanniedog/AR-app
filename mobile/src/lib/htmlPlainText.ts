@@ -37,18 +37,72 @@ function tagEnd(html: string, from: number): number {
   return -1;
 }
 
-function rawTextEnd(html: string, name: string, from: number): number {
-  const needle = `</${name}`;
+function commentEnd(html: string, from: number): number {
+  for (let index = from; index < html.length - 2; index += 1) {
+    if (html.charCodeAt(index) !== 45 || html.charCodeAt(index + 1) !== 45) continue;
+    if (html[index + 2] === '>') return index + 3;
+    if (html[index + 2] === '!' && html[index + 3] === '>') return index + 4;
+  }
+  return html.length;
+}
+
+function nextNamedTag(html: string, from: number, name: string, closing: boolean): { start: number; end: number } | null {
+  const needle = `${closing ? '</' : '<'}${name}`;
   let index = from;
-  while ((index = html.indexOf('</', index)) >= 0) {
+  while ((index = html.indexOf(closing ? '</' : '<', index)) >= 0) {
+    if (!closing && html.startsWith('<!--', index)) {
+      index += 4;
+      continue;
+    }
     const afterName = index + needle.length;
     if (asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
-      // Once a real end-tag name starts, scan its attributes only once. An
-      // incomplete end tag consumes the remainder instead of exposing it.
       const end = tagEnd(html, afterName);
-      return end < 0 ? html.length : end + 1;
+      return { start: index, end: end < 0 ? html.length : end + 1 };
     }
-    index += 2;
+    index += closing ? 2 : 1;
+  }
+  return null;
+}
+
+function rawTextEnd(html: string, name: string, from: number): number {
+  const close = nextNamedTag(html, from, name, true);
+  return close === null ? html.length : close.end;
+}
+
+function scriptRawTextEnd(html: string, from: number): number {
+  let state: 'data' | 'escaped' | 'double' = 'data';
+  let index = from;
+  while (index < html.length) {
+    if (state === 'data') {
+      const comment = html.indexOf('<!--', index);
+      const close = nextNamedTag(html, index, 'script', true);
+      if (comment >= 0 && (close === null || comment < close.start)) {
+        state = 'escaped';
+        index = comment + 4;
+        continue;
+      }
+      return close === null ? html.length : close.end;
+    }
+    if (state === 'double') {
+      const close = nextNamedTag(html, index, 'script', true);
+      if (close === null) return html.length;
+      state = 'escaped';
+      index = close.end;
+      continue;
+    }
+    const dash = html.indexOf('-->', index);
+    const open = nextNamedTag(html, index, 'script', false);
+    const close = nextNamedTag(html, index, 'script', true);
+    const candidates: { at: number; kind: 'dash' | 'open' | 'close'; next: number }[] = [];
+    if (dash >= 0) candidates.push({ at: dash, kind: 'dash', next: dash + 3 });
+    if (open) candidates.push({ at: open.start, kind: 'open', next: open.start + 1 + 'script'.length });
+    if (close) candidates.push({ at: close.start, kind: 'close', next: close.end });
+    if (candidates.length === 0) return html.length;
+    candidates.sort((left, right) => left.at - right.at);
+    const first = candidates[0];
+    if (first.kind === 'close') return first.next;
+    state = first.kind === 'dash' ? 'data' : 'double';
+    index = first.next;
   }
   return html.length;
 }
@@ -65,8 +119,7 @@ export function htmlPlainText(html: string): string {
     }
     parts.push(html.slice(index, open), ' ');
     if (html.startsWith('<!--', open)) {
-      const end = html.indexOf('-->', open + 4);
-      index = end < 0 ? html.length : end + 3;
+      index = commentEnd(html, open + 4);
       continue;
     }
     const end = tagEnd(html, open + 1);
@@ -75,7 +128,7 @@ export function htmlPlainText(html: string): string {
     for (const name of ['script', 'style']) {
       const afterName = open + 1 + name.length;
       if (asciiEqualsAt(html, open + 1, name) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
-        index = rawTextEnd(html, name, index);
+        index = name === 'script' ? scriptRawTextEnd(html, index) : rawTextEnd(html, name, index);
         break;
       }
     }

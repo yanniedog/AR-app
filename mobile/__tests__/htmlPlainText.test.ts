@@ -19,6 +19,14 @@ test.each([
   expect(htmlPlainText(`${prefix}Visible`).trim()).toBe('Visible');
 });
 
+test('stops an HTML comment at the bang terminator', () => {
+  expect(htmlPlainText('Before<!--hidden--!>Visible').trim()).toBe('Before Visible');
+});
+
+test('keeps a double-escaped script body inside the script', () => {
+  expect(htmlPlainText('<script><!--<script></script>alert(1)</script>Visible').trim()).toBe('Visible');
+});
+
 test('handles thousands of false closer prefixes in one forward scan', () => {
   const raw = `<script>${'</script'.repeat(8_000)}</script>Visible`;
   expect(htmlPlainText(raw).trim()).toBe('Visible');
