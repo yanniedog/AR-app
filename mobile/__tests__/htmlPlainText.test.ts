@@ -23,6 +23,18 @@ test('stops an HTML comment at the bang terminator', () => {
   expect(htmlPlainText('Before<!--hidden--!>Visible').trim()).toBe('Before Visible');
 });
 
+test.each(['<!-->Visible', '<!--->Visible'])('keeps text after an abruptly closed comment %s', (raw) => {
+  expect(htmlPlainText(raw).trim()).toBe('Visible');
+});
+
+test('leaves a double-escaped script when the escape comment ends', () => {
+  expect(htmlPlainText('<script><!--<script>--></script>Visible').trim()).toBe('Visible');
+});
+
+test('keeps text after an equals sign inside a tag name', () => {
+  expect(htmlPlainText('<x="y>Visible').trim()).toBe('Visible');
+});
+
 test('keeps a double-escaped script body inside the script', () => {
   expect(htmlPlainText('<script><!--<script></script>alert(1)</script>Visible').trim()).toBe('Visible');
 });

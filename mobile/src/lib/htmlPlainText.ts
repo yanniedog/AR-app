@@ -13,26 +13,33 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
 
 function tagEnd(html: string, from: number): number {
   let quote = '';
-  let state: 'name' | 'beforeValue' | 'unquoted' = 'name';
+  let state: 'tagName' | 'attr' | 'beforeValue' | 'unquoted' = 'tagName';
   for (let index = from; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
       if (char === quote) quote = '';
-    } else if (char === '>') {
-      return index;
-    } else if (state === 'unquoted') {
-      if (HTML_SPACE.test(char)) state = 'name';
-    } else if (state === 'beforeValue') {
+      continue;
+    }
+    if (char === '>') return index;
+    if (state === 'tagName') {
+      if (HTML_SPACE.test(char) || char === '/') state = 'attr';
+      continue;
+    }
+    if (state === 'unquoted') {
+      if (HTML_SPACE.test(char)) state = 'attr';
+      continue;
+    }
+    if (state === 'beforeValue') {
       if (HTML_SPACE.test(char)) continue;
       if (char === '"' || char === "'") {
         quote = char;
-        state = 'name';
+        state = 'attr';
       } else {
         state = 'unquoted';
       }
-    } else if (char === '=') {
-      state = 'beforeValue';
+      continue;
     }
+    if (char === '=') state = 'beforeValue';
   }
   return -1;
 }
@@ -69,40 +76,39 @@ function rawTextEnd(html: string, name: string, from: number): number {
   return close === null ? html.length : close.end;
 }
 
+function namedTagAt(html: string, index: number, name: string, closing: boolean): boolean {
+  const needle = `${closing ? '</' : '<'}${name}`;
+  return asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[index + needle.length] ?? '');
+}
+
 function scriptRawTextEnd(html: string, from: number): number {
   let state: 'data' | 'escaped' | 'double' = 'data';
-  let index = from;
-  while (index < html.length) {
-    if (state === 'data') {
-      const comment = html.indexOf('<!--', index);
-      const close = nextNamedTag(html, index, 'script', true);
-      if (comment >= 0 && (close === null || comment < close.start)) {
-        state = 'escaped';
-        index = comment + 4;
-        continue;
-      }
-      return close === null ? html.length : close.end;
-    }
-    if (state === 'double') {
-      const close = nextNamedTag(html, index, 'script', true);
-      if (close === null) return html.length;
-      state = 'escaped';
-      index = close.end;
+  for (let index = from; index < html.length; index += 1) {
+    if (state !== 'data' && html.startsWith('-->', index)) {
+      state = state === 'double' ? 'escaped' : 'data';
+      index += 2;
       continue;
     }
-    const dash = html.indexOf('-->', index);
-    const open = nextNamedTag(html, index, 'script', false);
-    const close = nextNamedTag(html, index, 'script', true);
-    const candidates: { at: number; kind: 'dash' | 'open' | 'close'; next: number }[] = [];
-    if (dash >= 0) candidates.push({ at: dash, kind: 'dash', next: dash + 3 });
-    if (open) candidates.push({ at: open.start, kind: 'open', next: open.start + 1 + 'script'.length });
-    if (close) candidates.push({ at: close.start, kind: 'close', next: close.end });
-    if (candidates.length === 0) return html.length;
-    candidates.sort((left, right) => left.at - right.at);
-    const first = candidates[0];
-    if (first.kind === 'close') return first.next;
-    state = first.kind === 'dash' ? 'data' : 'double';
-    index = first.next;
+    if (html[index] !== '<') continue;
+    if (state === 'data' && html.startsWith('<!--', index)) {
+      state = 'escaped';
+      index += 3;
+      continue;
+    }
+    if (state === 'escaped' && namedTagAt(html, index, 'script', false)) {
+      state = 'double';
+      index += '<script'.length - 1;
+      continue;
+    }
+    if ((state === 'data' || state === 'escaped') && namedTagAt(html, index, 'script', true)) {
+      const end = tagEnd(html, index + '</script'.length);
+      return end < 0 ? html.length : end + 1;
+    }
+    if (state === 'double' && namedTagAt(html, index, 'script', true)) {
+      const end = tagEnd(html, index + '</script'.length);
+      state = 'escaped';
+      index = (end < 0 ? html.length : end) ;
+    }
   }
   return html.length;
 }
@@ -119,7 +125,10 @@ export function htmlPlainText(html: string): string {
     }
     parts.push(html.slice(index, open), ' ');
     if (html.startsWith('<!--', open)) {
-      index = commentEnd(html, open + 4);
+      const after = open + 4;
+      if (html[after] === '>') index = after + 1;
+      else if (html.startsWith('->', after)) index = after + 2;
+      else index = commentEnd(html, after);
       continue;
     }
     const end = tagEnd(html, open + 1);
