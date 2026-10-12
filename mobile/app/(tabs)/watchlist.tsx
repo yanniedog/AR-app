@@ -51,6 +51,7 @@ import {
 } from '../../src/lib/performanceAuditActionParams';
 import { useTheme } from '../../src/theme/ThemeProvider';
 import type { RateRow, SectionKey } from '../../src/types';
+import { SAVED_EMPTY_COPY, savedEmptyState } from '../../src/lib/savedEmptyState';
 
 function compareToken(productKey: string, rateIndex: number | null): string {
   return rateIndex == null ? productKey : `${rateIndex}#${productKey}`;
@@ -409,22 +410,20 @@ export default function MyRates() {
 
   const hasAnyPrivateRate = positions.length > 0;
   if (!items.length && !hasAnyPrivateRate && scenarioStatus === 'ready') {
+    const emptyState = savedEmptyState({ savedCount: savedRates.length, unavailableCount: unavailableRefs.length });
     return (
       <Screen onLayout={() => setLayoutReady(true)}>
         <View style={{ flex: 1, justifyContent: 'center', padding: 24, gap: 12 }}>
-          <EmptyState
-            icon="star-outline"
-            title={unavailableRefs.length ? 'Saved rate no longer published' : 'No saved rates yet'}
-            subtitle={unavailableRefs.length
-              ? 'A rate you saved is not in the current data. Remove it, or tap the star on any rate to watch it here.'
-              : 'Tap the star on any rate to watch it here, or add the rate you have now to see how it compares. No bank login.'}
-          />
-          {unavailableRefs.length ? (
+          <EmptyState icon="star-outline" {...SAVED_EMPTY_COPY[emptyState]} />
+          {emptyState === 'unavailable' ? (
             <Button
               title="Remove unavailable save"
               variant="secondary"
               onPress={() => unavailableRefs.forEach((ref) => removeSavedRate(ref.id))}
             />
+          ) : null}
+          {emptyState === 'hiddenByProfile' ? (
+            <Button title="Edit profile" variant="secondary" onPress={() => router.push('/profile')} />
           ) : null}
           <Button title="Check my rate" onPress={() => openRateEditor('Mortgage')} />
           <Button title="Browse products" variant="secondary" onPress={() => router.push('/(tabs)/browse')} />
