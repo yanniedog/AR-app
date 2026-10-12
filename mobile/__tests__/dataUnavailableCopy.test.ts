@@ -3,8 +3,7 @@ import { connectivityFromNetworkState, dataUnavailableMessage } from '../src/lib
 describe('data unavailable copy', () => {
   it('blames the connection only when the device reports it is offline', () => {
     expect(dataUnavailableMessage('offline')).toMatch(/offline/i);
-    expect(dataUnavailableMessage('online')).toMatch(/rates service/i);
-    expect(dataUnavailableMessage('online')).not.toMatch(/check your connection/i);
+    expect(dataUnavailableMessage('online')).toBe('We couldn’t load the rates. Try again in a moment.');
     expect(dataUnavailableMessage(null)).toMatch(/check your connection/i);
   });
 
