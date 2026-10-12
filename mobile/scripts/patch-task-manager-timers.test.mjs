@@ -16,7 +16,9 @@ test('Android autolinking builds the patched task manager source instead of its 
   const { getConfiguration } = require(path.join(autolinking, 'build/platforms/android/android'));
   const loader = createAutolinkingOptionsLoader({ projectRoot: process.cwd() });
   const android = await loader.getPlatformOptions('android');
-  assert.deepEqual(getConfiguration(android), { buildFromSource: ['expo-task-manager'] });
+  // TaskManager's pinned Gradle source requires this exact project dependency.
+  assert.deepEqual(getConfiguration(android), { buildFromSource: ['expo-task-manager', 'unimodules-app-loader'] });
+  assert.deepEqual(require('../package.json').expo.install.exclude, ['@react-navigation/native']);
   const apple = await loader.getPlatformOptions('apple');
   assert.equal(apple.buildFromSource, undefined);
 });

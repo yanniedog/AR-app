@@ -96,6 +96,11 @@
       "exclude": [
         "@react-navigation/native"
       ]
+    },
+    "autolinking": {
+      "android": {
+        "buildFromSource": ["expo-task-manager", "unimodules-app-loader"]
+      }
     }
   },
   "devDependencies": {
@@ -136,13 +141,6 @@
     "metro-transform-plugins@0.83.3": "0.83.8",
     "metro-transform-worker@0.83.3": "0.83.8",
     "decode-uri-component": "0.5.0"
-  },
-  "expo": {
-    "autolinking": {
-      "android": {
-        "buildFromSource": ["expo-task-manager"]
-      }
-    }
   },
   "jest": {
     "preset": "jest-expo",

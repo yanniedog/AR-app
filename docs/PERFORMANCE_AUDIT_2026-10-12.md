@@ -188,7 +188,8 @@ prematurely, as described in [Expo issue 51304](https://github.com/expo/expo/iss
 The patch rejects changed SDK versions or source hashes, is installed by the
 existing portable npm postinstall path, and compiles in required hosted CI
 against the installed React Native/Expo dependencies. Android autolinking builds
-only this patched package from source instead of consuming its prebuilt AAR.
+this patched package and its required app-loader project dependency from source
+instead of consuming their prebuilt AARs.
 Scheduling intervals,
 audit time limits, network policy and foreground checks are unchanged. A signed
 replacement APK must still demonstrate both a cold screen-off completion and
