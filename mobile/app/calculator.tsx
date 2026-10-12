@@ -53,6 +53,7 @@ import { useSuitabilityRevision } from '../src/hooks/useSuitabilityRevision';
 import { rowsUnder, statsFor } from '../src/data/taxonomy';
 import { openProduct } from '../src/lib/nav';
 import { auditActionString } from '../src/lib/performanceAuditActionParams';
+import { applyCalculatorAuditSection } from '../src/lib/calculatorAuditSelection';
 import { useLogoReadiness } from '../src/hooks/useLogoReadiness';
 import { type RateRow, type SectionKey } from '../src/types';
 import { useScenarioSection } from '../src/hooks/useScenarioSection';
@@ -336,8 +337,7 @@ export default function Calculator() {
   const auditSelectSection = useCallback((...args: unknown[]) => {
     const requested = auditActionString(args, 'section');
     if (typeof requested === 'string' && requested in SECTIONS) {
-      changeSection(requested as SectionKey);
-      return;
+      return applyCalculatorAuditSection(section, requested as SectionKey, changeSection);
     }
     const currentIndex = sectionOptions.findIndex((option) => option.value === section);
     const next = sectionOptions[(currentIndex + 1) % Math.max(1, sectionOptions.length)]?.value;
