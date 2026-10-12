@@ -177,3 +177,83 @@ it('compacts nested fallback reports without losing failure, session or incomple
   expect(details(retained.report.checks)).toEqual([failure]);
   expect(output.length).toBeLessThan(input.length / 10);
 });
+
+it('retains successful probe context for display failures, including unknown journal fields and source chronology', () => {
+  const probe = check('search.enter', 'pass', { readinessEvidence: 'search.results: ready, visibleRows=0, modelRows=450',
+    nonTimingFailure: false, futureProbe: { viewport: null, renderGeneration: 17 } });
+  const warning = check('chart.open', 'warn', { graphicEvidence: 'outlook.dashboard: ready, chartPoints=12',
+    nonTimingFailure: false, actionCompleted: true, renderRevisionBefore: 'before', renderRevisionAfter: 'after',
+    readinessActionEvidence: 'open-chart: action completed', futureMetric: [null, false, 'exact'] });
+  const laterProbe = { ...probe, id: 'search.return', label: 'search.return' };
+  const journalProbe = { ...probe, futureJournalEvidence: { originalVisit: 'first', unknownField: null } };
+  const health = { checks: [{ id: 'display-visible', code: 'display-visible', status: 'fail',
+    localEvidence: { failedSurfaceIds: ['search.results'] } }] };
+  const links = Array.from({ length: 400 }, (_, i) => ({ ...check(`link-${i}`, 'warn'), kind: 'network', metrics: {
+    urlValidation: 'pass', browserHandler: 'pass', httpReachability: 'unknown', httpAttempted: false, nonTimingFailure: false,
+  } }));
+  const input = [
+    event({ kind: 'check', sessionId, check: journalProbe }, '2026-10-12T07:00:01Z').replace('[WARN ]', '[INFO ]'),
+    '2026-10-12T07:00:02Z [WARN ] app: viewport observation',
+    event({ kind: 'check', sessionId, check: warning }, '2026-10-12T07:00:03Z'),
+    JSON.stringify({ sessionId, checks: [probe, ...links, warning, laterProbe], appHealth: health }),
+  ].join('\n');
+  const output = compactDebugLogExport(input);
+  const report = unpack(output);
+  const indexed = report.checks.detailGroups.flatMap((group: any) => details({ detailGroups: [group] })
+    .map((value: unknown, i: number) => ({ index: group.checkIndexes[i], value })))
+    .sort((a: any, b: any) => a.index - b.index);
+  expect(indexed).toEqual([{ index: 0, value: probe }, { index: 401, value: warning }, { index: 402, value: laterProbe }]);
+  expect(details(report.additionalJournalChecks)).toEqual([{ ...journalProbe, journalLogPrefix: '2026-10-12T07:00:01Z [INFO ]' }]);
+  expect(report.checkLocations).toEqual({ columns: ['id', 'sourceLine', 'logPrefix'], rows: [
+    ['search.enter', 1, '2026-10-12T07:00:01Z [INFO ]'], ['chart.open', 3, '2026-10-12T07:00:03Z [WARN ]'],
+  ] });
+  expect(report.appHealth).toEqual(health);
+  expect(report.checks.routineGroups).toEqual([expect.objectContaining({ kind: 'network', count: 400 })]);
+  expect(output).toContain('app: viewport observation');
+  expect(output.length).toBeLessThan(input.length / 10);
+});
+
+it.each(['readinessEvidence', 'graphicEvidence', 'readinessActionEvidence'])(
+  'retains %s in older partial journals without requiring a health report or failure', (field) => {
+    const probe = { ...check('older-success', 'pass', { [field]: 'successful probe', extra: { empty: null } }), futureField: ['unchanged'] };
+    const report = unpack(compactDebugLogExport(event({ kind: 'check', sessionId, check: probe })));
+    expect(report.partial).toBe(true);
+    expect(details(report.checks)).toEqual([{ ...probe, journalLogPrefix: '2026-10-12T07:12:21.717Z [WARN ]' }]);
+    expect(report.checks.detailGroups[0].checkIndexes).toEqual([0]);
+    expect(report.checkLocations.rows).toEqual([['older-success', 1, '2026-10-12T07:12:21.717Z [WARN ]']]);
+  },
+);
+
+it('retains structured future probes in fallback reports and all duplicate journal variants', () => {
+  const first = check('same-step', 'pass', { readinessEvidence: { futureSchema: true, visible: 0 } });
+  const second = check('same-step', 'warn', { nonTimingFailure: false, actionCompleted: true,
+    readinessEvidence: { futureSchema: true, visible: 4 } });
+  const report = unpack(compactDebugLogExport([
+    event({ kind: 'check', sessionId, check: first }), event({ kind: 'check', sessionId, check: second }),
+    event({ kind: 'report-fallback', sessionId, report: { sessionId, partial: true, checks: [second] } }),
+  ].join('\n')));
+  expect(report.duplicateJournalIds).toEqual(['same-step']);
+  expect(details(report.duplicateJournalChecks)).toEqual([first, second].map(value => ({ ...value,
+    journalLogPrefix: '2026-10-12T07:12:21.717Z [WARN ]' })));
+  expect(details(report.journalEvents[0].report.checks)).toEqual([second]);
+});
+
+it('keeps interleaved journal retries in source order for partial, additional and duplicate checks', () => {
+  const checks = [check('A', 'pass', { readinessEvidence: 'A first' }),
+    check('B', 'pass', { readinessEvidence: 'B first' }),
+    check('A', 'warn', { readinessEvidence: 'A retry' }),
+    check('B', 'warn', { readinessEvidence: 'B retry' })];
+  const lines = checks.map((value, i) => event({ kind: 'check', sessionId, check: value }, `2026-10-12T07:00:0${i}Z`));
+  const expected = checks.map((value, i) => ({ ...value, journalLogPrefix: `2026-10-12T07:00:0${i}Z [WARN ]` }));
+  const orderedDetails = (summary: any) => summary.detailGroups.flatMap((group: any) => details({ detailGroups: [group] })
+    .map((value: unknown, i: number) => ({ index: group.checkIndexes[i], value })))
+    .sort((a: any, b: any) => a.index - b.index).map((entry: any) => entry.value);
+  const partial = unpack(compactDebugLogExport(lines.join('\n')));
+  const saved = unpack(compactDebugLogExport([...lines, JSON.stringify({ sessionId, checks: [] })].join('\n')));
+  expect(orderedDetails(partial.checks)).toEqual(expected);
+  expect(orderedDetails(saved.additionalJournalChecks)).toEqual(expected);
+  for (const report of [partial, saved]) {
+    expect(orderedDetails(report.duplicateJournalChecks)).toEqual(expected);
+    expect(report.checkLocations.rows).toEqual(checks.map((value, i) => [value.id, i + 1, expected[i].journalLogPrefix]));
+  }
+});
