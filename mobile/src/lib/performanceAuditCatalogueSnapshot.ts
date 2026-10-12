@@ -8,13 +8,15 @@ import { SECTION_KEYS, type CorePayload, type RateRow } from '../types';
 
 import type { AppHealthCatalogueObservation, CatalogueCounts, CatalogueProviderCoverage, CatalogueSectionCoverage } from './appHealth/catalogueCoverage';
 
-let prepared: { inputs: readonly unknown[]; observation: AppHealthCatalogueObservation | null } | null = null;
+let prepared: { inputs: readonly unknown[]; serialized: string } | null = null;
+
+export function clearPreparedAppHealthCatalogueSnapshot(): void { prepared = null; }
 
 /** Reuse the passive scan only for the same immutable store inputs and gate
  * revisions. Retain one publication, never a growing cache of private profiles.
  * The uncached scanner below remains available for independent selector checks. */
 export function preparedAppHealthCatalogueSnapshot(state: AppState): AppHealthCatalogueObservation | null {
-  if (!state.core) { prepared = null; return null; }
+  if (!state.core) { clearPreparedAppHealthCatalogueSnapshot(); return null; }
   const inputs = [state.core, state.core?.sections, state.core?.brands,
     ...SECTION_KEYS.map(section => state.core?.sections[section]?.rates),
     state.details, state.details?.products, state.searchIndex, state.searchIndex?.products,
@@ -22,10 +24,12 @@ export function preparedAppHealthCatalogueSnapshot(state: AppState): AppHealthCa
     state.prefs.depositRankMetric, state.prefs.mortgageRateMetric,
     normalizeInterests(state.prefs.interests).join(','),
     getMandatoryEligibilityRevision(), getSuitabilityRevision()];
-  if (prepared && inputs.every((value, index) => value === prepared!.inputs[index])) return prepared.observation;
-  const observation = appHealthCatalogueSnapshot(state);
-  prepared = { inputs, observation };
-  return observation;
+  if (!prepared || !inputs.every((value, index) => value === prepared!.inputs[index])) {
+    prepared = { inputs, serialized: JSON.stringify(appHealthCatalogueSnapshot(state)) };
+  }
+  // Detach every public result, including the initial capture. Serialize only
+  // once so later copies cannot mutate cached evidence or repeatedly encode it.
+  return JSON.parse(prepared.serialized) as AppHealthCatalogueObservation | null;
 }
 
 function counts(rows: readonly RateRow[]): CatalogueCounts {

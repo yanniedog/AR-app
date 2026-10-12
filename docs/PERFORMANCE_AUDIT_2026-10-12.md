@@ -329,12 +329,14 @@ passive check results. It now shares one prepared coverage observation with the
 background scanner. Reuse requires the same immutable core, details and search
 index, interests and ranking settings, plus both eligibility gate revisions.
 Changing a relevant input regenerates the evidence; removing the core releases
-the retained observation. The independent uncached scanner remains available.
+the retained observation even during a coreless passive wake or when catalogue
+capture is disabled. Each caller receives a detached copy, preventing mutations
+from corrupting later captures. The independent uncached scanner remains available.
 No profile or catalogue evidence is added to persistent storage.
 
-A local Node/Jest probe over the 16,691-row public payload measured 740.2 ms for
-an uncached scan, 546.1 ms for initial preparation and 0.23 ms for reuse, with
-identical coverage evidence. This is not a phone timing claim. Regressions prove
+A local Node/Jest probe over the 16,691-row public payload measured 823.5 ms for
+an uncached scan, 473.3 ms for initial preparation and 4.93 ms for reuse including
+the detached copy, with identical coverage evidence. This is not a phone timing claim. Regressions prove
 200 consecutive unchanged captures invoke each Search/Banks selector only once
 per section, and changed assets, interests, rank preferences and gate revisions
 invalidate reuse. Initial capture took 30.197 seconds in one v1.0.229 emulator

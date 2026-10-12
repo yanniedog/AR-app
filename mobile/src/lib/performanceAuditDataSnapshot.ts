@@ -1,6 +1,6 @@
 import type { AppState } from '../data/storeTypes';
 import type { AppHealthAssetObservation, AppHealthAssetKey, AppHealthDataSnapshot } from './appHealth/types';
-import { preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
+import { clearPreparedAppHealthCatalogueSnapshot, preparedAppHealthCatalogueSnapshot } from './performanceAuditCatalogueSnapshot';
 
 function countRecord(value: unknown): number | null {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -27,6 +27,7 @@ export function appHealthDataSnapshot(
   appVersion: string,
   includeCatalogue = true,
 ): AppHealthDataSnapshot {
+  if (!state.core) clearPreparedAppHealthCatalogueSnapshot();
   const coreKeys = new Set(
     Object.values(state.core?.sections ?? {})
       .flatMap((section) => section.rates)

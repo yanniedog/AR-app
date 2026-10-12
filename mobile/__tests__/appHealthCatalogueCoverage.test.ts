@@ -43,12 +43,34 @@ test('manual snapshots reuse passive catalogue evidence without rerunning any se
     expect(banks).toHaveBeenCalledTimes(3);
     for (let run = 0; run < 200; run++) {
       const manual = appHealthDataSnapshot({ ...state, prefs: { ...state.prefs } }, '1.0.0');
-      expect(manual.catalogue).toBe(passive.catalogue);
+      expect(manual.catalogue).not.toBe(passive.catalogue);
+      expect(manual.catalogue).toEqual(passive.catalogue);
     }
     expect(search).toHaveBeenCalledTimes(3);
     expect(banks).toHaveBeenCalledTimes(3);
     expect(preparedAppHealthCatalogueSnapshot(state)).toEqual(appHealthCatalogueSnapshot(state));
   } finally { search.mockRestore(); banks.mockRestore(); }
+});
+
+test('callers cannot corrupt a later capture by mutating nested prepared evidence', () => {
+  const state = stateFor(makeHealthyDataFixture().snapshot.core!);
+  const expected = appHealthCatalogueSnapshot(state);
+  const first = appHealthDataSnapshot(state, '1.0.0');
+  first.catalogue!.sections[0].providers[0].published.products = 999;
+  first.catalogue!.sections[0].searchMissing!.push('invented product');
+  first.catalogue!.sections.splice(1);
+  expect(appHealthDataSnapshot(state, '1.0.0').catalogue).toEqual(expected);
+});
+
+test('a catalogue-disabled coreless snapshot releases prepared inputs', () => {
+  const state = stateFor(makeHealthyDataFixture().snapshot.core!);
+  preparedAppHealthCatalogueSnapshot(state);
+  const scan = jest.spyOn(selectors, 'groupByProvider');
+  try {
+    appHealthDataSnapshot({ ...state, core: null, coreAssetState: { status: 'loading', data: null } }, '1.0.0', false);
+    preparedAppHealthCatalogueSnapshot(state);
+    expect(scan).toHaveBeenCalledTimes(3);
+  } finally { scan.mockRestore(); }
 });
 
 test('prepared coverage invalidates on payloads, interests, rank settings and eligibility revisions', () => {
