@@ -364,7 +364,7 @@ function PerformanceAuditScreenInner() {
           information actually render. Your settings and saved rates are restored afterward.
         </AppText>
         <AppText variant="tiny" color="textMuted">
-          When the audit finishes, its full debug log and complete report, including product identities
+          When the audit finishes, its compact diagnostic log, including product identities
           and profile-based coverage counts, are uploaded to paste.
           Anyone with the resulting link can read them. A separate deidentified report is also available.
         </AppText>
@@ -448,7 +448,7 @@ function PerformanceAuditScreenInner() {
           contact approved websites; blocked sites, timeouts and unchecked links stay unverified.
           Graph checks require plotted data and measured layout, or a visible no-data state.
           After the audit finishes,
-          the full log and complete report are uploaded to paste and the verified link is copied
+          the compact diagnostic log is uploaded to paste and the verified link is copied
           to your clipboard. Anyone with the link can read the log.
         </AppText>
         {updateBlocksAudit ? (

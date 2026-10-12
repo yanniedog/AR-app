@@ -73,6 +73,7 @@ describe('resolveRefreshOutcomeSnackbar', () => {
     expect(view.kind).toBe('failure');
     expect(view.action).toBe('retry');
     expect(view.actionLabel).toBe('Retry');
+    expect(view.message).toBe('Couldn\u2019t update rates. Showing your saved copy.');
   });
 
   it('links to settings on wifi skip', () => {
