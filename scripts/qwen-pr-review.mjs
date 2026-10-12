@@ -104,7 +104,11 @@ export function collectDiff(baseRef, headSha, maxChars, prNumber) {
   assertBranchName(baseRef, 'BASE_REF');
   const prRef = `refs/remotes/origin/pr-review-${prNumber}`;
   const baseRemote = `refs/remotes/origin/${baseRef}`;
-  runGit(['fetch', '--no-tags', 'origin', `+refs/heads/${baseRef}:${baseRemote}`]);
+  const shallow = runGit(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+  const baseFetch = ['fetch', '--no-tags'];
+  if (shallow) baseFetch.push('--unshallow');
+  baseFetch.push('origin', `+refs/heads/${baseRef}:${baseRemote}`);
+  runGit(baseFetch);
   runGit(['fetch', '--no-tags', 'origin', `+refs/pull/${prNumber}/head:${prRef}`]);
   const resolvedHead = runGit(['rev-parse', '--verify', `${prRef}^{commit}`]).trim().toLowerCase();
   const expectedHead = String(headSha).trim().toLowerCase();

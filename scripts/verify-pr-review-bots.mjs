@@ -402,6 +402,8 @@ assert.match(workflow, /fetched and used only as diff data/);
 assert.doesNotMatch(workflow, /checked out separately/);
 assert.match(reviewer, /refs\/heads\/\$\{baseRef\}:\$\{baseRemote\}/);
 assert.match(reviewer, /\$\{baseRemote\}\.\.\.\$\{resolvedHead\}/);
+assert.match(reviewer, /--unshallow/);
+assert.match(workflow, /fetch-depth:\s*0/);
 assert.doesNotMatch(workflow, /Reviewed files:/);
 assert.doesNotMatch(workflow, /Omitted (?:reviewable )?files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);
