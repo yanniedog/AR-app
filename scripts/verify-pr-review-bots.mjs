@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import {
+  adjustRequiredKeysForPrContext,
   blockingMissingRequiredKeys,
   isReviewerNonsenseFailure,
   DEFAULT_REQUIRED_KEYS,
@@ -72,6 +73,11 @@ assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
 assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["coderabbit"]);
+assert.deepEqual(parseRequiredKeys("github-actions[bot],codex"), ["codex"]);
+assert.deepEqual(parseRequiredKeys("codex,qwen,sourcery"), ["codex", "sourcery"]);
+assert.deepEqual(resolveRequiredKeys(["codex", "qwen", "sourcery"]), ["codex", "sourcery"]);
+assert.deepEqual(adjustRequiredKeysForPrContext(["sourcery", "qwen"]), ["sourcery"]);
+assert.deepEqual(missingRequiredKeysFromEvents(["qwen"], []), []);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({

@@ -89,7 +89,8 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
 }
 
 export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
-  return (requiredKeys || []).filter(
+  const keys = omitNeverRequiredKeys(requiredKeys);
+  return keys.filter(
     (key) => !(events || []).some((e) => eventSatisfiesRequiredKey(e.login, e.body, key, opts)),
   );
 }
@@ -158,19 +159,22 @@ export function blockingMissingRequiredKeys(missing, events) {
   });
 }
 
-export function parseRequiredKeys(raw) {
-  if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
-  if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];
-  return omitNeverRequiredKeys(String(raw)
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean));
-}
-
-const NEVER_REQUIRED_KEYS = new Set(['qwen']);
+/** Qwen is an optional reviewer. It cannot be reintroduced through CLI, env, or saved state. */
+const NEVER_REQUIRED_KEYS = new Set(['qwen', 'github-actions[bot]']);
 
 export function omitNeverRequiredKeys(keys) {
   return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').toLowerCase()));
+}
+
+export function parseRequiredKeys(raw) {
+  if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
+  if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];
+  return omitNeverRequiredKeys(
+    String(raw)
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean),
+  );
 }
 
 export function resolveRequiredKeys(argvKeys, envRaw) {
