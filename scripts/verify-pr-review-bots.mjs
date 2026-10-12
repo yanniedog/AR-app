@@ -80,6 +80,11 @@ assert.deepEqual(parseRequiredKeys("codex,qwen,sourcery"), ["codex", "sourcery"]
 assert.deepEqual(resolveRequiredKeys(["codex", "qwen", "sourcery"]), ["codex", "sourcery"]);
 assert.deepEqual(adjustRequiredKeysForPrContext(["sourcery", "qwen"]), ["sourcery"]);
 assert.deepEqual(missingRequiredKeysFromEvents(["qwen"], []), []);
+assert.deepEqual(parseRequiredKeys('codex,github-actions[bot],qwen'), ['codex']);
+assert.deepEqual(resolveRequiredKeys(['QWEN', 'GITHUB-ACTIONS[BOT]', 'sourcery']), ['sourcery']);
+assert.deepEqual(adjustRequiredKeysForPrContext(['github-actions[bot]', 'codex']), ['codex']);
+assert.deepEqual(missingRequiredKeysFromEvents(['github-actions[bot]'], []), []);
+assert.deepEqual(blockingMissingRequiredKeys(['github-actions[bot]'], []), []);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({
@@ -302,6 +307,33 @@ assert.deepEqual(
 );
 
 assert.equal(isBotNoise("ERROR: Gemini API returned HTTP 503"), true);
+assert.equal(isBotNoise('Review limit reached. Please wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window.'), true);
+assert.equal(isReviewerNonsenseFailure('## Review limit reached\nPlease wait until the next window.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window.\nThis branch then loses the queued deployment.'), false);
+assert.equal(isBotNoise('The retry workflow matches "Review limit reached" case-sensitively.'), false);
+assert.equal(isBotNoise('The failing service responds with:\nReview limit reached\nThis error loses the queued deployment.'), false);
+for (const notice of [
+  'You have reached your monthly quota for code reviews; please upgrade your plan',
+  'You have exceeded your daily quota for reviews. Please try again tomorrow.',
+  'Your free-tier review quota has been exhausted; please upgrade your plan.',
+]) {
+  assert.equal(isBotNoise(notice), true, notice);
+  assert.equal(isReviewerNonsenseFailure(notice), true, notice);
+  const finding = `${notice}; this branch then deletes the release artifact.`;
+  assert.equal(isBotNoise(finding), false, finding);
+  assert.equal(isReviewerNonsenseFailure(finding), false, finding);
+}
+const emittedQwenFailure = [
+  '<!-- qwen-code-review -->', '## Qwen Code Review', '',
+  `Reviewed commit: \`${sha}\``, 'Review outcome: failed', '',
+  'Qwen Code Review did not complete successfully. Qwen is not a required reviewer, so this notice does not block merge.', '',
+  '```text', 'Local model returned an HTTP 503 error.', '```',
+].join('\n');
+assert.equal(isReviewerNonsenseFailure(emittedQwenFailure), true);
+assert.equal(isBotNoise(emittedQwenFailure), true);
+assert.equal(isBotNoise(`${qwenSuccess}\n${emittedQwenFailure}`), false);
 assert.equal(
   isBotNoise(
     "The consumer version has been sunset; review activity has ceased.",
@@ -328,6 +360,15 @@ assert.deepEqual(
 );
 assert.deepEqual(blockingMissingRequiredKeys(["gemini"], []), []);
 assert.deepEqual(blockingMissingRequiredKeys(["qwen"], []), []);
+for (const body of ['', '   ', 'empty review', 'ERROR: empty review.']) {
+  const events = [{ login: 'chatgpt-codex-connector', body }];
+  assert.equal(eventSatisfiesRequiredKey(events[0].login, body, 'codex'), false);
+  const missing = missingRequiredKeysFromEvents(['codex'], events);
+  assert.deepEqual(missing, ['codex']);
+  assert.deepEqual(blockingMissingRequiredKeys(missing, events), []);
+}
+assert.deepEqual(blockingMissingRequiredKeys(missingRequiredKeysFromEvents(['codex'], []), []), ['codex']);
+assert.equal(eventSatisfiesRequiredKey('chatgpt-codex-connector', 'thumbs-up no-findings reaction', 'codex'), true);
 assert.deepEqual(
   blockingMissingRequiredKeys(
     ["qwen"],
@@ -377,10 +418,10 @@ const failedQwenNotice = [
   '<!-- qwen-code-review -->',
   '## Qwen Code Review',
   '',
-  'Reviewed commit: `abc`',
+  'Reviewed commit: `abc1234`',
   'Review outcome: failed',
   '',
-  'Qwen Code Review did not complete successfully. This does not satisfy reviewer presence.',
+  'Qwen Code Review did not complete successfully. Qwen is not a required reviewer, so this notice does not block merge.',
   '',
   '```text',
   'ERROR: model',
@@ -636,6 +677,21 @@ assert.doesNotMatch(
 );
 
 const waitScript = readFileSync("wait_for_bots.mjs", "utf8");
+const noFindingsReaction = { user: { login: 'chatgpt-codex-connector' }, content: 'THUMBS_UP', createdAt: '2026-10-12T00:01:00Z' };
+const activityFixture = {
+  comments: { nodes: [{ author: { login: 'chatgpt-codex-connector' }, createdAt: '2026-10-12T00:00:00Z', body: 'thanks', reactions: { nodes: [noFindingsReaction] } }] },
+  reactions: { nodes: [noFindingsReaction] },
+};
+const fetchActivitySource = waitScript.match(/function fetchBotActivity\([\s\S]*?\n}\n/)?.[0];
+assert(fetchActivitySource, 'expected fetchBotActivity implementation');
+const fetchActivity = new Function('gh', 'COMMENTS_QUERY', 'isGeminiCodeReviewBody', 'isQwenCodeReviewBody', 'isBotNoise', 'isReviewerNonsenseFailure', 'isQuietWindowNoise', `${fetchActivitySource}; return fetchBotActivity;`)(
+  () => ({ ok: true, data: { data: { repository: { pullRequest: activityFixture } } } }), '', () => false, () => false, isBotNoise, isReviewerNonsenseFailure, isQuietWindowNoise,
+);
+assert.deepEqual(fetchActivity('owner', 'repo', 1).events.map(({ body, noise }) => ({ body, noise })), [
+  { body: 'thanks', noise: true },
+  { body: 'thumbs-up no-findings reaction', noise: false },
+  { body: 'thumbs-up no-findings reaction', noise: false },
+]);
 assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);
 assert.match(waitScript, /state\.anchor = anchorFromPr/);
 assert.match(

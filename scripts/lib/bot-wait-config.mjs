@@ -2,7 +2,7 @@
  * Required-bot aliases for wait-for-bots and pr-bot-feedback-check.
  * Keys are short names; values are GitHub logins to match.
  */
-import { isBotNoise, isQuotaBotMessage } from './bot-noise.mjs';
+import { isBotNoise, isQuotaBotMessage, isQwenFailureNotice } from './bot-noise.mjs';
 
 export const BOT_ALIASES = {
   gemini: [
@@ -78,7 +78,7 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
     const expected = String(opts.expectedHeadSha).toLowerCase();
     return Boolean(reviewed && (reviewed === expected || expected.startsWith(reviewed)));
   }
-  if (isQuotaBotMessage(body)) return false;
+  if (isReviewerNonsenseFailure(body)) return false;
   if (k === 'gemini') {
     if (lower === 'github-actions[bot]') {
       return isGeminiCodeReviewBody(body) && !/^\s*ERROR:/i.test(String(body || ''));
@@ -88,10 +88,16 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
   return loginMatchesRequiredKey(login, key);
 }
 
+const NO_FINDINGS_REVIEW = /^(?:lgtm|looks good(?:\s+to\s+me)?|no (?:comments?|issues?|concerns?)|nothing to (?:report|add)|all good|approved)[\s.!]*$/i;
+
 /** Short no-findings reviews still start the quiet window when they count as presence. */
 export function isQuietWindowNoise(login, body) {
   if (body === 'thumbs-up no-findings reaction') return false;
-  if (['codex', 'sourcery'].some((key) => eventSatisfiesRequiredKey(login, body, key))) return false;
+  const text = String(body || '').trim();
+  if (NO_FINDINGS_REVIEW.test(text)
+    && ['codex', 'sourcery'].some((key) => eventSatisfiesRequiredKey(login, body, key))) {
+    return false;
+  }
   return isBotNoise(body) || isReviewerNonsenseFailure(body);
 }
 
@@ -116,21 +122,14 @@ function isSuccessfulQwenReview(body) {
     && !/did not complete successfully|review failed/i.test(body);
 }
 
-function isFailedQwenNotice(body) {
-  return isQwenCodeReviewBody(body)
-    && /Review outcome:\s*failed/i.test(body)
-    && /did not complete successfully/i.test(body);
-}
-
 export function isReviewerNonsenseFailure(bodyRaw) {
   const body = String(bodyRaw ?? '').trim();
   if (!body) return true;
-  // The workflow's failed-review comment is advisory noise, including its
-  // fenced diagnostic. A completed Qwen review stays required even when a
-  // finding mentions quota or an HTTP status.
-  if (isFailedQwenNotice(body)) return true;
+  // A completed Qwen review stays required even when a finding mentions quota
+  // or an HTTP status. Only an actual failed or quota-only notice is nonsense.
   if (isSuccessfulQwenReview(body)) return false;
-  return isQuotaBotMessage(body) || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
+  return isQuotaBotMessage(body) || isQwenFailureNotice(body)
+    || REVIEWER_NONSENSE_PATTERNS.some((pattern) => pattern.test(body));
 }
 
 function eventsForRequiredKey(key, events) {
@@ -157,7 +156,7 @@ function eventsForRequiredKey(key, events) {
  * feedback gate.
  */
 export function blockingMissingRequiredKeys(missing, events) {
-  return (missing || []).filter((key) => {
+  return omitNeverRequiredKeys(missing).filter((key) => {
     const normalized = String(key || '').toLowerCase();
     if (normalized === 'gemini' || normalized === 'qwen') return false;
     const related = eventsForRequiredKey(normalized, events);
@@ -166,22 +165,19 @@ export function blockingMissingRequiredKeys(missing, events) {
   });
 }
 
-/** Qwen is an optional reviewer. It cannot be reintroduced through CLI, env, or saved state. */
-const NEVER_REQUIRED_KEYS = new Set(['qwen', 'github-actions[bot]']);
-
-export function omitNeverRequiredKeys(keys) {
-  return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').toLowerCase()));
-}
-
 export function parseRequiredKeys(raw) {
   if (!raw || !String(raw).trim()) return [...DEFAULT_REQUIRED_KEYS];
   if (/^(?:off|none|disabled)$/i.test(String(raw).trim())) return [];
-  return omitNeverRequiredKeys(
-    String(raw)
-      .split(',')
-      .map((s) => s.trim().toLowerCase())
-      .filter(Boolean),
-  );
+  return omitNeverRequiredKeys(String(raw)
+    .split(',')
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean));
+}
+
+const NEVER_REQUIRED_KEYS = new Set(['qwen', ...BOT_ALIASES.qwen]);
+
+export function omitNeverRequiredKeys(keys) {
+  return (keys || []).filter((key) => !NEVER_REQUIRED_KEYS.has(String(key || '').trim().toLowerCase()));
 }
 
 export function resolveRequiredKeys(argvKeys, envRaw) {
@@ -226,7 +222,7 @@ export function loginMatchesRequiredKey(login, key) {
 
 export function missingRequiredKeys(requiredKeys, seenLogins) {
   const seen = [...(seenLogins || [])];
-  return requiredKeys.filter(
+  return omitNeverRequiredKeys(requiredKeys).filter(
     (key) => !seen.some((login) => loginMatchesRequiredKey(login, key)),
   );
 }

@@ -29,8 +29,16 @@ const QUOTA_PATTERNS = [
   /^ERROR:\s*(?:Gemini|Qwen|CodeRabbit|Codex|Sourcery)(?: API)?(?: returned)?(?: HTTP)? [45]\d\d[.!]*$/i,
   /^(?:Your )?(?:CodeRabbit|Sourcery|Codex|Gemini|Qwen)(?: review)? (?:trial has expired|subscription expired)[.!]*$/i,
   /^The consumer version has been (?:sunset|retired|deprecated); review activity has ceased[.!]*$/i,
-  /^You have reached your (?:monthly|daily|free[- ]tier) (?:limit|quota)(?: for [\w ]+)?(?:; please upgrade your plan)?[.!]*$/i,
+  /^(?:You have|You've|We have|We've) (?:reached|exceeded|exhausted) (?:your |our |the )?(?:monthly|daily|free[- ]tier) (?:quota|limit)(?: for (?:code )?reviews)?(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
+  /^(?:Your |Our |The )?(?:monthly|daily|free[- ]tier) (?:review )?(?:quota|limit) (?:has been )?(?:reached|exceeded|exhausted)(?:[.;:,]?\s*(?:please )?(?:upgrade your plan|try again tomorrow|try again next month))?[.!]*$/i,
+  /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)[.!]*(?:\s+Please wait until the next window(?: before requesting another review)?[.!]*)?$/i,
 ];
+
+export function isQwenFailureNotice(bodyRaw) {
+  // Match the workflow's structured failed-run notice, including its fenced
+  // diagnostics. Finding text that merely mentions failed reviews stays live.
+  return /^<!-- qwen-code-review -->\r?\n## Qwen Code Review\r?\n\r?\nReviewed commit: `[0-9a-f]{7,40}`\r?\nReview outcome: failed\r?\n\r?\nQwen Code Review did not complete successfully\. Qwen is not a required reviewer, so this notice does not block merge\.\r?\n\r?\n```text\r?\n[\s\S]*\r?\n```$/i.test(String(bodyRaw || '').trim());
+}
 
 const TRIVIAL_PATTERNS = [
   // Ack/no-op replies (the whole body, modulo whitespace and trailing puncts).
@@ -43,16 +51,12 @@ const TRIVIAL_PATTERNS = [
  * @param {string} bodyRaw
  * @returns {boolean}
  */
-// Anchor at the start of the trimmed body only. A later paragraph or code
-// block that begins with the vendor phrase is still a substantive finding.
-const CODERABBIT_LIMIT = /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)(?:$|[.!]|[\r\n])/i;
-
 export function isQuotaBotMessage(bodyRaw) {
   if (!bodyRaw) return false;
   const body = String(bodyRaw).trim();
   if (!body) return false;
   if (QUOTA_PATTERNS.some((re) => re.test(body))) return true;
-  return CODERABBIT_LIMIT.test(body);
+  return false;
 }
 
 /**
@@ -78,13 +82,6 @@ export function isTrivialBotMessage(bodyRaw) {
  * @param {string} bodyRaw
  * @returns {boolean}
  */
-function isFailedQwenNotice(bodyRaw) {
-  const body = String(bodyRaw || '');
-  return /<!--\s*qwen-code-review\s*-->/i.test(body)
-    && /Review outcome:\s*failed/i.test(body)
-    && /did not complete successfully/i.test(body);
-}
-
 export function isBotNoise(bodyRaw) {
-  return isFailedQwenNotice(bodyRaw) || isQuotaBotMessage(bodyRaw) || isTrivialBotMessage(bodyRaw);
+  return isQuotaBotMessage(bodyRaw) || isQwenFailureNotice(bodyRaw) || isTrivialBotMessage(bodyRaw);
 }

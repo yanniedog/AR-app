@@ -12,6 +12,9 @@ const mockEnsureDetails = jest.fn(async () => undefined);
 const mockSurfaces = new Map<string, any>();
 const mockListMount = jest.fn();
 const mockListUnmount = jest.fn();
+const mockRecomputeViewableItems = jest.fn();
+let mockVisibleCount: number | null = null;
+let mockSuppressViewability = false;
 jest.mock('../src/data/store', () => ({
   useStore: Object.assign((selector: any) => selector(mockState), { getState: () => mockState }),
 }));
@@ -29,20 +32,32 @@ jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (surface: any) => mockSurfaces.set(surface.id, surface),
 }));
 jest.mock('../src/hooks/useLogoReadiness', () => ({ useLogoReadiness: () => ({ ready: true }) }));
-jest.mock('../src/hooks/useVirtualizedListReadiness', () => ({
-  useVirtualizedListReadiness: () => ({ ready: true, visiblyCommitted: true }),
-}));
 jest.mock('../src/hooks/useDebouncedValue', () => ({ useDebouncedValue: (value: string) => value }));
-jest.mock('@shopify/flash-list', () => ({
-  FlashList: function MockFlashList(props: any) {
-    const React = jest.requireActual('react');
-    React.useEffect(() => { mockListMount(); return () => mockListUnmount(); }, []);
+jest.mock('@shopify/flash-list', () => {
+  const React = jest.requireActual('react');
+  return { FlashList: React.forwardRef(function MockFlashList(props: any, ref: any) {
+    const measure = () => {
+      if (!mockSuppressViewability) props.onViewableItemsChanged({ viewableItems:
+        props.data.slice(0, mockVisibleCount ?? 3).map(() => ({ isViewable: true })) });
+    };
+    const measureRef = React.useRef(measure);
+    measureRef.current = measure;
+    const { extraData, onCommitLayoutEffect } = props;
+    React.useImperativeHandle(ref, () => ({ recomputeViewableItems: () => {
+      mockRecomputeViewableItems(); measure();
+    } }));
+    React.useEffect(() => {
+      mockListMount();
+      measureRef.current();
+      return () => mockListUnmount();
+    }, []);
+    React.useEffect(() => { onCommitLayoutEffect(); }, [extraData, onCommitLayoutEffect]);
     return React.createElement('FlashList', props,
       props.data.length ? props.data.map((item: any, index: number) =>
         React.createElement('Rate', { key: index }, props.renderItem({ item })))
         : props.ListEmptyComponent);
-  },
-}));
+  }) };
+});
 jest.mock('../src/components/SearchReportExport', () => ({ SearchReportExport: 'SearchReportExport' }));
 jest.mock('../src/components/FilterSheet', () => ({ FilterSheet: 'FilterSheet' }));
 jest.mock('../src/components/ProductCard', () => ({ ProductCard: 'ProductCard' }));
@@ -58,6 +73,7 @@ jest.mock('../src/components/ledger', () => ({ LedgerSheet: 'LedgerSheet' }));
 beforeEach(() => {
   mockEnsureDetails.mockClear(); mockSurfaces.clear();
   mockListMount.mockClear(); mockListUnmount.mockClear();
+  mockRecomputeViewableItems.mockClear(); mockVisibleCount = null; mockSuppressViewability = false;
   const fixture = rateConditionFixture();
   mockState = { ...fixture, prefs: { ...DEFAULT_PREFS, enableDeepSearch: false }, subscriptions: [],
     detailsLoading: false, ensureDetails: mockEnsureDetails, searchIndexStatus: 'idle' };
@@ -187,6 +203,10 @@ test('comparison and filter disclosure commit without remounting unchanged searc
   try {
     const initialRows = tree.root.findByType('FlashList' as any).props.data;
     const first = initialRows[0];
+    const measuredCount = Math.min(3, initialRows.length);
+    const listProbe = () => mockSurfaces.get('search.results').probes.find((probe: any) => probe.id === 'search.list');
+    expect(listProbe().visibleCount).toBe(measuredCount);
+    let measurements = mockRecomputeViewableItems.mock.calls.length;
     const token = `${first.rate_index}#${first.product_key}`;
     let previousRevision = mockSurfaces.get('search.results').renderRevision;
     for (const [action, parameters] of [
@@ -200,6 +220,8 @@ test('comparison and filter disclosure commit without remounting unchanged searc
       const revision = mockSurfaces.get('search.results').renderRevision;
       expect(revision).not.toBe(previousRevision);
       expect(tree.root.findByType('FlashList' as any).props.extraData).toBe(revision);
+      expect(listProbe().visibleCount).toBe(measuredCount);
+      expect(mockRecomputeViewableItems).toHaveBeenCalledTimes(++measurements);
       previousRevision = revision;
     }
     expect(tree.root.findAllByType('ProductCard' as any)[0].props.selected).toBe(true);
@@ -208,5 +230,41 @@ test('comparison and filter disclosure commit without remounting unchanged searc
     expect(mockListMount).toHaveBeenCalledTimes(2);
     expect(mockListUnmount).toHaveBeenCalledTimes(1);
     expect(tree.root.findByType('FlashList' as any).props.data).toHaveLength(0);
+    expect(listProbe().visibleCount).toBe(0);
+  } finally { act(() => tree.unmount()); }
+});
+
+test('an updated native viewport with no visible rows never inherits an earlier positive measurement', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const listProbe = () => mockSurfaces.get('search.results').probes.find((probe: any) => probe.id === 'search.list');
+    expect(listProbe().visibleCount).toBeGreaterThan(0);
+    mockVisibleCount = 0;
+    act(() => mockSurfaces.get('search.results').actions['search.compare.mode']());
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(listProbe().visibleCount).toBe(0);
+    expect(listProbe().status).toBe('pending');
+  } finally { act(() => tree.unmount()); }
+});
+
+test('a missing fresh native callback leaves the current viewport unverified', () => {
+  mockState.prefs.includeNonStandard = true;
+  let tree: any;
+  act(() => { tree = TestRenderer.create(<Search />); });
+  try {
+    const listProbe = () => mockSurfaces.get('search.results').probes.find((probe: any) => probe.id === 'search.list');
+    expect(listProbe().visibleCount).toBeGreaterThan(0);
+    mockSuppressViewability = true;
+    act(() => mockSurfaces.get('search.results').actions['search.compare.mode']());
+    expect(mockListMount).toHaveBeenCalledTimes(1);
+    expect(listProbe().visibleCount).toBeNull();
+    expect(listProbe().status).toBe('pending');
+    act(() => tree.root.findByType('FlashList' as any).props.onViewableItemsChanged({
+      viewableItems: [{ isViewable: true }],
+    }));
+    expect(listProbe().visibleCount).toBe(1);
+    expect(listProbe().status).toBe('ready');
   } finally { act(() => tree.unmount()); }
 });

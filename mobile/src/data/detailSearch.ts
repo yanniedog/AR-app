@@ -144,18 +144,31 @@ export function productKeysMatchingIndex(
   return new Set(hits);
 }
 
+type SearchRow = { provider: string; product_name: string; product_key: string };
+
+/** Prepare once per filtering pass so indexed hits are not copied for every row. */
+export function prepareRowSearchQuery(
+  query: string,
+  payloadIndex?: SearchIndexPayload | null,
+  searchIndexSha?: string | null,
+): (row: SearchRow, runtimeDetailText?: string) => boolean {
+  const q = query.trim();
+  if (!q) return () => true;
+  const needle = q.toLowerCase();
+  const hits = productKeysMatchingIndex(payloadIndex ?? null, q, searchIndexSha);
+  if (hits) return (row) => hits.has(row.product_key);
+  return (row, runtimeDetailText) => {
+    if (row.provider.toLowerCase().includes(needle) || row.product_name.toLowerCase().includes(needle)) return true;
+    return runtimeDetailText ? runtimeDetailText.includes(needle) : false;
+  };
+}
+
 export function rowMatchesSearchQuery(
-  row: { provider: string; product_name: string; product_key: string },
+  row: SearchRow,
   query: string,
   payloadIndex?: SearchIndexPayload | null,
   runtimeDetailText?: string,
   searchIndexSha?: string | null,
 ): boolean {
-  const q = query.trim();
-  if (!q) return true;
-  const needle = q.toLowerCase();
-  const hits = productKeysMatchingIndex(payloadIndex ?? null, q, searchIndexSha);
-  if (hits) return hits.has(row.product_key);
-  if (row.provider.toLowerCase().includes(needle) || row.product_name.toLowerCase().includes(needle)) return true;
-  return runtimeDetailText ? runtimeDetailText.includes(needle) : false;
+  return prepareRowSearchQuery(query, payloadIndex, searchIndexSha)(row, runtimeDetailText);
 }
