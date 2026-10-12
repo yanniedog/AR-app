@@ -4,6 +4,7 @@ import { strict as assert } from "node:assert";
 import {
   adjustRequiredKeysForPrContext,
   blockingMissingRequiredKeys,
+  isQuietWindowNoise,
   isReviewerNonsenseFailure,
   DEFAULT_REQUIRED_KEYS,
   eventSatisfiesRequiredKey,
@@ -354,6 +355,12 @@ const monthlyQuotaNotice = 'You have reached your monthly quota for code reviews
 assert.equal(isBotNoise(monthlyQuotaNotice), true);
 assert.equal(isBotNoise('Review limit reached. Please wait until the next window before requesting another review.'), true);
 assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window.'), true);
+assert.equal(isBotNoise('Review limit reached handling is case-sensitive and misses the retry'), false);
+assert.equal(isReviewerNonsenseFailure('Review limit reached handling is case-sensitive and misses the retry'), false);
+assert.equal(isQuietWindowNoise('chatgpt-codex-connector[bot]', 'LGTM'), false);
+assert.equal(isQuietWindowNoise('chatgpt-codex-connector[bot]', 'No issues'), false);
+assert.equal(isQuietWindowNoise('someone', 'LGTM'), true);
+assert.equal(isQuietWindowNoise('thumbs-up', 'thumbs-up no-findings reaction'), false);
 assert.equal(isBotNoise('This branch treats Review limit reached as success and drops the retry.'), false);
 assert.equal(isBotNoise('The retry workflow matches "Review limit reached" case-sensitively.'), false);
 const laterCodeRabbitLine = [

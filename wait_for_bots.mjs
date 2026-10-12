@@ -14,14 +14,13 @@ import {
   formatRequiredKeys,
   isGeminiCodeReviewBody,
   isQwenCodeReviewBody,
-  isReviewerNonsenseFailure,
+  isQuietWindowNoise,
   missingRequiredKeysFromEvents,
   parseRequiredKeys,
   resolveRequiredKeys,
 } from './scripts/lib/bot-wait-config.mjs';
 import { readBotWaitStateFile, writeBotWaitStateFile } from './scripts/lib/bot-wait-state.mjs';
 import { isGithubRateLimitError, repoSlugFromEnv } from './scripts/lib/gh-pr-review-threads.mjs';
-import { isBotNoise } from './scripts/lib/bot-noise.mjs';
 import { gateExemptReason } from './scripts/lib/pr-gate-exempt.mjs';
 import { fetchRequiredCheckState } from './scripts/lib/required-ci-checks.mjs';
 
@@ -165,9 +164,7 @@ function fetchBotActivity(owner, name, prNumber) {
       login,
       at,
       body: body || '',
-      noise: body === 'thumbs-up no-findings reaction'
-        ? false
-        : isBotNoise(body) || isReviewerNonsenseFailure(body),
+      noise: isQuietWindowNoise(login, body),
     });
   };
   for (const c of pr.comments?.nodes || []) {

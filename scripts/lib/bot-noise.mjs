@@ -45,7 +45,7 @@ const TRIVIAL_PATTERNS = [
  */
 // Anchor at the start of the trimmed body only. A later paragraph or code
 // block that begins with the vendor phrase is still a substantive finding.
-const CODERABBIT_LIMIT = /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)\b/i;
+const CODERABBIT_LIMIT = /^(?:#{1,6}\s*)?(?:Review limit reached|You have reached your PR review limit|rate limited by coderabbit\.ai)(?:$|[.!]|[\r\n])/i;
 
 export function isQuotaBotMessage(bodyRaw) {
   if (!bodyRaw) return false;

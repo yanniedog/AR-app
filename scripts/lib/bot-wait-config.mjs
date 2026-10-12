@@ -2,7 +2,7 @@
  * Required-bot aliases for wait-for-bots and pr-bot-feedback-check.
  * Keys are short names; values are GitHub logins to match.
  */
-import { isQuotaBotMessage } from './bot-noise.mjs';
+import { isBotNoise, isQuotaBotMessage } from './bot-noise.mjs';
 
 export const BOT_ALIASES = {
   gemini: [
@@ -86,6 +86,13 @@ export function eventSatisfiesRequiredKey(login, body, key, opts = {}) {
     return loginMatchesRequiredKey(login, 'gemini');
   }
   return loginMatchesRequiredKey(login, key);
+}
+
+/** Short no-findings reviews still start the quiet window when they count as presence. */
+export function isQuietWindowNoise(login, body) {
+  if (body === 'thumbs-up no-findings reaction') return false;
+  if (['codex', 'sourcery'].some((key) => eventSatisfiesRequiredKey(login, body, key))) return false;
+  return isBotNoise(body) || isReviewerNonsenseFailure(body);
 }
 
 export function missingRequiredKeysFromEvents(requiredKeys, events, opts = {}) {
