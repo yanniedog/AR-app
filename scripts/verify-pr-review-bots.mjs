@@ -24,6 +24,7 @@ import {
   workflowNeedsStateChange,
 } from "./review-bot-control.mjs";
 import { evaluateRequiredCheckState } from "./lib/required-ci-checks.mjs";
+import { verifyQwenDiff } from "./verify-qwen-diff.mjs";
 
 function indentedBlock(source, heading) {
   const lines = source.split(/\r?\n/);
@@ -413,7 +414,12 @@ assert.doesNotThrow(() => assertBranchName('foo@bar', 'BASE_REF'));
 assert.throws(() => assertBranchName('has space', 'BASE_REF'), /branch name/);
 assert.match(reviewer, /\$\{baseRemote\}\.\.\.\$\{resolvedHead\}/);
 assert.match(reviewer, /--unshallow/);
-assert.match(workflow, /fetch-depth:\s*0/);
+assert.match(workflow, /fetch-depth:\s*1/);
+assert.doesNotMatch(workflow, /fetch-depth:\s*0/);
+assert.match(reviewer, /refs\/review-fetch\/base-\$\{pullNumber\}/);
+assert.doesNotMatch(reviewer, /refs\/remotes\/origin\/\$\{baseRef\}/);
+assert.match(reviewer, /--refmap=/);
+verifyQwenDiff();
 assert.doesNotMatch(workflow, /Reviewed files:/);
 assert.doesNotMatch(workflow, /Omitted (?:reviewable )?files:/);
 assert.match(workflow, /\$exists\.ToString\(\)\.ToLowerInvariant\(\)/);

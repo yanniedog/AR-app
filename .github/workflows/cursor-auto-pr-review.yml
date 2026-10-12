@@ -106,7 +106,7 @@ jobs:
         with:
           ref: main
           path: _trusted-reviewer
-          fetch-depth: 0
+          fetch-depth: 1
           persist-credentials: false
           clean: true
 

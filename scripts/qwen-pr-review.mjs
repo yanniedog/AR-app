@@ -109,13 +109,14 @@ export function collectDiff(baseRef, headSha, maxChars, prNumber) {
   if (!/^[0-9a-f]{7,40}$/i.test(String(headSha || ''))) fail('HEAD_SHA must be the pull request commit id');
   assertBranchName(baseRef, 'BASE_REF');
   const prRef = fetchedPullRequestRef(pullNumber);
-  const baseRemote = `refs/remotes/origin/${baseRef}`;
+  // Remote branch names may contain Windows-invalid filename characters.
+  const baseRemote = `refs/review-fetch/base-${pullNumber}`;
   const shallow = runGit(['rev-parse', '--is-shallow-repository']).trim() === 'true';
-  const baseFetch = ['fetch', '--no-tags'];
+  const baseFetch = ['fetch', '--no-tags', '--refmap=', '--no-recurse-submodules'];
   if (shallow) baseFetch.push('--unshallow');
   baseFetch.push('origin', `+refs/heads/${baseRef}:${baseRemote}`);
   runGit(baseFetch);
-  runGit(['fetch', '--no-tags', 'origin', `+refs/pull/${pullNumber}/head:${prRef}`]);
+  runGit(['fetch', '--no-tags', '--refmap=', '--no-recurse-submodules', 'origin', `+refs/pull/${pullNumber}/head:${prRef}`]);
   const resolvedHead = runGit(['rev-parse', '--verify', `${prRef}^{commit}`]).trim().toLowerCase();
   const expectedHead = String(headSha).trim().toLowerCase();
   if (resolvedHead !== expectedHead && !resolvedHead.startsWith(expectedHead)) {
