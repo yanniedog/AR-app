@@ -2,6 +2,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { strict as assert } from "node:assert";
 import {
+  adjustRequiredKeysForPrContext,
   DEFAULT_REQUIRED_KEYS,
   eventSatisfiesRequiredKey,
   missingRequiredKeysFromEvents,
@@ -69,7 +70,11 @@ assert.equal(workflowNeedsStateChange("disabled_manually", true), true);
 assert.deepEqual(parseRequiredKeys("off"), []);
 assert.deepEqual(parseRequiredKeys("none"), []);
 assert.deepEqual(parseRequiredKeys("disabled"), []);
-assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["qwen", "coderabbit"]);
+assert.deepEqual(parseRequiredKeys("qwen,coderabbit"), ["coderabbit"]);
+assert.deepEqual(parseRequiredKeys("codex,qwen,sourcery"), ["codex", "sourcery"]);
+assert.deepEqual(resolveRequiredKeys(["codex", "qwen", "sourcery"]), ["codex", "sourcery"]);
+assert.deepEqual(adjustRequiredKeysForPrContext(["sourcery", "qwen"]), ["sourcery"]);
+assert.deepEqual(missingRequiredKeysFromEvents(["qwen"], []), []);
 assert.deepEqual(resolveRequiredKeys([], "qwen"), []);
 assert.deepEqual(
   requiredChecksFromProtection({
