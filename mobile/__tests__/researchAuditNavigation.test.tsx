@@ -4,7 +4,9 @@ import TestRenderer, { act } from 'react-test-renderer';
 import Research from '../app/research';
 import { DEFAULT_PREFS as mockDefaultPrefs } from '../src/data/storeTypes';
 import { buildDeepPerformanceAuditPlan } from '../src/lib/performanceAuditPlan';
-import { PerformanceAuditReadinessRegistry, type PerformanceAuditSurfaceDefinition } from '../src/lib/performanceAuditReadiness';
+import { compactPerformanceAuditReadinessEvidence, PerformanceAuditReadinessRegistry, type PerformanceAuditSurfaceDefinition } from '../src/lib/performanceAuditReadiness';
+import { appHealthDisplayObservations } from '../src/lib/performanceAuditHealth';
+import { evaluateAppHealthDisplayQuality } from '../src/lib/appHealth/displayQuality';
 import { usePerformanceAuditProbe } from '../src/hooks/usePerformanceAuditReadiness';
 import { makeHealthyCore } from '../__fixtures__/appHealth';
 import type { CorePayload } from '../src/types';
@@ -69,22 +71,56 @@ test('closed economics does not register graphic readiness and reopening require
   let tree!: InspectableRenderer;
   act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
   const economics = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-graphics').at(-1)!;
+  const economicData = () => jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === 'economic-data').at(-1)!;
   const toggle = () => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle();
   try {
     expect(economics()[2]).toBe(false);
+    expect(economicData()[2]).toBe(false);
     await act(async () => { await mockSurfaces.get('outlook.dashboard')!.actions!['outlook.history.mode.spread'](); });
     expect(economics()[2]).toBe(false);
     act(toggle);
     expect(economics()[2]).toBe(true);
+    expect(economicData()[2]).toBe(true);
+    expect(economicData()[1]).toMatchObject({ required: true, status: 'pending' });
     expect(economics()[1]).toMatchObject({ required: true, status: 'pending', layoutMeasured: false });
     act(() => { tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
-      status: 'ready', expectedCount: 2, pointCount: 2, layoutMeasured: true, accessibleSummary: true,
+      status: 'ready', expectedCount: 2, pointCount: 2, layoutMeasured: true, graphicReady: true, accessibleSummary: true,
     }); });
     expect(economics()[1]).toMatchObject({ status: 'ready', actualCount: 2 });
     act(toggle);
     expect(economics()[2]).toBe(false);
     act(toggle);
     expect(economics()[1]).toMatchObject({ status: 'pending', actualCount: 0, layoutMeasured: false });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('missing economics keeps its optional data error while a measured empty graphic is unavailable', () => {
+  mockCore = makeHealthyCore();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
+  try {
+    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    act(() => tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
+      status: 'error', error: 'Economic signals are not saved on this device.', indicatorCount: 0,
+      expectedCount: 0, pointCount: 0, layoutMeasured: true, emptyStateRendered: true,
+      graphicReady: true, accessibleSummary: true,
+    }));
+    const probes = ['economic-graphics', 'economic-data'].map(id =>
+      jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === id).at(-1)![1]);
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('economic-unavailable');
+    registry.registerSurface({ id: 'outlook.dashboard', probes });
+    const snapshot = registry.snapshot(['outlook.dashboard']);
+    expect(snapshot.ready).toBe(false);
+    expect(snapshot.blockers).toEqual([expect.objectContaining({ code: 'probe-error', probeId: 'economic-data' })]);
+    const observations = appHealthDisplayObservations([{
+      id: 'economy', kind: 'journey', label: 'Economy', status: 'skipped', durationMs: null,
+      metrics: { readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot) },
+    }]);
+    const chart = evaluateAppHealthDisplayQuality([
+      { id: 'outlook.dashboard', requiredRoles: ['chart'] },
+    ], observations).find(check => check.id === 'display-chart');
+    expect(chart).toMatchObject({ status: 'unavailable', metrics: { failed: 0, unavailable: 1 } });
   } finally { act(() => tree.unmount()); }
 });
 

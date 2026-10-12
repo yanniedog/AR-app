@@ -4,6 +4,9 @@ import { toPublicAppHealthReport } from './appHealth';
 const METRIC_ALLOWLIST = new Set([
   'durationMs',
   'forwardMs',
+  'preActionWaitMs',
+  'preActionQuietWindowReused',
+  'preActionQuietWindowAvoidedMs',
   'backgroundSettleMs',
   'backMs',
   'returnFallbackMs',
