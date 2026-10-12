@@ -99,7 +99,7 @@
     },
     "autolinking": {
       "android": {
-        "buildFromSource": ["expo-task-manager", "unimodules-app-loader"]
+        "buildFromSource": ["expo-task-manager", "unimodules-app-loader", "expo-background-task"]
       }
     }
   },

@@ -9,11 +9,11 @@ import { AppText, Button, Card } from './ui';
 
 const LABELS = {
   idle: '',
-  preparing: 'Preparing the full log…',
-  uploading: 'Uploading the full log…',
-  verifying: 'Checking the paste contains the full log…',
+  preparing: 'Preparing the compact log…',
+  uploading: 'Uploading the compact log…',
+  verifying: 'Verifying the compact log…',
   copying: 'Copying the paste link…',
-  copied: 'Full log uploaded. Link copied to clipboard.',
+  copied: 'Compact log uploaded. Link copied to clipboard.',
   failed: 'Log sharing needs attention',
 };
 
