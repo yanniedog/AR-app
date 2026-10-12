@@ -193,7 +193,7 @@ describe('deidentified diagnostics privacy boundary', () => {
     expect(screen).not.toContain('Clipboard');
     expect(screen).not.toContain('uploadDebugLog');
     expect(screen).not.toContain('fetch(');
-    expect(debugScreen).toContain('Upload full log?');
+    expect(debugScreen).toContain('Upload diagnostic log?');
     expect(screen).toContain('Anyone with the link can read the log.');
     const completion = runner.indexOf('await publishPerformanceAuditAfterFinalization(report');
     const upload = runner.indexOf('void startDebugLogUpload(');
