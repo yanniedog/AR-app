@@ -1,7 +1,7 @@
 name: qwen-code-review
 
-# pull_request_target loads this workflow from protected main. The target PR is
-# checked out separately and treated only as diff data on the laptop runner.
+# pull_request_target loads this workflow from protected main. The pull request
+# ref is fetched and used only as diff data; it is not checked out.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
