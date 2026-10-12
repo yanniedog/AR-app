@@ -106,6 +106,22 @@ test('applies multiple missing feed decisions in chronological order', () => {
   expect(resolved.schedule).toEqual([]);
 });
 
+test('drops slash-marked script bodies, comments, and length-changing characters', () => {
+  const html = `
+    <!-- <script>cash rate target 8.88%</script> -->
+    <script/>cash rate target 9.99%</script>
+    <script>İ</script >
+    <h2>Cash rate target</h2><p>4.35 <span>%</span></p>
+    <p>Effective date 12 August 2026</p>
+    <p>Next update 2.30 pm, 29 September 2026</p>
+  `;
+  expect(parseRbaOfficialOverview(html)).toEqual({
+    rate: 4.35,
+    effectiveDate: '2026-08-12',
+    nextUpdateDate: '2026-09-29',
+  });
+});
+
 test('drops script bodies when the end tag has whitespace before the closing bracket', () => {
   const html = `
     <script>cash rate target 9.99%</script >

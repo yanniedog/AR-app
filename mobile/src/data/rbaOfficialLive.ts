@@ -11,6 +11,38 @@ const MONTHS: Record<string, string> = {
   july: '07', august: '08', september: '09', october: '10', november: '11', december: '12',
 };
 
+function foldAscii(char: string): string {
+  const code = char.charCodeAt(0);
+  return code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : char;
+}
+
+function asciiEqualsAt(html: string, index: number, lowerNeedle: string): boolean {
+  if (index < 0 || index + lowerNeedle.length > html.length) return false;
+  for (let offset = 0; offset < lowerNeedle.length; offset += 1) {
+    if (foldAscii(html[index + offset]) !== lowerNeedle[offset]) return false;
+  }
+  return true;
+}
+
+function indexOfAscii(html: string, lowerNeedle: string, from: number): number {
+  const last = html.length - lowerNeedle.length;
+  for (let index = Math.max(0, from); index <= last; index += 1) {
+    if (asciiEqualsAt(html, index, lowerNeedle)) return index;
+  }
+  return -1;
+}
+
+function readTagName(html: string, start: number, end: number): string {
+  let cursor = start;
+  while (cursor < end && /\s/.test(html[cursor])) cursor += 1;
+  let name = '';
+  while (cursor < end && /[A-Za-z0-9:_-]/.test(html[cursor])) {
+    name += foldAscii(html[cursor]);
+    cursor += 1;
+  }
+  return name;
+}
+
 function stripElements(html: string, blocked: ReadonlySet<string>): string {
   let out = '';
   let index = 0;
@@ -21,22 +53,25 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
       break;
     }
     out += html.slice(index, open);
+    if (asciiEqualsAt(html, open + 1, '!--')) {
+      const commentEnd = html.indexOf('-->', open + 4);
+      index = commentEnd < 0 ? html.length : commentEnd + 3;
+      out += ' ';
+      continue;
+    }
     const close = html.indexOf('>', open + 1);
     if (close < 0) {
       out += html.slice(open);
       break;
     }
-    const token = html.slice(open + 1, close).trimStart();
-    const isClosing = token.startsWith('/');
-    const name = (isClosing ? token.slice(1) : token).match(/^[A-Za-z][\w:-]*/)?.[0]?.toLowerCase() ?? '';
-    const selfClosing = /\/\s*$/.test(token);
-    if (!isClosing && !selfClosing && blocked.has(name)) {
+    const isClosing = html[open + 1] === '/';
+    const name = readTagName(html, open + (isClosing ? 2 : 1), close);
+    if (!isClosing && blocked.has(name)) {
       const closer = `</${name}`;
-      const lower = html.toLowerCase();
       let searchFrom = close + 1;
       let foundAt = -1;
       while (searchFrom < html.length) {
-        const candidate = lower.indexOf(closer, searchFrom);
+        const candidate = indexOfAscii(html, closer, searchFrom);
         if (candidate < 0) break;
         let cursor = candidate + closer.length;
         while (cursor < html.length && /\s/.test(html[cursor])) cursor += 1;
@@ -44,7 +79,7 @@ function stripElements(html: string, blocked: ReadonlySet<string>): string {
           foundAt = cursor + 1;
           break;
         }
-        searchFrom = candidate + closer.length;
+        searchFrom = candidate + 1;
       }
       index = foundAt < 0 ? html.length : foundAt;
       out += ' ';
