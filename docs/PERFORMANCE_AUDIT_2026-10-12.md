@@ -166,3 +166,28 @@ invoked; a passive-only wake never imports or hydrates the app store. Tests
 execute this entry without a React mount and invoke the real passive callback
 against persisted compact metadata with no store import or network request.
 The replacement signed APK still requires native cold-worker acceptance.
+
+## Android background timer follow-up
+
+The signed v1.0.227 / build 288 APK retained the headless loader and delivered
+both callbacks in a cold process while the device was asleep. Its debug log
+then recorded refresh durations of 107,544 ms and 132,690 ms: completion waited
+until the app was opened. Waking the screen while remaining in Home did not
+complete the work. These results establish a callback execution problem beyond
+entry registration; they are not evidence of successful background preloading.
+
+The installed SDK 54 TaskService does not register pending events with React
+Native's HeadlessJsTaskContext. JavaTimerManager therefore keeps timers paused
+without an Activity. This matches [Expo's timer fix](https://github.com/expo/expo/pull/43821).
+The pinned compatibility backport now holds one native timer lease per app
+while its events remain pending, including overlapping passive and daily jobs.
+It releases the lease after the last event or failed cold load. The JS handler
+stays pending because an immediately resolved handler would release the lease
+prematurely, as described in [Expo issue 51304](https://github.com/expo/expo/issues/51304).
+
+The patch rejects changed SDK versions or source hashes, is installed by the
+existing portable npm postinstall path, and compiles in required hosted CI
+against the installed React Native/Expo dependencies. Scheduling intervals,
+audit time limits, network policy and foreground checks are unchanged. A signed
+replacement APK must still demonstrate both a cold screen-off completion and
+a later background completion after foreground reuse.
