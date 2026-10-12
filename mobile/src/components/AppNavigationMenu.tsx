@@ -43,7 +43,8 @@ function useNavigationMenu(): NavigationMenuContextValue {
   return value;
 }
 
-export function NavigationMenuButton() {
+/** `compact` drops the visible label where header space is tight; the accessible name stays. */
+export function NavigationMenuButton({ compact = false }: { compact?: boolean } = {}) {
   const theme = useTheme();
   const onboarded = useStore((state) => state.prefs.onboarded);
   const menu = useNavigationMenu();
@@ -54,10 +55,12 @@ export function NavigationMenuButton() {
       accessibilityRole="button"
       accessibilityLabel="Open app menu"
       accessibilityState={{ expanded: menu.open }}
+      // Icon-only still keeps the 48 dp minimum width.
+      square={compact}
       style={({ pressed }) => ({ flexDirection: 'row', gap: 5, paddingHorizontal: 10, opacity: pressed ? 0.6 : 1 })}
     >
       <LedgerIcon name="menu" size={21} color={theme.ledger.ink} />
-      <AppText variant="small" weight="600">Menu</AppText>
+      {compact ? null : <AppText variant="small" weight="600">Menu</AppText>}
     </TouchTarget>
   );
 }

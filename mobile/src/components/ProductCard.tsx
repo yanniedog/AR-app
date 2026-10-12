@@ -25,6 +25,7 @@ import {
   useProductRateChangeSummary,
 } from './product/ProductRateChangeLine';
 import { androidRipple, AppText, Row } from './ui';
+import { lvrTierDisplay } from '../data/lvrTier';
 
 function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): string[] {
   const out: string[] = [];
@@ -34,7 +35,7 @@ function chips(row: RateRow, section: SectionKey, qualifier: RateQualifier): str
     if (term) out.push(term);
     if (row.ribbon_repayment_type ?? row.repayment_type)
       out.push(humanizeEnum(row.ribbon_repayment_type ?? row.repayment_type));
-    if (row.lvr_tier) out.push(humanizeEnum(row.lvr_tier));
+    if (row.lvr_tier) out.push(lvrTierDisplay(row.lvr_tier));
   } else if (section === 'TD') {
     const term = formatTerm(row);
     if (term) out.push(term);
