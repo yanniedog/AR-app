@@ -323,15 +323,12 @@ function evaluate({
     substantiveBotEvents.length > 0
       ? new Date(substantiveBotEvents[substantiveBotEvents.length - 1].at)
       : null;
-  const lastQuietAnchorAt =
-    lastBotAt ||
-    (botEventsSinceAnchor.length > 0
-      ? new Date(botEventsSinceAnchor[botEventsSinceAnchor.length - 1].at)
-      : null);
+  // Quota and other noise must not keep the quiet window open. An all-waived
+  // event set is the same as no activity.
   const quiet =
     allRequiredPosted &&
-    (lastQuietAnchorAt === null ||
-      Date.now() - lastQuietAnchorAt.getTime() >= QUIET_WINDOW_SEC * 1000);
+    (lastBotAt === null ||
+      Date.now() - lastBotAt.getTime() >= QUIET_WINDOW_SEC * 1000);
 
   const checks = fetchChecks(prNumber, repo, expectedHeadSha, baseRefName);
   if (checks.error && !checks.failed) {

@@ -558,4 +558,10 @@ assert.doesNotMatch(
   "third-party actions must use immutable commit SHAs",
 );
 
+const waitForBots = readFileSync("wait_for_bots.mjs", "utf8");
+assert.match(waitForBots, /substantiveBotEvents/);
+assert.doesNotMatch(
+  waitForBots,
+  /lastBotAt \|\|[\s\S]{0,180}botEventsSinceAnchor\[botEventsSinceAnchor\.length - 1\]/,
+);
 console.log("PASS verify-pr-review-bots");
