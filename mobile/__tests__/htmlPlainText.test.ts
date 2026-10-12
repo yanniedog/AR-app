@@ -43,3 +43,11 @@ test.each([
 test('does not expose text after an unclosed double-escaped script', () => {
   expect(htmlPlainText('<script><!--<script></script>hidden')).toBe(' ');
 });
+
+test.each(['<x="y>Visible', '</x="y>Visible'])('keeps equals signs inside tag names %s', (raw) => {
+  expect(htmlPlainText(raw).trim()).toBe('Visible');
+});
+
+test.each(['Invalid value: size must be < 10', 'x < y > z', 'trailing <'])('keeps literal less-than signs in %s', (raw) => {
+  expect(htmlPlainText(raw)).toBe(raw);
+});

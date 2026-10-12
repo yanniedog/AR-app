@@ -11,22 +11,25 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
   return true;
 }
 
-function tagEnd(html: string, from: number): number {
+function tagEnd(html: string, from: number, afterName = false): number {
   let quote = '';
-  let state: 'name' | 'beforeValue' | 'unquoted' = 'name';
-  for (let index = from; index < html.length; index += 1) {
+  let state: 'tagName' | 'attr' | 'beforeValue' | 'unquoted' = afterName ? 'attr' : 'tagName';
+  const start = !afterName && html[from] === '/' ? from + 1 : from;
+  for (let index = start; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
       if (char === quote) quote = '';
     } else if (char === '>') {
       return index;
+    } else if (state === 'tagName') {
+      if (HTML_SPACE.test(char) || char === '/') state = 'attr';
     } else if (state === 'unquoted') {
-      if (HTML_SPACE.test(char)) state = 'name';
+      if (HTML_SPACE.test(char)) state = 'attr';
     } else if (state === 'beforeValue') {
       if (HTML_SPACE.test(char)) continue;
       if (char === '"' || char === "'") {
         quote = char;
-        state = 'name';
+        state = 'attr';
       } else {
         state = 'unquoted';
       }
@@ -46,7 +49,7 @@ function rawTextEnd(html: string, name: string, from: number): number {
     if (asciiEqualsAt(html, index, needle) && TAG_BOUNDARY.test(html[afterName] ?? '')) {
       // Once a real end-tag name starts, scan its attributes only once. An
       // incomplete end tag consumes the remainder instead of exposing it.
-      const end = tagEnd(html, afterName);
+      const end = tagEnd(html, afterName, true);
       return end < 0 ? html.length : end + 1;
     }
     index += 2;
@@ -82,7 +85,7 @@ function scriptEnd(html: string, from: number): number {
         state = 'escaped';
         index += 8;
       } else {
-        const end = tagEnd(html, index + 8);
+        const end = tagEnd(html, index + 8, true);
         return end < 0 ? html.length : end + 1;
       }
     }
@@ -111,7 +114,13 @@ export function htmlPlainText(html: string): string {
       parts.push(html.slice(index));
       break;
     }
-    parts.push(html.slice(index, open), ' ');
+    parts.push(html.slice(index, open));
+    if (!/[!?/A-Za-z]/.test(html[open + 1] ?? '')) {
+      parts.push('<');
+      index = open + 1;
+      continue;
+    }
+    parts.push(' ');
     if (html.startsWith('<!--', open)) {
       index = commentEnd(html, open + 4);
       continue;

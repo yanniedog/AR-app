@@ -306,6 +306,10 @@ assert.deepEqual(
 );
 
 assert.equal(isBotNoise("ERROR: Gemini API returned HTTP 503"), true);
+assert.equal(isBotNoise('Review limit reached. Please wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('## Review limit reached\nPlease wait until the next window before requesting another review.'), true);
+assert.equal(isBotNoise('The retry workflow matches "Review limit reached" case-sensitively.'), false);
+assert.equal(isBotNoise('The failing service responds with:\nReview limit reached\nThis error loses the queued deployment.'), false);
 for (const notice of [
   'You have reached your monthly quota for code reviews; please upgrade your plan',
   'You have exceeded your daily quota for reviews. Please try again tomorrow.',
@@ -623,6 +627,21 @@ assert.doesNotMatch(
 );
 
 const waitScript = readFileSync("wait_for_bots.mjs", "utf8");
+const noFindingsReaction = { user: { login: 'chatgpt-codex-connector' }, content: 'THUMBS_UP', createdAt: '2026-10-12T00:01:00Z' };
+const activityFixture = {
+  comments: { nodes: [{ author: { login: 'chatgpt-codex-connector' }, createdAt: '2026-10-12T00:00:00Z', body: 'thanks', reactions: { nodes: [noFindingsReaction] } }] },
+  reactions: { nodes: [noFindingsReaction] },
+};
+const fetchActivitySource = waitScript.match(/function fetchBotActivity\([\s\S]*?\n}\n/)?.[0];
+assert(fetchActivitySource, 'expected fetchBotActivity implementation');
+const fetchActivity = new Function('gh', 'COMMENTS_QUERY', 'isGeminiCodeReviewBody', 'isQwenCodeReviewBody', 'isBotNoise', 'isReviewerNonsenseFailure', `${fetchActivitySource}; return fetchBotActivity;`)(
+  () => ({ ok: true, data: { data: { repository: { pullRequest: activityFixture } } } }), '', () => false, () => false, isBotNoise, isReviewerNonsenseFailure,
+);
+assert.deepEqual(fetchActivity('owner', 'repo', 1).events.map(({ body, noise }) => ({ body, noise })), [
+  { body: 'thanks', noise: true },
+  { body: 'thumbs-up no-findings reaction', noise: false },
+  { body: 'thumbs-up no-findings reaction', noise: false },
+]);
 assert.doesNotMatch(waitScript, /const fields = '[^']*\bupdatedAt\b/);
 assert.match(waitScript, /state\.anchor = anchorFromPr/);
 assert.match(

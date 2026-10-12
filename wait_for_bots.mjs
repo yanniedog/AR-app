@@ -154,7 +154,7 @@ function fetchBotActivity(owner, name, prNumber) {
   if (!pr) return { error: 'GraphQL: pull request not found', events: [] };
 
   const events = [];
-  const pushEvent = (login, at, body) => {
+  const pushEvent = (login, at, body, noFindingsReaction = false) => {
     if (!login || !at) return;
     if (
       login.toLowerCase() === 'github-actions[bot]' &&
@@ -165,14 +165,14 @@ function fetchBotActivity(owner, name, prNumber) {
       login,
       at,
       body: body || '',
-      noise: isBotNoise(body) || isReviewerNonsenseFailure(body),
+      noise: !noFindingsReaction && (isBotNoise(body) || isReviewerNonsenseFailure(body)),
     });
   };
   for (const c of pr.comments?.nodes || []) {
     pushEvent(c.author?.login, c.createdAt, c.body);
     for (const reaction of c.reactions?.nodes || []) {
       if (reaction.content === 'THUMBS_UP') {
-        pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction');
+        pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction', true);
       }
     }
   }
@@ -186,7 +186,7 @@ function fetchBotActivity(owner, name, prNumber) {
   }
   for (const reaction of pr.reactions?.nodes || []) {
     if (reaction.content === 'THUMBS_UP') {
-      pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction');
+      pushEvent(reaction.user?.login, reaction.createdAt, 'thumbs-up no-findings reaction', true);
     }
   }
   events.sort((a, b) => new Date(a.at) - new Date(b.at));
