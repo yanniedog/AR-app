@@ -305,8 +305,6 @@ export default function Compare() {
   return (
     <Screen onLayout={() => setLayoutReady(true)}>
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator>
-      <CanonicalTermsComparison rows={calculationRows} />
-      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
       {compact ? (
         <>
           <View style={styles.compactIntro}>
@@ -520,6 +518,10 @@ export default function Compare() {
         </View>
       </View>
       )}
+
+      {/* Differences first; calculations and document terms are follow-up detail. */}
+      <CanonicalTermsComparison rows={calculationRows} />
+      {entries.every(entry => entry.section === 'TD') ? <FixedDepositComparison rows={calculationRows} /> : entries.every(entry => entry.section === 'Savings') ? <PortfolioComparison rows={entries} /> : entries.every(entry => entry.section === 'Mortgage') ? <MortgageComparison rows={entries} /> : <PersonalCostComparisonDisclosure />}
 
       <AppText variant="h3">Published product details</AppText>
       {entries.map((entry, index) => (
