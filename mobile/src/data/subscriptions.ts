@@ -7,6 +7,7 @@ import type { SavedRateRef } from './savedRates';
 import { activeFilterCount, filterRows, rankFraction, type Filters, type MortgageRateMetric, type RankMetric, type SortKey } from './selectors';
 import { breadcrumb, rowsForSearchScope } from './taxonomy';
 import { factCriterionId, normalizeFactCriterion } from './productFacts';
+import { lvrTierDisplay } from './lvrTier';
 
 /** factCriteria is optional only for persisted snapshots created before this field existed. */
 export type FilterSnapshot = Omit<Filters, 'query' | 'factCriteria'> & {
@@ -87,7 +88,7 @@ export function buildProductLabel(row: RateRow, rateIndex: number | null): strin
   if (rateIndex == null) return base;
   const bits: string[] = [];
   if (row.rate_type) bits.push(humanizeEnum(row.rate_type));
-  if (row.lvr_tier) bits.push(humanizeEnum(row.lvr_tier));
+  if (row.lvr_tier) bits.push(lvrTierDisplay(row.lvr_tier));
   const suffix = bits.length ? bits.join(' · ') : `rate #${rateIndex}`;
   return `${base} (${suffix})`;
 }
