@@ -108,3 +108,26 @@ suites / 29 tests, typecheck and scoped lint. Root PR automation verification
 also passed. The foreground-inventory follow-up passed the complete canonical
 command with 292 Jest suites / 3,319 tests, all-platform exports and size guards.
 Hosted checks validate the final committed revision.
+
+## Cold Android worker release follow-up
+
+Native acceptance of v1.0.226 / build 287 reproduced a cold-process failure
+with the screen asleep. Expo attempted both `ar-rates-passive-quality` and
+`ar-rates-daily-refresh`, but its manifest-selected
+`expo.modules.adapters.react.apploader.RNHeadlessAppLoader` was absent under
+that name in the release DEX. The worker failed before JavaScript could run.
+This differs from the already-verified idle foreground preload.
+
+The existing `expo-build-properties` prebuild plugin now preserves only that
+class and its public `android.content.Context` constructor. Release code and
+resource shrinking remain enabled. APK validation and publication inspect DEX
+class definitions and encoded constructor signatures; a manifest or reflection
+string alone does not count as a retained loader. The guard rejects the actual
+published v1.0.226 APK and has regressions for secondary DEX files, renamed or
+missing definitions, inaccessible/wrong constructors and malformed input.
+An independently compiled R8 fixture fails this guard without the keep rule
+and passes with the exact configured rule and public Context constructor.
+
+A replacement release still requires a cold-process, screen-off worker test
+against its signed APK. A passing build-time class check alone does not prove
+JavaScript task execution or OS scheduling guarantees.
