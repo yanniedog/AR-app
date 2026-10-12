@@ -580,9 +580,9 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       return promise;
     },
 
-    async ensureBankInsights(opts: { force?: boolean } = {}) {
+    async ensureBankInsights(opts: { force?: boolean; cacheOnly?: boolean } = {}) {
       const set = revisionBoundSet();
-      const { force = false } = opts;
+      const { force = false, cacheOnly = false } = opts;
       if (!effectiveBankInsights()) {
         logEnsureSkipped('ensureBankInsights', 'proGate');
         return;
@@ -592,28 +592,46 @@ export function createEnsureActions(set: StoreSet, get: StoreGet) {
       if (source !== 'remote' || !manifest) {
         set({
           bankInsights: null,
-          bankInsightsError: 'Bank response analysis needs the latest online dataset.',
+          bankInsightsError: cacheOnly ? null : 'Bank response analysis needs the latest online dataset.',
         });
         return;
       }
       const asset = manifest.files.bank_history;
       if (!asset) {
         logDegradation('warn', 'store.ensureUnavailable', { fn: 'ensureBankInsights', reason: 'manifest_missing_asset' });
-        set({ bankInsightsError: 'bank history unavailable' });
+        set(cacheOnly ? { bankInsights: null, bankInsightsError: null } : { bankInsightsError: 'bank history unavailable' });
         return;
       }
       if (force) set({ bankInsightsError: null });
       const coreSha = manifest.files.core.sha256;
+      const cacheEditionStillCurrent = () => {
+        const current = get();
+        return current.source === 'remote' && current.core?.run_date === core.run_date &&
+          current.manifest?.run_date === core.run_date &&
+          current.manifest?.files.core.sha256 === coreSha &&
+          current.manifest?.files.bank_history?.sha256 === asset.sha256 &&
+          current.manifest?.files.bank_history?.url === asset.url;
+      };
       const meta = await cache.readOptionalMeta();
+      if (cacheOnly && !cacheEditionStillCurrent()) return;
       const fresh = (p: ReturnType<StoreGet>['bankInsights']) =>
-        !!p && p.run_date === core.run_date && meta?.coreSha === coreSha && meta?.bankInsightsSha === asset.sha256;
-      if (!force && fresh(bankInsights)) {
+        !!p && (!cacheOnly || Boolean(coreSha) && Boolean(asset.sha256)) &&
+        p.run_date === core.run_date && meta?.coreSha === coreSha && meta?.bankInsightsSha === asset.sha256;
+      if ((!force || cacheOnly) && fresh(bankInsights)) {
         set({ bankInsightsError: null });
         return;
       }
-      const cached = force ? null : normalizeBankInsightsPayload(await cache.readBankInsights());
-      if (!force && fresh(cached)) {
+      const cached = force && !cacheOnly ? null : normalizeBankInsightsPayload(await cache.readBankInsights());
+      if (cacheOnly && !cacheEditionStillCurrent()) return;
+      if ((!force || cacheOnly) && fresh(cached)) {
         set({ bankInsights: cached, bankInsightsError: null });
+        return;
+      }
+      if (cacheOnly) {
+        // Absence is terminal availability for a local audit, without attempting
+        // transport or treating an old edition as current bank intelligence.
+        set({ bankInsights: null, bankInsightsError: null });
+        logEnsureSkipped('ensureBankInsights', 'cache_only_unavailable');
         return;
       }
       try {

@@ -262,9 +262,6 @@ export default function Market() {
       'outlook.history.window.all': () => setExplorerWindow('All'),
       'outlook.history.date.previous': previousHistoryDate,
       'outlook.rba-response.decision.previous': () => { openRba(); previousRbaDate(); },
-      'outlook.economy.lens.next': () => queueEconomyAuditAction('lens'),
-      'outlook.economy.window.next': () => queueEconomyAuditAction('window'),
-      'outlook.economy.date.previous': () => queueEconomyAuditAction('date'),
       'outlook.snapshot.browse.first': (...args: unknown[]) => {
         const planned = auditActionString(args, 'section');
         const target = planned && SECTION_ORDER.includes(planned as typeof activeSection)
@@ -319,7 +316,24 @@ export default function Market() {
     accessibleSummary: historyOpen && historyChartAvailable &&
       historyGraphicState?.revision === renderRevision && historyGraphicState.accessibleSummary,
   }, historyOpen);
-  usePerformanceAuditProbe(surface, {
+  // Economics has an independent cache and empty-state boundary. Its missing
+  // observations must block its own controls without blocking a market browse
+  // action on the same screen after the optional panel has been opened.
+  const economyRenderRevision = `${datasetRevision ?? 'none'}:${economyOpen}:${economicAuditState?.renderRevision ?? 'unavailable'}`;
+  const economySurface = usePerformanceAuditSurface({
+    id: 'outlook.economy', routeKey: '/research', datasetRevision,
+    renderRevision: economyRenderRevision,
+    actions: {
+      'outlook.economy.lens.next': () => queueEconomyAuditAction('lens'),
+      'outlook.economy.window.next': () => queueEconomyAuditAction('window'),
+      'outlook.economy.date.previous': () => queueEconomyAuditAction('date'),
+    },
+  });
+  usePerformanceAuditProbe(economySurface, {
+    id: 'core-data', kind: 'data', status: core ? 'ready' : 'pending', datasetRevision, renderRevision: economyRenderRevision,
+    expectedCount: core ? 1 : 0, actualCount: core ? 1 : 0,
+  });
+  usePerformanceAuditProbe(economySurface, {
     id: 'economic-graphics', kind: 'graphic', required: economyOpen,
     status: !economyOpen || economicAuditState?.graphicReady ? 'ready' : 'pending',
     expectedCount: economyOpen ? economicAuditState?.expectedCount ?? 0 : 0,
@@ -327,16 +341,16 @@ export default function Market() {
     layoutMeasured: economyOpen ? economicAuditState?.layoutMeasured ?? false : false,
     emptyStateRendered: economyOpen ? economicAuditState?.emptyStateRendered ?? false : false,
     accessibleSummary: economyOpen ? economicAuditState?.accessibleSummary ?? false : false,
-    datasetRevision, renderRevision,
+    datasetRevision, renderRevision: economyRenderRevision,
   }, economyOpen);
   // Missing optional observations are a data-availability boundary. The chart
   // still proves its actual measured empty state before that boundary is terminal.
-  usePerformanceAuditProbe(surface, {
+  usePerformanceAuditProbe(economySurface, {
     id: 'economic-data', kind: 'data', required: economyOpen,
     status: economicAuditState?.status ?? 'pending', error: economicAuditState?.error,
     expectedCount: economicAuditState?.indicatorCount ?? 0,
     actualCount: economicAuditState?.indicatorCount ?? 0,
-    datasetRevision, renderRevision,
+    datasetRevision, renderRevision: economyRenderRevision,
   }, economyOpen);
   usePerformanceAuditProbe(surface, {
     id: 'leader-logos', kind: 'logo', required: explorerMode === 'race',

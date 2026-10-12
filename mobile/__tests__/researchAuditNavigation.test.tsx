@@ -29,7 +29,7 @@ jest.mock('../src/hooks/useSuitabilityRevision', () => ({ useSuitabilityRevision
 jest.mock('../src/hooks/usePerformanceAuditReadiness', () => ({
   usePerformanceAuditSurface: (surface: PerformanceAuditSurfaceDefinition) => {
     mockSurfaces.set(surface.id, surface);
-    return {};
+    return { surfaceId: surface.id };
   },
   usePerformanceAuditProbe: jest.fn(),
 }));
@@ -109,8 +109,16 @@ test('missing economics keeps its optional data error while a measured empty gra
       jest.mocked(usePerformanceAuditProbe).mock.calls.filter(call => call[1].id === id).at(-1)![1]);
     const registry = new PerformanceAuditReadinessRegistry();
     registry.beginCapture('economic-unavailable');
-    registry.registerSurface({ id: 'outlook.dashboard', probes });
-    const snapshot = registry.snapshot(['outlook.dashboard']);
+    const economyStep = buildDeepPerformanceAuditPlan(mockCore).passes[0].steps
+      .find(step => step.semanticActionId === 'outlook.economy.lens.next')!;
+    expect(economyStep.expectedSurface).toBe('outlook.economy');
+    for (const id of ['economic-graphics', 'economic-data']) {
+      const registration = jest.mocked(usePerformanceAuditProbe).mock.calls
+        .filter(call => call[1].id === id).at(-1)!;
+      expect(registration[0].surfaceId).toBe(economyStep.expectedSurface);
+    }
+    registry.registerSurface({ id: economyStep.expectedSurface, probes });
+    const snapshot = registry.snapshot([economyStep.expectedSurface]);
     expect(snapshot.ready).toBe(false);
     expect(snapshot.blockers).toEqual([expect.objectContaining({ code: 'probe-error', probeId: 'economic-data' })]);
     const observations = appHealthDisplayObservations([{
@@ -118,9 +126,73 @@ test('missing economics keeps its optional data error while a measured empty gra
       metrics: { readinessEvidence: compactPerformanceAuditReadinessEvidence(snapshot) },
     }]);
     const chart = evaluateAppHealthDisplayQuality([
-      { id: 'outlook.dashboard', requiredRoles: ['chart'] },
+      { id: economyStep.expectedSurface, requiredRoles: ['chart'] },
     ], observations).find(check => check.id === 'display-chart');
     expect(chart).toMatchObject({ status: 'unavailable', metrics: { failed: 0, unavailable: 1 } });
+  } finally { act(() => tree.unmount()); }
+});
+
+test('uncached economics cannot block the mounted market browse action', async () => {
+  mockCore = makeHealthyCore();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
+  try {
+    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    act(() => tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
+      status: 'error', error: 'Economic signals are not saved on this device.', indicatorCount: 0,
+      expectedCount: 0, pointCount: 0, layoutMeasured: true, emptyStateRendered: true,
+      graphicReady: true, accessibleSummary: true,
+    }));
+    const latestProbes = new Map(jest.mocked(usePerformanceAuditProbe).mock.calls
+      .filter(call => call[2] !== false)
+      .map(call => [`${call[0].surfaceId}:${call[1].id}`, call]));
+    const registry = new PerformanceAuditReadinessRegistry();
+    registry.beginCapture('browse-after-uncached-economics');
+    for (const surface of mockSurfaces.values()) {
+      const probes = [...latestProbes.values()]
+        .filter(call => call[0].surfaceId === surface.id).map(call => call[1]);
+      registry.registerSurface({ ...surface, probes });
+    }
+    expect(registry.snapshot(['outlook.economy']).blockers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'probe-error', probeId: 'economic-data' }),
+    ]));
+    // Other missing mock chart assets may remain pending, but economics is not
+    // among the dashboard's data prerequisites or terminal failures.
+    const dashboard = registry.snapshot(['outlook.dashboard'], undefined, ['data', 'layout']);
+    expect(dashboard.surfaces[0].probes.some(probe => probe.id.startsWith('economic-'))).toBe(false);
+    expect(dashboard.blockers.some(blocker => blocker.code === 'probe-error')).toBe(false);
+    const result = await registry.invokeAction('outlook.dashboard', 'outlook.snapshot.browse.first', { section: 'Mortgage' });
+    expect(result).toEqual({ expectedPath: '/categories' });
+    expect(mockNavigate).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/categories' }));
+  } finally { act(() => tree.unmount()); }
+});
+
+test('economic view changes update the scoped surface and probes independently of market-history state', () => {
+  mockCore = makeHealthyCore();
+  let tree!: InspectableRenderer;
+  act(() => { tree = TestRenderer.create(<Research />) as InspectableRenderer; });
+  try {
+    act(() => tree.root.findAll(node => node.props.title === 'What is shaping rates')[0].props.onToggle());
+    const reportEconomicRender = (renderRevision: string, graphicReady: boolean) => act(() => {
+      tree.root.findAll(node => node.type === 'RbaOutlook')[0].props.onAuditStateChange({
+        status: graphicReady ? 'ready' : 'pending', revision: 'cached-economic-edition', renderRevision,
+        indicatorCount: 1, expectedCount: 2, pointCount: 2, layoutMeasured: graphicReady,
+        emptyStateRendered: false, graphicReady, accessibleSummary: graphicReady,
+      });
+    });
+    reportEconomicRender('cached-economic-edition:policy:5Y:0', true);
+    const marketRevision = mockSurfaces.get('outlook.dashboard')!.renderRevision;
+    const before = mockSurfaces.get('outlook.economy')!.renderRevision;
+    reportEconomicRender('cached-economic-edition:policy:All:0', false);
+    const surface = mockSurfaces.get('outlook.economy')!;
+    expect(surface.renderRevision).not.toBe(before);
+    expect(mockSurfaces.get('outlook.dashboard')!.renderRevision).toBe(marketRevision);
+    expect(mockSurfaces.get('outlook.dashboard')!.actions!['outlook.economy.window.next']).toBeUndefined();
+    const graphic = () => jest.mocked(usePerformanceAuditProbe).mock.calls
+      .filter(call => call[1].id === 'economic-graphics').at(-1)![1];
+    expect(graphic()).toMatchObject({ status: 'pending', renderRevision: surface.renderRevision, layoutMeasured: false });
+    reportEconomicRender('cached-economic-edition:policy:All:0', true);
+    expect(graphic()).toMatchObject({ status: 'ready', renderRevision: surface.renderRevision, layoutMeasured: true });
   } finally { act(() => tree.unmount()); }
 });
 

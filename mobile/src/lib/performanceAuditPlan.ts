@@ -518,7 +518,6 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     skipExplanation: 'My matches requires a pinned core revision and an honest suitability result.',
   }, [
     { depth: 0, semanticActionId: 'today.open' },
-    { depth: 1, semanticActionId: 'today.section.next', stateImpact: 'restorable' },
     {
       depth: 2,
       semanticActionId: 'today.best.open',
@@ -530,6 +529,9 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
       optional: true,
       skipReason: missingPrimary,
     },
+    // Exercise the card that actually rendered before cycling to another
+    // section, which may honestly have no product matching the user's profile.
+    { depth: 1, semanticActionId: 'today.section.next', stateImpact: 'restorable' },
   ]);
 
   scenario(templates, 'route.browse', {
@@ -973,9 +975,9 @@ function templatesFor(inputs: DeepAuditDerivedInputs): StepTemplate[] {
     { depth: 2, semanticActionId: 'outlook.history.window.all', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 3, semanticActionId: 'outlook.history.date.previous', readiness: ['graphics'], optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.rba-response.decision.previous', expectedSurface: 'outlook.rba-response', readiness: ['rba-calendar', 'graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.economy.lens.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 2, semanticActionId: 'outlook.economy.window.next', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
-    { depth: 3, semanticActionId: 'outlook.economy.date.previous', readiness: ['economic-data', 'graphics'], optional: true, ...optionalFeatureSkip },
+    { depth: 2, semanticActionId: 'outlook.economy.lens.next', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },
+    { depth: 2, semanticActionId: 'outlook.economy.window.next', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },
+    { depth: 3, semanticActionId: 'outlook.economy.date.previous', expectedSurface: 'outlook.economy', readiness: ['economic-data', 'graphics'], stateImpact: 'local-only', optional: true, ...optionalFeatureSkip },
     { depth: 2, semanticActionId: 'outlook.snapshot.browse.first', expectedPath: '/categories', expectedSurface: 'browse.hierarchy', readiness: ['list'], parameters: { section: section ?? null }, optional: true, skipReason: missingCore },
   ]);
 

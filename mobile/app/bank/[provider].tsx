@@ -1,6 +1,8 @@
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { InteractionManager, Pressable, type ScrollView, View } from 'react-native';
+import { InteractionManager, Pressable, useWindowDimensions, View } from 'react-native';
 
 import { BankAvatar } from '../../src/components/BankAvatar';
 import {
@@ -11,7 +13,7 @@ import { BankMoveRow } from '../../src/components/BankInsights';
 import { ChartErrorBoundary } from '../../src/components/ChartErrorBoundary';
 import { EmptyState, ScreenSkeleton } from '../../src/components/feedback';
 import { ProductCard } from '../../src/components/ProductCard';
-import { ScreenScrollView } from '../../src/components/Screen';
+import { DataHealthBannerStrip, responsiveScreenContentStyle, Screen } from '../../src/components/Screen';
 import { SegmentedControl } from '../../src/components/controls';
 import { AppText, Card, Chip, Divider, Row } from '../../src/components/ui';
 import { SECTIONS, SECTION_ORDER } from '../../src/constants';
@@ -35,6 +37,7 @@ import { rateHistoryChartModel } from '../../src/data/rateHistoryCharts';
 import { useStore } from '../../src/data/store';
 import { usePerformanceAuditSurface } from '../../src/hooks/usePerformanceAuditReadiness';
 import { useLogoReadiness } from '../../src/hooks/useLogoReadiness';
+import { useVirtualizedListReadiness } from '../../src/hooks/useVirtualizedListReadiness';
 import { openProduct } from '../../src/lib/nav';
 import {
   auditActionInteger,
@@ -53,6 +56,8 @@ import {
 import type { RateRow, SectionKey } from '../../src/types';
 import { SECTION_KEYS } from '../../src/types';
 import { useTheme } from '../../src/theme/ThemeProvider';
+
+interface LenderProductItem { row: RateRow; section: SectionKey; firstInSection: boolean }
 
 function bpsLabel(bps: number): string {
   const rounded = Math.round(bps * 10) / 10;
@@ -158,7 +163,9 @@ export default function BankDetail() {
   const productHistory = useStore((s) => (productHistoryReady ? s.productHistory : null));
   const insightsRequestKey = useRef<string | null>(null);
   const historyRequestKey = useRef<string | null>(null);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlashListRef<LenderProductItem>>(null);
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const historyAuditActionsRef = useRef<BankHistoryChartAuditActions | null>(null);
   const [layoutReady, setLayoutReady] = useState(false);
   const [historyGraphicEvidence, setHistoryGraphicEvidence] =
@@ -400,12 +407,21 @@ export default function BankDetail() {
 
   const recentMoveBreakdowns = focusSourceEvent ? [] : eventBreakdowns.slice(0, 3);
 
-  const productCount = useMemo(() => bySection.reduce((n, s) => n + s.rows.length, 0), [bySection]);
+  const productItems = useMemo(() => bySection.flatMap(({ section, rows }) => rows.map((row, index) => ({
+    row, section, firstInSection: index === 0,
+  }))), [bySection]);
+  const productCount = productItems.length;
+  const productListRevision = useRef({ items: productItems, version: 0 });
+  if (productListRevision.current.items !== productItems) {
+    productListRevision.current = { items: productItems, version: productListRevision.current.version + 1 };
+  }
+  const listRevision = `${provider}:${coreSha ?? core?.run_date ?? ''}:${productListRevision.current.version}`;
+  const listReadiness = useVirtualizedListReadiness(listRevision, productCount);
 
   const handleMoveSelect = useCallback(
     (event: BankRateEvent) => {
       router.setParams({ date: event.date, section: event.section });
-      requestAnimationFrame(() => scrollRef.current?.scrollTo({ y: 0, animated: true }));
+      requestAnimationFrame(() => scrollRef.current?.scrollToOffset({ offset: 0, animated: true }));
     },
     [router],
   );
@@ -466,7 +482,7 @@ export default function BankDetail() {
     () => provider ? [`lender:header:${provider}`] : [],
     [provider],
   );
-  const logoReadiness = useLogoReadiness(provider, lenderLogoIds);
+  const logoReadiness = useLogoReadiness(listRevision, lenderLogoIds);
   const moveHistoryRequired = showBankInsights && !!(focusDate && focusSection);
   const currentHistoryGraphicEvidence = isCurrentHistoryGraphicEvidence(
     historyGraphicEvidence,
@@ -488,9 +504,10 @@ export default function BankDetail() {
       {
         id: 'lender.products',
         kind: 'list',
-        status: core ? 'ready' : 'pending',
+        status: core && listReadiness.ready ? 'ready' : 'pending',
         expectedCount: productCount,
-        actualCount: productCount,
+        actualCount: listReadiness.committedItemCount,
+        visibleCount: listReadiness.measuredVisibleCount,
       },
       {
         id: 'lender.layout',
@@ -555,37 +572,39 @@ export default function BankDetail() {
 
   if (!core) return <ScreenSkeleton />;
 
-  const currentProducts = bySection.length === 0 ? (
-    <EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />
-  ) : (
-    bySection.map(({ section, rows }) => (
-      <View key={section} style={{ marginBottom: 12 }}>
-        <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
-          {SECTIONS[section].title.toUpperCase()}
-        </AppText>
-        {rows.map((r) => (
-          <ProductCard
-            key={r.product_key}
-            row={r}
-            section={section}
-            showLenderAction={false}
-            logoRenderStateId={`lender:${section}:${r.rate_index ?? 'default'}#${r.product_key}`}
-            onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
-            onPress={() => openProduct(r.product_key, r.rate_index)}
-          />
-        ))}
-      </View>
-    ))
-  );
-
   return (
     <>
       <Stack.Screen options={{ title: provider }} />
-      <ScreenScrollView
-        ref={scrollRef}
-        onLayout={() => setLayoutReady(true)}
-        contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
-      >
+      <Screen showDataHealthBanner={false}>
+        <View style={{ ...responsiveScreenContentStyle(width), paddingHorizontal: 0, flex: 1 }}>
+        <FlashList
+          key={listRevision}
+          ref={scrollRef}
+          data={productItems}
+          onLayout={() => { setLayoutReady(true); listReadiness.onRevisionLayout(); }}
+          onCommitLayoutEffect={listReadiness.onCommitLayoutEffect}
+          onLoad={listReadiness.onLoad}
+          onContentSizeChange={listReadiness.onContentSizeChange}
+          onViewableItemsChanged={listReadiness.onViewableItemsChanged}
+          viewabilityConfig={{ itemVisiblePercentThreshold: 1, minimumViewTime: 16 }}
+          keyExtractor={item => `${item.section}:${item.row.product_key}`}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 32 + insets.bottom }}
+          renderItem={({ item }) => <View>
+            {item.firstInSection ? <AppText variant="small" weight="700" color="textMuted" style={{ marginBottom: 8, marginLeft: 4 }}>
+              {SECTIONS[item.section].title.toUpperCase()}
+            </AppText> : null}
+            <ProductCard
+              row={item.row}
+              section={item.section}
+              showLenderAction={false}
+              logoRenderStateId={`lender:${item.section}:${item.row.rate_index ?? 'default'}#${item.row.product_key}`}
+              onLogoRenderStateChange={logoReadiness.onLogoRenderStateChange}
+              onPress={() => openProduct(item.row.product_key, item.row.rate_index)}
+            />
+          </View>}
+          ListEmptyComponent={<EmptyState title="No current products" subtitle="This lender has no rates in the current data set." />}
+          ListHeaderComponent={<View>
+        <DataHealthBannerStrip />
         <Row gap={14} style={{ marginBottom: 20 }}>
           <BankAvatar
             provider={provider}
@@ -613,7 +632,10 @@ export default function BankDetail() {
         ) : null}
 
         <AppText variant="h3" style={{ marginBottom: 10 }}>Current products</AppText>
-        {currentProducts}
+
+          </View>}
+          ListFooterComponent={<View>
+
 
         {showBankInsights && focusEvent && focusSection ? (
           <Card
@@ -807,7 +829,11 @@ export default function BankDetail() {
           ) : null
         ) : null}
 
-      </ScreenScrollView>
+
+          </View>}
+        />
+        </View>
+      </Screen>
     </>
   );
 }

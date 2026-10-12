@@ -329,6 +329,39 @@ describe('deep performance audit plan', () => {
     }
   });
 
+  test('exercises the available matched card before cycling to a section without a winner', () => {
+    const plan = buildDeepPerformanceAuditPlan(corePayload());
+    for (const pass of plan.passes) {
+      let bestAvailable = false;
+      const opened: string[] = [];
+      const actions: Record<string, () => void> = {
+        'today.open': () => { bestAvailable = true; },
+        'today.best.open': () => {
+          if (bestAvailable) opened.push('the mounted exact matched product');
+        },
+        'today.section.next': () => { bestAvailable = false; },
+      };
+      for (const step of pass.steps.filter(item => item.scenarioId === 'route.today')) {
+        actions[step.semanticActionId]();
+      }
+      expect(opened).toEqual(['the mounted exact matched product']);
+      expect(bestAvailable).toBe(false);
+    }
+  });
+
+  test('gates economics controls on their own data and graphic surface', () => {
+    const plan = buildDeepPerformanceAuditPlan(corePayload());
+    for (const pass of plan.passes) {
+      const economy = pass.steps.filter(step => step.semanticActionId.startsWith('outlook.economy.'));
+      expect(economy).toHaveLength(3);
+      for (const step of economy) {
+        expect(step.expectedSurface).toBe('outlook.economy');
+        expect(step.readiness).toEqual(expect.arrayContaining(['data', 'economic-data', 'graphics']));
+        expect(step.optional).toBe(true);
+      }
+    }
+  });
+
   test('replays exact same-section comparison tiers and sample ordering from the recorded seed', () => {
     const core = corePayload();
     const options = { seed: 'session-example' };

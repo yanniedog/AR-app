@@ -7,7 +7,7 @@ import { AppText, Button, Disclosure } from '../ui';
 import { SavingsPeriodForm } from './SavingsPeriodForm';
 export function SavingsPeriodCalculation({ productKey, row, section }: { productKey: string; row?: RateRow; section?: SectionKey }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity), details = useStore(s => s.details), ensureDetails = useStore(s => s.ensureDetails);
-  const [open, setOpen] = useState(false), [retry, setRetry] = useState(0), identity = hashText(canonical([manifest, productKey, row ?? null, section ?? null]));
+  const [open, setOpen] = useState(false), [retry, setRetry] = useState(0), identity = open ? hashText(canonical([manifest, productKey, row ?? null, section ?? null])) : '';
   const [loaded, setLoaded] = useState<{ identity: string; core: typeof core; details: typeof details; integrity: typeof coreIntegrity; selections?: SavingsSelection[]; target?: SavingsTarget; error?: string } | null>(null);
   const current = loaded?.identity === identity && loaded.core === core && loaded.details === details && loaded.integrity === coreIntegrity ? loaded : null;
   useEffect(() => {

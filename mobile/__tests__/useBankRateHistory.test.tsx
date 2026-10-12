@@ -114,3 +114,52 @@ test('startup loading keeps current-only data hidden until the store completes h
   expect(value.revision).not.toBe(previousRevision);
   act(() => tree.unmount());
 });
+
+test('product, lender and chart mounts share the exact eligible scope and invalidate live profile changes', () => {
+  const values: ReturnType<typeof useBankRateHistory>[] = [];
+  function Consumer({ index }: { index: number }) { values[index] = useBankRateHistory(); return null; }
+  let tree!: ReactTestRenderer;
+  act(() => { tree = TestRenderer.create(<><Consumer index={0} /><Consumer index={1} /><Consumer index={2} /></>); });
+  const initial = values[0].scope;
+  expect(values[1].scope).toBe(initial);
+  expect(values[2].scope).toBe(initial);
+  expect(initial.rows.Mortgage).toEqual(mockState.core!.sections.Mortgage.rates);
+
+  // Same-day corrected objects and mandatory-gate revisions must break reuse.
+  mockState.core = makeCore();
+  mockState.core.sections.Mortgage.rates[0].rate = '0.07';
+  mockSuitabilityRevision++;
+  act(() => tree.update(<><Consumer index={0} /><Consumer index={1} /></>));
+  expect(values[0].scope).not.toBe(initial);
+  expect(values[1].scope).toBe(values[0].scope);
+  expect(values[0].snapshots![mockState.core.run_date].Mortgage!.Alpha.mean).toBeCloseTo(7);
+
+  mockState.prefs = { ...mockState.prefs, profileFilters: { ...EMPTY_PROFILE, rateTypes: ['FIXED'] } };
+  act(() => tree.update(<><Consumer index={0} /><Consumer index={1} /></>));
+  expect(values[0].scope.rows.Mortgage).toEqual([]);
+  expect(values[1].scope).toBe(values[0].scope);
+  act(() => tree.unmount());
+});
+
+test('uncached large scope stays blank while preparing and never publishes a cancelled edition', async () => {
+  const original = makeCore();
+  original.sections.Mortgage.rates = Array.from({ length: 100 }, (_, index) => ({ ...original.sections.Mortgage.rates[0], product_key: `loan-${index}` }));
+  mockState.core = original;
+  let resume!: () => void;
+  const paused = new Promise<void>(resolve => { resume = resolve; });
+  jest.mocked(yieldToUi).mockImplementationOnce(() => paused);
+  let value!: ReturnType<typeof useBankRateHistory>;
+  function Consumer() { value = useBankRateHistory(); return null; }
+  let tree!: ReactTestRenderer;
+  await act(async () => { tree = TestRenderer.create(<Consumer />); });
+  expect(value.snapshots).toBeNull();
+  expect(value.updating).toBe(true);
+  const corrected = makeCore();
+  corrected.sections.Mortgage.rates[0].rate = '0.07';
+  mockState.core = corrected;
+  act(() => tree.update(<Consumer />));
+  expect(value.snapshots![corrected.run_date].Mortgage!.Alpha.mean).toBeCloseTo(7);
+  await act(async () => { resume(); await paused; });
+  expect(value.snapshots![corrected.run_date].Mortgage!.Alpha.mean).toBeCloseTo(7);
+  act(() => tree.unmount());
+});

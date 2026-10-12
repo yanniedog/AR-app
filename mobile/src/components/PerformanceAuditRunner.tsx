@@ -1,4 +1,4 @@
-import { auditSearchUsesBasicFallback, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
+import { auditSearchUsesBasicFallback, canPrepareAuditBankInsights, canPrepareAuditSearchIndex } from '../lib/performanceAuditProfile';
 import { isVerifiedCalculatorSectionSelection } from '../lib/calculatorAuditSelection';
 import { isLocalAppHealthAudit } from '../lib/appHealthTransportGuard';
 import { toPublicAppHealthReport } from '../lib/appHealth';
@@ -1396,6 +1396,22 @@ async function runMaximumCoverageProfileCheck(
       };
     }
   }
+  const bankInsightsCacheOnly = auditMode === 'local';
+  const bankInsightsPreparationAttempted = bankInsightsCacheOnly ||
+    canPrepareAuditBankInsights(auditMode, original.manifest, liveSnapshot?.manifest);
+  if (bankInsightsPreparationAttempted) {
+    await awaitAuditWork(useStore.getState().ensureBankInsights({ cacheOnly: bankInsightsCacheOnly }),
+      watchdog, 'Preparing authenticated bank intelligence');
+    const prepared = useStore.getState();
+    if (liveSnapshot) {
+      liveSnapshot.assets ??= {};
+      liveSnapshot.assets.bank_history = {
+        state: prepared.bankInsights ? 'ready' : prepared.bankInsightsError ? 'failed' : 'not-requested',
+        runDate: prepared.bankInsights?.run_date ?? null,
+        itemCount: prepared.bankInsights ? Object.keys(prepared.bankInsights.banks).length : null,
+      };
+    }
+  }
   assertSessionActive(watchdog);
 
   const state = useStore.getState();
@@ -1454,6 +1470,8 @@ async function runMaximumCoverageProfileCheck(
       availableAssets: Object.values(requiredAssets).filter(Boolean).length,
       missingAssets: missingAssets.join(',') || null,
       localCacheOnly: auditMode === 'local',
+      bankInsightsPreparationAttempted,
+      bankInsightsCacheOnly,
       executionAttempted: true,
       measurementAvailable: !assetsUnavailableWithoutPreparation,
       ...(assetsUnavailableWithoutPreparation ? {

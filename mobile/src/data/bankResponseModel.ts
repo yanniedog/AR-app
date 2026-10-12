@@ -32,27 +32,14 @@ function dayBefore(date: string): string {
   return new Date(time - DAY_MS).toISOString().slice(0, 10);
 }
 
-function firstEvent(
-  events: BankRateEvent[], provider: string, section: SectionKey, start: string, end: string,
-): BankRateEvent | null {
-  return events
-    .filter((event) => event.provider === provider && event.section === section && event.date >= start && event.date <= end)
-    .sort((a, b) => a.date.localeCompare(b.date))[0] ?? null;
-}
-
-function hasSeriesObservation(
-  payload: BankInsightsPayload,
-  provider: string,
-  section: SectionKey,
-  start: string,
-  end: string,
-): boolean {
-  const series = payload.banks[provider]?.[section];
-  if (!series) return false;
-  return payload.run_dates.some((date, index) =>
-    date >= start
-    && date <= end
-    && [series.median[index], series.best[index], series.count[index]].some((value) => value != null));
+function firstDateIndex<T>(values: readonly T[], start: string, date: (value: T) => string): number {
+  let low = 0, high = values.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (date(values[middle]) < start) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }
 
 export function buildCompactBankResponseWindows(
@@ -64,19 +51,40 @@ export function buildCompactBankResponseWindows(
     .filter((decision) => decision.date <= payload.run_date)
     .sort((a, b) => a.date.localeCompare(b.date));
   const ledgerStart = payload.run_dates[0] ?? payload.run_date;
+  // Index once per section instead of scanning and sorting the full event
+  // ledger for every bank in every decision window. Stable sorting preserves
+  // the producer's first event when several observations share a date.
+  const eventsByProvider = new Map<string, BankRateEvent[]>();
+  for (const event of payload.events) {
+    if (event.section !== section) continue;
+    const events = eventsByProvider.get(event.provider);
+    if (events) events.push(event);
+    else eventsByProvider.set(event.provider, [event]);
+  }
+  for (const events of eventsByProvider.values()) events.sort((a, b) => a.date.localeCompare(b.date));
+  const providers = Object.keys(payload.banks).sort((a, b) => a.localeCompare(b));
+  const observations = new Map<string, string[]>();
+  for (const provider of providers) {
+    const series = payload.banks[provider]?.[section];
+    if (!series) continue;
+    observations.set(provider, payload.run_dates.filter((_, index) =>
+      series.median[index] != null || series.best[index] != null || series.count[index] != null).sort());
+  }
   return decisions.map((decision, index) => {
     const next = decisions[index + 1];
     const windowEnd = next ? dayBefore(next.date) : payload.run_date;
     const observationStart = decision.date < ledgerStart ? ledgerStart : decision.date;
     const partialHistory = observationStart !== decision.date;
-    const providers = Object.entries(payload.banks)
-      .filter(([provider]) =>
-        payload.events.some((event) => event.provider === provider && event.section === section)
-        || hasSeriesObservation(payload, provider, section, observationStart, windowEnd))
-      .map(([provider]) => provider)
-      .sort((a, b) => a.localeCompare(b));
-    const rows = providers.map((provider) => {
-      const event = firstEvent(payload.events, provider, section, observationStart, windowEnd);
+    const includedProviders = providers.filter((provider) => {
+      if (eventsByProvider.has(provider)) return true;
+      const dates = observations.get(provider) ?? [];
+      const first = dates[firstDateIndex(dates, observationStart, date => date)];
+      return first !== undefined && first <= windowEnd;
+    });
+    const rows = includedProviders.map((provider) => {
+      const events = eventsByProvider.get(provider) ?? [];
+      const candidate = events[firstDateIndex(events, observationStart, event => event.date)];
+      const event = candidate && candidate.date <= windowEnd ? candidate : null;
       return {
         provider,
         movePp: event ? event.avg_bps / 100 : null,

@@ -64,8 +64,8 @@ function DepositForm({ candidates, context, row }: { candidates: ApprovedSelecti
 export function FixedDepositCalculation({ row }: { row: RateRow }) {
   const manifest = useStore(s => s.manifest), core = useStore(s => s.core), coreIntegrity = useStore(s => s.coreIntegrity);
   const [open, setOpen] = useState(false);
-  const edition = manifest ? hashText(canonical(manifest)) : '';
-  const identity = `${edition}:${hashText(canonical(row))}`;
+  const edition = open && manifest ? hashText(canonical(manifest)) : '';
+  const identity = open ? `${edition}:${hashText(canonical(row))}` : '';
   const [loaded, setLoaded] = useState<{ identity: string; selections?: ApprovedSelection[]; error?: string } | null>(null);
   const selected = loaded?.identity === identity ? loaded : null;
   useEffect(() => {
