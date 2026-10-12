@@ -2,6 +2,7 @@
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
 import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
+import { readDetailsCacheText } from './detailsCacheText';
 import { Platform } from 'react-native';
 
 import type { CorePayload, DetailsPayload, Manifest, PayloadSource } from '../types';
@@ -456,7 +457,7 @@ export const cache = {
     if (meta?.manifest.payload_revision && !meta.detailsSha) return null;
     const file = versionedAsset(DETAILS, meta?.manifest.payload_revision ? meta.detailsSha ?? undefined : undefined);
     try {
-      const text = await readText(file);
+      const text = await readDetailsCacheText(file, readText);
       const details = await parseJsonHeavy<DetailsPayload>(text);
       return await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
     } catch { return null; }
