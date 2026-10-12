@@ -61,17 +61,64 @@ it('yields before parsing and bounds new policy validations and duplicate scans 
   const validate = jest.spyOn(policy, 'trustedExternalUrl');
   let previous = 0;
   let slices = 0;
-  const source = details(Array.from({ length: 600 }, (_, index) =>
-    `https://bank.com.au/product/${Math.floor(index / 300)}`));
-  const result = await collect({ details: source }, async () => {
+  let scanned = 0;
+  const source = details(Array.from({ length: 10_000 }, (_, index) =>
+    `https://bank.com.au/product/${Math.floor(index / 5_000)}`));
+  const result = await collect({ details: source }, async (_count, progress) => {
     expect(validate.mock.calls.length - previous).toBeLessThanOrEqual(16);
+    expect(progress.scannedCandidates - scanned).toBeLessThanOrEqual(4_096);
     if (slices === 0) expect(validate).not.toHaveBeenCalled();
     previous = validate.mock.calls.length;
+    scanned = progress.scannedCandidates;
     slices++;
   }, () => 0);
   expect(result).toHaveLength(FIXED_EXTERNAL_AUDIT_LINKS.length + 2);
-  // Only seven parses are needed, but 605 raw candidates still require slices.
+  // Only seven parses are needed; cheap duplicates still have a finite count cap.
   expect(slices).toBeGreaterThanOrEqual(4);
+  expect(scanned).toBe(10_005);
+});
+
+it('finishes a cached large-catalogue pass within 10 seconds despite native yield overhead', async () => {
+  const source = details(Array.from({ length: 53_771 }, (_, index) =>
+    `https://bank.com.au/product/${index % 2_348}`));
+  const collect = createExternalAuditLinkCollector();
+  const initial = await collect({ details: source }, async () => {}, () => 0);
+  const validate = jest.spyOn(policy, 'trustedExternalUrl');
+  let elapsed = 0;
+  let checkpointCount = 0;
+  const repeated = await collect({ details: source }, async (_count, progress) => {
+    // Model rendering/scheduling delays independently of policy CPU. The
+    // previous 256-item cap requires over 200 such native yields.
+    elapsed += 180;
+    checkpointCount++;
+    expect(elapsed).toBeLessThan(10_000);
+    expect(progress.policyValidations).toBe(0);
+    expect(progress.activeCpuMs).toBe(0);
+    expect(progress.maxSliceMs).toBe(0);
+  }, () => elapsed);
+  expect(repeated).toEqual(initial);
+  expect(validate).not.toHaveBeenCalled();
+  expect(checkpointCount).toBe(15);
+  expect(elapsed).toBe(2_700);
+});
+
+it('observes additions, removals, URL changes and labels mutated inside the same details object', async () => {
+  const source = details(['https://bank.com.au/old', 'https://bank.com.au/removed']);
+  source.products['product-0'].sourceDocuments = [{ url: 'https://bank.com.au/document', sourcePath: 'documents.0', relation: 'terms', label: 'Old label' }];
+  const collect = createExternalAuditLinkCollector();
+  await collect({ details: source }, async () => {});
+  source.products['product-0'].links!.overview = 'https://bank.com.au/new';
+  source.products['product-0'].sourceDocuments![0].label = 'Updated label';
+  source.products['product-0'].sourceDocuments!.push({ url: 'http://unapproved.test/rejected', sourcePath: 'documents.1', relation: 'terms', label: 'New rejected document' });
+  delete source.products['product-1'];
+  const observed = [request('https://bank.com.au/new', 'Mounted label')];
+  const expected = collectExternalAuditLinks({ details: source, observed });
+  const actual = await collect({ details: source, observed }, async () => {});
+  expect(actual).toEqual(expected);
+  expect(actual.find(entry => entry.url.endsWith('/new'))?.label).toBe('Mounted label');
+  expect(actual.find(entry => entry.url.endsWith('/document'))?.label).toBe('Updated label');
+  expect(actual.some(entry => /old|removed/.test(entry.url))).toBe(false);
+  expect(actual.some(entry => entry.url === 'http://unapproved.test/rejected')).toBe(true);
 });
 
 it('checks its time budget between requests even when the count bound has not been reached', async () => {

@@ -141,3 +141,28 @@ retain detached initial data and bank/category coverage, keep observed display
 failures, and leave unvisited display checks unverified against the full plan.
 The settings restoration and rollback time limits remain unchanged; host CPU
 contention during that run prevents a device-performance conclusion.
+
+## Quiet-host native follow-up
+
+The subsequent offline emulator run completed its first preference restoration
+and repeat navigation pass, then stopped while rebuilding the external-link
+inventory. Cached policy work still yielded every 256 raw candidates, causing
+hundreds of native scheduling delays for repeated source URLs. The collector
+now scans up to 4,096 cheap candidates per slice while keeping its 8 ms active
+slice, 16-new-validation and 10-second total limits. It still re-enumerates all
+sources, including in-place edits, removals and labels. Reports record slice,
+candidate and policy-work counts so scheduling overhead can be distinguished.
+
+Projection navigation now waits for input storage before applying the scenario
+that creates its chart. Closed optional Outlook panels unregister their probes;
+opening them again requires fresh measured evidence. The RBA action opens and
+checks its own chart, so ready market history cannot conceal an unmeasured RBA
+plot. These fixes preserve strict chart counts, layout and accessible summaries.
+
+Inspection of the installed Expo SDK also confirmed that a cold headless host
+does not mount Router screens. The production entry now imports lightweight
+task definitions before Router. Each callback loads only its own runtime when
+invoked; a passive-only wake never imports or hydrates the app store. Tests
+execute this entry without a React mount and invoke the real passive callback
+against persisted compact metadata with no store import or network request.
+The replacement signed APK still requires native cold-worker acceptance.

@@ -2717,9 +2717,13 @@ export function PerformanceAuditRunner() {
         await waitWhilePaused(watchdog);
         const inventoryWatchdog = new PerformanceAuditStepWatchdog('External link inventory preparation');
         let lastProgress = -Infinity;
+        let lastProgressCount = -1;
+        let inventoryMetrics = { inventorySlices: 0, inventoryRawCandidates: 0,
+          inventoryPolicyValidations: 0, inventoryCpuMs: 0, inventoryMaxSliceMs: 0 };
         const progress = (count: number, finished = false) => {
-          if (!finished && now() - lastProgress < 100) return;
+          if (!finished && (count === lastProgressCount || now() - lastProgress < 1_000)) return;
           lastProgress = now();
+          lastProgressCount = count;
           const reserved = finished ? count : Math.max(reservedLinkChecks, count);
           total += reserved - reservedLinkChecks;
           reservedLinkChecks = reserved;
@@ -2728,7 +2732,12 @@ export function PerformanceAuditRunner() {
           refreshEstimate();
         };
         try {
-          const links = await collectExternalLinks(input, async count => {
+          const links = await collectExternalLinks(input, async (count, evidence) => {
+            inventoryMetrics = {
+              inventorySlices: evidence.slices, inventoryRawCandidates: evidence.scannedCandidates,
+              inventoryPolicyValidations: evidence.policyValidations,
+              inventoryCpuMs: roundMetric(evidence.activeCpuMs), inventoryMaxSliceMs: roundMetric(evidence.maxSliceMs),
+            };
             await waitWhilePaused(inventoryWatchdog);
             assertSessionActive(watchdog);
             assertSessionActive(inventoryWatchdog);
@@ -2743,7 +2752,7 @@ export function PerformanceAuditRunner() {
           assertSessionActive(inventoryWatchdog);
           progress(links.length, true);
           assertSessionActive(inventoryWatchdog);
-          return { links, durationMs: roundMetric(inventoryWatchdog.elapsedMs) };
+          return { links, durationMs: roundMetric(inventoryWatchdog.elapsedMs), metrics: inventoryMetrics };
         } finally {
           inventoryWatchdog.close();
         }
@@ -3123,6 +3132,7 @@ export function PerformanceAuditRunner() {
           id: 'external-link-inventory', label: 'External link coverage', kind: 'data',
           status: useStore.getState().details ? 'pass' : 'warn', durationMs: externalInventory.durationMs,
           metrics: {
+            ...externalInventory.metrics,
             executionAttempted: true, uniqueDestinations: externalLinks.length,
             lenderDetailsLoaded: useStore.getState().details != null,
             observedDestinations: getCapturedExternalAuditLinks().length,

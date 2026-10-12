@@ -70,6 +70,14 @@ export function collectExternalAuditLinks(input: Parameters<typeof iterateExtern
   return uniqueExternalAuditLinks(iterateExternalAuditLinks(input));
 }
 
+export interface ExternalAuditLinkCollectionProgress {
+  slices: number;
+  scannedCandidates: number;
+  policyValidations: number;
+  activeCpuMs: number;
+  maxSliceMs: number;
+}
+
 /** Reuse policy work only within one audit. Every call still enumerates its
  * current sources, so changed details, labels and mounted links remain visible.
  * Rejected URLs are retained for foreground failure evidence, without a cap. */
@@ -77,23 +85,30 @@ export function createExternalAuditLinkCollector() {
   const keys = new Map<string, string>();
   return async (
     input: Parameters<typeof iterateExternalAuditLinks>[0],
-    checkpoint: (uniqueDestinations: number) => Promise<void>,
+    checkpoint: (uniqueDestinations: number, progress: Readonly<ExternalAuditLinkCollectionProgress>) => Promise<void>,
     clock: () => number = () => globalThis.performance?.now?.() ?? Date.now(),
   ): Promise<TrustedExternalUrlRequest[]> => {
     const unique = new Map<string, TrustedExternalUrlRequest>();
     const rawSeen = new Set<string>();
     const iterator = iterateExternalAuditLinks(input);
+    const progress: ExternalAuditLinkCollectionProgress = {
+      slices: 0, scannedCandidates: 0, policyValidations: 0, activeCpuMs: 0, maxSliceMs: 0,
+    };
     let done = false;
     try {
       // The caller checks cancellation, pauses and its whole-operation deadline
       // before each slice, then yields the native task queue for input/ETA work.
       while (!done) {
-        await checkpoint(unique.size);
+        await checkpoint(unique.size, { ...progress });
         const started = clock();
         let validations = 0;
-        for (let scanned = 0; scanned < 256 && validations < 16 && clock() - started < 8; scanned++) {
+        // Cached and duplicate entries are cheap. A tiny count cap forces the
+        // final native pass to wait hundreds of times for little CPU work.
+        // CPU time and new policy parses retain their original tight bounds.
+        for (let scanned = 0; scanned < 4_096 && validations < 16 && clock() - started < 8; scanned++) {
           const next = iterator.next();
           if (next.done) { done = true; break; }
+          progress.scannedCandidates++;
           const request = next.value;
           const raw = rawTargetKey(request);
           if (rawSeen.has(raw)) continue;
@@ -101,14 +116,19 @@ export function createExternalAuditLinkCollector() {
           let key = keys.get(raw);
           if (key == null) {
             validations++;
+            progress.policyValidations++;
             key = targetKey(request);
             keys.set(raw, key);
           }
           if (!unique.has(key)) unique.set(key, { ...request });
         }
+        const duration = clock() - started;
+        progress.slices++;
+        progress.activeCpuMs += duration;
+        progress.maxSliceMs = Math.max(progress.maxSliceMs, duration);
       }
       // Also catch synchronous work that finishes after the caller's deadline.
-      await checkpoint(unique.size);
+      await checkpoint(unique.size, { ...progress });
       return [...unique.values()];
     } finally {
       iterator.return(undefined);

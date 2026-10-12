@@ -110,38 +110,39 @@ export interface PerformanceAuditProbeController {
   update(patch: PerformanceAuditProbePatch): boolean;
 }
 
-/** Registers and removes a probe with component lifecycle-safe callbacks. */
+/** Registers a mounted part of the surface. Closed optional panels have no probe. */
 export function usePerformanceAuditProbe(
   surface: PerformanceAuditSurfaceController,
   definition: PerformanceAuditProbeDefinition,
+  enabled = true,
 ): PerformanceAuditProbeController {
   const definitionRef = useRef(definition);
   definitionRef.current = definition;
 
   useEffect(() => {
-    if (!surface.active) return;
+    if (!surface.active || !enabled) return;
     surface.upsertProbe(definitionRef.current);
     return () => {
       surface.removeProbe(definitionRef.current.id);
     };
-  }, [definition.id, surface]);
+  }, [definition.id, enabled, surface]);
 
   useEffect(() => {
-    if (surface.active) surface.upsertProbe(definition);
-  }, [definition, surface]);
+    if (surface.active && enabled) surface.upsertProbe(definition);
+  }, [definition, enabled, surface]);
 
   return useMemo<PerformanceAuditProbeController>(() => {
     const update = (patch: PerformanceAuditProbePatch) =>
-      surface.updateProbe(definition.id, patch);
+      enabled && surface.updateProbe(definition.id, patch);
     return {
-      active: surface.active,
+      active: surface.active && enabled,
       probeId: definition.id,
       pending: (patch = {}) => update({ ...patch, status: 'pending', error: null }),
       ready: (patch = {}) => update({ ...patch, status: 'ready', error: null }),
       fail: (error, patch = {}) => update({ ...patch, status: 'error', error }),
       update,
     };
-  }, [definition.id, surface]);
+  }, [definition.id, enabled, surface]);
 }
 
 export function usePerformanceAuditLogoProbe(
