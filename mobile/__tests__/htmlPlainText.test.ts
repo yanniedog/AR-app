@@ -45,6 +45,19 @@ test('keeps text after an equals sign inside a tag name', () => {
   expect(htmlPlainText('<x="y>Visible').trim()).toBe('Visible');
 });
 
+test('keeps text after an equals sign before an attribute name', () => {
+  expect(htmlPlainText('<div =">Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+});
+
+test('ends a non-doctype declaration at the first greater-than sign', () => {
+  expect(htmlPlainText('<!foo "x>Cash rate target 4.35%').trim()).toBe('Cash rate target 4.35%');
+});
+
+test('keeps a less-than sign that cannot start a tag', () => {
+  expect(htmlPlainText('<3 x=">Cash rate target 4.35%')).toBe('<3 x=">Cash rate target 4.35%');
+  expect(htmlPlainText('</3>visible').trim()).toBe('visible');
+});
+
 test('keeps a double-escaped script body inside the script', () => {
   expect(htmlPlainText('<script><!--<script></script>alert(1)</script>Visible').trim()).toBe('Visible');
 });

@@ -13,33 +13,45 @@ function asciiEqualsAt(html: string, index: number, needle: string): boolean {
 
 function tagEnd(html: string, from: number): number {
   let quote = '';
-  let state: 'tagName' | 'attr' | 'beforeValue' | 'unquoted' = 'tagName';
+  let state: 'tagName' | 'beforeAttr' | 'attrName' | 'afterAttr' | 'beforeValue' | 'unquoted' = 'tagName';
   for (let index = from; index < html.length; index += 1) {
     const char = html[index];
     if (quote) {
-      if (char === quote) quote = '';
+      if (char === quote) {
+        quote = '';
+        state = 'beforeAttr';
+      }
       continue;
     }
     if (char === '>') return index;
     if (state === 'tagName') {
-      if (HTML_SPACE.test(char) || char === '/') state = 'attr';
+      if (HTML_SPACE.test(char) || char === '/') state = 'beforeAttr';
       continue;
     }
-    if (state === 'unquoted') {
-      if (HTML_SPACE.test(char)) state = 'attr';
+    if (state === 'beforeAttr' || state === 'afterAttr') {
+      if (HTML_SPACE.test(char) || char === '/') continue;
+      if (char === '=' && state === 'afterAttr') {
+        state = 'beforeValue';
+        continue;
+      }
+      // An equals sign or quote before an attribute name is part of that name.
+      // It does not open a quoted value, so the next ">" still ends the tag.
+      state = 'attrName';
+      continue;
+    }
+    if (state === 'attrName') {
+      if (HTML_SPACE.test(char)) state = 'afterAttr';
+      else if (char === '=') state = 'beforeValue';
+      else if (char === '/') state = 'beforeAttr';
       continue;
     }
     if (state === 'beforeValue') {
       if (HTML_SPACE.test(char)) continue;
-      if (char === '"' || char === "'") {
-        quote = char;
-        state = 'attr';
-      } else {
-        state = 'unquoted';
-      }
+      if (char === '"' || char === "'") quote = char;
+      else state = 'unquoted';
       continue;
     }
-    if (char === '=') state = 'beforeValue';
+    if (HTML_SPACE.test(char)) state = 'beforeAttr';
   }
   return -1;
 }
@@ -141,7 +153,14 @@ export function htmlPlainText(html: string): string {
       parts.push(html.slice(index));
       break;
     }
-    parts.push(html.slice(index, open), ' ');
+    parts.push(html.slice(index, open));
+    const next = html[open + 1] || '';
+    if (next !== '!' && next !== '/' && !/[A-Za-z]/.test(next)) {
+      parts.push('<');
+      index = open + 1;
+      continue;
+    }
+    parts.push(' ');
     if (html.startsWith('<!--', open)) {
       const after = open + 4;
       if (html[after] === '>') index = after + 1;
@@ -149,8 +168,22 @@ export function htmlPlainText(html: string): string {
       else index = commentEnd(html, after);
       continue;
     }
-    if (html[open + 1] === '!') {
+    if (next === '!') {
+      const doctype = asciiEqualsAt(html, open, '<!doctype')
+        && TAG_BOUNDARY.test(html[open + '<!doctype'.length] ?? '');
+      if (!doctype) {
+        const end = html.indexOf('>', open + 2);
+        if (end < 0) break;
+        index = end + 1;
+        continue;
+      }
       const end = declarationEnd(html, open + 2);
+      if (end < 0) break;
+      index = end + 1;
+      continue;
+    }
+    if (next === '/' && !/[A-Za-z]/.test(html[open + 2] || '')) {
+      const end = html.indexOf('>', open + 2);
       if (end < 0) break;
       index = end + 1;
       continue;
