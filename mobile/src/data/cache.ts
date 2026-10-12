@@ -1,7 +1,7 @@
 // SDK 54 replaced the classic file API with a File/Directory API; the classic
 // functions we use (documentDirectory, read/write/move/delete) live under /legacy.
 import * as FileSystem from 'expo-file-system/legacy';
-import { bindCachedDetails, detailsCacheIdentity } from './detailsIdentity';
+import { bindCachedDetails, detailsCacheIdentity, verifiedDetailsSha } from './detailsIdentity';
 import { readDetailsCacheText } from './detailsCacheText';
 import { Platform } from 'react-native';
 
@@ -459,7 +459,10 @@ export const cache = {
     try {
       const text = await readDetailsCacheText(file, readText);
       const details = await parseJsonHeavy<DetailsPayload>(text);
-      return await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
+      await bindCachedDetails(details, text, await readJson(`${file}.verified`), meta?.detailsSha);
+      // A same-size replacement can span chunk reads. Only the assembled text's
+      // verified receipt may satisfy a known publication, including legacy paths.
+      return meta?.detailsSha && verifiedDetailsSha(details) !== meta.detailsSha ? null : details;
     } catch { return null; }
   },
 

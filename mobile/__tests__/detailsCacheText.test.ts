@@ -111,7 +111,7 @@ it.each(['ios', 'web'])('preserves the existing %s reader', async platform => {
   expect(FileSystem.readAsStringAsync).not.toHaveBeenCalled();
 });
 
-it('keeps exact details SHA binding after bounded reads and leaves changed JSON unverified', async () => {
+it('keeps exact details SHA binding after bounded reads and rejects changed JSON', async () => {
   const manifest = revisionManifest(1), sha = manifest.files.details.sha256;
   const file = `${path}.${sha}`;
   const hash = (text: string): string => jest.requireActual('node:crypto').createHash('sha256').update(text).digest('hex');
@@ -126,11 +126,69 @@ it('keeps exact details SHA binding after bounded reads and leaves changed JSON 
     jest.mocked(FileSystem.readAsStringAsync).mockImplementation(async (name, options) => name === `${file}.verified`
       ? receipt : boundedRead(name, options));
     const details = await cache.readDetails();
-    expect(details).not.toBeNull();
-    expect(verifiedDetailsSha(details!)).toBe(contents === text ? sha : null);
+    if (contents === text) expect(verifiedDetailsSha(details!)).toBe(sha);
+    else expect(details).toBeNull();
   }
   expect(jest.mocked(FileSystem.readAsStringAsync).mock.calls.filter(([name]) => name === file)
     .every(([, options]) => options?.encoding === 'base64' && options.length! <= DETAILS_CACHE_READ_CHUNK_BYTES)).toBe(true);
+});
+
+it('rejects parseable mixed JSON after a same-size replacement between reads', async () => {
+  const manifest = revisionManifest(1), sha = manifest.files.details.sha256;
+  const file = `${path}.${sha}`;
+  const hash = (text: string): string => jest.requireActual('node:crypto').createHash('sha256').update(text).digest('hex');
+  jest.spyOn(Crypto, 'digestStringAsync').mockImplementation(async (_algorithm, text) => hash(text));
+  jest.spyOn(cache, 'readMeta').mockResolvedValue({ manifest, coreSha: manifest.files.core.sha256,
+    detailsSha: sha, source: 'remote', savedAt: manifest.generated_at });
+  const first = JSON.stringify({ run_date: manifest.run_date, products: {}, left: 'a'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES), right: 'b'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES) });
+  const second = JSON.stringify({ run_date: manifest.run_date, products: {}, left: 'c'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES), right: 'd'.repeat(DETAILS_CACHE_READ_CHUNK_BYTES) });
+  expect(Buffer.byteLength(first)).toBe(Buffer.byteLength(second));
+  installBytes(Buffer.from(first));
+  const actualChunks: Buffer[] = [];
+  jest.mocked(FileSystem.readAsStringAsync).mockImplementation(async (name, options) => {
+    if (name === `${file}.verified`) return JSON.stringify({ schemaVersion: 1, assetSha256: sha, contentSha256: hash(second) });
+    const start = options!.position!;
+    const bytes = Buffer.from(start === 0 ? first : second).subarray(start, start + options!.length!);
+    actualChunks.push(bytes);
+    return bytes.toString('base64');
+  });
+  await expect(cache.readDetails()).resolves.toBeNull();
+  const mixed = Buffer.concat(actualChunks).toString('utf8');
+  expect(() => JSON.parse(mixed)).not.toThrow();
+  expect(mixed).not.toBe(first);
+  expect(mixed).not.toBe(second);
+});
+
+it.each(['missing', 'asset mismatch', 'content mismatch'])('rejects a known publication with %s receipt', async kind => {
+  const manifest = revisionManifest(1), sha = manifest.files.details.sha256;
+  const text = JSON.stringify({ run_date: manifest.run_date, products: {} });
+  const hash = (value: string): string => jest.requireActual('node:crypto').createHash('sha256').update(value).digest('hex');
+  jest.spyOn(Crypto, 'digestStringAsync').mockImplementation(async (_algorithm, value) => hash(value));
+  jest.spyOn(cache, 'readMeta').mockResolvedValue({ manifest, coreSha: manifest.files.core.sha256,
+    detailsSha: sha, source: 'remote', savedAt: manifest.generated_at });
+  installBytes(Buffer.from(text));
+  const boundedRead = jest.mocked(FileSystem.readAsStringAsync).getMockImplementation()!;
+  jest.mocked(FileSystem.readAsStringAsync).mockImplementation(async (name, options) => {
+    if (!name.endsWith('.verified')) return boundedRead(name, options);
+    if (kind === 'missing') throw new Error('No receipt');
+    return JSON.stringify({ schemaVersion: 1, assetSha256: kind === 'asset mismatch' ? 'f'.repeat(64) : sha,
+      contentSha256: kind === 'content mismatch' ? 'f'.repeat(64) : hash(text) });
+  });
+  await expect(cache.readDetails()).resolves.toBeNull();
+});
+
+it('preserves an unbound legacy cache only when no expected details identity is known', async () => {
+  const details = { run_date: '2026-10-12', products: {} }, text = JSON.stringify(details);
+  jest.spyOn(cache, 'readMeta').mockResolvedValue(null);
+  installBytes(Buffer.from(text));
+  const boundedRead = jest.mocked(FileSystem.readAsStringAsync).getMockImplementation()!;
+  jest.mocked(FileSystem.readAsStringAsync).mockImplementation(async (name, options) => {
+    if (name.endsWith('.verified')) throw new Error('No receipt');
+    return boundedRead(name, options);
+  });
+  const result = await cache.readDetails();
+  expect(result).toEqual(details);
+  expect(verifiedDetailsSha(result!)).toBeNull();
 });
 
 it('returns the normal cache miss on a truncated Android file', async () => {
