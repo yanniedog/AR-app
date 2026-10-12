@@ -203,6 +203,7 @@ export default function Onboarding() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.bg }}>
       <ScrollView
+        style={{ flex: 1 }}
         contentContainerStyle={{
           flexGrow: 1,
           paddingTop: insets.top + 24,
