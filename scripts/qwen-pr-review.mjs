@@ -84,9 +84,45 @@ export function changedLinesFromDiff(diffText) {
   return { left, right };
 }
 
-export function collectDiff(baseRef, maxChars) {
-  runGit(['fetch', '--no-tags', 'origin', baseRef]);
-  const range = `origin/${baseRef}...HEAD`;
+export function assertBranchName(name, label) {
+  if (typeof name !== 'string' || name.length === 0) {
+    fail(`${label} is not a branch name`);
+  }
+  const check = spawnSync('git', ['check-ref-format', '--branch', name], { encoding: 'utf8' });
+  if (check.status !== 0) fail(`${label} is not a branch name`);
+}
+
+export function canonicalPullNumber(prNumber) {
+  const raw = String(prNumber ?? '').trim();
+  if (!/^\d+$/.test(raw)) fail('PR_NUMBER is required to fetch the pull request ref');
+  const canonical = raw.replace(/^0+/, '');
+  if (!/^[1-9]\d*$/.test(canonical)) fail('PR_NUMBER is required to fetch the pull request ref');
+  return canonical;
+}
+
+export function fetchedPullRequestRef(prNumber) {
+  return `refs/review-fetch/pr-${canonicalPullNumber(prNumber)}`;
+}
+
+export function collectDiff(baseRef, headSha, maxChars, prNumber) {
+  const pullNumber = canonicalPullNumber(prNumber);
+  if (!/^[0-9a-f]{7,40}$/i.test(String(headSha || ''))) fail('HEAD_SHA must be the pull request commit id');
+  assertBranchName(baseRef, 'BASE_REF');
+  const prRef = fetchedPullRequestRef(pullNumber);
+  // Remote branch names may contain Windows-invalid filename characters.
+  const baseRemote = `refs/review-fetch/base-${pullNumber}`;
+  const shallow = runGit(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+  const baseFetch = ['fetch', '--no-tags', '--refmap=', '--no-recurse-submodules'];
+  if (shallow) baseFetch.push('--unshallow');
+  baseFetch.push('origin', `+refs/heads/${baseRef}:${baseRemote}`);
+  runGit(baseFetch);
+  runGit(['fetch', '--no-tags', '--refmap=', '--no-recurse-submodules', 'origin', `+refs/pull/${pullNumber}/head:${prRef}`]);
+  const resolvedHead = runGit(['rev-parse', '--verify', `${prRef}^{commit}`]).trim().toLowerCase();
+  const expectedHead = String(headSha).trim().toLowerCase();
+  if (resolvedHead !== expectedHead && !resolvedHead.startsWith(expectedHead)) {
+    fail(`PR ref SHA mismatch: expected ${expectedHead}, got ${resolvedHead}`);
+  }
+  const range = `${baseRemote}...${resolvedHead}`;
   const changedFiles = runGit(['diff', '--name-only', '--diff-filter=ACDMRTUXB', range])
     .split(/\r?\n/)
     .map((value) => value.trim())
@@ -204,10 +240,7 @@ async function main() {
   const baseRef = String(process.env.BASE_REF || '').trim();
   if (!baseRef) fail('BASE_REF is required');
   const expectedHead = String(process.env.HEAD_SHA || '').trim().toLowerCase();
-  const actualHead = runGit(['rev-parse', 'HEAD']).trim().toLowerCase();
-  if (!expectedHead || actualHead !== expectedHead) {
-    fail(`PR checkout SHA mismatch: expected ${expectedHead || '(missing)'}, got ${actualHead}`);
-  }
+  const prNumber = String(process.env.PR_NUMBER || '').trim();
   const promptPath = resolve(process.env.PROMPT_PATH || '.cursor/PR_REVIEW_PROMPT.md');
   if (!existsSync(promptPath)) fail(`Trusted prompt not found: ${promptPath}`);
   const rubric = readFileSync(promptPath, 'utf8').trim();
@@ -216,8 +249,11 @@ async function main() {
   const configuredMax = Number(process.env.DIFF_MAX_CHARS || DEFAULT_DIFF_MAX);
   const diff = collectDiff(
     baseRef,
+    expectedHead,
     Number.isFinite(configuredMax) && configuredMax > 0 ? configuredMax : DEFAULT_DIFF_MAX,
+    prNumber,
   );
+  const actualHead = expectedHead;
   let findings = [];
   let reason = '';
   let modelCalls = 0;
